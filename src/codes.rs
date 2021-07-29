@@ -1,4 +1,8 @@
 //! Encoding codes of AMQP types
+
+use std::fmt::Display;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EncodingCodes {
     DescribedTypeIndicator = 0x00 as u8,
@@ -67,11 +71,30 @@ pub enum EncodingCodes {
     Array32 = 0xf0
 }
 
+impl Display for EncodingCodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}:0x{:x}", self, self.clone() as u8)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn size_of_encoding_codes() {
         let s = std::mem::size_of::<super::EncodingCodes>();
         println!("{}", s);
+    }
+
+    #[test]
+    fn debug_encoding_codes() {
+        let code = super::EncodingCodes::Null;
+        println!("0x{:x}", code.clone() as u8);
+        assert_eq!(code as u8, 0x40);
+    }
+
+    #[test]
+    fn print_encoding_codes() {
+        let code = super::EncodingCodes::Boolean;
+        println!("{}", code);
     }
 }
