@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+use ordered_float::OrderedFloat;
+
 /// Primitive type definitions 
-pub enum Primitive<ArrayItem> {
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Primitive {
     /// Indicates an empty value
     /// 
     /// encoding code = 0x40, 
@@ -110,14 +114,14 @@ pub enum Primitive<ArrayItem> {
     /// encoding name = "ieee-754", encoding code = 0x72
     /// category = fixed, width = 4
     /// label = "IEEE 754-2008 binary32"
-    Float(f32),
+    Float(OrderedFloat<f32>),
 
     /// 64-bit floating point number (IEEE 754-2008 binary64).
     /// 
     /// encoding name = "ieee-754", encoding code = 0x82
     /// category = fixed, width = 8
     /// label = "IEEE 754-2008 binary64"
-    Double(f64),
+    Double(OrderedFloat<f64>),
 
     /// 32-bit decimal number (IEEE 754-2008 decimal32).
     /// 
@@ -213,7 +217,7 @@ pub enum Primitive<ArrayItem> {
     /// encoding name = "list32", encoding code = 0xd0
     /// category = compound, width = 4
     /// label="up to 2^32 - 1 list elements with total size less than 2^32 octets"
-    List(Vec<Primitive<ArrayItem>>),
+    List(Vec<Primitive>),
 
     /// A polymorphic mapping from distinct keys to values.
     /// 
@@ -224,7 +228,15 @@ pub enum Primitive<ArrayItem> {
     /// encoding name = "map32", encoding code = 0xd1,
     /// category = compound, width = 4
     /// label="up to 2^32 - 1 octets of encoded map data
-    Map,
+    ///
+    /// Map encodings MUST contain an even number of items (i.e. an equal number of keys and values). 
+    /// A map in which there exist two identical key values is invalid. Unless known to be otherwise, 
+    /// maps MUST be considered to be ordered, that is, the order of the key-value pairs is semantically 
+    /// important and two maps which are different only in the order in which their key-value pairs are 
+    /// encoded are not equal.
+    ///
+    /// Note: Can only use BTreeMap as it must be considered to be ordered
+    Map(BTreeMap<Primitive, Primitive>),
 
     /// A sequence of values of a single type.
     /// 
@@ -235,8 +247,21 @@ pub enum Primitive<ArrayItem> {
     /// encoding name = "array32", encoding code = 0xf0,
     /// category = array, width = 4
     /// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
-    Array(Vec<ArrayItem>),
+    Array(Vec<Primitive>),
 }
 
 /// Placeholder type if ArrayItem type is unknown
+#[derive(Debug, Clone)]
 pub struct Unknown { }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_construct_map() {
+        let map: BTreeMap<Primitive, Primitive> = BTreeMap::new();
+        let pmap = Primitive::Map(map);
+        
+    }
+}
