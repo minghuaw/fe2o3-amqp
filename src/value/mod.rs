@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 use ordered_float::OrderedFloat;
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
 
 /// Primitive type definitions 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Primitive {
+pub enum Value {
     /// Indicates an empty value
     /// 
     /// encoding code = 0x40, 
@@ -95,7 +98,7 @@ pub enum Primitive {
     /// 
     /// encoding name = "smallint", encoding code = 0x54
     /// category = fixed, width = 1
-    /// label = "8-bit two's-complement integer"
+    /// label = "32-bit two's-complement integer"
     Int(i32),
 
     /// Integer in the range -(2^63) to 2^63-1 inclusive
@@ -106,7 +109,7 @@ pub enum Primitive {
     /// 
     /// encoding name = "smalllong", encoding code = 0x55
     /// category = fixed, width = 1
-    /// label = "8-bit two's-complement integer"
+    /// label = "64-bit two's-complement integer"
     Long(i64),
 
     /// 32-bit floating point number (IEEE 754-2008 binary32)
@@ -156,14 +159,14 @@ pub enum Primitive {
     /// encoding name = "ms64", code = 0x83,
     /// category = fixed, width = 8
     /// label = "64-bit two’s-complement integer representing milliseconds since the unix epoch"
-    Timestamp,
+    Timestamp(Timestamp),
 
     /// A universally unique identifier as defined by RFC-4122 in section 4.1.2
     /// 
     /// encoding code = 0x98,
     /// category = fixed, width = 16,
     /// label="UUID as defined in section 4.1.2 of RFC-4122"
-    Uuid,
+    Uuid(Uuid),
 
     /// A sequence of octets.
     /// 
@@ -217,7 +220,7 @@ pub enum Primitive {
     /// encoding name = "list32", encoding code = 0xd0
     /// category = compound, width = 4
     /// label="up to 2^32 - 1 list elements with total size less than 2^32 octets"
-    List(Vec<Primitive>),
+    List(Vec<Value>),
 
     /// A polymorphic mapping from distinct keys to values.
     /// 
@@ -236,7 +239,7 @@ pub enum Primitive {
     /// encoded are not equal.
     ///
     /// Note: Can only use BTreeMap as it must be considered to be ordered
-    Map(BTreeMap<Primitive, Primitive>),
+    Map(BTreeMap<Value, Value>),
 
     /// A sequence of values of a single type.
     /// 
@@ -247,12 +250,61 @@ pub enum Primitive {
     /// encoding name = "array32", encoding code = 0xf0,
     /// category = array, width = 4
     /// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
-    Array(Vec<Primitive>),
+    Array(Vec<Value>),
 }
 
-/// Placeholder type if ArrayItem type is unknown
-#[derive(Debug, Clone)]
-pub struct Unknown { }
+/// 64-bit two’s-complement integer representing milliseconds since the unix epoch
+///
+/// TODO: Replace with i64?
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp {
+    #[serde(with = "timestamp_format")]
+    pub timestamp: DateTime<Utc>
+}
+
+mod timestamp_format {
+    use chrono::{DateTime, Utc};
+    use serde::{self, Serializer, Deserializer};
+
+    const FORMAT: &'static str = "%Y-%m-%d %H:%M:%S";
+
+    // The signature of a serialize_with function must follow the pattern:
+    //
+    //    fn serialize<S>(&T, S) -> Result<S::Ok, S::Error>
+    //    where
+    //        S: Serializer
+    //
+    // although it may also be generic over the input types T.
+    pub fn serialize<S>(
+        datetime: &DateTime<Utc>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // let s = format!("{}", date.format(FORMAT));
+        // serializer.serialize_str(&s)
+        unimplemented!()
+    }
+
+    // The signature of a deserialize_with function must follow the pattern:
+    //
+    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
+    //    where
+    //        D: Deserializer<'de>
+    //
+    // although it may also be generic over the output types T.
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // let s = String::deserialize(deserializer)?;
+        // Utc.datetime_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
+        unimplemented!()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -260,8 +312,8 @@ mod tests {
 
     #[test]
     fn test_construct_map() {
-        let map: BTreeMap<Primitive, Primitive> = BTreeMap::new();
-        let pmap = Primitive::Map(map);
+        let map: BTreeMap<Value, Value> = BTreeMap::new();
+        let pmap = Value::Map(map);
         
     }
 }
