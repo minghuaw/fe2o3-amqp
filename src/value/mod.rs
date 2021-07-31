@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
 
-use crate::types::{Timestamp};
+use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp};
 
 /// Primitive type definitions 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -131,21 +131,21 @@ pub enum Value {
     /// encoding name = "ieee-754", encoding code = 0x74
     /// category = fixed, width = 4
     /// label = "IEEE 754-2008 decimal32 using the Binary Integer Decimal encoding"
-    Decimal32,
+    Decimal32(Dec32),
 
     /// 64-bit decimal number (IEEE 754-2008 decimal64).
     /// 
     /// encoding name = "ieee-754", encoding code = 0x84
     /// category = fixed, width = 8
     /// label = "IEEE 754-2008 decimal64 using the Binary Integer Decimal encoding"
-    Decimal64,
+    Decimal64(Dec64),
 
     /// 128-bit decimal number (IEEE 754-2008 decimal128).
     /// 
     /// encoding name = "ieee-754", encoding code = 0x94
     /// category = fixed, width = 16
     /// label = "IEEE 754-2008 decimal128 using the Binary Integer Decimal encoding"
-    Decimal128,
+    Decimal128(Dec128),
 
     /// A single Unicode character
     /// 
@@ -205,7 +205,7 @@ pub enum Value {
     /// typically the both number and size of symbols in use for any 
     /// given application will be small, e.g. small enough that it is reasonable 
     /// to cache all the distinct values. Symbols are encoded as ASCII characters [ASCII].
-    Symbol,
+    Symbol(Symbol),
 
     /// A sequence of polymorphic values.
     /// 
@@ -251,16 +251,4 @@ pub enum Value {
     /// category = array, width = 4
     /// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
     Array(Vec<Value>),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_construct_map() {
-        let map: BTreeMap<Value, Value> = BTreeMap::new();
-        let pmap = Value::Map(map);
-        
-    }
 }
