@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+
+use crate::types::{Timestamp};
 
 /// Primitive type definitions 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -251,59 +251,6 @@ pub enum Value {
     /// category = array, width = 4
     /// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
     Array(Vec<Value>),
-}
-
-/// 64-bit two’s-complement integer representing milliseconds since the unix epoch
-///
-/// TODO: Replace with i64?
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Timestamp {
-    #[serde(with = "timestamp_format")]
-    pub timestamp: DateTime<Utc>
-}
-
-mod timestamp_format {
-    use chrono::{DateTime, Utc};
-    use serde::{self, Serializer, Deserializer};
-
-    const FORMAT: &'static str = "%Y-%m-%d %H:%M:%S";
-
-    // The signature of a serialize_with function must follow the pattern:
-    //
-    //    fn serialize<S>(&T, S) -> Result<S::Ok, S::Error>
-    //    where
-    //        S: Serializer
-    //
-    // although it may also be generic over the input types T.
-    pub fn serialize<S>(
-        datetime: &DateTime<Utc>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // let s = format!("{}", date.format(FORMAT));
-        // serializer.serialize_str(&s)
-        unimplemented!()
-    }
-
-    // The signature of a deserialize_with function must follow the pattern:
-    //
-    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
-    //    where
-    //        D: Deserializer<'de>
-    //
-    // although it may also be generic over the output types T.
-    pub fn deserialize<'de, D>(
-        deserializer: D,
-    ) -> Result<DateTime<Utc>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // let s = String::deserialize(deserializer)?;
-        // Utc.datetime_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
-        unimplemented!()
-    }
 }
 
 #[cfg(test)]
