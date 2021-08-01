@@ -34,7 +34,7 @@ pub enum Value {
     /// encoding code = 0x50,
     /// category = fixed, width = 1
     /// label = "8-bit unsigned integer"
-    UByte(u8),
+    Ubyte(u8),
 
     /// Integer in the range 0 to 2^16-1 inclusive
     ///
@@ -42,7 +42,7 @@ pub enum Value {
     /// category = fixed, width = 2
     /// label = "16-bit unsigned integer in network byte order" 
     /// (AKA. Big-Endian, rust uses BigEndian by default)
-    UShort(u16),
+    Ushort(u16),
 
     /// Integer in the range 0 to 2^32-1 inclusive
     ///
@@ -58,7 +58,7 @@ pub enum Value {
     /// encoding name = "uint0", encoding code = 0x43
     /// category = fixed, width = 0
     /// label = "the uint value 0"
-    UInt(u32),
+    Uint(u32),
 
     /// Integer in the range 0 to 2^64-1 inclusive
     ///
@@ -74,7 +74,7 @@ pub enum Value {
     /// encoding name = "ulong0", encoding code = 0x44
     /// category = fixed, width = 0
     /// label = "the ulong value 0"
-    ULong(u64),
+    Ulong(u64),
 
     /// Integer in the range -(2^7) to 2^7-1 inclusive
     /// 

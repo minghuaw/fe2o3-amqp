@@ -284,3 +284,201 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for Compound<'a, W> {
         unimplemented!()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::codes::EncodingCodes;
+
+    use super::*;
+
+    fn assert_eq_on_serialized_vs_expected<T: Serialize>(val: T, expected: Vec<u8>) {
+        let serialized = to_vec(&val).unwrap();
+        assert_eq!(serialized, expected);
+    }
+
+    #[test]
+    fn test_bool() {
+        let val = true;
+        let expected = vec![EncodingCodes::BooleanTrue as u8];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        let val = false;
+        let expected = vec![EncodingCodes::BooleanFalse as u8];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_i8() {
+        let val = 3i8;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_i16() {
+        let val = 3i16;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_i32() {
+        // small int
+        let val = 3i32;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // int
+        let val = 300i32;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_i64() {
+        // small long
+        let val = 3i64;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // long
+        let val = 300i64;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_u8() {
+        let val = u8::MIN;
+        let expected = vec![EncodingCodes::Ubyte as u8, u8::MIN];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        let val = u8::MAX;
+        let expected = vec![EncodingCodes::Ubyte as u8, u8::MAX];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_u16() {
+        let val = u16::MIN;
+        let mut expected = vec![EncodingCodes::Ushort as u8];
+        expected.append(&mut Vec::from(val.to_be_bytes()));
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        let val = 131u16;
+        let mut expected = vec![EncodingCodes::Ushort as u8];
+        expected.append(&mut Vec::from(val.to_be_bytes()));
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        let val = u16::MAX;
+        let mut expected = vec![EncodingCodes::Ushort as u8];
+        expected.append(&mut Vec::from(val.to_be_bytes()));
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_u32() {
+        // uint0
+        let val = 0u32;
+        let expected = vec![EncodingCodes::Uint0 as u8];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // small uint
+        let val = 255u32;
+        let expected = vec![EncodingCodes::SmallUint as u8, 255];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // uint
+        let val = u32::MAX;
+        let mut expected = vec![EncodingCodes::Uint as u8];
+        expected.append(&mut val.to_be_bytes().into());
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_u64() {
+        // ulong0
+        let val = 0u64;
+        let expected = vec![EncodingCodes::Ulong0 as u8];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // small ulong
+        let val = 255u64;
+        let expected = vec![EncodingCodes::SmallUlong as u8, 255];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // ulong
+        let val = u64::MAX;
+        let mut expected = vec![EncodingCodes::Uint as u8];
+        expected.append(&mut val.to_be_bytes().into());
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_f32() {
+        unimplemented!();
+
+        let val = 5.0f32;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_f64() {
+        unimplemented!();
+
+        let val = 5.0f64;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_char() {
+        unimplemented!();
+
+        let val = 'c';
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_str() {
+        unimplemented!();
+        
+        let val = "true";
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_bytes() {
+        unimplemented!();
+        let val = vec![1,2,3];
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_none() {
+        unimplemented!();
+        let val: Option<()> = None;
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_some() {
+        unimplemented!();
+        let val = Some(1);
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_unit() {
+        unimplemented!();
+        let val = ();
+        let expected = vec![0u8, 0];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+}

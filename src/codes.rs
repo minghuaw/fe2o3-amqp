@@ -13,30 +13,40 @@ pub enum EncodingCodes {
     BooleanTrue = 0x41,
     BooleanFalse = 0x42,
 
-    UByte = 0x50,
+    /// u8
+    Ubyte = 0x50,
 
-    UShort = 0x60,
+    /// u16
+    Ushort = 0x60,
 
-    UInt = 0x70,
-    SmallUInt = 0x52,
-    UInt0 = 0x43,
+    /// u32
+    Uint = 0x70,
+    SmallUint = 0x52,
+    Uint0 = 0x43,
 
-    ULong = 0x80,
-    SmallULong = 0x53,
-    ULong0 = 0x44,
+    /// u64
+    Ulong = 0x80,
+    SmallUlong = 0x53,
+    Ulong0 = 0x44,
 
+    /// i8
     Byte = 0x51,
 
+    /// i16
     Short = 0x61,
 
+    ///i32
     Int = 0x71,
     SmallInt = 0x54,
 
+    /// i64
     Long = 0x81,
     SmallLong = 0x55,
 
+    /// f32
     Float = 0x72,
 
+    /// f64
     Double = 0x82,
 
     Decimal32 = 0x74,
