@@ -3,9 +3,10 @@ use serde::{ser, de};
 
 // pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub enum Error {
     Message(String),
+    Io(std::io::Error),
 }
 
 impl Display for Error {
@@ -31,5 +32,11 @@ impl de::Error for Error {
         T:Display 
     {
         unimplemented!()    
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
     }
 }

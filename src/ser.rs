@@ -2,17 +2,26 @@ use std::{io::Write, num::Wrapping};
 
 use serde::{Serialize, ser};
 
-use crate::error::{Error};
-
-pub struct Serializer<W> {
-    writer: W
-}
+use crate::{codes::EncodingCodes, error::{Error}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error> 
 where 
     T: Serialize
 {
-    unimplemented!()
+    let mut writer = Vec::new(); // TODO: pre-allocate capacity
+    let mut serializer = Serializer::new(&mut writer);
+    value.serialize(&mut serializer)?;
+    Ok(writer)
+}
+
+pub struct Serializer<W> {
+    writer: W
+}
+
+impl<W: Write> Serializer<W> {
+    fn new(writer: W) -> Self {
+        Self { writer }
+    }
 }
 
 impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
@@ -28,7 +37,17 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type SerializeTupleVariant = Compound<'a, W>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        match v {
+            true => {
+                let buf = [EncodingCodes::BooleanTrue as u8];
+                self.writer.write_all(&buf)
+            },
+            false => {
+                let buf = [EncodingCodes::BooleanFalse as u8];
+                self.writer.write_all(&buf)
+            }
+        }
+        .map_err(|err| err.into())
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
