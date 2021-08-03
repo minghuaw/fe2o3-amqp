@@ -396,6 +396,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     //
     // Thus serialize this into a Map
     // TODO: List or Map?
+    // amqpdotnetlite serializes a class into a described list where the descriptor doesn't have a 
+    // code
     #[inline]
     fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         self.serialize_map(Some(len))
