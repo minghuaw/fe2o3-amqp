@@ -61,9 +61,11 @@ pub enum EncodingCodes {
 
     Uuid = 0x98,
 
+    // Binary
     VBin8 = 0xa0,
     VBin32 = 0xb0,
 
+    // String
     Str8 = 0xa1,
     Str32 = 0xb1,
 

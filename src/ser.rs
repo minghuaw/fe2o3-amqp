@@ -2,7 +2,7 @@ use std::{io::Write};
 
 use serde::{Serialize, ser};
 
-use crate::{codes::EncodingCodes, error::{Error}};
+use crate::{codes::EncodingCodes, error::{Error}, value::{U32_MAX_AS_USIZE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error> 
 where 
@@ -173,7 +173,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        // char in rust is a subset of the unicode code points and 
+        // `char` in rust is a subset of the unicode code points and 
         // can be directly treated as u32
         let code = [EncodingCodes::Char as u8];
         let buf = (v as u32).to_be_bytes();
@@ -183,11 +183,51 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        // String slices are always valid utf-8
+        // `String` isd utf-8 encoded
+        let l = v.len();
+        match l {
+            // str8-utf8
+            0 ..= 255 => {
+                let code = [EncodingCodes::Str8 as u8];
+                let width: [u8; 1] = (l as u8).to_be_bytes();
+                self.writer.write_all(&code)?;
+                self.writer.write_all(&width)?;
+            },
+            // str32-utf8
+            256 ..= U32_MAX_AS_USIZE => {
+                let code = [EncodingCodes::Str32 as u8];
+                let width: [u8; 4] = (l as u32).to_be_bytes();
+                self.writer.write_all(&code)?;
+                self.writer.write_all(&width)?;
+            },
+            _ => return Err(Error::Message("Too long".into()))
+        }
+        self.writer.write_all(v.as_bytes())
+            .map_err(|err| err.into())
     }
     
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        let l = v.len();
+        match l {
+            // vbin8
+            0 ..= 255 => {
+                let code = [EncodingCodes::VBin8 as u8];
+                let width: [u8; 1] = (l as u8).to_be_bytes();
+                self.writer.write_all(&code)?;
+                self.writer.write_all(&width)?;
+            },
+            // vbin32
+            256 ..= U32_MAX_AS_USIZE => {
+                let code = [EncodingCodes::VBin32 as u8];
+                let width: [u8; 4] = (l as u32).to_be_bytes();
+                self.writer.write_all(&code)?;
+                self.writer.write_all(&width)?;
+            },
+            _ => return Err(Error::Message("Too long".into()))
+        }
+        self.writer.write_all(v)
+            .map_err(|err| err.into())
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {

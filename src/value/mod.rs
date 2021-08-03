@@ -4,6 +4,8 @@ use uuid::Uuid;
 
 use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp};
 
+pub const U32_MAX_AS_USIZE: usize = u32::MAX as usize;
+
 /// Primitive type definitions 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
