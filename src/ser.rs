@@ -157,15 +157,29 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        let code = [EncodingCodes::Float as u8];
+        let buf = v.to_be_bytes();
+        self.writer.write_all(&code)?;
+        self.writer.write_all(&buf)
+            .map_err(|err| err.into())
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        let code = [EncodingCodes::Double as u8];
+        let buf = v.to_be_bytes();
+        self.writer.write_all(&code)?;
+        self.writer.write_all(&buf)
+            .map_err(|err| err.into())
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        // char in rust is a subset of the unicode code points and 
+        // can be directly treated as u32
+        let code = [EncodingCodes::Char as u8];
+        let buf = (v as u32).to_be_bytes();
+        self.writer.write_all(&code)?;
+        self.writer.write_all(&buf)
+            .map_err(|err| err.into())
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
@@ -522,28 +536,45 @@ mod test {
 
     #[test]
     fn test_f32() {
-        unimplemented!();
+        let val = f32::MIN;
+        let mut expected = vec![EncodingCodes::Float as u8];
+        expected.append(&mut val.to_be_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, expected);
+        
+        let val = -123.456f32;
+        let mut expected = vec![EncodingCodes::Float as u8];
+        expected.append(&mut val.to_be_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, expected);
 
-        let val = 5.0f32;
-        let expected = vec![0u8, 0];
+        let val = 0.0f32;
+        let mut expected = vec![EncodingCodes::Float as u8];
+        expected.append(&mut val.to_be_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        let val = 123.456f32;
+        let mut expected = vec![EncodingCodes::Float as u8];
+        expected.append(&mut val.to_be_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        let val = f32::MAX;
+        let mut expected = vec![EncodingCodes::Float as u8];
+        expected.append(&mut val.to_be_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_f64() {
-        unimplemented!();
-
-        let val = 5.0f64;
-        let expected = vec![0u8, 0];
+        let val = 123.456f64;
+        let mut expected = vec![EncodingCodes::Double as u8];
+        expected.append(&mut val.to_be_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_char() {
-        unimplemented!();
-
         let val = 'c';
-        let expected = vec![0u8, 0];
+        let mut expected = vec![EncodingCodes::Char as u8];
+        expected.append(&mut (val as u32).to_be_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
