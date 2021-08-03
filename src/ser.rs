@@ -1,6 +1,6 @@
 use std::{io::Write};
 
-use serde::{Serialize, ser::{self, SerializeSeq}};
+use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq}};
 
 use crate::{codes::EncodingCodes, error::{Error}, value::{U32_MAX_AS_USIZE}};
 
@@ -392,10 +392,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         }
     }
 
+    // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
+    //
+    // Thus serialize this into a Map
+    // TODO: List or Map?
     #[inline]
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        println!("serialize struct");
-        unimplemented!()
+    fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        self.serialize_map(Some(len))
     }
 
     #[inline]
@@ -490,22 +493,6 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for Compound<'a, W> {
     }
 }
 
-impl<'a, W: Write + 'a> ser::SerializeTupleVariant for Compound<'a, W> {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-    where
-        T: Serialize 
-    {
-        unimplemented!()
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
-    }
-}
-
 impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
@@ -536,9 +523,27 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
 
+    #[inline]
     fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
+    {
+        <Self as SerializeMap>::serialize_entry(self, key, value)
+    }
+
+    #[inline]
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        <Self as SerializeMap>::end(self)
+    }
+}
+
+impl<'a, W: Write + 'a> ser::SerializeTupleVariant for Compound<'a, W> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize 
     {
         unimplemented!()
     }
