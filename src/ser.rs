@@ -30,8 +30,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
     
-    type SerializeSeq = SeqSerializer<'a, W>;
-    type SerializeTuple = SeqSerializer<'a, W>;
+    type SerializeSeq = Compound<'a, W>;
+    type SerializeTuple = Compound<'a, W>;
     type SerializeMap = Compound<'a, W>;
     type SerializeStruct = Compound<'a, W>;
     type SerializeStructVariant = Compound<'a, W>;
@@ -332,7 +332,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     return Err(Error::Message("Too long".into()))
                 }
             }
-            Ok(SeqSerializer::from(self))
+            Ok(Self::SerializeSeq::from(self))
         } else {
             Err(Error::Message("Length must be known".into()))
         }
@@ -388,23 +388,23 @@ pub struct Compound<'a, W: 'a> {
     se: &'a mut Serializer<W>,
 }
 
-pub struct SeqSerializer<'a, W: 'a> {
-    se: &'a mut Serializer<W>
-}
+// pub struct SeqSerializer<'a, W: 'a> {
+//     se: &'a mut Serializer<W>
+// }
 
-impl<'a, W: 'a> From<&'a mut Serializer<W>> for SeqSerializer<'a, W> {
+impl<'a, W: 'a> From<&'a mut Serializer<W>> for Compound<'a, W> {
     fn from(se: &'a mut Serializer<W>) -> Self {
         Self { se }
     }
 }
 
-impl<'a, W: 'a> AsRef<Serializer<W>> for SeqSerializer<'a, W> {
+impl<'a, W: 'a> AsRef<Serializer<W>> for Compound<'a, W> {
     fn as_ref(&self) -> &Serializer<W> {
         self.se
     }
 }
 
-impl<'a, W: 'a> AsMut<Serializer<W>> for SeqSerializer<'a, W> {
+impl<'a, W: 'a> AsMut<Serializer<W>> for Compound<'a, W> {
     fn as_mut(&mut self) -> &mut Serializer<W> {
         self.se
     }
@@ -412,7 +412,7 @@ impl<'a, W: 'a> AsMut<Serializer<W>> for SeqSerializer<'a, W> {
 
 // This requires some hacking way of getting the constructor (EncodingCode)
 // for the type. Use TypeId?
-impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeSeq for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
 
@@ -430,7 +430,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     }
 }
 
-impl<'a, W: Write + 'a> ser::SerializeTuple for SeqSerializer<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
 
