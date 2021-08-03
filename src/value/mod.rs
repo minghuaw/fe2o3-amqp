@@ -98,7 +98,7 @@ pub enum Value {
     /// 
     /// encoding name = "smallint", encoding code = 0x54
     /// category = fixed, width = 1
-    /// label = "32-bit two's-complement integer"
+    /// label = "8-bit two’s-complement integer"
     Int(i32),
 
     /// Integer in the range -(2^63) to 2^63-1 inclusive
@@ -109,7 +109,7 @@ pub enum Value {
     /// 
     /// encoding name = "smalllong", encoding code = 0x55
     /// category = fixed, width = 1
-    /// label = "64-bit two's-complement integer"
+    /// label = "8-bit two’s-complement integer"
     Long(i64),
 
     /// 32-bit floating point number (IEEE 754-2008 binary32)
