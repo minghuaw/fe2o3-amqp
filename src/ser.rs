@@ -1,6 +1,6 @@
 use std::{io::Write};
 
-use serde::{Serialize, ser};
+use serde::{Serialize, ser::{self, SerializeSeq}};
 
 use crate::{codes::EncodingCodes, error::{Error}, value::{U32_MAX_AS_USIZE}};
 
@@ -348,10 +348,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         self.serialize_seq(Some(len))
     }
 
+    // A named tuple, for example `struct Rgb(u8, u8, u8)`
+    //
+    // The tuple struct looks rather like a rust-exclusive data type. 
+    // Thus this will be treated the same as a tuple (as in JSON and AVRO)
     #[inline]
-    fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        println!("serialize tuple struct");
-        unimplemented!()
+    fn serialize_tuple_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        self.serialize_seq(Some(len))
     }
 
     #[inline]
@@ -362,8 +365,31 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        println!("serialize map");
-        unimplemented!()
+        if let Some(len) = len {
+            // AMQP Map counts a KV pair as two items
+            let len = len * 2; 
+
+            match len {
+                0 ..= 255 => {
+                    let code = [EncodingCodes::Map8 as u8];
+                    let width = (len as u8).to_be_bytes();
+                    self.writer.write_all(&code)?;
+                    self.writer.write_all(&width)?;
+                },
+                256 ..= U32_MAX_AS_USIZE => {
+                    let code = [EncodingCodes::Map32 as u8];
+                    let width = (len as u32).to_be_bytes();
+                    self.writer.write_all(&code)?;
+                    self.writer.write_all(&width)?;
+                },
+                _ => {
+                    return Err(Error::Message("Too long".into()))
+                }
+            }
+            Ok(Self::SerializeMap::from(self))
+        } else {
+            Err(Error::Message("length must be known".into()))
+        }
     }
 
     #[inline]
@@ -439,12 +465,12 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
     where
             T: Serialize 
     {
-        unimplemented!()
+        <Self as SerializeSeq>::serialize_element(self, value)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        <Self as SerializeSeq>::end(self)
     }
 }
 
@@ -456,11 +482,11 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for Compound<'a, W> {
     where
             T: Serialize 
     {
-        unimplemented!()
+        <Self as SerializeSeq>::serialize_element(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        <Self as SerializeSeq>::end(self)
     }
 }
 
@@ -470,7 +496,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for Compound<'a, W> {
 
     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
     {
         unimplemented!()
     }
@@ -484,30 +510,25 @@ impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
 
+    #[inline]
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
     {
-        unimplemented!()
+        key.serialize(self.as_mut())
     }
 
+    #[inline]
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
     {
-        unimplemented!()
+        value.serialize(self.as_mut())
     }
 
-    fn serialize_entry<K: ?Sized, V: ?Sized>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
-    where
-            K: Serialize,
-            V: Serialize, 
-    {
-        unimplemented!()
-    }
-
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
