@@ -8,6 +8,7 @@ pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where 
     T: Serialize
 {
+    println!("to vec");
     let mut writer = Vec::new(); // TODO: pre-allocate capacity
     let mut serializer = Serializer::new(&mut writer);
     value.serialize(&mut serializer)?;
@@ -47,13 +48,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&buf)
             }
         }
-        .map_err(|err| err.into())
+        .map_err(Into::into)
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
         let buf = [EncodingCodes::Byte as u8, v as u8];
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
@@ -61,7 +62,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         self.writer.write_all(&code)?;
         let buf = v.to_be_bytes();
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
@@ -77,7 +78,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&buf)
             }
         }
-        .map_err(|err| err.into())
+        .map_err(Into::into)
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
@@ -93,13 +94,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&buf)
             }
         }
-        .map_err(|err| err.into())
+        .map_err(Into::into)
     }
 
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         let buf = [EncodingCodes::Ubyte as u8, v];
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
@@ -107,7 +108,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         let buf: [u8; 2] = v.to_be_bytes();
         self.writer.write_all(&code)?;
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
@@ -130,7 +131,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&buf)
             }
         }
-        .map_err(|err| err.into())
+        .map_err(Into::into)
     }
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
@@ -153,7 +154,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&buf)
             }
         }
-        .map_err(|err| err.into())
+        .map_err(Into::into)
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -161,7 +162,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         let buf = v.to_be_bytes();
         self.writer.write_all(&code)?;
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
@@ -169,7 +170,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         let buf = v.to_be_bytes();
         self.writer.write_all(&code)?;
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
@@ -179,7 +180,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         let buf = (v as u32).to_be_bytes();
         self.writer.write_all(&code)?;
         self.writer.write_all(&buf)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
@@ -204,7 +205,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             _ => return Err(Error::Message("Too long".into()))
         }
         self.writer.write_all(v.as_bytes())
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
     
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
@@ -227,12 +228,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             _ => return Err(Error::Message("Too long".into()))
         }
         self.writer.write_all(v)
-            .map_err(|err| err.into())
+            .map_err(Into::into)
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         // None is serialized as Bson::Null in BSON
-        unimplemented!()
+        let buf = [EncodingCodes::Null as u8];
+        self.writer.write_all(&buf)
+            .map_err(Into::into)
     }
 
     fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
@@ -240,19 +243,23 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             T: Serialize 
     {
         // Some(T) is serialized simply as if it is T in BSON
-        unimplemented!()
+        value.serialize(self)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         // unit is serialized as Bson::Null in BSON
-        unimplemented!()
+        let buf = [EncodingCodes::Null as u8];
+        self.writer.write_all(&buf)
+            .map_err(Into::into)
     }
 
     fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+        println!("serialize unit struct");
         unimplemented!()
     }
 
     fn serialize_unit_variant(self, name: &'static str, variant_index: u32, variant: &'static str) -> Result<Self::Ok, Self::Error> {
+        println!("serialize unit variant");
         unimplemented!()
     }
 
@@ -260,6 +267,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
             T: Serialize 
     {
+        println!("serialize newtype struct");
         unimplemented!()
     }
     
@@ -267,34 +275,49 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
             T: Serialize 
     {
+        println!("serialize newtype variant");
         unimplemented!()
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        println!("serialize seq");
+        // if let Some(len) = len {
+        //     match len {
+
+        //     }
+        // } else {
+        //     Err(Error::Message("Length must be known".into()))
+        // }
         unimplemented!()
     }
 
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        println!("serialize tuple");
         unimplemented!()
     }
 
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        println!("serialize tuple struct");
         unimplemented!()
     }
 
     fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        println!("serialize tuple variant");
         unimplemented!()
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        println!("serialize map");
         unimplemented!()
     }
 
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        println!("serialize struct");
         unimplemented!()
     }
 
     fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant, Self::Error> {
+        println!("serialize struct variant");
         unimplemented!()
     }
 }
@@ -620,42 +643,74 @@ mod test {
 
     #[test]
     fn test_str() {
-        unimplemented!();
-        
-        let val = "true";
-        let expected = vec![0u8, 0];
+        const SMALL_STRING_VALUIE: &str = "Small String";
+        const LARGE_STRING_VALUIE: &str = r#"Large String: 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog. 
+            "The quick brown fox jumps over the lazy dog."#;
+
+        // str8
+        let val = SMALL_STRING_VALUIE;
+        let len = val.len() as u8;
+        let mut expected = vec![EncodingCodes::Str8 as u8, len];
+        expected.append(&mut val.as_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // str32
+        let val = LARGE_STRING_VALUIE;
+        let len = val.len() as u32;
+        let mut expected = vec![EncodingCodes::Str32 as u8];
+        expected.append(&mut len.to_be_bytes().to_vec());
+        expected.append(&mut val.as_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_bytes() {
-        unimplemented!();
-        let val = vec![1,2,3];
-        let expected = vec![0u8, 0];
+        // serialize_bytes only works with serde_bytes wrapper types `Bytes` and `ByteBuf`
+        use serde_bytes::ByteBuf;
+        const SMALL_BYTES_VALUE: &[u8] = &[133u8; 200];
+        const LARGE_BYTES_VALUE: &[u8] = &[199u8; 1000];
+
+        // vbin8
+        let val = ByteBuf::from(SMALL_BYTES_VALUE);
+        let len = val.len() as u8;
+        let mut expected = vec![EncodingCodes::VBin8 as u8, len];
+        expected.append(&mut val.to_vec());
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // vbin32
+        let val = ByteBuf::from(LARGE_BYTES_VALUE);
+        let len = val.len() as u32;
+        let mut expected = vec![EncodingCodes::VBin32 as u8];
+        expected.append(&mut len.to_be_bytes().to_vec());
+        expected.append(&mut val.to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_none() {
-        unimplemented!();
         let val: Option<()> = None;
-        let expected = vec![0u8, 0];
+        let expected = vec![EncodingCodes::Null as u8];
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_some() {
-        unimplemented!();
-        let val = Some(1);
-        let expected = vec![0u8, 0];
+        let val = Some(1i32);
+        let expected = super::to_vec(&1i32).unwrap();
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_unit() {
-        unimplemented!();
         let val = ();
-        let expected = vec![0u8, 0];
+        let expected = vec![EncodingCodes::Null as u8];
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 }

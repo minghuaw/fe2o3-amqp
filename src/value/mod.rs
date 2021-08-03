@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
+use serde_bytes::ByteBuf;
 
 use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp};
 
@@ -179,7 +180,7 @@ pub enum Value {
     /// encoding name = "vbin32", encoding code = 0xb0,
     /// category = variable, width = 4,
     /// label="up to 2^32 - 1 octets of binary data"
-    Binary(Vec<u8>),
+    Binary(ByteBuf),
 
     /// A sequence of Unicode characters.
     /// 
