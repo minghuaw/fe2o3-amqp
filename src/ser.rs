@@ -173,9 +173,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
+    // `char` in rust is a subset of the unicode code points and 
+    // can be directly treated as u32
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-        // `char` in rust is a subset of the unicode code points and 
-        // can be directly treated as u32
         let code = [EncodingCodes::Char as u8];
         let buf = (v as u32).to_be_bytes();
         self.writer.write_all(&code)?;
@@ -183,9 +183,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
+    // String slices are always valid utf-8
+    // `String` isd utf-8 encoded
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        // String slices are always valid utf-8
-        // `String` isd utf-8 encoded
         let l = v.len();
         match l {
             // str8-utf8
@@ -231,8 +231,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
+    // None is serialized as Bson::Null in BSON
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        // None is serialized as Bson::Null in BSON
         let buf = [EncodingCodes::Null as u8];
         self.writer.write_all(&buf)
             .map_err(Into::into)
@@ -279,6 +279,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         unimplemented!()
     }
 
+    // This will serialize into a sequence of a single type
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         println!("serialize seq");
         // if let Some(len) = len {
@@ -328,7 +329,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 // }
 
 pub struct Compound<'a, W: 'a> {
-    se: &'a mut Serializer<W>
+    se: &'a mut Serializer<W>,
+    is_first_element: bool
 }
 
 impl<'a, W: Write + 'a> ser::SerializeSeq for Compound<'a, W> {
