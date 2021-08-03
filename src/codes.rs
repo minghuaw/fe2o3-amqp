@@ -2,10 +2,12 @@
 
 use std::fmt::Display;
 
+use serde::Serialize;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EncodingCodes {
-    DescribedTypeIndicator = 0x00 as u8,
+    DescribedType = 0x00 as u8,
     
     Null = 0x40,
     
@@ -87,6 +89,10 @@ impl Display for EncodingCodes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}:0x{:x}", self, self.clone() as u8)
     }
+}
+
+pub struct DescribedType<'a, T> {
+    inner: &'a T
 }
 
 #[cfg(test)]

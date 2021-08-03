@@ -26,17 +26,19 @@ impl<W: Write> Serializer<W> {
 }
 
 impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
+    // TODO: change to output an in-memory data structure
     type Ok = ();
     type Error = Error;
     
-    type SerializeSeq = Compound<'a, W>;
+    type SerializeSeq = SeqSerializer<'a, W>;
+    type SerializeTuple = SeqSerializer<'a, W>;
     type SerializeMap = Compound<'a, W>;
     type SerializeStruct = Compound<'a, W>;
     type SerializeStructVariant = Compound<'a, W>;
-    type SerializeTuple = Compound<'a, W>;
     type SerializeTupleStruct = Compound<'a, W>;
     type SerializeTupleVariant = Compound<'a, W>;
 
+    #[inline]
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         match v {
             true => {
@@ -51,12 +53,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
         let buf = [EncodingCodes::Byte as u8, v as u8];
         self.writer.write_all(&buf)
             .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
         let code = [EncodingCodes::Short as u8];
         self.writer.write_all(&code)?;
@@ -65,6 +69,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
         match v {
             val @ -128..=127 => {
@@ -81,6 +86,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         match v {
             val @ -128..=127 => {
@@ -97,12 +103,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         let buf = [EncodingCodes::Ubyte as u8, v];
         self.writer.write_all(&buf)
             .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
         let code = [EncodingCodes::Ushort as u8];
         let buf: [u8; 2] = v.to_be_bytes();
@@ -111,6 +119,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
         match v {
             // uint0
@@ -134,6 +143,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         match v {
             // ulong0
@@ -157,6 +167,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
         let code = [EncodingCodes::Float as u8];
         let buf = v.to_be_bytes();
@@ -165,6 +176,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         let code = [EncodingCodes::Double as u8];
         let buf = v.to_be_bytes();
@@ -175,6 +187,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     // `char` in rust is a subset of the unicode code points and 
     // can be directly treated as u32
+    #[inline]
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
         let code = [EncodingCodes::Char as u8];
         let buf = (v as u32).to_be_bytes();
@@ -185,6 +198,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     // String slices are always valid utf-8
     // `String` isd utf-8 encoded
+    #[inline]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         let l = v.len();
         match l {
@@ -208,6 +222,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
     
+    #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         let l = v.len();
         match l {
@@ -232,12 +247,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     // None is serialized as Bson::Null in BSON
+    #[inline]
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         let buf = [EncodingCodes::Null as u8];
         self.writer.write_all(&buf)
             .map_err(Into::into)
     }
 
+    #[inline]
     fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
             T: Serialize 
@@ -246,6 +263,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         value.serialize(self)
     }
 
+    #[inline]
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         // unit is serialized as Bson::Null in BSON
         let buf = [EncodingCodes::Null as u8];
@@ -253,70 +271,108 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             .map_err(Into::into)
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
-        println!("serialize unit struct");
-        unimplemented!()
+    // JSON, BSOM, AVRO all serialized to unit
+    #[inline]
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
+        self.serialize_unit()
     }
 
-    fn serialize_unit_variant(self, name: &'static str, variant_index: u32, variant: &'static str) -> Result<Self::Ok, Self::Error> {
-        println!("serialize unit variant");
-        unimplemented!()
+    // Serialize into tag
+    #[inline]
+    fn serialize_unit_variant(self, _name: &'static str, variant_index: u32, _variant: &'static str) -> Result<Self::Ok, Self::Error> {
+        self.serialize_u32(variant_index)
     }
 
-    fn serialize_newtype_struct<T: ?Sized>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
+    // Treat newtype structs as insignificant wrappers around the data they contain
+    #[inline]
+    fn serialize_newtype_struct<T: ?Sized>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
     {
-        println!("serialize newtype struct");
-        unimplemented!()
+        value.serialize(self)
     }
     
+    // TODO: see how are enums represented in AMQP
+    #[inline]
     fn serialize_newtype_variant<T: ?Sized>(self, name: &'static str, variant_index: u32, variant: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
     {
         println!("serialize newtype variant");
         unimplemented!()
     }
 
-    // This will serialize into a sequence of a single type
+    // A variably sized heterogeneous sequence of values
+    // 
+    // This will be encoded as primitive type `List`
+    #[inline]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        println!("serialize seq");
-        // if let Some(len) = len {
-        //     match len {
-
-        //     }
-        // } else {
-        //     Err(Error::Message("Length must be known".into()))
-        // }
-        unimplemented!()
+        if let Some(len) = len {
+            match len {
+                // list0
+                0 => {
+                    let code = [EncodingCodes::List0 as u8];
+                    self.writer.write_all(&code)?;
+                },
+                // list8
+                1 ..= 255 => {
+                    let code = [EncodingCodes::List8 as u8];
+                    let width: [u8; 1] = (len as u8).to_be_bytes();
+                    self.writer.write_all(&code)?;
+                    self.writer.write_all(&width)?;
+                },
+                // list32
+                256 ..= U32_MAX_AS_USIZE => {
+                    let code = [EncodingCodes::List32 as u8];
+                    let width: [u8; 4] = (len as u32).to_be_bytes();
+                    self.writer.write_all(&code)?;
+                    self.writer.write_all(&width)?;
+                },
+                _ => {
+                    return Err(Error::Message("Too long".into()))
+                }
+            }
+            Ok(SeqSerializer::from(self))
+        } else {
+            Err(Error::Message("Length must be known".into()))
+        }
     }
 
+    // A statically sized heterogeneous sequence of values 
+    // for which the length will be known at deserialization 
+    // time without looking at the serialized data
+    // 
+    // This will be encoded as primitive type `List`
+    #[inline]
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        println!("serialize tuple");
-        unimplemented!()
+        self.serialize_seq(Some(len))
     }
 
+    #[inline]
     fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         println!("serialize tuple struct");
         unimplemented!()
     }
 
+    #[inline]
     fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant, Self::Error> {
         println!("serialize tuple variant");
         unimplemented!()
     }
 
+    #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         println!("serialize map");
         unimplemented!()
     }
 
+    #[inline]
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         println!("serialize struct");
         unimplemented!()
     }
 
+    #[inline]
     fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant, Self::Error> {
         println!("serialize struct variant");
         unimplemented!()
@@ -330,29 +386,55 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
 pub struct Compound<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    is_first_element: bool
 }
 
-impl<'a, W: Write + 'a> ser::SerializeSeq for Compound<'a, W> {
+pub struct SeqSerializer<'a, W: 'a> {
+    se: &'a mut Serializer<W>
+}
+
+impl<'a, W: 'a> From<&'a mut Serializer<W>> for SeqSerializer<'a, W> {
+    fn from(se: &'a mut Serializer<W>) -> Self {
+        Self { se }
+    }
+}
+
+impl<'a, W: 'a> AsRef<Serializer<W>> for SeqSerializer<'a, W> {
+    fn as_ref(&self) -> &Serializer<W> {
+        self.se
+    }
+}
+
+impl<'a, W: 'a> AsMut<Serializer<W>> for SeqSerializer<'a, W> {
+    fn as_mut(&mut self) -> &mut Serializer<W> {
+        self.se
+    }
+}
+
+// This requires some hacking way of getting the constructor (EncodingCode)
+// for the type. Use TypeId?
+impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = Error;
 
+    #[inline]
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-            T: Serialize 
+        T: Serialize 
     {
-        unimplemented!()
+        value.serialize(self.as_mut())
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
-impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeTuple for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = Error;
 
+    #[inline]
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
             T: Serialize 
@@ -360,6 +442,7 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
         unimplemented!()
     }
 
+    #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         unimplemented!()
     }
