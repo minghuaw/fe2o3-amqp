@@ -33,7 +33,7 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
     let fn_get_name = match attr.name {
         Some(s) => {
             quote::quote! {
-                fn get_name() -> Option<String> { Some(#s) }
+                fn get_name() -> Option<String> { Some(#s.into()) }
             }
         },
         None => {
