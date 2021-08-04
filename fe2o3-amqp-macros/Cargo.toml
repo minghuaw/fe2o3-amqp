@@ -8,6 +8,9 @@ edition = "2018"
 [lib]
 proc-macro = true
 
+[dev-dependencies]
+serde = { version = "1.0.127", features = ["derive"] }
+
 [dependencies]
 darling = "0.13.0"
 quote = "1.0.9"
