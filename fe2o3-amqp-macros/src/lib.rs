@@ -1,27 +1,93 @@
 use darling::{FromDeriveInput, FromMeta};
 
 #[derive(Debug, Clone, FromMeta)]
+#[darling(default)]
 enum EncodingType {
-    Seq,
+    List,
     Map
+}
+
+impl Default for EncodingType {
+    fn default() -> Self {
+        Self::List
+    }
 }
 
 #[derive(Debug, Clone, FromDeriveInput)]
 #[darling(attributes(amqp_contract))]
 struct AmqpContractAttr {
     #[darling(default)]
-    name: Option<String>,
+    pub name: Option<String>,
     #[darling(default)]
-    code: Option<u64>,
+    pub code: Option<u64>,
     #[darling(default)]
-    encoding_type: Option<EncodingType>,
+    pub encoding: Option<EncodingType>,
 }
 
 #[proc_macro_derive(AmqpContract, attributes(amqp_contract))]
 pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
-    let attr = AmqpContractAttr::from_derive_input(&input);
+    let ident = &input.ident;
+    let attr = AmqpContractAttr::from_derive_input(&input).unwrap();
     println!("{:?}", &attr);
-    let output = quote::quote! { };
+    let fn_get_name = match attr.name {
+        Some(s) => {
+            quote::quote! {
+                fn get_name() -> Option<String> { Some(#s) }
+            }
+        },
+        None => {
+            quote::quote! {
+                fn get_name() -> Option<String> { None }
+            }
+        }
+    };
+    let fn_get_code = match attr.code {
+        Some(num) => {
+            quote::quote! {
+                fn get_code() -> Option<u64> { Some(#num) }
+            }
+        },
+        None => {
+            quote::quote! {
+                fn get_code() -> Option<u64> { None }
+            }
+        }
+    };
+    let fn_get_encoding = match attr.encoding {
+        Some(s) => {
+            match s {
+                EncodingType::List => {
+                    quote::quote! {
+                        fn get_encoding_type() -> Option<fe2o3_amqp::contract::EncodingType>{ 
+                            Some(fe2o3_amqp::contract::EncodingType::List)
+                        }
+                    }
+                },
+                EncodingType::Map => {
+                    quote::quote! {
+                        fn get_encoding_type() -> Option<fe2o3_amqp::contract::EncodingType>{ 
+                            Some(fe2o3_amqp::contract::EncodingType::Map)
+                        }
+                    }
+                }
+            }
+        },
+        None => {
+            quote::quote! {
+                fn get_encoding_type() -> Option<fe2o3_amqp::contract::EncodingType>{ None }
+            }
+        }
+    };
+
+
+    let output = quote::quote! { 
+        impl fe2o3_amqp::contract::AmqpContract for #ident {
+            #fn_get_name
+            #fn_get_code
+            #fn_get_encoding
+        }
+    };
     output.into()
 }
+

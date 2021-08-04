@@ -2,8 +2,6 @@
 
 use std::fmt::Display;
 
-use serde::Serialize;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EncodingCodes {

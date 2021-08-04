@@ -8,7 +8,7 @@ use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp};
 
 #[derive(Debug, Clone)]
 pub enum EncodingType {
-    Seq,
+    List,
     Map
 }
 

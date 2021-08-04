@@ -1,5 +1,10 @@
 [workspace]
 members = [
     "fe2o3-amqp-macros",
-    "fe2o3-amqp"
+    "fe2o3-amqp",
+    "examples/macro_expand"
+]
+
+exclude = [
+
 ]
