@@ -118,3 +118,22 @@ impl<T: AmqpContract> AmqpContract for RwLock<T> { }
 impl<'a, T: AmqpContract> AmqpContract for RwLockReadGuard<'a, T> { }
 
 impl<'a, T: AmqpContract> AmqpContract for RwLockWriteGuard<'a, T> { }
+
+macro_rules! impl_amqp_contract_for_tuples {
+    ( $( $name:ident )+ ) => {
+        impl<$($name),+> AmqpContract for ($($name,)+) { }
+    };
+}
+
+impl_amqp_contract_for_tuples! { A }
+impl_amqp_contract_for_tuples! { A B }
+impl_amqp_contract_for_tuples! { A B C }
+impl_amqp_contract_for_tuples! { A B C D }
+impl_amqp_contract_for_tuples! { A B C D E }
+impl_amqp_contract_for_tuples! { A B C D E F }
+impl_amqp_contract_for_tuples! { A B C D E F G }
+impl_amqp_contract_for_tuples! { A B C D E F G H }
+impl_amqp_contract_for_tuples! { A B C D E F G H I }
+impl_amqp_contract_for_tuples! { A B C D E F G H I J }
+impl_amqp_contract_for_tuples! { A B C D E F G H I J K }
+impl_amqp_contract_for_tuples! { A B C D E F G H I J K L }
