@@ -285,11 +285,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     // Treat newtype structs as insignificant wrappers around the data they contain
-    //
-    // TODO: consider user configurable serialization, 
-    // Options include: 
-    // 1. default: treat as insignificant wrappers and only serialize the inner
-    // 2. described: serialize the struct as a described type with the name of the outer type as the descriptor
     #[inline]
     fn serialize_newtype_struct<T: ?Sized>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
@@ -366,10 +361,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     //
     // The tuple struct looks rather like a rust-exclusive data type. 
     // Thus this will be treated the same as a tuple (as in JSON and AVRO)
-    //
-    // TODO: Consider configurable serialization
-    // 1. default: serialize as a list
-    // 2. described: serialize as a described list
     #[inline]
     fn serialize_tuple_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
         unimplemented!()
@@ -412,10 +403,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
     //
-    // Thus serialize this into a Map
-    // TODO: List or Map?
-    // amqpdotnetlite serializes a class into a described list where the descriptor doesn't have a 
-    // code
+    // Naive impl: serialize into a list
+    // 
+    // Can be configured to serialize into a map or list when wrapped with `Described`
     #[inline]
     fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         unimplemented!()
@@ -502,8 +492,7 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
     }
 }
 
-// Serialize into a List with an option to serialize with a descriptor
-// List requires knowing the total number of bytes after serialized
+// Serialize into a List with 
 impl<'a, W: Write + 'a> ser::SerializeTupleStruct for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
@@ -548,9 +537,7 @@ impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     }
 }
 
-// TODO: Consider configurable serialization (similar to that in "amqp.net lite")
-// 1. `EncodingType::List`: serialize as a described list
-// 2. `EncodingType::Map`: serialize as a described map
+// Serialize into a list
 impl<'a, W: Write + 'a> ser::SerializeStruct for Compound<'a, W> {
     type Ok = ();
     type Error = Error;

@@ -89,10 +89,6 @@ impl Display for EncodingCodes {
     }
 }
 
-pub struct DescribedType<'a, T> {
-    inner: &'a T
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
