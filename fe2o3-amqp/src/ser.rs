@@ -2,7 +2,7 @@ use std::{io::Write};
 
 use serde::{Serialize, ser::{self, SerializeSeq}};
 
-use crate::{constructor::EncodingCodes, contract::{Contract}, error::{Error}, value::{U32_MAX_AS_USIZE}};
+use crate::{constructor::EncodingCodes, error::{Error}, value::{U32_MAX_AS_USIZE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error> 
 where 
@@ -290,7 +290,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize 
     {
-        unimplemented!()
+        value.serialize(self)
     }
     
     // TODO: see how are enums represented in AMQP
@@ -299,52 +299,20 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize 
     {
-        // TODO: consider serialize into a described type
         unimplemented!()
     }
 
     // A variably sized heterogeneous sequence of values
     // 
     // This will be encoded as primitive type `List`
-    // TODO: list needs to know the total size 
     #[inline]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         match len {
-            Some(len) => {
-                Ok(Compound::new(self, len))
+            Some(num) => {
+                Ok(Compound::new(self, num))
             },
             None => Err(Error::Message("Length must be known".into()))
         }
-        // TODO: wrong implementation
-        // if let Some(len) = len {
-        //     match len {
-        //         // list0
-        //         0 => {
-        //             let code = [EncodingCodes::List0 as u8];
-        //             self.writer.write_all(&code)?;
-        //         },
-        //         // list8
-        //         1 ..= 255 => {
-        //             let code = [EncodingCodes::List8 as u8];
-        //             let width: [u8; 1] = (len as u8).to_be_bytes();
-        //             self.writer.write_all(&code)?;
-        //             self.writer.write_all(&width)?;
-        //         },
-        //         // list32
-        //         256 ..= U32_MAX_AS_USIZE => {
-        //             let code = [EncodingCodes::List32 as u8];
-        //             let width: [u8; 4] = (len as u32).to_be_bytes();
-        //             self.writer.write_all(&code)?;
-        //             self.writer.write_all(&width)?;
-        //         },
-        //         _ => {
-        //             return Err(Error::Message("Too long".into()))
-        //         }
-        //     }
-        //     Ok(Self::SerializeSeq::from(self))
-        // } else {
-        //     Err(Error::Message("Length must be known".into()))
-        // }
     }
 
     // A statically sized heterogeneous sequence of values 
@@ -363,7 +331,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // Thus this will be treated the same as a tuple (as in JSON and AVRO)
     #[inline]
     fn serialize_tuple_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        unimplemented!()
+        self.serialize_seq(Some(len))
     }
 
     #[inline]
@@ -373,32 +341,10 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        // if let Some(len) = len {
-        //     // AMQP Map counts a KV pair as two items
-        //     let len = len * 2; 
-
-        //     match len {
-        //         0 ..= 255 => {
-        //             let code = [EncodingCodes::Map8 as u8];
-        //             let width = (len as u8).to_be_bytes();
-        //             self.writer.write_all(&code)?;
-        //             self.writer.write_all(&width)?;
-        //         },
-        //         256 ..= U32_MAX_AS_USIZE => {
-        //             let code = [EncodingCodes::Map32 as u8];
-        //             let width = (len as u32).to_be_bytes();
-        //             self.writer.write_all(&code)?;
-        //             self.writer.write_all(&width)?;
-        //         },
-        //         _ => {
-        //             return Err(Error::Message("Too long".into()))
-        //         }
-        //     }
-        //     Ok(Self::SerializeMap::from(self))
-        // } else {
-        //     Err(Error::Message("length must be known".into()))
-        // }
-        unimplemented!()
+        match len {
+            Some(num) => Ok(Compound::new(self, num * 2)),
+            None => Err(Error::Message("Length must be known".into()))
+        }
     }
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
@@ -408,12 +354,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // Can be configured to serialize into a map or list when wrapped with `Described`
     #[inline]
     fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        unimplemented!()
+        self.serialize_seq(Some(len))
     }
 
     #[inline]
     fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant, Self::Error> {
-        println!("serialize struct variant");
         unimplemented!()
     }
 }
@@ -423,29 +368,17 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 /// 2. Map
 pub struct Compound<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    len: usize, // number of element
+    num: usize, // number of element
     buf: Vec<u8>, // byte buffer
 }
 
 impl<'a, W: 'a> Compound<'a, W> {
-    fn new(se: &'a mut Serializer<W>, len: usize) -> Self {
+    fn new(se: &'a mut Serializer<W>, num: usize) -> Self {
         Self {
             se,
-            len,
+            num,
             buf: Vec::new()
         }
-    }
-}
-
-impl<'a, W: 'a> AsRef<Serializer<W>> for Compound<'a, W> {
-    fn as_ref(&self) -> &Serializer<W> {
-        self.se
-    }
-}
-
-impl<'a, W: 'a> AsMut<Serializer<W>> for Compound<'a, W> {
-    fn as_mut(&mut self) -> &mut Serializer<W> {
-        self.se
     }
 }
 
@@ -463,11 +396,37 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for Compound<'a, W> {
     where
         T: Serialize 
     {
-        value.serialize(self.as_mut())
+        let mut serializer = Serializer::new(&mut self.buf);
+        value.serialize(&mut serializer)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        let Self { se, num, buf } = self;
+        let len = buf.len();
+
+        // if `len` < 255, `num` must be smaller than 255
+        match len {
+            0 => {
+                let code = [EncodingCodes::List0 as u8];
+                se.writer.write_all(&code)?;
+            },
+            1 ..= 255 => {
+                let code = [EncodingCodes::List8 as u8, len as u8, num as u8];
+                se.writer.write_all(&code)?;
+                se.writer.write_all(&buf)?;
+            },
+            256 ..= U32_MAX_AS_USIZE => {
+                let code = [EncodingCodes::List32 as u8];
+                let len: [u8; 4] = (len as u32).to_be_bytes();
+                let num: [u8; 4] = (num as u32).to_be_bytes();
+                se.writer.write_all(&code)?;
+                se.writer.write_all(&len)?;
+                se.writer.write_all(&num)?;
+                se.writer.write_all(&buf)?;
+            },
+            _ => return Err(Error::Message("Too long".into()))
+        }
         Ok(())
     }
 }
@@ -516,23 +475,55 @@ impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     type Error = Error;
 
     #[inline]
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
+    fn serialize_entry<K: ?Sized, V: ?Sized>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
     where
-        T: Serialize 
+        K: Serialize,
+        V: Serialize, 
     {
-        key.serialize(self.as_mut())
+        let mut serializer = Serializer::new(&mut self.buf);
+        key.serialize(&mut serializer)?;
+        value.serialize(&mut serializer)?;
+        Ok(())
     }
 
     #[inline]
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<(), Self::Error>
     where
         T: Serialize 
     {
-        value.serialize(self.as_mut())
+        unreachable!()
+    }
+
+    #[inline]
+    fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize 
+    {
+        unreachable!()
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        let Self {se, num, buf } = self;
+        let len = buf.len();
+
+        match len {
+            0 ..= 255 => {
+                let code = [EncodingCodes::Map8 as u8, len as u8, num as u8];
+                se.writer.write_all(&code)?;
+                se.writer.write_all(&buf)?;
+            },
+            256 ..= U32_MAX_AS_USIZE => {
+                let code = [EncodingCodes::Map32 as u8];
+                let len = (len as u32).to_be_bytes();
+                let num = (num as u32).to_be_bytes();
+                se.writer.write_all(&code)?;
+                se.writer.write_all(&len)?;
+                se.writer.write_all(&num)?;
+                se.writer.write_all(&buf)?;
+            },
+            _ => return Err(Error::Message("Too long".into()))
+        }
         Ok(())
     }
 }
@@ -543,16 +534,16 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for Compound<'a, W> {
     type Error = Error;
 
     #[inline]
-    fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize 
     {
-        unimplemented!()
+        <Self as SerializeSeq>::serialize_element(self, value)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        <Self as SerializeSeq>::end(self)
     }
 }
 
