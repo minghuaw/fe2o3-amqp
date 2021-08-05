@@ -15,7 +15,8 @@ pub enum EncodingType {
 pub struct Contract {
     pub name: Option<String>,
     pub code: Option<u64>,
-    pub encoding_type: Option<EncodingType>
+    pub encoding_type: Option<EncodingType>,
+    pub described: bool
 }
 
 impl Default for Contract {
@@ -23,7 +24,8 @@ impl Default for Contract {
         Self { 
             name: None, 
             code: None, 
-            encoding_type: None 
+            encoding_type: None,
+            described: false,
         }
     }
 }
@@ -33,7 +35,8 @@ impl Contract {
         Self {
             name: T::get_name(),
             code: T::get_code(),
-            encoding_type: T::get_encoding_type()
+            encoding_type: T::get_encoding_type(),
+            described: T::is_described()
         }
     }
 
@@ -48,6 +51,10 @@ impl Contract {
     pub fn get_encoding_type(&self) -> &Option<EncodingType> {
         &self.encoding_type
     }
+
+    pub fn is_described(&self) -> bool {
+        self.described
+    }
 }
 
 pub trait AmqpContract {
@@ -56,6 +63,8 @@ pub trait AmqpContract {
     fn get_code() -> Option<u64> { None }
 
     fn get_encoding_type() -> Option<EncodingType> { None }
+
+    fn is_described() -> bool { false }
 }
 
 macro_rules! impl_amqp_contract_for_primitive_types {

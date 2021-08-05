@@ -1,4 +1,4 @@
-use std::{io::Write};
+use std::{io::Write, path::Component};
 
 use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq}};
 
@@ -288,12 +288,17 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     // Treat newtype structs as insignificant wrappers around the data they contain
+    //
+    // TODO: consider user configurable serialization, 
+    // Options include: 
+    // 1. default: treat as insignificant wrappers and only serialize the inner
+    // 2. described: serialize the struct as a described type with the name of the outer type as the descriptor
     #[inline]
     fn serialize_newtype_struct<T: ?Sized>(self, _name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize 
     {
-        value.serialize(self)
+        unimplemented!()
     }
     
     // TODO: see how are enums represented in AMQP
@@ -302,44 +307,52 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize 
     {
-        println!("serialize newtype variant");
+        // TODO: consider serialize into a described type
         unimplemented!()
     }
 
     // A variably sized heterogeneous sequence of values
     // 
     // This will be encoded as primitive type `List`
+    // TODO: list needs to know the total size 
     #[inline]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        if let Some(len) = len {
-            match len {
-                // list0
-                0 => {
-                    let code = [EncodingCodes::List0 as u8];
-                    self.writer.write_all(&code)?;
-                },
-                // list8
-                1 ..= 255 => {
-                    let code = [EncodingCodes::List8 as u8];
-                    let width: [u8; 1] = (len as u8).to_be_bytes();
-                    self.writer.write_all(&code)?;
-                    self.writer.write_all(&width)?;
-                },
-                // list32
-                256 ..= U32_MAX_AS_USIZE => {
-                    let code = [EncodingCodes::List32 as u8];
-                    let width: [u8; 4] = (len as u32).to_be_bytes();
-                    self.writer.write_all(&code)?;
-                    self.writer.write_all(&width)?;
-                },
-                _ => {
-                    return Err(Error::Message("Too long".into()))
-                }
-            }
-            Ok(Self::SerializeSeq::from(self))
-        } else {
-            Err(Error::Message("Length must be known".into()))
+        match len {
+            Some(len) => {
+                Ok(Compound::new(self, len))
+            },
+            None => Err(Error::Message("Length must be known".into()))
         }
+        // TODO: wrong implementation
+        // if let Some(len) = len {
+        //     match len {
+        //         // list0
+        //         0 => {
+        //             let code = [EncodingCodes::List0 as u8];
+        //             self.writer.write_all(&code)?;
+        //         },
+        //         // list8
+        //         1 ..= 255 => {
+        //             let code = [EncodingCodes::List8 as u8];
+        //             let width: [u8; 1] = (len as u8).to_be_bytes();
+        //             self.writer.write_all(&code)?;
+        //             self.writer.write_all(&width)?;
+        //         },
+        //         // list32
+        //         256 ..= U32_MAX_AS_USIZE => {
+        //             let code = [EncodingCodes::List32 as u8];
+        //             let width: [u8; 4] = (len as u32).to_be_bytes();
+        //             self.writer.write_all(&code)?;
+        //             self.writer.write_all(&width)?;
+        //         },
+        //         _ => {
+        //             return Err(Error::Message("Too long".into()))
+        //         }
+        //     }
+        //     Ok(Self::SerializeSeq::from(self))
+        // } else {
+        //     Err(Error::Message("Length must be known".into()))
+        // }
     }
 
     // A statically sized heterogeneous sequence of values 
@@ -356,44 +369,48 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     //
     // The tuple struct looks rather like a rust-exclusive data type. 
     // Thus this will be treated the same as a tuple (as in JSON and AVRO)
+    //
+    // TODO: Consider configurable serialization
+    // 1. default: serialize as a list
+    // 2. described: serialize as a described list
     #[inline]
     fn serialize_tuple_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        self.serialize_seq(Some(len))
+        unimplemented!()
     }
 
     #[inline]
     fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        println!("serialize tuple variant");
         unimplemented!()
     }
 
     #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        if let Some(len) = len {
-            // AMQP Map counts a KV pair as two items
-            let len = len * 2; 
+        // if let Some(len) = len {
+        //     // AMQP Map counts a KV pair as two items
+        //     let len = len * 2; 
 
-            match len {
-                0 ..= 255 => {
-                    let code = [EncodingCodes::Map8 as u8];
-                    let width = (len as u8).to_be_bytes();
-                    self.writer.write_all(&code)?;
-                    self.writer.write_all(&width)?;
-                },
-                256 ..= U32_MAX_AS_USIZE => {
-                    let code = [EncodingCodes::Map32 as u8];
-                    let width = (len as u32).to_be_bytes();
-                    self.writer.write_all(&code)?;
-                    self.writer.write_all(&width)?;
-                },
-                _ => {
-                    return Err(Error::Message("Too long".into()))
-                }
-            }
-            Ok(Self::SerializeMap::from(self))
-        } else {
-            Err(Error::Message("length must be known".into()))
-        }
+        //     match len {
+        //         0 ..= 255 => {
+        //             let code = [EncodingCodes::Map8 as u8];
+        //             let width = (len as u8).to_be_bytes();
+        //             self.writer.write_all(&code)?;
+        //             self.writer.write_all(&width)?;
+        //         },
+        //         256 ..= U32_MAX_AS_USIZE => {
+        //             let code = [EncodingCodes::Map32 as u8];
+        //             let width = (len as u32).to_be_bytes();
+        //             self.writer.write_all(&code)?;
+        //             self.writer.write_all(&width)?;
+        //         },
+        //         _ => {
+        //             return Err(Error::Message("Too long".into()))
+        //         }
+        //     }
+        //     Ok(Self::SerializeMap::from(self))
+        // } else {
+        //     Err(Error::Message("length must be known".into()))
+        // }
+        unimplemented!()
     }
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
@@ -414,22 +431,22 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 }
 
-// pub enum Compound<'a, W: 'a> {
-//     Map { ser: &'a mut Serializer<W> },
-    
-// }
-
+/// Serializer for Compound types. Compound types include:
+/// 1. List
+/// 2. Map
 pub struct Compound<'a, W: 'a> {
     se: &'a mut Serializer<W>,
+    len: usize, // number of element
+    buf: Vec<u8>, // byte buffer
 }
 
-// pub struct SeqSerializer<'a, W: 'a> {
-//     se: &'a mut Serializer<W>
-// }
-
-impl<'a, W: 'a> From<&'a mut Serializer<W>> for Compound<'a, W> {
-    fn from(se: &'a mut Serializer<W>) -> Self {
-        Self { se }
+impl<'a, W: 'a> Compound<'a, W> {
+    fn new(se: &'a mut Serializer<W>, len: usize) -> Self {
+        Self {
+            se,
+            len,
+            buf: Vec::new()
+        }
     }
 }
 
@@ -447,6 +464,9 @@ impl<'a, W: 'a> AsMut<Serializer<W>> for Compound<'a, W> {
 
 // This requires some hacking way of getting the constructor (EncodingCode)
 // for the type. Use TypeId?
+// 
+// Serialize into a List
+// List requires knowing the total number of bytes after serialized
 impl<'a, W: Write + 'a> ser::SerializeSeq for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
@@ -465,6 +485,8 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for Compound<'a, W> {
     }
 }
 
+// Serialize into a List
+// List requires knowing the total number of bytes after serialized
 impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
@@ -483,6 +505,8 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for Compound<'a, W> {
     }
 }
 
+// Serialize into a List with an option to serialize with a descriptor
+// List requires knowing the total number of bytes after serialized
 impl<'a, W: Write + 'a> ser::SerializeTupleStruct for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
@@ -499,6 +523,8 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for Compound<'a, W> {
     }
 }
 
+// Map is a compound type and thus requires knowing the size of the total number 
+// of bytes
 impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
@@ -525,6 +551,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     }
 }
 
+// TODO: Consider configurable serialization (similar to that in "amqp.net lite")
+// 1. `EncodingType::List`: serialize as a described list
+// 2. `EncodingType::Map`: serialize as a described map
 impl<'a, W: Write + 'a> ser::SerializeStruct for Compound<'a, W> {
     type Ok = ();
     type Error = Error;

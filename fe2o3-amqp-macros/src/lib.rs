@@ -22,6 +22,8 @@ struct AmqpContractAttr {
     pub code: Option<u64>,
     #[darling(default)]
     pub encoding: Option<EncodingType>,
+    #[darling(default)]
+    pub described: bool,
 }
 
 #[proc_macro_derive(AmqpContract, attributes(amqp_contract))]
@@ -79,13 +81,17 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
             }
         }
     };
-
+    let is_described = attr.described;
+    let fn_is_described = quote::quote! {
+        fn is_described() -> bool { #is_described }
+    };
 
     let output = quote::quote! { 
         impl fe2o3_amqp::contract::AmqpContract for #ident {
             #fn_get_name
             #fn_get_code
             #fn_get_encoding
+            #fn_is_described
         }
     };
     output.into()
