@@ -1,30 +1,27 @@
-use std::{io::Write, path::Component};
+use std::{io::Write};
 
-use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq}};
+use serde::{Serialize, ser::{self, SerializeSeq}};
 
-use crate::{constructor::EncodingCodes, contract::{AmqpContract, Contract}, error::{Error}, value::{U32_MAX_AS_USIZE}};
+use crate::{constructor::EncodingCodes, contract::{Contract}, error::{Error}, value::{U32_MAX_AS_USIZE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error> 
 where 
-    T: Serialize + AmqpContract
+    T: Serialize
 {
-    let contract = Contract::from_type::<T>();
     let mut writer = Vec::new(); // TODO: pre-allocate capacity
-    let mut serializer = Serializer::new(&mut writer, contract);
+    let mut serializer = Serializer::new(&mut writer);
     value.serialize(&mut serializer)?;
     Ok(writer)
 }
 
 pub struct Serializer<W> {
     writer: W,
-    contract: Contract,
 }
 
 impl<W: Write> Serializer<W> {
-    fn new(writer: W, contract: Contract) -> Self {
+    fn new(writer: W) -> Self {
         Self { 
             writer,
-            contract,
         }
     }
 }
@@ -610,7 +607,7 @@ mod test {
 
     use super::*;
 
-    fn assert_eq_on_serialized_vs_expected<T: Serialize + AmqpContract>(val: T, expected: Vec<u8>) {
+    fn assert_eq_on_serialized_vs_expected<T: Serialize>(val: T, expected: Vec<u8>) {
         let serialized = to_vec(&val).unwrap();
         assert_eq!(serialized, expected);
     }
