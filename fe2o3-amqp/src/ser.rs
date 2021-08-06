@@ -357,14 +357,12 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     // Treat this as if it is a tuple because this kind of enum is unique in rust
-    // TODO: 
     #[inline]
     fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Ok(VariantSerializer::new(self, name, variant_index, variant, len))
     }
 
     // Treat it as if it is a struct because this is not found in other languages
-    // TODO: 
     #[inline]
     fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant, Self::Error> {
         Ok(VariantSerializer::new(self, name, variant_index, variant, len))
