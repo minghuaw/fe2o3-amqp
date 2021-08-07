@@ -1,7 +1,7 @@
 use super::Symbol;
 
 #[derive(Debug)]
-pub enum Descriptor {
-    Name(Symbol),
-    Code(u64),
+pub struct Descriptor {
+    name: Symbol,
+    code: Option<u64>
 }

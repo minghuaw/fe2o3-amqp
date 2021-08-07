@@ -348,7 +348,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
     //
-    // Naive impl: serialize into a list
+    // Naive impl: serialize into a list (because Composite types in AMQP is serialized as
+    // a described list)
     // 
     // Can be configured to serialize into a map or list when wrapped with `Described`
     #[inline]

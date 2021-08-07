@@ -69,6 +69,7 @@ pub enum EncodingCodes {
     Str8 = 0xa1,
     Str32 = 0xb1,
 
+    // A special version of String
     Sym8 = 0xa3,
     Sym32 = 0xb3,
 
