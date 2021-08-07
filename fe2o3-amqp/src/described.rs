@@ -1,3 +1,5 @@
+use serde::{Serialize, Serializer};
+
 use crate::contract::WithContract;
 
 use crate::descriptor::Descriptor;
@@ -16,6 +18,9 @@ impl<'a, T: WithContract + ?Sized> Described<'a, T> {
     }
 }
 
-pub trait SerializeDescribed:  {
+pub trait SerializeDescribed: WithContract + Serialize {
+    type Ok;
+    type Error;
 
+    fn serialize_described<S: Serializer>(&self, se: S) -> Result<Self::Ok, Self::Error>;
 }
