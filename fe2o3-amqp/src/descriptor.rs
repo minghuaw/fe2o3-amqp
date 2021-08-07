@@ -1,4 +1,4 @@
-use super::Symbol;
+use crate::types::Symbol;
 
 #[derive(Debug)]
 pub struct Descriptor {
