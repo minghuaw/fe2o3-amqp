@@ -4,7 +4,7 @@ use darling::{FromDeriveInput, FromMeta};
 #[darling(default)]
 enum EncodingType {
     List,
-    Map
+    Map,
 }
 
 impl Default for EncodingType {
@@ -31,11 +31,10 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
     let attr = AmqpContractAttr::from_derive_input(&input).unwrap();
     println!("{:?}", &attr);
 
-    let output = quote::quote! { 
+    let output = quote::quote! {
         impl fe2o3_amqp::contract::AmqpContract for #ident {
 
         }
     };
     output.into()
 }
-

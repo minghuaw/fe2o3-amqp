@@ -1,9 +1,9 @@
-mod timestamp;
+mod array;
 mod decimal;
 mod symbol;
-mod array;
+mod timestamp;
 
-pub use timestamp::*;
+pub use array::*;
 pub use decimal::*;
 pub use symbol::*;
-pub use array::*;
+pub use timestamp::*;

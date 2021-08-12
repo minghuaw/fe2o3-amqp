@@ -13,14 +13,14 @@ pub const DESCRIPTOR: &str = "DESCRIPTOR";
 #[derive(Debug)]
 pub struct Descriptor {
     name: Symbol,
-    code: Option<u64>
+    code: Option<u64>,
 }
 
 impl Descriptor {
     pub fn new(name: impl Into<Symbol>, code: Option<u64>) -> Self {
         Self {
             name: name.into(),
-            code
+            code,
         }
     }
 }
@@ -28,7 +28,7 @@ impl Descriptor {
 impl Serialize for Descriptor {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         let mut state = serializer.serialize_struct(DESCRIPTOR, 1)?;
         if let Some(code) = self.code {

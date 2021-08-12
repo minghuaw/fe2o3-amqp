@@ -6,9 +6,9 @@ use std::fmt::Display;
 #[repr(u8)]
 pub enum EncodingCodes {
     DescribedType = 0x00 as u8,
-    
+
     Null = 0x40,
-    
+
     Boolean = 0x56,
     BooleanTrue = 0x41,
     BooleanFalse = 0x42,
@@ -81,7 +81,7 @@ pub enum EncodingCodes {
     Map32 = 0xd1,
 
     Array8 = 0xe0,
-    Array32 = 0xf0
+    Array32 = 0xf0,
 }
 
 impl Display for EncodingCodes {
