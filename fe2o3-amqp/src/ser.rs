@@ -404,7 +404,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             Ok(StructSerialzier::descriptor(self, len))
         } else if name == DESCRIPTOR_MAGIC { 
             // The field in `Descriptor` should be treated as value
-            Ok(StructSerialzier::value(self, len))
+            Ok(StructSerialzier::descriptor(self, len))
         } else {
             // The value will be serialized as a List, and must be serialized onto a separate buffer first
             Ok(StructSerialzier::value(self, len))
@@ -581,6 +581,7 @@ fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
 }
 
 pub enum StructSerializerState {
+    Described,
     Descriptor ,
     Value,
 }
@@ -644,24 +645,26 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerialzier<'a, W> {
     where
         T: Serialize 
     {
-        match &mut self.state {
-            StructSerializerState::Descriptor => {
-                // This should be calling serialization on the descriptor
-                value.serialize(self.as_mut())?;
-                self.state = StructSerializerState::Value;
-                Ok(())
-            },
-            StructSerializerState::Value => {
-                let mut serializer = Serializer::new(&mut self.buf);
-                value.serialize(&mut serializer)
-            }
-        }
+        // match &mut self.state {
+        //     StructSerializerState::Descriptor => {
+        //         // This should be calling serialization on the descriptor
+        //         value.serialize(self.as_mut())?;
+        //         self.state = StructSerializerState::Value;
+        //         Ok(())
+        //     },
+        //     StructSerializerState::Value => {
+        //         let mut serializer = Serializer::new(&mut self.buf);
+        //         value.serialize(&mut serializer)
+        //     }
+        // }
+        value.serialize(self.as_mut())
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         match self.state {
-            StructSerializerState::Descriptor => unreachable!(),
+            StructSerializerState::Described => Ok(()),
+            StructSerializerState::Descriptor => Ok(()),
             StructSerializerState::Value => {
                 write_seq(&mut self.se.writer, self.num, self.buf)
             }
