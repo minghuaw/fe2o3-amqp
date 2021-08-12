@@ -819,7 +819,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::constructor::EncodingCodes;
+    use crate::{constructor::EncodingCodes, descriptor::Descriptor};
 
     use super::*;
 
@@ -1079,5 +1079,20 @@ mod test {
         let symbol = Symbol::new("amqp".into());
         let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(symbol, expected);
+    }
+
+    #[test]
+    fn test_serialize_descriptor_name() {
+        // The descriptor name should just be serialized as a symbol
+        let descriptor = Descriptor::new(String::from("amqp"), None);
+        let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        assert_eq_on_serialized_vs_expected(descriptor, expected);
+    }
+
+    #[test]
+    fn test_serialize_descriptor_code() {
+        let descriptor = Descriptor::new(String::from("amqp"), Some(0xf2));
+        let expected = vec![0x53, 0xf2];
+        assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
 }

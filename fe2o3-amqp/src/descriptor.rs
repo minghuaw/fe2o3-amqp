@@ -16,6 +16,15 @@ pub struct Descriptor {
     code: Option<u64>
 }
 
+impl Descriptor {
+    pub fn new(name: impl Into<Symbol>, code: Option<u64>) -> Self {
+        Self {
+            name: name.into(),
+            code
+        }
+    }
+}
+
 impl Serialize for Descriptor {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
