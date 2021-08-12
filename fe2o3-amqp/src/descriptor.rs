@@ -2,7 +2,7 @@ use serde::ser::{Serialize, SerializeStruct};
 
 use crate::types::Symbol;
 
-pub const DESCRIPTOR_MAGIC: &str = "DESCRIPTOR";
+pub const DESCRIPTOR: &str = "DESCRIPTOR";
 
 /// Descriptor of a described type
 ///
@@ -21,7 +21,7 @@ impl Serialize for Descriptor {
     where
         S: serde::Serializer 
     {
-        let mut state = serializer.serialize_struct(DESCRIPTOR_MAGIC, 1)?;
+        let mut state = serializer.serialize_struct(DESCRIPTOR, 1)?;
         if let Some(code) = self.code {
             state.serialize_field("code", &code)?;
         } else {

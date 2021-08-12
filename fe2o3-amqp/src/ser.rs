@@ -2,7 +2,10 @@ use std::{io::Write};
 
 use serde::{Serialize, ser::{self, SerializeSeq, SerializeStruct}};
 
-use crate::{constructor::EncodingCodes, described::DESCRIBED_TYPE_MAGIC, descriptor::DESCRIPTOR_MAGIC, error::{Error}, types::SYMBOL_MAGIC, value::{U32_MAX_AS_USIZE}};
+use crate::{constructor::EncodingCodes, described::DESCRIBED_TYPE, descriptor::DESCRIPTOR, error::{Error}, types::SYMBOL_MAGIC, value::{U32_MAX_AS_USIZE}};
+
+pub const DESCRIBED_VALUE_LIST: &str = "VALUE_LIST";
+pub const DESCRIBED_VALUE_MAP: &str = "VALUE_MAP";
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error> 
 where 
@@ -397,17 +400,23 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // Can be configured to serialize into a map or list when wrapped with `Described`
     #[inline]
     fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        if name == DESCRIBED_TYPE_MAGIC {
+        if name == DESCRIBED_TYPE {
             let code = [EncodingCodes::DescribedType as u8];
             self.writer.write_all(&code)?;
             // The field following is a descriptor, which should be directly written to the writer
-            Ok(StructSerialzier::descriptor(self, len))
-        } else if name == DESCRIPTOR_MAGIC { 
+            Ok(StructSerialzier::described(self, len))
+        } else if name == DESCRIPTOR { 
             // The field in `Descriptor` should be treated as value
             Ok(StructSerialzier::descriptor(self, len))
-        } else {
+        } else if name == DESCRIBED_VALUE_LIST {
             // The value will be serialized as a List, and must be serialized onto a separate buffer first
-            Ok(StructSerialzier::value(self, len))
+            Ok(StructSerialzier::list_value(self, len))
+        } else if name == DESCRIBED_VALUE_MAP {
+            // The value will be serialized as a Map, and must be serialized onto a separate buffer first
+            Ok(StructSerialzier::map_value(self, len))
+        } else {
+            // Other primitive types
+            Ok(StructSerialzier::basic_value(self, len))
         }
     }
 
@@ -583,7 +592,9 @@ fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
 pub enum StructSerializerState {
     Described,
     Descriptor ,
-    Value,
+    ListValue,
+    MapValue,
+    BasicValue,
 }
 
 pub struct StructSerialzier<'a, W: 'a> {
@@ -594,18 +605,46 @@ pub struct StructSerialzier<'a, W: 'a> {
 }
 
 impl<'a, W: 'a> StructSerialzier<'a, W> {
+    pub fn described(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se,
+            state: StructSerializerState::Described,
+            num,
+            buf: Vec::with_capacity(0) // TODO: this should be ommitable by allocating with capacity 0
+        }
+    }
+
     pub fn descriptor(se: &'a mut Serializer<W>, num: usize) -> Self {
         Self {
             se,
             state: StructSerializerState::Descriptor,
             num,
+            buf: Vec::with_capacity(0)
+        }
+    }
+
+    pub fn list_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se, 
+            state: StructSerializerState::ListValue,
+            num,
             buf: Vec::new()
         }
     }
-    pub fn value(se: &'a mut Serializer<W>, num: usize) -> Self {
+
+    pub fn map_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se, 
+            state: StructSerializerState::MapValue,
+            num,
+            buf: Vec::new()
+        }
+    }
+
+    pub fn basic_value(se: &'a mut Serializer<W>, num: usize) -> Self {
         Self {
             se,
-            state: StructSerializerState::Value,
+            state: StructSerializerState::BasicValue,
             num,
             buf: Vec::new(),
         }
@@ -645,19 +684,25 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerialzier<'a, W> {
     where
         T: Serialize 
     {
-        // match &mut self.state {
-        //     StructSerializerState::Descriptor => {
-        //         // This should be calling serialization on the descriptor
-        //         value.serialize(self.as_mut())?;
-        //         self.state = StructSerializerState::Value;
-        //         Ok(())
-        //     },
-        //     StructSerializerState::Value => {
-        //         let mut serializer = Serializer::new(&mut self.buf);
-        //         value.serialize(&mut serializer)
-        //     }
-        // }
-        value.serialize(self.as_mut())
+        match &mut self.state {
+            StructSerializerState::Described => {
+                value.serialize(self.as_mut())
+            }
+            StructSerializerState::Descriptor => {
+                // This should be calling serialization on the descriptor
+                value.serialize(self.as_mut())
+            },
+            StructSerializerState::ListValue => {
+                let mut serializer = Serializer::new(&mut self.buf);
+                value.serialize(&mut serializer)
+            },
+            StructSerializerState::MapValue => {
+                unimplemented!()
+            },
+            StructSerializerState::BasicValue => {
+                unimplemented!()
+            }
+        }
     }
 
     #[inline]
@@ -665,8 +710,14 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerialzier<'a, W> {
         match self.state {
             StructSerializerState::Described => Ok(()),
             StructSerializerState::Descriptor => Ok(()),
-            StructSerializerState::Value => {
+            StructSerializerState::ListValue => {
                 write_seq(&mut self.se.writer, self.num, self.buf)
+            },
+            StructSerializerState::MapValue => {
+                unimplemented!()
+            },
+            StructSerializerState::BasicValue => {
+                unimplemented!()
             }
         }
     }
@@ -1020,5 +1071,13 @@ mod test {
         let val = ();
         let expected = vec![EncodingCodes::Null as u8];
         assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_symbol() {
+        use crate::types::Symbol;
+        let symbol = Symbol::new("amqp".into());
+        let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        assert_eq_on_serialized_vs_expected(symbol, expected);
     }
 }
