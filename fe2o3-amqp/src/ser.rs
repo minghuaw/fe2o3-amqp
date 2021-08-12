@@ -960,7 +960,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::{constructor::EncodingCodes, descriptor::Descriptor};
+    use crate::{constructor::EncodingCodes, described::Described, descriptor::Descriptor};
 
     use super::*;
 
@@ -1259,5 +1259,19 @@ mod test {
         let val = Foo {a: 13, b: true };
         let output = to_vec(&val).unwrap();
         println!("{:?}", &output);
+    }
+
+    #[test]
+    fn test_serialize_described_basic_type() {
+        let value = String::from("amqp");
+        let descriptor = Descriptor::new("val".to_string(), Some(100));
+        let described = Described {
+            encoding_type: crate::described::EncodingType::Basic,
+            descriptor,
+            value: &value
+        };
+
+        let output = to_vec(&described).unwrap();
+        println!("{:?}", output);
     }
 }
