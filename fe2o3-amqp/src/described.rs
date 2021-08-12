@@ -1,8 +1,8 @@
-use serde::{Serialize, Serializer};
+use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use crate::descriptor::Descriptor;
 
-pub const DESCRIBED_TYPE_MAGIC: &str = "DESCRIBED_TYPE_MAGIC";
+pub const DESCRIBED_TYPE_MAGIC: &str = "DESCRIBED";
 
 /// The described type will attach a descriptor before the value. 
 /// There is no generic implementation of serialization. But a inner type
@@ -10,4 +10,16 @@ pub const DESCRIBED_TYPE_MAGIC: &str = "DESCRIBED_TYPE_MAGIC";
 pub struct Described<'a, T: ?Sized> {
     pub descriptor: Descriptor,
     pub value: &'a T
+}
+
+impl<'a, T: ?Sized + Serialize> Serialize for Described<'a, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer 
+    {
+        let mut state = serializer.serialize_struct(DESCRIBED_TYPE_MAGIC, 2)?;
+        state.serialize_field("descriptor", &self.descriptor)?;
+        state.serialize_field("value", &self.value)?;
+        state.end()
+    }
 }

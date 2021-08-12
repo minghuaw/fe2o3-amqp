@@ -2,7 +2,7 @@ use std::{io::Write};
 
 use serde::{Serialize, ser::{self, SerializeSeq, SerializeStruct}};
 
-use crate::{constructor::EncodingCodes, error::{Error}, types::SYMBOL_MAGIC, value::{U32_MAX_AS_USIZE}};
+use crate::{constructor::EncodingCodes, described::DESCRIBED_TYPE_MAGIC, descriptor::DESCRIPTOR_MAGIC, error::{Error}, types::SYMBOL_MAGIC, value::{U32_MAX_AS_USIZE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error> 
 where 
@@ -396,9 +396,19 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // 
     // Can be configured to serialize into a map or list when wrapped with `Described`
     #[inline]
-    fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        // self.serialize_seq(Some(len))
-        unimplemented!()
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        if name == DESCRIBED_TYPE_MAGIC {
+            let code = [EncodingCodes::DescribedType as u8];
+            self.writer.write_all(&code)?;
+            // The field following is a descriptor, which should be directly written to the writer
+            Ok(StructSerialzier::descriptor(self, len))
+        } else if name == DESCRIPTOR_MAGIC { 
+            // The field in `Descriptor` should be treated as value
+            Ok(StructSerialzier::value(self, len))
+        } else {
+            // The value will be serialized as a List, and must be serialized onto a separate buffer first
+            Ok(StructSerialzier::value(self, len))
+        }
     }
 
     // Treat this as if it is a tuple because this kind of enum is unique in rust
@@ -570,8 +580,41 @@ fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
     Ok(())
 }
 
+pub enum StructSerializerState {
+    Descriptor ,
+    Value,
+}
+
 pub struct StructSerialzier<'a, W: 'a> {
-    se: &'a mut Serializer<W>
+    se: &'a mut Serializer<W>,
+    state: StructSerializerState,
+    num: usize,
+    buf: Vec<u8>,
+}
+
+impl<'a, W: 'a> StructSerialzier<'a, W> {
+    pub fn descriptor(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se,
+            state: StructSerializerState::Descriptor,
+            num,
+            buf: Vec::new()
+        }
+    }
+    pub fn value(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se,
+            state: StructSerializerState::Value,
+            num,
+            buf: Vec::new(),
+        }
+    }
+}
+
+impl<'a, W: 'a> AsMut<Serializer<W>> for StructSerialzier<'a, W> {
+    fn as_mut(&mut self) -> &mut Serializer<W> {
+        self.se
+    }
 }
 
 // Serialize into a List with 
@@ -601,12 +644,28 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerialzier<'a, W> {
     where
         T: Serialize 
     {
-        unimplemented!()
+        match &mut self.state {
+            StructSerializerState::Descriptor => {
+                // This should be calling serialization on the descriptor
+                value.serialize(self.as_mut())?;
+                self.state = StructSerializerState::Value;
+                Ok(())
+            },
+            StructSerializerState::Value => {
+                let mut serializer = Serializer::new(&mut self.buf);
+                value.serialize(&mut serializer)
+            }
+        }
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        match self.state {
+            StructSerializerState::Descriptor => unreachable!(),
+            StructSerializerState::Value => {
+                write_seq(&mut self.se.writer, self.num, self.buf)
+            }
+        }
     }
 }
 
