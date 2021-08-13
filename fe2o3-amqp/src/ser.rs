@@ -24,8 +24,8 @@ where
 #[repr(u8)]
 enum SerializerState {
     None,
-    Symbol,
     DescribedList,
+    Symbol,
     DescribedMap,
     DescribedBasic,
 }
@@ -452,24 +452,10 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        // if name == DESCRIBED_TYPE {
-        //     let code = [EncodingCodes::DescribedType as u8];
-        //     self.writer.write_all(&code)?;
-        //     // The field following is a descriptor, which should be directly written to the writer
-        //     Ok(StructSerialzier::described(self, len))
-        // } else if name == DESCRIPTOR {
-        //     // The field in `Descriptor` should be treated as value
-        //     Ok(StructSerialzier::descriptor(self, len))
-        // } else if name == DESCRIBED_VALUE_LIST {
-        //     // The value will be serialized as a List, and must be serialized onto a separate buffer first
-        //     Ok(StructSerialzier::list_value(self, len))
-        // } else if name == DESCRIBED_VALUE_MAP {
-        //     // The value will be serialized as a Map, and must be serialized onto a separate buffer first
-        //     Ok(StructSerialzier::map_value(self, len))
-        // } else {
-        //     // Other primitive types
-        //     Ok(StructSerialzier::basic_value(self, len))
-        // }
+        if name == DESCRIPTOR {
+            return Ok(StructSerialzier::descriptor(StructRole::Descriptor, self, len))
+        }
+
         match self.state {
             // A None state indicates a freshly instantiated serializer
             SerializerState::None => {
@@ -477,32 +463,32 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.state = SerializerState::DescribedList;
                     let code = [EncodingCodes::DescribedType as u8];
                     self.writer.write_all(&code)?;
-                    Ok(StructSerialzier::list_value(self, len))
+                    Ok(StructSerialzier::list_value(StructRole::Described, self, len))
                 } else if name == DESCRIBED_MAP {
                     self.state = SerializerState::DescribedMap;
                     let code = [EncodingCodes::DescribedType as u8];
                     self.writer.write_all(&code)?;
-                    Ok(StructSerialzier::map_value(self, len))
+                    Ok(StructSerialzier::map_value(StructRole::Described, self, len))
                 } else if name == DESCRIBED_BASIC {
                     self.state = SerializerState::DescribedBasic;
                     let code = [EncodingCodes::DescribedType as u8];
                     self.writer.write_all(&code)?;
-                    Ok(StructSerialzier::basic_value(self, len))
+                    Ok(StructSerialzier::basic_value(StructRole::Described, self, len))
                 } else if name == DESCRIPTOR {
-                    Ok(StructSerialzier::descriptor(self, len))
+                    Ok(StructSerialzier::descriptor(StructRole::Descriptor, self, len))
                 } else {
                     // Only non-described struct will go to this branch
-                    Ok(StructSerialzier::list_value(self, len))
+                    Ok(StructSerialzier::list_value(StructRole::Value, self, len))
                 }
             },
             SerializerState::DescribedBasic => {
-                Ok(StructSerialzier::basic_value(self, len))
+                Ok(StructSerialzier::basic_value(StructRole::Value, self, len))
             },
             SerializerState::DescribedList => {
-                Ok(StructSerialzier::list_value(self, len))
+                Ok(StructSerialzier::list_value(StructRole::Value, self, len))
             },
             SerializerState::DescribedMap => {
-                Ok(StructSerialzier::map_value(self, len))
+                Ok(StructSerialzier::map_value(StructRole::Value, self, len))
             },
             SerializerState::Symbol => unreachable!()
         }
@@ -705,65 +691,76 @@ fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
     Ok(())
 }
 
-pub enum StructSerializerType {
+pub enum StructRole {
     Described,
     Descriptor,
-    BasicValue,
-    ListValue,
-    MapValue,
-    // BasicValue,
+    Value
+}
+
+pub enum ValueType {
+    Basic,
+    List,
+    Map
 }
 
 pub struct StructSerialzier<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    state: StructSerializerType,
+    role: StructRole,
+    val_ty: ValueType,
     num: usize,
     buf: Vec<u8>,
 }
 
+#[inline]
+pub fn init_vec(role: &StructRole) -> Vec<u8> {
+    match role {
+        &StructRole::Value => Vec::new(),
+        _ => Vec::with_capacity(0)
+    }
+}
+
 impl<'a, W: 'a> StructSerialzier<'a, W> {
-    pub fn described(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn descriptor(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+        let buf = init_vec(&role);
         Self {
             se,
-            state: StructSerializerType::Described,
+            role,
+            val_ty: ValueType::Basic,
             num,
-            buf: Vec::new(), // TODO: this should be ommitable by allocating with capacity 0
+            buf,
         }
     }
 
-    pub fn descriptor(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn basic_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+        let buf = init_vec(&role);
         Self {
             se,
-            state: StructSerializerType::Descriptor,
+            role,
+            val_ty: ValueType::Basic,
             num,
-            buf: Vec::new(),
+            buf,
         }
     }
 
-    pub fn basic_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn list_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+        let buf = init_vec(&role);
         Self {
             se,
-            state: StructSerializerType::BasicValue,
+            role,
+            val_ty: ValueType::List,
             num,
-            buf: Vec::new(),
+            buf,
         }
     }
 
-    pub fn list_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn map_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+        let buf = init_vec(&role);
         Self {
             se,
-            state: StructSerializerType::ListValue,
+            role,
+            val_ty: ValueType::Map,
             num,
-            buf: Vec::new(),
-        }
-    }
-
-    pub fn map_value(se: &'a mut Serializer<W>, num: usize) -> Self {
-        Self {
-            se,
-            state: StructSerializerType::MapValue,
-            num,
-            buf: Vec::new(),
+            buf,
         }
     }
 }
@@ -799,51 +796,55 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerialzier<'a, W> {
     #[inline]
     fn serialize_field<T: ?Sized>(
         &mut self,
-        _key: &'static str,
+        key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
-        match self.state {
-            StructSerializerType::Descriptor => {
+        match self.role {
+            StructRole::Described => {
                 value.serialize(self.as_mut())
             },
-            StructSerializerType::Described => {
+            StructRole::Descriptor => {
                 value.serialize(self.as_mut())
             },
-            StructSerializerType::BasicValue => {
-                value.serialize(self.as_mut())
-            },
-            StructSerializerType::ListValue => {
-                let mut serializer = Serializer::described_list(&mut self.buf);
-                value.serialize(&mut serializer)
-            },
-            StructSerializerType::MapValue => {
-                let mut serializer = Serializer::described_map(&mut self.buf);
-                value.serialize(&mut serializer)
-            },
+            StructRole::Value => {
+                match self.val_ty {
+                    ValueType::Basic => {
+                        value.serialize(self.as_mut())
+                    },
+                    ValueType::List => {
+                        let mut serializer = Serializer::described_list(&mut self.buf);
+                        value.serialize(&mut serializer)
+                    },
+                    ValueType::Map => {
+                        unimplemented!()
+                        // let mut serializer = Serializer::described_map(&mut self.buf);
+                        // value.serialize(&mut serializer)
+                    }
+                }
+            }
         }
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.state {
-            StructSerializerType::Descriptor => {
-                Ok(())
-            },
-            StructSerializerType::Described => {
-                Ok(())
-            },
-            StructSerializerType::BasicValue => {
-                Ok(())
-            },
-            StructSerializerType::ListValue => {
-                write_seq(&mut self.se.writer, self.num, self.buf)
-            },
-            StructSerializerType::MapValue => {
-                write_map(&mut self.se.writer, self.num, self.buf)
-            },
+        match self.role {
+            StructRole::Described => Ok(()),
+            StructRole::Descriptor => Ok(()),
+            StructRole::Value => {
+                match self.val_ty {
+                    ValueType::Basic => {
+                        Ok(())
+                    },
+                    ValueType::List => {
+                        write_seq(&mut self.se.writer, self.num, self.buf)
+                    }, ValueType::Map => {
+                        write_map(&mut self.se.writer, self.num, self.buf)
+                    }
+                }
+            }
         }
     }
 }
@@ -1246,15 +1247,16 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
 
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct Foo {
+        a: i32,
+        b: bool
+    }
+
     #[test]
     fn test_serialize_non_described_struct() {
-        use serde::Serialize;
-
-        #[derive(Serialize)]
-        struct Foo {
-            a: i32,
-            b: bool
-        }
 
         let val = Foo {a: 13, b: true };
         let output = to_vec(&val).unwrap();
@@ -1265,11 +1267,31 @@ mod test {
     fn test_serialize_described_basic_type() {
         let value = String::from("amqp");
         let descriptor = Descriptor::new("val".to_string(), Some(100));
-        let described = Described {
-            encoding_type: crate::described::EncodingType::Basic,
+        let described = Described::new(
+            crate::described::EncodingType::Basic,
             descriptor,
-            value: &value
-        };
+            &value
+        );
+        let mut expected = vec![
+            EncodingCodes::DescribedType as u8, 
+            EncodingCodes::SmallUlong as u8,
+            100u64 as u8,
+            EncodingCodes::Str8 as u8,
+            4 as u8,
+        ];
+        expected.append(&mut value.as_bytes().into());
+        assert_eq_on_serialized_vs_expected(described, expected);
+    }
+
+    #[test]
+    fn test_serialize_described_list_type() {
+        let value = Foo {a: 13, b: true};
+        let descriptor = Descriptor::new("Foo".to_string(), Some(13));
+        let described = Described::new(
+            crate::described::EncodingType::List,
+            descriptor,
+            &value
+        );
 
         let output = to_vec(&described).unwrap();
         println!("{:?}", output);

@@ -1,6 +1,6 @@
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
-use crate::descriptor::Descriptor;
+use crate::descriptor::{DESCRIPTOR, Descriptor};
 
 pub const DESCRIBED_BASIC: &str = "DESCRIBED_BASIC";
 pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
@@ -16,9 +16,19 @@ pub enum EncodingType {
 /// There is no generic implementation of serialization. But a inner type
 /// specific implementation will be generated via macro.
 pub struct Described<'a, T: ?Sized> {
-    pub encoding_type: EncodingType,
-    pub descriptor: Descriptor,
-    pub value: &'a T,
+    encoding_type: EncodingType,
+    descriptor: Descriptor,
+    value: &'a T,
+}
+
+impl<'a, T: ?Sized> Described<'a, T> {
+    pub fn new(encoding: EncodingType, descriptor: Descriptor, value: &'a T) -> Self {
+        Self {
+            encoding_type: encoding,
+            descriptor,
+            value
+        }
+    }
 }
 
 impl<'a, T: ?Sized + Serialize> Serialize for Described<'a, T> {
@@ -32,7 +42,7 @@ impl<'a, T: ?Sized + Serialize> Serialize for Described<'a, T> {
             EncodingType::Map => DESCRIBED_MAP,
         };
         let mut state = serializer.serialize_struct(name, 2)?;
-        state.serialize_field("descriptor", &self.descriptor)?;
+        state.serialize_field(DESCRIPTOR, &self.descriptor)?;
         state.serialize_field("value", &self.value)?;
         state.end()
     }
