@@ -1134,6 +1134,8 @@ mod test {
         // str8
         let val = SMALL_STRING_VALUIE;
         let len = val.len() as u8;
+        let output = to_vec(&val).unwrap();
+        println!("{:?}", output);
         let mut expected = vec![EncodingCodes::Str8 as u8, len];
         expected.append(&mut val.as_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
@@ -1218,14 +1220,14 @@ mod test {
 
     #[derive(Serialize)]
     struct Foo {
-        a: i32,
+        a_field: i32,
         b: bool
     }
 
     #[test]
     fn test_serialize_non_described_struct() {
 
-        let val = Foo {a: 13, b: true };
+        let val = Foo {a_field: 13, b: true };
         let output = to_vec(&val).unwrap();
         println!("{:?}", &output);
     }
@@ -1252,7 +1254,7 @@ mod test {
 
     #[test]
     fn test_serialize_described_list_type() {
-        let value = Foo {a: 13, b: true};
+        let value = Foo {a_field: 13, b: true};
         let descriptor = Descriptor::new("Foo".to_string(), Some(13));
         let described = Described::new(
             crate::described::EncodingType::List,
@@ -1275,7 +1277,15 @@ mod test {
 
     #[test]
     fn test_serialize_described_map_type() {
-        unimplemented!()
+        let value = Foo {a_field: 13, b: true};
+        let descriptor = Descriptor::new("Foo".to_string(), Some(13));
+        let described = Described::new(
+            crate::described::EncodingType::Map,
+            descriptor,
+            &value
+        );
+        let output = to_vec(&described).unwrap();
+        println!("{:?}", output);
     }
 
     #[derive(Serialize)]
