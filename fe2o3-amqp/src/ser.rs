@@ -1278,6 +1278,7 @@ mod test {
         unimplemented!()
     }
 
+    #[derive(Serialize)]
     enum Enumeration {
         UnitVariant,
         NewTypeVariant(u32),
@@ -1291,24 +1292,36 @@ mod test {
     #[test]
     fn test_serialize_unit_variant() {
         let val = Enumeration::UnitVariant;
+        let output = to_vec(&val).unwrap();
+        println!("{:?}", output);
 
+        unimplemented!()
     }
 
     #[test] 
     fn test_serialize_newtype_variant() {
         let val = Enumeration::NewTypeVariant(13);
+        let output = to_vec(&val).unwrap();
+        println!("{:?}", output);
+
         unimplemented!()
     }
 
     #[test]
     fn test_serialize_tuple_variant() {
-        let val = Enumeration::TupleVariant(true, 1313, String::from("amqp"));
+        let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
+        let output = to_vec(&val).unwrap();
+        println!("{:?}", output);
+
         unimplemented!()
     }
 
     #[test]
     fn test_serialize_struct_variant() {
         let val = Enumeration::StructVariant { id: 13, is_true: true };
+        let output = to_vec(&val).unwrap();
+        println!("{:?}", output);
+
         unimplemented!()
     }
 
