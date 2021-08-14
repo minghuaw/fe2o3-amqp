@@ -1,6 +1,6 @@
-use std::io::Write;
+use std::{io::Write};
 
-use serde::{Serialize, ser::{self, SerializeSeq, SerializeTupleStruct}};
+use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq}};
 
 use crate::{
     constructor::EncodingCodes, descriptor::DESCRIPTOR, error::Error, types::SYMBOL_MAGIC,
@@ -104,10 +104,10 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type SerializeMap = Compound<'a, W>;
     type SerializeTupleStruct = Compound<'a, W>;
     type SerializeStruct = DescribedCompound<'a, W>;
-    type SerializeTupleVariant = Compound<'a, W>;
+    type SerializeTupleVariant = VariantSerializer<'a, W>;
 
     // The variant struct will be serialized as Value in DescribedCompound
-    type SerializeStructVariant = DescribedCompound<'a, W>;
+    type SerializeStructVariant = VariantSerializer<'a, W>;
 
     #[inline]
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
@@ -395,14 +395,16 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
-        _variant_index: u32,
+        variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize,
     {
-        value.serialize(self)
+        let mut map_se = self.serialize_map(Some(1))?;
+        map_se.serialize_entry(&variant_index, value)?;
+        SerializeMap::end(map_se)
     }
 
     // A variably sized heterogeneous sequence of values
@@ -508,11 +510,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_tuple_variant(
         self,
         name: &'static str,
-        _variant_index: u32,
-        _variant: &'static str,
+        variant_index: u32,
+        variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        self.serialize_tuple_struct(name, len)
+        Ok(VariantSerializer::new(self, name, variant_index, variant, len))
     }
 
     // Treat it as if it is a struct because this is not found in other languages
@@ -520,11 +522,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_struct_variant(
         self,
         name: &'static str,
-        _variant_index: u32,
-        _variant: &'static str,
+        variant_index: u32,
+        variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        self.serialize_struct(name, len)
+        Ok(VariantSerializer::new(self, name, variant_index, variant, len))
     }
 }
 
@@ -643,10 +645,12 @@ impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     }
 
     #[inline]
-    fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<(), Self::Error>
+    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
+        // let mut serializer = Serializer::new(&mut self.buf);
+        // key.serialize(&mut serializer);
         unreachable!()
     }
 
@@ -848,7 +852,35 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedCompound<'a, W> {
     }
 }
 
-impl<'a, W: Write + 'a> ser::SerializeTupleVariant for Compound<'a, W> {
+pub struct VariantSerializer<'a, W: 'a> {
+    se: &'a mut Serializer<W>,
+    name: &'static str,
+    variant_index: u32,
+    variant: &'static str,
+    num: usize,
+    buf: Vec<u8>,
+}
+
+impl<'a, W: 'a> VariantSerializer<'a, W> {
+    pub fn new(
+        se: &'a mut Serializer<W>,
+        name: &'static str,
+        variant_index: u32,
+        variant: &'static str,
+        num: usize, // number of field in the tuple
+    ) -> Self {
+        Self {
+            se,
+            name,
+            variant_index,
+            variant,
+            num,
+            buf: Vec::new()
+        }
+    }
+}
+
+impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> {
     type Ok = ();
     type Error = Error;
 
@@ -856,15 +888,25 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for Compound<'a, W> {
     where
         T: Serialize,
     {
-        <Self as SerializeTupleStruct>::serialize_field(self, value)
+        let mut se = Serializer::new(&mut self.buf);
+        // let seq_se = Compound::new(&mut se, self.num);
+        // seq_se.serialize_element(value)
+        value.serialize(&mut se)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        <Self as SerializeTupleStruct>::end(self)
+        let mut value = Vec::new();
+        write_seq(&mut value, self.num, self.buf)?;
+
+        let mut kv = Vec::new();
+        let mut se = Serializer::new(&mut kv);
+        ser::Serialize::serialize(&self.variant_index, &mut se)?;
+        kv.append(&mut value);
+        write_map(&mut self.se.writer, 1, kv)
     }
 }
 
-impl<'a, W: Write + 'a> ser::SerializeStructVariant for DescribedCompound<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W> {
     type Ok = ();
     type Error = Error;
 
@@ -876,13 +918,11 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for DescribedCompound<'a, W>
     where
         T: Serialize,
     {
-        use ser::SerializeStruct;
-        <Self as SerializeStruct>::serialize_field(self, key, value)
+        <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        use ser::SerializeStruct;
-        <Self as SerializeStruct>::end(self)
+        <Self as ser::SerializeTupleVariant>::end(self)
     }
 }
 
@@ -1231,5 +1271,64 @@ mod test {
             EncodingCodes::BooleanTrue as u8 // Constructor of second item
         ];
         assert_eq_on_serialized_vs_expected(described, expected);
+    }
+
+    #[test]
+    fn test_serialize_described_map_type() {
+        unimplemented!()
+    }
+
+    enum Enumeration {
+        UnitVariant,
+        NewTypeVariant(u32),
+        TupleVariant(bool, u64, String),
+        StructVariant {
+            id: u32,
+            is_true: bool
+        }
+    }
+
+    #[test]
+    fn test_serialize_unit_variant() {
+        let val = Enumeration::UnitVariant;
+
+    }
+
+    #[test] 
+    fn test_serialize_newtype_variant() {
+        let val = Enumeration::NewTypeVariant(13);
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_serialize_tuple_variant() {
+        let val = Enumeration::TupleVariant(true, 1313, String::from("amqp"));
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_serialize_struct_variant() {
+        let val = Enumeration::StructVariant { id: 13, is_true: true };
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_serialize_described_unit_variant() {
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_serialize_described_newtype_variant() {
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_serialize_described_tuple_variant() {
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_serialize_described_struct_variant() {
+        unimplemented!()
     }
 }
