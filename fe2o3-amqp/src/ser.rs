@@ -649,17 +649,17 @@ impl<'a, W: Write + 'a> ser::SerializeMap for Compound<'a, W> {
     where
         T: Serialize,
     {
-        // let mut serializer = Serializer::new(&mut self.buf);
-        // key.serialize(&mut serializer);
-        unreachable!()
+        let mut serializer = Serializer::new(&mut self.buf);
+        key.serialize(&mut serializer)
     }
 
     #[inline]
-    fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
-        unreachable!()
+        let mut serializer = Serializer::new(&mut self.buf);
+        value.serialize(&mut serializer)
     }
 
     #[inline]
@@ -854,9 +854,9 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedCompound<'a, W> {
 
 pub struct VariantSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    name: &'static str,
+    _name: &'static str,
     variant_index: u32,
-    variant: &'static str,
+    _variant: &'static str,
     num: usize,
     buf: Vec<u8>,
 }
@@ -871,9 +871,9 @@ impl<'a, W: 'a> VariantSerializer<'a, W> {
     ) -> Self {
         Self {
             se,
-            name,
+            _name: name,
             variant_index,
-            variant,
+            _variant: variant,
             num,
             buf: Vec::new()
         }
@@ -912,7 +912,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
     fn serialize_field<T: ?Sized>(
         &mut self,
-        key: &'static str,
+        _key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error>
     where
