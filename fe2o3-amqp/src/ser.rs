@@ -1,9 +1,6 @@
 use std::io::Write;
 
-use serde::{
-    ser::{self, SerializeSeq},
-    Serialize,
-};
+use serde::{Serialize, ser::{self, SerializeSeq, SerializeTupleStruct}};
 
 use crate::{
     constructor::EncodingCodes, descriptor::DESCRIPTOR, error::Error, types::SYMBOL_MAGIC,
@@ -107,8 +104,10 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type SerializeMap = Compound<'a, W>;
     type SerializeTupleStruct = Compound<'a, W>;
     type SerializeStruct = DescribedCompound<'a, W>;
-    type SerializeStructVariant = VariantSerializer<'a, W>;
-    type SerializeTupleVariant = VariantSerializer<'a, W>;
+    type SerializeTupleVariant = Compound<'a, W>;
+
+    // The variant struct will be serialized as Value in DescribedCompound
+    type SerializeStructVariant = DescribedCompound<'a, W>;
 
     #[inline]
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
@@ -509,17 +508,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_tuple_variant(
         self,
         name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Ok(VariantSerializer::new(
-            self,
-            name,
-            variant_index,
-            variant,
-            len,
-        ))
+        self.serialize_tuple_struct(name, len)
     }
 
     // Treat it as if it is a struct because this is not found in other languages
@@ -527,17 +520,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_struct_variant(
         self,
         name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Ok(VariantSerializer::new(
-            self,
-            name,
-            variant_index,
-            variant,
-            len,
-        ))
+        self.serialize_struct(name, len)
     }
 }
 
@@ -861,37 +848,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedCompound<'a, W> {
     }
 }
 
-pub struct VariantSerializer<'a, W: 'a> {
-    se: &'a mut Serializer<W>,
-    _name: &'static str,
-    _variant_index: u32,
-    variant: &'static str,
-    num: usize,
-    list_buf: Vec<u8>,
-}
-
-impl<'a, W: 'a> VariantSerializer<'a, W> {
-    pub fn new(
-        se: &'a mut Serializer<W>,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        num: usize,
-    ) -> Self {
-        let buf = Vec::new();
-
-        Self {
-            se,
-            _name: name,
-            _variant_index: variant_index,
-            variant,
-            num,
-            list_buf: buf,
-        }
-    }
-}
-
-impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeTupleVariant for Compound<'a, W> {
     type Ok = ();
     type Error = Error;
 
@@ -899,75 +856,33 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
     where
         T: Serialize,
     {
-        let mut se = Serializer::new(&mut self.list_buf);
-        value.serialize(&mut se)
+        <Self as SerializeTupleStruct>::serialize_field(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self {
-            se,
-            variant,
-            num,
-            list_buf,
-            ..
-        } = self;
-
-        // finish serializing the tuple
-        let mut val_buf = Vec::new();
-        write_seq(&mut val_buf, num, list_buf)?;
-
-        // serialize key as string
-        let mut buf = Vec::new();
-        let mut key_serializer = Serializer::new(&mut buf);
-        variant.serialize(&mut key_serializer)?;
-
-        // Join key_buf and val_buf
-        buf.append(&mut val_buf);
-
-        // write as a map
-        write_map(&mut se.writer, num, buf)
+        <Self as SerializeTupleStruct>::end(self)
     }
 }
 
-impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeStructVariant for DescribedCompound<'a, W> {
     type Ok = ();
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(
         &mut self,
-        _key: &'static str,
+        key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
-        let mut se = Serializer::new(&mut self.list_buf);
-        value.serialize(&mut se)
+        use ser::SerializeStruct;
+        <Self as SerializeStruct>::serialize_field(self, key, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self {
-            se,
-            variant,
-            num,
-            list_buf,
-            ..
-        } = self;
-
-        // finish serializing the struct as list
-        let mut val_buf = Vec::new();
-        write_seq(&mut val_buf, num, list_buf)?;
-
-        // serialize key as string
-        let mut buf = Vec::new();
-        let mut key_serializer = Serializer::new(&mut buf);
-        ser::Serialize::serialize(&variant, &mut key_serializer)?;
-
-        // Join key_buf and val_buf
-        buf.append(&mut val_buf);
-
-        // write as a map
-        write_map(&mut se.writer, num, buf)
+        use ser::SerializeStruct;
+        <Self as SerializeStruct>::end(self)
     }
 }
 
