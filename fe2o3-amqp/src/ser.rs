@@ -1209,14 +1209,14 @@ mod test {
     #[test]
     fn test_serialize_descriptor_name() {
         // The descriptor name should just be serialized as a symbol
-        let descriptor = Descriptor::new(String::from("amqp"), None);
+        let descriptor = Descriptor::new(Some(String::from("amqp")), None);
         let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
 
     #[test]
     fn test_serialize_descriptor_code() {
-        let descriptor = Descriptor::new(String::from("amqp"), Some(0xf2));
+        let descriptor = Descriptor::new(Some(String::from("amqp")), Some(0xf2));
         let expected = vec![0x53, 0xf2];
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
@@ -1240,7 +1240,7 @@ mod test {
     #[test]
     fn test_serialize_described_basic_type() {
         let value = String::from("amqp");
-        let descriptor = Descriptor::new("val".to_string(), Some(100));
+        let descriptor = Descriptor::new(Some("val".to_string()), Some(100));
         let described = Described::new(
             crate::described::EncodingType::Basic,
             descriptor,
@@ -1260,7 +1260,7 @@ mod test {
     #[test]
     fn test_serialize_described_list_type() {
         let value = Foo {a_field: 13, b: true};
-        let descriptor = Descriptor::new("Foo".to_string(), Some(13));
+        let descriptor = Descriptor::new(Some("Foo".to_string()), Some(13));
         let described = Described::new(
             crate::described::EncodingType::List,
             descriptor,
@@ -1283,7 +1283,7 @@ mod test {
     #[test]
     fn test_serialize_described_map_type() {
         let value = Foo {a_field: 13, b: true};
-        let descriptor = Descriptor::new("Foo".to_string(), Some(13));
+        let descriptor = Descriptor::new(Some("Foo".to_string()), Some(13));
         let described = Described::new(
             crate::described::EncodingType::Map,
             descriptor,
