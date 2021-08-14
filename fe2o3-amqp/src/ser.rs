@@ -528,6 +528,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Ok(VariantSerializer::new(self, name, variant_index, variant, len))
     }
+
+    #[inline]
+    fn is_human_readable(&self) -> bool {
+        false
+    }
 }
 
 /// Serializer for Compound types. Compound types include:
