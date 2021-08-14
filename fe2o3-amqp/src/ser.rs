@@ -105,8 +105,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type SerializeSeq = Compound<'a, W>;
     type SerializeTuple = Compound<'a, W>;
     type SerializeMap = Compound<'a, W>;
-    type SerializeTupleStruct = StructSerialzier<'a, W>;
-    type SerializeStruct = StructSerialzier<'a, W>;
+    type SerializeTupleStruct = Compound<'a, W>;
+    type SerializeStruct = DescribedCompound<'a, W>;
     type SerializeStructVariant = VariantSerializer<'a, W>;
     type SerializeTupleVariant = VariantSerializer<'a, W>;
 
@@ -437,8 +437,10 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         _name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        // self.serialize_seq(Some(len))
-        unimplemented!()
+        // This will never be called on a Described type because the Decribed type is 
+        // a struct.
+        // Simply serialize the content as seq
+        self.serialize_seq(Some(len))
     }
 
     #[inline]
@@ -462,7 +464,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         if name == DESCRIPTOR {
-            return Ok(StructSerialzier::descriptor(StructRole::Descriptor, self, len))
+            return Ok(DescribedCompound::descriptor(StructRole::Descriptor, self, len))
         }
 
         match self.encoding {
@@ -472,32 +474,32 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.encoding = StructEncoding::DescribedList;
                     let code = [EncodingCodes::DescribedType as u8];
                     self.writer.write_all(&code)?;
-                    Ok(StructSerialzier::list_value(StructRole::Described, self, len))
+                    Ok(DescribedCompound::list_value(StructRole::Described, self, len))
                 } else if name == DESCRIBED_MAP {
                     self.encoding = StructEncoding::DescribedMap;
                     let code = [EncodingCodes::DescribedType as u8];
                     self.writer.write_all(&code)?;
-                    Ok(StructSerialzier::map_value(StructRole::Described, self, len))
+                    Ok(DescribedCompound::map_value(StructRole::Described, self, len))
                 } else if name == DESCRIBED_BASIC {
                     self.encoding = StructEncoding::DescribedBasic;
                     let code = [EncodingCodes::DescribedType as u8];
                     self.writer.write_all(&code)?;
-                    Ok(StructSerialzier::basic_value(StructRole::Described, self, len))
+                    Ok(DescribedCompound::basic_value(StructRole::Described, self, len))
                 } else if name == DESCRIPTOR {
-                    Ok(StructSerialzier::descriptor(StructRole::Descriptor, self, len))
+                    Ok(DescribedCompound::descriptor(StructRole::Descriptor, self, len))
                 } else {
                     // Only non-described struct will go to this branch
-                    Ok(StructSerialzier::list_value(StructRole::Value, self, len))
+                    Ok(DescribedCompound::list_value(StructRole::Value, self, len))
                 }
             },
             StructEncoding::DescribedBasic => {
-                Ok(StructSerialzier::basic_value(StructRole::Value, self, len))
+                Ok(DescribedCompound::basic_value(StructRole::Value, self, len))
             },
             StructEncoding::DescribedList => {
-                Ok(StructSerialzier::list_value(StructRole::Value, self, len))
+                Ok(DescribedCompound::list_value(StructRole::Value, self, len))
             },
             StructEncoding::DescribedMap => {
-                Ok(StructSerialzier::map_value(StructRole::Value, self, len))
+                Ok(DescribedCompound::map_value(StructRole::Value, self, len))
             },
         }
     }
@@ -699,6 +701,25 @@ fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
     Ok(())
 }
 
+// Serialize into a List with
+impl<'a, W: Write + 'a> ser::SerializeTupleStruct for Compound<'a, W> {
+    type Ok = ();
+    type Error = Error;
+
+    #[inline]
+    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize,
+    {
+        <Self as SerializeSeq>::serialize_element(self, value)
+    }
+
+    #[inline]
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        <Self as SerializeSeq>::end(self)
+    }
+}
+
 pub enum StructRole {
     Described,
     Descriptor,
@@ -711,7 +732,7 @@ pub enum ValueType {
     Map
 }
 
-pub struct StructSerialzier<'a, W: 'a> {
+pub struct DescribedCompound<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     role: StructRole,
     val_ty: ValueType,
@@ -727,7 +748,7 @@ pub fn init_vec(role: &StructRole) -> Vec<u8> {
     }
 }
 
-impl<'a, W: 'a> StructSerialzier<'a, W> {
+impl<'a, W: 'a> DescribedCompound<'a, W> {
     pub fn descriptor(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
@@ -773,33 +794,14 @@ impl<'a, W: 'a> StructSerialzier<'a, W> {
     }
 }
 
-impl<'a, W: 'a> AsMut<Serializer<W>> for StructSerialzier<'a, W> {
+impl<'a, W: 'a> AsMut<Serializer<W>> for DescribedCompound<'a, W> {
     fn as_mut(&mut self) -> &mut Serializer<W> {
         self.se
     }
 }
 
-// Serialize into a List with
-impl<'a, W: Write + 'a> ser::SerializeTupleStruct for StructSerialzier<'a, W> {
-    type Ok = ();
-    type Error = Error;
-
-    #[inline]
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-    where
-        T: Serialize,
-    {
-        unimplemented!()
-    }
-
-    #[inline]
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
-    }
-}
-
 // Serialize into a list
-impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerialzier<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedCompound<'a, W> {
     type Ok = ();
     type Error = Error;
 
