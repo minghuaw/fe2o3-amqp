@@ -12,3 +12,18 @@ macro_rules! unpack {
         }
     };
 }
+
+#[macro_export]
+macro_rules! unpack_or_eof {
+    ($e:expr) => {
+        match $e {
+            Some(val) => {
+                match val {
+                    Ok(val) => val,
+                    Err(err) => return Err(err.into())
+                }
+            },
+            None => return Err(Error::EofWhileParsing)
+        }
+    };
+}

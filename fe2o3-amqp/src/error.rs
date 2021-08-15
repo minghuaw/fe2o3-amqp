@@ -7,10 +7,15 @@ use std::fmt::Display;
 pub enum Error {
     #[error("Message {0}")]
     Message(String),
+
     #[error("IO {0}")]
     Io(std::io::Error),
+
     #[error("Invalid constructor")]
     InvalidConstructor,
+
+    #[error("EOF while parsing")]
+    EofWhileParsing
 }
 
 impl ser::Error for Error {
