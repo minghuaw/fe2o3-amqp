@@ -1,3 +1,4 @@
+// Public mods
 pub mod constructor;
 pub mod contract;
 pub mod de;
@@ -8,3 +9,6 @@ pub mod macros;
 pub mod ser;
 pub mod types;
 pub mod value;
+
+// Private mods
+mod read;

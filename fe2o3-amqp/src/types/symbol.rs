@@ -41,7 +41,8 @@ impl<'de> Visitor<'de> for SymbolVisitor {
     where
         D: serde::Deserializer<'de>, 
     {
-        todo!()
+        let val: String = de::Deserialize::deserialize(deserializer)?;
+        Ok(Symbol::new(val))
     }
 }
 

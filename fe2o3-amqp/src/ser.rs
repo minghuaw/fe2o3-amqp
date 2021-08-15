@@ -5,7 +5,7 @@ use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq}};
 use crate::{
     constructor::EncodingCodes, descriptor::DESCRIPTOR, error::Error, types::SYMBOL,
     value::U32_MAX_AS_USIZE,
-    described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}
+    described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
 };
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
