@@ -18,7 +18,7 @@ pub enum Error {
     EofWhileParsing,
 
     #[error("Expecting non-described constructor")]
-    IsDescribedType
+    IsDescribedType,
 }
 
 impl ser::Error for Error {

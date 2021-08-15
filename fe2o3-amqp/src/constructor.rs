@@ -98,9 +98,9 @@ impl TryFrom<u8> for EncodingCodes {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         let code = match value {
             0x00 => EncodingCodes::DescribedType,
-        
+
             0x40 => EncodingCodes::Null,
-        
+
             0x56 => EncodingCodes::Boolean,
             0x41 => EncodingCodes::BooleanTrue,
             0x42 => EncodingCodes::BooleanFalse,
@@ -124,7 +124,7 @@ impl TryFrom<u8> for EncodingCodes {
             // i8
             0x51 => EncodingCodes::Byte,
 
-            // i16 
+            // i16
             0x61 => EncodingCodes::Short,
 
             // i32
@@ -170,7 +170,7 @@ impl TryFrom<u8> for EncodingCodes {
             0xe0 => EncodingCodes::Array8,
             0xf0 => EncodingCodes::Array32,
 
-            _ => return Err(Error::InvalidConstructor)
+            _ => return Err(Error::InvalidConstructor),
         };
 
         Ok(code)

@@ -3,7 +3,7 @@ use std::io;
 use crate::error::Error;
 
 mod private {
-    pub trait Sealed { }
+    pub trait Sealed {}
 }
 
 pub trait Read<'de>: private::Sealed {
@@ -36,19 +36,19 @@ pub struct IoReader<R> {
     // an io reader
     reader: R,
     // a temporarty buffer holding the next byte
-    next_byte: Option<u8>
+    next_byte: Option<u8>,
 }
 
 impl<R: io::Read> IoReader<R> {
     pub fn new(reader: R) -> Self {
-        Self { 
+        Self {
             reader,
-            next_byte: None
+            next_byte: None,
         }
     }
 }
 
-impl<R: io::Read> private::Sealed for IoReader<R> { }
+impl<R: io::Read> private::Sealed for IoReader<R> {}
 
 impl<'de, R: io::Read> Read<'de> for IoReader<R> {
     fn peek(&mut self) -> Option<Result<u8, Error>> {
@@ -56,7 +56,7 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
             let mut buf = [0u8; 1];
             match self.reader.read_exact(&mut buf) {
                 Ok(_) => self.next_byte = Some(buf[0]),
-                Err(err) => return map_eof_to_none(err)
+                Err(err) => return map_eof_to_none(err),
             }
         }
 
@@ -70,7 +70,7 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
                 let mut buf = [0u8; 1];
                 match self.reader.read_exact(&mut buf) {
                     Ok(_) => Some(Ok(buf[0])),
-                    Err(err) => map_eof_to_none(err)
+                    Err(err) => map_eof_to_none(err),
                 }
             }
         }
@@ -81,10 +81,8 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
             Some(b) => {
                 out[0] = b;
                 self.reader.read_exact(&mut out[1..])
-            },
-            None => {
-                self.reader.read_exact(out)
             }
+            None => self.reader.read_exact(out),
         };
 
         if result.is_ok() {
@@ -111,8 +109,7 @@ mod tests {
 
     const SHORT_BUFFER: &[u8] = &[0, 1, 2];
     const LONG_BUFFER: &[u8] = &[
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-        11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     ];
 
     #[test]
@@ -120,13 +117,16 @@ mod tests {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader.peek()
+        let peek0 = io_reader
+            .peek()
             .expect("Should contain value")
             .expect("Should not return error");
-        let peek1 = io_reader.peek()
+        let peek1 = io_reader
+            .peek()
             .expect("Should contain value")
             .expect("Should not return error");
-        let peek2 = io_reader.peek()
+        let peek2 = io_reader
+            .peek()
             .expect("Should contain value")
             .expect("Should not return error");
 
@@ -135,16 +135,18 @@ mod tests {
         assert_eq!(peek2, reader[0]);
     }
 
-   #[test] 
+    #[test]
     fn test_next() {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
         for i in 0..reader.len() {
-            let peek = io_reader.peek()
+            let peek = io_reader
+                .peek()
                 .expect("Should contain value")
                 .expect("Should not return error");
-            let next = io_reader.next()
+            let next = io_reader
+                .next()
                 .expect("Should contain value")
                 .expect("Should not return error");
 
@@ -166,18 +168,20 @@ mod tests {
 
         // Read first 10 bytes
         let n = 10;
-        let bytes = io_reader.read_bytes(n)
+        let bytes = io_reader
+            .read_bytes(n)
             .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), n);
         assert_eq!(&bytes[..], &reader[..n]);
 
         // Read the second bytes
-        let bytes = io_reader.read_bytes(n)
+        let bytes = io_reader
+            .read_bytes(n)
             .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..], &reader[(n)..(2*n)]);
+        assert_eq!(&bytes[..], &reader[(n)..(2 * n)]);
 
         // Read None
         let bytes = io_reader.read_bytes(n);
@@ -195,10 +199,12 @@ mod tests {
         assert!(bytes.is_none());
 
         for i in 0..reader.len() {
-            let peek = io_reader.peek()
+            let peek = io_reader
+                .peek()
                 .expect("Should contain value")
                 .expect("Should not return error");
-            let next = io_reader.next()
+            let next = io_reader
+                .next()
                 .expect("Should contain value")
                 .expect("Should not return error");
 
@@ -218,25 +224,28 @@ mod tests {
         let reader = LONG_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader.peek()
+        let peek0 = io_reader
+            .peek()
             .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
         let n = 10;
-        let bytes = io_reader.read_bytes(n)
+        let bytes = io_reader
+            .read_bytes(n)
             .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), n);
         assert_eq!(&bytes[..], &reader[..n]);
 
         // Read the second bytes
-        let bytes = io_reader.read_bytes(n)
+        let bytes = io_reader
+            .read_bytes(n)
             .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..], &reader[(n)..(2*n)]);
+        assert_eq!(&bytes[..], &reader[(n)..(2 * n)]);
 
         // Read None
         let bytes = io_reader.read_bytes(n);
@@ -248,7 +257,8 @@ mod tests {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(std::io::Cursor::new(reader));
 
-        let peek0 = io_reader.peek()
+        let peek0 = io_reader
+            .peek()
             .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(peek0, reader[0]);
@@ -259,10 +269,12 @@ mod tests {
         assert!(bytes.is_none());
 
         for i in 0..reader.len() {
-            let peek = io_reader.peek()
+            let peek = io_reader
+                .peek()
                 .expect("Should contain value")
                 .expect("Should not return error");
-            let next = io_reader.next()
+            let next = io_reader
+                .next()
                 .expect("Should contain value")
                 .expect("Should not return error");
 

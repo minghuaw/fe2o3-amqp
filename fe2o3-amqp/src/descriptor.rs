@@ -1,5 +1,5 @@
-use serde::ser::{Serialize, SerializeStruct};
 use serde::de;
+use serde::ser::{Serialize, SerializeStruct};
 
 use crate::types::Symbol;
 
@@ -46,7 +46,7 @@ impl Serialize for Descriptor {
 // impl<'de> de::Deserialize<'de> for Descriptor {
 //     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 //     where
-//         D: serde::Deserializer<'de>     
+//         D: serde::Deserializer<'de>
 //     {
 //         enum Field {
 //             name:

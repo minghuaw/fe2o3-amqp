@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use serde::{Serialize, de::{self, Visitor}};
+use serde::{
+    de::{self, Visitor},
+    Serialize,
+};
 
 pub const SYMBOL: &str = "SYMBOL";
 
@@ -28,7 +31,7 @@ impl Serialize for Symbol {
     }
 }
 
-struct SymbolVisitor { }
+struct SymbolVisitor {}
 
 impl<'de> Visitor<'de> for SymbolVisitor {
     type Value = Symbol;
@@ -39,7 +42,7 @@ impl<'de> Visitor<'de> for SymbolVisitor {
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de>, 
+        D: serde::Deserializer<'de>,
     {
         let val: String = de::Deserialize::deserialize(deserializer)?;
         Ok(Symbol::new(val))
@@ -49,9 +52,9 @@ impl<'de> Visitor<'de> for SymbolVisitor {
 impl<'de> de::Deserialize<'de> for Symbol {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(SYMBOL, SymbolVisitor { } )
+        deserializer.deserialize_newtype_struct(SYMBOL, SymbolVisitor {})
     }
 }
 

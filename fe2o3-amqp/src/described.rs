@@ -1,6 +1,6 @@
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
-use crate::descriptor::{DESCRIPTOR, Descriptor};
+use crate::descriptor::{Descriptor, DESCRIPTOR};
 
 pub const DESCRIBED_BASIC: &str = "DESCRIBED_BASIC";
 pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
@@ -26,7 +26,7 @@ impl<'a, T: ?Sized> Described<'a, T> {
         Self {
             encoding_type: encoding,
             descriptor,
-            value
+            value,
         }
     }
 }

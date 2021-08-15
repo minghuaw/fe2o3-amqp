@@ -1,6 +1,12 @@
 use std::convert::TryInto;
 
-use crate::{constructor::EncodingCodes, error::Error, read::{IoReader, Read}, unpack};
+use crate::{
+    constructor::EncodingCodes,
+    error::Error,
+    format::{ArrayWidth, CompoundWidth, FixedWidth, VariableWidth},
+    read::{IoReader, Read},
+    unpack,
+};
 
 pub fn from_slice<'de, T>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -14,18 +20,24 @@ pub fn from_slice<'de, T>(slice: &'de [u8]) -> Result<T, Error> {
 //     content: Option<Vec<u8>>,
 // }
 
-// pub enum ItemBytes {
+// pub enum Content {
 //     Described {
-//         descriptor_bytes: Vec<u8>,
-//         value_bytes: Vec<u8>
+//         descriptor_buf: Vec<u8>,
+//         value_buf: Vec<u8>
 //     },
 //     Fixed {
-
+//         buf: Vec<u8>
 //     },
+//     Variable {
+//         buf: Vec<u8>
+//     },
+//     Compound {
+//         buf
+//     }
 // }
 
 pub struct Deserializer<R> {
-    reader: R
+    reader: R,
 }
 
 impl<'de, R: Read<'de>> Deserializer<R> {
@@ -37,5 +49,31 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         let code = self.reader.next();
         let code = unpack!(code);
         Some(code.try_into())
+    }
+
+    fn read_fixed_width_bytes(&mut self, width: FixedWidth) -> Option<Result<Vec<u8>, Error>> {
+        let n = width as usize;
+        self.reader.read_bytes(n)
+    }
+
+    fn read_variable_width_bytes(&mut self, width: VariableWidth) -> Option<Result<Vec<u8>, Error>> {
+        let n = match width {
+            VariableWidth::One => {
+                let size = unpack!(self.reader.next());
+                u8::from_be_bytes([size]) as usize
+            },
+            VariableWidth::Four => {
+                let size_buf = unpack!(self.reader.read_bytes(4));
+                u32::from_be_bytes(size_buf) as usize
+            }
+        };
+    }
+
+    fn read_compound_bytes(&mut self, width: CompoundWidth) -> Option<Result<Vec<u8>, Error>> {
+        todo!()
+    }
+
+    fn read_array_bytes(&mut self, width: ArrayWidth) -> Option<Result<Vec<u8>, Error>> {
+        todo!()
     }
 }

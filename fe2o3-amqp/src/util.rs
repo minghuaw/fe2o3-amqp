@@ -2,13 +2,11 @@
 macro_rules! unpack {
     ($e:expr) => {
         match $e {
-            Some(val) => {
-                match val {
-                    Ok(val) => val,
-                    Err(err) => return Some(Err(err.into()))
-                }
+            Some(val) => match val {
+                Ok(val) => val,
+                Err(err) => return Some(Err(err.into())),
             },
-            None => return None
+            None => return None,
         }
     };
 }
@@ -17,13 +15,11 @@ macro_rules! unpack {
 macro_rules! unpack_or_eof {
     ($e:expr) => {
         match $e {
-            Some(val) => {
-                match val {
-                    Ok(val) => val,
-                    Err(err) => return Err(err.into())
-                }
+            Some(val) => match val {
+                Ok(val) => val,
+                Err(err) => return Err(err.into()),
             },
-            None => return Err(Error::EofWhileParsing)
+            None => return Err(Error::EofWhileParsing),
         }
     };
 }
