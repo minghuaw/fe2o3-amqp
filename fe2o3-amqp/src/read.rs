@@ -14,6 +14,23 @@ pub trait Read<'de>: private::Sealed {
     fn next(&mut self) -> Option<Result<u8, Error>>;
 
     /// Read n bytes
+    /// 
+    /// Prefered to use this when the size is small and can be stack allocated
+    fn read_const_bytes<const N: usize>(&mut self) -> Option<Result<[u8; N], Error>> {
+        // let mut buf = vec![0; n];
+        let mut buf = [0; N];
+        match self.read_exact(&mut buf) {
+            Ok(_) => Some(Ok(buf)),
+            Err(err) => {
+                if let io::ErrorKind::UnexpectedEof = err.kind() {
+                    None
+                } else {
+                    Some(Err(err.into()))
+                }
+            }
+        }
+    }
+
     fn read_bytes(&mut self, n: usize) -> Option<Result<Vec<u8>, Error>> {
         let mut buf = vec![0; n];
         match self.read_exact(&mut buf) {
@@ -162,40 +179,40 @@ mod tests {
     }
 
     #[test]
-    fn test_read_bytes_without_peek() {
+    fn test_read_const_bytes_without_peek() {
         let reader = LONG_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
         // Read first 10 bytes
-        let n = 10;
+        const N: usize = 10;
         let bytes = io_reader
-            .read_bytes(n)
+            .read_const_bytes::<10>()
             .expect("Should contain value")
             .expect("Should not return error");
-        assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..], &reader[..n]);
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &reader[..N]);
 
         // Read the second bytes
         let bytes = io_reader
-            .read_bytes(n)
+            .read_const_bytes::<N>()
             .expect("Should contain value")
             .expect("Should not return error");
-        assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..], &reader[(n)..(2 * n)]);
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &reader[(N)..(2 * N)]);
 
         // Read None
-        let bytes = io_reader.read_bytes(n);
+        let bytes = io_reader.read_const_bytes::<N>();
         assert!(bytes.is_none());
     }
 
     #[test]
-    fn test_incomplete_read_bytes_without_peek() {
+    fn test_incomplete_read_const_bytes_without_peek() {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(std::io::Cursor::new(reader));
 
         // Read first 10 bytes
-        let n = 10;
-        let bytes = io_reader.read_bytes(n);
+        const N: usize = 10;
+        let bytes = io_reader.read_const_bytes::<N>();
         assert!(bytes.is_none());
 
         for i in 0..reader.len() {
@@ -220,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_bytes_after_peek() {
+    fn test_read_const_bytes_after_peek() {
         let reader = LONG_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
@@ -231,29 +248,29 @@ mod tests {
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
-        let n = 10;
+        const N: usize = 10;
         let bytes = io_reader
-            .read_bytes(n)
+            .read_const_bytes::<N>()
             .expect("Should contain value")
             .expect("Should not return error");
-        assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..], &reader[..n]);
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &reader[..N]);
 
         // Read the second bytes
         let bytes = io_reader
-            .read_bytes(n)
+            .read_const_bytes::<N>()
             .expect("Should contain value")
             .expect("Should not return error");
-        assert_eq!(bytes.len(), n);
-        assert_eq!(&bytes[..], &reader[(n)..(2 * n)]);
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &reader[(N)..(2 * N)]);
 
         // Read None
-        let bytes = io_reader.read_bytes(n);
+        let bytes = io_reader.read_const_bytes::<N>();
         assert!(bytes.is_none());
     }
 
     #[test]
-    fn test_incomplete_read_bytes_after_peek() {
+    fn test_incomplete_read_const_bytes_after_peek() {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(std::io::Cursor::new(reader));
 
@@ -264,8 +281,8 @@ mod tests {
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
-        let n = 10;
-        let bytes = io_reader.read_bytes(n);
+        const N: usize = 10;
+        let bytes = io_reader.read_const_bytes::<N>();
         assert!(bytes.is_none());
 
         for i in 0..reader.len() {

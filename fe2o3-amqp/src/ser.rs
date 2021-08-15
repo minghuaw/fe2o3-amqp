@@ -625,14 +625,20 @@ fn write_seq<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
         0 => {
             let code = [EncodingCodes::List0 as u8];
             writer.write_all(&code)?;
-        }
+        },
+        // FIXME: whether `len` should be below 255-1
         1..=255 => {
+            // `len` must include the one byte taken by `num`
+            let len = len + 1;
             let code = [EncodingCodes::List8 as u8, len as u8, num as u8];
             writer.write_all(&code)?;
             writer.write_all(&buf)?;
         }
+        // FIXME: whether `len` should be below u32::MAX - 4
         256..=U32_MAX_AS_USIZE => {
             let code = [EncodingCodes::List32 as u8];
+            // Length including the four bytes taken by `num`
+            let len = len + 4;
             let len: [u8; 4] = (len as u32).to_be_bytes();
             let num: [u8; 4] = (num as u32).to_be_bytes();
             writer.write_all(&code)?;
@@ -716,13 +722,19 @@ fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>) -> 
     let len = buf.len();
 
     match len {
+        // FIXME: Whether `len` should be 255 - 1
         0..=255 => {
+            // `len` must include the one byte taken by `num`
+            let len = len + 1;
             let code = [EncodingCodes::Map8 as u8, len as u8, num as u8];
             writer.write_all(&code)?;
             writer.write_all(&buf)?;
         }
+        // FIXME: whether `len` should be u32::MAX - 4
         256..=U32_MAX_AS_USIZE => {
             let code = [EncodingCodes::Map32 as u8];
+            // `len` must include the four bytes taken by `num`
+            let len = len + 4;
             let len = (len as u32).to_be_bytes();
             let num = (num as u32).to_be_bytes();
             writer.write_all(&code)?;
