@@ -3,26 +3,22 @@ use std::fmt::Display;
 
 // pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Message {0}")]
     Message(String),
+    #[error("IO {0}")]
     Io(std::io::Error),
+    #[error("Invalid constructor")]
+    InvalidConstructor,
 }
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!()
-    }
-}
-
-impl std::error::Error for Error {}
 
 impl ser::Error for Error {
     fn custom<T>(msg: T) -> Self
     where
         T: std::fmt::Display,
     {
-        unimplemented!()
+        Self::Message(msg.to_string())
     }
 }
 
@@ -31,7 +27,7 @@ impl de::Error for Error {
     where
         T: Display,
     {
-        unimplemented!()
+        Self::Message(msg.to_string())
     }
 }
 

@@ -1,6 +1,8 @@
 //! Encoding codes of AMQP types
 
-use std::fmt::Display;
+use std::{convert::TryFrom, fmt::Display};
+
+use crate::error::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -87,6 +89,91 @@ pub enum EncodingCodes {
 impl Display for EncodingCodes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}:0x{:x}", self, self.clone() as u8)
+    }
+}
+
+impl TryFrom<u8> for EncodingCodes {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let code = match value {
+            0x00 => EncodingCodes::DescribedType,
+        
+            0x40 => EncodingCodes::Null,
+        
+            0x56 => EncodingCodes::Boolean,
+            0x41 => EncodingCodes::BooleanTrue,
+            0x42 => EncodingCodes::BooleanFalse,
+
+            // u8
+            0x50 => EncodingCodes::Ubyte,
+
+            // u16
+            0x60 => EncodingCodes::Ushort,
+
+            // u32
+            0x70 => EncodingCodes::Uint,
+            0x52 => EncodingCodes::SmallUint,
+            0x43 => EncodingCodes::Uint0,
+
+            // u64
+            0x80 => EncodingCodes::Ulong,
+            0x53 => EncodingCodes::SmallUlong,
+            0x44 => EncodingCodes::Ulong0,
+
+            // i8
+            0x51 => EncodingCodes::Byte,
+
+            // i16 
+            0x61 => EncodingCodes::Short,
+
+            // i32
+            0x71 => EncodingCodes::Int,
+            0x54 => EncodingCodes::SmallInt,
+
+            // i64
+            0x81 => EncodingCodes::Long,
+            0x55 => EncodingCodes::SmallLong,
+
+            // f32
+            0x72 => EncodingCodes::Float,
+
+            // f64
+            0x82 => EncodingCodes::Double,
+
+            0x74 => EncodingCodes::Decimal32,
+            0x84 => EncodingCodes::Decimal64,
+            0x94 => EncodingCodes::Decimal128,
+
+            0x73 => EncodingCodes::Char,
+
+            0x83 => EncodingCodes::Timestamp,
+
+            0x98 => EncodingCodes::Uuid,
+
+            0xa0 => EncodingCodes::VBin8,
+            0xb0 => EncodingCodes::VBin32,
+
+            0xa1 => EncodingCodes::Str8,
+            0xb1 => EncodingCodes::Str32,
+
+            0xa3 => EncodingCodes::Sym8,
+            0xb3 => EncodingCodes::Sym32,
+
+            0x45 => EncodingCodes::List0,
+            0xc0 => EncodingCodes::List8,
+            0xd0 => EncodingCodes::List32,
+
+            0xc1 => EncodingCodes::Map8,
+            0xd1 => EncodingCodes::Map32,
+
+            0xe0 => EncodingCodes::Array8,
+            0xf0 => EncodingCodes::Array32,
+
+            _ => return Err(Error::InvalidConstructor)
+        };
+
+        Ok(code)
     }
 }
 

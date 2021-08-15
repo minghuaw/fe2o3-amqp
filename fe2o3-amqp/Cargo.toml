@@ -16,5 +16,6 @@ ordered-float = { version = "2.7.0", features = ["serde"] }
 serde = { version = "1.0.126", features = ["derive"] }
 serde_bytes = "0.11.5"
 uuid = { version = "0.8.2", features = ["serde"] }
+thiserror = "1.0.26"
 
 
