@@ -14,14 +14,22 @@ pub trait Read<'de>: private::Sealed {
     fn next(&mut self) -> Option<Result<u8, Error>>;
 
     /// Read n bytes
-    fn read_bytes(&mut self, n: usize) -> Option<Result<Vec<u8>, Error>>;
+    fn read_bytes(&mut self, n: usize) -> Option<Result<Vec<u8>, Error>> {
+        let mut buf = vec![0; n];
+        match self.read_exact(&mut buf) {
+            Ok(_) => Some(Ok(buf)),
+            Err(err) => {
+                if let io::ErrorKind::UnexpectedEof = err.kind() {
+                    None
+                } else {
+                    Some(Err(err.into()))
+                }
+            }
+        }
+    }
 
     /// Read to fill a mutable buffer
     fn read_exact(&mut self, out: &mut [u8]) -> Result<(), io::Error>;
-}
-
-pub trait ReadExt<'de>: Read<'de> {
-
 }
 
 pub struct IoReader<R> {
@@ -63,20 +71,6 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
                 match self.reader.read_exact(&mut buf) {
                     Ok(_) => Some(Ok(buf[0])),
                     Err(err) => map_eof_to_none(err)
-                }
-            }
-        }
-    }
-
-    fn read_bytes(&mut self, n: usize) -> Option<Result<Vec<u8>, Error>> {
-        let mut buf = vec![0; n];
-        match self.read_exact(&mut buf) {
-            Ok(_) => Some(Ok(buf)),
-            Err(err) => {
-                if let io::ErrorKind::UnexpectedEof = err.kind() {
-                    None
-                } else {
-                    Some(Err(err.into()))
                 }
             }
         }
