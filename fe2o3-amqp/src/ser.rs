@@ -3,7 +3,7 @@ use std::{io::Write};
 use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq}};
 
 use crate::{
-    constructor::EncodingCodes, descriptor::DESCRIPTOR, error::Error, types::SYMBOL_MAGIC,
+    constructor::EncodingCodes, descriptor::DESCRIPTOR, error::Error, types::SYMBOL,
     value::U32_MAX_AS_USIZE,
     described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}
 };
@@ -384,7 +384,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize,
     {
-        if name == SYMBOL_MAGIC {
+        if name == SYMBOL {
             self.newtype = NewType::Symbol;
         }
         value.serialize(self)
