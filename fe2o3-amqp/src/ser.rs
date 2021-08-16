@@ -2,14 +2,7 @@ use std::io::Write;
 
 use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq, SerializeTuple}};
 
-use crate::{
-    constructor::EncodingCodes,
-    described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
-    descriptor::DESCRIPTOR,
-    error::Error,
-    types::SYMBOL,
-    value::U32_MAX_AS_USIZE,
-};
+use crate::{constructor::EncodingCodes, described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, types::{LIST, SYMBOL}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -558,6 +551,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     {
         if name == SYMBOL {
             self.newtype = NewType::Symbol;
+        } else if name == LIST {
+            self.newtype = NewType::List;
         }
         value.serialize(self)
     }
@@ -585,7 +580,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArray::False
-        Ok(ArraySerializer::new(self, self.is_array.clone()))
+        // TODO: change behavior based on whether newtype is List
+        Ok(ArraySerializer::new(self))
     }
 
     // A statically sized heterogeneous sequence of values
@@ -595,7 +591,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // This will be encoded as primitive type `List`
     #[inline]
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Ok(ListSerializer::new(self, len, self.is_array.clone()))
+        Ok(ListSerializer::new(self, len))
     }
 
     // A named tuple, for example `struct Rgb(u8, u8, u8)`
@@ -617,7 +613,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         match len {
-            Some(num) => Ok(MapSerializer::new(self, num * 2, self.is_array.clone())),
+            Some(num) => Ok(MapSerializer::new(self, num * 2)),
             None => Err(Error::Message("Length must be known".into())),
         }
     }
@@ -639,7 +635,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 StructRole::Descriptor,
                 self,
                 len,
-                self.is_array.clone()
             ));
         }
 
@@ -656,7 +651,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         StructRole::Described,
                         self,
                         len,
-                        self.is_array.clone()
                     ))
                 } else if name == DESCRIBED_MAP {
                     if let IsArray::False | IsArray::FirstElement = self.is_array {   
@@ -668,7 +662,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         StructRole::Described,
                         self,
                         len,
-                        self.is_array.clone()
                     ))
                 } else if name == DESCRIBED_BASIC {
                     if let IsArray::False | IsArray::FirstElement = self.is_array {
@@ -680,28 +673,26 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         StructRole::Described,
                         self,
                         len,
-                        self.is_array.clone()
                     ))
                 } else if name == DESCRIPTOR {
                     Ok(DescribedSerializer::descriptor(
                         StructRole::Descriptor,
                         self,
                         len,
-                        self.is_array.clone()
                     ))
                 } else {
                     // Only non-described struct will go to this branch
-                    Ok(DescribedSerializer::list_value(StructRole::Value, self, len, self.is_array.clone()))
+                    Ok(DescribedSerializer::list_value(StructRole::Value, self, len))
                 }
             }
             StructEncoding::DescribedBasic => {
-                Ok(DescribedSerializer::basic_value(StructRole::Value, self, len, self.is_array.clone()))
+                Ok(DescribedSerializer::basic_value(StructRole::Value, self, len))
             }
             StructEncoding::DescribedList => {
-                Ok(DescribedSerializer::list_value(StructRole::Value, self, len, self.is_array.clone()))
+                Ok(DescribedSerializer::list_value(StructRole::Value, self, len))
             }
             StructEncoding::DescribedMap => {
-                Ok(DescribedSerializer::map_value(StructRole::Value, self, len, self.is_array.clone()))
+                Ok(DescribedSerializer::map_value(StructRole::Value, self, len))
             }
         }
     }
@@ -752,16 +743,14 @@ pub struct ArraySerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
     buf: Vec<u8>,
-    ext_is_array: IsArray
 }
 
 impl<'a, W: 'a> ArraySerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>, ext_is_array: IsArray) -> Self {
+    fn new(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
             num: 0,
             buf: Vec::new(),
-            ext_is_array,
         }
     }
 }
@@ -793,12 +782,12 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for ArraySerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self { se, num, buf, ext_is_array } = self;
+        let Self { se, num, buf } = self;
         let len = buf.len();
 
         match len {
             0 ..= 255 => {
-                if let IsArray::False | IsArray::FirstElement = ext_is_array {
+                if let IsArray::False | IsArray::FirstElement = se.is_array {
                     let code = [EncodingCodes::Array8 as u8, len as u8, num as u8];
                     se.writer.write_all(&code)?;
                 }
@@ -808,7 +797,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for ArraySerializer<'a, W> {
                 se.writer.write_all(&len_num)?;
             },
             256 ..= U32_MAX_AS_USIZE => {
-                if let IsArray::False | IsArray::FirstElement = ext_is_array {
+                if let IsArray::False | IsArray::FirstElement = se.is_array {
                     let code = [EncodingCodes::Array32 as u8];
                     se.writer.write_all(&code)?;
                 }
@@ -830,16 +819,14 @@ pub struct ListSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
     buf: Vec<u8>,
-    ext_is_array: IsArray
 }
 
 impl<'a, W: 'a> ListSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>, num: usize, ext_is_array: IsArray) -> Self {
+    fn new(se: &'a mut Serializer<W>, num: usize) -> Self {
         Self {
             se,
             num,
             buf: Vec::new(),
-            ext_is_array
         }
     }
 }
@@ -861,12 +848,12 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for ListSerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self { se, num, buf, ext_is_array } = self;
-        write_list(&mut se.writer, num, buf, ext_is_array)
+        let Self { se, num, buf } = self;
+        write_list(&mut se.writer, num, buf, &se.is_array)
     }
 }
 
-fn write_list<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array: IsArray) -> Result<(), Error> {
+fn write_list<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array: &IsArray) -> Result<(), Error> {
     let len = buf.len();
 
     // if `len` < 255, `num` must be smaller than 255
@@ -909,16 +896,14 @@ pub struct MapSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
     buf: Vec<u8>,
-    ext_is_array: IsArray
 }
 
 impl<'a, W: 'a> MapSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>, num: usize, ext_is_array: IsArray) -> Self {
+    fn new(se: &'a mut Serializer<W>, num: usize) -> Self {
         Self {
             se,
             num,
             buf: Vec::new(),
-            ext_is_array
         }
     }
 }
@@ -965,12 +950,12 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let Self { se, num, buf, ext_is_array } = self;
-        write_map(&mut se.writer, num, buf, ext_is_array)
+        let Self { se, num, buf } = self;
+        write_map(&mut se.writer, num, buf, &se.is_array)
     }
 }
 
-fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array: IsArray) -> Result<(), Error> {
+fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array: &IsArray) -> Result<(), Error> {
     let len = buf.len();
 
     match len {
@@ -1041,7 +1026,6 @@ pub struct DescribedSerializer<'a, W: 'a> {
     val_ty: ValueType,
     num: usize,
     buf: Vec<u8>,
-    ext_is_array: IsArray
 }
 
 #[inline]
@@ -1053,7 +1037,7 @@ pub fn init_vec(role: &StructRole) -> Vec<u8> {
 }
 
 impl<'a, W: 'a> DescribedSerializer<'a, W> {
-    pub fn descriptor(role: StructRole, se: &'a mut Serializer<W>, num: usize, ext_is_array: IsArray) -> Self {
+    pub fn descriptor(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1061,11 +1045,10 @@ impl<'a, W: 'a> DescribedSerializer<'a, W> {
             val_ty: ValueType::Basic,
             num,
             buf,
-            ext_is_array
         }
     }
 
-    pub fn basic_value(role: StructRole, se: &'a mut Serializer<W>, num: usize, ext_is_array: IsArray) -> Self {
+    pub fn basic_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1073,11 +1056,10 @@ impl<'a, W: 'a> DescribedSerializer<'a, W> {
             val_ty: ValueType::Basic,
             num,
             buf,
-            ext_is_array
         }
     }
 
-    pub fn list_value(role: StructRole, se: &'a mut Serializer<W>, num: usize, ext_is_array: IsArray) -> Self {
+    pub fn list_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1085,11 +1067,10 @@ impl<'a, W: 'a> DescribedSerializer<'a, W> {
             val_ty: ValueType::List,
             num,
             buf,
-            ext_is_array
         }
     }
 
-    pub fn map_value(role: StructRole, se: &'a mut Serializer<W>, num: usize, ext_is_array: IsArray) -> Self {
+    pub fn map_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1097,7 +1078,6 @@ impl<'a, W: 'a> DescribedSerializer<'a, W> {
             val_ty: ValueType::Map,
             num,
             buf,
-            ext_is_array
         }
     }
 }
@@ -1148,9 +1128,9 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
             StructRole::Value => match self.val_ty {
                 ValueType::Basic => Ok(()),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-                ValueType::List => write_list(&mut self.se.writer, self.num, self.buf, IsArray::False),
+                ValueType::List => write_list(&mut self.se.writer, self.num, self.buf, &IsArray::False),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-                ValueType::Map => write_map(&mut self.se.writer, self.num, self.buf, IsArray::False),
+                ValueType::Map => write_map(&mut self.se.writer, self.num, self.buf, &IsArray::False),
             },
         }
     }
