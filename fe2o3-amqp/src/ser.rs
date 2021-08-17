@@ -1618,8 +1618,24 @@ mod test {
         };
         let descriptor = Descriptor::new(Some("Foo".to_string()), Some(13));
         let described = Described::new(crate::described::EncodingType::Map, descriptor, &value);
-        let output = to_vec(&described).unwrap();
-        println!("{:?}", output);
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            13,
+            EncodingCodes::Map8 as u8,
+            (1 + 9 + 2 + 3 + 1) as u8, //(count, "a_field", 13, "b", true)
+            2,
+            EncodingCodes::Str8 as u8,
+            7,
+            b'a', b'_', b'f', b'i', b'e', b'l', b'd',
+            EncodingCodes::SmallInt as u8,
+            13,
+            EncodingCodes::Str8 as u8,
+            1,
+            b'b',
+            EncodingCodes::BooleanTrue as u8
+        ];
+        assert_eq_on_serialized_vs_expected(described, expected);
     }
 
     #[derive(Serialize)]
