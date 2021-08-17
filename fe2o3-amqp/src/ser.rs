@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use serde::{Serialize, ser::{self, SerializeMap, SerializeSeq, SerializeTuple}};
+use serde::{Serialize, ser::{self, SerializeMap, SerializeTuple}};
 
 use crate::{constructor::EncodingCodes, described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, types::{LIST, SYMBOL}, value::U32_MAX_AS_USIZE};
 
@@ -806,7 +806,7 @@ fn write_array<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, e
     match len {
         0 ..= 255 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
-                let code = [EncodingCodes::Array8 as u8, len as u8, num as u8];
+                let code = [EncodingCodes::Array8 as u8];
                 writer.write_all(&code)?;
             }
             // `len` must include the one byte taken by `num`
@@ -1231,7 +1231,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::{constructor::EncodingCodes, described::Described, descriptor::Descriptor};
+    use crate::{constructor::EncodingCodes, described::Described, descriptor::Descriptor, types::List};
 
     use super::*;
 
@@ -1497,6 +1497,41 @@ mod test {
     }
 
     #[test]
+    fn test_serialize_array() {
+        let val = vec![1, 2, 3, 4];
+        let expected = vec![
+            EncodingCodes::Array8 as u8, // array8
+            (2 + 4 * 4) as u8, // length including `count` and element constructor
+            4, // count
+            EncodingCodes::Int as u8,
+            0, 0, 0, 1, // first element as i32
+            0, 0, 0, 2, // second element 
+            0, 0, 0, 3, // third
+            0, 0, 0, 4, // fourth
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialzie_list() {
+        let val = List::from(vec![1, 2, 3, 4]);
+        let expected = vec![
+            EncodingCodes::List8 as u8,
+            (1 + 2 * 4) as u8, // length including one byte on count
+            4, // count
+            EncodingCodes::SmallInt as u8,
+            1,
+            EncodingCodes::SmallInt as u8,
+            2,
+            EncodingCodes::SmallInt as u8,
+            3,
+            EncodingCodes::SmallInt as u8,
+            4,
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
     fn test_serialize_symbol() {
         use crate::types::Symbol;
         let symbol = Symbol::new("amqp".into());
@@ -1550,7 +1585,7 @@ mod test {
             4 as u8,
         ];
         expected.append(&mut value.as_bytes().into());
-        // assert_eq_on_serialized_vs_expected(described, expected);
+        assert_eq_on_serialized_vs_expected(described, expected);
     }
 
     #[test]
