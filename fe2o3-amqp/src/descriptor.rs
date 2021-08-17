@@ -1,4 +1,4 @@
-use serde::de;
+use serde::{Serializer, de};
 use serde::ser::{Serialize, SerializeStruct};
 
 use crate::types::Symbol;
@@ -12,17 +12,18 @@ pub const DESCRIPTOR: &str = "DESCRIPTOR";
 /// 2. go-amqp: Symbol?
 /// 3. qpid-proton-j2: Symbol
 #[derive(Debug)]
-pub struct Descriptor {
-    name: Option<Symbol>,
-    code: Option<u64>,
+pub enum Descriptor {
+    Name(Symbol),
+    Code(u64)
 }
 
 impl Descriptor {
-    pub fn new<T: Into<Symbol>>(name: Option<T>, code: Option<u64>) -> Self {
-        Self {
-            name: name.map(Into::into),
-            code,
-        }
+    pub fn name(name: impl Into<Symbol>) -> Self {
+        Self::Name(name.into())
+    }
+
+    pub fn code(code: u64) -> Self {
+        Self::Code(code.into())
     }
 }
 
@@ -31,15 +32,14 @@ impl Serialize for Descriptor {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct(DESCRIPTOR, 1)?;
-        if let Some(code) = &self.code {
-            state.serialize_field("code", code)?;
-        } else if let Some(name) = &self.name {
-            state.serialize_field("name", name)?;
-        } else {
-            state.serialize_field("name", &Symbol::new("".to_string()))?;
+        match self {
+            Descriptor::Name(value) => {
+                serializer.serialize_newtype_variant(DESCRIPTOR, 0, "Name", value)
+            },
+            Descriptor::Code(value) => {
+                serializer.serialize_newtype_variant(DESCRIPTOR, 1, "Code", value)
+            }
         }
-        state.end()
     }
 }
 

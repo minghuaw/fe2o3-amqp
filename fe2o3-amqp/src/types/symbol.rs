@@ -22,6 +22,12 @@ impl From<String> for Symbol {
     }
 }
 
+impl From<&str> for Symbol {
+    fn from(val: &str) -> Self {
+        Self(val.into()) 
+    }
+}
+
 impl Serialize for Symbol {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

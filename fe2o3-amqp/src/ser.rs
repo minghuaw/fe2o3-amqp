@@ -561,17 +561,21 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_newtype_variant<T: ?Sized>(
         self,
-        _name: &'static str,
+        name: &'static str,
         variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize,
-    {
-        let mut map_se = self.serialize_map(Some(1))?;
-        map_se.serialize_entry(&variant_index, value)?;
-        SerializeMap::end(map_se)
+    {   
+        if name == DESCRIPTOR {
+            value.serialize(self)
+        } else {
+            let mut map_se = self.serialize_map(Some(1))?;
+            map_se.serialize_entry(&variant_index, value)?;
+            SerializeMap::end(map_se)
+        }
     }
 
     // A variably sized heterogeneous sequence of values
@@ -1542,14 +1546,14 @@ mod test {
     #[test]
     fn test_serialize_descriptor_name() {
         // The descriptor name should just be serialized as a symbol
-        let descriptor = Descriptor::new(Some(String::from("amqp")), None);
+        let descriptor = Descriptor::name("amqp");
         let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
 
     #[test]
     fn test_serialize_descriptor_code() {
-        let descriptor = Descriptor::new(Some(String::from("amqp")), Some(0xf2));
+        let descriptor = Descriptor::code(0xf2);
         let expected = vec![0x53, 0xf2];
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
@@ -1575,7 +1579,7 @@ mod test {
     #[test]
     fn test_serialize_described_basic_type() {
         let value = String::from("amqp");
-        let descriptor = Descriptor::new(Some("val".to_string()), Some(100));
+        let descriptor = Descriptor::code(100);
         let described = Described::new(crate::described::EncodingType::Basic, descriptor, &value);
         let mut expected = vec![
             EncodingCodes::DescribedType as u8,
@@ -1594,7 +1598,7 @@ mod test {
             a_field: 13,
             b: true,
         };
-        let descriptor = Descriptor::new(Some("Foo".to_string()), Some(13));
+        let descriptor = Descriptor::code(13);
         let described = Described::new(crate::described::EncodingType::List, descriptor, &value);
         let expected = vec![
             EncodingCodes::DescribedType as u8, // Described type contructor
@@ -1616,7 +1620,7 @@ mod test {
             a_field: 13,
             b: true,
         };
-        let descriptor = Descriptor::new(Some("Foo".to_string()), Some(13));
+        let descriptor = Descriptor::code(13);
         let described = Described::new(crate::described::EncodingType::Map, descriptor, &value);
         let expected = vec![
             EncodingCodes::DescribedType as u8,
