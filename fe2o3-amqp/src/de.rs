@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto};
 use serde::de;
 
 use crate::{
@@ -9,33 +9,11 @@ use crate::{
     unpack,
 };
 
-pub fn from_slice<'de, T>(slice: &'de [u8]) -> Result<T, Error> {
+pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
-    todo!()
+    let mut de = Deserializer::new(io_reader);
+    T::deserialize(&mut de)
 }
-
-// pub struct ItemBytes {
-//     constructor: EncodingCodes,
-//     size: Option<Vec<u8>>,
-//     count: Option<Vec<u8>>,
-//     content: Option<Vec<u8>>,
-// }
-
-// pub enum Content {
-//     Described {
-//         descriptor_buf: Vec<u8>,
-//         value_buf: Vec<u8>
-//     },
-//     Fixed {
-//         buf: Vec<u8>
-//     },
-//     Variable {
-//         buf: Vec<u8>
-//     },
-//     Compound {
-//         buf
-//     }
-// }
 
 pub struct CompoundBuf {
     count: u32,
@@ -147,7 +125,25 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         todo!()
     }
 
+    fn parse_i8(&mut self) -> Result<i8, Error> {
+        todo!()
+    }
 
+    fn parse_i16(&mut self) -> Result<i16, Error> {
+        todo!()
+    }
+
+    fn parse_i32(&mut self) -> Result<i32, Error> {
+        todo!()
+    }
+
+    fn parse_i64(&mut self) -> Result<i64, Error> {
+        todo!()
+    }
+
+    fn parse_u8(&mut self) -> Result<u8, Error> {
+        todo!()
+    }
 }
 
 
@@ -347,5 +343,22 @@ where
         V: de::Visitor<'de> 
     {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_deserialize_bool() {
+
+    }
+
+    #[test]
+    fn test_deserialize_i8() {
+
+    }
+
+    fn test_deserialize_u8() {
+
     }
 }
