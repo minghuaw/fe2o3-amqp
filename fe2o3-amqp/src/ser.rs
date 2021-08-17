@@ -117,7 +117,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type Ok = ();
     type Error = Error;
 
-    type SerializeSeq = ArraySerializer<'a, W>;
+    type SerializeSeq = SeqSerializer<'a, W>;
     type SerializeTuple = ListSerializer<'a, W>;
     type SerializeMap = MapSerializer<'a, W>;
     type SerializeTupleStruct = ListSerializer<'a, W>;
@@ -581,7 +581,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArrayElement::False
         // TODO: change behavior based on whether newtype is List
-        Ok(ArraySerializer::new(self))
+        Ok(SeqSerializer::new(self))
     }
 
     // A statically sized heterogeneous sequence of values
@@ -739,13 +739,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 }
 
-pub struct ArraySerializer<'a, W: 'a> {
+pub struct SeqSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
     buf: Vec<u8>,
 }
 
-impl<'a, W: 'a> ArraySerializer<'a, W> {
+impl<'a, W: 'a> SeqSerializer<'a, W> {
     fn new(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
@@ -760,7 +760,7 @@ impl<'a, W: 'a> ArraySerializer<'a, W> {
 //
 // Serialize into a List
 // List requires knowing the total number of bytes after serialized
-impl<'a, W: Write + 'a> ser::SerializeSeq for ArraySerializer<'a, W> {
+impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     type Ok = ();
     type Error = Error;
 
@@ -1154,12 +1154,12 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
 }
 
 pub struct VariantSerializer<'a, W: 'a> {
-    se: &'a mut Serializer<W>,
+    _se: &'a mut Serializer<W>,
     _name: &'static str,
-    variant_index: u32,
+    _variant_index: u32,
     _variant: &'static str,
-    num: usize,
-    buf: Vec<u8>,
+    _num: usize,
+    _buf: Vec<u8>,
 }
 
 impl<'a, W: 'a> VariantSerializer<'a, W> {
@@ -1171,12 +1171,12 @@ impl<'a, W: 'a> VariantSerializer<'a, W> {
         num: usize, // number of field in the tuple
     ) -> Self {
         Self {
-            se,
+            _se: se,
             _name: name,
-            variant_index,
+            _variant_index: variant_index,
             _variant: variant,
-            num,
-            buf: Vec::new(),
+            _num: num,
+            _buf: Vec::new(),
         }
     }
 }
@@ -1185,7 +1185,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
@@ -1214,7 +1214,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
     fn serialize_field<T: ?Sized>(
         &mut self,
         _key: &'static str,
-        value: &T,
+        _value: &T,
     ) -> Result<(), Self::Error>
     where
         T: Serialize,
