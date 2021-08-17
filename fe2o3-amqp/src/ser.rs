@@ -2,7 +2,7 @@ use std::io::Write;
 
 use serde::{Serialize, ser::{self, SerializeMap, SerializeTuple}};
 
-use crate::{constructor::EncodingCodes, described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, types::{LIST, SYMBOL}, value::U32_MAX_AS_USIZE};
+use crate::{format_code::EncodingCodes, described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, types::{LIST, SYMBOL}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -1235,7 +1235,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::{constructor::EncodingCodes, described::Described, descriptor::Descriptor, types::List};
+    use crate::{format_code::EncodingCodes, described::Described, descriptor::Descriptor, types::List};
 
     use super::*;
 

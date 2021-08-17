@@ -19,7 +19,7 @@ macro_rules! unpack_or_eof {
                 Ok(val) => val,
                 Err(err) => return Err(err.into()),
             },
-            None => return Err(Error::EofWhileParsing),
+            None => return Err(Error::Eof),
         }
     };
 }

@@ -1,13 +1,7 @@
 use std::{convert::TryInto};
 use serde::de;
 
-use crate::{
-    constructor::EncodingCodes,
-    error::Error,
-    format::{ArrayWidth, CompoundWidth, FixedWidth, VariableWidth},
-    read::{IoReader, Read},
-    unpack,
-};
+use crate::{format_code::EncodingCodes, error::Error, format::{ArrayWidth, CompoundWidth, FixedWidth, VariableWidth}, read::{IoReader, Read}, unpack, unpack_or_eof};
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -35,7 +29,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         Self { reader }
     }
 
-    fn read_constructor(&mut self) -> Option<Result<EncodingCodes, Error>> {
+    fn read_format_code(&mut self) -> Option<Result<EncodingCodes, Error>> {
         let code = self.reader.next();
         let code = unpack!(code);
         Some(code.try_into())
@@ -121,27 +115,45 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         Some(Ok(ab))
     }
 
+    #[inline]
     fn parse_bool(&mut self) -> Result<bool, Error> {
         todo!()
     }
 
+    #[inline]
     fn parse_i8(&mut self) -> Result<i8, Error> {
-        todo!()
+        let byte = unpack_or_eof!(self.reader.next());
+        Ok(byte as i8)
     }
 
+    #[inline]
     fn parse_i16(&mut self) -> Result<i16, Error> {
         todo!()
     }
 
+    #[inline]
     fn parse_i32(&mut self) -> Result<i32, Error> {
         todo!()
     }
 
+    #[inline]
     fn parse_i64(&mut self) -> Result<i64, Error> {
         todo!()
     }
 
+    #[inline]
     fn parse_u8(&mut self) -> Result<u8, Error> {
+        let byte = unpack_or_eof!(self.reader.next());
+        Ok( byte )
+    }
+
+    #[inline]
+    fn parse_u16(&mut self) -> Result<u16, Error> {
+        todo!()
+    }
+
+    #[inline]
+    fn parse_u32(&mut self) -> Result<u32, Error> {
         todo!()
     }
 }
@@ -169,8 +181,14 @@ where
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        match unpack_or_eof!(self.read_format_code()) {
+            EncodingCodes::Byte => {
+                visitor.visit_i8(self.parse_i8()?)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -196,7 +214,12 @@ where
     where
         V: de::Visitor<'de> 
     {
-        unimplemented!()
+        match unpack_or_eof!(self.read_format_code()) {
+            EncodingCodes::Ubyte => {
+                visitor.visit_u8(self.parse_u8()?)
+            }
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -348,6 +371,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::ser::to_vec;
+
+    use super::from_slice;
+
     #[test]
     fn test_deserialize_bool() {
 
@@ -355,7 +382,10 @@ mod tests {
 
     #[test]
     fn test_deserialize_i8() {
-
+        let orig = 7i8;
+        let serialized = to_vec(&orig).unwrap();
+        let recovered: i8 = from_slice(&serialized).unwrap();
+        assert_eq!(orig, recovered);
     }
 
     fn test_deserialize_u8() {

@@ -170,7 +170,7 @@ impl TryFrom<u8> for EncodingCodes {
             0xe0 => EncodingCodes::Array8,
             0xf0 => EncodingCodes::Array32,
 
-            _ => return Err(Error::InvalidConstructor),
+            _ => return Err(Error::InvalidFormatCode),
         };
 
         Ok(code)

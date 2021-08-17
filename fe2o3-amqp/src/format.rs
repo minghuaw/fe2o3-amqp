@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::{constructor::EncodingCodes, error::Error};
+use crate::{format_code::EncodingCodes, error::Error};
 
 pub enum Category {
     Fixed(FixedWidth),

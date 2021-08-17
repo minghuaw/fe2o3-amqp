@@ -12,13 +12,15 @@ pub enum Error {
     Io(std::io::Error),
 
     #[error("Invalid constructor")]
-    InvalidConstructor,
-
-    #[error("EOF while parsing")]
-    EofWhileParsing,
+    InvalidFormatCode, 
 
     #[error("Expecting non-described constructor")]
     IsDescribedType,
+
+    #[error("EOF")]
+    Eof,
+
+
 }
 
 impl ser::Error for Error {
