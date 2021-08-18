@@ -1,12 +1,7 @@
 use serde::de;
 use std::convert::TryInto;
 
-use crate::{
-    error::Error,
-    format::{ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth},
-    format_code::EncodingCodes,
-    read::{IoReader, Read},
-};
+use crate::{error::Error, format::{ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth}, format_code::EncodingCodes, read::{IoReader, Read}, types::SYMBOL, util::NewType};
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -16,11 +11,23 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
 
 pub struct Deserializer<R> {
     reader: R,
+
+    newtype: NewType,
 }
 
 impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
-        Self { reader }
+        Self { 
+            reader,
+            newtype: Default::default()
+        }
+    }
+
+    pub fn symbol(reader: R) -> Self {
+        Self {
+            reader,
+            newtype: NewType::Symbol,
+        }
     }
 
     fn read_format_code(&mut self) -> Result<EncodingCodes, Error> {
@@ -187,21 +194,40 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    fn read_small_string(&mut self) -> Result<String, Error> {
+        let len = self.reader.next()?;
+        let buf = self.reader.read_bytes(len as usize)?;
+        String::from_utf8(buf).map_err(Into::into)
+    }
+
+    fn read_string(&mut self) -> Result<String, Error> {
+        let len_bytes = self.reader.read_const_bytes()?;
+        let len = u32::from_be_bytes(len_bytes);
+        let buf = self.reader.read_bytes(len as usize)?;
+        String::from_utf8(buf).map_err(Into::into)
+    }
+
     fn parse_string(&mut self) -> Result<String, Error> {
         match self.read_format_code()? {
             EncodingCodes::Str8 => {
-                // read length byte
-                let len = self.reader.next()?;
-                let buf = self.reader.read_bytes(len as usize)?;
-                String::from_utf8(buf).map_err(Into::into)
+                self.read_small_string()
             }
             EncodingCodes::Str32 => {
-                let len_bytes = self.reader.read_const_bytes()?;
-                let len = u32::from_be_bytes(len_bytes);
-                let buf = self.reader.read_bytes(len as usize)?;
-                String::from_utf8(buf).map_err(Into::into)
+                self.read_string()
             }
             _ => Err(Error::InvalidFormatCode),
+        }
+    }
+
+    fn parse_symbol(&mut self) -> Result<String, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::Sym8 => {
+                self.read_small_string()
+            },
+            EncodingCodes::Sym32 => {
+                self.read_string()
+            },
+            _ => Err(Error::InvalidFormatCode)
         }
     }
 
@@ -370,7 +396,17 @@ where
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_string(self.parse_string()?)
+        match self.newtype {
+            NewType::None => {
+                visitor.visit_string(self.parse_string()?)
+            },
+            NewType::Symbol => {
+                visitor.visit_string(self.parse_symbol()?)
+            },
+            NewType::List => {
+                todo!()
+            }
+        }
     }
 
     #[inline]
@@ -436,7 +472,10 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        if name == SYMBOL {
+            self.newtype = NewType::Symbol;
+        }
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -670,6 +709,14 @@ mod tests {
             118, 101, 114, 32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 
             111, 103, 46];
         let expected = LARGE_STRING_VALUE.to_string();
+        assert_eq_deserialized_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_symbol() {
+        use crate::types::Symbol;
+        let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        let expected = Symbol::from("amqp");
         assert_eq_deserialized_vs_expected(buf, expected);
     }
 }

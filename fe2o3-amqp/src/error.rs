@@ -54,7 +54,7 @@ impl From<std::io::Error> for Error {
 }
 
 impl From<std::string::FromUtf8Error> for Error {
-    fn from(err: std::string::FromUtf8Error) -> Self {
+    fn from(_: std::string::FromUtf8Error) -> Self {
         Error::InvalidUtf8Encoding
     }
 }

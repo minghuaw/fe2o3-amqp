@@ -1564,7 +1564,7 @@ mod test {
     #[test]
     fn test_serialize_symbol() {
         use crate::types::Symbol;
-        let symbol = Symbol::new("amqp".into());
+        let symbol = Symbol::from("amqp");
         let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(symbol, expected);
     }
