@@ -35,10 +35,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         Some(code.try_into())
     }
 
-    fn read_fixed_width_bytes(&mut self, width: FixedWidth) -> Option<Result<Vec<u8>, Error>> {
-        let n = width as usize;
-        self.reader.read_bytes(n)
-    }
+    // fn read_fixed_width_bytes(&mut self, width: FixedWidth) -> Option<Result<Vec<u8>, Error>> {
+    //     let n = width as usize;
+    //     self.reader.read_bytes(n)
+    // }
 
     fn read_variable_width_bytes(&mut self, width: VariableWidth) -> Option<Result<Vec<u8>, Error>> {
         let n = match width {
@@ -122,18 +122,29 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_i8(&mut self) -> Result<i8, Error> {
-        let byte = unpack_or_eof!(self.reader.next());
-        Ok(byte as i8)
+        match unpack_or_eof!(self.read_format_code()) {
+            EncodingCodes::Byte => {
+                let byte = unpack_or_eof!(self.reader.next());
+                Ok(byte as i8)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
     fn parse_i16(&mut self) -> Result<i16, Error> {
-        todo!()
+        match unpack_or_eof!(self.read_format_code()) {
+            EncodingCodes::Short => {
+                let bytes = unpack_or_eof!(self.reader.read_const_bytes::<2>());
+                Ok(i16::from_be_bytes(bytes))
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
     fn parse_i32(&mut self) -> Result<i32, Error> {
-        todo!()
+        match unpack_or_eof!(self.read)
     }
 
     #[inline]
@@ -143,8 +154,13 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_u8(&mut self) -> Result<u8, Error> {
-        let byte = unpack_or_eof!(self.reader.next());
-        Ok( byte )
+        match unpack_or_eof!(self.read_format_code()) {
+            EncodingCodes::Ubyte => {
+                let byte = unpack_or_eof!(self.reader.next());
+                Ok( byte )
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
@@ -183,18 +199,14 @@ where
     where
         V: de::Visitor<'de> 
     {
-        match unpack_or_eof!(self.read_format_code()) {
-            EncodingCodes::Byte => {
-                visitor.visit_i8(self.parse_i8()?)
-            },
-            _ => Err(Error::InvalidFormatCode)
-        }
+        visitor.visit_i8(self.parse_i8()?)
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_i16(self.parse_i16()?)
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -214,12 +226,7 @@ where
     where
         V: de::Visitor<'de> 
     {
-        match unpack_or_eof!(self.read_format_code()) {
-            EncodingCodes::Ubyte => {
-                visitor.visit_u8(self.parse_u8()?)
-            }
-            _ => Err(Error::InvalidFormatCode)
-        }
+        visitor.visit_u8(self.parse_u8()?)
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>

@@ -8,41 +8,25 @@ mod private {
 
 pub trait Read<'de>: private::Sealed {
     /// Peek the next byte without consuming
-    fn peek(&mut self) -> Option<Result<u8, Error>>;
+    fn peek(&mut self) -> Result<u8, Error>;
 
     /// Read the next byte
-    fn next(&mut self) -> Option<Result<u8, Error>>;
+    fn next(&mut self) -> Result<u8, Error>;
 
     /// Read n bytes
     /// 
     /// Prefered to use this when the size is small and can be stack allocated
-    fn read_const_bytes<const N: usize>(&mut self) -> Option<Result<[u8; N], Error>> {
+    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
         // let mut buf = vec![0; n];
         let mut buf = [0; N];
-        match self.read_exact(&mut buf) {
-            Ok(_) => Some(Ok(buf)),
-            Err(err) => {
-                if let io::ErrorKind::UnexpectedEof = err.kind() {
-                    None
-                } else {
-                    Some(Err(err.into()))
-                }
-            }
-        }
+        self.read_exact(&mut buf)?;
+        Ok(buf)
     }
 
-    fn read_bytes(&mut self, n: usize) -> Option<Result<Vec<u8>, Error>> {
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
         let mut buf = vec![0; n];
-        match self.read_exact(&mut buf) {
-            Ok(_) => Some(Ok(buf)),
-            Err(err) => {
-                if let io::ErrorKind::UnexpectedEof = err.kind() {
-                    None
-                } else {
-                    Some(Err(err.into()))
-                }
-            }
-        }
+        self.read_exact(&mut buf)?;
+        Ok(buf)
     }
 
     /// Read to fill a mutable buffer
@@ -68,27 +52,24 @@ impl<R: io::Read> IoReader<R> {
 impl<R: io::Read> private::Sealed for IoReader<R> {}
 
 impl<'de, R: io::Read> Read<'de> for IoReader<R> {
-    fn peek(&mut self) -> Option<Result<u8, Error>> {
-        if let None = self.next_byte {
-            let mut buf = [0u8; 1];
-            match self.reader.read_exact(&mut buf) {
-                Ok(_) => self.next_byte = Some(buf[0]),
-                Err(err) => return map_eof_to_none(err),
-            }
-        }
-
-        self.next_byte.map(|val| Ok(val))
-    }
-
-    fn next(&mut self) -> Option<Result<u8, Error>> {
-        match self.next_byte.take() {
-            Some(b) => Some(Ok(b)),
+    fn peek(&mut self) -> Result<u8, Error> {
+        match self.next_byte {
+            Some(b) => Ok(b),
             None => {
                 let mut buf = [0u8; 1];
-                match self.reader.read_exact(&mut buf) {
-                    Ok(_) => Some(Ok(buf[0])),
-                    Err(err) => map_eof_to_none(err),
-                }
+                self.reader.read_exact(&mut buf)?;
+                Ok(buf[0])
+            }
+        }
+    }
+
+    fn next(&mut self) -> Result<u8, Error> {
+        match self.next_byte.take() {
+            Some(b) => Ok(b),
+            None => {
+                let mut buf = [0u8; 1];
+                self.reader.read_exact(&mut buf)?;
+                Ok(buf[0])
             }
         }
     }
@@ -136,15 +117,12 @@ mod tests {
 
         let peek0 = io_reader
             .peek()
-            .expect("Should contain value")
             .expect("Should not return error");
         let peek1 = io_reader
             .peek()
-            .expect("Should contain value")
             .expect("Should not return error");
         let peek2 = io_reader
             .peek()
-            .expect("Should contain value")
             .expect("Should not return error");
 
         assert_eq!(peek0, reader[0]);
@@ -160,11 +138,9 @@ mod tests {
         for i in 0..reader.len() {
             let peek = io_reader
                 .peek()
-                .expect("Should contain value")
                 .expect("Should not return error");
             let next = io_reader
                 .next()
-                .expect("Should contain value")
                 .expect("Should not return error");
 
             assert_eq!(peek, reader[i]);
@@ -174,8 +150,8 @@ mod tests {
         let peek_none = io_reader.peek();
         let next_none = io_reader.next();
 
-        assert!(peek_none.is_none());
-        assert!(next_none.is_none());
+        assert!(peek_none.is_err());
+        assert!(next_none.is_err());
     }
 
     #[test]
@@ -187,7 +163,6 @@ mod tests {
         const N: usize = 10;
         let bytes = io_reader
             .read_const_bytes::<10>()
-            .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[..N]);
@@ -195,14 +170,13 @@ mod tests {
         // Read the second bytes
         let bytes = io_reader
             .read_const_bytes::<N>()
-            .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[(N)..(2 * N)]);
 
         // Read None
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
+        assert!(bytes.is_err());
     }
 
     #[test]
@@ -213,16 +187,14 @@ mod tests {
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
+        assert!(bytes.is_err());
 
         for i in 0..reader.len() {
             let peek = io_reader
                 .peek()
-                .expect("Should contain value")
                 .expect("Should not return error");
             let next = io_reader
                 .next()
-                .expect("Should contain value")
                 .expect("Should not return error");
 
             assert_eq!(peek, reader[i]);
@@ -232,8 +204,8 @@ mod tests {
         let peek_none = io_reader.peek();
         let next_none = io_reader.next();
 
-        assert!(peek_none.is_none());
-        assert!(next_none.is_none());
+        assert!(peek_none.is_err());
+        assert!(next_none.is_err());
     }
 
     #[test]
@@ -243,7 +215,6 @@ mod tests {
 
         let peek0 = io_reader
             .peek()
-            .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(peek0, reader[0]);
 
@@ -251,7 +222,6 @@ mod tests {
         const N: usize = 10;
         let bytes = io_reader
             .read_const_bytes::<N>()
-            .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[..N]);
@@ -259,14 +229,13 @@ mod tests {
         // Read the second bytes
         let bytes = io_reader
             .read_const_bytes::<N>()
-            .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[(N)..(2 * N)]);
 
         // Read None
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
+        assert!(bytes.is_err());
     }
 
     #[test]
@@ -276,23 +245,20 @@ mod tests {
 
         let peek0 = io_reader
             .peek()
-            .expect("Should contain value")
             .expect("Should not return error");
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = io_reader.read_const_bytes::<N>();
-        assert!(bytes.is_none());
+        assert!(bytes.is_err());
 
         for i in 0..reader.len() {
             let peek = io_reader
                 .peek()
-                .expect("Should contain value")
                 .expect("Should not return error");
             let next = io_reader
                 .next()
-                .expect("Should contain value")
                 .expect("Should not return error");
 
             assert_eq!(peek, reader[i]);
@@ -302,7 +268,7 @@ mod tests {
         let peek_none = io_reader.peek();
         let next_none = io_reader.next();
 
-        assert!(peek_none.is_none());
-        assert!(next_none.is_none());
+        assert!(peek_none.is_err());
+        assert!(next_none.is_err());
     }
 }
