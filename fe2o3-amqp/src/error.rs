@@ -19,8 +19,6 @@ pub enum Error {
 
     #[error("EOF")]
     Eof,
-
-
 }
 
 impl ser::Error for Error {
@@ -43,6 +41,9 @@ impl de::Error for Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::Io(err)
+        match err.kind() {
+            std::io::ErrorKind::UnexpectedEof => Self::Eof,
+            _ => Self::Io(err)
+        }
     }
 }
