@@ -117,7 +117,20 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_bool(&mut self) -> Result<bool, Error> {
-        todo!()
+        // TODO: check whether is parsing in an array
+        match self.read_format_code()? {
+            EncodingCodes::Boolean => {
+                let byte = self.reader.next()?;
+                match byte {
+                    0x00 => Ok(false),
+                    0x01 => Ok(true),
+                    _ => Err(Error::InvalidValue)
+                }
+            },
+            EncodingCodes::BooleanTrue => Ok(true),
+            EncodingCodes::BooleanFalse => Ok(false),
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
@@ -285,7 +298,7 @@ where
     where
         V: de::Visitor<'de> 
     {
-        unimplemented!()
+        visitor.visit_bool(self.parse_bool()?)
     }
 
     #[inline]
