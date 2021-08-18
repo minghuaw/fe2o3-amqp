@@ -610,14 +610,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        if name == DESCRIPTOR {
-            return Ok(DescribedSerializer::descriptor(
-                StructRole::Descriptor,
-                self,
-                len,
-            ));
-        }
-
         match self.struct_encoding {
             // A None state indicates a freshly instantiated serializer
             StructEncoding::None => {
@@ -654,12 +646,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.struct_encoding = StructEncoding::DescribedBasic;
                     Ok(DescribedSerializer::basic_value(
                         StructRole::Described,
-                        self,
-                        len,
-                    ))
-                } else if name == DESCRIPTOR {
-                    Ok(DescribedSerializer::descriptor(
-                        StructRole::Descriptor,
                         self,
                         len,
                     ))
@@ -1033,7 +1019,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for ListSerializer<'a, W> {
 
 pub enum StructRole {
     Described,
-    Descriptor,
+    // Descriptor,
     Value,
 }
 
@@ -1060,17 +1046,6 @@ pub fn init_vec(role: &StructRole) -> Vec<u8> {
 }
 
 impl<'a, W: 'a> DescribedSerializer<'a, W> {
-    pub fn descriptor(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
-        let buf = init_vec(&role);
-        Self {
-            se,
-            role,
-            val_ty: ValueType::Basic,
-            num,
-            buf,
-        }
-    }
-
     pub fn basic_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
@@ -1127,7 +1102,6 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
     {
         match self.role {
             StructRole::Described => value.serialize(self.as_mut()),
-            StructRole::Descriptor => value.serialize(self.as_mut()),
             StructRole::Value => match self.val_ty {
                 ValueType::Basic => value.serialize(self.as_mut()),
                 ValueType::List => {
@@ -1147,7 +1121,6 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         match self.role {
             StructRole::Described => Ok(()),
-            StructRole::Descriptor => Ok(()),
             StructRole::Value => match self.val_ty {
                 ValueType::Basic => Ok(()),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
