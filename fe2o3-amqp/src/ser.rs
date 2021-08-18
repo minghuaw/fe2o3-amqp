@@ -1455,14 +1455,14 @@ mod test {
         // str8
         let val = SMALL_STRING_VALUIE;
         let len = val.len() as u8;
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", output);
         let mut expected = vec![EncodingCodes::Str8 as u8, len];
         expected.append(&mut val.as_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, expected);
 
         // str32
         let val = LARGE_STRING_VALUIE;
+        let output = to_vec(&val).unwrap();
+        println!("{:?}", output);
         let len = val.len() as u32;
         let mut expected = vec![EncodingCodes::Str32 as u8];
         expected.append(&mut len.to_be_bytes().to_vec());

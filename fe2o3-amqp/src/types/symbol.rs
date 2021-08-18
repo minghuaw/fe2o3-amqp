@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use serde::{
     de::{self, Visitor},
     Serialize,
@@ -52,6 +50,20 @@ impl<'de> Visitor<'de> for SymbolVisitor {
     {
         let val: String = de::Deserialize::deserialize(deserializer)?;
         Ok(Symbol::new(val))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        Ok(Symbol::from(v))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        Ok(Symbol::from(v.to_string()))
     }
 }
 
