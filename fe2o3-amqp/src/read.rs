@@ -14,7 +14,7 @@ pub trait Read<'de>: private::Sealed {
     fn next(&mut self) -> Result<u8, Error>;
 
     /// Read n bytes
-    /// 
+    ///
     /// Prefered to use this when the size is small and can be stack allocated
     fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
         // let mut buf = vec![0; n];
@@ -107,15 +107,9 @@ mod tests {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader
-            .peek()
-            .expect("Should not return error");
-        let peek1 = io_reader
-            .peek()
-            .expect("Should not return error");
-        let peek2 = io_reader
-            .peek()
-            .expect("Should not return error");
+        let peek0 = io_reader.peek().expect("Should not return error");
+        let peek1 = io_reader.peek().expect("Should not return error");
+        let peek2 = io_reader.peek().expect("Should not return error");
 
         assert_eq!(peek0, reader[0]);
         assert_eq!(peek1, reader[0]);
@@ -128,12 +122,8 @@ mod tests {
         let mut io_reader = IoReader::new(reader);
 
         for i in 0..reader.len() {
-            let peek = io_reader
-                .peek()
-                .expect("Should not return error");
-            let next = io_reader
-                .next()
-                .expect("Should not return error");
+            let peek = io_reader.peek().expect("Should not return error");
+            let next = io_reader.next().expect("Should not return error");
 
             assert_eq!(peek, reader[i]);
             assert_eq!(next, reader[i]);
@@ -182,12 +172,8 @@ mod tests {
         assert!(bytes.is_err());
 
         for i in 0..reader.len() {
-            let peek = io_reader
-                .peek()
-                .expect("Should not return error");
-            let next = io_reader
-                .next()
-                .expect("Should not return error");
+            let peek = io_reader.peek().expect("Should not return error");
+            let next = io_reader.next().expect("Should not return error");
 
             assert_eq!(peek, reader[i]);
             assert_eq!(next, reader[i]);
@@ -205,9 +191,7 @@ mod tests {
         let reader = LONG_BUFFER;
         let mut io_reader = IoReader::new(reader);
 
-        let peek0 = io_reader
-            .peek()
-            .expect("Should not return error");
+        let peek0 = io_reader.peek().expect("Should not return error");
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
@@ -235,9 +219,7 @@ mod tests {
         let reader = SHORT_BUFFER;
         let mut io_reader = IoReader::new(std::io::Cursor::new(reader));
 
-        let peek0 = io_reader
-            .peek()
-            .expect("Should not return error");
+        let peek0 = io_reader.peek().expect("Should not return error");
         assert_eq!(peek0, reader[0]);
 
         // Read first 10 bytes
@@ -246,12 +228,8 @@ mod tests {
         assert!(bytes.is_err());
 
         for i in 0..reader.len() {
-            let peek = io_reader
-                .peek()
-                .expect("Should not return error");
-            let next = io_reader
-                .next()
-                .expect("Should not return error");
+            let peek = io_reader.peek().expect("Should not return error");
+            let next = io_reader.next().expect("Should not return error");
 
             assert_eq!(peek, reader[i]);
             assert_eq!(next, reader[i]);

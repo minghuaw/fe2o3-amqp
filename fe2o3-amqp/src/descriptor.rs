@@ -1,5 +1,5 @@
-use serde::{Serializer, de};
 use serde::ser::{Serialize, SerializeStruct};
+use serde::{de, Serializer};
 
 use crate::types::Symbol;
 
@@ -14,7 +14,7 @@ pub const DESCRIPTOR: &str = "DESCRIPTOR";
 #[derive(Debug)]
 pub enum Descriptor {
     Name(Symbol),
-    Code(u64)
+    Code(u64),
 }
 
 impl Descriptor {
@@ -35,7 +35,7 @@ impl Serialize for Descriptor {
         match self {
             Descriptor::Name(value) => {
                 serializer.serialize_newtype_variant(DESCRIPTOR, 0, "Name", value)
-            },
+            }
             Descriptor::Code(value) => {
                 serializer.serialize_newtype_variant(DESCRIPTOR, 1, "Code", value)
             }

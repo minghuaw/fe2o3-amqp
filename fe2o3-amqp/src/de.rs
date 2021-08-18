@@ -1,28 +1,17 @@
-use std::{convert::TryInto};
 use serde::de;
+use std::convert::TryInto;
 
 use crate::{
-    format_code::EncodingCodes, 
-    error::Error, 
-    // format::{ArrayWidth, CompoundWidth, FixedWidth, VariableWidth}, 
-    read::{IoReader, Read}
+    error::Error,
+    format::{ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth},
+    format_code::EncodingCodes,
+    read::{IoReader, Read},
 };
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
     let mut de = Deserializer::new(io_reader);
     T::deserialize(&mut de)
-}
-
-pub struct CompoundBuf {
-    count: u32,
-    value_buf: Vec<u8>
-}
-
-pub struct ArrayBuf {
-    count: u32,
-    elem_code: u8, // element constructor
-    value_buf: Vec<u8>,
 }
 
 pub struct Deserializer<R> {
@@ -40,86 +29,6 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         code.try_into()
     }
 
-    // fn read_fixed_width_bytes(&mut self, width: FixedWidth) -> Option<Result<Vec<u8>, Error>> {
-    //     let n = width as usize;
-    //     self.reader.read_bytes(n)
-    // }
-
-    // fn read_variable_width_bytes(&mut self, width: VariableWidth) -> Result<Vec<u8>, Error> {
-    //     let n = match width {
-    //         VariableWidth::One => {
-    //             let size = self.reader.next()?;
-    //             size as usize
-    //         },
-    //         VariableWidth::Four => {
-    //             let size_buf = self.reader.read_const_bytes::<4>()?;
-    //             u32::from_be_bytes(size_buf) as usize
-    //         }
-    //     };
-
-    //     self.reader.read_bytes(n)
-    // }
-
-    // fn read_compound_bytes(&mut self, width: CompoundWidth) -> Result<CompoundBuf, Error> {
-    //     let cb = match width {
-    //         CompoundWidth::Zero => {
-    //             CompoundBuf { count: 0, value_buf: Vec::with_capacity(0) }
-    //         },
-    //         CompoundWidth::One => {
-    //             let size = self.reader.next()?;
-    //             let count = self.reader.next()?;
-
-    //             // Need to subtract the one byte taken by `count`
-    //             let size = size - 1;
-    //             let value_buf = self.reader.read_bytes(size as usize)?;
-    //             CompoundBuf {count: count as u32, value_buf }
-    //         },
-    //         CompoundWidth::Four => {
-    //             let size_buf = self.reader.read_const_bytes::<4>()?;
-    //             let count_buf = self.reader.read_const_bytes::<4>()?;
-    //             let size = u32::from_be_bytes(size_buf);
-    //             let count = u32::from_be_bytes(count_buf);
-
-    //             // Need to substract the four byte taken by `count`
-    //             let size = size - 4;
-    //             let value_buf = self.reader.read_bytes(size as usize)?;
-    //             CompoundBuf { count, value_buf }
-    //         }
-    //     };
-
-    //     Ok(cb)
-    // }
-
-    // fn read_array_bytes(&mut self, width: ArrayWidth) -> Result<ArrayBuf, Error> {
-    //     let ab = match width {
-    //         ArrayWidth::One => {
-    //             let size = self.reader.next()?;
-    //             let count = self.reader.next()?;
-    //             let elem_code = self.reader.next()?;
-
-    //             // Must subtract the one byte taken by `count` and one byte taken by `elem_code`
-    //             let size = size - 1 - 1;
-    //             let value_buf = self.reader.read_bytes(size as usize)?;
-    //             ArrayBuf { count: count as u32, elem_code, value_buf }
-    //         },
-    //         ArrayWidth::Four => {
-    //             let size_buf = self.reader.read_const_bytes::<4>()?;
-    //             let count_buf = self.reader.read_const_bytes::<4>()?;
-    //             let elem_code = self.reader.next()?;
-
-    //             let size = u32::from_be_bytes(size_buf);
-    //             let count = u32::from_be_bytes(count_buf);
-
-    //             // Must subtract the four bytes taken by `count` and one byte taken by `elem_code`
-    //             let size = size - 4 - 1;
-    //             let value_buf = self.reader.read_bytes(size as usize)?;
-    //             ArrayBuf { count, elem_code, value_buf }
-    //         }
-    //     };
-
-    //     Ok(ab)
-    // }
-
     #[inline]
     fn parse_bool(&mut self) -> Result<bool, Error> {
         // TODO: check whether is parsing in an array
@@ -129,12 +38,12 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 match byte {
                     0x00 => Ok(false),
                     0x01 => Ok(true),
-                    _ => Err(Error::InvalidValue)
+                    _ => Err(Error::InvalidValue),
                 }
-            },
+            }
             EncodingCodes::BooleanTrue => Ok(true),
             EncodingCodes::BooleanFalse => Ok(false),
-            _ => Err(Error::InvalidFormatCode)
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -144,8 +53,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Byte => {
                 let byte = self.reader.next()?;
                 Ok(byte as i8)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -155,8 +64,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Short => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(i16::from_be_bytes(bytes))
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -166,12 +75,12 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Int => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(i32::from_be_bytes(bytes))
-            },
+            }
             EncodingCodes::SmallInt => {
                 let byte = self.reader.next()?;
                 Ok(byte as i32)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -181,12 +90,12 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Long => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(i64::from_be_bytes(bytes))
-            },
+            }
             EncodingCodes::SmallLong => {
                 let byte = self.reader.next()?;
                 Ok(byte as i64)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -195,9 +104,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         match self.read_format_code()? {
             EncodingCodes::Ubyte => {
                 let byte = self.reader.next()?;
-                Ok( byte )
-            },
-            _ => Err(Error::InvalidFormatCode)
+                Ok(byte)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -207,8 +116,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Ushort => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(u16::from_be_bytes(bytes))
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -218,15 +127,13 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Uint => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(u32::from_be_bytes(bytes))
-            },
+            }
             EncodingCodes::SmallUint => {
                 let byte = self.reader.next()?;
                 Ok(byte as u32)
-            },
-            EncodingCodes::Uint0 => {
-                Ok(0)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            EncodingCodes::Uint0 => Ok(0),
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -236,15 +143,13 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Ulong => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(u64::from_be_bytes(bytes))
-            },
+            }
             EncodingCodes::SmallUlong => {
                 let byte = self.reader.next()?;
                 Ok(byte as u64)
-            },
-            EncodingCodes::Ulong0 => {
-                Ok(0)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            EncodingCodes::Ulong0 => Ok(0),
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -254,8 +159,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Float => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(f32::from_be_bytes(bytes))
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -265,8 +170,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Double => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(f64::from_be_bytes(bytes))
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -277,14 +182,46 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let bytes = self.reader.read_const_bytes()?;
                 let n = u32::from_be_bytes(bytes);
                 char::from_u32(n).ok_or(Error::InvalidValue)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
+        }
+    }
+
+    fn parse_string(&mut self) -> Result<String, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::Str8 => {
+                // read length byte
+                let len = self.reader.next()?;
+                let buf = self.reader.read_bytes(len as usize)?;
+                String::from_utf8(buf).map_err(Into::into)
+            }
+            EncodingCodes::Str32 => {
+                let len_bytes = self.reader.read_const_bytes()?;
+                let len = u32::from_be_bytes(len_bytes);
+                let buf = self.reader.read_bytes(len as usize)?;
+                String::from_utf8(buf).map_err(Into::into)
+            }
+            _ => Err(Error::InvalidFormatCode),
+        }
+    }
+
+    fn parse_byte_buf(&mut self) -> Result<Vec<u8>, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::VBin8 => {
+                let len = self.reader.next()?;
+                self.reader.read_bytes(len as usize)
+            }
+            EncodingCodes::VBin32 => {
+                let len_bytes = self.reader.read_const_bytes()?;
+                let len = u32::from_be_bytes(len_bytes);
+                self.reader.read_bytes(len as usize)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 }
 
-
-impl<'de, 'a, R> de::Deserializer<'de> for &'a mut Deserializer<R> 
+impl<'de, 'a, R> de::Deserializer<'de> for &'a mut Deserializer<R>
 where
     R: Read<'de>,
 {
@@ -293,15 +230,49 @@ where
     #[inline]
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
-        unimplemented!()
+        match self.reader.peek()?.try_into()? {
+            EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
+                self.deserialize_bool(visitor)
+            }
+            EncodingCodes::Byte => self.deserialize_i8(visitor),
+            EncodingCodes::Short => self.deserialize_i16(visitor),
+            EncodingCodes::Int | EncodingCodes::SmallInt => self.deserialize_i32(visitor),
+            EncodingCodes::Long | EncodingCodes::SmallLong => self.deserialize_i64(visitor),
+            EncodingCodes::Ubyte => self.deserialize_u8(visitor),
+            EncodingCodes::Ushort => self.deserialize_u16(visitor),
+            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
+                self.deserialize_u32(visitor)
+            },
+            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
+                self.deserialize_u64(visitor)
+            },
+            EncodingCodes::Float => self.deserialize_f32(visitor),
+            EncodingCodes::Double => self.deserialize_f64(visitor),
+            EncodingCodes::Char => self.deserialize_char(visitor),
+            EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_string(visitor),
+            EncodingCodes::VBin32 | EncodingCodes::VBin8 => self.deserialize_byte_buf(visitor),
+            EncodingCodes::Null => self.deserialize_unit(visitor),
+
+            // unimplemented
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => todo!(),
+            EncodingCodes::DescribedType => todo!(),
+            EncodingCodes::Decimal32 => todo!(),
+            EncodingCodes::Decimal64 => todo!(),
+            EncodingCodes::Decimal128 => todo!(),
+            EncodingCodes::Timestamp => todo!(),
+            EncodingCodes::Uuid => todo!(),
+            EncodingCodes::Array32 | EncodingCodes::Array8 => todo!(),
+            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => todo!(),
+            EncodingCodes::Map32 | EncodingCodes::Map8 => todo!()
+        }
     }
 
     #[inline]
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_bool(self.parse_bool()?)
     }
@@ -309,7 +280,7 @@ where
     #[inline]
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_i8(self.parse_i8()?)
     }
@@ -317,7 +288,7 @@ where
     #[inline]
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_i16(self.parse_i16()?)
     }
@@ -325,7 +296,7 @@ where
     #[inline]
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_i32(self.parse_i32()?)
     }
@@ -333,7 +304,7 @@ where
     #[inline]
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_i64(self.parse_i64()?)
     }
@@ -341,7 +312,7 @@ where
     #[inline]
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_u8(self.parse_u8()?)
     }
@@ -349,7 +320,7 @@ where
     #[inline]
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_u16(self.parse_u16()?)
     }
@@ -357,7 +328,7 @@ where
     #[inline]
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_u32(self.parse_u32()?)
     }
@@ -365,7 +336,7 @@ where
     #[inline]
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_u64(self.parse_u64()?)
     }
@@ -373,7 +344,7 @@ where
     #[inline]
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_f32(self.parse_f32()?)
     }
@@ -381,7 +352,7 @@ where
     #[inline]
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_f64(self.parse_f64()?)
     }
@@ -389,7 +360,7 @@ where
     #[inline]
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         visitor.visit_char(self.parse_char()?)
     }
@@ -397,115 +368,145 @@ where
     #[inline]
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
-        // visitor.visit_str(self.parse_str()?)
-        todo!()
+        visitor.visit_string(self.parse_string()?)
     }
 
     #[inline]
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
-        // visitor.visit_str(self.parse_str()?)
-        todo!()
+        // TODO: considering adding a buffer to the reader
+        visitor.visit_str(&self.parse_string()?)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        todo!()    
+        visitor.visit_byte_buf(self.parse_byte_buf()?)
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> ,
+        V: de::Visitor<'de>,
     {
-        todo!()    
+        // TODO: considering adding a buffer to the reader
+        visitor.visit_bytes(&self.parse_byte_buf()?)
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
-        todo!()
+        match self.reader.peek()?.try_into()? {
+            EncodingCodes::Null => visitor.visit_none(),
+            _ => visitor.visit_some(self),
+        }
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
-        todo!()    
+        match self.read_format_code()? {
+            EncodingCodes::Null => visitor.visit_unit(),
+            _ => Err(Error::InvalidFormatCode),
+        }
     }
 
-    fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_unit_struct<V>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
-        todo!()
+        self.deserialize_unit(visitor)
     }
-    
-    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<V::Value, Self::Error>
+
+    fn deserialize_newtype_struct<V>(
+        self,
+        name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         todo!()
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
-    {
-        todo!()
-    }
-    
-    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
+    {
+        todo!()
+    }
+
+    fn deserialize_tuple_struct<V>(
+        self,
+        name: &'static str,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de>,
     {
         todo!()
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
-    {
-        todo!()    
-    }
-
-    fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_struct<V>(
+        self,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         todo!()
     }
 
+    fn deserialize_enum<V>(
+        self,
+        name: &'static str,
+        variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de>,
+    {
+        todo!()
+    }
+
+    // an identifier is either a field of a struct or a variant of an eunm
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         todo!()
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         todo!()
     }
@@ -513,24 +514,50 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::ser::to_vec;
+    use serde::Deserialize;
+
+    use crate::{format_code::EncodingCodes, ser::to_vec};
 
     use super::from_slice;
 
+    fn assert_eq_deserialized_vs_expected<'de, T>(buf: &'de [u8], expected: T)
+    where
+        T: Deserialize<'de> + std::fmt::Debug + PartialEq,
+    {
+        let deserialized: T = from_slice(buf).unwrap();
+        assert_eq!(deserialized, expected);
+    }
+
     #[test]
     fn test_deserialize_bool() {
+        let buf = &[EncodingCodes::BooleanFalse as u8];
+        let expected = false;
+        assert_eq_deserialized_vs_expected(buf, expected);
 
+        let buf = &[EncodingCodes::BooleanTrue as u8];
+        let expected = true;
+        assert_eq_deserialized_vs_expected(buf, expected);
+
+        let buf = &[EncodingCodes::Boolean as u8, 1];
+        let expected = true;
+        assert_eq_deserialized_vs_expected(buf, expected);
+
+        let buf = &[EncodingCodes::Boolean as u8, 0];
+        let expected = false;
+        assert_eq_deserialized_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_i8() {
-        let orig = 7i8;
-        let serialized = to_vec(&orig).unwrap();
-        let recovered: i8 = from_slice(&serialized).unwrap();
-        assert_eq!(orig, recovered);
+        let buf = &[EncodingCodes::Byte as u8, 7i8 as u8];
+        let expected = 7i8;
+        assert_eq_deserialized_vs_expected(buf, expected);
     }
 
+    #[test]
     fn test_deserialize_u8() {
-
+        let buf = &[EncodingCodes::Ubyte as u8, 5u8];
+        let expected = 5u8;
+        assert_eq_deserialized_vs_expected(buf, expected);
     }
 }

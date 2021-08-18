@@ -12,7 +12,7 @@ pub enum Error {
     Io(std::io::Error),
 
     #[error("Invalid format code")]
-    InvalidFormatCode, 
+    InvalidFormatCode,
 
     #[error("Invalid value")]
     InvalidValue,
@@ -20,8 +20,8 @@ pub enum Error {
     #[error("Expecting non-described constructor")]
     IsDescribedType,
 
-    // #[error("EOF")]
-    // Eof,
+    #[error("Invalid UTF-8 encoding")]
+    InvalidUtf8Encoding,
 }
 
 impl ser::Error for Error {
@@ -50,5 +50,11 @@ impl From<std::io::Error> for Error {
         // }
 
         Self::Io(err)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        Error::InvalidUtf8Encoding
     }
 }

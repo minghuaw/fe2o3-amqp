@@ -24,7 +24,7 @@ impl From<String> for Symbol {
 
 impl From<&str> for Symbol {
     fn from(val: &str) -> Self {
-        Self(val.into()) 
+        Self(val.into())
     }
 }
 

@@ -23,3 +23,23 @@
 //         }
 //     };
 // }
+
+
+pub(crate) enum NewType {
+    None,
+    Symbol,
+    List,
+}
+
+impl Default for NewType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum IsArrayElement {
+    False,
+    FirstElement,
+    OtherElement,
+}

@@ -1,8 +1,11 @@
 use std::io::Write;
 
-use serde::{Serialize, ser::{self, SerializeMap, SerializeTuple}};
+use serde::{
+    ser::{self, SerializeMap, SerializeTuple},
+    Serialize,
+};
 
-use crate::{format_code::EncodingCodes, described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, types::{LIST, SYMBOL}, value::U32_MAX_AS_USIZE};
+use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{LIST, SYMBOL}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -12,18 +15,6 @@ where
     let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
     value.serialize(&mut serializer)?;
     Ok(writer)
-}
-
-enum NewType {
-    None,
-    Symbol,
-    List,
-}
-
-impl Default for NewType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[repr(u8)]
@@ -40,26 +31,19 @@ impl Default for StructEncoding {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum IsArrayElement {
-    False,
-    FirstElement,
-    OtherElement,
-}
-
 pub struct Serializer<W> {
     /// The output of serialized data
     pub writer: W,
-    
+
     /// Any particular newtype wrapper
     newtype: NewType,
-    
+
     /// How a struct should be encoded
     struct_encoding: StructEncoding,
-    
+
     /// Whether we are serializing an array
     /// NOTE: This should only be changed by `SeqSerializer`
-    pub is_array_elem: IsArrayElement
+    pub is_array_elem: IsArrayElement,
 }
 
 impl<W: Write> Serializer<W> {
@@ -137,18 +121,18 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 };
                 // This cannot be moved out of match because array have different length
                 self.writer.write_all(&buf)
-            },
+            }
             IsArrayElement::FirstElement => {
                 let buf = match v {
                     true => [EncodingCodes::Boolean as u8, 0x01],
-                    false => [EncodingCodes::Boolean as u8, 0x00]
+                    false => [EncodingCodes::Boolean as u8, 0x00],
                 };
                 self.writer.write_all(&buf)
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf = match v {
                     true => [0x01u8],
-                    false => [0x00u8]
+                    false => [0x00u8],
                 };
                 self.writer.write_all(&buf)
             }
@@ -162,7 +146,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             IsArrayElement::False | IsArrayElement::FirstElement => {
                 let buf = [EncodingCodes::Byte as u8, v as u8];
                 self.writer.write_all(&buf).map_err(Into::into)
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf = [v as u8];
                 self.writer.write_all(&buf).map_err(Into::into)
@@ -183,18 +167,16 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
         match self.is_array_elem {
-            IsArrayElement::False => {
-                match v {
-                    val @ -128..=127 => {
-                        let buf = [EncodingCodes::SmallInt as u8, val as u8];
-                        self.writer.write_all(&buf)?;
-                    }
-                    val @ _ => {
-                        let code = [EncodingCodes::Int as u8];
-                        self.writer.write_all(&code)?;
-                        let buf: [u8; 4] = val.to_be_bytes();
-                        self.writer.write_all(&buf)?;
-                    }
+            IsArrayElement::False => match v {
+                val @ -128..=127 => {
+                    let buf = [EncodingCodes::SmallInt as u8, val as u8];
+                    self.writer.write_all(&buf)?;
+                }
+                val @ _ => {
+                    let code = [EncodingCodes::Int as u8];
+                    self.writer.write_all(&code)?;
+                    let buf: [u8; 4] = val.to_be_bytes();
+                    self.writer.write_all(&buf)?;
                 }
             },
             IsArrayElement::FirstElement => {
@@ -202,7 +184,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&code)?;
                 let buf: [u8; 4] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf: [u8; 4] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
@@ -214,18 +196,16 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         match self.is_array_elem {
-            IsArrayElement::False => {
-                match v {
-                    val @ -128..=127 => {
-                        let buf = [EncodingCodes::SmallLong as u8, val as u8];
-                        self.writer.write_all(&buf)?;
-                    }
-                    val @ _ => {
-                        let code = [EncodingCodes::Long as u8];
-                        self.writer.write_all(&code)?;
-                        let buf: [u8; 8] = val.to_be_bytes();
-                        self.writer.write_all(&buf)?;
-                    }
+            IsArrayElement::False => match v {
+                val @ -128..=127 => {
+                    let buf = [EncodingCodes::SmallLong as u8, val as u8];
+                    self.writer.write_all(&buf)?;
+                }
+                val @ _ => {
+                    let code = [EncodingCodes::Long as u8];
+                    self.writer.write_all(&code)?;
+                    let buf: [u8; 8] = val.to_be_bytes();
+                    self.writer.write_all(&buf)?;
                 }
             },
             IsArrayElement::FirstElement => {
@@ -233,7 +213,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.writer.write_all(&code)?;
                 let buf: [u8; 8] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf: [u8; 8] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
@@ -249,7 +229,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             IsArrayElement::False | IsArrayElement::FirstElement => {
                 let buf = [EncodingCodes::Ubyte as u8, v];
                 self.writer.write_all(&buf)?;
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf = [v];
                 self.writer.write_all(&buf)?;
@@ -291,13 +271,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&buf)?;
                     }
                 }
-            },
+            }
             IsArrayElement::FirstElement => {
                 let code = [EncodingCodes::Uint as u8];
                 self.writer.write_all(&code)?;
                 let buf: [u8; 4] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf: [u8; 4] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
@@ -329,13 +309,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&buf)?;
                     }
                 }
-            },
+            }
             IsArrayElement::FirstElement => {
                 let code = [EncodingCodes::Ulong as u8];
                 self.writer.write_all(&code)?;
                 let buf: [u8; 8] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
-            },
+            }
             IsArrayElement::OtherElement => {
                 let buf: [u8; 8] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
@@ -420,39 +400,35 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                             _ => return Err(Error::Message("Too long".into())),
                         }
                     }
-                    NewType::List => unreachable!()
-                }
-            },
-            IsArrayElement::FirstElement => {
-                match self.newtype {
-                    NewType::Symbol => {
-                        let code = [EncodingCodes::Sym32 as u8];
-                        let width = (l as u32).to_be_bytes();
-                        self.writer.write_all(&code)?;
-                        self.writer.write_all(&width)?;
-                    },
-                    NewType::None => {
-                        let code = [EncodingCodes::Str32 as u8];
-                        let width: [u8; 4] = (l as u32).to_be_bytes();
-                        self.writer.write_all(&code)?;
-                        self.writer.write_all(&width)?;
-                    },
-                    NewType::List => unreachable!()
-                }
-            },
-            IsArrayElement::OtherElement => {
-                match self.newtype {
-                    NewType::Symbol => {
-                        let width = (l as u32).to_be_bytes();
-                        self.writer.write_all(&width)?;
-                    },
-                    NewType::None => {
-                        let width: [u8; 4] = (l as u32).to_be_bytes();
-                        self.writer.write_all(&width)?;
-                    },
-                    NewType::List => unreachable!()
+                    NewType::List => unreachable!(),
                 }
             }
+            IsArrayElement::FirstElement => match self.newtype {
+                NewType::Symbol => {
+                    let code = [EncodingCodes::Sym32 as u8];
+                    let width = (l as u32).to_be_bytes();
+                    self.writer.write_all(&code)?;
+                    self.writer.write_all(&width)?;
+                }
+                NewType::None => {
+                    let code = [EncodingCodes::Str32 as u8];
+                    let width: [u8; 4] = (l as u32).to_be_bytes();
+                    self.writer.write_all(&code)?;
+                    self.writer.write_all(&width)?;
+                }
+                NewType::List => unreachable!(),
+            },
+            IsArrayElement::OtherElement => match self.newtype {
+                NewType::Symbol => {
+                    let width = (l as u32).to_be_bytes();
+                    self.writer.write_all(&width)?;
+                }
+                NewType::None => {
+                    let width: [u8; 4] = (l as u32).to_be_bytes();
+                    self.writer.write_all(&width)?;
+                }
+                NewType::List => unreachable!(),
+            },
         }
 
         self.writer.write_all(v.as_bytes()).map_err(Into::into)
@@ -480,13 +456,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                     _ => return Err(Error::Message("Too long".into())),
                 }
-            },
+            }
             IsArrayElement::FirstElement => {
                 let code = [EncodingCodes::VBin32 as u8];
                 let width: [u8; 4] = (l as u32).to_be_bytes();
                 self.writer.write_all(&code)?;
                 self.writer.write_all(&width)?;
-            },
+            }
             IsArrayElement::OtherElement => {
                 let width: [u8; 4] = (l as u32).to_be_bytes();
                 self.writer.write_all(&width)?;
@@ -568,7 +544,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     ) -> Result<Self::Ok, Self::Error>
     where
         T: Serialize,
-    {   
+    {
         if name == DESCRIPTOR {
             value.serialize(self)
         } else {
@@ -646,7 +622,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             // A None state indicates a freshly instantiated serializer
             StructEncoding::None => {
                 if name == DESCRIBED_LIST {
-                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
+                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
+                    {
                         let code = [EncodingCodes::DescribedType as u8];
                         self.writer.write_all(&code)?;
                     }
@@ -657,7 +634,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         len,
                     ))
                 } else if name == DESCRIBED_MAP {
-                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {   
+                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
+                    {
                         let code = [EncodingCodes::DescribedType as u8];
                         self.writer.write_all(&code)?;
                     }
@@ -668,7 +646,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         len,
                     ))
                 } else if name == DESCRIBED_BASIC {
-                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
+                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
+                    {
                         let code = [EncodingCodes::DescribedType as u8];
                         self.writer.write_all(&code)?;
                     }
@@ -686,15 +665,23 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     ))
                 } else {
                     // Only non-described struct will go to this branch
-                    Ok(DescribedSerializer::list_value(StructRole::Value, self, len))
+                    Ok(DescribedSerializer::list_value(
+                        StructRole::Value,
+                        self,
+                        len,
+                    ))
                 }
             }
-            StructEncoding::DescribedBasic => {
-                Ok(DescribedSerializer::basic_value(StructRole::Value, self, len))
-            }
-            StructEncoding::DescribedList => {
-                Ok(DescribedSerializer::list_value(StructRole::Value, self, len))
-            }
+            StructEncoding::DescribedBasic => Ok(DescribedSerializer::basic_value(
+                StructRole::Value,
+                self,
+                len,
+            )),
+            StructEncoding::DescribedList => Ok(DescribedSerializer::list_value(
+                StructRole::Value,
+                self,
+                len,
+            )),
             StructEncoding::DescribedMap => {
                 Ok(DescribedSerializer::map_value(StructRole::Value, self, len))
             }
@@ -781,12 +768,12 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
                     // The remaining element should only write the value bytes
                     _ => Serializer::new(&mut self.buf, IsArrayElement::OtherElement),
                 }
-            },
+            }
             NewType::List => {
                 // Element in the list always has it own constructor
                 Serializer::new(&mut self.buf, IsArrayElement::False)
-            },
-            NewType::Symbol => unreachable!()
+            }
+            NewType::Symbol => unreachable!(),
         };
 
         self.num = self.num + 1;
@@ -799,16 +786,21 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
         match se.newtype {
             NewType::None => write_array(&mut se.writer, num, buf, &se.is_array_elem),
             NewType::List => write_list(&mut se.writer, num, buf, &se.is_array_elem),
-            NewType::Symbol => unreachable!()
+            NewType::Symbol => unreachable!(),
         }
     }
 }
 
-fn write_array<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array_elem: &IsArrayElement) -> Result<(), Error> {
+fn write_array<'a, W: Write + 'a>(
+    writer: &'a mut W,
+    num: usize,
+    buf: Vec<u8>,
+    ext_is_array_elem: &IsArrayElement,
+) -> Result<(), Error> {
     let len = buf.len();
 
     match len {
-        0 ..= 255 => {
+        0..=255 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Array8 as u8];
                 writer.write_all(&code)?;
@@ -817,8 +809,8 @@ fn write_array<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, e
             let len = len + 1;
             let len_num = [len as u8, num as u8];
             writer.write_all(&len_num)?;
-        },
-        256 ..= U32_MAX_AS_USIZE => {
+        }
+        256..=U32_MAX_AS_USIZE => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Array32 as u8];
                 writer.write_all(&code)?;
@@ -829,8 +821,8 @@ fn write_array<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, e
             let num = (num as u32).to_be_bytes();
             writer.write_all(&len)?;
             writer.write_all(&num)?;
-        },
-        _ => return Err(Error::Message("Too long".into()))
+        }
+        _ => return Err(Error::Message("Too long".into())),
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -874,7 +866,12 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for ListSerializer<'a, W> {
     }
 }
 
-fn write_list<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array_elem: &IsArrayElement) -> Result<(), Error> {
+fn write_list<'a, W: Write + 'a>(
+    writer: &'a mut W,
+    num: usize,
+    buf: Vec<u8>,
+    ext_is_array_elem: &IsArrayElement,
+) -> Result<(), Error> {
     let len = buf.len();
 
     // if `len` < 255, `num` must be smaller than 255
@@ -882,7 +879,7 @@ fn write_list<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ex
         0 => {
             let code = [EncodingCodes::List0 as u8];
             writer.write_all(&code)?;
-        },
+        }
         // FIXME: whether `len` should be below 255-1
         1..=255 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
@@ -976,7 +973,12 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     }
 }
 
-fn write_map<'a, W: Write + 'a>(writer: &'a mut W, num: usize, buf: Vec<u8>, ext_is_array_elem: &IsArrayElement) -> Result<(), Error> {
+fn write_map<'a, W: Write + 'a>(
+    writer: &'a mut W,
+    num: usize,
+    buf: Vec<u8>,
+    ext_is_array_elem: &IsArrayElement,
+) -> Result<(), Error> {
     let len = buf.len();
 
     match len {
@@ -1149,9 +1151,19 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
             StructRole::Value => match self.val_ty {
                 ValueType::Basic => Ok(()),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-                ValueType::List => write_list(&mut self.se.writer, self.num, self.buf, &IsArrayElement::False),
+                ValueType::List => write_list(
+                    &mut self.se.writer,
+                    self.num,
+                    self.buf,
+                    &IsArrayElement::False,
+                ),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-                ValueType::Map => write_map(&mut self.se.writer, self.num, self.buf, &IsArrayElement::False),
+                ValueType::Map => write_map(
+                    &mut self.se.writer,
+                    self.num,
+                    self.buf,
+                    &IsArrayElement::False,
+                ),
             },
         }
     }
@@ -1235,7 +1247,9 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::{format_code::EncodingCodes, described::Described, descriptor::Descriptor, types::List};
+    use crate::{
+        described::Described, descriptor::Descriptor, format_code::EncodingCodes, types::List,
+    };
 
     use super::*;
 
@@ -1505,13 +1519,25 @@ mod test {
         let val = vec![1, 2, 3, 4];
         let expected = vec![
             EncodingCodes::Array8 as u8, // array8
-            (2 + 4 * 4) as u8, // length including `count` and element constructor
-            4, // count
+            (2 + 4 * 4) as u8,           // length including `count` and element constructor
+            4,                           // count
             EncodingCodes::Int as u8,
-            0, 0, 0, 1, // first element as i32
-            0, 0, 0, 2, // second element 
-            0, 0, 0, 3, // third
-            0, 0, 0, 4, // fourth
+            0,
+            0,
+            0,
+            1, // first element as i32
+            0,
+            0,
+            0,
+            2, // second element
+            0,
+            0,
+            0,
+            3, // third
+            0,
+            0,
+            0,
+            4, // fourth
         ];
         assert_eq_on_serialized_vs_expected(val, expected);
     }
@@ -1522,7 +1548,7 @@ mod test {
         let expected = vec![
             EncodingCodes::List8 as u8,
             (1 + 2 * 4) as u8, // length including one byte on count
-            4, // count
+            4,                 // count
             EncodingCodes::SmallInt as u8,
             1,
             EncodingCodes::SmallInt as u8,
@@ -1631,13 +1657,19 @@ mod test {
             2,
             EncodingCodes::Str8 as u8,
             7,
-            b'a', b'_', b'f', b'i', b'e', b'l', b'd',
+            b'a',
+            b'_',
+            b'f',
+            b'i',
+            b'e',
+            b'l',
+            b'd',
             EncodingCodes::SmallInt as u8,
             13,
             EncodingCodes::Str8 as u8,
             1,
             b'b',
-            EncodingCodes::BooleanTrue as u8
+            EncodingCodes::BooleanTrue as u8,
         ];
         assert_eq_on_serialized_vs_expected(described, expected);
     }
