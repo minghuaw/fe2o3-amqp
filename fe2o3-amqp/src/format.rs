@@ -2,19 +2,19 @@
 
 // use crate::{format_code::EncodingCodes, error::Error};
 
-// offset includes 1 byte of `count`
+/// offset includes 1 byte of `count`
 pub const OFFSET_LIST8: usize = 1;
-// offset includes 4 byte of `count`
+/// offset includes 4 byte of `count`
 pub const OFFSET_LIST32: usize = 4;
 
-// offset includes 1 byte of `count`
+/// offset includes 1 byte of `count`
 pub const OFFSET_MAP8: usize = 1;
-// offset includes 4 byte of `count`
+/// offset includes 4 byte of `count`
 pub const OFFSET_MAP32: usize = 4;
 
-// offset includes 1 byte of `count` and 1 byte of element format code
+/// offset includes 1 byte of `count` and 1 byte of element format code
 pub const OFFSET_ARRAY8: usize = 2;
-// offset includes 4 bytes of `count` and 1 byte of element format code
+/// offset includes 4 bytes of `count` and 1 byte of element format code
 pub const OFFSET_ARRAY32: usize = 5;
 
 // pub enum Category {
