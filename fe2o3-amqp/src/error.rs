@@ -11,8 +11,11 @@ pub enum Error {
     #[error("IO {0}")]
     Io(std::io::Error),
 
-    #[error("Invalid constructor")]
+    #[error("Invalid format code")]
     InvalidFormatCode, 
+
+    #[error("Invalid value")]
+    InvalidValue,
 
     #[error("Expecting non-described constructor")]
     IsDescribedType,

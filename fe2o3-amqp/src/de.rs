@@ -135,7 +135,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     fn parse_i16(&mut self) -> Result<i16, Error> {
         match self.read_format_code()? {
             EncodingCodes::Short => {
-                let bytes = self.reader.read_const_bytes::<2>()?;
+                let bytes = self.reader.read_const_bytes()?;
                 Ok(i16::from_be_bytes(bytes))
             },
             _ => Err(Error::InvalidFormatCode)
@@ -144,15 +144,32 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_i32(&mut self) -> Result<i32, Error> {
-        // match self.read_format_code()? {
-        //     EncodingCodes::
-        // }
-        todo!()
+        match self.read_format_code()? {
+            EncodingCodes::Int => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(i32::from_be_bytes(bytes))
+            },
+            EncodingCodes::SmallInt => {
+                let byte = self.reader.next()?;
+                Ok(byte as i32)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
     fn parse_i64(&mut self) -> Result<i64, Error> {
-        todo!()
+        match self.read_format_code()? {
+            EncodingCodes::Long => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(i64::from_be_bytes(bytes))
+            },
+            EncodingCodes::SmallLong => {
+                let byte = self.reader.next()?;
+                Ok(byte as i64)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
@@ -168,12 +185,83 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_u16(&mut self) -> Result<u16, Error> {
-        todo!()
+        match self.read_format_code()? {
+            EncodingCodes::Ushort => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(u16::from_be_bytes(bytes))
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     #[inline]
     fn parse_u32(&mut self) -> Result<u32, Error> {
-        todo!()
+        match self.read_format_code()? {
+            EncodingCodes::Uint => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(u32::from_be_bytes(bytes))
+            },
+            EncodingCodes::SmallUint => {
+                let byte = self.reader.next()?;
+                Ok(byte as u32)
+            },
+            EncodingCodes::Uint0 => {
+                Ok(0)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
+    }
+
+    #[inline]
+    fn parse_u64(&mut self) -> Result<u64, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::Ulong => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(u64::from_be_bytes(bytes))
+            },
+            EncodingCodes::SmallUlong => {
+                let byte = self.reader.next()?;
+                Ok(byte as u64)
+            },
+            EncodingCodes::Ulong0 => {
+                Ok(0)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
+    }
+
+    #[inline]
+    fn parse_f32(&mut self) -> Result<f32, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::Float => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(f32::from_be_bytes(bytes))
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
+    }
+
+    #[inline]
+    fn parse_f64(&mut self) -> Result<f64, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::Double => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(f64::from_be_bytes(bytes))
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
+    }
+
+    #[inline]
+    fn parse_char(&mut self) -> Result<char, Error> {
+        match self.read_format_code()? {
+            EncodingCodes::Char => {
+                let bytes = self.reader.read_const_bytes()?;
+                let n = u32::from_be_bytes(bytes);
+                char::from_u32(n).ok_or(Error::InvalidValue)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 }
 
@@ -184,6 +272,7 @@ where
 {
     type Error = Error;
 
+    #[inline]
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de> 
@@ -191,6 +280,7 @@ where
         unimplemented!()
     }
 
+    #[inline]
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de> 
@@ -198,6 +288,7 @@ where
         unimplemented!()
     }
 
+    #[inline]
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de> 
@@ -205,6 +296,7 @@ where
         visitor.visit_i8(self.parse_i8()?)
     }
 
+    #[inline]
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de> 
@@ -212,19 +304,23 @@ where
         visitor.visit_i16(self.parse_i16()?)
     }
 
+    #[inline]
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_i32(self.parse_i32()?)
     }
 
+    #[inline]
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de> 
     {
-        todo!()
+        visitor.visit_i64(self.parse_i64()?)
     }
 
+    #[inline]
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de> 
@@ -232,51 +328,69 @@ where
         visitor.visit_u8(self.parse_u8()?)
     }
 
+    #[inline]
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_u16(self.parse_u16()?)
     }
 
+    #[inline]
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_u32(self.parse_u32()?)
     }
 
+    #[inline]
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_u64(self.parse_u64()?)
     }
 
+    #[inline]
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_f32(self.parse_f32()?)
     }
 
+    #[inline]
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_f64(self.parse_f64()?)
     }
 
+    #[inline]
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
-        todo!()
+        V: de::Visitor<'de> 
+    {
+        visitor.visit_char(self.parse_char()?)
     }
 
+    #[inline]
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
+        V: de::Visitor<'de> 
+    {
+        // visitor.visit_str(self.parse_str()?)
         todo!()
     }
 
+    #[inline]
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
-            V: de::Visitor<'de> {
+        V: de::Visitor<'de> 
+    {
+        // visitor.visit_str(self.parse_str()?)
         todo!()
     }
 
