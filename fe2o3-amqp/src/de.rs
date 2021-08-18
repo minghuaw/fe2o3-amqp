@@ -555,9 +555,61 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_i16() {
+        let mut buf = vec![EncodingCodes::Short as u8];
+        buf.append(&mut 307i16.to_be_bytes().to_vec());
+        let expected = 307i16;
+        assert_eq_deserialized_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_i32() {
+        let buf = &[EncodingCodes::SmallInt as u8, 7i32 as u8];
+        let expected = 7i32;
+        assert_eq_deserialized_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_i64() {
+        let buf = &[EncodingCodes::SmallLong as u8, 7i64 as u8];
+        let expected = 7i64;
+        assert_eq_deserialized_vs_expected(buf, expected);
+    }
+
+    #[test]
     fn test_deserialize_u8() {
         let buf = &[EncodingCodes::Ubyte as u8, 5u8];
         let expected = 5u8;
+        assert_eq_deserialized_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_u16() {
+        let mut buf = vec![EncodingCodes::Ushort as u8];
+        buf.append(&mut 300u16.to_be_bytes().to_vec());
+        let expected = 300u16;
+        assert_eq_deserialized_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_u32() {
+        let buf = &[EncodingCodes::Uint0 as u8];
+        let expected = 0u32;
+        assert_eq_deserialized_vs_expected(buf, expected);
+
+        let buf = &[EncodingCodes::SmallUint as u8, 5u8];
+        let expected = 5u32;
+        assert_eq_deserialized_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_u64() {
+        let buf = &[EncodingCodes::Ulong0 as u8];
+        let expected = 0u64;
+        assert_eq_deserialized_vs_expected(buf, expected);
+
+        let buf = &[EncodingCodes::SmallUlong as u8, 5u8];
+        let expected = 5u64;
         assert_eq_deserialized_vs_expected(buf, expected);
     }
 }
