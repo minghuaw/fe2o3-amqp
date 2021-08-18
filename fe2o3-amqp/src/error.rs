@@ -17,8 +17,8 @@ pub enum Error {
     #[error("Expecting non-described constructor")]
     IsDescribedType,
 
-    #[error("EOF")]
-    Eof,
+    // #[error("EOF")]
+    // Eof,
 }
 
 impl ser::Error for Error {
@@ -41,9 +41,11 @@ impl de::Error for Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        match err.kind() {
-            std::io::ErrorKind::UnexpectedEof => Self::Eof,
-            _ => Self::Io(err)
-        }
+        // match err.kind() {
+        //     std::io::ErrorKind::UnexpectedEof => Self::Eof,
+        //     _ => Self::Io(err)
+        // }
+
+        Self::Io(err)
     }
 }

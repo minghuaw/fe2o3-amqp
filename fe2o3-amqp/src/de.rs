@@ -1,7 +1,7 @@
 use std::{convert::TryInto};
 use serde::de;
 
-use crate::{format_code::EncodingCodes, error::Error, format::{ArrayWidth, CompoundWidth, FixedWidth, VariableWidth}, read::{IoReader, Read}, unpack, unpack_or_eof};
+use crate::{format_code::EncodingCodes, error::Error, format::{ArrayWidth, CompoundWidth, FixedWidth, VariableWidth}, read::{IoReader, Read}};
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -29,10 +29,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         Self { reader }
     }
 
-    fn read_format_code(&mut self) -> Option<Result<EncodingCodes, Error>> {
+    fn read_format_code(&mut self) -> Result<EncodingCodes, Error> {
         let code = self.reader.next();
-        let code = unpack!(code);
-        Some(code.try_into())
+        let code = code?;
+        code.try_into()
     }
 
     // fn read_fixed_width_bytes(&mut self, width: FixedWidth) -> Option<Result<Vec<u8>, Error>> {
@@ -40,14 +40,14 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     //     self.reader.read_bytes(n)
     // }
 
-    fn read_variable_width_bytes(&mut self, width: VariableWidth) -> Option<Result<Vec<u8>, Error>> {
+    fn read_variable_width_bytes(&mut self, width: VariableWidth) -> Result<Vec<u8>, Error> {
         let n = match width {
             VariableWidth::One => {
-                let size = unpack!(self.reader.next());
+                let size = self.reader.next()?;
                 size as usize
             },
             VariableWidth::Four => {
-                let size_buf = unpack!(self.reader.read_const_bytes::<4>());
+                let size_buf = self.reader.read_const_bytes::<4>()?;
                 u32::from_be_bytes(size_buf) as usize
             }
         };
@@ -55,64 +55,64 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         self.reader.read_bytes(n)
     }
 
-    fn read_compound_bytes(&mut self, width: CompoundWidth) -> Option<Result<CompoundBuf, Error>> {
+    fn read_compound_bytes(&mut self, width: CompoundWidth) -> Result<CompoundBuf, Error> {
         let cb = match width {
             CompoundWidth::Zero => {
                 CompoundBuf { count: 0, value_buf: Vec::with_capacity(0) }
             },
             CompoundWidth::One => {
-                let size = unpack!(self.reader.next());
-                let count = unpack!(self.reader.next());
+                let size = self.reader.next()?;
+                let count = self.reader.next()?;
 
                 // Need to subtract the one byte taken by `count`
                 let size = size - 1;
-                let value_buf = unpack!(self.reader.read_bytes(size as usize));
+                let value_buf = self.reader.read_bytes(size as usize)?;
                 CompoundBuf {count: count as u32, value_buf }
             },
             CompoundWidth::Four => {
-                let size_buf = unpack!(self.reader.read_const_bytes::<4>());
-                let count_buf = unpack!(self.reader.read_const_bytes::<4>());
+                let size_buf = self.reader.read_const_bytes::<4>()?;
+                let count_buf = self.reader.read_const_bytes::<4>()?;
                 let size = u32::from_be_bytes(size_buf);
                 let count = u32::from_be_bytes(count_buf);
 
                 // Need to substract the four byte taken by `count`
                 let size = size - 4;
-                let value_buf = unpack!(self.reader.read_bytes(size as usize));
+                let value_buf = self.reader.read_bytes(size as usize)?;
                 CompoundBuf { count, value_buf }
             }
         };
 
-        Some(Ok(cb))
+        Ok(cb)
     }
 
-    fn read_array_bytes(&mut self, width: ArrayWidth) -> Option<Result<ArrayBuf, Error>> {
+    fn read_array_bytes(&mut self, width: ArrayWidth) -> Result<ArrayBuf, Error> {
         let ab = match width {
             ArrayWidth::One => {
-                let size = unpack!(self.reader.next());
-                let count = unpack!(self.reader.next());
-                let elem_code = unpack!(self.reader.next());
+                let size = self.reader.next()?;
+                let count = self.reader.next()?;
+                let elem_code = self.reader.next()?;
 
                 // Must subtract the one byte taken by `count` and one byte taken by `elem_code`
                 let size = size - 1 - 1;
-                let value_buf = unpack!(self.reader.read_bytes(size as usize));
+                let value_buf = self.reader.read_bytes(size as usize)?;
                 ArrayBuf { count: count as u32, elem_code, value_buf }
             },
             ArrayWidth::Four => {
-                let size_buf = unpack!(self.reader.read_const_bytes::<4>());
-                let count_buf = unpack!(self.reader.read_const_bytes::<4>());
-                let elem_code = unpack!(self.reader.next());
+                let size_buf = self.reader.read_const_bytes::<4>()?;
+                let count_buf = self.reader.read_const_bytes::<4>()?;
+                let elem_code = self.reader.next()?;
 
                 let size = u32::from_be_bytes(size_buf);
                 let count = u32::from_be_bytes(count_buf);
 
                 // Must subtract the four bytes taken by `count` and one byte taken by `elem_code`
                 let size = size - 4 - 1;
-                let value_buf = unpack!(self.reader.read_bytes(size as usize));
+                let value_buf = self.reader.read_bytes(size as usize)?;
                 ArrayBuf { count, elem_code, value_buf }
             }
         };
 
-        Some(Ok(ab))
+        Ok(ab)
     }
 
     #[inline]
@@ -122,9 +122,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_i8(&mut self) -> Result<i8, Error> {
-        match unpack_or_eof!(self.read_format_code()) {
+        match self.read_format_code()? {
             EncodingCodes::Byte => {
-                let byte = unpack_or_eof!(self.reader.next());
+                let byte = self.reader.next()?;
                 Ok(byte as i8)
             },
             _ => Err(Error::InvalidFormatCode)
@@ -133,9 +133,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_i16(&mut self) -> Result<i16, Error> {
-        match unpack_or_eof!(self.read_format_code()) {
+        match self.read_format_code()? {
             EncodingCodes::Short => {
-                let bytes = unpack_or_eof!(self.reader.read_const_bytes::<2>());
+                let bytes = self.reader.read_const_bytes::<2>()?;
                 Ok(i16::from_be_bytes(bytes))
             },
             _ => Err(Error::InvalidFormatCode)
@@ -144,7 +144,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_i32(&mut self) -> Result<i32, Error> {
-        match unpack_or_eof!(self.read)
+        // match self.read_format_code()? {
+        //     EncodingCodes::
+        // }
+        todo!()
     }
 
     #[inline]
@@ -154,9 +157,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_u8(&mut self) -> Result<u8, Error> {
-        match unpack_or_eof!(self.read_format_code()) {
+        match self.read_format_code()? {
             EncodingCodes::Ubyte => {
-                let byte = unpack_or_eof!(self.reader.next());
+                let byte = self.reader.next()?;
                 Ok( byte )
             },
             _ => Err(Error::InvalidFormatCode)

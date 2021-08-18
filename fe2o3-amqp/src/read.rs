@@ -58,6 +58,7 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
             None => {
                 let mut buf = [0u8; 1];
                 self.reader.read_exact(&mut buf)?;
+                self.next_byte.insert(buf[0]);
                 Ok(buf[0])
             }
         }
@@ -87,15 +88,6 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
             self.next_byte.take();
         }
         result
-    }
-}
-
-#[inline]
-fn map_eof_to_none(err: io::Error) -> Option<Result<u8, Error>> {
-    if let io::ErrorKind::UnexpectedEof = err.kind() {
-        None
-    } else {
-        Some(Err(err.into()))
     }
 }
 
