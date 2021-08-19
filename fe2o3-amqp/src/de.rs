@@ -23,7 +23,7 @@ pub struct Deserializer<R> {
     reader: R,
 
     // a temporary buffer for borrowed value
-    buf: Vec<u8>,
+    // buf: Vec<u8>,
 
     newtype: NewType,
 
@@ -35,7 +35,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            buf: Vec::new(),
+            // buf: Vec::new(),
             newtype: Default::default(),
             // is_array_element: IsArrayElement::False,
             elem_format_code: None,
@@ -45,7 +45,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn symbol(reader: R) -> Self {
         Self {
             reader,
-            buf: Vec::new(),
+            // buf: Vec::new(),
             newtype: NewType::Symbol,
             // is_array_element: IsArrayElement::False,
             elem_format_code: None,
@@ -442,19 +442,15 @@ where
     {
         // // TODO: considering adding a buffer to the reader
         println!(">>> Debug: deserialize_str");
-        // let len = match self.get_elem_code_or_read_format_code()? {
-        //     EncodingCodes::Str8 => self.reader.next()? as usize,
-        //     EncodingCodes::Str32 => {
-        //         let len_bytes = self.reader.read_const_bytes()?;
-        //         u32::from_be_bytes(len_bytes) as usize
-        //     }
-        //     _ => return Err(Error::InvalidFormatCode),
-        // };
-        // self.reader.read_exact(&mut self.buf)?;
-        // let s = self.reader.parse_str(&self.buf[..])?;
-        // visitor.visit_str(s)
-        // self.reader.forward_read_str(len, visitor)
-        visitor.visit_str(&self.parse_string()?)
+        let len = match self.get_elem_code_or_read_format_code()? {
+            EncodingCodes::Str8 => self.reader.next()? as usize,
+            EncodingCodes::Str32 => {
+                let len_bytes = self.reader.read_const_bytes()?;
+                u32::from_be_bytes(len_bytes) as usize
+            }
+            _ => return Err(Error::InvalidFormatCode),
+        };
+        self.reader.forward_read_str(len, visitor)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -983,17 +979,17 @@ mod tests {
         "The quick brown fox jumps over the lazy dog. 
         "The quick brown fox jumps over the lazy dog."#;
 
-    #[test]
-    fn test_deserialize_str() {
-        // // str8
-        // let buf = [
-        //     161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
-        // ];
-        // let expected = SMALL_STRING_VALUE;
-        // assert_eq_deserialized_vs_expected(&buf, expected);
+    // #[test]
+    // fn test_deserialize_str() {
+    //     // // str8
+    //     // let buf = [
+    //     //     161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
+    //     // ];
+    //     // let expected = SMALL_STRING_VALUE;
+    //     // assert_eq_deserialized_vs_expected(&buf, expected);
 
-        todo!()
-    }
+    //     todo!()
+    // }
 
     #[test]
     fn test_deserialize_string() {

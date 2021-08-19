@@ -22,12 +22,12 @@ pub trait Read<'de>: private::Sealed {
 
     fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error>;
 
-    fn parse_str<'s: 'de>(&mut self, buf: &'s [u8]) -> Result<&'de str, Error> {
-        match std::str::from_utf8(buf) {
-            Ok(s) => Ok(s),
-            Err(err) => Err(err.into())
-        }
-    }
+    // fn parse_str<'s: 'de>(&mut self, buf: &'s [u8]) -> Result<&'de str, Error> {
+    //     match std::str::from_utf8(buf) {
+    //         Ok(s) => Ok(s),
+    //         Err(err) => Err(err.into())
+    //     }
+    // }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error>;
 
@@ -167,6 +167,8 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         visitor.visit_str(s)
     }
 }
+
+// TODO: add SliceReader
 
 #[cfg(test)]
 mod tests {
