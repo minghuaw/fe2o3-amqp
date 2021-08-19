@@ -2,51 +2,7 @@ use std::io;
 
 use crate::error::Error;
 
-mod private {
-    pub trait Sealed {}
-}
-
-pub trait Read<'de>: private::Sealed {
-    /// Peek the next byte without consuming
-    fn peek(&mut self) -> Result<u8, Error>;
-
-    /// Read the next byte
-    fn next(&mut self) -> Result<u8, Error>;
-
-    // fn buffer(&mut self) -> &[u8];
-
-    /// Read n bytes
-    ///
-    /// Prefered to use this when the size is small and can be stack allocated
-    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
-        let mut buf = [0u8; N];
-        self.read_exact(&mut buf)?;
-        Ok(buf)
-    }
-
-    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
-        let mut buf = vec![0u8; n];
-        self.read_exact(&mut buf)?;
-        Ok(buf)
-    }
-
-    // fn parse_str<'s: 'de>(&mut self, buf: &'s [u8]) -> Result<&'de str, Error> {
-    //     match std::str::from_utf8(buf) {
-    //         Ok(s) => Ok(s),
-    //         Err(err) => Err(err.into())
-    //     }
-    // }
-
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error>;
-
-    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
-    where
-        V: serde::de::Visitor<'de>;
-
-    fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
-    where
-        V: serde::de::Visitor<'de>;
-}
+use super::{private, Read};
 
 pub struct IoReader<R> {
     // an io reader
@@ -175,81 +131,6 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         visitor.visit_str(s)
     }
 }
-
-// TODO: add SliceReader
-pub struct SliceReader<'s> {
-    slice: &'s [u8]
-}
-
-impl<'s> SliceReader<'s> {
-    pub fn new(slice: &'s [u8]) -> Self {
-        Self {
-            slice
-        }
-    }
-
-    pub fn unexpected_eof(msg: &str) -> Error {
-        Error::Io(io::Error::new(
-            io::ErrorKind::UnexpectedEof, 
-            msg
-        ))
-    }
-}
-
-impl<'s> private::Sealed for SliceReader<'s> { }
-
-impl<'s> Read<'s> for SliceReader<'s> {
-    fn peek(&mut self) -> Result<u8, Error> {
-        match self.slice.first() {
-            Some(b) => Ok(*b),
-            None => Err(Self::unexpected_eof("")),
-        }
-    }
-
-    fn next(&mut self) -> Result<u8, Error> {
-        match self.slice.len() {
-            0 => Err(Self::unexpected_eof("")),
-            _ => {
-                let (next, remaining) = self.slice.split_at(1);
-                self.slice = remaining;
-                Ok(next[0])
-            }
-        }
-    }
-
-    // fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
-    //     // if self.slice.len() < N {
-    //     //     Err(Self::unexpected_eof(""))
-    //     // } else {
-    //     //     let mut buf = [0u8; N];
-
-    //     // }
-    //     unimplemented!()
-    // }
-
-    // fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
-    //     todo!()
-    // }
-
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
-    where
-        V: serde::de::Visitor<'s> 
-    {
-        todo!()
-    }
-
-    fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
-    where
-        V: serde::de::Visitor<'s> 
-    {
-        todo!()   
-    }
-}
-
 
 
 #[cfg(test)]
