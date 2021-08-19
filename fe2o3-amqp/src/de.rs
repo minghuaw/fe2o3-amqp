@@ -226,10 +226,6 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         String::from_utf8(buf).map_err(Into::into)
     }
 
-    fn parse_str(&'de mut self) -> Result<&'de str, Error> {
-        todo!()
-    }
-
     fn parse_string(&mut self) -> Result<String, Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Str8 => {
@@ -447,9 +443,18 @@ where
         V: de::Visitor<'de>,
     {
         // // TODO: considering adding a buffer to the reader
-        // println!(">>> Debug: deserialize_str");
-        // visitor.visit_borrowed_str(self.parse_str()?)
-        todo!()
+        println!(">>> Debug: deserialize_str");
+        let len = match self.get_elem_code_or_read_format_code()? {
+            EncodingCodes::Str8 => {
+                self.reader.next()? as usize
+            },
+            EncodingCodes::Str32 => {
+                let len_bytes = self.reader.read_const_bytes()?;
+                u32::from_be_bytes(len_bytes) as usize
+            },
+            _ => return Err(Error::InvalidFormatCode)
+        };
+        self.reader.forward_read_str(len, visitor)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
