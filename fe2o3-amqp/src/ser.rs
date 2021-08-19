@@ -560,7 +560,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArrayElement::False
-        // TODO: change behavior based on whether newtype is List
+        println!(">>> Debug serialize_seq");
         Ok(SeqSerializer::new(self))
     }
 
@@ -571,6 +571,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // This will be encoded as primitive type `List`
     #[inline]
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        println!(">>> Debug serialize_tuple");
         Ok(ListSerializer::new(self, len))
     }
 
@@ -1488,7 +1489,7 @@ mod test {
     }
 
     #[test]
-    fn test_serialize_array() {
+    fn test_serialize_vec_as_array() {
         let val = vec![1, 2, 3, 4];
         let expected = vec![
             EncodingCodes::Array8 as u8, // array8
@@ -1513,6 +1514,36 @@ mod test {
             4, // fourth
         ];
         assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_slice_as_array() {
+        let val = &[1u8, 2, 3, 4];
+        let output = to_vec(val).unwrap();
+        println!("{:?}", output);
+        // let expected = vec![
+        //     EncodingCodes::Array8 as u8, // array8
+        //     (2 + 4 * 4) as u8,           // length including `count` and element constructor
+        //     4,                           // count
+        //     EncodingCodes::Int as u8,
+        //     0,
+        //     0,
+        //     0,
+        //     1, // first element as i32
+        //     0,
+        //     0,
+        //     0,
+        //     2, // second element
+        //     0,
+        //     0,
+        //     0,
+        //     3, // third
+        //     0,
+        //     0,
+        //     0,
+        //     4, // fourth
+        // ];
+        // assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
