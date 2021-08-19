@@ -22,6 +22,15 @@ pub trait Read<'de>: private::Sealed {
 
     fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error>;
 
+    fn parse_str<'s: 'de>(&mut self, buf: &'s [u8]) -> Result<&'de str, Error> {
+        match std::str::from_utf8(buf) {
+            Ok(s) => Ok(s),
+            Err(err) => Err(err.into())
+        }
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error>;
+
     fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>;
@@ -122,6 +131,22 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         } else {
             let out = self.buf.drain(0..n).collect();
             Ok(out)
+        }
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+        let n = buf.len();
+        let l = self.buf.len();
+
+        if l < n {
+            buf.copy_from_slice(&self.buf[..l]);
+            self.reader.read_exact(&mut buf[l..])?;
+            self.buf.drain(..l);
+            Ok(())
+        } else {
+            buf.copy_from_slice(&self.buf[..n]);
+            self.buf.drain(..n);
+            Ok(())
         }
     }
 

@@ -13,8 +13,8 @@ use crate::{
     util::{IsArrayElement, NewType},
 };
 
-pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
-    let io_reader = IoReader::new(slice);
+pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
+    let io_reader = IoReader::new(reader);
     let mut de = Deserializer::new(io_reader);
     T::deserialize(&mut de)
 }
@@ -442,15 +442,19 @@ where
     {
         // // TODO: considering adding a buffer to the reader
         println!(">>> Debug: deserialize_str");
-        let len = match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Str8 => self.reader.next()? as usize,
-            EncodingCodes::Str32 => {
-                let len_bytes = self.reader.read_const_bytes()?;
-                u32::from_be_bytes(len_bytes) as usize
-            }
-            _ => return Err(Error::InvalidFormatCode),
-        };
-        self.reader.forward_read_str(len, visitor)
+        // let len = match self.get_elem_code_or_read_format_code()? {
+        //     EncodingCodes::Str8 => self.reader.next()? as usize,
+        //     EncodingCodes::Str32 => {
+        //         let len_bytes = self.reader.read_const_bytes()?;
+        //         u32::from_be_bytes(len_bytes) as usize
+        //     }
+        //     _ => return Err(Error::InvalidFormatCode),
+        // };
+        // self.reader.read_exact(&mut self.buf)?;
+        // let s = self.reader.parse_str(&self.buf[..])?;
+        // visitor.visit_str(s)
+        // self.reader.forward_read_str(len, visitor)
+        visitor.visit_str(&self.parse_string()?)
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -869,17 +873,17 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
 
 #[cfg(test)]
 mod tests {
-    use serde::Deserialize;
+    use serde::{Deserialize, de::DeserializeOwned};
 
     use crate::format_code::EncodingCodes;
 
-    use super::from_slice;
+    use super::from_reader;
 
     fn assert_eq_deserialized_vs_expected<'de, T>(buf: &'de [u8], expected: T)
     where
-        T: Deserialize<'de> + std::fmt::Debug + PartialEq,
+        T: DeserializeOwned + std::fmt::Debug + PartialEq,
     {
-        let deserialized: T = from_slice(buf).unwrap();
+        let deserialized: T = from_reader(buf).unwrap();
         assert_eq!(deserialized, expected);
     }
 
@@ -981,12 +985,14 @@ mod tests {
 
     #[test]
     fn test_deserialize_str() {
-        // str8
-        let buf = &[
-            161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
-        ];
-        let expected = SMALL_STRING_VALUE;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        // // str8
+        // let buf = [
+        //     161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
+        // ];
+        // let expected = SMALL_STRING_VALUE;
+        // assert_eq_deserialized_vs_expected(&buf, expected);
+
+        todo!()
     }
 
     #[test]
