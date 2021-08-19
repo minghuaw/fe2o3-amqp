@@ -501,7 +501,7 @@ where
         V: de::Visitor<'de>,
     {
         let code = self.get_elem_code_or_read_format_code()?;
-        
+
         match code {
             EncodingCodes::Array8 => {
                 println!(">>> Debug: Array8");
@@ -619,14 +619,14 @@ where
 
     fn deserialize_tuple_struct<V>(
         self,
-        name: &'static str,
+        _name: &'static str,
         len: usize,
         visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        self.deserialize_tuple(len, visitor)
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -939,10 +939,12 @@ mod tests {
 
     #[test]
     fn test_deserialize_array() {
-        todo!()
-        // use crate::ser::to_vec;
-        // let expected = vec![5u8, 4, 3, 2, 1];
-        // let output = to_vec(value)
+        use crate::ser::to_vec;
+        use crate::types::Array;
+
+        let expected = Array::from(vec![5u8, 4, 3, 2, 1]);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_deserialized_vs_expected(&buf, expected);
     }
 
     #[test]
