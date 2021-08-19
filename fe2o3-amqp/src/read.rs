@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::error::Error;
+use crate::{error::Error};
 
 mod private {
     pub trait Sealed {}
@@ -13,38 +13,40 @@ pub trait Read<'de>: private::Sealed {
     /// Read the next byte
     fn next(&mut self) -> Result<u8, Error>;
 
+    // fn buffer(&mut self) -> &[u8];
+
     /// Read n bytes
     ///
     /// Prefered to use this when the size is small and can be stack allocated
-    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
-        // let mut buf = vec![0; n];
-        let mut buf = [0; N];
-        self.read_exact(&mut buf)?;
-        Ok(buf)
-    }
+    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error>;
 
-    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
-        let mut buf = vec![0; n];
-        self.read_exact(&mut buf)?;
-        Ok(buf)
-    }
-
-    /// Read to fill a mutable buffer
-    fn read_exact(&mut self, out: &mut [u8]) -> Result<(), io::Error>;
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error>;
 }
 
 pub struct IoReader<R> {
     // an io reader
     reader: R,
     // a temporarty buffer holding the next byte
-    next_byte: Option<u8>,
+    // next_byte: Option<u8>,
+
+    buf: Vec<u8>,
 }
 
 impl<R: io::Read> IoReader<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            next_byte: None,
+            // next_byte: None,
+            buf: Vec::new(),
+        }
+    }
+
+    pub fn pop_first(&mut self) -> Option<u8> {
+        match self.buf.is_empty() {
+            true => None,
+            false => {
+                Some(self.buf.remove(0))
+            }
         }
     }
 }
@@ -53,19 +55,29 @@ impl<R: io::Read> private::Sealed for IoReader<R> {}
 
 impl<'de, R: io::Read> Read<'de> for IoReader<R> {
     fn peek(&mut self) -> Result<u8, Error> {
-        match self.next_byte {
-            Some(b) => Ok(b),
+        // match self.next_byte {
+        //     Some(b) => Ok(b),
+        //     None => {
+        //         let mut buf = [0u8; 1];
+        //         self.reader.read_exact(&mut buf)?;
+        //         self.next_byte.insert(buf[0]);
+        //         Ok(buf[0])
+        //     }
+        // }
+
+        match self.buf.first() {
+            Some(b) => Ok(*b),
             None => {
                 let mut buf = [0u8; 1];
                 self.reader.read_exact(&mut buf)?;
-                self.next_byte.insert(buf[0]);
+                self.buf.push(buf[0]);
                 Ok(buf[0])
             }
         }
     }
 
     fn next(&mut self) -> Result<u8, Error> {
-        match self.next_byte.take() {
+        match self.pop_first() {
             Some(b) => Ok(b),
             None => {
                 let mut buf = [0u8; 1];
@@ -75,19 +87,36 @@ impl<'de, R: io::Read> Read<'de> for IoReader<R> {
         }
     }
 
-    fn read_exact(&mut self, out: &mut [u8]) -> Result<(), io::Error> {
-        let result = match self.next_byte {
-            Some(b) => {
-                out[0] = b;
-                self.reader.read_exact(&mut out[1..])
-            }
-            None => self.reader.read_exact(out),
-        };
+    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+        let mut buf = [0u8; N];
+        let l = self.buf.len();
 
-        if result.is_ok() {
-            self.next_byte.take();
+        if l < N {
+            &mut buf[..l].copy_from_slice(&self.buf[..l]);
+            self.reader.read_exact(&mut buf[l..])?;
+            // Only drain the buffer if further read is successful
+            self.buf.drain(..l);
+            Ok(buf)
+        } else {
+            buf.copy_from_slice(&self.buf[..N]);
+            self.buf.drain(..N);
+            Ok(buf)
         }
-        result
+    }
+
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
+        let l = self.buf.len();
+        if l < n {
+            let mut buf = vec![0u8; n];
+            &mut buf[..l].copy_from_slice(&self.buf[..l]);
+            self.reader.read_exact(&mut buf[l..])?;
+            // Only drain the buffer if further read is successfull
+            self.buf.drain(..l);
+            Ok(buf)
+        } else {
+            let out = self.buf.drain(0..n).collect();
+            Ok(out)
+        }
     }
 }
 
@@ -231,14 +260,17 @@ mod tests {
             let peek = io_reader.peek().expect("Should not return error");
             let next = io_reader.next().expect("Should not return error");
 
+            // println!("peek {:?}", peek);
+            // println!("next {:?}", next);
+
             assert_eq!(peek, reader[i]);
             assert_eq!(next, reader[i]);
         }
 
-        let peek_none = io_reader.peek();
-        let next_none = io_reader.next();
+        let peek_err = io_reader.peek();
+        let next_err = io_reader.next();
 
-        assert!(peek_none.is_err());
-        assert!(next_none.is_err());
+        assert!(peek_err.is_err());
+        assert!(next_err.is_err());
     }
 }

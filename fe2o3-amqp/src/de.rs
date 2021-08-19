@@ -1,7 +1,7 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{error::Error, format::{ArrayWidth, Category, CompoundWidth, FixedWidth, OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, VariableWidth}, format_code::EncodingCodes, read::{IoReader, Read}, types::SYMBOL, util::{IsArrayElement, NewType}};
+use crate::{error::Error, format::{ArrayWidth, Category, CompoundWidth, FixedWidth, OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8, VariableWidth}, format_code::EncodingCodes, read::{IoReader, Read}, types::SYMBOL, util::{IsArrayElement, NewType}};
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -11,6 +11,9 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
 
 pub struct Deserializer<R> {
     reader: R,
+    
+    // a temporary buffer for borrowed value
+    buf: Vec<u8>,
 
     newtype: NewType,
 
@@ -22,6 +25,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
         Self { 
             reader,
+            buf: Vec::new(),
             newtype: Default::default(),
             // is_array_element: IsArrayElement::False,
             elem_format_code: None,
@@ -31,6 +35,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn symbol(reader: R) -> Self {
         Self {
             reader,
+            buf: Vec::new(),
             newtype: NewType::Symbol,
             // is_array_element: IsArrayElement::False,
             elem_format_code: None,
@@ -219,6 +224,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         let len = u32::from_be_bytes(len_bytes);
         let buf = self.reader.read_bytes(len as usize)?;
         String::from_utf8(buf).map_err(Into::into)
+    }
+
+    fn parse_str(&'de mut self) -> Result<&'de str, Error> {
+        todo!()
     }
 
     fn parse_string(&mut self) -> Result<String, Error> {
@@ -417,6 +426,8 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_string");
+
         match self.newtype {
             NewType::None => {
                 visitor.visit_string(self.parse_string()?)
@@ -435,8 +446,10 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // TODO: considering adding a buffer to the reader
-        visitor.visit_str(&self.parse_string()?)
+        // // TODO: considering adding a buffer to the reader
+        // println!(">>> Debug: deserialize_str");
+        // visitor.visit_borrowed_str(self.parse_str()?)
+        todo!()
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -633,7 +646,36 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let code = self.get_elem_code_or_read_format_code()?;
+        println!("{:?}", &code);
+        let (size, count) = match code {
+            EncodingCodes::Map8 => {
+                let size = self.reader.next()? as usize;
+                let count = self.reader.next()? as usize;
+
+                // Account for offset
+                let size = size - OFFSET_MAP8;
+                
+                (size, count)
+            },
+            EncodingCodes::Map32 => {
+                let size_bytes = self.reader.read_const_bytes()?;
+                let count_bytes = self.reader.read_const_bytes()?;
+
+                let size = u32::from_be_bytes(size_bytes) as usize;
+                let count = u32::from_be_bytes(count_bytes) as usize;
+
+                // Account for offset
+                let size = size - OFFSET_MAP32;
+
+                (size, count)
+            },
+            _ => return Err(Error::InvalidFormatCode)
+        };
+
+        // AMQP map count includes both key and value, should be halfed
+        let count = count / 2;
+        visitor.visit_map(MapAccess::new(self, size, count))
     }
 
     fn deserialize_struct<V>(
@@ -678,7 +720,7 @@ where
 
 pub struct ArrayAccess<'a, R>{
     de: &'a mut Deserializer<R>,
-    _len: usize,
+    _size: usize,
     count: usize,
     // buf: Vec<u8>,
 }
@@ -686,13 +728,13 @@ pub struct ArrayAccess<'a, R>{
 impl<'a, R> ArrayAccess<'a, R> {
     pub fn new(
         de: &'a mut Deserializer<R>,
-        len: usize,
+        size: usize,
         count: usize,
         // buf: Vec<u8>
     ) -> Self {
         Self {
             de,
-            _len: len,
+            _size: size,
             count,
             // buf
         }
@@ -728,15 +770,15 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
 
 pub struct ListAccess<'a, R> {
     de: &'a mut Deserializer<R>,
-    _len: usize,
+    _size: usize,
     count: usize,
 }
 
 impl<'a, R> ListAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>, len: usize, count: usize) -> Self {
+    pub fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
         Self {
             de, 
-            _len: len,
+            _size: size,
             count
         }
     }
@@ -768,11 +810,67 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
     }
 }
 
+pub struct MapAccess<'a, R> {
+    de: &'a mut Deserializer<R>,
+    _size: usize,
+    count: usize,
+}
+
+impl<'a, R> MapAccess<'a, R> {
+    pub fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
+        Self {
+            de, 
+            _size: size,
+            count
+        }
+    }
+}
+
+impl<'a, R> AsMut<Deserializer<R>> for MapAccess<'a, R> {
+    fn as_mut(&mut self) -> &mut Deserializer<R> {
+        self.de
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, _seed: K) -> Result<Option<K::Value>, Self::Error>
+    where
+        K: de::DeserializeSeed<'de> 
+    {
+        unreachable!()    
+    }
+
+    fn next_value_seed<V>(&mut self, _seed: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::DeserializeSeed<'de> 
+    {
+        unreachable!()
+    }
+
+    fn next_entry_seed<K, V>(&mut self, kseed: K, vseed: V) -> Result<Option<(K::Value, V::Value)>, Self::Error>
+    where
+        K: de::DeserializeSeed<'de>,
+        V: de::DeserializeSeed<'de>, 
+    {
+        match self.count {
+            0 => Ok(None),
+            _ => {
+                self.count = self.count - 1;
+                let key = kseed.deserialize(self.as_mut())?;
+                let val = vseed.deserialize(self.as_mut())?;
+                Ok(Some((key, val)))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
 
-    use crate::{format_code::EncodingCodes, ser::to_vec};
+    use crate::{format_code::EncodingCodes};
 
     use super::from_slice;
 
@@ -869,19 +967,27 @@ mod tests {
         assert_eq_deserialized_vs_expected(buf, expected);
     }
 
+    const SMALL_STRING_VALUE: &str = "Small String";
+    const LARGE_STRING_VALUE: &str = r#"Large String: 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog. 
+        "The quick brown fox jumps over the lazy dog."#;
+
+    #[test]
+    fn test_deserialize_str() {
+        // str8
+        let buf = &[161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103];
+        let expected = SMALL_STRING_VALUE;
+        assert_eq_deserialized_vs_expected(buf, expected);
+    }
+
     #[test]
     fn test_deserialize_string() {
-        const SMALL_STRING_VALUE: &str = "Small String";
-        const LARGE_STRING_VALUE: &str = r#"Large String: 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog. 
-            "The quick brown fox jumps over the lazy dog."#;
-
         // str8
         let buf = &[161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103];
         let expected = SMALL_STRING_VALUE.to_string();
@@ -974,6 +1080,33 @@ mod tests {
             EncodingCodes::SmallInt as u8,
             4,
         ];
+        assert_eq_deserialized_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_map() {
+        use std::collections::BTreeMap;
+
+        // Map should be considered ordered (here by its key)
+        let buf = vec![
+            EncodingCodes::Map8 as u8,
+            1 + 4 * (3 + 2), // 1 for count, 4 kv pairs, 3 for "a", 2 for 1i32
+            2 * 4, // 4 kv pairs
+            EncodingCodes::Str8 as u8, 1, b'a', // fisrt key
+            EncodingCodes::SmallInt as u8, 1, // first value
+            EncodingCodes::Str8 as u8, 1, b'm',
+            EncodingCodes::SmallInt as u8, 2,
+            EncodingCodes::Str8 as u8, 1, b'p',
+            EncodingCodes::SmallInt as u8, 4,
+            EncodingCodes::Str8 as u8, 1, b'q',
+            EncodingCodes::SmallInt as u8, 3,
+        ];
+        let mut expected = BTreeMap::new();
+        expected.insert("a".to_string(), 1i32);
+        expected.insert("m".to_string(), 2);
+        expected.insert("q".to_string(), 3);
+        expected.insert("p".to_string(), 4);
+
         assert_eq_deserialized_vs_expected(&buf, expected);
     }
 }

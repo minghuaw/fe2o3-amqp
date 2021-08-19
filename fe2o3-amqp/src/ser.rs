@@ -1593,6 +1593,35 @@ mod test {
     }
 
     #[test]
+    fn test_serialize_map() {
+        use std::collections::BTreeMap;
+
+        // Map8
+        let mut val = BTreeMap::new();
+        val.insert("a", 1i32);
+        val.insert("m", 2);
+        val.insert("q", 3);
+        val.insert("p", 4);
+
+        // A BTreeMap will be serialized in the ascending order
+        let expected = vec![
+            EncodingCodes::Map8 as u8,
+            1 + 4 * (3 + 2), // 1 for count, 4 kv pairs, 3 for "a", 2 for 1i32
+            2 * 4, // 4 kv pairs
+            EncodingCodes::Str8 as u8, 1, b'a', // fisrt key
+            EncodingCodes::SmallInt as u8, 1, // first value
+            EncodingCodes::Str8 as u8, 1, b'm',
+            EncodingCodes::SmallInt as u8, 2,
+            EncodingCodes::Str8 as u8, 1, b'p',
+            EncodingCodes::SmallInt as u8, 4,
+            EncodingCodes::Str8 as u8, 1, b'q',
+            EncodingCodes::SmallInt as u8, 3,
+        ];
+
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
     fn test_serialize_symbol() {
         use crate::types::Symbol;
         let symbol = Symbol::from("amqp");

@@ -1,7 +1,4 @@
-
-use std::marker::PhantomData;
-
-use serde::{Serialize, Deserialize, de::{Visitor}};
+use serde::{Serialize, Deserialize};
 
 pub const ARRAY: &str = "ARRAY";
 
@@ -23,34 +20,3 @@ impl<T: Serialize> Serialize for Array<T> {
         serializer.serialize_newtype_struct(ARRAY, &self.0)
     }
 }
-
-// struct ArrayVisitor<T> { 
-//     marker: PhantomData<T>,
-// }
-
-// impl<'de, T: Deserialize<'de>> Visitor<'de> for ArrayVisitor<T> {
-//     type Value = Array<T>;
-
-//     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         formatter.write_str("struct Array")
-//     }
-
-//     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-//     where
-//         D: serde::Deserializer<'de>, 
-//     {
-//         let val: Vec<T> = Deserialize::deserialize(deserializer)?;
-//         Ok(Array(val))
-//     }
-
-//     fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
-//     where
-//         A: serde::de::SeqAccess<'de>, 
-//     {
-//         match seq.next_element::<Vec<T>>()? {
-//             Some(val) => val,
-//             None => 
-//         }
-//     }
-// }
-
