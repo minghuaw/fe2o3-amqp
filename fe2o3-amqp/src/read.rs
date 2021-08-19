@@ -18,9 +18,17 @@ pub trait Read<'de>: private::Sealed {
     /// Read n bytes
     ///
     /// Prefered to use this when the size is small and can be stack allocated
-    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error>;
+    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+        let mut buf = [0u8; N];
+        self.read_exact(&mut buf)?;
+        Ok(buf)
+    }
 
-    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error>;
+    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
+        let mut buf = vec![0u8; n];
+        self.read_exact(&mut buf)?;
+        Ok(buf)
+    }
 
     // fn parse_str<'s: 'de>(&mut self, buf: &'s [u8]) -> Result<&'de str, Error> {
     //     match std::str::from_utf8(buf) {
@@ -102,44 +110,44 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
-    fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
-        let mut buf = [0u8; N];
-        let l = self.buf.len();
+    // fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+    //     let mut buf = [0u8; N];
+    //     let l = self.buf.len();
 
-        if l < N {
-            &mut buf[..l].copy_from_slice(&self.buf[..l]);
-            self.reader.read_exact(&mut buf[l..])?;
-            // Only drain the buffer if further read is successful
-            self.buf.drain(..l);
-            Ok(buf)
-        } else {
-            buf.copy_from_slice(&self.buf[..N]);
-            self.buf.drain(..N);
-            Ok(buf)
-        }
-    }
+    //     if l < N {
+    //         &mut buf[..l].copy_from_slice(&self.buf[..l]);
+    //         self.reader.read_exact(&mut buf[l..])?;
+    //         // Only drain the buffer if further read is successful
+    //         self.buf.drain(..l);
+    //         Ok(buf)
+    //     } else {
+    //         buf.copy_from_slice(&self.buf[..N]);
+    //         self.buf.drain(..N);
+    //         Ok(buf)
+    //     }
+    // }
 
-    fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
-        let l = self.buf.len();
-        if l < n {
-            let mut buf = vec![0u8; n];
-            &mut buf[..l].copy_from_slice(&self.buf[..l]);
-            self.reader.read_exact(&mut buf[l..])?;
-            // Only drain the buffer if further read is successfull
-            self.buf.drain(..l);
-            Ok(buf)
-        } else {
-            let out = self.buf.drain(0..n).collect();
-            Ok(out)
-        }
-    }
+    // fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
+    //     let l = self.buf.len();
+    //     if l < n {
+    //         let mut buf = vec![0u8; n];
+    //         &mut buf[..l].copy_from_slice(&self.buf[..l]);
+    //         self.reader.read_exact(&mut buf[l..])?;
+    //         // Only drain the buffer if further read is successfull
+    //         self.buf.drain(..l);
+    //         Ok(buf)
+    //     } else {
+    //         let out = self.buf.drain(0..n).collect();
+    //         Ok(out)
+    //     }
+    // }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
         let n = buf.len();
         let l = self.buf.len();
 
         if l < n {
-            buf.copy_from_slice(&self.buf[..l]);
+            &mut buf[..l].copy_from_slice(&self.buf[..l]);
             self.reader.read_exact(&mut buf[l..])?;
             self.buf.drain(..l);
             Ok(())
@@ -169,6 +177,80 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
 }
 
 // TODO: add SliceReader
+pub struct SliceReader<'s> {
+    slice: &'s [u8]
+}
+
+impl<'s> SliceReader<'s> {
+    pub fn new(slice: &'s [u8]) -> Self {
+        Self {
+            slice
+        }
+    }
+
+    pub fn unexpected_eof(msg: &str) -> Error {
+        Error::Io(io::Error::new(
+            io::ErrorKind::UnexpectedEof, 
+            msg
+        ))
+    }
+}
+
+impl<'s> private::Sealed for SliceReader<'s> { }
+
+impl<'s> Read<'s> for SliceReader<'s> {
+    fn peek(&mut self) -> Result<u8, Error> {
+        match self.slice.first() {
+            Some(b) => Ok(*b),
+            None => Err(Self::unexpected_eof("")),
+        }
+    }
+
+    fn next(&mut self) -> Result<u8, Error> {
+        match self.slice.len() {
+            0 => Err(Self::unexpected_eof("")),
+            _ => {
+                let (next, remaining) = self.slice.split_at(1);
+                self.slice = remaining;
+                Ok(next[0])
+            }
+        }
+    }
+
+    // fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
+    //     // if self.slice.len() < N {
+    //     //     Err(Self::unexpected_eof(""))
+    //     // } else {
+    //     //     let mut buf = [0u8; N];
+
+    //     // }
+    //     unimplemented!()
+    // }
+
+    // fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
+    //     todo!()
+    // }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'s> 
+    {
+        todo!()
+    }
+
+    fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'s> 
+    {
+        todo!()   
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -223,7 +305,7 @@ mod tests {
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = io_reader
-            .read_const_bytes::<10>()
+            .read_const_bytes::<N>()
             .expect("Should not return error");
         assert_eq!(bytes.len(), N);
         assert_eq!(&bytes[..], &reader[..N]);
