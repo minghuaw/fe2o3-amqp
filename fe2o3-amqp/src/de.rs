@@ -1,21 +1,20 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{
-    error::Error,
-    format::{
+use crate::{error::Error, format::{
         ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth, OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    },
-    format_code::EncodingCodes,
-    read::{IoReader, Read},
-    types::SYMBOL,
-    util::{IsArrayElement, NewType},
-};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::SYMBOL, util::{IsArrayElement, NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
-    let io_reader = IoReader::new(reader);
-    let mut de = Deserializer::new(io_reader);
+    let reader = IoReader::new(reader);
+    let mut de = Deserializer::new(reader);
+    T::deserialize(&mut de)
+}
+
+pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
+    let reader = SliceReader::new(slice);
+    let mut de = Deserializer::new(reader);
     T::deserialize(&mut de)
 }
 
@@ -873,9 +872,9 @@ mod tests {
 
     use crate::format_code::EncodingCodes;
 
-    use super::from_reader;
+    use super::{from_reader, from_slice};
 
-    fn assert_eq_deserialized_vs_expected<'de, T>(buf: &'de [u8], expected: T)
+    fn assert_eq_from_reader_vs_expected<'de, T>(buf: &'de [u8], expected: T)
     where
         T: DeserializeOwned + std::fmt::Debug + PartialEq,
     {
@@ -883,30 +882,38 @@ mod tests {
         assert_eq!(deserialized, expected);
     }
 
+    fn assert_eq_from_slice_vs_expected<'de, T>(buf: &'de [u8], expected: T)
+    where 
+        T: Deserialize<'de> + std::fmt::Debug + PartialEq,
+    {
+        let deserialized: T = from_slice(buf).unwrap();
+        assert_eq!(deserialized, expected)
+    }
+
     #[test]
     fn test_deserialize_bool() {
         let buf = &[EncodingCodes::BooleanFalse as u8];
         let expected = false;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
 
         let buf = &[EncodingCodes::BooleanTrue as u8];
         let expected = true;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
 
         let buf = &[EncodingCodes::Boolean as u8, 1];
         let expected = true;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
 
         let buf = &[EncodingCodes::Boolean as u8, 0];
         let expected = false;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_i8() {
         let buf = &[EncodingCodes::Byte as u8, 7i8 as u8];
         let expected = 7i8;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
@@ -914,28 +921,28 @@ mod tests {
         let mut buf = vec![EncodingCodes::Short as u8];
         buf.append(&mut 307i16.to_be_bytes().to_vec());
         let expected = 307i16;
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]
     fn test_deserialize_i32() {
         let buf = &[EncodingCodes::SmallInt as u8, 7i32 as u8];
         let expected = 7i32;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_i64() {
         let buf = &[EncodingCodes::SmallLong as u8, 7i64 as u8];
         let expected = 7i64;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_u8() {
         let buf = &[EncodingCodes::Ubyte as u8, 5u8];
         let expected = 5u8;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
@@ -943,29 +950,29 @@ mod tests {
         let mut buf = vec![EncodingCodes::Ushort as u8];
         buf.append(&mut 300u16.to_be_bytes().to_vec());
         let expected = 300u16;
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]
     fn test_deserialize_u32() {
         let buf = &[EncodingCodes::Uint0 as u8];
         let expected = 0u32;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
 
         let buf = &[EncodingCodes::SmallUint as u8, 5u8];
         let expected = 5u32;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_u64() {
         let buf = &[EncodingCodes::Ulong0 as u8];
         let expected = 0u64;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
 
         let buf = &[EncodingCodes::SmallUlong as u8, 5u8];
         let expected = 5u64;
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     const SMALL_STRING_VALUE: &str = "Small String";
@@ -979,17 +986,15 @@ mod tests {
         "The quick brown fox jumps over the lazy dog. 
         "The quick brown fox jumps over the lazy dog."#;
 
-    // #[test]
-    // fn test_deserialize_str() {
-    //     // // str8
-    //     // let buf = [
-    //     //     161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
-    //     // ];
-    //     // let expected = SMALL_STRING_VALUE;
-    //     // assert_eq_deserialized_vs_expected(&buf, expected);
-
-    //     todo!()
-    // }
+    #[test]
+    fn test_deserialize_str() {
+        // str8
+        let buf = [
+            161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
+        ];
+        let expected = SMALL_STRING_VALUE;
+        assert_eq_from_slice_vs_expected(&buf, expected);
+    }
 
     #[test]
     fn test_deserialize_string() {
@@ -998,12 +1003,12 @@ mod tests {
             161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
         ];
         let expected = SMALL_STRING_VALUE.to_string();
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
 
         // str32
         let expected = LARGE_STRING_VALUE.to_string();
         let buf = crate::ser::to_vec(&expected).unwrap();
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]
@@ -1011,7 +1016,7 @@ mod tests {
         use crate::types::Symbol;
         let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         let expected = Symbol::from("amqp");
-        assert_eq_deserialized_vs_expected(buf, expected);
+        assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
@@ -1021,7 +1026,7 @@ mod tests {
 
         let expected = Array::from(vec![5u8, 4, 3, 2, 1]);
         let buf = to_vec(&expected).unwrap();
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]
@@ -1029,12 +1034,12 @@ mod tests {
         // List0
         let expected: Vec<i32> = vec![];
         let buf = vec![EncodingCodes::List0 as u8];
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
 
         // List0
         let expected: &[i32; 0] = &[]; // slice will be (de)serialized as List
         let buf = vec![EncodingCodes::List0 as u8];
-        assert_eq_deserialized_vs_expected(&buf, *expected);
+        assert_eq_from_reader_vs_expected(&buf, *expected);
 
         // List8
         let expected = vec![1i32, 2, 3, 4];
@@ -1051,7 +1056,7 @@ mod tests {
             EncodingCodes::SmallInt as u8,
             4,
         ];
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]
@@ -1090,6 +1095,6 @@ mod tests {
         expected.insert("q".to_string(), 3);
         expected.insert("p".to_string(), 4);
 
-        assert_eq_deserialized_vs_expected(&buf, expected);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 }
