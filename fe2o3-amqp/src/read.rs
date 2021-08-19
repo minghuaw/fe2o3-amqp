@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::{error::Error};
+use crate::error::Error;
 
 mod private {
     pub trait Sealed {}
@@ -22,12 +22,12 @@ pub trait Read<'de>: private::Sealed {
 
     fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error>;
 
-    fn forward_read_bytes<V>(&'de mut self, len: usize, visitor: V) -> Result<V::Value, Error> 
-    where 
+    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
         V: serde::de::Visitor<'de>;
 
-    fn forward_read_str<V>(&'de mut self, len: usize, visitor: V) -> Result<V::Value, Error> 
-    where 
+    fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
         V: serde::de::Visitor<'de>;
 }
 
@@ -36,7 +36,6 @@ pub struct IoReader<R> {
     reader: R,
     // a temporarty buffer holding the next byte
     // next_byte: Option<u8>,
-
     buf: Vec<u8>,
 }
 
@@ -52,9 +51,7 @@ impl<R: io::Read> IoReader<R> {
     pub fn pop_first(&mut self) -> Option<u8> {
         match self.buf.is_empty() {
             true => None,
-            false => {
-                Some(self.buf.remove(0))
-            }
+            false => Some(self.buf.remove(0)),
         }
     }
 
@@ -128,21 +125,21 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
-    fn forward_read_bytes<V>(&'de mut self, len: usize, visitor: V) -> Result<V::Value, Error> 
-    where 
-        V: serde::de::Visitor<'de>
+    fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'de>,
     {
         self.fill_buffer(len)?;
-        visitor.visit_borrowed_bytes(&self.buf[..len])
+        visitor.visit_bytes(&self.buf[..len])
     }
 
-    fn forward_read_str<V>(&'de mut self, len: usize, visitor: V) -> Result<V::Value, Error> 
-    where 
-        V: serde::de::Visitor<'de>
+    fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: serde::de::Visitor<'de>,
     {
         self.fill_buffer(len)?;
         let s = std::str::from_utf8(&self.buf[..len])?;
-        visitor.visit_borrowed_str(s)
+        visitor.visit_str(s)
     }
 }
 

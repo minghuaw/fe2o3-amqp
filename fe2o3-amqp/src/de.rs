@@ -1,7 +1,17 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{error::Error, format::{ArrayWidth, Category, CompoundWidth, FixedWidth, OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8, VariableWidth}, format_code::EncodingCodes, read::{IoReader, Read}, types::SYMBOL, util::{IsArrayElement, NewType}};
+use crate::{
+    error::Error,
+    format::{
+        ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth, OFFSET_ARRAY32,
+        OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
+    },
+    format_code::EncodingCodes,
+    read::{IoReader, Read},
+    types::SYMBOL,
+    util::{IsArrayElement, NewType},
+};
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -11,7 +21,7 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
 
 pub struct Deserializer<R> {
     reader: R,
-    
+
     // a temporary buffer for borrowed value
     buf: Vec<u8>,
 
@@ -23,7 +33,7 @@ pub struct Deserializer<R> {
 
 impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
-        Self { 
+        Self {
             reader,
             buf: Vec::new(),
             newtype: Default::default(),
@@ -47,11 +57,11 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         let code = code?;
         code.try_into()
     }
-    
+
     fn get_elem_code_or_read_format_code(&mut self) -> Result<EncodingCodes, Error> {
         match &self.elem_format_code {
             Some(c) => Ok(c.clone()),
-            None => self.read_format_code()
+            None => self.read_format_code(),
         }
     }
 
@@ -228,25 +238,17 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     fn parse_string(&mut self) -> Result<String, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Str8 => {
-                self.read_small_string()
-            }
-            EncodingCodes::Str32 => {
-                self.read_string()
-            }
+            EncodingCodes::Str8 => self.read_small_string(),
+            EncodingCodes::Str32 => self.read_string(),
             _ => Err(Error::InvalidFormatCode),
         }
     }
 
     fn parse_symbol(&mut self) -> Result<String, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Sym8 => {
-                self.read_small_string()
-            },
-            EncodingCodes::Sym32 => {
-                self.read_string()
-            },
-            _ => Err(Error::InvalidFormatCode)
+            EncodingCodes::Sym8 => self.read_small_string(),
+            EncodingCodes::Sym32 => self.read_string(),
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -268,7 +270,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     fn parse_unit(&mut self) -> Result<(), Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Null => Ok(()),
-            _ => Err(Error::InvalidFormatCode)
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 }
@@ -296,10 +298,10 @@ where
             EncodingCodes::Ushort => self.deserialize_u16(visitor),
             EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                 self.deserialize_u32(visitor)
-            },
+            }
             EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                 self.deserialize_u64(visitor)
-            },
+            }
             EncodingCodes::Float => self.deserialize_f32(visitor),
             EncodingCodes::Double => self.deserialize_f64(visitor),
             EncodingCodes::Char => self.deserialize_char(visitor),
@@ -317,7 +319,7 @@ where
             EncodingCodes::Uuid => todo!(),
             EncodingCodes::Array32 | EncodingCodes::Array8 => todo!(),
             EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => todo!(),
-            EncodingCodes::Map32 | EncodingCodes::Map8 => todo!()
+            EncodingCodes::Map32 | EncodingCodes::Map8 => todo!(),
         }
     }
 
@@ -425,12 +427,8 @@ where
         println!(">>> Debug: deserialize_string");
 
         match self.newtype {
-            NewType::None => {
-                visitor.visit_string(self.parse_string()?)
-            },
-            NewType::Symbol => {
-                visitor.visit_string(self.parse_symbol()?)
-            },
+            NewType::None => visitor.visit_string(self.parse_string()?),
+            NewType::Symbol => visitor.visit_string(self.parse_symbol()?),
             NewType::Array => {
                 todo!()
             }
@@ -445,14 +443,12 @@ where
         // // TODO: considering adding a buffer to the reader
         println!(">>> Debug: deserialize_str");
         let len = match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Str8 => {
-                self.reader.next()? as usize
-            },
+            EncodingCodes::Str8 => self.reader.next()? as usize,
             EncodingCodes::Str32 => {
                 let len_bytes = self.reader.read_const_bytes()?;
                 u32::from_be_bytes(len_bytes) as usize
-            },
-            _ => return Err(Error::InvalidFormatCode)
+            }
+            _ => return Err(Error::InvalidFormatCode),
         };
         self.reader.forward_read_str(len, visitor)
     }
@@ -534,7 +530,7 @@ where
                 // let buf = self.reader.read_bytes(len)?;
 
                 visitor.visit_seq(ArrayAccess::new(self, len, count))
-            },
+            }
             EncodingCodes::Array32 => {
                 println!(">>> Debug: Array32");
                 // Read "header" bytes
@@ -552,23 +548,23 @@ where
                 // let buf = self.reader.read_bytes(len)?;
 
                 visitor.visit_seq(ArrayAccess::new(self, len, count))
-            },
+            }
             EncodingCodes::List0 => {
                 let len = 0;
                 let count = 0;
                 visitor.visit_seq(ListAccess::new(self, len, count))
-            },
+            }
             EncodingCodes::List8 => {
                 let len = self.reader.next()? as usize;
                 let count = self.reader.next()? as usize;
-                
+
                 // Account for offset
                 let len = len - OFFSET_LIST8;
-                
+
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
                 visitor.visit_seq(ListAccess::new(self, len, count))
-            }, 
+            }
             EncodingCodes::List32 => {
                 let len_bytes = self.reader.read_const_bytes()?;
                 let count_bytes = self.reader.read_const_bytes()?;
@@ -581,9 +577,8 @@ where
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
                 visitor.visit_seq(ListAccess::new(self, len, count))
-                
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -599,18 +594,18 @@ where
                 let size = 0;
                 let count = 0;
                 (size, count)
-            },
+            }
             EncodingCodes::List8 => {
                 let size = self.reader.next()? as usize;
                 let count = self.reader.next()? as usize;
-                
+
                 // Account for offset
                 let size = size - OFFSET_LIST8;
-                
+
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
                 (size, count)
-            }, 
+            }
             EncodingCodes::List32 => {
                 let size_bytes = self.reader.read_const_bytes()?;
                 let count_bytes = self.reader.read_const_bytes()?;
@@ -623,13 +618,12 @@ where
                 // Make sure there is no other element format code
                 self.elem_format_code = None;
                 (size, count)
-                
-            },
-            _ => return Err(Error::InvalidFormatCode)
+            }
+            _ => return Err(Error::InvalidFormatCode),
         };
 
         if count != len {
-            return Err(Error::SequenceLengthMismatch)
+            return Err(Error::SequenceLengthMismatch);
         }
 
         visitor.visit_seq(ListAccess::new(self, size, count))
@@ -660,9 +654,9 @@ where
 
                 // Account for offset
                 let size = size - OFFSET_MAP8;
-                
+
                 (size, count)
-            },
+            }
             EncodingCodes::Map32 => {
                 let size_bytes = self.reader.read_const_bytes()?;
                 let count_bytes = self.reader.read_const_bytes()?;
@@ -674,8 +668,8 @@ where
                 let size = size - OFFSET_MAP32;
 
                 (size, count)
-            },
-            _ => return Err(Error::InvalidFormatCode)
+            }
+            _ => return Err(Error::InvalidFormatCode),
         };
 
         // AMQP map count includes both key and value, should be halfed
@@ -723,7 +717,7 @@ where
     }
 }
 
-pub struct ArrayAccess<'a, R>{
+pub struct ArrayAccess<'a, R> {
     de: &'a mut Deserializer<R>,
     _size: usize,
     count: usize,
@@ -757,14 +751,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
-        T: de::DeserializeSeed<'de> 
+        T: de::DeserializeSeed<'de>,
     {
         println!(">>> Debug: ArrayAccess::next_element_seed");
         match self.count {
             0 => {
                 self.de.elem_format_code = None;
                 Ok(None)
-            },
+            }
             _ => {
                 self.count = self.count - 1;
                 seed.deserialize(self.as_mut()).map(Some)
@@ -782,9 +776,9 @@ pub struct ListAccess<'a, R> {
 impl<'a, R> ListAccess<'a, R> {
     pub fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
         Self {
-            de, 
+            de,
             _size: size,
-            count
+            count,
         }
     }
 }
@@ -797,16 +791,14 @@ impl<'a, R> AsMut<Deserializer<R>> for ListAccess<'a, R> {
 
 impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
     type Error = Error;
-    
+
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
-        T: de::DeserializeSeed<'de> 
+        T: de::DeserializeSeed<'de>,
     {
         println!(">>> Debug: ListAccess::next_element_seed");
         match self.count {
-            0 => {
-                Ok(None)
-            },
+            0 => Ok(None),
             _ => {
                 self.count = self.count - 1;
                 seed.deserialize(self.as_mut()).map(Some)
@@ -824,9 +816,9 @@ pub struct MapAccess<'a, R> {
 impl<'a, R> MapAccess<'a, R> {
     pub fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
         Self {
-            de, 
+            de,
             _size: size,
-            count
+            count,
         }
     }
 }
@@ -842,22 +834,26 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
 
     fn next_key_seed<K>(&mut self, _seed: K) -> Result<Option<K::Value>, Self::Error>
     where
-        K: de::DeserializeSeed<'de> 
-    {
-        unreachable!()    
-    }
-
-    fn next_value_seed<V>(&mut self, _seed: V) -> Result<V::Value, Self::Error>
-    where
-        V: de::DeserializeSeed<'de> 
+        K: de::DeserializeSeed<'de>,
     {
         unreachable!()
     }
 
-    fn next_entry_seed<K, V>(&mut self, kseed: K, vseed: V) -> Result<Option<(K::Value, V::Value)>, Self::Error>
+    fn next_value_seed<V>(&mut self, _seed: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::DeserializeSeed<'de>,
+    {
+        unreachable!()
+    }
+
+    fn next_entry_seed<K, V>(
+        &mut self,
+        kseed: K,
+        vseed: V,
+    ) -> Result<Option<(K::Value, V::Value)>, Self::Error>
     where
         K: de::DeserializeSeed<'de>,
-        V: de::DeserializeSeed<'de>, 
+        V: de::DeserializeSeed<'de>,
     {
         match self.count {
             0 => Ok(None),
@@ -875,7 +871,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
 mod tests {
     use serde::Deserialize;
 
-    use crate::{format_code::EncodingCodes};
+    use crate::format_code::EncodingCodes;
 
     use super::from_slice;
 
@@ -986,7 +982,9 @@ mod tests {
     #[test]
     fn test_deserialize_str() {
         // str8
-        let buf = &[161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103];
+        let buf = &[
+            161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
+        ];
         let expected = SMALL_STRING_VALUE;
         assert_eq_deserialized_vs_expected(buf, expected);
     }
@@ -994,50 +992,16 @@ mod tests {
     #[test]
     fn test_deserialize_string() {
         // str8
-        let buf = &[161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103];
+        let buf = &[
+            161u8, 12, 83, 109, 97, 108, 108, 32, 83, 116, 114, 105, 110, 103,
+        ];
         let expected = SMALL_STRING_VALUE.to_string();
         assert_eq_deserialized_vs_expected(buf, expected);
 
         // str32
-        let buf = &[
-            177, 0, 0, 1, 229, 76, 97, 114, 103, 101, 32, 83, 116, 
-            114, 105, 110, 103, 58, 32, 10, 32, 32, 32, 32, 32, 32, 
-            32, 32, 32, 32, 32, 32, 34, 84, 104, 101, 32, 113, 117, 
-            105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 
-            120, 32, 106, 117, 109, 112, 115, 32, 111, 118, 101, 114, 
-            32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 111, 103, 
-            46, 32, 10, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 
-            34, 84, 104, 101, 32, 113, 117, 105, 99, 107, 32, 98, 114, 
-            111, 119, 110, 32, 102, 111, 120, 32, 106, 117, 109, 112, 
-            115, 32, 111, 118, 101, 114, 32, 116, 104, 101, 32, 108, 
-            97, 122, 121, 32, 100, 111, 103, 46, 32, 10, 32, 32, 32, 
-            32, 32, 32, 32, 32, 32, 32, 32, 32, 34, 84, 104, 101, 32, 
-            113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 
-            111, 120, 32, 106, 117, 109, 112, 115, 32, 111, 118, 101, 114, 
-            32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 111, 103, 46, 
-            32, 10, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 34, 84, 
-            104, 101, 32, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 
-            32, 102, 111, 120, 32, 106, 117, 109, 112, 115, 32, 111, 118, 101, 
-            114, 32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 111, 103, 
-            46, 32, 10, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 34, 
-            84, 104, 101, 32, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 
-            110, 32, 102, 111, 120, 32, 106, 117, 109, 112, 115, 32, 111, 118, 
-            101, 114, 32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 111, 
-            103, 46, 32, 10, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 
-            34, 84, 104, 101, 32, 113, 117, 105, 99, 107, 32, 98, 114, 111, 
-            119, 110, 32, 102, 111, 120, 32, 106, 117, 109, 112, 115, 32, 111, 
-            118, 101, 114, 32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 
-            111, 103, 46, 32, 10, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 
-            32, 34, 84, 104, 101, 32, 113, 117, 105, 99, 107, 32, 98, 114, 111, 
-            119, 110, 32, 102, 111, 120, 32, 106, 117, 109, 112, 115, 32, 111, 
-            118, 101, 114, 32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 
-            111, 103, 46, 32, 10, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 
-            32, 34, 84, 104, 101, 32, 113, 117, 105, 99, 107, 32, 98, 114, 111, 
-            119, 110, 32, 102, 111, 120, 32, 106, 117, 109, 112, 115, 32, 111, 
-            118, 101, 114, 32, 116, 104, 101, 32, 108, 97, 122, 121, 32, 100, 
-            111, 103, 46];
         let expected = LARGE_STRING_VALUE.to_string();
-        assert_eq_deserialized_vs_expected(buf, expected);
+        let buf = crate::ser::to_vec(&expected).unwrap();
+        assert_eq_deserialized_vs_expected(&buf, expected);
     }
 
     #[test]
@@ -1096,15 +1060,27 @@ mod tests {
         let buf = vec![
             EncodingCodes::Map8 as u8,
             1 + 4 * (3 + 2), // 1 for count, 4 kv pairs, 3 for "a", 2 for 1i32
-            2 * 4, // 4 kv pairs
-            EncodingCodes::Str8 as u8, 1, b'a', // fisrt key
-            EncodingCodes::SmallInt as u8, 1, // first value
-            EncodingCodes::Str8 as u8, 1, b'm',
-            EncodingCodes::SmallInt as u8, 2,
-            EncodingCodes::Str8 as u8, 1, b'p',
-            EncodingCodes::SmallInt as u8, 4,
-            EncodingCodes::Str8 as u8, 1, b'q',
-            EncodingCodes::SmallInt as u8, 3,
+            2 * 4,           // 4 kv pairs
+            EncodingCodes::Str8 as u8,
+            1,
+            b'a', // fisrt key
+            EncodingCodes::SmallInt as u8,
+            1, // first value
+            EncodingCodes::Str8 as u8,
+            1,
+            b'm',
+            EncodingCodes::SmallInt as u8,
+            2,
+            EncodingCodes::Str8 as u8,
+            1,
+            b'p',
+            EncodingCodes::SmallInt as u8,
+            4,
+            EncodingCodes::Str8 as u8,
+            1,
+            b'q',
+            EncodingCodes::SmallInt as u8,
+            3,
         ];
         let mut expected = BTreeMap::new();
         expected.insert("a".to_string(), 1i32);

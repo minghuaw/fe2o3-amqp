@@ -5,7 +5,15 @@ use serde::{
     Serialize,
 };
 
-use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{ARRAY, SYMBOL}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
+use crate::{
+    described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
+    descriptor::DESCRIPTOR,
+    error::Error,
+    format_code::EncodingCodes,
+    types::{ARRAY, SYMBOL},
+    util::{IsArrayElement, NewType},
+    value::U32_MAX_AS_USIZE,
+};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -751,7 +759,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
             NewType::None => {
                 // Element in the list always has it own constructor
                 Serializer::new(&mut self.buf, IsArrayElement::False)
-            },
+            }
             NewType::Array => {
                 match self.num {
                     // The first element should include the contructor code
@@ -1607,15 +1615,27 @@ mod test {
         let expected = vec![
             EncodingCodes::Map8 as u8,
             1 + 4 * (3 + 2), // 1 for count, 4 kv pairs, 3 for "a", 2 for 1i32
-            2 * 4, // 4 kv pairs
-            EncodingCodes::Str8 as u8, 1, b'a', // fisrt key
-            EncodingCodes::SmallInt as u8, 1, // first value
-            EncodingCodes::Str8 as u8, 1, b'm',
-            EncodingCodes::SmallInt as u8, 2,
-            EncodingCodes::Str8 as u8, 1, b'p',
-            EncodingCodes::SmallInt as u8, 4,
-            EncodingCodes::Str8 as u8, 1, b'q',
-            EncodingCodes::SmallInt as u8, 3,
+            2 * 4,           // 4 kv pairs
+            EncodingCodes::Str8 as u8,
+            1,
+            b'a', // fisrt key
+            EncodingCodes::SmallInt as u8,
+            1, // first value
+            EncodingCodes::Str8 as u8,
+            1,
+            b'm',
+            EncodingCodes::SmallInt as u8,
+            2,
+            EncodingCodes::Str8 as u8,
+            1,
+            b'p',
+            EncodingCodes::SmallInt as u8,
+            4,
+            EncodingCodes::Str8 as u8,
+            1,
+            b'q',
+            EncodingCodes::SmallInt as u8,
+            3,
         ];
 
         assert_eq_on_serialized_vs_expected(val, expected);
@@ -1661,10 +1681,10 @@ mod test {
         let expected = vec![
             EncodingCodes::List8 as u8,
             1 + 2 + 1, // 1 for count, 2 for i32, 1 for true
-            2, // count
+            2,         // count
             EncodingCodes::SmallInt as u8,
             13,
-            EncodingCodes::BooleanTrue as u8
+            EncodingCodes::BooleanTrue as u8,
         ];
         assert_eq_on_serialized_vs_expected(val, expected);
     }

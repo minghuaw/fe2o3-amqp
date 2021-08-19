@@ -24,7 +24,6 @@
 //     };
 // }
 
-
 pub(crate) enum NewType {
     None,
     Symbol,

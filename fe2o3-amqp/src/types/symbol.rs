@@ -54,14 +54,14 @@ impl<'de> Visitor<'de> for SymbolVisitor {
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         Ok(Symbol::from(v))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         Ok(Symbol::from(v.to_string()))
     }
