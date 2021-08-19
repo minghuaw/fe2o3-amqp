@@ -1,7 +1,7 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{error::Error, format::{ArrayWidth, Category, CompoundWidth, FixedWidth, OFFSET_ARRAY32, OFFSET_ARRAY8, VariableWidth}, format_code::EncodingCodes, read::{IoReader, Read}, types::SYMBOL, util::{IsArrayElement, NewType}};
+use crate::{error::Error, format::{ArrayWidth, Category, CompoundWidth, FixedWidth, OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, VariableWidth}, format_code::EncodingCodes, read::{IoReader, Read}, types::SYMBOL, util::{IsArrayElement, NewType}};
 
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let io_reader = IoReader::new(slice);
@@ -500,7 +500,9 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.read_format_code()? {
+        let code = self.get_elem_code_or_read_format_code()?;
+        
+        match code {
             EncodingCodes::Array8 => {
                 println!(">>> Debug: Array8");
                 // Read "header" bytes
@@ -529,15 +531,39 @@ where
 
                 // Account for offset
                 let len = len as usize - OFFSET_ARRAY32;
-                let buf = self.reader.read_bytes(len)?;
+                // let buf = self.reader.read_bytes(len)?;
 
                 visitor.visit_seq(ArrayAccess::new(self, len, count))
             },
             EncodingCodes::List0 => {
-                todo!()
+                let len = 0;
+                let count = 0;
+                visitor.visit_seq(ListAccess::new(self, len, count))
+            },
+            EncodingCodes::List8 => {
+                let len = self.reader.next()? as usize;
+                let count = self.reader.next()? as usize;
+                
+                // Account for offset
+                let len = len - OFFSET_LIST8;
+                
+                // Make sure there is no other element format code
+                self.elem_format_code = None;
+                visitor.visit_seq(ListAccess::new(self, len, count))
             }, 
             EncodingCodes::List32 => {
-                todo!()
+                let len_bytes = self.reader.read_const_bytes()?;
+                let count_bytes = self.reader.read_const_bytes()?;
+                let len = u32::from_be_bytes(len_bytes) as usize;
+                let count = u32::from_be_bytes(count_bytes) as usize;
+
+                // Account for offset
+                let len = len - OFFSET_LIST32;
+
+                // Make sure there is no other element format code
+                self.elem_format_code = None;
+                visitor.visit_seq(ListAccess::new(self, len, count))
+                
             },
             _ => Err(Error::InvalidFormatCode)
         }
@@ -547,7 +573,48 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        // Tuple will always be deserialized as List
+        let code = self.get_elem_code_or_read_format_code()?;
+
+        let (size, count) = match code {
+            EncodingCodes::List0 => {
+                let size = 0;
+                let count = 0;
+                (size, count)
+            },
+            EncodingCodes::List8 => {
+                let size = self.reader.next()? as usize;
+                let count = self.reader.next()? as usize;
+                
+                // Account for offset
+                let size = size - OFFSET_LIST8;
+                
+                // Make sure there is no other element format code
+                self.elem_format_code = None;
+                (size, count)
+            }, 
+            EncodingCodes::List32 => {
+                let size_bytes = self.reader.read_const_bytes()?;
+                let count_bytes = self.reader.read_const_bytes()?;
+                let size = u32::from_be_bytes(size_bytes) as usize;
+                let count = u32::from_be_bytes(count_bytes) as usize;
+
+                // Account for offset
+                let size = size - OFFSET_LIST32;
+
+                // Make sure there is no other element format code
+                self.elem_format_code = None;
+                (size, count)
+                
+            },
+            _ => return Err(Error::InvalidFormatCode)
+        };
+
+        if count != len {
+            return Err(Error::SequenceLengthMismatch)
+        }
+
+        visitor.visit_seq(ListAccess::new(self, size, count))
     }
 
     fn deserialize_tuple_struct<V>(
@@ -611,7 +678,7 @@ where
 
 pub struct ArrayAccess<'a, R>{
     de: &'a mut Deserializer<R>,
-    len: usize,
+    _len: usize,
     count: usize,
     // buf: Vec<u8>,
 }
@@ -625,7 +692,7 @@ impl<'a, R> ArrayAccess<'a, R> {
     ) -> Self {
         Self {
             de,
-            len,
+            _len: len,
             count,
             // buf
         }
@@ -653,9 +720,49 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
             },
             _ => {
                 self.count = self.count - 1;
-                Ok(Some(
-                    seed.deserialize(self.as_mut())?
-                ))
+                seed.deserialize(self.as_mut()).map(Some)
+            }
+        }
+    }
+}
+
+pub struct ListAccess<'a, R> {
+    de: &'a mut Deserializer<R>,
+    _len: usize,
+    count: usize,
+}
+
+impl<'a, R> ListAccess<'a, R> {
+    pub fn new(de: &'a mut Deserializer<R>, len: usize, count: usize) -> Self {
+        Self {
+            de, 
+            _len: len,
+            count
+        }
+    }
+}
+
+impl<'a, R> AsMut<Deserializer<R>> for ListAccess<'a, R> {
+    fn as_mut(&mut self) -> &mut Deserializer<R> {
+        self.de
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
+    type Error = Error;
+    
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: de::DeserializeSeed<'de> 
+    {
+        println!(">>> Debug: ListAccess::next_element_seed");
+        match self.count {
+            0 => {
+                Ok(None)
+            },
+            _ => {
+                self.count = self.count - 1;
+                seed.deserialize(self.as_mut()).map(Some)
             }
         }
     }
@@ -832,8 +939,39 @@ mod tests {
 
     #[test]
     fn test_deserialize_array() {
-        use crate::ser::to_vec;
-        let expected = vec![5u8, 4, 3, 2, 1];
+        todo!()
+        // use crate::ser::to_vec;
+        // let expected = vec![5u8, 4, 3, 2, 1];
         // let output = to_vec(value)
+    }
+
+    #[test]
+    fn test_deserialize_list() {
+        // List0
+        let expected: Vec<i32> = vec![];
+        let buf = vec![EncodingCodes::List0 as u8];
+        assert_eq_deserialized_vs_expected(&buf, expected);
+
+        // List0
+        let expected: &[i32; 0] = &[]; // slice will be (de)serialized as List
+        let buf = vec![EncodingCodes::List0 as u8];
+        assert_eq_deserialized_vs_expected(&buf, *expected);
+
+        // List8
+        let expected = vec![1i32, 2, 3, 4];
+        let buf = vec![
+            EncodingCodes::List8 as u8,
+            1 + 4 * 2,
+            4,
+            EncodingCodes::SmallInt as u8,
+            1,
+            EncodingCodes::SmallInt as u8,
+            2,
+            EncodingCodes::SmallInt as u8,
+            3,
+            EncodingCodes::SmallInt as u8,
+            4,
+        ];
+        assert_eq_deserialized_vs_expected(&buf, expected);
     }
 }

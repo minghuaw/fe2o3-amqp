@@ -22,6 +22,9 @@ pub enum Error {
 
     #[error("Invalid UTF-8 encoding")]
     InvalidUtf8Encoding,
+
+    #[error("Sequence length mismatch")]
+    SequenceLengthMismatch,
 }
 
 impl ser::Error for Error {

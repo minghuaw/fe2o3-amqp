@@ -1549,6 +1549,12 @@ mod test {
 
     #[test]
     fn test_serialzie_list() {
+        // List0
+        let val: Vec<i32> = vec![];
+        let expected = vec![EncodingCodes::List0 as u8];
+        assert_eq_on_serialized_vs_expected(val, expected);
+
+        // List8
         let val = vec![1, 2, 3, 4];
         let expected = vec![
             EncodingCodes::List8 as u8,
