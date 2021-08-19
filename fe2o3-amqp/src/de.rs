@@ -424,7 +424,7 @@ where
             NewType::Symbol => {
                 visitor.visit_string(self.parse_symbol()?)
             },
-            NewType::List => {
+            NewType::Array => {
                 todo!()
             }
         }

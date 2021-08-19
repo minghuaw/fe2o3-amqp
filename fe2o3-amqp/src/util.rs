@@ -28,7 +28,7 @@
 pub(crate) enum NewType {
     None,
     Symbol,
-    List,
+    Array,
 }
 
 impl Default for NewType {

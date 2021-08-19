@@ -5,7 +5,7 @@ use serde::{
     Serialize,
 };
 
-use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{LIST, SYMBOL}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
+use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{ARRAY, SYMBOL}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -400,7 +400,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                             _ => return Err(Error::Message("Too long".into())),
                         }
                     }
-                    NewType::List => unreachable!(),
+                    NewType::Array => unreachable!(),
                 }
             }
             IsArrayElement::FirstElement => match self.newtype {
@@ -416,7 +416,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.writer.write_all(&code)?;
                     self.writer.write_all(&width)?;
                 }
-                NewType::List => unreachable!(),
+                NewType::Array => unreachable!(),
             },
             IsArrayElement::OtherElement => match self.newtype {
                 NewType::Symbol => {
@@ -427,7 +427,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     let width: [u8; 4] = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
-                NewType::List => unreachable!(),
+                NewType::Array => unreachable!(),
             },
         }
 
@@ -527,8 +527,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     {
         if name == SYMBOL {
             self.newtype = NewType::Symbol;
-        } else if name == LIST {
-            self.newtype = NewType::List;
+        } else if name == ARRAY {
+            self.newtype = NewType::Array;
         }
         value.serialize(self)
     }
@@ -749,16 +749,16 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     {
         let mut se = match self.se.newtype {
             NewType::None => {
+                // Element in the list always has it own constructor
+                Serializer::new(&mut self.buf, IsArrayElement::False)
+            },
+            NewType::Array => {
                 match self.num {
                     // The first element should include the contructor code
                     0 => Serializer::new(&mut self.buf, IsArrayElement::FirstElement),
                     // The remaining element should only write the value bytes
                     _ => Serializer::new(&mut self.buf, IsArrayElement::OtherElement),
                 }
-            }
-            NewType::List => {
-                // Element in the list always has it own constructor
-                Serializer::new(&mut self.buf, IsArrayElement::False)
             }
             NewType::Symbol => unreachable!(),
         };
@@ -771,8 +771,8 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let Self { se, num, buf } = self;
         match se.newtype {
-            NewType::None => write_array(&mut se.writer, num, buf, &se.is_array_elem),
-            NewType::List => write_list(&mut se.writer, num, buf, &se.is_array_elem),
+            NewType::None => write_list(&mut se.writer, num, buf, &se.is_array_elem),
+            NewType::Array => write_array(&mut se.writer, num, buf, &se.is_array_elem),
             NewType::Symbol => unreachable!(),
         }
     }
@@ -1222,7 +1222,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 #[cfg(test)]
 mod test {
     use crate::{
-        described::Described, descriptor::Descriptor, format_code::EncodingCodes, types::List,
+        described::Described, descriptor::Descriptor, format_code::EncodingCodes, types::Array,
     };
 
     use super::*;
@@ -1490,7 +1490,7 @@ mod test {
 
     #[test]
     fn test_serialize_vec_as_array() {
-        let val = vec![1, 2, 3, 4];
+        let val = Array::from(vec![1, 2, 3, 4]);
         let expected = vec![
             EncodingCodes::Array8 as u8, // array8
             (2 + 4 * 4) as u8,           // length including `count` and element constructor
@@ -1518,37 +1518,58 @@ mod test {
 
     #[test]
     fn test_serialize_slice_as_array() {
-        let val = &[1u8, 2, 3, 4];
-        let output = to_vec(val).unwrap();
-        println!("{:?}", output);
-        // let expected = vec![
-        //     EncodingCodes::Array8 as u8, // array8
-        //     (2 + 4 * 4) as u8,           // length including `count` and element constructor
-        //     4,                           // count
-        //     EncodingCodes::Int as u8,
-        //     0,
-        //     0,
-        //     0,
-        //     1, // first element as i32
-        //     0,
-        //     0,
-        //     0,
-        //     2, // second element
-        //     0,
-        //     0,
-        //     0,
-        //     3, // third
-        //     0,
-        //     0,
-        //     0,
-        //     4, // fourth
-        // ];
-        // assert_eq_on_serialized_vs_expected(val, expected);
+        let val = &[1, 2, 3, 4];
+        let val = Array::from(val.to_vec());
+        // let output = to_vec(&val).unwrap();
+        // println!("{:?}", output);
+        let expected = vec![
+            EncodingCodes::Array8 as u8, // array8
+            (2 + 4 * 4) as u8,           // length including `count` and element constructor
+            4,                           // count
+            EncodingCodes::Int as u8,
+            0,
+            0,
+            0,
+            1, // first element as i32
+            0,
+            0,
+            0,
+            2, // second element
+            0,
+            0,
+            0,
+            3, // third
+            0,
+            0,
+            0,
+            4, // fourth
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_serialzie_list() {
-        let val = List::from(vec![1, 2, 3, 4]);
+        let val = vec![1, 2, 3, 4];
+        let expected = vec![
+            EncodingCodes::List8 as u8,
+            (1 + 2 * 4) as u8, // length including one byte on count
+            4,                 // count
+            EncodingCodes::SmallInt as u8,
+            1,
+            EncodingCodes::SmallInt as u8,
+            2,
+            EncodingCodes::SmallInt as u8,
+            3,
+            EncodingCodes::SmallInt as u8,
+            4,
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialzie_slice_as_list() {
+        // slice will call `serialize_tuple`
+        let val = [1, 2, 3, 4];
         let expected = vec![
             EncodingCodes::List8 as u8,
             (1 + 2 * 4) as u8, // length including one byte on count
@@ -1602,8 +1623,15 @@ mod test {
             a_field: 13,
             b: true,
         };
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", &output);
+        let expected = vec![
+            EncodingCodes::List8 as u8,
+            1 + 2 + 1, // 1 for count, 2 for i32, 1 for true
+            2, // count
+            EncodingCodes::SmallInt as u8,
+            13,
+            EncodingCodes::BooleanTrue as u8
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
