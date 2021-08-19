@@ -66,38 +66,6 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
-    // fn read_const_bytes<const N: usize>(&mut self) -> Result<[u8; N], Error> {
-    //     let mut buf = [0u8; N];
-    //     let l = self.buf.len();
-
-    //     if l < N {
-    //         &mut buf[..l].copy_from_slice(&self.buf[..l]);
-    //         self.reader.read_exact(&mut buf[l..])?;
-    //         // Only drain the buffer if further read is successful
-    //         self.buf.drain(..l);
-    //         Ok(buf)
-    //     } else {
-    //         buf.copy_from_slice(&self.buf[..N]);
-    //         self.buf.drain(..N);
-    //         Ok(buf)
-    //     }
-    // }
-
-    // fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
-    //     let l = self.buf.len();
-    //     if l < n {
-    //         let mut buf = vec![0u8; n];
-    //         &mut buf[..l].copy_from_slice(&self.buf[..l]);
-    //         self.reader.read_exact(&mut buf[l..])?;
-    //         // Only drain the buffer if further read is successfull
-    //         self.buf.drain(..l);
-    //         Ok(buf)
-    //     } else {
-    //         let out = self.buf.drain(0..n).collect();
-    //         Ok(out)
-    //     }
-    // }
-
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
         let n = buf.len();
         let l = self.buf.len();

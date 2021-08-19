@@ -4,7 +4,6 @@ use crate::error::Error;
 
 use super::{private, Read};
 
-// TODO: add SliceReader
 pub struct SliceReader<'s> {
     slice: &'s [u8]
 }
@@ -22,6 +21,15 @@ impl<'s> SliceReader<'s> {
             msg
         ))
     }
+
+    pub fn get_byte_slice(&mut self, n: usize) -> Result<&'s [u8], Error> {
+        if self.slice.len() < n {
+            return Err(Self::unexpected_eof(""))
+        }
+        let (read_slice, remaining) = self.slice.split_at(n);
+        self.slice = remaining;
+        Ok(read_slice)
+    }
 }
 
 impl<'s> private::Sealed for SliceReader<'s> { }
@@ -38,9 +46,11 @@ impl<'s> Read<'s> for SliceReader<'s> {
         match self.slice.len() {
             0 => Err(Self::unexpected_eof("")),
             _ => {
-                let (next, remaining) = self.slice.split_at(1);
-                self.slice = remaining;
-                Ok(next[0])
+                // let (next, remaining) = self.slice.split_at(1);
+                // self.slice = remaining;
+                // Ok(next[0])
+                let buf = self.get_byte_slice(1)?;
+                Ok(buf[0])
             }
         }
     }
@@ -51,9 +61,11 @@ impl<'s> Read<'s> for SliceReader<'s> {
         if self.slice.len() < n {
             Err(Self::unexpected_eof(""))
         } else {
-            let (read_slice, remaining) = self.slice.split_at(n);
+            // let (read_slice, remaining) = self.slice.split_at(n);
+            // self.slice = remaining;
+            // Ok(())
+            let read_slice = self.get_byte_slice(n)?;
             buf.copy_from_slice(read_slice);
-            self.slice = remaining;
             Ok(())
         }
     }
@@ -62,13 +74,14 @@ impl<'s> Read<'s> for SliceReader<'s> {
     where
         V: serde::de::Visitor<'s> 
     {
-        todo!()
+        visitor.visit_borrowed_bytes(self.get_byte_slice(len)?)
     }
 
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'s> 
     {
-        todo!()   
+        let str_slice = std::str::from_utf8(self.get_byte_slice(len)?)?;
+        visitor.visit_borrowed_str(str_slice)
     }
 }
