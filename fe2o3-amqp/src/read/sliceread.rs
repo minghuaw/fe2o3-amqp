@@ -85,3 +85,156 @@ impl<'s> Read<'s> for SliceReader<'s> {
         visitor.visit_borrowed_str(str_slice)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::{Read, SliceReader};
+
+    const SHORT_BUFFER: &[u8] = &[0, 1, 2];
+    const LONG_BUFFER: &[u8] = &[
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    ];
+
+    #[test]
+    fn test_peek() {
+        let slice = SHORT_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        let peek0 = reader.peek().expect("Should not return error");
+        let peek1 = reader.peek().expect("Should not return error");
+        let peek2 = reader.peek().expect("Should not return error");
+
+        assert_eq!(peek0, slice[0]);
+        assert_eq!(peek1, slice[0]);
+        assert_eq!(peek2, slice[0]);
+    }
+
+    #[test]
+    fn test_next() {
+        let slice = SHORT_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        for i in 0..slice.len() {
+            let peek = reader.peek().expect("Should not return error");
+            let next = reader.next().expect("Should not return error");
+
+            assert_eq!(peek, slice[i]);
+            assert_eq!(next, slice[i]);
+        }
+
+        let peek_none = reader.peek();
+        let next_none = reader.next();
+
+        assert!(peek_none.is_err());
+        assert!(next_none.is_err());
+    }
+
+
+    #[test]
+    fn test_read_const_bytes_without_peek() {
+        let slice = LONG_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        // Read first 10 bytes
+        const N: usize = 10;
+        let bytes = reader
+            .read_const_bytes::<N>()
+            .expect("Should not return error");
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &slice[..N]);
+
+        // Read the second bytes
+        let bytes = reader
+            .read_const_bytes::<N>()
+            .expect("Should not return error");
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &slice[(N)..(2 * N)]);
+
+        // Read None
+        let bytes = reader.read_const_bytes::<N>();
+        assert!(bytes.is_err());
+    }
+
+    #[test]
+    fn test_incomplete_read_const_bytes_without_peek() {
+        let slice = SHORT_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        // Read first 10 bytes
+        const N: usize = 10;
+        let bytes = reader.read_const_bytes::<N>();
+        assert!(bytes.is_err());
+
+        for i in 0..slice.len() {
+            let peek = reader.peek().expect("Should not return error");
+            let next = reader.next().expect("Should not return error");
+
+            assert_eq!(peek, slice[i]);
+            assert_eq!(next, slice[i]);
+        }
+
+        let peek_none = reader.peek();
+        let next_none = reader.next();
+
+        assert!(peek_none.is_err());
+        assert!(next_none.is_err());
+    }
+
+    #[test]
+    fn test_read_const_bytes_after_peek() {
+        let slice = LONG_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        let peek0 = reader.peek().expect("Should not return error");
+        assert_eq!(peek0, slice[0]);
+
+        // Read first 10 bytes
+        const N: usize = 10;
+        let bytes = reader
+            .read_const_bytes::<N>()
+            .expect("Should not return error");
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &slice[..N]);
+
+        // Read the second bytes
+        let bytes = reader
+            .read_const_bytes::<N>()
+            .expect("Should not return error");
+        assert_eq!(bytes.len(), N);
+        assert_eq!(&bytes[..], &slice[(N)..(2 * N)]);
+
+        // Read None
+        let bytes = reader.read_const_bytes::<N>();
+        assert!(bytes.is_err());
+    }
+
+    #[test]
+    fn test_incomplete_read_const_bytes_after_peek() {
+        let slice = SHORT_BUFFER;
+        let mut reader = SliceReader::new(slice);
+
+        let peek0 = reader.peek().expect("Should not return error");
+        assert_eq!(peek0, slice[0]);
+
+        // Read first 10 bytes
+        const N: usize = 10;
+        let bytes = reader.read_const_bytes::<N>();
+        assert!(bytes.is_err());
+
+        for i in 0..slice.len() {
+            let peek = reader.peek().expect("Should not return error");
+            let next = reader.next().expect("Should not return error");
+
+            // println!("peek {:?}", peek);
+            // println!("next {:?}", next);
+
+            assert_eq!(peek, slice[i]);
+            assert_eq!(next, slice[i]);
+        }
+
+        let peek_err = reader.peek();
+        let next_err = reader.next();
+
+        assert!(peek_err.is_err());
+        assert!(next_err.is_err());
+    }
+}
