@@ -886,6 +886,55 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
     }
 }
 
+enum FieldRole {
+    // The descriptor bytes should be consumed
+    Descriptor,
+    
+    // The byte after the descriptor should be peeked to see
+    // which type of encoding is used
+    EncodingType,
+
+    // The bytes after the descriptor should be consumed 
+    Value,
+
+    // // All fields should be already deserialized. Probably redundant
+    // End
+}
+
+/// A special visitor access to the `Described` type
+pub struct DescribedAccess<'a, R> { 
+    de: &'a mut Deserializer<R>,
+    field_role: FieldRole
+}
+
+impl<'a, R> DescribedAccess<'a, R> {
+    pub fn new(de: &'a mut Deserializer<R>) -> Self {
+        Self {
+            de,
+            // The first field should be the descriptor
+            field_role: FieldRole::Descriptor
+        }
+    }
+}
+
+impl<'a, R> AsMut<Deserializer<R>> for DescribedAccess<'a, R> {
+    fn as_mut(&mut self) -> &mut Deserializer<R> {
+        self.de
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: de::DeserializeSeed<'de> 
+    {
+        println!(">>> Debug: ListAccess::next_element_seed");
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, de::DeserializeOwned};

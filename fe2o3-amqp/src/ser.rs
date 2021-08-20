@@ -630,7 +630,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                     self.struct_encoding = StructEncoding::DescribedList;
                     Ok(DescribedSerializer::list_value(
-                        StructRole::Described,
+                        Role::Described,
                         self,
                         len,
                     ))
@@ -642,7 +642,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                     self.struct_encoding = StructEncoding::DescribedMap;
                     Ok(DescribedSerializer::map_value(
-                        StructRole::Described,
+                        Role::Described,
                         self,
                         len,
                     ))
@@ -654,31 +654,31 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                     self.struct_encoding = StructEncoding::DescribedBasic;
                     Ok(DescribedSerializer::basic_value(
-                        StructRole::Described,
+                        Role::Described,
                         self,
                         len,
                     ))
                 } else {
                     // Only non-described struct will go to this branch
                     Ok(DescribedSerializer::list_value(
-                        StructRole::Value,
+                        Role::Value,
                         self,
                         len,
                     ))
                 }
             }
             StructEncoding::DescribedBasic => Ok(DescribedSerializer::basic_value(
-                StructRole::Value,
+                Role::Value,
                 self,
                 len,
             )),
             StructEncoding::DescribedList => Ok(DescribedSerializer::list_value(
-                StructRole::Value,
+                Role::Value,
                 self,
                 len,
             )),
             StructEncoding::DescribedMap => {
-                Ok(DescribedSerializer::map_value(StructRole::Value, self, len))
+                Ok(DescribedSerializer::map_value(Role::Value, self, len))
             }
         }
     }
@@ -1026,7 +1026,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for ListSerializer<'a, W> {
     }
 }
 
-pub enum StructRole {
+pub enum Role {
     Described,
     // Descriptor,
     Value,
@@ -1040,22 +1040,22 @@ pub enum ValueType {
 
 pub struct DescribedSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    role: StructRole,
+    role: Role,
     val_ty: ValueType,
     num: usize,
     buf: Vec<u8>,
 }
 
 #[inline]
-pub fn init_vec(role: &StructRole) -> Vec<u8> {
+pub fn init_vec(role: &Role) -> Vec<u8> {
     match role {
-        &StructRole::Value => Vec::new(),
+        &Role::Value => Vec::new(),
         _ => Vec::with_capacity(0),
     }
 }
 
 impl<'a, W: 'a> DescribedSerializer<'a, W> {
-    pub fn basic_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn basic_value(role: Role, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1066,7 +1066,7 @@ impl<'a, W: 'a> DescribedSerializer<'a, W> {
         }
     }
 
-    pub fn list_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn list_value(role: Role, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1077,7 +1077,7 @@ impl<'a, W: 'a> DescribedSerializer<'a, W> {
         }
     }
 
-    pub fn map_value(role: StructRole, se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn map_value(role: Role, se: &'a mut Serializer<W>, num: usize) -> Self {
         let buf = init_vec(&role);
         Self {
             se,
@@ -1110,8 +1110,8 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
         T: Serialize,
     {
         match self.role {
-            StructRole::Described => value.serialize(self.as_mut()),
-            StructRole::Value => match self.val_ty {
+            Role::Described => value.serialize(self.as_mut()),
+            Role::Value => match self.val_ty {
                 ValueType::Basic => value.serialize(self.as_mut()),
                 ValueType::List => {
                     let mut serializer = Serializer::described_list(&mut self.buf);
@@ -1129,8 +1129,8 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         match self.role {
-            StructRole::Described => Ok(()),
-            StructRole::Value => match self.val_ty {
+            Role::Described => Ok(()),
+            Role::Value => match self.val_ty {
                 ValueType::Basic => Ok(()),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
                 ValueType::List => write_list(

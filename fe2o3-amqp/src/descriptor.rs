@@ -1,7 +1,11 @@
-use serde::ser::{Serialize, SerializeStruct};
-use serde::{de, Serializer};
+use std::convert::TryInto;
+use std::fmt::Write;
+
+use serde::ser::{Serialize};
+use serde::de;
 // use serde::{Serialize, Deserialize};
 
+use crate::format_code::EncodingCodes;
 use crate::types::Symbol;
 
 pub const DESCRIPTOR: &str = "DESCRIPTOR";
@@ -41,6 +45,76 @@ impl Serialize for Descriptor {
             Descriptor::Code(value) => {
                 serializer.serialize_newtype_variant(DESCRIPTOR, 1, "Code", value)
             }
+        }
+    }
+}
+
+// Because the bytes will be consumed when `deserialize_identifier`
+enum Field {
+    Name(Symbol),
+    Code(u64),
+}
+
+struct FieldVisitor { }
+
+impl<'de> de::Visitor<'de> for FieldVisitor {
+    type Value = Field;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("variant identifier")
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        // It has to be Descriptor::Name(Symbol) if visit_string is called
+        let name = Symbol::from(v);
+        Ok(Field::Name(name))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        let name = Symbol::from(v);
+        Ok(Field::Name(name))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        Ok(Field::Code(v))
+    }
+}
+
+impl<'de> de::Deserialize<'de> for Field {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> 
+    {
+        deserializer.deserialize_identifier(FieldVisitor { })
+    }
+}
+
+struct DescriptorVisitor { }
+
+impl<'de> de::Visitor<'de> for DescriptorVisitor {
+    type Value = Descriptor;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("enum Descriptor")
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::EnumAccess<'de>, 
+    {
+        let (val, _) = data.variant()?;
+        match val {
+            Field::Name(name) => Ok(Descriptor::Name(name)),
+            Field::Code(code) => Ok(Descriptor::Code(code)),
         }
     }
 }
