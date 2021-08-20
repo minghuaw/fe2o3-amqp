@@ -886,6 +886,67 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
     }
 }
 
+pub struct VariantAccess<'a, R> {
+    de: &'a mut Deserializer<R>
+}
+
+impl<'a, R> VariantAccess<'a, R> {
+    pub fn new(de: &'a mut Deserializer<R>) -> Self {
+        Self {
+            de
+        }
+    }
+}
+
+impl<'a, R> AsMut<Deserializer<R>> for VariantAccess<'a, R> {
+    fn as_mut(&mut self) -> &mut Deserializer<R> {
+        self.de
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::EnumAccess<'de> for VariantAccess<'a, R> {
+    type Error = Error;
+    type Variant = Self;
+
+    fn variant_seed<V>(mut self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
+    where
+        V: de::DeserializeSeed<'de> 
+    {
+        let val = seed.deserialize(self.as_mut())?;
+        Ok((val, self))
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<(), Self::Error> {
+        de::Deserialize::deserialize(self.de)
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
+    where
+        T: de::DeserializeSeed<'de> 
+    {
+        seed.deserialize(self.de)
+    }
+
+    fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de> 
+    {
+        de::Deserializer::deserialize_tuple(self.de, len, visitor)
+    }
+
+    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de> 
+    {
+        de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
+    }
+}
+
+
 enum FieldRole {
     // The descriptor bytes should be consumed
     Descriptor,
