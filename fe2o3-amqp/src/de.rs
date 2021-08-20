@@ -685,7 +685,15 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        match self.reader.peek()?.try_into()? {
+            EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
+                self.deserialize_tuple(fields.len(), visitor)
+            },
+            EncodingCodes::Map32 | EncodingCodes::Map8 => {
+                self.deserialize_map(visitor)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
     }
 
     fn deserialize_enum<V>(
@@ -705,14 +713,26 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        // The following are the possible identifiers
+        match self.reader.peek()?.try_into()? {
+            // If a struct is serialized as a map, then the fields are serialized as str
+            EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
+            // FIXME: Enum variant currently are serialzied as map of with variant index and a list
+            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => self.deserialize_u32(visitor),
+            // Potentially using `Descriptor::Name` as identifier
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => self.deserialize_newtype_struct(SYMBOL, visitor),
+            // Potentially using `Descriptor::Code` as identifier
+            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => self.deserialize_u64(visitor),
+            // Other types should not be used to serialize identifiers
+            _ => Err(Error::InvalidFormatCode),
+        }
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        todo!()   
     }
 }
 
@@ -1095,6 +1115,22 @@ mod tests {
         expected.insert("q".to_string(), 3);
         expected.insert("p".to_string(), 4);
 
+        assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_nondescribed_struct() {
+        use serde::{Serialize, Deserialize};
+        use crate::ser::to_vec;
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Foo {
+            bar: u32,
+            is_fool: bool
+        }
+
+        let expected = Foo {bar: 13, is_fool: true};
+        let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 }

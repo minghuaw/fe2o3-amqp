@@ -1,5 +1,6 @@
 use serde::ser::{Serialize, SerializeStruct};
 use serde::{de, Serializer};
+// use serde::{Serialize, Deserialize};
 
 use crate::types::Symbol;
 
@@ -11,7 +12,8 @@ pub const DESCRIPTOR: &str = "DESCRIPTOR";
 /// 1. amqpnetlite: Symbol
 /// 2. go-amqp: Symbol?
 /// 3. qpid-proton-j2: Symbol
-#[derive(Debug)]
+// #[derive(Debug, Serialize)]
+// #[serde(rename(serialize = "DESCRIPTOR"))]
 pub enum Descriptor {
     Name(Symbol),
     Code(u64),
