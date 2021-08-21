@@ -1,4 +1,6 @@
-use serde::ser::{Serialize, SerializeStruct, Serializer};
+use std::fmt::Debug;
+
+use serde::ser::{self, Serialize, SerializeStruct, Serializer};
 use serde::de;
 
 use crate::descriptor::{Descriptor, DESCRIPTOR};
@@ -7,6 +9,7 @@ use crate::format_code::EncodingCodes;
 pub const DESCRIBED_BASIC: &str = "DESCRIBED_BASIC";
 pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
 pub const DESCRIBED_MAP: &str = "DESCRIBED_MAP";
+pub const DESERIALIZE_DESCRIBED: &str = "DESERIALIZE_DESCRIBED";
 
 pub const ENCODING_TYPE: &str = "ENCODING_TYPE";
 
@@ -107,10 +110,20 @@ pub struct Described<T> {
 impl<T> Described<T> {
     pub fn new(encoding: EncodingType, descriptor: Descriptor, value: T) -> Self {
         Self {
-            encoding_type: encoding,
             descriptor,
+            encoding_type: encoding,
             value,
         }
+    }
+}
+
+impl<T: Debug> Debug for Described<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Described")
+            .field("descriptor", &self.descriptor)
+            .field("encoding_type", &self.encoding_type)
+            .field("value", &self.value)
+            .finish()
     }
 }
 
@@ -132,8 +145,10 @@ impl<'a, T: Serialize> Serialize for Described<T> {
 }
 
 mod described {
-    use std::marker::PhantomData;
+    use std::{marker::PhantomData};
+    use serde::Deserialize;
 
+    use crate::error::Error;
     use super::*;
 
     // enum Field {
@@ -155,16 +170,64 @@ mod described {
     //     }
     // }
 
-    // struct DescribedVisitor<'de, T> { 
-    //     marker: PhantomData<T>,
-    //     lifetime: PhantomData<&'de ()>
-    // }
+    struct DescribedVisitor<'de, T> { 
+        marker: PhantomData<T>,
+        lifetime: PhantomData<&'de ()>
+    }
 
-    // impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for DescribedVisitor<'de, T> {
-    //     type Value = Described<'de, T>;
+    impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for DescribedVisitor<'de, T> {
+        type Value = Described<T>;
 
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("struct Described")
+        }
 
-    // }
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>, 
+        {
+            let descriptor: Descriptor = match seq.next_element()? {
+                Some(val) => val,
+                None => return Err(de::Error::custom("Invalid length. Expecting descriptor."))
+            };
+
+            let encoding_type: EncodingType = match seq.next_element()? {
+                Some(val) => val,
+                None => return Err(de::Error::custom("Invalid length. Expecting encoding_type"))
+            };
+
+            let value: T = match seq.next_element()? {
+                Some(val) => val,
+                None => return Err(de::Error::custom("Invalid length. Expecting value"))
+            };
+
+            Ok(Described {
+                descriptor,
+                encoding_type, 
+                value
+            })
+        }
+    }
+
+    impl<'de, T> de::Deserialize<'de> for Described<T> 
+    where 
+        T: de::Deserialize<'de>
+    {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> 
+        {
+            const FIELDS: &'static [&'static str] = &["descriptor", "encoding_type", "value"];
+            deserializer.deserialize_struct(
+                DESERIALIZE_DESCRIBED, 
+                FIELDS,
+                DescribedVisitor { 
+                    marker: PhantomData,
+                    lifetime: PhantomData
+                }
+            )
+        }
+    }
 }
 
 // #[cfg(test)]

@@ -1,7 +1,7 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{error::Error, format::{
+use crate::{described::DESERIALIZE_DESCRIBED, error::Error, format::{
         ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth, OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
     }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::SYMBOL, util::{IsArrayElement, NewType}};
@@ -692,6 +692,13 @@ where
             EncodingCodes::Map32 | EncodingCodes::Map8 => {
                 self.deserialize_map(visitor)
             },
+            EncodingCodes::DescribedType => {
+                if name != DESERIALIZE_DESCRIBED {
+                    return Err(Error::InvalidFormatCode)
+                }
+                self.reader.next()?;
+                visitor.visit_seq(DescribedAccess::new(self))
+            },
             _ => Err(Error::InvalidFormatCode)
         }
     }
@@ -968,8 +975,8 @@ enum FieldRole {
     // The bytes after the descriptor should be consumed 
     Value,
 
-    // // All fields should be already deserialized. Probably redundant
-    // End
+    // All fields should be already deserialized. Probably redundant
+    End
 }
 
 /// A special visitor access to the `Described` type
@@ -1001,8 +1008,22 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de> 
     {
-        println!(">>> Debug: ListAccess::next_element_seed");
-        todo!()
+        println!(">>> Debug: DescribedAccess::next_element_seed");
+        match self.field_role {
+            FieldRole::Descriptor => {
+                self.field_role = FieldRole::EncodingType;
+                seed.deserialize(self.as_mut()).map(Some)
+            },
+            FieldRole::EncodingType => {
+                self.field_role = FieldRole::Value;
+                seed.deserialize(self.as_mut()).map(Some)
+            },
+            FieldRole::Value => {
+                self.field_role = FieldRole::End;
+                seed.deserialize(self.as_mut()).map(Some)
+            },
+            FieldRole::End => Ok(None)
+        }
     }
 }
 
@@ -1010,7 +1031,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 mod tests {
     use serde::{Deserialize, de::DeserializeOwned};
 
-    use crate::{described::EncodingType, descriptor::Descriptor, format_code::EncodingCodes};
+    use crate::{described::{Described, EncodingType}, descriptor::Descriptor, format_code::EncodingCodes};
 
     use super::{from_reader, from_slice};
 
@@ -1239,22 +1260,6 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_nondescribed_struct() {
-        use serde::{Serialize, Deserialize};
-        use crate::ser::to_vec;
-
-        #[derive(Serialize, Deserialize, Debug, PartialEq)]
-        struct Foo {
-            bar: u32,
-            is_fool: bool
-        }
-
-        let expected = Foo {bar: 13, is_fool: true};
-        let buf = to_vec(&expected).unwrap();
-        assert_eq_from_reader_vs_expected(&buf, expected);
-    }
-
-    #[test]
     fn test_deserialize_unit_variant() {
         use serde::{Serialize, Deserialize};
 
@@ -1310,4 +1315,42 @@ mod tests {
         let encoding_type: EncodingType = from_slice(&buf).unwrap();
         println!("{:?}", encoding_type);
     }
+
+    #[test]
+    fn test_deserialize_nondescribed_struct() {
+        use serde::{Serialize, Deserialize};
+        use crate::ser::to_vec;
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq)]
+        struct Foo {
+            bar: u32,
+            is_fool: bool
+        }
+
+        let expected = Foo {bar: 13, is_fool: true};
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_described_list_struct() {
+        use serde::{Serialize, Deserialize};
+        use crate::ser::to_vec;
+        use crate::types::Symbol;
+        use crate::described::EncodingType;
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Foo {
+            a_field: i32,
+            b: bool
+        }
+
+        let foo = Foo { a_field: 13, b: false };
+        let descriptor = Descriptor::Name(Symbol::from("Foo"));
+        let foo = Described::new(EncodingType::List, descriptor, foo);
+        let buf = to_vec(&foo).unwrap();
+        let foo2: Described<Foo> = from_slice(&buf).unwrap();
+        println!("{:?}", &foo2);
+    }
+
 }
