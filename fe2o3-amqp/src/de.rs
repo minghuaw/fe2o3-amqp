@@ -923,7 +923,8 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
 
     fn unit_variant(self) -> Result<(), Self::Error> {
         println!(">>> Debug VariantAccess::unit_variant");
-        de::Deserialize::deserialize(self.de)
+        // de::Deserialize::deserialize(self.de)
+        Ok(())
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
@@ -1250,7 +1251,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_enum() {
+    fn test_deserialize_unit_variant() {
         use serde::{Serialize, Deserialize};
 
         use crate::ser::to_vec;
@@ -1266,5 +1267,23 @@ mod tests {
         let buf = to_vec(&foo).unwrap();
         let foo2: Foo = from_slice(&buf).unwrap();
         println!("{:?}", &buf);
+    }
+
+    #[test]
+    fn test_deserialize_newtype_variant() {
+        use serde::{Serialize, Deserialize};
+
+        use crate::ser::to_vec;
+
+        #[derive(Serialize, Deserialize)]
+        enum Foo {
+            A(String),
+            B(u64),
+        }
+
+        let foo = Foo::B(13);
+        let buf = to_vec(&foo).unwrap();
+        println!("{:?}", &buf);
+        let foo2: Foo = from_slice(&buf).unwrap();
     }
 }
