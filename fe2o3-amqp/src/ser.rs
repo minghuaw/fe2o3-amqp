@@ -1774,8 +1774,6 @@ mod test {
         let val = Enumeration::UnitVariant;
         let output = to_vec(&val).unwrap();
         println!("{:?}", output);
-
-        unimplemented!()
     }
 
     #[test]
@@ -1783,8 +1781,6 @@ mod test {
         let val = Enumeration::NewTypeVariant(13);
         let output = to_vec(&val).unwrap();
         println!("{:?}", output);
-
-        unimplemented!()
     }
 
     #[test]

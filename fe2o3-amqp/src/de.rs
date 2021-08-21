@@ -705,7 +705,8 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        println!(">>> Debug deserialize_enum");
+        visitor.visit_enum(VariantAccess::new(self))
     }
 
     // an identifier is either a field of a struct or a variant of an eunm
@@ -921,6 +922,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
+        println!(">>> Debug VariantAccess::unit_variant");
         de::Deserialize::deserialize(self.de)
     }
 
@@ -928,6 +930,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de> 
     {
+        println!(">>> Debug VariantAccess::newtype_variant_seed");
         seed.deserialize(self.de)
     }
 
@@ -935,6 +938,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         V: de::Visitor<'de> 
     {
+        println!(">>> Debug VariantAccess::tuple_variant");
         de::Deserializer::deserialize_tuple(self.de, len, visitor)
     }
 
@@ -942,6 +946,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         V: de::Visitor<'de> 
     {
+        println!(">>> Debug VariantAccess::struct_variant");
         de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }
 }
@@ -1242,5 +1247,24 @@ mod tests {
         let expected = Foo {bar: 13, is_fool: true};
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_enum() {
+        use serde::{Serialize, Deserialize};
+
+        use crate::ser::to_vec;
+
+        #[derive(Serialize, Deserialize)]
+        enum Foo {
+            A,
+            B,
+            C
+        }
+
+        let foo = Foo::B;
+        let buf = to_vec(&foo).unwrap();
+        let foo2: Foo = from_slice(&buf).unwrap();
+        println!("{:?}", &buf);
     }
 }
