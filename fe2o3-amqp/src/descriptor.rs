@@ -16,7 +16,7 @@ pub const DESCRIPTOR: &str = "DESCRIPTOR";
 /// 1. amqpnetlite: Symbol
 /// 2. go-amqp: Symbol?
 /// 3. qpid-proton-j2: Symbol
-// #[derive(Debug, Serialize)]
+#[derive(Debug)]
 // #[serde(rename(serialize = "DESCRIPTOR"))]
 pub enum Descriptor {
     Name(Symbol),
@@ -119,13 +119,12 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
     }
 }
 
-// impl<'de> de::Deserialize<'de> for Descriptor {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>
-//     {
-//         enum Field {
-//             name:
-//         }
-//     }
-// }
+impl<'de> de::Deserialize<'de> for Descriptor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>
+    {
+        const VARIANTS: &'static [&'static str] = &["A", "B"];
+        deserializer.deserialize_enum(DESCRIPTOR, VARIANTS, DescriptorVisitor { })
+    }
+}

@@ -1289,13 +1289,14 @@ mod tests {
 
     #[test]
     fn test_deserialize_descriptor() {
-        // use crate::ser::to_vec;
+        use crate::types::Symbol;
+        use crate::ser::to_vec;
 
-        // let descriptor = Descriptor::Code(13);
-        // let buf = to_vec(&descriptor).unwrap();
-        // let recovered: Descriptor = from_slice(&buf).unwrap();
-        // println!("{:?}", &buf);
+        let descriptor = Descriptor::Name(Symbol::from("amqp"));
+        let buf = to_vec(&descriptor).unwrap();
+        let recovered: Descriptor = from_slice(&buf).unwrap();
+        println!("{:?}", &recovered);
 
-        unimplemented!()
+        // unimplemented!()
     }
 }
