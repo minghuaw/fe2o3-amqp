@@ -556,9 +556,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         if name == DESCRIPTOR {
             value.serialize(self)
         } else {
-            let mut map_se = self.serialize_map(Some(1))?;
-            map_se.serialize_entry(&variant_index, value)?;
-            SerializeMap::end(map_se)
+            // let mut map_se = self.serialize_map(Some(1))?;
+            // map_se.serialize_entry(&variant_index, value)?;
+            // SerializeMap::end(map_se)
+
+            // TODO: how should enums be treated? 
+
+            self.serialize_u32(variant_index)?;
+            value.serialize(self)
         }
     }
 

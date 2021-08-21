@@ -1006,7 +1006,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 mod tests {
     use serde::{Deserialize, de::DeserializeOwned};
 
-    use crate::format_code::EncodingCodes;
+    use crate::{descriptor::Descriptor, format_code::EncodingCodes};
 
     use super::{from_reader, from_slice};
 
@@ -1256,7 +1256,7 @@ mod tests {
 
         use crate::ser::to_vec;
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize)]
         enum Foo {
             A,
             B,
@@ -1266,7 +1266,7 @@ mod tests {
         let foo = Foo::B;
         let buf = to_vec(&foo).unwrap();
         let foo2: Foo = from_slice(&buf).unwrap();
-        println!("{:?}", &buf);
+        println!("{:?}", &foo2);
     }
 
     #[test]
@@ -1275,7 +1275,7 @@ mod tests {
 
         use crate::ser::to_vec;
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize)]
         enum Foo {
             A(String),
             B(u64),
@@ -1283,7 +1283,19 @@ mod tests {
 
         let foo = Foo::B(13);
         let buf = to_vec(&foo).unwrap();
-        println!("{:?}", &buf);
         let foo2: Foo = from_slice(&buf).unwrap();
+        println!("{:?}", &foo2);
+    }
+
+    #[test]
+    fn test_deserialize_descriptor() {
+        // use crate::ser::to_vec;
+
+        // let descriptor = Descriptor::Code(13);
+        // let buf = to_vec(&descriptor).unwrap();
+        // let recovered: Descriptor = from_slice(&buf).unwrap();
+        // println!("{:?}", &buf);
+
+        unimplemented!()
     }
 }
