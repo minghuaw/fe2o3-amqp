@@ -736,7 +736,8 @@ where
     where
         V: de::Visitor<'de>,
     {
-        todo!()   
+        // The deserializer will only peek the next u8 
+        visitor.visit_u8(self.reader.peek()?)
     }
 }
 
@@ -1009,7 +1010,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 mod tests {
     use serde::{Deserialize, de::DeserializeOwned};
 
-    use crate::{descriptor::Descriptor, format_code::EncodingCodes};
+    use crate::{described::EncodingType, descriptor::Descriptor, format_code::EncodingCodes};
 
     use super::{from_reader, from_slice};
 
@@ -1301,5 +1302,12 @@ mod tests {
         println!("{:?}", &recovered);
 
         // unimplemented!()
+    }
+
+    #[test]
+    fn test_deserialize_encoding_type() {
+        let buf = [EncodingCodes::List8 as u8];
+        let encoding_type: EncodingType = from_slice(&buf).unwrap();
+        println!("{:?}", encoding_type);
     }
 }
