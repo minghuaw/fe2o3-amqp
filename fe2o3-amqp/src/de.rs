@@ -721,7 +721,10 @@ where
             // FIXME: Enum variant currently are serialzied as map of with variant index and a list
             EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => self.deserialize_u32(visitor),
             // Potentially using `Descriptor::Name` as identifier
-            EncodingCodes::Sym32 | EncodingCodes::Sym8 => self.deserialize_newtype_struct(SYMBOL, visitor),
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                self.newtype = NewType::Symbol;
+                self.deserialize_string(visitor)
+            },
             // Potentially using `Descriptor::Code` as identifier
             EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => self.deserialize_u64(visitor),
             // Other types should not be used to serialize identifiers
