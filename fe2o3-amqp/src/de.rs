@@ -3,7 +3,7 @@ use std::{borrow::Borrow, convert::TryInto, ops::Neg};
 
 use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, UUID, UUID_LEN}, util::{IsArrayElement, NewType}};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, TIMESTAMP, UUID, UUID_LEN}, util::{IsArrayElement, NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -129,6 +129,17 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let byte = self.reader.next()?;
                 Ok(byte as i64)
             }
+            _ => Err(Error::InvalidFormatCode),
+        }
+    }
+
+    #[inline]
+    fn parse_timestamp(&mut self) -> Result<i64, Error> {
+        match self.get_elem_code_or_read_format_code()? {
+            EncodingCodes::Timestamp => {
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(i64::from_be_bytes(bytes))
+            },
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -375,7 +386,11 @@ where
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_i64(self.parse_i64()?)
+        match self.newtype {
+            NewType::None => visitor.visit_i64(self.parse_i64()?),
+            NewType::Timestamp => visitor.visit_i64(self.parse_timestamp()?),
+            _ => unreachable!()
+        }
     }
 
     #[inline]
@@ -443,7 +458,10 @@ where
 
         match self.newtype {
             NewType::None => visitor.visit_string(self.parse_string()?),
-            NewType::Symbol => visitor.visit_string(self.parse_symbol()?),
+            NewType::Symbol => {
+                self.newtype = NewType::None;
+                visitor.visit_string(self.parse_symbol()?)
+            },
             _ => unreachable!()
         }
     }
@@ -473,8 +491,14 @@ where
         println!(">>> Debug deserialize_byte_buf");
         match self.newtype {
             NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
-            NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => visitor.visit_byte_buf(self.parse_decimal()?),
-            NewType::Uuid => visitor.visit_byte_buf(self.parse_uuid()?),
+            NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
+                self.newtype = NewType::None;
+                visitor.visit_byte_buf(self.parse_decimal()?)
+            },
+            NewType::Uuid => {
+                self.newtype = NewType::None;
+                visitor.visit_byte_buf(self.parse_uuid()?)
+            },
             _ => unreachable!()
         }
     }
@@ -541,6 +565,8 @@ where
             self.newtype = NewType::Dec128;
         } else if name == UUID {
             self.newtype = NewType::Uuid;
+        } else if name == TIMESTAMP {
+            self.newtype = NewType::Timestamp;
         }
         visitor.visit_newtype_struct(self)
     }
@@ -1250,6 +1276,16 @@ mod tests {
         let expected = Uuid::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_slice_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_timestamp() {
+        use crate::ser::to_vec;
+        use crate::types::Timestamp;
+
+        let expected = Timestamp::from(0);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]

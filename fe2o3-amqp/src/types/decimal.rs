@@ -17,7 +17,6 @@ mod dec32 {
     pub const DECIMAL32: &str = "DECIMAL32";
     pub const DECIMAL32_LEN: usize = 4;
     
-    /// TODO: implement Serialize and Deserialize
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec32([u8; DECIMAL32_LEN]);
     impl From<[u8; DECIMAL32_LEN]> for Dec32 {
@@ -86,8 +85,6 @@ mod dec64 {
     pub const DECIMAL64: &str = "DECIMAL64";
     pub const DECIMAL64_LEN: usize = 8;
 
-
-    /// TODO: implement Serialize and Deserialize
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec64([u8; DECIMAL64_LEN]);
     
@@ -157,7 +154,6 @@ mod dec128 {
     pub const DECIMAL128: &str = "DECIMAL128";
     pub const DECIMAL128_LEN: usize = 16;
 
-    /// TODO: implement Serialize and Deserialize
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec128([u8; DECIMAL128_LEN]);
     
