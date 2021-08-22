@@ -1,7 +1,7 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{described::DESERIALIZE_DESCRIBED, error::Error, format::{
+use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{
         ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth, OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
     }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::SYMBOL, util::{IsArrayElement, NewType}};
@@ -308,17 +308,18 @@ where
             EncodingCodes::VBin32 | EncodingCodes::VBin8 => self.deserialize_byte_buf(visitor),
             EncodingCodes::Null => self.deserialize_unit(visitor),
 
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => self.deserialize_newtype_struct(SYMBOL, visitor),
+            EncodingCodes::DescribedType => self.deserialize_struct(DESERIALIZE_DESCRIBED, DESCRIBED_FIELDS, visitor),
+            EncodingCodes::Array32 | EncodingCodes::Array8 => self.deserialize_seq(visitor),
+            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => self.deserialize_seq(visitor),
+            EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
+
             // unimplemented
-            EncodingCodes::Sym32 | EncodingCodes::Sym8 => todo!(),
-            EncodingCodes::DescribedType => todo!(),
             EncodingCodes::Decimal32 => todo!(),
             EncodingCodes::Decimal64 => todo!(),
             EncodingCodes::Decimal128 => todo!(),
             EncodingCodes::Timestamp => todo!(),
             EncodingCodes::Uuid => todo!(),
-            EncodingCodes::Array32 | EncodingCodes::Array8 => todo!(),
-            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => todo!(),
-            EncodingCodes::Map32 | EncodingCodes::Map8 => todo!(),
         }
     }
 

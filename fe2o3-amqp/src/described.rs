@@ -11,6 +11,8 @@ pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
 pub const DESCRIBED_MAP: &str = "DESCRIBED_MAP";
 pub const DESERIALIZE_DESCRIBED: &str = "DESERIALIZE_DESCRIBED";
 
+pub const DESCRIBED_FIELDS: &'static [&'static str] = &["descriptor", "encoding_type", "value"];
+
 pub const ENCODING_TYPE: &str = "ENCODING_TYPE";
 
 #[derive(Debug)]
@@ -217,10 +219,9 @@ mod described {
         where
             D: serde::Deserializer<'de> 
         {
-            const FIELDS: &'static [&'static str] = &["descriptor", "encoding_type", "value"];
             deserializer.deserialize_struct(
                 DESERIALIZE_DESCRIBED, 
-                FIELDS,
+                DESCRIBED_FIELDS,
                 DescribedVisitor { 
                     marker: PhantomData,
                     lifetime: PhantomData
