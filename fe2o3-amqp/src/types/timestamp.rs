@@ -52,9 +52,26 @@
 //     }
 // }
 
+use serde::ser;
+
 
 pub const TIMESTAMP: &str = "TIMESTAMP";
 
 /// 64-bit two’s-complement integer representing milliseconds since the unix epoch
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(i64);
+
+impl From<i64> for Timestamp {
+    fn from(val: i64) -> Self {
+        Self(val)
+    }
+}
+
+impl ser::Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer 
+    {
+        serializer.serialize_newtype_struct(TIMESTAMP, &self.0)
+    }   
+}

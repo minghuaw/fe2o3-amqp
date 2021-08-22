@@ -195,29 +195,42 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        match self.is_array_elem {
-            IsArrayElement::False => match v {
-                val @ -128..=127 => {
-                    let buf = [EncodingCodes::SmallLong as u8, val as u8];
-                    self.writer.write_all(&buf)?;
-                }
-                val @ _ => {
-                    let code = [EncodingCodes::Long as u8];
-                    self.writer.write_all(&code)?;
-                    let buf: [u8; 8] = val.to_be_bytes();
-                    self.writer.write_all(&buf)?;
+        match self.newtype {
+            NewType::None => {
+                match self.is_array_elem {
+                    IsArrayElement::False => match v {
+                        val @ -128..=127 => {
+                            let buf = [EncodingCodes::SmallLong as u8, val as u8];
+                            self.writer.write_all(&buf)?;
+                        }
+                        val @ _ => {
+                            let code = [EncodingCodes::Long as u8];
+                            self.writer.write_all(&code)?;
+                            let buf: [u8; 8] = val.to_be_bytes();
+                            self.writer.write_all(&buf)?;
+                        }
+                    },
+                    IsArrayElement::FirstElement => {
+                        let code = [EncodingCodes::Long as u8];
+                        self.writer.write_all(&code)?;
+                        let buf: [u8; 8] = v.to_be_bytes();
+                        self.writer.write_all(&buf)?;
+                    }
+                    IsArrayElement::OtherElement => {
+                        let buf: [u8; 8] = v.to_be_bytes();
+                        self.writer.write_all(&buf)?;
+                    }
                 }
             },
-            IsArrayElement::FirstElement => {
-                let code = [EncodingCodes::Long as u8];
-                self.writer.write_all(&code)?;
-                let buf: [u8; 8] = v.to_be_bytes();
+            NewType::Timestamp => {
+                if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
+                    let code = [EncodingCodes::Timestamp as u8];
+                    self.writer.write_all(&code)?;
+                }
+                let buf = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
-            }
-            IsArrayElement::OtherElement => {
-                let buf: [u8; 8] = v.to_be_bytes();
-                self.writer.write_all(&buf)?;
-            }
+            },
+            _ => unreachable!()
         }
 
         Ok(())
@@ -492,12 +505,22 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
                 self.newtype = NewType::None;
             },
-            NewType::Timestamp => {
-                todo!()
-            },
+            // NewType::Timestamp => {
+            //     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
+            //         let code = [EncodingCodes::Timestamp as u8];
+            //         self.writer.write_all(&code)?;
+            //     }
+            //     self.newtype = NewType::None;
+            // },
             NewType::Uuid => {
-                todo!()
+                if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
+                    let code = [EncodingCodes::Uuid as u8];
+                    self.writer.write_all(&code)?;
+                }
+                self.newtype = NewType::None;
             },
+            // Timestamp should be handled by i64
+            NewType::Timestamp => unreachable!(),
             NewType::Array => unreachable!(),
             NewType::Symbol => unreachable!(),
         }
@@ -1270,7 +1293,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::{described::Described, descriptor::Descriptor, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64}};
+    use crate::{described::Described, descriptor::Descriptor, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid}};
 
     use super::*;
 
@@ -1886,5 +1909,26 @@ mod test {
             0, 0, 0, 0, 0, 0, 0, 0,
         ];
         assert_eq_on_serialized_vs_expected(d128, expected);
+    }
+
+    #[test]
+    fn test_serialize_timestamp() {
+        let val = Timestamp::from(0);
+        let expected = vec![
+            EncodingCodes::Timestamp as u8,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_uuid() {
+        let val = Uuid::from([0; 16]);
+        let expected = vec![
+            EncodingCodes::Uuid as u8,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        assert_eq_on_serialized_vs_expected(val, expected);
     }
 }
