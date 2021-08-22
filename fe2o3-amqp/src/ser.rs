@@ -495,7 +495,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             NewType::Timestamp => {
                 todo!()
             },
-            _ => unreachable!()
+            NewType::Uuid => {
+                todo!()
+            },
+            NewType::Array => unreachable!(),
+            NewType::Symbol => unreachable!(),
         }
 
         self.writer.write_all(v).map_err(Into::into)

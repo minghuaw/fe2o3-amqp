@@ -1,8 +1,7 @@
 use serde::de::{self};
 use std::{borrow::Borrow, convert::TryInto};
 
-use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{
-        ArrayWidth, Category, CompoundWidth, FixedWidth, VariableWidth, OFFSET_ARRAY32,
+use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
     }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::SYMBOL, util::{IsArrayElement, NewType}};
 
@@ -462,7 +461,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // TODO: considering adding a buffer to the reader
         visitor.visit_bytes(&self.parse_byte_buf()?)
     }
 
@@ -704,8 +702,8 @@ where
 
     fn deserialize_enum<V>(
         self,
-        name: &'static str,
-        variants: &'static [&'static str],
+        _name: &'static str,
+        _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
