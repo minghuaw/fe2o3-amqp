@@ -15,12 +15,13 @@ mod dec32 {
     use super::*;
 
     pub const DECIMAL32: &str = "DECIMAL32";
+    pub const DECIMAL32_LEN: usize = 4;
     
     /// TODO: implement Serialize and Deserialize
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Dec32([u8; 4]);
-    impl From<[u8; 4]> for Dec32 {
-        fn from(val: [u8; 4]) -> Self {
+    pub struct Dec32([u8; DECIMAL32_LEN]);
+    impl From<[u8; DECIMAL32_LEN]> for Dec32 {
+        fn from(val: [u8; DECIMAL32_LEN]) -> Self {
             Self(val)
         }
     }
@@ -29,12 +30,12 @@ mod dec32 {
         type Error = Error;
     
         fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-            if value.len() != 4 {
+            if value.len() != DECIMAL32_LEN {
                 return Err(Error::InvalidLength)
             }
     
-            let mut buf = [0u8; 4];
-            buf.copy_from_slice(&value[..4]);
+            let mut buf = [0u8; DECIMAL32_LEN];
+            buf.copy_from_slice(&value[..DECIMAL32_LEN]);
             Ok(Self(buf))
         }
     }
@@ -83,13 +84,15 @@ mod dec64 {
     use super::*;
 
     pub const DECIMAL64: &str = "DECIMAL64";
+    pub const DECIMAL64_LEN: usize = 8;
+
 
     /// TODO: implement Serialize and Deserialize
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Dec64([u8; 8]);
+    pub struct Dec64([u8; DECIMAL64_LEN]);
     
-    impl From<[u8; 8]> for Dec64 {
-        fn from(val: [u8; 8]) -> Self {
+    impl From<[u8; DECIMAL64_LEN]> for Dec64 {
+        fn from(val: [u8; DECIMAL64_LEN]) -> Self {
             Self(val)
         }
     }
@@ -98,12 +101,12 @@ mod dec64 {
         type Error = Error;
     
         fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-            if value.len() != 8 {
+            if value.len() != DECIMAL64_LEN {
                 return Err(Error::InvalidLength)
             }
     
-            let mut buf = [0u8; 8];
-            buf.copy_from_slice(&value[..8]);
+            let mut buf = [0u8; DECIMAL64_LEN];
+            buf.copy_from_slice(&value[..DECIMAL64_LEN]);
             Ok(Self(buf))
         }
     }
@@ -152,12 +155,14 @@ mod dec128 {
     use super::*;
 
     pub const DECIMAL128: &str = "DECIMAL128";
+    pub const DECIMAL128_LEN: usize = 16;
+
     /// TODO: implement Serialize and Deserialize
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Dec128([u8; 16]);
+    pub struct Dec128([u8; DECIMAL128_LEN]);
     
-    impl From<[u8; 16]> for Dec128 {
-        fn from(val: [u8; 16]) -> Self {
+    impl From<[u8; DECIMAL128_LEN]> for Dec128 {
+        fn from(val: [u8; DECIMAL128_LEN]) -> Self {
             Self(val)
         }
     }
@@ -166,12 +171,12 @@ mod dec128 {
         type Error = Error;
     
         fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-            if value.len() != 16 {
+            if value.len() != DECIMAL128_LEN {
                 return Err(Error::InvalidLength)
             }
     
-            let mut buf = [0u8; 16];
-            buf.copy_from_slice(&value[..16]);
+            let mut buf = [0u8; DECIMAL128_LEN];
+            buf.copy_from_slice(&value[..DECIMAL128_LEN]);
             Ok(Self(buf))
         }
     }

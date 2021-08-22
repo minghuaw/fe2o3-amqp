@@ -3,7 +3,7 @@ use std::{borrow::Borrow, convert::TryInto, ops::Neg};
 
 use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL}, util::{IsArrayElement, NewType}};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, UUID, UUID_LEN}, util::{IsArrayElement, NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -267,15 +267,16 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     fn parse_decimal(&mut self) -> Result<Vec<u8>, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Decimal32 => {
-                self.reader.read_bytes(4)
-            },
-            EncodingCodes::Decimal64 => {
-                self.reader.read_bytes(8)
-            },
-            EncodingCodes::Decimal128 => {
-                self.reader.read_bytes(16)
-            },
+            EncodingCodes::Decimal32 => self.reader.read_bytes(DECIMAL32_LEN),
+            EncodingCodes::Decimal64 => self.reader.read_bytes(DECIMAL64_LEN),
+            EncodingCodes::Decimal128 => self.reader.read_bytes(DECIMAL128_LEN),
+            _ => Err(Error::InvalidFormatCode)
+        }
+    }
+
+    fn parse_uuid(&mut self) -> Result<Vec<u8>, Error> {
+        match self.get_elem_code_or_read_format_code()? {
+            EncodingCodes::Uuid => self.reader.read_bytes(UUID_LEN),
             _ => Err(Error::InvalidFormatCode)
         }
     }
@@ -473,6 +474,7 @@ where
         match self.newtype {
             NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
             NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => visitor.visit_byte_buf(self.parse_decimal()?),
+            NewType::Uuid => visitor.visit_byte_buf(self.parse_uuid()?),
             _ => unreachable!()
         }
     }
@@ -537,6 +539,8 @@ where
             self.newtype = NewType::Dec64;
         } else if name == DECIMAL128 {
             self.newtype = NewType::Dec128;
+        } else if name == UUID {
+            self.newtype = NewType::Uuid;
         }
         visitor.visit_newtype_struct(self)
     }
@@ -1234,6 +1238,16 @@ mod tests {
         assert_eq_from_slice_vs_expected(&buf, expected);
         
         let expected = Dec128::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_slice_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_uuid() {
+        use crate::ser::to_vec;
+        use crate::types::Uuid;
+
+        let expected = Uuid::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_slice_vs_expected(&buf, expected);
     }
