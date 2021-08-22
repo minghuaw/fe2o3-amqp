@@ -1,9 +1,8 @@
 use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
-use uuid::Uuid;
 
-use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp};
+use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid};
 
 pub const U32_MAX_AS_USIZE: usize = u32::MAX as usize;
 

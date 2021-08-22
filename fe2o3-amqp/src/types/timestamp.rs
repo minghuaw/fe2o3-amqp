@@ -52,6 +52,9 @@
 //     }
 // }
 
+
+pub const TIMESTAMP: &str = "TIMESTAMP";
+
 /// 64-bit two’s-complement integer representing milliseconds since the unix epoch
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(i64);

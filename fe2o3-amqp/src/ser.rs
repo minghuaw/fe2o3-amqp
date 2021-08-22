@@ -5,15 +5,7 @@ use serde::{
     Serialize,
 };
 
-use crate::{
-    described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
-    descriptor::DESCRIPTOR,
-    error::Error,
-    format_code::EncodingCodes,
-    types::{ARRAY, SYMBOL},
-    util::{IsArrayElement, NewType},
-    value::U32_MAX_AS_USIZE,
-};
+use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -408,7 +400,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                             _ => return Err(Error::Message("Too long".into())),
                         }
                     }
-                    NewType::Array => unreachable!(),
+                    _ => unreachable!(),
                 }
             }
             IsArrayElement::FirstElement => match self.newtype {
@@ -424,7 +416,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.writer.write_all(&code)?;
                     self.writer.write_all(&width)?;
                 }
-                NewType::Array => unreachable!(),
+                _ => unreachable!(),
             },
             IsArrayElement::OtherElement => match self.newtype {
                 NewType::Symbol => {
@@ -435,7 +427,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     let width: [u8; 4] = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
-                NewType::Array => unreachable!(),
+                _ => unreachable!(),
             },
         }
 
@@ -537,6 +529,16 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.newtype = NewType::Symbol;
         } else if name == ARRAY {
             self.newtype = NewType::Array;
+        } else if name == DECIMAL32 {
+            self.newtype = NewType::Dec32;
+        } else if name == DECIMAL64 {
+            self.newtype = NewType::Dec64;
+        } else if name == DECIMAL128 {
+            self.newtype = NewType::Dec128;
+        } else if name == TIMESTAMP {
+            self.newtype = NewType::Timestamp
+        } else if name == UUID {
+            self.newtype = NewType::Uuid
         }
         value.serialize(self)
     }
@@ -773,7 +775,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
                     _ => Serializer::new(&mut self.buf, IsArrayElement::OtherElement),
                 }
             }
-            NewType::Symbol => unreachable!(),
+            _ => unreachable!()
         };
 
         self.num = self.num + 1;
@@ -786,7 +788,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
         match se.newtype {
             NewType::None => write_list(&mut se.writer, num, buf, &se.is_array_elem),
             NewType::Array => write_array(&mut se.writer, num, buf, &se.is_array_elem),
-            NewType::Symbol => unreachable!(),
+            _ => unreachable!()
         }
     }
 }

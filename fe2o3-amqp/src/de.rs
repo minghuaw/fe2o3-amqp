@@ -428,9 +428,7 @@ where
         match self.newtype {
             NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => visitor.visit_string(self.parse_symbol()?),
-            NewType::Array => {
-                todo!()
-            }
+            _ => unreachable!()
         }
     }
 
