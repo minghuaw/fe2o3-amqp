@@ -502,7 +502,7 @@ where
     {
         if name == SYMBOL {
             self.newtype = NewType::Symbol;
-        }
+        } 
         visitor.visit_newtype_struct(self)
     }
 
