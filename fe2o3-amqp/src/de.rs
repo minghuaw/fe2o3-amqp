@@ -1,9 +1,9 @@
 use serde::de::{self};
-use std::{borrow::Borrow, convert::TryInto};
+use std::{borrow::Borrow, convert::TryInto, ops::Neg};
 
 use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::SYMBOL, util::{IsArrayElement, NewType}};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL}, util::{IsArrayElement, NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -265,6 +265,21 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    fn parse_decimal(&mut self) -> Result<Vec<u8>, Error> {
+        match self.get_elem_code_or_read_format_code()? {
+            EncodingCodes::Decimal32 => {
+                self.reader.read_bytes(4)
+            },
+            EncodingCodes::Decimal64 => {
+                self.reader.read_bytes(8)
+            },
+            EncodingCodes::Decimal128 => {
+                self.reader.read_bytes(16)
+            },
+            _ => Err(Error::InvalidFormatCode)
+        }
+    }
+
     fn parse_unit(&mut self) -> Result<(), Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Null => Ok(()),
@@ -454,14 +469,28 @@ where
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_byte_buf(self.parse_byte_buf()?)
+        println!(">>> Debug deserialize_byte_buf");
+        match self.newtype {
+            NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
+            NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => visitor.visit_byte_buf(self.parse_decimal()?),
+            _ => unreachable!()
+        }
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_bytes(&self.parse_byte_buf()?)
+        println!(">>> Debug deserialize_bytes");
+        let len = match self.get_elem_code_or_read_format_code()? {
+            EncodingCodes::VBin8 => self.reader.next()? as usize,
+            EncodingCodes::VBin32 => {
+                let bytes = self.reader.read_const_bytes()?;
+                u32::from_be_bytes(bytes) as usize
+            },
+            _ => return Err(Error::InvalidFormatCode),
+        };
+        self.reader.forward_read_bytes(len, visitor)
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -502,7 +531,13 @@ where
     {
         if name == SYMBOL {
             self.newtype = NewType::Symbol;
-        } 
+        } else if name == DECIMAL32 {
+            self.newtype = NewType::Dec32;
+        } else if name == DECIMAL64 {
+            self.newtype = NewType::Dec64;
+        } else if name == DECIMAL128 {
+            self.newtype = NewType::Dec128;
+        }
         visitor.visit_newtype_struct(self)
     }
 
@@ -510,6 +545,8 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug deserialize_seq");
+
         let code = self.get_elem_code_or_read_format_code()?;
 
         match code {
@@ -582,6 +619,8 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug deserialize_tuple");
+
         // Tuple will always be deserialized as List
         let code = self.get_elem_code_or_read_format_code()?;
 
@@ -1170,12 +1209,42 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_bytes() {
+        use serde_bytes::{Bytes, ByteBuf};
+        use crate::ser::to_vec;
+
+        let val = [1u8, 2, 3, 4];
+        let buf = to_vec(&Bytes::new(&val)).unwrap();
+        println!("{:?}", buf);
+        let recovered: ByteBuf = from_slice(&buf).unwrap();
+        println!("{:?}", &recovered);
+    }
+
+    #[test]
+    fn test_deserialize_decimal() {
+        use crate::ser::to_vec;
+        use crate::types::{Dec32, Dec64, Dec128};
+
+        let expected = Dec32::from([1, 2, 3, 4]);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_slice_vs_expected(&buf, expected);
+
+        let expected = Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_slice_vs_expected(&buf, expected);
+        
+        let expected = Dec128::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_slice_vs_expected(&buf, expected);
+    }
+
+    #[test]
     fn test_deserialize_symbol() {
         use crate::types::Symbol;
         let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         let expected = Symbol::from("amqp");
         assert_eq_from_reader_vs_expected(buf, expected);
-    }
+    }   
 
     #[test]
     fn test_deserialize_array() {

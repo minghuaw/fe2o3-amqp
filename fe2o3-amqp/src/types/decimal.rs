@@ -10,6 +10,8 @@ use crate::error::Error;
 
 
 mod dec32 {
+    use serde_bytes::ByteBuf;
+
     use super::*;
 
     pub const DECIMAL32: &str = "DECIMAL32";
@@ -46,9 +48,38 @@ mod dec32 {
         }
     }
 
+    struct Visitor { }
+
+    impl<'de> de::Visitor<'de> for Visitor {
+        type Value = Dec32;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("struct Dec32")
+        }
+
+        fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>, 
+        {
+            let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+            Dec32::try_from(val.as_slice())
+                .map_err(|err| de::Error::custom(err.to_string()))
+        }
+    }
+
+    impl<'de> de::Deserialize<'de> for Dec32 {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> 
+        {
+            deserializer.deserialize_newtype_struct(DECIMAL32, Visitor { })
+        }
+    }
 }
 
 mod dec64 {
+    use serde_bytes::ByteBuf;
+
     use super::*;
 
     pub const DECIMAL64: &str = "DECIMAL64";
@@ -85,9 +116,39 @@ mod dec64 {
             serializer.serialize_newtype_struct(DECIMAL64, Bytes::new(&self.0))
         }
     }
+
+    struct Visitor { }
+
+    impl<'de> de::Visitor<'de> for Visitor {
+        type Value = Dec64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("struct Dec64")
+        }
+
+        fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>, 
+        {
+            let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+            Dec64::try_from(val.as_slice())
+                .map_err(|err| de::Error::custom(err.to_string()))
+        }
+    }
+
+    impl<'de> de::Deserialize<'de> for Dec64 {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> 
+        {
+            deserializer.deserialize_newtype_struct(DECIMAL64, Visitor { })
+        }
+    }
 }
 
 mod dec128 {
+    use serde_bytes::ByteBuf;
+
     use super::*;
 
     pub const DECIMAL128: &str = "DECIMAL128";
@@ -121,6 +182,34 @@ mod dec128 {
             S: serde::Serializer 
         {
             serializer.serialize_newtype_struct(DECIMAL128, Bytes::new(&self.0))
+        }
+    }
+
+    struct Visitor { }
+
+    impl<'de> de::Visitor<'de> for Visitor {
+        type Value = Dec128;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("struct Dec128")
+        }
+
+        fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>, 
+        {
+            let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+            Dec128::try_from(val.as_slice())
+                .map_err(|err| de::Error::custom(err.to_string()))
+        }
+    }
+
+    impl<'de> de::Deserialize<'de> for Dec128 {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> 
+        {
+            deserializer.deserialize_newtype_struct(DECIMAL128, Visitor { })    
         }
     }
 }
