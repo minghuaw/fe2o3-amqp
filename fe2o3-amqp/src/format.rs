@@ -1,7 +1,3 @@
-use std::convert::TryFrom;
-
-use crate::{error::Error, format_code::EncodingCodes};
-
 /// offset includes 1 byte of `count`
 pub const OFFSET_LIST8: usize = 1;
 /// offset includes 4 byte of `count`

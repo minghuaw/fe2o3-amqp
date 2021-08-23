@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use serde::ser::{self, Serialize, SerializeStruct, Serializer};
+use serde::ser;
 use serde::de;
 
 use crate::descriptor::{Descriptor, DESCRIPTOR};
@@ -129,11 +129,13 @@ impl<T: Debug> Debug for Described<T> {
     }
 }
 
-impl<'a, T: Serialize> Serialize for Described<T> {
+impl<'a, T: ser::Serialize> ser::Serialize for Described<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer,
+        S: ser::Serializer,
     {
+        use serde::ser::SerializeStruct;
+
         let name = match self.encoding_type {
             EncodingType::Basic => DESCRIBED_BASIC,
             EncodingType::List => DESCRIBED_LIST,
@@ -148,29 +150,7 @@ impl<'a, T: Serialize> Serialize for Described<T> {
 
 mod described {
     use std::{marker::PhantomData};
-    use serde::Deserialize;
-
-    use crate::error::Error;
     use super::*;
-
-    // enum Field {
-    //     Descriptor,
-    //     EncodingType,
-    //     Value
-    // }
-
-    // struct FieldVisitor { }
-
-    // impl<'de> de::Visitor<'de> for FieldVisitor {
-    //     type Value = Field;
-
-    //     fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
-    //     where
-    //         A: de::SeqAccess<'de>, 
-    //     {
-            
-    //     }
-    // }
 
     struct DescribedVisitor<'de, T> { 
         marker: PhantomData<T>,
@@ -230,9 +210,3 @@ mod described {
         }
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     #[test]
-//     fn
-// }

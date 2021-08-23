@@ -1,11 +1,5 @@
-use std::convert::TryInto;
-use std::fmt::Write;
-
 use serde::ser::{Serialize};
 use serde::de;
-// use serde::{Serialize, Deserialize};
-
-use crate::format_code::EncodingCodes;
 use crate::types::Symbol;
 
 pub const DESCRIPTOR: &str = "DESCRIPTOR";

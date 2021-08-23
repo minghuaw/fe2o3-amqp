@@ -1,9 +1,9 @@
 use serde::de::{self};
-use std::{borrow::Borrow, convert::TryInto, ops::Neg};
+use std::{convert::TryInto};
 
 use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, TIMESTAMP, UUID, UUID_LEN}, util::{IsArrayElement, NewType}};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, TIMESTAMP, UUID, UUID_LEN}, util::{NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -19,13 +19,7 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
 
 pub struct Deserializer<R> {
     reader: R,
-
-    // a temporary buffer for borrowed value
-    // buf: Vec<u8>,
-
     newtype: NewType,
-
-    // is_array_element: IsArrayElement,
     elem_format_code: Option<EncodingCodes>,
 }
 
@@ -33,9 +27,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            // buf: Vec::new(),
             newtype: Default::default(),
-            // is_array_element: IsArrayElement::False,
             elem_format_code: None,
         }
     }
@@ -43,9 +35,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn symbol(reader: R) -> Self {
         Self {
             reader,
-            // buf: Vec::new(),
             newtype: NewType::Symbol,
-            // is_array_element: IsArrayElement::False,
             elem_format_code: None,
         }
     }

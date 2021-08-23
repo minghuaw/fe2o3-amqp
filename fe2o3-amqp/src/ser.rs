@@ -1,8 +1,7 @@
 use std::io::Write;
 
 use serde::{
-    ser::{self, SerializeMap, SerializeTuple},
-    Serialize,
+    ser, Serialize,
 };
 
 use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
@@ -1081,12 +1080,12 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleSerializer<'a, W> {
     where
         T: Serialize,
     {
-        <Self as SerializeTuple>::serialize_element(self, value)
+        <Self as ser::SerializeTuple>::serialize_element(self, value)
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        <Self as SerializeTuple>::end(self)
+        <Self as ser::SerializeTuple>::end(self)
     }
 }
 
