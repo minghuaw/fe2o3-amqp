@@ -102,9 +102,9 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
 
     let impl_try_from = quote!{
         impl std::convert::TryFrom<#ident> for fe2o3_amqp::described::Described<#ident> {
-            type Error = fe2o3_amqp::error::Error;
+            type Error = #ident;
 
-            fn try_from(value: #ident) -> Result<fe2o3_amqp::described::Described<#ident>, Self::Error> {
+            fn try_from(value: #ident) -> Result<Self, Self::Error> {
                 Ok(
                     fe2o3_amqp::described::Described::new(
                         #encoding,
@@ -115,86 +115,6 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
             }
         }
     };
-
-    // let try_from_impl = match input.data {
-    //     syn::Data::Struct(s) => {
-    //         match &s.fields {
-    //             syn::Fields::Named(named) => {
-                    
-    //             },
-    //             syn::Fields::Unnamed(unnamed) => {
-    //                 match s.fields.len() {
-    //                     0 => {
-    //                         return Err(syn::Error::new(unnamed.span(), "At least one field should be present"))
-    //                             .unwrap_or_else(|err| err.to_compile_error())
-    //                             .into()
-    //                     },
-    //                     1 => {
-    //                         quote!{
-    //                             impl std::convert::TryFrom<#ident> for fe2o3_amqp::described::Described<#ident> {
-    //                                 type Error = fe2o3_amqp::error::Error;
-
-    //                                 fn try_from(value: #ident) -> Result<fe2o3_amqp::described::Described<#ident>, Self::Error> {
-    //                                     Ok(
-    //                                         fe2o3_amqp::described::Described::new(
-    //                                             fe2o3_amqp::described::EncodingType::Basic,
-    //                                             #descriptor,
-    //                                             value
-    //                                         )
-    //                                     )
-    //                                 }
-    //                             }
-    //                         }
-    //                     },
-    //                     _ => {
-    //                         quote!{
-    //                             impl std::convert::TryFrom<#ident> for fe2o3_amqp::described::Described<#ident> {
-    //                                 type Error = fe2o3_amqp::error::Error;
-
-    //                                 fn try_from(value: #ident) -> Result<fe2o3_amqp::described::Described<#ident>, Self::Error> {
-    //                                     Ok(
-    //                                         fe2o3_amqp::described::Described::new(
-    //                                             fe2o3_amqp::described::EncodingType::List,
-    //                                             #descriptor,
-    //                                             value
-    //                                         )
-    //                                     )
-    //                                 }
-    //                             }
-    //                         }
-    //                     } 
-    //                 }
-    //             },
-    //             syn::Fields::Unit => {
-    //                 quote!{
-    //                     impl std::convert::TryFrom<#ident> for fe2o3_amqp::described::Described<#ident> {
-    //                         type Error = fe2o3_amqp::error::Error;
-
-    //                         fn try_from(value: #ident) -> Result<fe2o3_amqp::described::Described<#ident>, Self::Error> {
-    //                             Ok(
-    //                                 fe2o3_amqp::described::Described::new(
-    //                                     fe2o3_amqp::described::EncodingType::List,
-    //                                     #descriptor,
-    //                                     value
-    //                                 )
-    //                             )
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     },
-    //     syn::Data::Enum(e) => {
-    //         return Err(syn::Error::new(e.enum_token.span, "Enum not implemented"))
-    //             .unwrap_or_else(|err| err.to_compile_error())
-    //             .into();
-    //     },
-    //     syn::Data::Union(u) => {
-    //         return Err(syn::Error::new(u.union_token.span, "Union not implemented"))
-    //             .unwrap_or_else(|err| err.to_compile_error())
-    //             .into();
-    //     }
-    // };
 
     let output = quote::quote! {
         #impl_try_from

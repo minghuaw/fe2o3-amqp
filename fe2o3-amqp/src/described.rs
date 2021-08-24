@@ -210,3 +210,25 @@ mod described {
         }
     }
 }
+
+// implement conversion to described type for the fundamental types
+
+macro_rules! impl_err_try_conversion_to_described {
+    ($($t:ty), *) => {
+        $(
+            impl std::convert::TryFrom<$t> for Described<$t> {
+                type Error = $t;
+
+                fn try_from(value: $t) -> Result<Self, Self::Error> {
+                    Err(value)
+                }
+            }
+        )*
+    };
+}
+
+impl_err_try_conversion_to_described!(
+    u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64,
+    bool
+    // TODO: add more fundamental types
+);
