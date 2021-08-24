@@ -52,8 +52,8 @@
 //     }
 // }
 
-use serde::ser;
 use serde::de;
+use serde::ser;
 
 pub const TIMESTAMP: &str = "TIMESTAMP";
 
@@ -70,13 +70,13 @@ impl From<i64> for Timestamp {
 impl ser::Serialize for Timestamp {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         serializer.serialize_newtype_struct(TIMESTAMP, &self.0)
-    }   
+    }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = Timestamp;
@@ -87,7 +87,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de>, 
+        D: serde::Deserializer<'de>,
     {
         let val: i64 = de::Deserialize::deserialize(deserializer)?;
         Ok(Timestamp(val))
@@ -97,8 +97,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for Timestamp {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(TIMESTAMP, Visitor { })
+        deserializer.deserialize_newtype_struct(TIMESTAMP, Visitor {})
     }
 }

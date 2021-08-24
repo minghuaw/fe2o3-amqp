@@ -27,7 +27,7 @@ pub enum Error {
     SequenceLengthMismatch,
 
     #[error("Invalid length for decimal float point number")]
-    InvalidLength
+    InvalidLength,
 }
 
 impl ser::Error for Error {

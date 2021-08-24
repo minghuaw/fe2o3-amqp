@@ -100,7 +100,6 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::read::IoReader;

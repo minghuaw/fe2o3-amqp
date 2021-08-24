@@ -5,26 +5,21 @@ use crate::error::Error;
 use super::{private, Read};
 
 pub struct SliceReader<'s> {
-    slice: &'s [u8]
+    slice: &'s [u8],
 }
 
 impl<'s> SliceReader<'s> {
     pub fn new(slice: &'s [u8]) -> Self {
-        Self {
-            slice
-        }
+        Self { slice }
     }
 
     pub fn unexpected_eof(msg: &str) -> Error {
-        Error::Io(io::Error::new(
-            io::ErrorKind::UnexpectedEof, 
-            msg
-        ))
+        Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, msg))
     }
 
     pub fn get_byte_slice(&mut self, n: usize) -> Result<&'s [u8], Error> {
         if self.slice.len() < n {
-            return Err(Self::unexpected_eof(""))
+            return Err(Self::unexpected_eof(""));
         }
         let (read_slice, remaining) = self.slice.split_at(n);
         self.slice = remaining;
@@ -32,7 +27,7 @@ impl<'s> SliceReader<'s> {
     }
 }
 
-impl<'s> private::Sealed for SliceReader<'s> { }
+impl<'s> private::Sealed for SliceReader<'s> {}
 
 impl<'s> Read<'s> for SliceReader<'s> {
     fn peek(&mut self) -> Result<u8, Error> {
@@ -57,7 +52,7 @@ impl<'s> Read<'s> for SliceReader<'s> {
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
         let n = buf.len();
-        
+
         if self.slice.len() < n {
             Err(Self::unexpected_eof(""))
         } else {
@@ -72,14 +67,14 @@ impl<'s> Read<'s> for SliceReader<'s> {
 
     fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
-        V: serde::de::Visitor<'s> 
+        V: serde::de::Visitor<'s>,
     {
         visitor.visit_borrowed_bytes(self.get_byte_slice(len)?)
     }
 
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
-        V: serde::de::Visitor<'s> 
+        V: serde::de::Visitor<'s>,
     {
         let str_slice = std::str::from_utf8(self.get_byte_slice(len)?)?;
         visitor.visit_borrowed_str(str_slice)
@@ -127,7 +122,6 @@ mod tests {
         assert!(peek_none.is_err());
         assert!(next_none.is_err());
     }
-
 
     #[test]
     fn test_read_const_bytes_without_peek() {

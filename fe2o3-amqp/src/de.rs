@@ -1,9 +1,18 @@
 use serde::de::{self};
-use std::{convert::TryInto};
+use std::convert::TryInto;
 
-use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{OFFSET_ARRAY32,
-        OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{NewType}};
+use crate::{
+    error::Error,
+    fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
+    format::{
+        OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
+    },
+    format_code::EncodingCodes,
+    read::{IoReader, Read, SliceReader},
+    types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED},
+    util::NewType,
+};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -129,7 +138,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Timestamp => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(i64::from_be_bytes(bytes))
-            },
+            }
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -271,14 +280,14 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Decimal32 => self.reader.read_bytes(DECIMAL32_WIDTH),
             EncodingCodes::Decimal64 => self.reader.read_bytes(DECIMAL64_WIDTH),
             EncodingCodes::Decimal128 => self.reader.read_bytes(DECIMAL128_WIDTH),
-            _ => Err(Error::InvalidFormatCode)
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
     fn parse_uuid(&mut self) -> Result<Vec<u8>, Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Uuid => self.reader.read_bytes(UUID_WIDTH),
-            _ => Err(Error::InvalidFormatCode)
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -324,10 +333,16 @@ where
             EncodingCodes::VBin32 | EncodingCodes::VBin8 => self.deserialize_byte_buf(visitor),
             EncodingCodes::Null => self.deserialize_unit(visitor),
 
-            EncodingCodes::Sym32 | EncodingCodes::Sym8 => self.deserialize_newtype_struct(SYMBOL, visitor),
-            EncodingCodes::DescribedType => self.deserialize_struct(DESERIALIZE_DESCRIBED, DESCRIBED_FIELDS, visitor),
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                self.deserialize_newtype_struct(SYMBOL, visitor)
+            }
+            EncodingCodes::DescribedType => {
+                self.deserialize_struct(DESERIALIZE_DESCRIBED, DESCRIBED_FIELDS, visitor)
+            }
             EncodingCodes::Array32 | EncodingCodes::Array8 => self.deserialize_seq(visitor),
-            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => self.deserialize_seq(visitor),
+            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
+                self.deserialize_seq(visitor)
+            }
             EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
 
             EncodingCodes::Decimal32 => self.deserialize_newtype_struct(DECIMAL32, visitor),
@@ -378,7 +393,7 @@ where
         match self.newtype {
             NewType::None => visitor.visit_i64(self.parse_i64()?),
             NewType::Timestamp => visitor.visit_i64(self.parse_timestamp()?),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -450,8 +465,8 @@ where
             NewType::Symbol => {
                 self.newtype = NewType::None;
                 visitor.visit_string(self.parse_symbol()?)
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -483,12 +498,12 @@ where
             NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
                 self.newtype = NewType::None;
                 visitor.visit_byte_buf(self.parse_decimal()?)
-            },
+            }
             NewType::Uuid => {
                 self.newtype = NewType::None;
                 visitor.visit_byte_buf(self.parse_uuid()?)
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -502,7 +517,7 @@ where
             EncodingCodes::VBin32 => {
                 let bytes = self.reader.read_const_bytes()?;
                 u32::from_be_bytes(bytes) as usize
-            },
+            }
             _ => return Err(Error::InvalidFormatCode),
         };
         self.reader.forward_read_bytes(len, visitor)
@@ -743,18 +758,16 @@ where
         match self.reader.peek()?.try_into()? {
             EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                 self.deserialize_tuple(fields.len(), visitor)
-            },
-            EncodingCodes::Map32 | EncodingCodes::Map8 => {
-                self.deserialize_map(visitor)
-            },
+            }
+            EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
             EncodingCodes::DescribedType => {
                 if name != DESERIALIZE_DESCRIBED {
-                    return Err(Error::InvalidFormatCode)
+                    return Err(Error::InvalidFormatCode);
                 }
                 self.reader.next()?;
                 visitor.visit_seq(DescribedAccess::new(self))
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -781,14 +794,18 @@ where
             // If a struct is serialized as a map, then the fields are serialized as str
             EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
             // FIXME: Enum variant currently are serialzied as map of with variant index and a list
-            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => self.deserialize_u32(visitor),
+            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
+                self.deserialize_u32(visitor)
+            }
             // Potentially using `Descriptor::Name` as identifier
             EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                 self.newtype = NewType::Symbol;
                 self.deserialize_string(visitor)
-            },
+            }
             // Potentially using `Descriptor::Code` as identifier
-            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => self.deserialize_u64(visitor),
+            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
+                self.deserialize_u64(visitor)
+            }
             // Other types should not be used to serialize identifiers
             _ => Err(Error::InvalidFormatCode),
         }
@@ -798,7 +815,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // The deserializer will only peek the next u8 
+        // The deserializer will only peek the next u8
         visitor.visit_u8(self.reader.peek()?)
     }
 }
@@ -954,14 +971,12 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
 }
 
 pub struct VariantAccess<'a, R> {
-    de: &'a mut Deserializer<R>
+    de: &'a mut Deserializer<R>,
 }
 
 impl<'a, R> VariantAccess<'a, R> {
     pub fn new(de: &'a mut Deserializer<R>) -> Self {
-        Self {
-            de
-        }
+        Self { de }
     }
 }
 
@@ -977,7 +992,7 @@ impl<'a, 'de, R: Read<'de>> de::EnumAccess<'de> for VariantAccess<'a, R> {
 
     fn variant_seed<V>(mut self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
     where
-        V: de::DeserializeSeed<'de> 
+        V: de::DeserializeSeed<'de>,
     {
         let val = seed.deserialize(self.as_mut())?;
         Ok((val, self))
@@ -995,7 +1010,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
     where
-        T: de::DeserializeSeed<'de> 
+        T: de::DeserializeSeed<'de>,
     {
         println!(">>> Debug VariantAccess::newtype_variant_seed");
         seed.deserialize(self.de)
@@ -1003,41 +1018,44 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
 
     fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         println!(">>> Debug VariantAccess::tuple_variant");
         de::Deserializer::deserialize_tuple(self.de, len, visitor)
     }
 
-    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value, Self::Error>
+    fn struct_variant<V>(
+        self,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
     where
-        V: de::Visitor<'de> 
+        V: de::Visitor<'de>,
     {
         println!(">>> Debug VariantAccess::struct_variant");
         de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }
 }
 
-
 enum FieldRole {
     // The descriptor bytes should be consumed
     Descriptor,
-    
+
     // The byte after the descriptor should be peeked to see
     // which type of encoding is used
     EncodingType,
 
-    // The bytes after the descriptor should be consumed 
+    // The bytes after the descriptor should be consumed
     Value,
 
     // All fields should be already deserialized. Probably redundant
-    End
+    End,
 }
 
 /// A special visitor access to the `Described` type
-pub struct DescribedAccess<'a, R> { 
+pub struct DescribedAccess<'a, R> {
     de: &'a mut Deserializer<R>,
-    field_role: FieldRole
+    field_role: FieldRole,
 }
 
 impl<'a, R> DescribedAccess<'a, R> {
@@ -1045,7 +1063,7 @@ impl<'a, R> DescribedAccess<'a, R> {
         Self {
             de,
             // The first field should be the descriptor
-            field_role: FieldRole::Descriptor
+            field_role: FieldRole::Descriptor,
         }
     }
 }
@@ -1061,32 +1079,36 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
-        T: de::DeserializeSeed<'de> 
+        T: de::DeserializeSeed<'de>,
     {
         println!(">>> Debug: DescribedAccess::next_element_seed");
         match self.field_role {
             FieldRole::Descriptor => {
                 self.field_role = FieldRole::EncodingType;
                 seed.deserialize(self.as_mut()).map(Some)
-            },
+            }
             FieldRole::EncodingType => {
                 self.field_role = FieldRole::Value;
                 seed.deserialize(self.as_mut()).map(Some)
-            },
+            }
             FieldRole::Value => {
                 self.field_role = FieldRole::End;
                 seed.deserialize(self.as_mut()).map(Some)
-            },
-            FieldRole::End => Ok(None)
+            }
+            FieldRole::End => Ok(None),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use serde::{Deserialize, de::DeserializeOwned};
+    use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{types::{Described, EncodingType}, types::Descriptor, format_code::EncodingCodes};
+    use crate::{
+        format_code::EncodingCodes,
+        types::Descriptor,
+        types::{Described, EncodingType},
+    };
 
     use super::{from_reader, from_slice};
 
@@ -1099,7 +1121,7 @@ mod tests {
     }
 
     fn assert_eq_from_slice_vs_expected<'de, T>(buf: &'de [u8], expected: T)
-    where 
+    where
         T: Deserialize<'de> + std::fmt::Debug + PartialEq,
     {
         let deserialized: T = from_slice(buf).unwrap();
@@ -1229,8 +1251,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_bytes() {
-        use serde_bytes::{Bytes, ByteBuf};
         use crate::ser::to_vec;
+        use serde_bytes::{ByteBuf, Bytes};
 
         let val = [1u8, 2, 3, 4];
         let buf = to_vec(&Bytes::new(&val)).unwrap();
@@ -1242,7 +1264,7 @@ mod tests {
     #[test]
     fn test_deserialize_decimal() {
         use crate::ser::to_vec;
-        use crate::types::{Dec32, Dec64, Dec128};
+        use crate::types::{Dec128, Dec32, Dec64};
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1251,7 +1273,7 @@ mod tests {
         let expected = Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_slice_vs_expected(&buf, expected);
-        
+
         let expected = Dec128::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_slice_vs_expected(&buf, expected);
@@ -1283,7 +1305,7 @@ mod tests {
         let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         let expected = Symbol::from("amqp");
         assert_eq_from_reader_vs_expected(buf, expected);
-    }   
+    }
 
     #[test]
     fn test_deserialize_array() {
@@ -1366,7 +1388,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_unit_variant() {
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
 
         use crate::ser::to_vec;
 
@@ -1374,7 +1396,7 @@ mod tests {
         enum Foo {
             A,
             B,
-            C
+            C,
         }
 
         let foo = Foo::B;
@@ -1385,7 +1407,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_newtype_variant() {
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
 
         use crate::ser::to_vec;
 
@@ -1403,8 +1425,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_descriptor() {
-        use crate::types::Symbol;
         use crate::ser::to_vec;
+        use crate::types::Symbol;
 
         let descriptor = Descriptor::Name(Symbol::from("amqp"));
         let buf = to_vec(&descriptor).unwrap();
@@ -1423,39 +1445,44 @@ mod tests {
 
     #[test]
     fn test_deserialize_nondescribed_struct() {
-        use serde::{Serialize, Deserialize};
         use crate::ser::to_vec;
+        use serde::{Deserialize, Serialize};
 
         #[derive(Serialize, Deserialize, Debug, PartialEq)]
         struct Foo {
             bar: u32,
-            is_fool: bool
+            is_fool: bool,
         }
 
-        let expected = Foo {bar: 13, is_fool: true};
+        let expected = Foo {
+            bar: 13,
+            is_fool: true,
+        };
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
     #[test]
     fn test_deserialize_described_list_struct() {
-        use serde::{Serialize, Deserialize};
         use crate::ser::to_vec;
-        use crate::types::Symbol;
         use crate::types::EncodingType;
+        use crate::types::Symbol;
+        use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize)]
         struct Foo {
             a_field: i32,
-            b: bool
+            b: bool,
         }
 
-        let foo = Foo { a_field: 13, b: false };
+        let foo = Foo {
+            a_field: 13,
+            b: false,
+        };
         let descriptor = Descriptor::Name(Symbol::from("Foo"));
         let foo = Described::new(EncodingType::List, descriptor, foo);
         let buf = to_vec(&foo).unwrap();
         let foo2: Described<Foo> = from_slice(&buf).unwrap();
         println!("{:?}", &foo2);
     }
-
 }

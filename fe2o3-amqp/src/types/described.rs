@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use serde::ser;
 use serde::de;
+use serde::ser;
 
 use super::{Descriptor, DESCRIPTOR};
 use crate::format_code::EncodingCodes;
@@ -33,7 +33,7 @@ mod encoding_type {
         Map,
     }
 
-    struct FieldVisitor { }
+    struct FieldVisitor {}
 
     impl<'de> de::Visitor<'de> for FieldVisitor {
         type Value = Field;
@@ -44,30 +44,31 @@ mod encoding_type {
 
         fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
         where
-            E: de::Error, 
+            E: de::Error,
         {
-            match v.try_into().map_err(|_| de::Error::custom("Invalid format code"))? {
+            match v
+                .try_into()
+                .map_err(|_| de::Error::custom("Invalid format code"))?
+            {
                 EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                     Ok(Field::List)
-                },
-                EncodingCodes::Map8 | EncodingCodes::Map32 => {
-                    Ok(Field::Map)
-                },
-                _ => Ok(Field::Basic)
-            }    
+                }
+                EncodingCodes::Map8 | EncodingCodes::Map32 => Ok(Field::Map),
+                _ => Ok(Field::Basic),
+            }
         }
     }
 
     impl<'de> de::Deserialize<'de> for Field {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de> 
+            D: serde::Deserializer<'de>,
         {
-            deserializer.deserialize_ignored_any(FieldVisitor { })
+            deserializer.deserialize_ignored_any(FieldVisitor {})
         }
     }
 
-    struct EncodingTypeVisitor { }
+    struct EncodingTypeVisitor {}
 
     impl<'de> de::Visitor<'de> for EncodingTypeVisitor {
         type Value = EncodingType;
@@ -78,13 +79,13 @@ mod encoding_type {
 
         fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
         where
-            A: de::EnumAccess<'de>, 
+            A: de::EnumAccess<'de>,
         {
             let (val, _) = data.variant()?;
             match val {
                 Field::Basic => Ok(EncodingType::Basic),
                 Field::List => Ok(EncodingType::List),
-                Field::Map => Ok(EncodingType::Map)
+                Field::Map => Ok(EncodingType::Map),
             }
         }
     }
@@ -92,10 +93,10 @@ mod encoding_type {
     impl<'de> de::Deserialize<'de> for EncodingType {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de> 
+            D: serde::Deserializer<'de>,
         {
             const VARIANTS: &'static [&'static str] = &["Basic", "List", "Map"];
-            deserializer.deserialize_enum(ENCODING_TYPE, VARIANTS, EncodingTypeVisitor { })
+            deserializer.deserialize_enum(ENCODING_TYPE, VARIANTS, EncodingTypeVisitor {})
         }
     }
 }
@@ -149,12 +150,12 @@ impl<'a, T: ser::Serialize> ser::Serialize for Described<T> {
 }
 
 mod described {
-    use std::{marker::PhantomData};
     use super::*;
+    use std::marker::PhantomData;
 
-    struct DescribedVisitor<'de, T> { 
+    struct DescribedVisitor<'de, T> {
         marker: PhantomData<T>,
-        lifetime: PhantomData<&'de ()>
+        lifetime: PhantomData<&'de ()>,
     }
 
     impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for DescribedVisitor<'de, T> {
@@ -166,46 +167,46 @@ mod described {
 
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
         where
-            A: de::SeqAccess<'de>, 
+            A: de::SeqAccess<'de>,
         {
             let descriptor: Descriptor = match seq.next_element()? {
                 Some(val) => val,
-                None => return Err(de::Error::custom("Invalid length. Expecting descriptor."))
+                None => return Err(de::Error::custom("Invalid length. Expecting descriptor.")),
             };
 
             let encoding_type: EncodingType = match seq.next_element()? {
                 Some(val) => val,
-                None => return Err(de::Error::custom("Invalid length. Expecting encoding_type"))
+                None => return Err(de::Error::custom("Invalid length. Expecting encoding_type")),
             };
 
             let value: T = match seq.next_element()? {
                 Some(val) => val,
-                None => return Err(de::Error::custom("Invalid length. Expecting value"))
+                None => return Err(de::Error::custom("Invalid length. Expecting value")),
             };
 
             Ok(Described {
                 descriptor,
-                encoding_type, 
-                value
+                encoding_type,
+                value,
             })
         }
     }
 
-    impl<'de, T> de::Deserialize<'de> for Described<T> 
-    where 
-        T: de::Deserialize<'de>
+    impl<'de, T> de::Deserialize<'de> for Described<T>
+    where
+        T: de::Deserialize<'de>,
     {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de> 
+            D: serde::Deserializer<'de>,
         {
             deserializer.deserialize_struct(
-                DESERIALIZE_DESCRIBED, 
+                DESERIALIZE_DESCRIBED,
                 DESCRIBED_FIELDS,
-                DescribedVisitor { 
+                DescribedVisitor {
                     marker: PhantomData,
-                    lifetime: PhantomData
-                }
+                    lifetime: PhantomData,
+                },
             )
         }
     }
@@ -229,6 +230,5 @@ macro_rules! impl_err_try_conversion_to_described {
 
 impl_err_try_conversion_to_described!(
     u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64,
-    bool
-    // TODO: add more fundamental types
+    bool // TODO: add more fundamental types
 );

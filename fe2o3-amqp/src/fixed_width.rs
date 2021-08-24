@@ -20,4 +20,3 @@ pub const DECIMAL128_WIDTH: usize = 16;
 pub const CHAR_WIDTH: usize = 4;
 pub const TIMESTAMP_WIDTH: usize = 8;
 pub const UUID_WIDTH: usize = 16;
-

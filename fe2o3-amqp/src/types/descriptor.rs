@@ -1,6 +1,6 @@
-use serde::ser::{Serialize};
-use serde::de;
 use crate::types::Symbol;
+use serde::de;
+use serde::ser::Serialize;
 
 pub const DESCRIPTOR: &str = "DESCRIPTOR";
 
@@ -49,7 +49,7 @@ enum Field {
     Code(u64),
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
@@ -60,7 +60,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         // It has to be Descriptor::Name(Symbol) if visit_string is called
         let name = Symbol::from(v);
@@ -69,7 +69,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let name = Symbol::from(v);
         Ok(Field::Name(name))
@@ -77,7 +77,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         Ok(Field::Code(v))
     }
@@ -86,13 +86,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_identifier(FieldVisitor { })
+        deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
 
-struct DescriptorVisitor { }
+struct DescriptorVisitor {}
 
 impl<'de> de::Visitor<'de> for DescriptorVisitor {
     type Value = Descriptor;
@@ -103,7 +103,7 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-        A: de::EnumAccess<'de>, 
+        A: de::EnumAccess<'de>,
     {
         let (val, _) = data.variant()?;
         match val {
@@ -116,9 +116,9 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
 impl<'de> de::Deserialize<'de> for Descriptor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         const VARIANTS: &'static [&'static str] = &["A", "B"];
-        deserializer.deserialize_enum(DESCRIPTOR, VARIANTS, DescriptorVisitor { })
+        deserializer.deserialize_enum(DESCRIPTOR, VARIANTS, DescriptorVisitor {})
     }
 }

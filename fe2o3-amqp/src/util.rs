@@ -6,7 +6,7 @@ pub(crate) enum NewType {
     Dec128,
     Symbol,
     Timestamp,
-    Uuid
+    Uuid,
 }
 
 impl Default for NewType {

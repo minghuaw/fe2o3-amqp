@@ -1,5 +1,3 @@
-
-
 use crate::error::Error;
 
 mod ioread;
@@ -52,6 +50,3 @@ pub trait Read<'de>: private::Sealed {
     where
         V: serde::de::Visitor<'de>;
 }
-
-
-
