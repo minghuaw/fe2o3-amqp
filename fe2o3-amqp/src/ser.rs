@@ -1754,7 +1754,7 @@ mod test {
     fn test_serialize_described_basic_type() {
         let value = String::from("amqp");
         let descriptor = Descriptor::code(100);
-        let described = Described::new(crate::described::EncodingType::Basic, descriptor, &value);
+        let described = Described::new(crate::types::EncodingType::Basic, descriptor, &value);
         let mut expected = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
@@ -1773,7 +1773,7 @@ mod test {
             b: true,
         };
         let descriptor = Descriptor::code(13);
-        let described = Described::new(crate::described::EncodingType::List, descriptor, &value);
+        let described = Described::new(crate::types::EncodingType::List, descriptor, &value);
         let expected = vec![
             EncodingCodes::DescribedType as u8, // Described type contructor
             EncodingCodes::SmallUlong as u8,    // Descriptor code
@@ -1795,7 +1795,7 @@ mod test {
             b: true,
         };
         let descriptor = Descriptor::code(13);
-        let described = Described::new(crate::described::EncodingType::Map, descriptor, &value);
+        let described = Described::new(crate::types::EncodingType::Map, descriptor, &value);
         let expected = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,

@@ -12,15 +12,16 @@ use crate::error::Error;
 mod dec32 {
     use serde_bytes::ByteBuf;
 
+    use crate::fixed_width::DECIMAL32_WIDTH;
+
     use super::*;
 
     pub const DECIMAL32: &str = "DECIMAL32";
-    pub const DECIMAL32_LEN: usize = 4;
     
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Dec32([u8; DECIMAL32_LEN]);
-    impl From<[u8; DECIMAL32_LEN]> for Dec32 {
-        fn from(val: [u8; DECIMAL32_LEN]) -> Self {
+    pub struct Dec32([u8; DECIMAL32_WIDTH]);
+    impl From<[u8; DECIMAL32_WIDTH]> for Dec32 {
+        fn from(val: [u8; DECIMAL32_WIDTH]) -> Self {
             Self(val)
         }
     }
@@ -29,12 +30,12 @@ mod dec32 {
         type Error = Error;
     
         fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-            if value.len() != DECIMAL32_LEN {
+            if value.len() != DECIMAL32_WIDTH {
                 return Err(Error::InvalidLength)
             }
     
-            let mut buf = [0u8; DECIMAL32_LEN];
-            buf.copy_from_slice(&value[..DECIMAL32_LEN]);
+            let mut buf = [0u8; DECIMAL32_WIDTH];
+            buf.copy_from_slice(&value[..DECIMAL32_WIDTH]);
             Ok(Self(buf))
         }
     }
@@ -80,16 +81,17 @@ mod dec32 {
 mod dec64 {
     use serde_bytes::ByteBuf;
 
+    use crate::fixed_width::DECIMAL64_WIDTH;
+
     use super::*;
 
     pub const DECIMAL64: &str = "DECIMAL64";
-    pub const DECIMAL64_LEN: usize = 8;
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Dec64([u8; DECIMAL64_LEN]);
+    pub struct Dec64([u8; DECIMAL64_WIDTH]);
     
-    impl From<[u8; DECIMAL64_LEN]> for Dec64 {
-        fn from(val: [u8; DECIMAL64_LEN]) -> Self {
+    impl From<[u8; DECIMAL64_WIDTH]> for Dec64 {
+        fn from(val: [u8; DECIMAL64_WIDTH]) -> Self {
             Self(val)
         }
     }
@@ -98,12 +100,12 @@ mod dec64 {
         type Error = Error;
     
         fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-            if value.len() != DECIMAL64_LEN {
+            if value.len() != DECIMAL64_WIDTH {
                 return Err(Error::InvalidLength)
             }
     
-            let mut buf = [0u8; DECIMAL64_LEN];
-            buf.copy_from_slice(&value[..DECIMAL64_LEN]);
+            let mut buf = [0u8; DECIMAL64_WIDTH];
+            buf.copy_from_slice(&value[..DECIMAL64_WIDTH]);
             Ok(Self(buf))
         }
     }
@@ -149,16 +151,17 @@ mod dec64 {
 mod dec128 {
     use serde_bytes::ByteBuf;
 
+    use crate::fixed_width::DECIMAL128_WIDTH;
+
     use super::*;
 
     pub const DECIMAL128: &str = "DECIMAL128";
-    pub const DECIMAL128_LEN: usize = 16;
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct Dec128([u8; DECIMAL128_LEN]);
+    pub struct Dec128([u8; DECIMAL128_WIDTH]);
     
-    impl From<[u8; DECIMAL128_LEN]> for Dec128 {
-        fn from(val: [u8; DECIMAL128_LEN]) -> Self {
+    impl From<[u8; DECIMAL128_WIDTH]> for Dec128 {
+        fn from(val: [u8; DECIMAL128_WIDTH]) -> Self {
             Self(val)
         }
     }
@@ -167,12 +170,12 @@ mod dec128 {
         type Error = Error;
     
         fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-            if value.len() != DECIMAL128_LEN {
+            if value.len() != DECIMAL128_WIDTH {
                 return Err(Error::InvalidLength)
             }
     
-            let mut buf = [0u8; DECIMAL128_LEN];
-            buf.copy_from_slice(&value[..DECIMAL128_LEN]);
+            let mut buf = [0u8; DECIMAL128_WIDTH];
+            buf.copy_from_slice(&value[..DECIMAL128_WIDTH]);
             Ok(Self(buf))
         }
     }

@@ -1,9 +1,9 @@
 use serde::de::{self};
 use std::{convert::TryInto};
 
-use crate::{types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
+use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH}, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, TIMESTAMP, UUID, UUID_LEN}, util::{NewType}};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID, UUID_LEN}, util::{NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -268,9 +268,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     fn parse_decimal(&mut self) -> Result<Vec<u8>, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Decimal32 => self.reader.read_bytes(DECIMAL32_LEN),
-            EncodingCodes::Decimal64 => self.reader.read_bytes(DECIMAL64_LEN),
-            EncodingCodes::Decimal128 => self.reader.read_bytes(DECIMAL128_LEN),
+            EncodingCodes::Decimal32 => self.reader.read_bytes(DECIMAL32_WIDTH),
+            EncodingCodes::Decimal64 => self.reader.read_bytes(DECIMAL64_WIDTH),
+            EncodingCodes::Decimal128 => self.reader.read_bytes(DECIMAL128_WIDTH),
             _ => Err(Error::InvalidFormatCode)
         }
     }
@@ -1443,7 +1443,7 @@ mod tests {
         use serde::{Serialize, Deserialize};
         use crate::ser::to_vec;
         use crate::types::Symbol;
-        use crate::described::EncodingType;
+        use crate::types::EncodingType;
 
         #[derive(Debug, Serialize, Deserialize)]
         struct Foo {

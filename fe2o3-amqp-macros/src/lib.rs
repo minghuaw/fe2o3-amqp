@@ -32,19 +32,19 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
     let descriptor = match attr.code {
         Some(code) => {
             quote! {
-                fe2o3_amqp::descriptor::Descriptor::Code(#code)
+                fe2o3_amqp::types::Descriptor::Code(#code)
             }
         },
         None => {
             match attr.name {
                 Some(name) => {
                     quote! {
-                        fe2o3_amqp::descriptor::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name.to_string()))
+                        fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name.to_string()))
                     }
                 },
                 None => {
                     quote! {
-                        fe2o3_amqp::descriptor::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#ident_str))
+                        fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#ident_str))
                     }
                 }
             }
@@ -54,9 +54,9 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
     let encoding = match attr.encoding {
         Some(enc) => {
             match enc {
-                EncodingType::Basic => quote!{ fe2o3_amqp::described::EncodingType::Basic },
-                EncodingType::List => quote!{ fe2o3_amqp::described::EncodingType::List },
-                EncodingType::Map => quote!{ fe2o3_amqp::described::EncodingType::Map }
+                EncodingType::Basic => quote!{ fe2o3_amqp::types::EncodingType::Basic },
+                EncodingType::List => quote!{ fe2o3_amqp::types::EncodingType::List },
+                EncodingType::Map => quote!{ fe2o3_amqp::types::EncodingType::Map }
             }
         },
         None => {
@@ -64,7 +64,7 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
                 syn::Data::Struct(s) => {
                     match &s.fields {
                         syn::Fields::Named(_) => {
-                            quote! { fe2o3_amqp::described::EncodingType::List }
+                            quote! { fe2o3_amqp::types::EncodingType::List }
                         },
                         syn::Fields::Unnamed(unnamed) => {
                             match s.fields.len() {
@@ -74,15 +74,15 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
                                         .into()
                                 },
                                 1 => {
-                                    quote! { fe2o3_amqp::described::EncodingType::Basic }
+                                    quote! { fe2o3_amqp::types::EncodingType::Basic }
                                 },
                                 _ => {
-                                    quote! { fe2o3_amqp::described::EncodingType::List }
+                                    quote! { fe2o3_amqp::types::EncodingType::List }
                                 } 
                             }
                         },
                         syn::Fields::Unit => {
-                            quote! { fe2o3_amqp::described::EncodingType::Basic }
+                            quote! { fe2o3_amqp::types::EncodingType::Basic }
                         }
                     }
                 },
@@ -101,12 +101,12 @@ pub fn derive_amqp_contract(item: proc_macro::TokenStream) -> proc_macro::TokenS
     };
 
     let impl_try_from = quote!{
-        impl std::convert::TryFrom<#ident> for fe2o3_amqp::described::Described<#ident> {
+        impl std::convert::TryFrom<#ident> for fe2o3_amqp::types::Described<#ident> {
             type Error = #ident;
 
             fn try_from(value: #ident) -> Result<Self, Self::Error> {
                 Ok(
-                    fe2o3_amqp::described::Described::new(
+                    fe2o3_amqp::types::Described::new(
                         #encoding,
                         #descriptor,
                         value

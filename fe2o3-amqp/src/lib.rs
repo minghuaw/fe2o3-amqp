@@ -7,6 +7,7 @@ pub mod macros;
 pub mod ser;
 pub mod types;
 pub mod value;
+pub mod fixed_width;
 
 // Private mods
 mod read;
