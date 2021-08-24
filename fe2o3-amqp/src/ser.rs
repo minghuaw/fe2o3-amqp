@@ -4,7 +4,7 @@ use serde::{
     ser, Serialize,
 };
 
-use crate::{described::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, descriptor::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
+use crate::{types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, types::DESCRIPTOR, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{IsArrayElement, NewType}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -1292,7 +1292,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use crate::{described::Described, descriptor::Descriptor, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid}};
+    use crate::{types::Described, types::Descriptor, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid}};
 
     use super::*;
 

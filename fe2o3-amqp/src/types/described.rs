@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use serde::ser;
 use serde::de;
 
-use crate::descriptor::{Descriptor, DESCRIPTOR};
+use super::{Descriptor, DESCRIPTOR};
 use crate::format_code::EncodingCodes;
 
 pub const DESCRIBED_BASIC: &str = "DESCRIBED_BASIC";

@@ -1,8 +1,6 @@
 // Public mods
 pub mod contract;
 pub mod de;
-pub mod described;
-pub mod descriptor;
 pub mod error;
 pub mod format_code;
 pub mod macros;

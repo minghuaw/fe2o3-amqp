@@ -1,7 +1,7 @@
 use serde::de::{self};
 use std::{convert::TryInto};
 
-use crate::{described::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
+use crate::{types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, error::Error, format::{OFFSET_ARRAY32,
         OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
     }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL128_LEN, DECIMAL32, DECIMAL32_LEN, DECIMAL64, DECIMAL64_LEN, SYMBOL, TIMESTAMP, UUID, UUID_LEN}, util::{NewType}};
 
@@ -1087,7 +1087,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 mod tests {
     use serde::{Deserialize, de::DeserializeOwned};
 
-    use crate::{described::{Described, EncodingType}, descriptor::Descriptor, format_code::EncodingCodes};
+    use crate::{types::{Described, EncodingType}, types::Descriptor, format_code::EncodingCodes};
 
     use super::{from_reader, from_slice};
 
