@@ -330,12 +330,11 @@ where
             EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => self.deserialize_seq(visitor),
             EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
 
-            // unimplemented
-            EncodingCodes::Decimal32 => todo!(),
-            EncodingCodes::Decimal64 => todo!(),
-            EncodingCodes::Decimal128 => todo!(),
-            EncodingCodes::Timestamp => todo!(),
-            EncodingCodes::Uuid => todo!(),
+            EncodingCodes::Decimal32 => self.deserialize_newtype_struct(DECIMAL32, visitor),
+            EncodingCodes::Decimal64 => self.deserialize_newtype_struct(DECIMAL64, visitor),
+            EncodingCodes::Decimal128 => self.deserialize_newtype_struct(DECIMAL128, visitor),
+            EncodingCodes::Timestamp => self.deserialize_newtype_struct(TIMESTAMP, visitor),
+            EncodingCodes::Uuid => self.deserialize_newtype_struct(UUID, visitor),
         }
     }
 
