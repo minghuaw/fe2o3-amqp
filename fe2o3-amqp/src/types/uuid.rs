@@ -6,15 +6,15 @@ use serde_bytes::ByteBuf;
 use serde_bytes::Bytes;
 
 use crate::error::Error;
+use crate::fixed_width::UUID_WIDTH;
 
 pub const UUID: &str = "UUID";
-pub const UUID_LEN: usize = 16;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Uuid([u8; UUID_LEN]);
+pub struct Uuid([u8; UUID_WIDTH]);
 
-impl From<[u8; UUID_LEN]> for Uuid {
-    fn from(val: [u8; UUID_LEN]) -> Self {
+impl From<[u8; UUID_WIDTH]> for Uuid {
+    fn from(val: [u8; UUID_WIDTH]) -> Self {
         Self(val)
     }
 }
@@ -23,12 +23,12 @@ impl TryFrom<&[u8]> for Uuid {
     type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() != UUID_LEN {
+        if value.len() != UUID_WIDTH {
             return Err(Error::InvalidLength)
         }
 
-        let mut buf = [0u8; UUID_LEN];
-        buf.copy_from_slice(&value[..UUID_LEN]);
+        let mut buf = [0u8; UUID_WIDTH];
+        buf.copy_from_slice(&value[..UUID_WIDTH]);
         Ok(Self(buf))
     }
 }
