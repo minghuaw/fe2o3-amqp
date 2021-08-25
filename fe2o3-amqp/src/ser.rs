@@ -2,15 +2,7 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{
-    error::Error,
-    format_code::EncodingCodes,
-    types::DESCRIPTOR,
-    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
-    types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
-    util::{IsArrayElement, NewType},
-    value::U32_MAX_AS_USIZE,
-};
+use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{IsArrayElement, NewType}, value::{U32_MAX_AS_USIZE, VALUE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -616,13 +608,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize,
     {
-        if name == DESCRIPTOR {
+        if name == DESCRIPTOR || name == VALUE {
             value.serialize(self)
         } else {
-            // let mut map_se = self.serialize_map(Some(1))?;
-            // map_se.serialize_entry(&variant_index, value)?;
-            // SerializeMap::end(map_se)
-
             // TODO: how should enums be treated?
 
             self.serialize_u32(variant_index)?;

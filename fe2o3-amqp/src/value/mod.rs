@@ -8,6 +8,7 @@ mod de;
 mod ser;
 
 pub const U32_MAX_AS_USIZE: usize = u32::MAX as usize;
+pub const VALUE: &str = "VALUE";
 
 /// Primitive type definitions
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

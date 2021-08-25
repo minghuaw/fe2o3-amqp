@@ -178,6 +178,15 @@ impl<'de> de::Visitor<'de> for Visitor {
 
         Ok(Value::Map(m))
     }
+
+    #[inline]
+    fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        // Dec32, Dec64, Dec128
+        todo!()
+    }
 }
 
 impl<'de> de::Deserialize<'de> for Value {

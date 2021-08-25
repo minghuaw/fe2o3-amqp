@@ -54,6 +54,9 @@
 
 use serde::de;
 use serde::ser;
+use serde_bytes::ByteBuf;
+
+use crate::fixed_width;
 
 pub const TIMESTAMP: &str = "TIMESTAMP";
 
@@ -89,8 +92,16 @@ impl<'de> de::Visitor<'de> for Visitor {
     where
         D: serde::Deserializer<'de>,
     {
-        let val: i64 = de::Deserialize::deserialize(deserializer)?;
-        Ok(Timestamp(val))
+        let buf: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+        if buf.len() != fixed_width::TIMESTAMP_WIDTH {
+            return Err(de::Error::custom("Wrong number of bytes for Timestamp"))
+        }
+        let mut bytes = [0u8; fixed_width::TIMESTAMP_WIDTH];
+        for (i, byte) in buf.into_vec().drain(..).enumerate() {
+            bytes[i] = byte;
+        }
+        let val = i64::from_be_bytes(bytes);
+        Ok(Timestamp::from(val))
     }
 }
 
