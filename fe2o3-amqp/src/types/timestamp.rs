@@ -54,9 +54,6 @@
 
 use serde::de;
 use serde::ser;
-use serde_bytes::ByteBuf;
-
-use crate::fixed_width;
 
 pub const TIMESTAMP: &str = "TIMESTAMP";
 

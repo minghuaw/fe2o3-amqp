@@ -1,7 +1,7 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, TIMESTAMP_WIDTH, UUID_WIDTH}, format::{
+use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
     }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, util::{EnumType, NewType}, value::VALUE};
 

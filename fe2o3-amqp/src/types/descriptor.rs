@@ -3,7 +3,6 @@ use std::convert::TryInto;
 use serde::de::{self, VariantAccess};
 use serde::ser::Serialize;
 
-use crate::error::Error;
 use crate::types::Symbol;
 use crate::format_code::EncodingCodes;
 
@@ -77,30 +76,6 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             _ => Err(de::Error::custom("Invalid format code"))
         }    
     }
-
-    // fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    // where
-    //     E: de::Error,
-    // {
-    //     // It has to be Descriptor::Name(Symbol) if visit_string is called
-    //     let name = Symbol::from(v);
-    //     Ok(Field::Name(name))
-    // }
-
-    // fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    // where
-    //     E: de::Error,
-    // {
-    //     let name = Symbol::from(v);
-    //     Ok(Field::Name(name))
-    // }
-
-    // fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-    // where
-    //     E: de::Error,
-    // {
-    //     Ok(Field::Code(v))
-    // }
 }
 
 impl<'de> de::Deserialize<'de> for Field {
@@ -127,10 +102,6 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
     {
         println!(">>> Debug visit_enum");
         let (val, de) = data.variant()?;
-        // match val {
-        //     Field::Name(name) => Ok(Descriptor::Name(name)),
-        //     Field::Code(code) => Ok(Descriptor::Code(code)),
-        // }
         match val {
             Field::Name => {
                 let val = de.newtype_variant()?;

@@ -1800,6 +1800,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(described, expected);
     }
 
+    #[allow(dead_code)]
     #[derive(Serialize)]
     enum Enumeration {
         UnitVariant,
