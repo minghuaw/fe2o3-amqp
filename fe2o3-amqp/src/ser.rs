@@ -1822,46 +1822,46 @@ mod test {
         println!("{:?}", output);
     }
 
-    #[test]
-    fn test_serialize_tuple_variant() {
-        let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", output);
+    // #[test]
+    // fn test_serialize_tuple_variant() {
+    //     let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
+    //     let output = to_vec(&val).unwrap();
+    //     println!("{:?}", output);
 
-        unimplemented!()
-    }
+    //     unimplemented!()
+    // }
 
-    #[test]
-    fn test_serialize_struct_variant() {
-        let val = Enumeration::StructVariant {
-            id: 13,
-            is_true: true,
-        };
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", output);
+    // #[test]
+    // fn test_serialize_struct_variant() {
+    //     let val = Enumeration::StructVariant {
+    //         id: 13,
+    //         is_true: true,
+    //     };
+    //     let output = to_vec(&val).unwrap();
+    //     println!("{:?}", output);
 
-        unimplemented!()
-    }
+    //     unimplemented!()
+    // }
 
-    #[test]
-    fn test_serialize_described_unit_variant() {
-        unimplemented!()
-    }
+    // #[test]
+    // fn test_serialize_described_unit_variant() {
+    //     unimplemented!()
+    // }
 
-    #[test]
-    fn test_serialize_described_newtype_variant() {
-        unimplemented!()
-    }
+    // #[test]
+    // fn test_serialize_described_newtype_variant() {
+    //     unimplemented!()
+    // }
 
-    #[test]
-    fn test_serialize_described_tuple_variant() {
-        unimplemented!()
-    }
+    // #[test]
+    // fn test_serialize_described_tuple_variant() {
+    //     unimplemented!()
+    // }
 
-    #[test]
-    fn test_serialize_described_struct_variant() {
-        unimplemented!()
-    }
+    // #[test]
+    // fn test_serialize_described_struct_variant() {
+    //     unimplemented!()
+    // }
 
     #[test]
     fn test_serializing_dec32() {

@@ -1,4 +1,6 @@
-use crate::error::Error;
+use std::convert::TryInto;
+
+use crate::{error::Error, format::{EncodedWidth}, format_code::EncodingCodes};
 
 mod ioread;
 pub use ioread::*;
@@ -33,12 +35,73 @@ pub trait Read<'de>: private::Sealed {
         self.read_exact(&mut buf)?;
         Ok(buf)
     }
-    // fn parse_str<'s: 'de>(&mut self, buf: &'s [u8]) -> Result<&'de str, Error> {
-    //     match std::str::from_utf8(buf) {
-    //         Ok(s) => Ok(s),
-    //         Err(err) => Err(err.into())
-    //     }
-    // }
+    
+    fn read_item_bytes_with_format_code(&mut self) -> Result<Vec<u8>, Error> {
+        use crate::format::Category;
+        let code_byte = self.next()?;
+        let code: EncodingCodes = code_byte.try_into()?;
+        let mut vec = match code.try_into()? {
+            Category::Fixed(w) => {
+                let mut buf = vec![0u8; 1 + w as usize];
+                self.read_exact(&mut buf[1..])?;
+                buf
+            },
+            Category::Encoded(w) => {
+                match w {
+                    EncodedWidth::Zero => return Ok(vec![code_byte]),
+                    EncodedWidth::One => {
+                        let len = self.next()?;
+                        let mut buf = vec![0u8; 1 + 1 + len as usize];
+                        self.read_exact(&mut buf[2..])?;
+                        buf[1] = len;
+                        buf
+                    },
+                    EncodedWidth::Four => {
+                        let len_bytes = self.read_const_bytes()?;
+                        let len = u32::from_be_bytes(len_bytes);
+                        let mut buf = vec![0u8; 1 + 4 + len as usize];
+                        self.read_exact(&mut buf[5..])?;
+                        (&mut buf[1..5]).copy_from_slice(&len_bytes);
+                        buf
+                    }
+                }
+            },
+            // Category::Compound(w) => {
+            //     match w {
+            //         CompoundWidth::Zero => {
+            //             return Ok(vec![code_byte])
+            //         },
+            //         CompoundWidth::One => {
+            //             let len = self.next()?;
+            //             let mut buf = vec![0u8; 1 + 1 + len as usize];
+            //             self.read_exact(&mut buf[2..])?;
+            //             buf[1] = len;
+            //             buf
+            //         },
+            //         CompoundWidth::Four => {
+            //             let len_bytes = self.read_const_bytes()?;
+            //             let len = u32::from_be_bytes(len_bytes.clone());
+            //             let mut buf = vec![0u8; 1 + 4 + len as usize];
+            //             self.read_exact(&mut buf[5..])?;
+            //             (&mut buf[1..5]).copy_from_slice(&len_bytes);
+            //             buf
+            //         }
+            //     }
+            // },
+            // Category::Array(w) => {
+            //     match w {
+            //         ArrayWidth::One => {
+            //             let len = 
+            //         },
+            //         ArrayWidth::Four => {
+
+            //         }
+            //     }
+            // }
+        };
+        vec[0] = code_byte;
+        Ok(vec)
+    }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error>;
 
