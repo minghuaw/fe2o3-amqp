@@ -1,6 +1,11 @@
-use crate::types::Symbol;
-use serde::de;
+use std::convert::TryInto;
+
+use serde::de::{self, VariantAccess};
 use serde::ser::Serialize;
+
+use crate::error::Error;
+use crate::types::Symbol;
+use crate::format_code::EncodingCodes;
 
 pub const DESCRIPTOR: &str = "DESCRIPTOR";
 
@@ -45,8 +50,10 @@ impl Serialize for Descriptor {
 
 // Because the bytes will be consumed when `deserialize_identifier`
 enum Field {
-    Name(Symbol),
-    Code(u64),
+    // Name(Symbol),
+    // Code(u64),
+    Name,
+    Code,
 }
 
 struct FieldVisitor {}
@@ -58,29 +65,42 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         formatter.write_str("variant identifier")
     }
 
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
-        E: de::Error,
+        E: de::Error, 
     {
-        // It has to be Descriptor::Name(Symbol) if visit_string is called
-        let name = Symbol::from(v);
-        Ok(Field::Name(name))
+        match v.try_into()
+            .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))? 
+        {
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => Ok(Field::Name),
+            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => Ok(Field::Code),
+            _ => Err(de::Error::custom("Invalid format code"))
+        }    
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        let name = Symbol::from(v);
-        Ok(Field::Name(name))
-    }
+    // fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    // where
+    //     E: de::Error,
+    // {
+    //     // It has to be Descriptor::Name(Symbol) if visit_string is called
+    //     let name = Symbol::from(v);
+    //     Ok(Field::Name(name))
+    // }
 
-    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(Field::Code(v))
-    }
+    // fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    // where
+    //     E: de::Error,
+    // {
+    //     let name = Symbol::from(v);
+    //     Ok(Field::Name(name))
+    // }
+
+    // fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    // where
+    //     E: de::Error,
+    // {
+    //     Ok(Field::Code(v))
+    // }
 }
 
 impl<'de> de::Deserialize<'de> for Field {
@@ -105,10 +125,21 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
     where
         A: de::EnumAccess<'de>,
     {
-        let (val, _) = data.variant()?;
+        println!(">>> Debug visit_enum");
+        let (val, de) = data.variant()?;
+        // match val {
+        //     Field::Name(name) => Ok(Descriptor::Name(name)),
+        //     Field::Code(code) => Ok(Descriptor::Code(code)),
+        // }
         match val {
-            Field::Name(name) => Ok(Descriptor::Name(name)),
-            Field::Code(code) => Ok(Descriptor::Code(code)),
+            Field::Name => {
+                let val = de.newtype_variant()?;
+                Ok(Descriptor::Name(val))
+            },
+            Field::Code => {
+                let val = de.newtype_variant()?;
+                Ok(Descriptor::Code(val))
+            }
         }
     }
 }

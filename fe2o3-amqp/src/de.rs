@@ -3,7 +3,7 @@ use std::convert::TryInto;
 
 use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, TIMESTAMP_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, util::{EnumType, NewType}};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, util::{EnumType, NewType}, value::VALUE};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -421,6 +421,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug deserialize_u64");
         visitor.visit_u64(self.parse_u64()?)
     }
 
@@ -558,6 +559,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug deserialize_newtype_struct {:?}", name);
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
         } else if name == DECIMAL32 {
@@ -772,7 +774,7 @@ where
 
     fn deserialize_enum<V>(
         self,
-        _name: &'static str,
+        name: &'static str,
         _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error>
@@ -780,6 +782,12 @@ where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug deserialize_enum");
+        if name == VALUE {
+            self.enum_type = EnumType::Value;
+        } else if name == DESCRIPTOR {
+            self.enum_type = EnumType::Descriptor;
+        }
+
         visitor.visit_enum(VariantAccess::new(self))
     }
 
@@ -793,7 +801,11 @@ where
                let code = self.reader.peek()?;
                visitor.visit_u8(code)
             },
-            EnumType::Descriptor | EnumType::None => {
+            EnumType::Descriptor => {
+                let code = self.reader.peek()?;
+                visitor.visit_u8(code)
+            },
+            EnumType::None => {
                 // The following are the possible identifiers
                 match self.reader.peek()?.try_into()? {
                     // If a struct is serialized as a map, then the fields are serialized as str
