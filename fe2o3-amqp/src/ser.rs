@@ -32,8 +32,8 @@ pub struct Serializer<W> {
     /// The output of serialized data
     pub writer: W,
 
-    /// Any particular newtype wrapper
-    newtype: NewType,
+    /// Any particular new_type wrapper
+    new_type: NewType,
 
     /// How a struct should be encoded
     struct_encoding: StructEncoding,
@@ -47,7 +47,7 @@ impl<W: Write> Serializer<W> {
     pub fn new(writer: W, is_array_elem: IsArrayElement) -> Self {
         Self {
             writer,
-            newtype: Default::default(),
+            new_type: Default::default(),
             struct_encoding: Default::default(),
             is_array_elem,
         }
@@ -60,7 +60,7 @@ impl<W: Write> Serializer<W> {
     pub fn symbol(writer: W) -> Self {
         Self {
             writer,
-            newtype: NewType::Symbol,
+            new_type: NewType::Symbol,
             struct_encoding: Default::default(),
             is_array_elem: IsArrayElement::False,
         }
@@ -69,7 +69,7 @@ impl<W: Write> Serializer<W> {
     pub fn described_list(writer: W) -> Self {
         Self {
             writer,
-            newtype: Default::default(),
+            new_type: Default::default(),
             struct_encoding: StructEncoding::DescribedList,
             is_array_elem: IsArrayElement::False,
         }
@@ -78,7 +78,7 @@ impl<W: Write> Serializer<W> {
     pub fn described_map(writer: W) -> Self {
         Self {
             writer,
-            newtype: Default::default(),
+            new_type: Default::default(),
             struct_encoding: StructEncoding::DescribedMap,
             is_array_elem: IsArrayElement::False,
         }
@@ -87,7 +87,7 @@ impl<W: Write> Serializer<W> {
     pub fn described_basic(writer: W) -> Self {
         Self {
             writer,
-            newtype: Default::default(),
+            new_type: Default::default(),
             struct_encoding: StructEncoding::DescribedBasic,
             is_array_elem: IsArrayElement::False,
         }
@@ -193,7 +193,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        match self.newtype {
+        match self.new_type {
             NewType::None => match self.is_array_elem {
                 IsArrayElement::False => match v {
                     val @ -128..=127 => {
@@ -372,7 +372,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         let l = v.len();
         match self.is_array_elem {
             IsArrayElement::False => {
-                match self.newtype {
+                match self.new_type {
                     NewType::Symbol => {
                         match l {
                             // sym8
@@ -388,7 +388,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                             }
                             _ => return Err(Error::Message("Too long".into())),
                         }
-                        self.newtype = NewType::None;
+                        self.new_type = NewType::None;
                     }
                     NewType::None => {
                         match l {
@@ -412,7 +412,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     _ => unreachable!(),
                 }
             }
-            IsArrayElement::FirstElement => match self.newtype {
+            IsArrayElement::FirstElement => match self.new_type {
                 NewType::Symbol => {
                     let code = [EncodingCodes::Sym32 as u8];
                     let width = (l as u32).to_be_bytes();
@@ -427,7 +427,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
                 _ => unreachable!(),
             },
-            IsArrayElement::OtherElement => match self.newtype {
+            IsArrayElement::OtherElement => match self.new_type {
                 NewType::Symbol => {
                     let width = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
@@ -446,7 +446,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         let l = v.len();
-        match self.newtype {
+        match self.new_type {
             NewType::None => {
                 match self.is_array_elem {
                     IsArrayElement::False => {
@@ -485,35 +485,28 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     let code = [EncodingCodes::Decimal32 as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
             }
             NewType::Dec64 => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Decimal64 as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
             }
             NewType::Dec128 => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Decimal128 as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.newtype = NewType::None;
-            }
-            // NewType::Timestamp => {
-            //     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
-            //         let code = [EncodingCodes::Timestamp as u8];
-            //         self.writer.write_all(&code)?;
-            //     }
-            //     self.newtype = NewType::None;
-            // },
+                self.new_type = NewType::None;
+            },
             NewType::Uuid => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Uuid as u8];
                     self.writer.write_all(&code)?;
                 }
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
             }
             // Timestamp should be handled by i64
             NewType::Timestamp => unreachable!(),
@@ -564,7 +557,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         self.serialize_u32(variant_index)
     }
 
-    // Treat newtype structs as insignificant wrappers around the data they contain
+    // Treat new_type structs as insignificant wrappers around the data they contain
     //
     // Serialization of `Symbol`
     // - The serializer will determine whether name == SYMBOL_MAGIC
@@ -579,24 +572,24 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         T: Serialize,
     {
         if name == SYMBOL {
-            self.newtype = NewType::Symbol;
+            self.new_type = NewType::Symbol;
         } else if name == ARRAY {
-            self.newtype = NewType::Array;
+            self.new_type = NewType::Array;
         } else if name == DECIMAL32 {
-            self.newtype = NewType::Dec32;
+            self.new_type = NewType::Dec32;
         } else if name == DECIMAL64 {
-            self.newtype = NewType::Dec64;
+            self.new_type = NewType::Dec64;
         } else if name == DECIMAL128 {
-            self.newtype = NewType::Dec128;
+            self.new_type = NewType::Dec128;
         } else if name == TIMESTAMP {
-            self.newtype = NewType::Timestamp
+            self.new_type = NewType::Timestamp
         } else if name == UUID {
-            self.newtype = NewType::Uuid
+            self.new_type = NewType::Uuid
         }
         value.serialize(self)
     }
 
-    // Treat newtype variant as insignificant wrappers around the data they contain
+    // Treat new_type variant as insignificant wrappers around the data they contain
     #[inline]
     fn serialize_newtype_variant<T: ?Sized>(
         self,
@@ -791,7 +784,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     where
         T: Serialize,
     {
-        let mut se = match self.se.newtype {
+        let mut se = match self.se.new_type {
             NewType::None => {
                 // Element in the list always has it own constructor
                 Serializer::new(&mut self.buf, IsArrayElement::False)
@@ -814,7 +807,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let Self { se, num, buf } = self;
-        match se.newtype {
+        match se.new_type {
             NewType::None => write_list(&mut se.writer, num, buf, &se.is_array_elem),
             NewType::Array => write_array(&mut se.writer, num, buf, &se.is_array_elem),
             _ => unreachable!(),

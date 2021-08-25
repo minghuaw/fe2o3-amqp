@@ -2,7 +2,7 @@ use ordered_float::OrderedFloat;
 use serde::ser;
 use serde_bytes::ByteBuf;
 
-use crate::error::Error;
+use crate::{error::Error, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, Timestamp, UUID}, util::NewType};
 
 use super::Value;
 
@@ -41,9 +41,27 @@ impl ser::Serialize for Value {
     }
 }
 
-pub struct Serializer { }
+pub fn to_value<T>(val: &T) -> Result<Value, Error> 
+where 
+    T: ser::Serialize
+{
+    let mut ser = Serializer::new();
+    ser::Serialize::serialize(val, &mut ser)
+}
 
-impl ser::Serializer for Serializer {
+pub struct Serializer { 
+    new_type: NewType,
+}
+
+impl Serializer {
+    pub fn new() -> Self {
+        Self {
+            new_type: Default::default()
+        }
+    }
+}
+
+impl<'a> ser::Serializer for &'a mut Serializer {
     type Ok = Value;
     type Error = Error;
     
@@ -77,7 +95,11 @@ impl ser::Serializer for Serializer {
 
     #[inline]
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Long(v))
+        match self.new_type {
+            NewType::None => Ok(Value::Long(v)),
+            NewType::Timestamp => Ok(Value::Timestamp(Timestamp::from(v))),
+            _ => Err(Error::InvalidNewTypeWrapper)
+        }
     }
 
     #[inline]
@@ -143,9 +165,25 @@ impl ser::Serializer for Serializer {
     #[inline]
     fn serialize_newtype_struct<T: ?Sized>(self, name: &'static str, value: &T) -> Result<Self::Ok, Self::Error>
     where
-            T: serde::Serialize {
+        T: serde::Serialize 
+    {
         // TODO: serialize the newtypes
-        todo!()
+        if name == SYMBOL {
+            self.new_type = NewType::Symbol;
+        } else if name == ARRAY {
+            self.new_type = NewType::Array;
+        } else if name == DECIMAL32 {
+            self.new_type = NewType::Dec32;
+        } else if name == DECIMAL64 {
+            self.new_type = NewType::Dec64;
+        } else if name == DECIMAL128 {
+            self.new_type = NewType::Dec128;
+        } else if name == TIMESTAMP {
+            self.new_type = NewType::Timestamp
+        } else if name == UUID {
+            self.new_type = NewType::Uuid
+        }
+        value.serialize(self)
     }
 
     #[inline]
@@ -334,5 +372,33 @@ impl ser::SerializeStructVariant for VariantSerializer {
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::Serialize;
+
+    use crate::{types::Timestamp, value::Value};
+
+    use super::to_value;
+
+    fn assert_eq_on_value_vs_expected<T: Serialize>(val: T, expected: Value) {
+        let value: Value = to_value(&val).unwrap();
+        assert_eq!(value, expected)
+    }
+
+    #[test]
+    fn test_serialize_value_bool() {
+        let val = true;
+        let expected: Value = Value::Bool(true);
+        assert_eq_on_value_vs_expected(val, expected)
+    }
+
+    #[test]
+    fn test_serialzie_value_timestamp() {
+        let val = Timestamp::from(131313);
+        let expected = Value::Timestamp(Timestamp::from(131313));
+        assert_eq_on_value_vs_expected(val, expected);
     }
 }

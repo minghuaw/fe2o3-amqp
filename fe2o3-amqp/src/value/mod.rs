@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use crate::{format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}};
 
-mod de;
-mod ser;
+pub mod de;
+pub mod ser;
 
 pub const U32_MAX_AS_USIZE: usize = u32::MAX as usize;
 pub const VALUE: &str = "VALUE";
