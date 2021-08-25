@@ -2,7 +2,10 @@ use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use crate::types::{Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid};
+use crate::types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid};
+
+mod ser;
+mod de;
 
 pub const U32_MAX_AS_USIZE: usize = u32::MAX as usize;
 
@@ -252,5 +255,11 @@ pub enum Value {
     /// encoding name = "array32", encoding code = 0xf0,
     /// category = array, width = 4
     /// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
-    Array(Vec<Value>),
+    Array(Array<Value>),
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Value::Null
+    }
 }

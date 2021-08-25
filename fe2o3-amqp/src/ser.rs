@@ -103,6 +103,7 @@ impl<W: Write> Serializer<W> {
 }
 
 impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
+    // A separate serializer is used for intermediate representation
     type Ok = ();
     type Error = Error;
 
