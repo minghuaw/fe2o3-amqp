@@ -21,3 +21,16 @@ pub enum IsArrayElement {
     FirstElement,
     OtherElement,
 }
+
+#[derive(Debug, Clone)]
+pub enum EnumType {
+    None,
+    Descriptor,
+    Value,
+}
+
+impl Default for EnumType {
+    fn default() -> Self {
+        Self::None
+    }
+}

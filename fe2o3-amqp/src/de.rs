@@ -3,7 +3,7 @@ use std::convert::TryInto;
 
 use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, TIMESTAMP_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, util::NewType};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_FIELDS, DESERIALIZE_DESCRIBED}, util::{EnumType, NewType}};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -19,7 +19,8 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
 
 pub struct Deserializer<R> {
     reader: R,
-    newtype: NewType,
+    new_type: NewType,
+    enum_type: EnumType,
     elem_format_code: Option<EncodingCodes>,
 }
 
@@ -27,7 +28,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            newtype: Default::default(),
+            new_type: Default::default(),
+            enum_type: Default::default(),
             elem_format_code: None,
         }
     }
@@ -35,7 +37,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     pub fn symbol(reader: R) -> Self {
         Self {
             reader,
-            newtype: NewType::Symbol,
+            new_type: NewType::Symbol,
+            enum_type: Default::default(),
             elem_format_code: None,
         }
     }
@@ -380,7 +383,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // match self.newtype {
+        // match self.new_type {
         //     NewType::None => visitor.visit_i64(self.parse_i64()?),
         //     NewType::Timestamp => visitor.visit_i64(self.parse_timestamp()?),
         //     _ => unreachable!(),
@@ -452,10 +455,10 @@ where
     {
         println!(">>> Debug: deserialize_string");
 
-        match self.newtype {
+        match self.new_type {
             NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => {
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
                 visitor.visit_string(self.parse_symbol()?)
             }
             _ => unreachable!(),
@@ -485,18 +488,18 @@ where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug deserialize_byte_buf");
-        match self.newtype {
+        match self.new_type {
             NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
             NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
                 visitor.visit_byte_buf(self.parse_decimal()?)
             }
             NewType::Uuid => {
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
                 visitor.visit_byte_buf(self.parse_uuid()?)
             }
             NewType::Timestamp => {
-                self.newtype = NewType::None;
+                self.new_type = NewType::None;
                 visitor.visit_byte_buf(self.parse_timestamp()?.into())
             }
             _ => unreachable!(),
@@ -556,17 +559,17 @@ where
         V: de::Visitor<'de>,
     {
         if name == SYMBOL {
-            self.newtype = NewType::Symbol;
+            self.new_type = NewType::Symbol;
         } else if name == DECIMAL32 {
-            self.newtype = NewType::Dec32;
+            self.new_type = NewType::Dec32;
         } else if name == DECIMAL64 {
-            self.newtype = NewType::Dec64;
+            self.new_type = NewType::Dec64;
         } else if name == DECIMAL128 {
-            self.newtype = NewType::Dec128;
+            self.new_type = NewType::Dec128;
         } else if name == UUID {
-            self.newtype = NewType::Uuid;
+            self.new_type = NewType::Uuid;
         } else if name == TIMESTAMP {
-            self.newtype = NewType::Timestamp;
+            self.new_type = NewType::Timestamp;
         }
         visitor.visit_newtype_struct(self)
     }
@@ -785,25 +788,33 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // The following are the possible identifiers
-        match self.reader.peek()?.try_into()? {
-            // If a struct is serialized as a map, then the fields are serialized as str
-            EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
-            // FIXME: Enum variant currently are serialzied as map of with variant index and a list
-            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
-                self.deserialize_u32(visitor)
+        match self.enum_type {
+            EnumType::Value => {
+               let code = self.reader.peek()?;
+               visitor.visit_u8(code)
+            },
+            EnumType::Descriptor | EnumType::None => {
+                // The following are the possible identifiers
+                match self.reader.peek()?.try_into()? {
+                    // If a struct is serialized as a map, then the fields are serialized as str
+                    EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
+                    // FIXME: Enum variant currently are serialzied as map of with variant index and a list
+                    EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
+                        self.deserialize_u32(visitor)
+                    }
+                    // Potentially using `Descriptor::Name` as identifier
+                    EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                        self.new_type = NewType::Symbol;
+                        self.deserialize_string(visitor)
+                    }
+                    // Potentially using `Descriptor::Code` as identifier
+                    EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
+                        self.deserialize_u64(visitor)
+                    }
+                    // Other types should not be used to serialize identifiers
+                    _ => Err(Error::InvalidFormatCode),
+                }
             }
-            // Potentially using `Descriptor::Name` as identifier
-            EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
-                self.newtype = NewType::Symbol;
-                self.deserialize_string(visitor)
-            }
-            // Potentially using `Descriptor::Code` as identifier
-            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
-                self.deserialize_u64(visitor)
-            }
-            // Other types should not be used to serialize identifiers
-            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -1098,6 +1109,8 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
+
     use serde::{de::DeserializeOwned, Deserialize};
 
     use crate::{
@@ -1388,7 +1401,7 @@ mod tests {
 
         use crate::ser::to_vec;
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
             A,
             B,
@@ -1397,8 +1410,9 @@ mod tests {
 
         let foo = Foo::B;
         let buf = to_vec(&foo).unwrap();
-        let foo2: Foo = from_slice(&buf).unwrap();
-        println!("{:?}", &foo2);
+        // let foo2: Foo = from_slice(&buf).unwrap();
+        // println!("{:?}", &foo2);
+        assert_eq_from_slice_vs_expected(&buf, foo);
     }
 
     #[test]
@@ -1407,7 +1421,7 @@ mod tests {
 
         use crate::ser::to_vec;
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
             A(String),
             B(u64),
@@ -1415,8 +1429,7 @@ mod tests {
 
         let foo = Foo::B(13);
         let buf = to_vec(&foo).unwrap();
-        let foo2: Foo = from_slice(&buf).unwrap();
-        println!("{:?}", &foo2);
+        assert_eq_from_slice_vs_expected(&buf, foo);
     }
 
     #[test]
@@ -1426,17 +1439,16 @@ mod tests {
 
         let descriptor = Descriptor::Name(Symbol::from("amqp"));
         let buf = to_vec(&descriptor).unwrap();
-        let recovered: Descriptor = from_slice(&buf).unwrap();
-        println!("{:?}", &recovered);
-
-        // unimplemented!()
+        assert_eq_from_slice_vs_expected(&buf, descriptor);
     }
 
     #[test]
     fn test_deserialize_encoding_type() {
         let buf = [EncodingCodes::List8 as u8];
         let encoding_type: EncodingType = from_slice(&buf).unwrap();
-        println!("{:?}", encoding_type);
+        if let EncodingType::Basic | EncodingType::Map = encoding_type {
+            panic!("Expecting EncodingType::List")
+        }
     }
 
     #[test]
@@ -1465,7 +1477,7 @@ mod tests {
         use crate::types::Symbol;
         use serde::{Deserialize, Serialize};
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
         struct Foo {
             a_field: i32,
             b: bool,
@@ -1478,7 +1490,6 @@ mod tests {
         let descriptor = Descriptor::Name(Symbol::from("Foo"));
         let foo = Described::new(EncodingType::List, descriptor, foo);
         let buf = to_vec(&foo).unwrap();
-        let foo2: Described<Foo> = from_slice(&buf).unwrap();
-        println!("{:?}", &foo2);
+        assert_eq_from_slice_vs_expected(&buf, foo);
     }
 }

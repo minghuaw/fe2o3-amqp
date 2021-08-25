@@ -130,6 +130,12 @@ impl<T: Debug> Debug for Described<T> {
     }
 }
 
+impl<T: PartialEq> PartialEq for Described<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.descriptor == other.descriptor && self.value == other.value
+    }
+}
+
 impl<'a, T: ser::Serialize> ser::Serialize for Described<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

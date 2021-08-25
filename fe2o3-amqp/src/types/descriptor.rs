@@ -10,7 +10,7 @@ pub const DESCRIPTOR: &str = "DESCRIPTOR";
 /// 1. amqpnetlite: Symbol
 /// 2. go-amqp: Symbol?
 /// 3. qpid-proton-j2: Symbol
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 // #[serde(rename(serialize = "DESCRIPTOR"))]
 pub enum Descriptor {
     Name(Symbol),

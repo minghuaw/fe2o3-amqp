@@ -2,7 +2,7 @@ use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use crate::types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid};
+use crate::{format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}};
 
 mod de;
 mod ser;
@@ -267,31 +267,32 @@ impl Default for Value {
 
 impl Value {
     pub fn index(&self) -> u8 {
-        match *self {
-            Value::Null => 0,
-            Value::Bool(_) => 1,
-            Value::Ubyte(_) => 2,
-            Value::Ushort(_) => 3,
-            Value::Uint(_) => 4,
-            Value::Ulong(_) => 5,
-            Value::Byte(_) => 6,
-            Value::Short(_) => 7,
-            Value::Int(_) => 8,
-            Value::Long(_) => 9,
-            Value::Float(_) => 10,
-            Value::Double(_) => 11,
-            Value::Decimal32(_) => 12,
-            Value::Decimal64(_) => 13,
-            Value::Decimal128(_) => 14,
-            Value::Char(_) => 15,
-            Value::Timestamp(_) => 16,
-            Value::Uuid(_) => 17,
-            Value::Binary(_) => 18,
-            Value::String(_) => 19,
-            Value::Symbol(_) => 20,
-            Value::List(_) => 21,
-            Value::Map(_) => 22,
-            Value::Array(_) => 23,
-        }
+        let code = match *self {
+            Value::Null => EncodingCodes::Null,
+            Value::Bool(_) => EncodingCodes::Boolean,
+            Value::Ubyte(_) => EncodingCodes::Ubyte,
+            Value::Ushort(_) => EncodingCodes::Ushort,
+            Value::Uint(_) => EncodingCodes::Uint,
+            Value::Ulong(_) => EncodingCodes::Ulong,
+            Value::Byte(_) => EncodingCodes::Byte,
+            Value::Short(_) => EncodingCodes::Short,
+            Value::Int(_) => EncodingCodes::Int,
+            Value::Long(_) => EncodingCodes::Long,
+            Value::Float(_) => EncodingCodes::Float,
+            Value::Double(_) => EncodingCodes::Double,
+            Value::Decimal32(_) => EncodingCodes::Decimal32,
+            Value::Decimal64(_) => EncodingCodes::Decimal64,
+            Value::Decimal128(_) => EncodingCodes::Decimal128,
+            Value::Char(_) => EncodingCodes::Char,
+            Value::Timestamp(_) => EncodingCodes::Timestamp,
+            Value::Uuid(_) => EncodingCodes::Uuid,
+            Value::Binary(_) => EncodingCodes::VBin32,
+            Value::String(_) => EncodingCodes::Str32,
+            Value::Symbol(_) => EncodingCodes::Sym32,
+            Value::List(_) => EncodingCodes::List32,
+            Value::Map(_) => EncodingCodes::Map32,
+            Value::Array(_) => EncodingCodes::Array32,
+        };
+        code as u8
     }
 }

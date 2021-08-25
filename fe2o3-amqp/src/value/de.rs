@@ -7,6 +7,43 @@ use crate::types::Array;
 
 use super::Value;
 
+enum Field {
+    Null,
+    Bool,
+    Ubyte,
+    Ushort,
+    Uint,
+    Ulong,
+    Byte,
+    Short,
+    Int,
+    Long,
+    Float,
+    Double,
+    Decimal32,
+    Decimal64,
+    Decimal128,
+    Char,
+    Timestamp,
+    Uuid,
+    Binary,
+    String,
+    Symbol,
+    List,
+    Map,
+    Array
+}
+
+struct FieldVisitor { }
+
+impl<'de> de::Visitor<'de> for FieldVisitor {
+    type Value = Field;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("field of enum Value")
+    }
+}
+
 struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
