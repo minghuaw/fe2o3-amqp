@@ -1,8 +1,10 @@
+use std::convert::TryFrom;
+
 use ordered_float::OrderedFloat;
 use serde::ser;
 use serde_bytes::ByteBuf;
 
-use crate::{error::Error, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, Timestamp, UUID}, util::NewType};
+use crate::{error::Error, fixed_width::DECIMAL32_WIDTH, types::{ARRAY, Array, DECIMAL128, DECIMAL32, DECIMAL64, Dec128, Dec32, Dec64, SYMBOL, Symbol, TIMESTAMP, Timestamp, UUID, Uuid}, util::NewType};
 
 use super::Value;
 
@@ -65,10 +67,10 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type Ok = Value;
     type Error = Error;
     
-    type SerializeSeq = SeqSerializer;
-    type SerializeTuple = SeqSerializer;
-    type SerializeTupleStruct = SeqSerializer;
-    type SerializeStruct = SeqSerializer;
+    type SerializeSeq = SeqSerializer<'a>;
+    type SerializeTuple = SeqSerializer<'a>;
+    type SerializeTupleStruct = SeqSerializer<'a>;
+    type SerializeStruct = SeqSerializer<'a>;
     type SerializeMap = MapSerializer;
     type SerializeStructVariant = VariantSerializer;
     type SerializeTupleVariant = VariantSerializer;
@@ -97,7 +99,10 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         match self.new_type {
             NewType::None => Ok(Value::Long(v)),
-            NewType::Timestamp => Ok(Value::Timestamp(Timestamp::from(v))),
+            NewType::Timestamp => {
+                self.new_type = NewType::None;
+                Ok(Value::Timestamp(Timestamp::from(v)))
+            },
             _ => Err(Error::InvalidNewTypeWrapper)
         }
     }
@@ -139,12 +144,40 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::String(String::from(v)))
+        match self.new_type {
+            NewType::None => Ok(Value::String(String::from(v))),
+            NewType::Symbol => {
+                self.new_type = NewType::None;
+                Ok(Value::Symbol(Symbol::from(v)))
+            },
+            _ => Err(Error::InvalidNewTypeWrapper)
+        }
     }
 
     #[inline]
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Binary(ByteBuf::from(v.to_vec())))
+        match self.new_type {
+            NewType::None => Ok(Value::Binary(ByteBuf::from(v.to_vec()))),
+            NewType::Dec32 => {
+                self.new_type = NewType::None;
+                Ok(Value::Decimal32(Dec32::try_from(v)?))
+            },
+            NewType::Dec64 => {
+                self.new_type = NewType::None;
+                Ok(Value::Decimal64(Dec64::try_from(v)?))
+            },
+            NewType::Dec128 => {
+                self.new_type = NewType::None;
+                Ok(Value::Decimal128(Dec128::try_from(v)?))
+            },
+            NewType::Uuid => {
+                self.new_type = NewType::Uuid;
+                Ok(Value::Uuid(Uuid::try_from(v)?))
+            },
+            NewType::Timestamp => Err(Error::InvalidNewTypeWrapper),
+            NewType::Array => Err(Error::InvalidNewTypeWrapper),
+            NewType::Symbol => Err(Error::InvalidNewTypeWrapper),
+        }
     }
 
     #[inline]
@@ -167,7 +200,6 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     where
         T: serde::Serialize 
     {
-        // TODO: serialize the newtypes
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
         } else if name == ARRAY {
@@ -200,7 +232,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        todo!()
+        Ok(SeqSerializer::new(self))
     }
 
     #[inline]
@@ -246,9 +278,27 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 }
 
-pub struct SeqSerializer { }
+pub struct SeqSerializer<'a> { 
+    se: &'a mut Serializer,
+    vec: Vec<Value>
+}
 
-impl ser::SerializeSeq for SeqSerializer {
+impl<'a> SeqSerializer<'a> {
+    pub fn new(se: &'a mut Serializer) -> Self {
+        Self {
+            se, 
+            vec: Vec::new(),
+        }
+    }
+}
+
+impl<'a> AsMut<Serializer> for SeqSerializer<'a> {
+    fn as_mut(&mut self) -> &mut Serializer {
+        self.se
+    }
+}
+
+impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
@@ -256,60 +306,73 @@ impl ser::SerializeSeq for SeqSerializer {
     where
         T: serde::Serialize 
     {
-        todo!()
+        let val: Value = value.serialize(self.as_mut())?;
+        self.vec.push(val);
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        match self.se.new_type {
+            NewType::None => {
+                Ok(Value::List(self.vec))
+            },
+            NewType::Array => {
+                Ok(Value::Array(Array::from(self.vec)))
+            },
+            _ => Err(Error::InvalidNewTypeWrapper)
+        }
     }
 }
 
 pub struct TupleSerializer { }
 
-impl ser::SerializeTuple for SeqSerializer {
+impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-            T: serde::Serialize {
-        todo!()
+        T: serde::Serialize 
+    {
+        let val = value.serialize(self.as_mut())?;
+        self.vec.push(val);
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        Ok(Value::List(self.vec))
     }
 }
 
-impl ser::SerializeTupleStruct for SeqSerializer {
+impl<'a> ser::SerializeTupleStruct for SeqSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
             T: serde::Serialize {
-        todo!()
+        <Self as ser::SerializeTuple>::serialize_element(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        <Self as ser::SerializeTuple>::end(self)
     }
 }
 
 // pub struct StructSerializer { }
 
-impl ser::SerializeStruct for SeqSerializer {
+impl<'a> ser::SerializeStruct for SeqSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
             T: serde::Serialize {
-        todo!()
+        <Self as ser::SerializeTuple>::serialize_element(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!()
+        <Self as ser::SerializeTuple>::end(self)
     }
 }
 
@@ -379,7 +442,7 @@ impl ser::SerializeStructVariant for VariantSerializer {
 mod tests {
     use serde::Serialize;
 
-    use crate::{types::Timestamp, value::Value};
+    use crate::{types::{Array, Timestamp}, value::Value};
 
     use super::to_value;
 
@@ -396,9 +459,29 @@ mod tests {
     }
 
     #[test]
-    fn test_serialzie_value_timestamp() {
+    fn test_serialize_value_timestamp() {
         let val = Timestamp::from(131313);
         let expected = Value::Timestamp(Timestamp::from(131313));
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_list() {
+        let val = vec![1i32, 2, 3, 4];
+        let expected = Value::List(
+            vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4),]
+        );
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_array() {
+        let val = Array::from(vec![1i32, 2, 3, 4]);
+        let expected = Value::Array(
+            Array::from(
+                vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4)]
+            )
+        );
         assert_eq_on_value_vs_expected(val, expected);
     }
 }
