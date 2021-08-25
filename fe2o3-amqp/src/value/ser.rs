@@ -1,4 +1,3 @@
-
 use serde::ser::Serialize;
 
 use super::Value;
@@ -7,7 +6,7 @@ impl Serialize for Value {
     #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         match self {
             Value::Null => serializer.serialize_unit(),
@@ -33,7 +32,7 @@ impl Serialize for Value {
             Value::Symbol(v) => v.serialize(serializer),
             Value::List(v) => v.serialize(serializer),
             Value::Map(v) => v.serialize(serializer),
-            Value::Array(v) => v.serialize(serializer)
+            Value::Array(v) => v.serialize(serializer),
         }
     }
 }
