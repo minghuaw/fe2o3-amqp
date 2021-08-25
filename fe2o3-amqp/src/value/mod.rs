@@ -296,3 +296,267 @@ impl Value {
         code as u8
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use ordered_float::OrderedFloat;
+    use serde::de::DeserializeOwned;
+
+    use crate::ser::to_vec;
+    use crate::de::from_reader;
+
+    use super::Value;
+
+    fn assert_eq_from_reader_vs_expected<T>(buf: Vec<u8>, expected: T)
+    where 
+        T: DeserializeOwned + std::fmt::Debug + PartialEq,
+    {
+        let deserialized: T = from_reader(buf.as_slice()).unwrap();
+        assert_eq!(deserialized, expected)
+    }
+
+    #[test]
+    fn test_value_null() {
+        let expected = Value::Null;
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_bool() {
+        let expected = Value::Bool(true);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        let expected = Value::Bool(false);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_ubyte() {
+        let expected = Value::Ubyte(13);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_ushort() {
+        let expected = Value::Ushort(1313);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_uint() {
+        // uint0
+        let expected = Value::Uint(0);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        // smalluint
+        let expected = Value::Uint(255);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        // uint
+        let expected = Value::Uint(u32::MAX);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_ulong() {
+        // ulong0
+        let expected = Value::Ulong(0);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        // smallulong
+        let expected = Value::Ulong(255);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        // ulong
+        let expected = Value::Ulong(u64::MAX);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_byte() {
+        let expected = Value::Byte(13);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_short() {
+        let expected = Value::Short(1313);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_int() {
+        // smallint
+        let expected = Value::Int(0);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        let expected = Value::Int(255);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        // int
+        let expected = Value::Int(i32::MAX);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_long() {
+        // smalllong
+        let expected = Value::Long(0);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        let expected = Value::Long(255);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+
+        // ulong
+        let expected = Value::Long(i64::MAX);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_float() {
+        let expected = Value::Float(OrderedFloat::from(1.313));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_double() {
+        let expected = Value::Double(OrderedFloat::from(13.13));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_decimal32() {
+        use crate::types::Dec32;
+        let expected = Value::Decimal32(Dec32::from([1, 2, 3, 4]));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_decimal64() {
+        use crate::types::Dec64;
+        let expected = Value::Decimal64(Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_decimal128() {
+        use crate::types::Dec128;
+        let expected = Value::Decimal128(
+            Dec128::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+        );
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_char() {
+        let expected = Value::Char('a');
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_timestamp() {
+        use crate::types::Timestamp;
+        let expected = Value::Timestamp(Timestamp::from(13));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_uuid() {
+        use crate::types::Uuid;
+        let expected = Value::Uuid(Uuid::from(
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14 ,15, 16]
+        ));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_binary() {
+        use serde_bytes::ByteBuf;
+        let expected = Value::Binary(
+            ByteBuf::from(vec![1, 2, 3, 4])
+        );
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_string() {
+        let expected = Value::String(String::from("amqp"));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_symbol() {
+        use crate::types::Symbol;
+        let expected = Value::Symbol(Symbol::from("amqp"));
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_list() {
+        let expected = Value::List(
+            vec![1u32, 2, 3, 4]
+            .iter()
+            .map(|v| Value::Uint(*v))
+            .collect()
+        );
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_map() {
+        use std::collections::BTreeMap;
+        let mut map = BTreeMap::new();
+        map.insert(Value::Uint(13), Value::Bool(true));
+        map.insert(Value::Uint(45), Value::Bool(false));
+        let expected = Value::Map(map);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_value_array() {
+        use crate::types::Array;
+        let vec: Vec<Value> = vec![1i32, 2, 3, 4]
+            .iter()
+            .map(|val| Value::Int(*val))
+            .collect();
+        let arr = Array::from(vec);
+        let expected = Value::Array(arr);
+        let buf = to_vec(&expected).unwrap();
+        println!("{:x?}", &buf);
+
+        assert_eq_from_reader_vs_expected(buf, expected);
+    }
+}

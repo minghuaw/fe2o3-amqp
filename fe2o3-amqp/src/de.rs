@@ -56,6 +56,13 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    fn get_elem_code_or_peek_byte(&mut self) -> Result<u8, Error> {
+        match &self.elem_format_code {
+            Some(c) => Ok(c.clone() as u8),
+            None => self.reader.peek()
+        }
+    }
+
     #[inline]
     fn parse_bool(&mut self) -> Result<bool, Error> {
         // TODO: check whether is parsing in an array
@@ -275,12 +282,13 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_timestamp(&mut self) -> Result<[u8; TIMESTAMP_WIDTH], Error> {
+    fn parse_timestamp(&mut self) -> Result<i64, Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Timestamp => {
-                self.reader.read_const_bytes()
-            }
-            _ => Err(Error::InvalidFormatCode),
+                let bytes = self.reader.read_const_bytes()?;
+                Ok(i64::from_be_bytes(bytes))
+            },
+            _ => Err(Error::InvalidFormatCode)
         }
     }
 
@@ -383,13 +391,14 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // match self.new_type {
-        //     NewType::None => visitor.visit_i64(self.parse_i64()?),
-        //     NewType::Timestamp => visitor.visit_i64(self.parse_timestamp()?),
-        //     _ => unreachable!(),
-        // }
-
-            visitor.visit_i64(self.parse_i64()?)
+        match self.new_type {
+            NewType::None => visitor.visit_i64(self.parse_i64()?),
+            NewType::Timestamp => {
+                self.new_type = NewType::None;
+                visitor.visit_i64(self.parse_timestamp()?)
+            },
+            _ => unreachable!(),
+        }
     }
 
     #[inline]
@@ -498,10 +507,6 @@ where
             NewType::Uuid => {
                 self.new_type = NewType::None;
                 visitor.visit_byte_buf(self.parse_uuid()?)
-            }
-            NewType::Timestamp => {
-                self.new_type = NewType::None;
-                visitor.visit_byte_buf(self.parse_timestamp()?.into())
             }
             _ => unreachable!(),
         }
@@ -798,16 +803,17 @@ where
     {
         match self.enum_type {
             EnumType::Value => {
-               let code = self.reader.peek()?;
+               let code = self.get_elem_code_or_peek_byte()?;
+               println!(">>> Debug deserialize_identifier {:x?}", &code);
                visitor.visit_u8(code)
             },
             EnumType::Descriptor => {
-                let code = self.reader.peek()?;
+                let code = self.get_elem_code_or_peek_byte()?;
                 visitor.visit_u8(code)
             },
             EnumType::None => {
                 // The following are the possible identifiers
-                match self.reader.peek()?.try_into()? {
+                match self.get_elem_code_or_peek_byte()?.try_into()? {
                     // If a struct is serialized as a map, then the fields are serialized as str
                     EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
                     // FIXME: Enum variant currently are serialzied as map of with variant index and a list
@@ -1333,8 +1339,9 @@ mod tests {
         use crate::ser::to_vec;
         use crate::types::Array;
 
-        let expected = Array::from(vec![5u8, 4, 3, 2, 1]);
+        let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
+        println!("{:x?}", &buf);
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 

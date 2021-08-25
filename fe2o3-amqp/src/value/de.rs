@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, convert::TryInto};
+use std::{convert::TryInto};
 
 use ordered_float::OrderedFloat;
-use serde::de::{self, VariantAccess, value};
+use serde::de::{self, VariantAccess};
 
-use crate::{error::Error, format_code::EncodingCodes, types::Array};
+use crate::{error::Error, format_code::EncodingCodes};
 
-use super::Value;
+use super::{Value, VALUE};
 
 enum Field {
     Null,
@@ -47,6 +47,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     where
         E: de::Error, 
     {
+        println!(">>> Debug visit_u8 {:x?}", v);
+
         let field = match v.try_into()
             .map_err(|err: Error| de::Error::custom(err.to_string()))? 
         {
@@ -386,6 +388,13 @@ impl<'de> de::Deserialize<'de> for Value {
     where
         D: serde::Deserializer<'de>,
     {
-        todo!()
+        const VARIANTS: &'static [&'static str] = &[
+            "Null", "Bool", "Ubyte", "Ushort", "Uint", "Ulong",
+            "Byte", "Short", "Int", "Long", "Float", "Double",
+            "Decimal32", "Decimal64", "Decimal128", "Char", "Timestamp",
+            "Uuid", "Binary", "String", "Symbol", "List", "Map", "Array"
+        ];
+        deserializer.deserialize_enum(VALUE, VARIANTS, Visitor { })
     }
 }
+
