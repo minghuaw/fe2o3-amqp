@@ -1,9 +1,19 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
+use crate::{
+    error::Error,
+    fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
+    format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, util::{EnumType, NewType}, value::VALUE};
+    },
+    format_code::EncodingCodes,
+    read::{IoReader, Read, SliceReader},
+    types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    types::{DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED},
+    util::{EnumType, NewType},
+    value::VALUE,
+};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -59,7 +69,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     fn get_elem_code_or_peek_byte(&mut self) -> Result<u8, Error> {
         match &self.elem_format_code {
             Some(c) => Ok(c.clone() as u8),
-            None => self.reader.peek()
+            None => self.reader.peek(),
         }
     }
 
@@ -287,8 +297,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
             EncodingCodes::Timestamp => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(i64::from_be_bytes(bytes))
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 
@@ -396,7 +406,7 @@ where
             NewType::Timestamp => {
                 self.new_type = NewType::None;
                 visitor.visit_i64(self.parse_timestamp()?)
-            },
+            }
             _ => unreachable!(),
         }
     }
@@ -803,14 +813,14 @@ where
     {
         match self.enum_type {
             EnumType::Value => {
-               let code = self.get_elem_code_or_peek_byte()?;
-               println!(">>> Debug deserialize_identifier {:x?}", &code);
-               visitor.visit_u8(code)
-            },
+                let code = self.get_elem_code_or_peek_byte()?;
+                println!(">>> Debug deserialize_identifier {:x?}", &code);
+                visitor.visit_u8(code)
+            }
             EnumType::Descriptor => {
                 let code = self.get_elem_code_or_peek_byte()?;
                 visitor.visit_u8(code)
-            },
+            }
             EnumType::None => {
                 // The following are the possible identifiers
                 match self.get_elem_code_or_peek_byte()?.try_into()? {

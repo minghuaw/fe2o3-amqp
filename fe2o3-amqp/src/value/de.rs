@@ -1,4 +1,4 @@
-use std::{convert::TryInto};
+use std::convert::TryInto;
 
 use ordered_float::OrderedFloat;
 use serde::de::{self, VariantAccess};
@@ -31,10 +31,10 @@ enum Field {
     Symbol,
     List,
     Map,
-    Array
+    Array,
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
@@ -45,19 +45,24 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         println!(">>> Debug visit_u8 {:x?}", v);
 
-        let field = match v.try_into()
-            .map_err(|err: Error| de::Error::custom(err.to_string()))? 
+        let field = match v
+            .try_into()
+            .map_err(|err: Error| de::Error::custom(err.to_string()))?
         {
             EncodingCodes::Null => Field::Null,
-            EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => Field::Bool,
+            EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
+                Field::Bool
+            }
             EncodingCodes::Ubyte => Field::Ubyte,
             EncodingCodes::Ushort => Field::Ushort,
             EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::Uint,
-            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => Field::Ulong,
+            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+                Field::Ulong
+            }
             EncodingCodes::Byte => Field::Byte,
             EncodingCodes::Short => Field::Short,
             EncodingCodes::Int | EncodingCodes::SmallInt => Field::Int,
@@ -76,10 +81,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => Field::List,
             EncodingCodes::Map32 | EncodingCodes::Map8 => Field::Map,
             EncodingCodes::Array32 | EncodingCodes::Array8 => Field::Array,
-            
+
             // The `Value` type cannot hold a `Described` type
-            EncodingCodes::DescribedType => return Err(de::Error::custom("Described type in Value enum is not supported yet"))
-            // EncodingCodes::DescribedType => Field::List, // could probably treat it as a list of two items
+            EncodingCodes::DescribedType => {
+                return Err(de::Error::custom(
+                    "Described type in Value enum is not supported yet",
+                ))
+            } // EncodingCodes::DescribedType => Field::List, // could probably treat it as a list of two items
         };
         Ok(field)
     }
@@ -88,9 +96,9 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_identifier(FieldVisitor { })    
+        deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
 
@@ -105,7 +113,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-        A: de::EnumAccess<'de>, 
+        A: de::EnumAccess<'de>,
     {
         let (val, de) = data.variant()?;
 
@@ -113,95 +121,95 @@ impl<'de> de::Visitor<'de> for Visitor {
             Field::Null => {
                 let _: () = de.newtype_variant()?;
                 Ok(Value::Null)
-            },
+            }
             Field::Bool => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Bool(val))
-            },
+            }
             Field::Ubyte => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Ubyte(val))
-            },
+            }
             Field::Ushort => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Ushort(val))
-            },
+            }
             Field::Uint => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Uint(val))
-            },
+            }
             Field::Ulong => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Ulong(val))
-            },
+            }
             Field::Byte => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Byte(val))
-            },
+            }
             Field::Short => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Short(val))
-            },
+            }
             Field::Int => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Int(val))
-            },
+            }
             Field::Long => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Long(val))
-            },
+            }
             Field::Float => {
                 let val: f32 = de.newtype_variant()?;
                 Ok(Value::Float(OrderedFloat::from(val)))
-            },
+            }
             Field::Double => {
                 let val: f64 = de.newtype_variant()?;
                 Ok(Value::Double(OrderedFloat::from(val)))
-            },
+            }
             Field::Decimal32 => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Decimal32(val))
-            },
+            }
             Field::Decimal64 => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Decimal64(val))
-            },
+            }
             Field::Decimal128 => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Decimal128(val))
-            },
+            }
             Field::Char => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Char(val))
-            },
+            }
             Field::Timestamp => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Timestamp(val))
-            },
+            }
             Field::Uuid => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Uuid(val))
-            },
+            }
             Field::Binary => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Binary(val))
-            },
+            }
             Field::String => {
                 let val = de.newtype_variant()?;
                 Ok(Value::String(val))
-            },
+            }
             Field::Symbol => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Symbol(val))
-            },
+            }
             Field::List => {
                 let val = de.newtype_variant()?;
                 Ok(Value::List(val))
-            },
+            }
             Field::Map => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Map(val))
-            },
+            }
             Field::Array => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Array(val))
@@ -216,12 +224,31 @@ impl<'de> de::Deserialize<'de> for Value {
         D: serde::Deserializer<'de>,
     {
         const VARIANTS: &'static [&'static str] = &[
-            "Null", "Bool", "Ubyte", "Ushort", "Uint", "Ulong",
-            "Byte", "Short", "Int", "Long", "Float", "Double",
-            "Decimal32", "Decimal64", "Decimal128", "Char", "Timestamp",
-            "Uuid", "Binary", "String", "Symbol", "List", "Map", "Array"
+            "Null",
+            "Bool",
+            "Ubyte",
+            "Ushort",
+            "Uint",
+            "Ulong",
+            "Byte",
+            "Short",
+            "Int",
+            "Long",
+            "Float",
+            "Double",
+            "Decimal32",
+            "Decimal64",
+            "Decimal128",
+            "Char",
+            "Timestamp",
+            "Uuid",
+            "Binary",
+            "String",
+            "Symbol",
+            "List",
+            "Map",
+            "Array",
         ];
-        deserializer.deserialize_enum(VALUE, VARIANTS, Visitor { })
+        deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
     }
 }
-

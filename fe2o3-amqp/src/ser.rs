@@ -2,7 +2,15 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{IsArrayElement, NewType}, value::{U32_MAX_AS_USIZE, VALUE}};
+use crate::{
+    error::Error,
+    format_code::EncodingCodes,
+    types::DESCRIPTOR,
+    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
+    util::{IsArrayElement, NewType},
+    value::{U32_MAX_AS_USIZE, VALUE},
+};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -500,7 +508,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     self.writer.write_all(&code)?;
                 }
                 self.new_type = NewType::None;
-            },
+            }
             NewType::Uuid => {
                 if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
                     let code = [EncodingCodes::Uuid as u8];

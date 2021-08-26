@@ -3,8 +3,8 @@ use std::convert::TryInto;
 use serde::de::{self, VariantAccess};
 use serde::ser::Serialize;
 
-use crate::types::Symbol;
 use crate::format_code::EncodingCodes;
+use crate::types::Symbol;
 
 pub const DESCRIPTOR: &str = "DESCRIPTOR";
 
@@ -66,15 +66,18 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
-        match v.try_into()
-            .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))? 
+        match v
+            .try_into()
+            .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
         {
             EncodingCodes::Sym32 | EncodingCodes::Sym8 => Ok(Field::Name),
-            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => Ok(Field::Code),
-            _ => Err(de::Error::custom("Invalid format code"))
-        }    
+            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+                Ok(Field::Code)
+            }
+            _ => Err(de::Error::custom("Invalid format code")),
+        }
     }
 }
 
@@ -106,7 +109,7 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
             Field::Name => {
                 let val = de.newtype_variant()?;
                 Ok(Descriptor::Name(val))
-            },
+            }
             Field::Code => {
                 let val = de.newtype_variant()?;
                 Ok(Descriptor::Code(val))

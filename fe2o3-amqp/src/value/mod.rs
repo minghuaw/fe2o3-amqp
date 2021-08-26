@@ -2,7 +2,10 @@ use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use crate::{format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}};
+use crate::{
+    format_code::EncodingCodes,
+    types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+};
 
 pub mod de;
 pub mod ser;
@@ -297,19 +300,18 @@ impl Value {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use ordered_float::OrderedFloat;
     use serde::de::DeserializeOwned;
 
-    use crate::ser::to_vec;
     use crate::de::from_reader;
+    use crate::ser::to_vec;
 
     use super::Value;
 
     fn assert_eq_from_reader_vs_expected<T>(buf: Vec<u8>, expected: T)
-    where 
+    where
         T: DeserializeOwned + std::fmt::Debug + PartialEq,
     {
         let deserialized: T = from_reader(buf.as_slice()).unwrap();
@@ -465,9 +467,9 @@ mod tests {
     #[test]
     fn test_value_decimal128() {
         use crate::types::Dec128;
-        let expected = Value::Decimal128(
-            Dec128::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
-        );
+        let expected = Value::Decimal128(Dec128::from([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        ]));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -490,9 +492,9 @@ mod tests {
     #[test]
     fn test_value_uuid() {
         use crate::types::Uuid;
-        let expected = Value::Uuid(Uuid::from(
-            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14 ,15, 16]
-        ));
+        let expected = Value::Uuid(Uuid::from([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        ]));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -500,9 +502,7 @@ mod tests {
     #[test]
     fn test_value_binary() {
         use serde_bytes::ByteBuf;
-        let expected = Value::Binary(
-            ByteBuf::from(vec![1, 2, 3, 4])
-        );
+        let expected = Value::Binary(ByteBuf::from(vec![1, 2, 3, 4]));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -526,9 +526,9 @@ mod tests {
     fn test_value_list() {
         let expected = Value::List(
             vec![1u32, 2, 3, 4]
-            .iter()
-            .map(|v| Value::Uint(*v))
-            .collect()
+                .iter()
+                .map(|v| Value::Uint(*v))
+                .collect(),
         );
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
