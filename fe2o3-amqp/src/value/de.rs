@@ -259,6 +259,11 @@ impl<'de> de::Deserialize<'de> for Value {
     }
 }
 
+pub fn from_value<T: de::DeserializeOwned>(value: Value) -> Result<T, Error> {
+    let de = Deserializer::new(value);
+    T::deserialize(de)
+}
+
 pub struct Deserializer {
     new_type: NewType,
     value: Value,
@@ -789,16 +794,8 @@ impl<'de> de::EnumAccess<'de> for VariantAccess {
 impl<'de> de::VariantAccess<'de> for VariantAccess {
     type Error = Error;
 
-    fn unit_variant(mut self) -> Result<(), Self::Error> {
-        match self.iter.next() {
-            Some(value) => {
-                match value {
-                    Value::Null => Ok(()),
-                    _ => Err(Error::InvalidValue)
-                }
-            },
-            None => Err(Error::Message("Expecting Null".to_string()))
-        }
+    fn unit_variant(self) -> Result<(), Self::Error> {
+        Ok(())
     }
 
     fn newtype_variant_seed<T>(mut self, seed: T) -> Result<T::Value, Self::Error>
@@ -839,5 +836,33 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
         V: de::Visitor<'de>,
     {
         self.tuple_variant(fields.len(), visitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::de;
+
+    use crate::value::Value;
+
+    use super::from_value;
+
+    fn assert_eq_from_value_vs_expected<T>(value: Value, expected: T) 
+    where 
+        T: de::DeserializeOwned + std::fmt::Debug + PartialEq,
+    {
+        let deserialized: T = from_value(value).unwrap();
+        assert_eq!(deserialized, expected);
+    }
+
+    #[test]
+    fn test_bool_from_value() {
+        let value = Value::Bool(true);
+        let expected = true;
+        assert_eq_from_value_vs_expected(value, expected);
+
+        let value = Value::Bool(false);
+        let expected = false;
+        assert_eq_from_value_vs_expected(value, expected);
     }
 }
