@@ -8,3 +8,4 @@ edition = "2018"
 [dependencies]
 fe2o3-amqp = { version = "0.0.1", path = "../fe2o3-amqp" }
 serde = { version = "1.0.127", features = ["derive"] }
+serde_bytes = "0.11.5"

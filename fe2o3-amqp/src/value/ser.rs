@@ -252,7 +252,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
             value.serialize(self)
         } else {
             use ser::SerializeSeq;
-            // TODO: how should enum be represented in Value
+            // FIXME: how should enum be represented in Value
             let mut state = self.serialize_seq(Some(2))?;
             state.serialize_element(&variant_index)?;
             state.serialize_element(value)?;
