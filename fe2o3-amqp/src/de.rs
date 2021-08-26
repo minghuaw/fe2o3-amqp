@@ -1,19 +1,9 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{
-    error::Error,
-    fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
-    format::{
+use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    },
-    format_code::EncodingCodes,
-    read::{IoReader, Read, SliceReader},
-    types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED},
-    types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
-    util::{EnumType, NewType},
-    value::VALUE,
-};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, ENCODING_TYPE, SYMBOL, TIMESTAMP, UUID}, util::{EnumType, NewType}, value::VALUE};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -801,16 +791,48 @@ where
         println!(">>> Debug deserialize_enum");
         if name == VALUE {
             self.enum_type = EnumType::Value;
+            visitor.visit_enum(VariantAccess::new(self))
         } else if name == DESCRIPTOR {
             self.enum_type = EnumType::Descriptor;
+            visitor.visit_enum(VariantAccess::new(self))
+        } else if name == ENCODING_TYPE {
+            visitor.visit_enum(VariantAccess::new(self))
+        } else {
+            // TODO: Considering the following enum serialization format
+            // `unit_variant` - a single u32
+            // generic `newtype_variant` - List([u32, Value])
+            // `tuple_variant` and `struct_variant` - List([u32, List([Value, *])])
+            match self.get_elem_code_or_peek_byte()?.try_into()? {
+                EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => {
+                    visitor.visit_enum(VariantAccess::new(self))
+                },
+                EncodingCodes::List0 => {
+                    Err(Error::InvalidFormatCode)
+                },
+                EncodingCodes::List8 => {
+                    let _code = self.reader.next()?;
+                    let _size = self.reader.next()? as usize;
+                    let count = self.reader.next()? as usize;
+                    if count != 2 {
+                        return Err(Error::InvalidLength)
+                    }
+                    visitor.visit_enum(VariantAccess::new(self))
+                },
+                EncodingCodes::List32 => {
+                    let _code = self.reader.next()?;
+                    let size_bytes = self.reader.read_const_bytes()?;
+                    let _size = u32::from_be_bytes(size_bytes);
+                    let count_bytes = self.reader.read_const_bytes()?;
+                    let count = u32::from_be_bytes(count_bytes);
+
+                    if count != 2 {
+                        return Err(Error::InvalidLength)
+                    }
+                    visitor.visit_enum(VariantAccess::new(self))
+                },
+                _ => Err(Error::InvalidFormatCode)
+            }
         }
-
-        // TODO: Considering the following enum serialization format
-        // `unit_variant` - a single u32
-        // generic `newtype_variant` - List([u32, Value])
-        // `tuple_variant` and `struct_variant` - List([u32, List([Value, *])])
-
-        visitor.visit_enum(VariantAccess::new(self))
     }
 
     // an identifier is either a field of a struct or a variant of an eunm
@@ -1432,43 +1454,6 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_unit_variant() {
-        use serde::{Deserialize, Serialize};
-
-        use crate::ser::to_vec;
-
-        #[derive(Debug, Serialize, Deserialize, PartialEq)]
-        enum Foo {
-            A,
-            B,
-            C,
-        }
-
-        let foo = Foo::B;
-        let buf = to_vec(&foo).unwrap();
-        // let foo2: Foo = from_slice(&buf).unwrap();
-        // println!("{:?}", &foo2);
-        assert_eq_from_slice_vs_expected(&buf, foo);
-    }
-
-    #[test]
-    fn test_deserialize_newtype_variant() {
-        use serde::{Deserialize, Serialize};
-
-        use crate::ser::to_vec;
-
-        #[derive(Debug, Serialize, Deserialize, PartialEq)]
-        enum Foo {
-            A(String),
-            B(u64),
-        }
-
-        let foo = Foo::B(13);
-        let buf = to_vec(&foo).unwrap();
-        assert_eq_from_slice_vs_expected(&buf, foo);
-    }
-
-    #[test]
     fn test_deserialize_descriptor() {
         use crate::ser::to_vec;
         use crate::types::Symbol;
@@ -1527,5 +1512,86 @@ mod tests {
         let foo = Described::new(EncodingType::List, descriptor, foo);
         let buf = to_vec(&foo).unwrap();
         assert_eq_from_slice_vs_expected(&buf, foo);
+    }
+
+    #[test]
+    fn test_deserialize_unit_variant() {
+        use serde::{Deserialize, Serialize};
+
+        use crate::ser::to_vec;
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A,
+            B,
+            C,
+        }
+
+        let foo = Foo::B;
+        let buf = to_vec(&foo).unwrap();
+        // let foo2: Foo = from_slice(&buf).unwrap();
+        // println!("{:?}", &foo2);
+        assert_eq_from_slice_vs_expected(&buf, foo);
+    }
+
+    #[test]
+    fn test_deserialize_newtype_variant() {
+        use serde::{Deserialize, Serialize};
+
+        use crate::ser::to_vec;
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A(String),
+            B(u64),
+        }
+
+        let foo = Foo::B(13);
+        let buf = to_vec(&foo).unwrap();
+        println!("{:x?}", &buf);
+        assert_eq_from_slice_vs_expected(&buf, foo);
+    }
+
+
+    #[test]
+    fn test_deserialize_tuple_variant() {
+        use serde::{Deserialize, Serialize};
+
+        use crate::ser::to_vec;
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A(u32, bool),
+            B(i32, String)
+        }
+        let expected = Foo::B(13, "amqp".to_string());
+        let buf = to_vec(&expected).unwrap();
+        // let foo: Foo = from_slice(&buf).unwrap();
+        // println!("{:?}", foo);
+        assert_eq_from_reader_vs_expected(&buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_struct_variant() {
+        use serde::{Deserialize, Serialize};
+
+        use crate::ser::to_vec;
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A {
+                num: u32, 
+                is_a: bool
+            },
+            B{
+                signed_num: i32, 
+                amqp: String
+            }
+        }
+        let expected = Foo::A {num: 13, is_a: true};
+        let buf = to_vec(&expected).unwrap();
+        // let foo: Foo = from_slice(&buf).unwrap();
+        // println!("{:?}", foo);
+        assert_eq_from_reader_vs_expected(&buf, expected);
     }
 }

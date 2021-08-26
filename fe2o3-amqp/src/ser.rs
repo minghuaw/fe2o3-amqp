@@ -609,13 +609,17 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize,
     {
+        use ser::SerializeSeq;
         if name == DESCRIPTOR || name == VALUE {
             value.serialize(self)
         } else {
             // TODO: how should enums be treated?
-
-            self.serialize_u32(variant_index)?;
-            value.serialize(self)
+            // self.serialize_u32(variant_index)?;
+            // value.serialize(self)
+            let mut state = self.serialize_seq(Some(2))?;
+            state.serialize_element(&variant_index)?;
+            state.serialize_element(value)?;
+            state.end()
         }
     }
 
@@ -1189,12 +1193,12 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
 }
 
 pub struct VariantSerializer<'a, W: 'a> {
-    _se: &'a mut Serializer<W>,
+    se: &'a mut Serializer<W>,
     _name: &'static str,
-    _variant_index: u32,
+    variant_index: u32,
     _variant: &'static str,
-    _num: usize,
-    _buf: Vec<u8>,
+    num: usize,
+    buf: Vec<u8>,
 }
 
 impl<'a, W: 'a> VariantSerializer<'a, W> {
@@ -1206,12 +1210,12 @@ impl<'a, W: 'a> VariantSerializer<'a, W> {
         num: usize, // number of field in the tuple
     ) -> Self {
         Self {
-            _se: se,
+            se: se,
             _name: name,
-            _variant_index: variant_index,
+            variant_index: variant_index,
             _variant: variant,
-            _num: num,
-            _buf: Vec::new(),
+            num: num,
+            buf: Vec::new(),
         }
     }
 }
@@ -1220,25 +1224,24 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
     type Ok = ();
     type Error = Error;
 
-    fn serialize_field<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
-        unimplemented!()
-        // let mut se = Serializer::new(&mut self.buf, IsArrayElement::False);
-        // value.serialize(&mut se)
+        let mut se = Serializer::new(&mut self.buf, IsArrayElement::False);
+        value.serialize(&mut se)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
-        // let mut value = Vec::new();
-        // write_list(&mut value, self.num, self.buf)?;
+        let mut value = Vec::new();
+        write_list(&mut value, self.num, self.buf, &self.se.is_array_elem)?;
 
-        // let mut kv = Vec::new();
-        // let mut se = Serializer::new(&mut kv, IsArrayElement::False);
-        // ser::Serialize::serialize(&self.variant_index, &mut se)?;
-        // kv.append(&mut value);
+        let mut list = Vec::new();
+        let mut se = Serializer::new(&mut list, IsArrayElement::False);
+        ser::Serialize::serialize(&self.variant_index, &mut se)?;
+        list.append(&mut value);
         // write_map(&mut self.se.writer, 1, kv)
+        write_list(&mut self.se.writer, 2, list, &self.se.is_array_elem)
     }
 }
 
@@ -1249,18 +1252,16 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
     fn serialize_field<T: ?Sized>(
         &mut self,
         _key: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<(), Self::Error>
     where
         T: Serialize,
     {
-        // <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
-        unimplemented!()
+        <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        // <Self as ser::SerializeTupleVariant>::end(self)
-        unimplemented!()
+        <Self as ser::SerializeTupleVariant>::end(self)
     }
 }
 
@@ -1824,26 +1825,26 @@ mod test {
         println!("{:?}", output);
     }
 
-    // #[test]
-    // fn test_serialize_tuple_variant() {
-    //     let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
-    //     let output = to_vec(&val).unwrap();
-    //     println!("{:?}", output);
+    #[test]
+    fn test_serialize_tuple_variant() {
+        let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
+        // let output = to_vec(&val).unwrap();
+        // println!("{:x?}", output);
+        let expected = vec![0xc0, 0x0f, 0x02, 0x52, 0x02, 0xc0, 0x0a, 0x03, 0x41, 0x53, 0x0d, 0xa1, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        assert_eq_on_serialized_vs_expected(val, expected)
+    }
 
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_serialize_struct_variant() {
-    //     let val = Enumeration::StructVariant {
-    //         id: 13,
-    //         is_true: true,
-    //     };
-    //     let output = to_vec(&val).unwrap();
-    //     println!("{:?}", output);
-
-    //     unimplemented!()
-    // }
+    #[test]
+    fn test_serialize_struct_variant() {
+        let val = Enumeration::StructVariant {
+            id: 13,
+            is_true: true,
+        };
+        // let output = to_vec(&val).unwrap();
+        // println!("{:x?}", output);
+        let expected = vec![0xc0, 0x09, 0x02, 0x52, 0x03, 0xc0, 0x04, 0x02, 0x52, 0x0d, 0x41];
+        assert_eq_on_serialized_vs_expected(val, expected);
+    }
 
     // #[test]
     // fn test_serialize_described_unit_variant() {
