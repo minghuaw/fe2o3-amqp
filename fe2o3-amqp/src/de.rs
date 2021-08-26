@@ -1,9 +1,19 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
+use crate::{
+    error::Error,
+    fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
+    format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, ENCODING_TYPE, SYMBOL, TIMESTAMP, UUID}, util::{EnumType, NewType}, value::VALUE};
+    },
+    format_code::EncodingCodes,
+    read::{IoReader, Read, SliceReader},
+    types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED},
+    types::{DECIMAL128, DECIMAL32, DECIMAL64, ENCODING_TYPE, SYMBOL, TIMESTAMP, UUID},
+    util::{EnumType, NewType},
+    value::VALUE,
+};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -805,19 +815,17 @@ where
             match self.get_elem_code_or_peek_byte()?.try_into()? {
                 EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => {
                     visitor.visit_enum(VariantAccess::new(self))
-                },
-                EncodingCodes::List0 => {
-                    Err(Error::InvalidFormatCode)
-                },
+                }
+                EncodingCodes::List0 => Err(Error::InvalidFormatCode),
                 EncodingCodes::List8 => {
                     let _code = self.reader.next()?;
                     let _size = self.reader.next()? as usize;
                     let count = self.reader.next()? as usize;
                     if count != 2 {
-                        return Err(Error::InvalidLength)
+                        return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
-                },
+                }
                 EncodingCodes::List32 => {
                     let _code = self.reader.next()?;
                     let size_bytes = self.reader.read_const_bytes()?;
@@ -826,11 +834,11 @@ where
                     let count = u32::from_be_bytes(count_bytes);
 
                     if count != 2 {
-                        return Err(Error::InvalidLength)
+                        return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
-                },
-                _ => Err(Error::InvalidFormatCode)
+                }
+                _ => Err(Error::InvalidFormatCode),
             }
         }
     }
@@ -1552,7 +1560,6 @@ mod tests {
         assert_eq_from_slice_vs_expected(&buf, foo);
     }
 
-
     #[test]
     fn test_deserialize_tuple_variant() {
         use serde::{Deserialize, Serialize};
@@ -1562,7 +1569,7 @@ mod tests {
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
             A(u32, bool),
-            B(i32, String)
+            B(i32, String),
         }
         let expected = Foo::B(13, "amqp".to_string());
         let buf = to_vec(&expected).unwrap();
@@ -1579,16 +1586,13 @@ mod tests {
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
-            A {
-                num: u32, 
-                is_a: bool
-            },
-            B{
-                signed_num: i32, 
-                amqp: String
-            }
+            A { num: u32, is_a: bool },
+            B { signed_num: i32, amqp: String },
         }
-        let expected = Foo::A {num: 13, is_a: true};
+        let expected = Foo::A {
+            num: 13,
+            is_a: true,
+        };
         let buf = to_vec(&expected).unwrap();
         // let foo: Foo = from_slice(&buf).unwrap();
         // println!("{:?}", foo);

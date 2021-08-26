@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, convert::TryInto};
 
 use ordered_float::OrderedFloat;
-use serde::{de::{self}};
+use serde::de::{self};
 
 use crate::{
     error::Error,
@@ -674,11 +674,9 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         } else {
             match self.value {
                 // An Uint should represent a unit_variant
-                v @ Value::Uint(_) => {
-                    visitor.visit_enum(VariantAccess{
-                        iter: vec![v].into_iter()
-                    })
-                }
+                v @ Value::Uint(_) => visitor.visit_enum(VariantAccess {
+                    iter: vec![v].into_iter(),
+                }),
                 Value::List(v) => visitor.visit_enum(VariantAccess {
                     iter: v.into_iter(),
                 }),
@@ -791,8 +789,8 @@ impl<'de> de::EnumAccess<'de> for VariantAccess {
             Some(value) => {
                 let val = seed.deserialize(Deserializer::new(value))?;
                 Ok((val, self))
-            },
-            None => Err(Error::Message("Expecting a Value".to_string()))
+            }
+            None => Err(Error::Message("Expecting a Value".to_string())),
         }
     }
 }
@@ -809,10 +807,8 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
         T: de::DeserializeSeed<'de>,
     {
         match self.iter.next() {
-            Some(value) => {
-                seed.deserialize(Deserializer::new(value))
-            },
-            None => Err(Error::Message("Expecting a value".to_string()))
+            Some(value) => seed.deserialize(Deserializer::new(value)),
+            None => Err(Error::Message("Expecting a value".to_string())),
         }
     }
 
@@ -821,15 +817,13 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
         V: de::Visitor<'de>,
     {
         match self.iter.next() {
-            Some(value) => {
-                match &value {
-                    Value::List(_) => {
-                        de::Deserializer::deserialize_tuple(Deserializer::new(value), len, visitor)
-                    },
-                    _ => Err(Error::InvalidValue)
+            Some(value) => match &value {
+                Value::List(_) => {
+                    de::Deserializer::deserialize_tuple(Deserializer::new(value), len, visitor)
                 }
+                _ => Err(Error::InvalidValue),
             },
-            None => Err(Error::Message("Expecting Value::List".to_string()))
+            None => Err(Error::Message("Expecting Value::List".to_string())),
         }
     }
 
@@ -853,8 +847,8 @@ mod tests {
 
     use super::from_value;
 
-    fn assert_eq_from_value_vs_expected<T>(value: Value, expected: T) 
-    where 
+    fn assert_eq_from_value_vs_expected<T>(value: Value, expected: T)
+    where
         T: de::DeserializeOwned + std::fmt::Debug + PartialEq,
     {
         let deserialized: T = from_value(value).unwrap();
@@ -910,15 +904,12 @@ mod tests {
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
             A(u32, bool),
-            B(i32, String)
+            B(i32, String),
         }
         let expected = Foo::B(13, "amqp".to_string());
         let val = Value::List(vec![
             Value::Uint(1),
-            Value::List(vec![
-                Value::Int(13),
-                Value::String(String::from("amqp"))
-            ])
+            Value::List(vec![Value::Int(13), Value::String(String::from("amqp"))]),
         ]);
         assert_eq_from_value_vs_expected(val, expected);
     }
@@ -929,23 +920,17 @@ mod tests {
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
-            A {
-                num: u32, 
-                is_a: bool
-            },
-            B{
-                signed_num: i32, 
-                amqp: String
-            }
+            A { num: u32, is_a: bool },
+            B { signed_num: i32, amqp: String },
         }
 
-        let expected = Foo::A {num: 13, is_a: true};
+        let expected = Foo::A {
+            num: 13,
+            is_a: true,
+        };
         let val = Value::List(vec![
             Value::Uint(0),
-            Value::List(vec![
-                Value::Uint(13),
-                Value::Bool(true)
-            ])
+            Value::List(vec![Value::Uint(13), Value::Bool(true)]),
         ]);
         assert_eq_from_value_vs_expected(val, expected);
     }

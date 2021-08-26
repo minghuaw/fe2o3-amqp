@@ -300,7 +300,13 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Ok(VariantSerializer::new(self, name, variant_index, variant, len))
+        Ok(VariantSerializer::new(
+            self,
+            name,
+            variant_index,
+            variant,
+            len,
+        ))
     }
 
     #[inline]
@@ -328,7 +334,13 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         variant: &'static str,
         len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Ok(VariantSerializer::new(self, name, variant_index, variant, len))
+        Ok(VariantSerializer::new(
+            self,
+            name,
+            variant_index,
+            variant,
+            len,
+        ))
     }
 
     #[inline]
@@ -490,7 +502,7 @@ pub struct VariantSerializer<'a> {
     variant_index: u32,
     _variant: &'static str,
     _num: usize,
-    buf: Vec<Value>
+    buf: Vec<Value>,
 }
 
 impl<'a> VariantSerializer<'a> {
@@ -667,15 +679,12 @@ mod tests {
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
             A(u32, bool),
-            B(i32, String)
+            B(i32, String),
         }
         let val = Foo::B(13, "amqp".to_string());
         let expected = Value::List(vec![
             Value::Uint(1),
-            Value::List(vec![
-                Value::Int(13),
-                Value::String(String::from("amqp"))
-            ])
+            Value::List(vec![Value::Int(13), Value::String(String::from("amqp"))]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
     }
@@ -686,23 +695,17 @@ mod tests {
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         enum Foo {
-            A {
-                num: u32, 
-                is_a: bool
-            },
-            B{
-                signed_num: i32, 
-                amqp: String
-            }
+            A { num: u32, is_a: bool },
+            B { signed_num: i32, amqp: String },
         }
 
-        let val = Foo::A {num: 13, is_a: true};
+        let val = Foo::A {
+            num: 13,
+            is_a: true,
+        };
         let expected = Value::List(vec![
             Value::Uint(0),
-            Value::List(vec![
-                Value::Uint(13),
-                Value::Bool(true)
-            ])
+            Value::List(vec![Value::Uint(13), Value::Bool(true)]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
     }
