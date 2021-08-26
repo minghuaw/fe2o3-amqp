@@ -6,7 +6,6 @@ use serde_bytes::ByteBuf;
 
 use crate::{
     error::Error,
-    fixed_width::DECIMAL32_WIDTH,
     types::{
         Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, ARRAY, DECIMAL128, DECIMAL32,
         DECIMAL64, SYMBOL, TIMESTAMP, UUID,
@@ -194,16 +193,16 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     #[inline]
-    fn serialize_unit_struct(self, name: &'static str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
         self.serialize_unit()
     }
 
     #[inline]
     fn serialize_unit_variant(
         self,
-        name: &'static str,
+        _ame: &'static str,
         variant_index: u32,
-        variant: &'static str,
+        _variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         self.serialize_u32(variant_index)
     }
@@ -424,7 +423,7 @@ impl<'a> ser::SerializeStruct for SeqSerializer<'a> {
 
     fn serialize_field<T: ?Sized>(
         &mut self,
-        key: &'static str,
+        _key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error>
     where
@@ -527,6 +526,8 @@ impl ser::SerializeStructVariant for VariantSerializer {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use serde::Serialize;
 
     use crate::{
@@ -576,6 +577,20 @@ mod tests {
             Value::Int(3),
             Value::Int(4),
         ]));
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_map() {
+        let mut val = BTreeMap::new();
+        val.insert("a", 1i32);
+        val.insert("m", 2);
+        val.insert("q", 3);
+        val.insert("p", 4);
+        let expected = Value::Map(
+            val.iter().map(|(k, v)| (to_value(k).unwrap(), to_value(v).unwrap()))
+            .collect()
+        );
         assert_eq_on_value_vs_expected(val, expected);
     }
 }
