@@ -805,6 +805,11 @@ where
             self.enum_type = EnumType::Descriptor;
         }
 
+        // TODO: Considering the following enum serialization format
+        // `unit_variant` - a single u32
+        // generic `newtype_variant` - List([u32, Value])
+        // `tuple_variant` and `struct_variant` - List([u32, List([Value, *])])
+
         visitor.visit_enum(VariantAccess::new(self))
     }
 

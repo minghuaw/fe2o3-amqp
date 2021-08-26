@@ -673,6 +673,12 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             }
         } else {
             match self.value {
+                // An Uint should represent a unit_variant
+                v @ Value::Uint(_) => {
+                    visitor.visit_enum(VariantAccess{
+                        iter: vec![v].into_iter()
+                    })
+                }
                 Value::List(v) => visitor.visit_enum(VariantAccess {
                     iter: v.into_iter(),
                 }),
