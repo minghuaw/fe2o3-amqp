@@ -12,6 +12,10 @@ impl Symbol {
     pub fn new(val: String) -> Self {
         Self(val)
     }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
 }
 
 impl From<String> for Symbol {
@@ -61,15 +65,3 @@ impl<'de> de::Deserialize<'de> for Symbol {
         deserializer.deserialize_newtype_struct(SYMBOL, SymbolVisitor {})
     }
 }
-
-// #[cfg(test)]
-// mod tests{
-//     use super::*;
-
-//     #[test]
-//     fn test_serialize_symbol() {
-//         let symbol = Symbol("amqp".into());
-//         let expected = [0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
-//         let
-//     }
-// }

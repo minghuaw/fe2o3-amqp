@@ -9,8 +9,8 @@ use crate::{
     },
     format_code::EncodingCodes,
     read::{IoReader, Read, SliceReader},
+    types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED},
     types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
-    types::{DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED},
     util::{EnumType, NewType},
     value::VALUE,
 };
@@ -350,7 +350,9 @@ where
             EncodingCodes::DescribedType => {
                 self.deserialize_struct(DESERIALIZE_DESCRIBED, DESCRIBED_FIELDS, visitor)
             }
-            EncodingCodes::Array32 | EncodingCodes::Array8 => self.deserialize_seq(visitor),
+            EncodingCodes::Array32 | EncodingCodes::Array8 => {
+                self.deserialize_newtype_struct(ARRAY, visitor)
+            }
             EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
                 self.deserialize_seq(visitor)
             }
@@ -851,7 +853,7 @@ where
         V: de::Visitor<'de>,
     {
         // The deserializer will only peek the next u8
-        visitor.visit_u8(self.reader.peek()?)
+        visitor.visit_u8(self.get_elem_code_or_peek_byte()?)
     }
 }
 

@@ -13,9 +13,21 @@ pub const UUID: &str = "UUID";
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Uuid([u8; UUID_WIDTH]);
 
+impl Uuid {
+    pub fn into_inner(self) -> [u8; UUID_WIDTH] {
+        self.0
+    }
+}
+
 impl From<[u8; UUID_WIDTH]> for Uuid {
     fn from(val: [u8; UUID_WIDTH]) -> Self {
         Self(val)
+    }
+}
+
+impl From<Uuid> for [u8; UUID_WIDTH] {
+    fn from(val: Uuid) -> Self {
+        val.0
     }
 }
 

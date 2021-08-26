@@ -269,7 +269,7 @@ impl Default for Value {
 }
 
 impl Value {
-    pub fn index(&self) -> u8 {
+    pub fn format_code(&self) -> u8 {
         let code = match *self {
             Value::Null => EncodingCodes::Null,
             Value::Bool(_) => EncodingCodes::Boolean,

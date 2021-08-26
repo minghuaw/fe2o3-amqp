@@ -110,7 +110,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
                 self.new_type = NewType::None;
                 Ok(Value::Timestamp(Timestamp::from(v)))
             }
-            _ => Err(Error::InvalidNewTypeWrapper),
+            _ => Err(Error::InvalidValue),
         }
     }
 
@@ -157,7 +157,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
                 self.new_type = NewType::None;
                 Ok(Value::Symbol(Symbol::from(v)))
             }
-            _ => Err(Error::InvalidNewTypeWrapper),
+            _ => Err(Error::InvalidValue),
         }
     }
 
@@ -181,9 +181,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
                 self.new_type = NewType::Uuid;
                 Ok(Value::Uuid(Uuid::try_from(v)?))
             }
-            NewType::Timestamp => Err(Error::InvalidNewTypeWrapper),
-            NewType::Array => Err(Error::InvalidNewTypeWrapper),
-            NewType::Symbol => Err(Error::InvalidNewTypeWrapper),
+            NewType::Timestamp => Err(Error::InvalidValue),
+            NewType::Array => Err(Error::InvalidValue),
+            NewType::Symbol => Err(Error::InvalidValue),
         }
     }
 
@@ -300,7 +300,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Ok(VariantSerializer { })
+        Ok(VariantSerializer {})
     }
 
     #[inline]
@@ -328,7 +328,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Ok(VariantSerializer { })
+        Ok(VariantSerializer {})
     }
 
     #[inline]
@@ -374,7 +374,7 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
         match self.se.new_type {
             NewType::None => Ok(Value::List(self.vec)),
             NewType::Array => Ok(Value::Array(Array::from(self.vec))),
-            _ => Err(Error::InvalidNewTypeWrapper),
+            _ => Err(Error::InvalidValue),
         }
     }
 }
@@ -588,8 +588,9 @@ mod tests {
         val.insert("q", 3);
         val.insert("p", 4);
         let expected = Value::Map(
-            val.iter().map(|(k, v)| (to_value(k).unwrap(), to_value(v).unwrap()))
-            .collect()
+            val.iter()
+                .map(|(k, v)| (to_value(k).unwrap(), to_value(v).unwrap()))
+                .collect(),
         );
         assert_eq_on_value_vs_expected(val, expected);
     }

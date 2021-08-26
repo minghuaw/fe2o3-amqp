@@ -28,9 +28,6 @@ pub enum Error {
 
     #[error("Invalid length for decimal float point number")]
     InvalidLength,
-
-    #[error("Invalid newtype struct wrapper")]
-    InvalidNewTypeWrapper,
 }
 
 impl ser::Error for Error {

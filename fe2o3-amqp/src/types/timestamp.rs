@@ -67,6 +67,16 @@ impl From<i64> for Timestamp {
     }
 }
 
+impl Timestamp {
+    pub fn from_milliseconds(milliseconds: i64) -> Self {
+        Self(milliseconds)
+    }
+
+    pub fn milliseconds(&self) -> i64 {
+        self.0
+    }
+}
+
 impl ser::Serialize for Timestamp {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

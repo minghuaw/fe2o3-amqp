@@ -18,6 +18,12 @@ impl<T> From<Array<T>> for Vec<T> {
     }
 }
 
+impl<T> AsMut<Vec<T>> for Array<T> {
+    fn as_mut(&mut self) -> &mut Vec<T> {
+        &mut self.0
+    }
+}
+
 impl<T> Array<T> {
     pub fn into_inner(self) -> Vec<T> {
         self.0

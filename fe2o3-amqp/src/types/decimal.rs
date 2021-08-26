@@ -19,9 +19,22 @@ mod dec32 {
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec32([u8; DECIMAL32_WIDTH]);
+
+    impl Dec32 {
+        pub fn into_inner(self) -> [u8; DECIMAL32_WIDTH] {
+            self.0
+        }
+    }
+
     impl From<[u8; DECIMAL32_WIDTH]> for Dec32 {
         fn from(val: [u8; DECIMAL32_WIDTH]) -> Self {
             Self(val)
+        }
+    }
+
+    impl From<Dec32> for [u8; DECIMAL32_WIDTH] {
+        fn from(val: Dec32) -> Self {
+            val.0
         }
     }
 
@@ -87,6 +100,12 @@ mod dec64 {
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec64([u8; DECIMAL64_WIDTH]);
+
+    impl Dec64 {
+        pub fn into_inner(self) -> [u8; DECIMAL64_WIDTH] {
+            self.0
+        }
+    }
 
     impl From<[u8; DECIMAL64_WIDTH]> for Dec64 {
         fn from(val: [u8; DECIMAL64_WIDTH]) -> Self {
@@ -156,6 +175,12 @@ mod dec128 {
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec128([u8; DECIMAL128_WIDTH]);
+
+    impl Dec128 {
+        pub fn into_inner(self) -> [u8; DECIMAL128_WIDTH] {
+            self.0
+        }
+    }
 
     impl From<[u8; DECIMAL128_WIDTH]> for Dec128 {
         fn from(val: [u8; DECIMAL128_WIDTH]) -> Self {
