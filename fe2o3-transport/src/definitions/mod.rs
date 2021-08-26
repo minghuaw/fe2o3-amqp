@@ -106,62 +106,22 @@ pub struct Error {
 }
 
 /// 2.8.15 AMQP Error
-/// TODO: manually implement serialize and deserialize
-#[derive(Debug)]
-pub enum AmqpError {
-    InternalError,
-    NotFound,
-    UnauthorizedAccess,
-    DecodeError,
-    ResourceLimitExceeded,
-    NotAllowed,
-    InvalidField,
-    NotImplemented,
-    ResourceLocked,
-    PreconditionFailed,
-    ResourceDeleted,
-    IllegalState,
-    FrameSizeTooSmall
-}
-
 mod amqp_error;
+pub use amqp_error::AmqpError;
 
 /// 2.8.16 Connection Error 
-/// TODO: manually implement serialize and deserialize
-#[derive(Debug)]
-pub enum ConnectionError {
-    ConnectionForced,
-    FramingError,
-    Redirect
-}
-
 mod conn_error;
+pub use conn_error::ConnectionError;
 
 /// 2.8.17 Session Error
-/// TODO: manually implement serialize and deserialize
-#[derive(Debug)]
-pub enum SessionError {
-    WindowViolation,
-    ErrantLink,
-    HandleInUse,
-    UnattachedHandle
-}
-
 mod session_error;
+pub use session_error::SessionError;
 
 
 /// 2.8.18 Link Error
-/// TODO: manually implement Serialize and Deserialize
-#[derive(Debug)]
-pub enum LinkError {
-    DetachForced,
-    TransferLimitExceeded,
-    MessageSizeExceeded,
-    Redirect,
-    Stolen,
-}
-
 mod link_error;
+pub use link_error::LinkError;
 
 /// 2.8.19 Constant definition
 mod constant_def;
+pub use constant_def::{PORT, SECURE_PORT, MAJOR, MINOR, REVISION, MIN_MAX_FRAME_SIZE};
