@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, convert::TryInto};
 
 use ordered_float::OrderedFloat;
-use serde::de::{self};
+use serde::{de::{self}};
 
 use crate::{
     error::Error,
@@ -700,7 +700,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        // self.deserialize_any(visitor)
+        visitor.visit_unit()
     }
 }
 
@@ -771,33 +772,62 @@ impl<'de> de::EnumAccess<'de> for VariantAccess {
     type Error = Error;
     type Variant = Self;
 
-    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
+    fn variant_seed<V>(mut self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
     where
         V: de::DeserializeSeed<'de>,
     {
-        todo!()
+        match self.iter.next() {
+            Some(value) => {
+                let val = seed.deserialize(Deserializer::new(value))?;
+                Ok((val, self))
+            },
+            None => Err(Error::Message("Expecting a Value".to_string()))
+        }
     }
 }
 
 impl<'de> de::VariantAccess<'de> for VariantAccess {
     type Error = Error;
 
-    fn unit_variant(self) -> Result<(), Self::Error> {
-        todo!()
+    fn unit_variant(mut self) -> Result<(), Self::Error> {
+        match self.iter.next() {
+            Some(value) => {
+                match value {
+                    Value::Null => Ok(()),
+                    _ => Err(Error::InvalidValue)
+                }
+            },
+            None => Err(Error::Message("Expecting Null".to_string()))
+        }
     }
 
-    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Self::Error>
+    fn newtype_variant_seed<T>(mut self, seed: T) -> Result<T::Value, Self::Error>
     where
         T: de::DeserializeSeed<'de>,
     {
-        todo!()
+        match self.iter.next() {
+            Some(value) => {
+                seed.deserialize(Deserializer::new(value))
+            },
+            None => Err(Error::Message("Expecting a value".to_string()))
+        }
     }
 
-    fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
+    fn tuple_variant<V>(mut self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        match self.iter.next() {
+            Some(value) => {
+                match &value {
+                    Value::List(_) => {
+                        de::Deserializer::deserialize_tuple(Deserializer::new(value), len, visitor)
+                    },
+                    _ => Err(Error::InvalidValue)
+                }
+            },
+            None => Err(Error::Message("Expecting Value::List".to_string()))
+        }
     }
 
     fn struct_variant<V>(
@@ -808,6 +838,6 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        self.tuple_variant(fields.len(), visitor)
     }
 }
