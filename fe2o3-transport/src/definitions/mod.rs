@@ -1,13 +1,12 @@
-// mod amqp_error;
-// mod conn_error;
-// mod constant_def;
+
+
 // mod delivery_number;
 // mod delivery_tag;
 // mod error;
 // mod fields;
 // mod handle;
 // mod ietf_lang_tag;
-// mod link_error;
+
 // mod milliseconds;
 // mod msg_fmt;
 // mod recver_settle_mode;
@@ -15,7 +14,7 @@
 // mod seconds;
 // mod sender_settle_mode;
 // mod seq_no;
-// mod session_error;
+
 // mod transfer_number;
 
 // pub use amqp_error::*;
@@ -42,7 +41,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
-use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value};
+use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value, macros::AmqpContract};
 
 /// 2.8.1 Role
 #[derive(Debug, Deserialize, Serialize)]
@@ -60,6 +59,10 @@ pub struct RcvSettleMode(Ubyte);
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Handle(Uint);
 
+/// 2.8.5 Seconds
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Seconds(Uint);
+
 /// 2.8.6 Milliseconds
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Milliseconds(Uint);
@@ -67,6 +70,10 @@ pub struct Milliseconds(Uint);
 /// 2.8.7 Delivery Tag
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeliveryTag(ByteBuf);
+
+/// 2.8.8 Delivery Number
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DeliveryNumber(SequenceNo);
 
 /// 2.8.9 Transfer Number
 #[derive(Debug, Deserialize, Serialize)]
@@ -76,6 +83,10 @@ pub struct TransferNumber(SequenceNo);
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SequenceNo(Uint);
 
+/// 2.8.11 Message Format
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MessageFormat(Uint);
+
 /// 2.8.12 IETF Language Tag
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IetfLanguageTag(Symbol);
@@ -83,3 +94,74 @@ pub struct IetfLanguageTag(Symbol);
 /// 2.8.13 Fields
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Fields(BTreeMap<Symbol, Value>);
+
+/// 2.8.14 Error
+#[derive(Debug, Deserialize, Serialize, AmqpContract)]
+#[serde(rename_all = "kebab-case")]
+#[amqp_contract(name="amqp:error:list", code=0x0000_0000_0000_001d, encoding="list")]
+pub struct Error {
+    condition: Symbol,
+    description: Option<String>,
+    info: Option<Fields>
+}
+
+/// 2.8.15 AMQP Error
+/// TODO: manually implement serialize and deserialize
+#[derive(Debug)]
+pub enum AmqpError {
+    InternalError,
+    NotFound,
+    UnauthorizedAccess,
+    DecodeError,
+    ResourceLimitExceeded,
+    NotAllowed,
+    InvalidField,
+    NotImplemented,
+    ResourceLocked,
+    PreconditionFailed,
+    ResourceDeleted,
+    IllegalState,
+    FrameSizeTooSmall
+}
+
+mod amqp_error;
+
+/// 2.8.16 Connection Error 
+/// TODO: manually implement serialize and deserialize
+#[derive(Debug)]
+pub enum ConnectionError {
+    ConnectionForced,
+    FramingError,
+    Redirect
+}
+
+mod conn_error;
+
+/// 2.8.17 Session Error
+/// TODO: manually implement serialize and deserialize
+#[derive(Debug)]
+pub enum SessionError {
+    WindowViolation,
+    ErrantLink,
+    HandleInUse,
+    UnattachedHandle
+}
+
+mod session_error;
+
+
+/// 2.8.18 Link Error
+/// TODO: manually implement Serialize and Deserialize
+#[derive(Debug)]
+pub enum LinkError {
+    DetachForced,
+    TransferLimitExceeded,
+    MessageSizeExceeded,
+    Redirect,
+    Stolen,
+}
+
+mod link_error;
+
+/// 2.8.19 Constant definition
+mod constant_def;

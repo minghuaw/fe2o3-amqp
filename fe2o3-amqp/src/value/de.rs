@@ -3,12 +3,7 @@ use std::{collections::BTreeMap, convert::TryInto};
 use ordered_float::OrderedFloat;
 use serde::de::{self};
 
-use crate::{
-    error::Error,
-    format_code::EncodingCodes,
-    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID},
-    util::{EnumType, NewType},
-};
+use crate::{error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID}, util::{AMQP_ERROR, CONNECTION_ERROR, EnumType, LINK_ERROR, NewType, SESSION_ERROR}};
 
 use super::{Value, VALUE};
 
@@ -671,6 +666,30 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 Value::Ulong(_) => self.deserialize_u64(visitor),
                 _ => Err(Error::InvalidValue),
             }
+        } else if name == AMQP_ERROR {
+            self.enum_type = EnumType::AmqpError;
+            match self.value {
+                Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
+                _ => Err(Error::InvalidValue)
+            }
+        } else if name == CONNECTION_ERROR {
+            self.enum_type = EnumType::ConnectionError;
+            match self.value {
+                Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
+                _ => Err(Error::InvalidValue)
+            }
+        } else if name == SESSION_ERROR {
+            self.enum_type = EnumType::SessionError;
+            match self.value {
+                Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
+                _ => Err(Error::InvalidValue)
+            }
+        } else if name == LINK_ERROR {
+            self.enum_type = EnumType::LinkError;
+            match self.value {
+                Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
+                _ => Err(Error::InvalidValue)
+            }
         } else {
             match self.value {
                 // An Uint should represent a unit_variant
@@ -697,7 +716,19 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             EnumType::Descriptor => {
                 let code = self.value.format_code();
                 visitor.visit_u8(code)
-            }
+            },
+            EnumType::AmqpError => {
+                self.deserialize_newtype_struct(SYMBOL, visitor)
+            },
+            EnumType::ConnectionError => {
+                self.deserialize_newtype_struct(SYMBOL, visitor)
+            },
+            EnumType::SessionError => {
+                self.deserialize_newtype_struct(SYMBOL, visitor)
+            },
+            EnumType::LinkError => {
+                self.deserialize_newtype_struct(SYMBOL, visitor)
+            },
             EnumType::None => match self.value {
                 Value::Uint(v) => visitor.visit_u32(v),
                 _ => Err(Error::InvalidValue),

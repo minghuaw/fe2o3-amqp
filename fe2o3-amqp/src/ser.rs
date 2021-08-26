@@ -2,15 +2,7 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{
-    error::Error,
-    format_code::EncodingCodes,
-    types::DESCRIPTOR,
-    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
-    types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
-    util::{IsArrayElement, NewType},
-    value::{U32_MAX_AS_USIZE, VALUE},
-};
+use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{AMQP_ERROR, CONNECTION_ERROR, IsArrayElement, LINK_ERROR, NewType, SESSION_ERROR}, value::{U32_MAX_AS_USIZE, VALUE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -610,7 +602,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         T: Serialize,
     {
         use ser::SerializeSeq;
-        if name == DESCRIPTOR || name == VALUE {
+        if name == DESCRIPTOR || name == VALUE || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR {
             value.serialize(self)
         } else {
             // TODO: how should enums be treated?
