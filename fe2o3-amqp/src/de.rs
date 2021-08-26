@@ -3,7 +3,12 @@ use std::convert::TryInto;
 
 use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, ENCODING_TYPE, SYMBOL, TIMESTAMP, UUID}, util::{AMQP_ERROR, CONNECTION_ERROR, EnumType, LINK_ERROR, NewType, SESSION_ERROR}, value::VALUE};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, ENCODING_TYPE, SYMBOL, TIMESTAMP, UUID}, 
+    util::{
+        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
+        EnumType, NewType
+    }, 
+    value::VALUE};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -797,18 +802,18 @@ where
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == ENCODING_TYPE {
             visitor.visit_enum(VariantAccess::new(self))
-        } else if name == AMQP_ERROR {
-            self.enum_type = EnumType::AmqpError;
-            visitor.visit_enum(VariantAccess::new(self))
-        } else if name == CONNECTION_ERROR {
-            self.enum_type = EnumType::ConnectionError;
-            visitor.visit_enum(VariantAccess::new(self))
-        } else if name == SESSION_ERROR {
-            self.enum_type = EnumType::SessionError;
-            visitor.visit_enum(VariantAccess::new(self))
-        } else if name == LINK_ERROR {
-            self.enum_type = EnumType::LinkError;
-            visitor.visit_enum(VariantAccess::new(self))
+        // } else if name == AMQP_ERROR {
+        //     self.enum_type = EnumType::AmqpError;
+        //     visitor.visit_enum(VariantAccess::new(self))
+        // } else if name == CONNECTION_ERROR {
+        //     self.enum_type = EnumType::ConnectionError;
+        //     visitor.visit_enum(VariantAccess::new(self))
+        // } else if name == SESSION_ERROR {
+        //     self.enum_type = EnumType::SessionError;
+        //     visitor.visit_enum(VariantAccess::new(self))
+        // } else if name == LINK_ERROR {
+        //     self.enum_type = EnumType::LinkError;
+        //     visitor.visit_enum(VariantAccess::new(self))
         } else {
             // TODO: Considering the following enum serialization format
             // `unit_variant` - a single u32
@@ -860,18 +865,18 @@ where
                 let code = self.get_elem_code_or_peek_byte()?;
                 visitor.visit_u8(code)
             },
-            EnumType::AmqpError => {
-                self.deserialize_newtype_struct(SYMBOL, visitor)
-            },
-            EnumType::ConnectionError => {
-                self.deserialize_newtype_struct(SYMBOL, visitor)
-            },
-            EnumType::SessionError => {
-                self.deserialize_newtype_struct(SYMBOL, visitor)
-            },
-            EnumType::LinkError => {
-                self.deserialize_newtype_struct(SYMBOL, visitor)
-            },
+            // EnumType::AmqpError => {
+            //     self.deserialize_newtype_struct(SYMBOL, visitor)
+            // },
+            // EnumType::ConnectionError => {
+            //     self.deserialize_newtype_struct(SYMBOL, visitor)
+            // },
+            // EnumType::SessionError => {
+            //     self.deserialize_newtype_struct(SYMBOL, visitor)
+            // },
+            // EnumType::LinkError => {
+            //     self.deserialize_newtype_struct(SYMBOL, visitor)
+            // },
             EnumType::None => {
                 // The following are the possible identifiers
                 match self.get_elem_code_or_peek_byte()?.try_into()? {
@@ -883,8 +888,9 @@ where
                     }
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
-                        self.new_type = NewType::Symbol;
-                        self.deserialize_string(visitor)
+                        // self.new_type = NewType::Symbol;
+                        // self.deserialize_string(visitor)
+                        self.deserialize_newtype_struct(SYMBOL, visitor)
                     }
                     // Potentially using `Descriptor::Code` as identifier
                     EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
