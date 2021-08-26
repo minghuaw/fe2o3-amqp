@@ -1,4 +1,4 @@
-use fe2o3_amqp::{macros::AmqpContract, types::{Array, Symbol, Uint, Ushort}};
+use fe2o3_amqp::{macros::AmqpContract, types::{Symbol, Uint, Ushort}};
 use serde::{Deserialize, Serialize};
 
 use crate::definitions::{Fields, Handle, TransferNumber};
