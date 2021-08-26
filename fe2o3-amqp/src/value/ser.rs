@@ -79,8 +79,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     type SerializeTupleStruct = SeqSerializer<'a>;
     type SerializeStruct = SeqSerializer<'a>;
     type SerializeMap = MapSerializer<'a>;
-    type SerializeStructVariant = VariantSerializer;
-    type SerializeTupleVariant = VariantSerializer;
+    type SerializeStructVariant = VariantSerializer<'a>;
+    type SerializeTupleVariant = VariantSerializer<'a>;
 
     #[inline]
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
@@ -295,12 +295,12 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     #[inline]
     fn serialize_tuple_variant(
         self,
-        _name: &'static str,
-        _variant_index: u32,
-        _variant: &'static str,
-        _len: usize,
+        name: &'static str,
+        variant_index: u32,
+        variant: &'static str,
+        len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        Ok(VariantSerializer {})
+        Ok(VariantSerializer::new(self, name, variant_index, variant, len))
     }
 
     #[inline]
@@ -323,12 +323,12 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     #[inline]
     fn serialize_struct_variant(
         self,
-        _name: &'static str,
-        _variant_index: u32,
-        _variant: &'static str,
-        _len: usize,
+        name: &'static str,
+        variant_index: u32,
+        variant: &'static str,
+        len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        Ok(VariantSerializer {})
+        Ok(VariantSerializer::new(self, name, variant_index, variant, len))
     }
 
     #[inline]
@@ -378,8 +378,6 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
         }
     }
 }
-
-pub struct TupleSerializer {}
 
 impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
     type Ok = Value;
@@ -486,41 +484,77 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     }
 }
 
-pub struct VariantSerializer {}
+pub struct VariantSerializer<'a> {
+    se: &'a mut Serializer,
+    _name: &'static str,
+    variant_index: u32,
+    _variant: &'static str,
+    _num: usize,
+    buf: Vec<Value>
+}
 
-impl ser::SerializeTupleVariant for VariantSerializer {
-    type Ok = Value;
-    type Error = Error;
-
-    fn serialize_field<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
-    where
-        T: serde::Serialize,
-    {
-        unimplemented!()
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+impl<'a> VariantSerializer<'a> {
+    pub fn new(
+        se: &'a mut Serializer,
+        name: &'static str,
+        variant_index: u32,
+        variant: &'static str,
+        num: usize, // number of field in the tuple
+    ) -> Self {
+        Self {
+            se: se,
+            _name: name,
+            variant_index: variant_index,
+            _variant: variant,
+            _num: num,
+            buf: Vec::new(),
+        }
     }
 }
 
-impl ser::SerializeStructVariant for VariantSerializer {
+impl<'a> AsMut<Serializer> for VariantSerializer<'a> {
+    fn as_mut(&mut self) -> &mut Serializer {
+        self.se
+    }
+}
+
+impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
+    type Ok = Value;
+    type Error = Error;
+
+    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::Serialize,
+    {
+        let value = value.serialize(self.as_mut())?;
+        self.buf.push(value);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        let value = Value::List(self.buf);
+        let index = Value::Uint(self.variant_index);
+        Ok(Value::List(vec![index, value]))
+    }
+}
+
+impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
     type Ok = Value;
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(
         &mut self,
         _key: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
     {
-        unimplemented!()
+        <Self as ser::SerializeTupleVariant>::serialize_field(self, value)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        unimplemented!()
+        <Self as ser::SerializeTupleVariant>::end(self)
     }
 }
 
@@ -592,6 +626,84 @@ mod tests {
                 .map(|(k, v)| (to_value(k).unwrap(), to_value(v).unwrap()))
                 .collect(),
         );
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_unit_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A,
+            B,
+            C,
+        }
+
+        let val = Foo::B;
+        let expected = Value::Uint(1);
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_newtype_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A(String),
+            B(u64),
+        }
+
+        let val = Foo::B(13);
+        let expected = Value::List(vec![Value::Uint(1), Value::Ulong(13)]);
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_tuple_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A(u32, bool),
+            B(i32, String)
+        }
+        let val = Foo::B(13, "amqp".to_string());
+        let expected = Value::List(vec![
+            Value::Uint(1),
+            Value::List(vec![
+                Value::Int(13),
+                Value::String(String::from("amqp"))
+            ])
+        ]);
+        assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_struct_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A {
+                num: u32, 
+                is_a: bool
+            },
+            B{
+                signed_num: i32, 
+                amqp: String
+            }
+        }
+
+        let val = Foo::A {num: 13, is_a: true};
+        let expected = Value::List(vec![
+            Value::Uint(0),
+            Value::List(vec![
+                Value::Uint(13),
+                Value::Bool(true)
+            ])
+        ]);
         assert_eq_on_value_vs_expected(val, expected);
     }
 }

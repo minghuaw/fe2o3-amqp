@@ -871,4 +871,82 @@ mod tests {
         let expected = false;
         assert_eq_from_value_vs_expected(value, expected);
     }
+
+    #[test]
+    fn test_serialize_value_unit_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A,
+            B,
+            C,
+        }
+
+        let expected = Foo::B;
+        let val = Value::Uint(1);
+        assert_eq_from_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_newtype_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A(String),
+            B(u64),
+        }
+
+        let expected = Foo::B(13);
+        let val = Value::List(vec![Value::Uint(1), Value::Ulong(13)]);
+        assert_eq_from_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_tuple_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A(u32, bool),
+            B(i32, String)
+        }
+        let expected = Foo::B(13, "amqp".to_string());
+        let val = Value::List(vec![
+            Value::Uint(1),
+            Value::List(vec![
+                Value::Int(13),
+                Value::String(String::from("amqp"))
+            ])
+        ]);
+        assert_eq_from_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_serialize_value_struct_variant() {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        enum Foo {
+            A {
+                num: u32, 
+                is_a: bool
+            },
+            B{
+                signed_num: i32, 
+                amqp: String
+            }
+        }
+
+        let expected = Foo::A {num: 13, is_a: true};
+        let val = Value::List(vec![
+            Value::Uint(0),
+            Value::List(vec![
+                Value::Uint(13),
+                Value::Bool(true)
+            ])
+        ]);
+        assert_eq_from_value_vs_expected(val, expected);
+    }
 }
