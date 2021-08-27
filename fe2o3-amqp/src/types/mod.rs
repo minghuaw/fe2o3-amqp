@@ -17,6 +17,8 @@ pub use uuid::*;
 // Alias for the primitive types to match those in the spec
 use serde_bytes::ByteBuf;
 
+use crate::convert::{AsDescribed, IntoDescribed};
+
 pub type Boolean = bool;
 pub type Ubyte = u8;
 pub type Ushort = u16;
@@ -30,3 +32,33 @@ pub type Float = f32;
 pub type Double = f64;
 pub type Char = char;
 pub type Binary = ByteBuf;
+
+pub enum Type<T> {
+    Described(Described<T>),
+    NonDescribed(T)
+}
+
+impl<T> Type<T> {
+    pub fn is_described(&self) -> bool {
+        match self {
+            Type::Described(_) => true,
+            Type::NonDescribed(_) => false
+        }
+    }
+}
+
+impl<T> From<Described<T>> for Type<T> {
+    fn from(d: Described<T>) -> Self {
+        Self::Described(d)
+    }
+}
+
+impl<T> From<T> for Type<T> 
+where 
+    T: IntoDescribed
+{
+    fn from(value: T) -> Self {
+        let described = value.into_described();
+        Type::Described(described)
+    }
+}

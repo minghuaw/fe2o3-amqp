@@ -3,12 +3,10 @@ use std::convert::TryInto;
 
 use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, ENCODING_TYPE, SYMBOL, TIMESTAMP, UUID}, 
-    util::{
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, Described, ENCODING_TYPE, SYMBOL, TIMESTAMP, Type, UUID}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         EnumType, NewType
-    }, 
-    value::VALUE};
+    }, value::VALUE};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -20,6 +18,22 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
     let reader = SliceReader::new(slice);
     let mut de = Deserializer::new(reader);
     T::deserialize(&mut de)
+}
+
+pub fn unmarshal<'de, T: de::Deserialize<'de>>(bytes: &'de [u8]) -> Result<Type<T>, Error> {
+    let mut reader = SliceReader::new(bytes);
+    match reader.peek()?.try_into()? {
+        EncodingCodes::DescribedType => {
+            let mut de = Deserializer::new(reader);
+            let described: Described<T> = de::Deserialize::deserialize(&mut de)?;
+            Ok(Type::Described(described))
+        },
+        _ => {
+            let mut de = Deserializer::new(reader);
+            let non_described: T = de::Deserialize::deserialize(&mut de)?;
+            Ok(Type::NonDescribed(non_described))
+        }
+    }
 }
 
 pub struct Deserializer<R> {
