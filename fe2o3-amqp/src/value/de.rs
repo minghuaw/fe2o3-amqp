@@ -698,12 +698,21 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         } else {
             match self.value {
                 // An Uint should represent a unit_variant
-                v @ Value::Uint(_) => visitor.visit_enum(VariantAccess {
-                    iter: vec![v].into_iter(),
-                }),
-                Value::List(v) => visitor.visit_enum(VariantAccess {
-                    iter: v.into_iter(),
-                }),
+                v @ Value::Uint(_) => {
+                    visitor.visit_enum(VariantAccess {
+                        iter: vec![v].into_iter(),
+                    })
+                },
+                Value::List(v) => {
+                    visitor.visit_enum(VariantAccess {
+                        iter: v.into_iter(),
+                    })
+                },
+                v @ Value::Symbol(_) => {
+                    visitor.visit_enum(VariantAccess {
+                        iter: vec![v].into_iter()
+                    })
+                }
                 _ => Err(Error::InvalidValue),
             }
         }
@@ -736,6 +745,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             // },
             EnumType::None => match self.value {
                 Value::Uint(v) => visitor.visit_u32(v),
+                Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
                 _ => Err(Error::InvalidValue),
             },
         }

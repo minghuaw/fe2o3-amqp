@@ -844,6 +844,10 @@ where
                         return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
+                },
+                // Symbols appears in the transport errors
+                EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                    visitor.visit_enum(VariantAccess::new(self))
                 }
                 _ => Err(Error::InvalidFormatCode),
             }
@@ -878,6 +882,7 @@ where
             //     self.deserialize_newtype_struct(SYMBOL, visitor)
             // },
             EnumType::None => {
+                println!("EnumType::None");
                 // The following are the possible identifiers
                 match self.get_elem_code_or_peek_byte()?.try_into()? {
                     // If a struct is serialized as a map, then the fields are serialized as str
@@ -888,6 +893,7 @@ where
                     }
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                        println!("Sym");
                         // self.new_type = NewType::Symbol;
                         // self.deserialize_string(visitor)
                         self.deserialize_newtype_struct(SYMBOL, visitor)
