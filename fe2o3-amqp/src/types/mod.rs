@@ -50,3 +50,14 @@ impl<T> From<Described<T>> for Type<T> {
         Self::Described(d)
     }
 }
+
+impl<T> Type<T> {
+    pub fn into_inner(self) -> T {
+        match self {
+            Type::Described(d) => {
+                d.into_inner()
+            },
+            Type::NonDescribed(v) => v
+        }
+    }
+}

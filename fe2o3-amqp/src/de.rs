@@ -20,7 +20,7 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
     T::deserialize(&mut de)
 }
 
-pub fn unmarshal<'de, T: de::Deserialize<'de>>(bytes: &'de [u8]) -> Result<Type<T>, Error> {
+pub fn deserialize<'de, T: de::Deserialize<'de>>(bytes: &'de [u8]) -> Result<Type<T>, Error> {
     let mut reader = SliceReader::new(bytes);
     match reader.peek()?.try_into()? {
         EncodingCodes::DescribedType => {

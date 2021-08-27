@@ -23,6 +23,7 @@ pub enum EncodingType {
 }
 
 mod encoding_type {
+    //! Impl serialization and deserialization for EncodingType
     use std::convert::TryInto;
 
     use super::*;
@@ -117,6 +118,10 @@ impl<T> Described<T> {
             encoding_type: encoding,
             value,
         }
+    }
+
+    pub fn into_inner(self) -> T {
+        self.value
     }
 }
 

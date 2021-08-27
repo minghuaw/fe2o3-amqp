@@ -1,4 +1,4 @@
-use std::{convert::TryInto, io::Write};
+use std::{io::Write};
 
 use serde::{ser, Serialize};
 
@@ -27,22 +27,22 @@ where
     Ok(writer)
 }
 
-pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error> 
-where 
-    T: Serialize + TryInto<Described<T>>,
-    T::Error: Serialize,
-{
-    let mut writer = Vec::new();
-    let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
-    let result: Result<Described<_>, _> = value.try_into();
-    match result {
-        Ok(v) => v.serialize(&mut serializer)?,
-        Err(v) => v.serialize(&mut serializer)?
-    };
-    Ok(writer)
-}
+// pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error> 
+// where 
+//     T: Serialize + TryInto<Described<T>>,
+//     T::Error: Serialize,
+// {
+//     let mut writer = Vec::new();
+//     let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
+//     let result: Result<Described<_>, _> = value.try_into();
+//     match result {
+//         Ok(v) => v.serialize(&mut serializer)?,
+//         Err(v) => v.serialize(&mut serializer)?
+//     };
+//     Ok(writer)
+// }
 
-pub fn marshal<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error> 
+pub fn serialize<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error> 
 where 
     T: Serialize,
 {
