@@ -50,5 +50,3 @@ impl<T> From<Described<T>> for Type<T> {
         Self::Described(d)
     }
 }
-
-use crate::convert::IntoDescribed;
