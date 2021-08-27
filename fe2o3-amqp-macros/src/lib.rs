@@ -130,6 +130,20 @@ pub fn derive_described(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
                 Ok(fe2o3_amqp::convert::AsDescribed::as_described(value))
             }
         }
+
+        impl std::convert::From<#ident> for fe2o3_amqp::types::Type<#ident> {
+            fn from(value: #ident) -> Self {
+                let described = fe2o3_amqp::convert::IntoDescribed::into_described(value);
+                fe2o3_amqp::types::Type::Described(described)
+            }
+        }
+
+        impl<'a> std::convert::From<&'a #ident> for fe2o3_amqp::types::Type<&'a #ident> {
+            fn from(value: &'a #ident) -> Self {
+                let described = fe2o3_amqp::convert::AsDescribed::as_described(value);
+                fe2o3_amqp::types::Type::Described(described)
+            }
+        }
     };
 
     let output = quote::quote! {

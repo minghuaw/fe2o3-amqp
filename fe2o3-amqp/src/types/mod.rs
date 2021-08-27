@@ -17,8 +17,6 @@ pub use uuid::*;
 // Alias for the primitive types to match those in the spec
 use serde_bytes::ByteBuf;
 
-use crate::convert::{AsDescribed, IntoDescribed};
-
 pub type Boolean = bool;
 pub type Ubyte = u8;
 pub type Ushort = u16;
@@ -53,12 +51,4 @@ impl<T> From<Described<T>> for Type<T> {
     }
 }
 
-impl<T> From<T> for Type<T> 
-where 
-    T: IntoDescribed
-{
-    fn from(value: T) -> Self {
-        let described = value.into_described();
-        Type::Described(described)
-    }
-}
+use crate::convert::IntoDescribed;
