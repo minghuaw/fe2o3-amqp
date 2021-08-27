@@ -2,7 +2,6 @@ use fe2o3_amqp::macros::NonDescribed;
 use fe2o3_amqp::types::Symbol;
 use serde::{de, ser};
 
-/// TODO: manually implement serialize and deserialize
 #[derive(Debug, PartialEq, NonDescribed)]
 pub enum ConnectionError {
     ConnectionForced,
@@ -11,7 +10,7 @@ pub enum ConnectionError {
 }
 
 impl ConnectionError {
-    fn value(&self) -> Symbol {
+    pub fn value(&self) -> Symbol {
         let val = match self {
             Self::ConnectionForced => "amqp:connection:forced",
             Self::FramingError => "amqp:connection:framing-error",
