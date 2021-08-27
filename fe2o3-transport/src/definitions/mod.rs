@@ -41,62 +41,62 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
-use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value, macros::AmqpContract};
+use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value, macros::{Described, NonDescribed}};
 
 /// 2.8.1 Role
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct Role(bool);
 
 /// 2.8.2 Sender Settle Mode
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct SndSettleMode(Ubyte);
 
 /// 2.8.3 Receiver Settle Mode
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct RcvSettleMode(Ubyte);
 
 /// 2.8.4 Handle
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct Handle(Uint);
 
 /// 2.8.5 Seconds
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct Seconds(Uint);
 
 /// 2.8.6 Milliseconds
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, NonDescribed)]
 pub struct Milliseconds(Uint);
 
 /// 2.8.7 Delivery Tag
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeliveryTag(ByteBuf);
 
 /// 2.8.8 Delivery Number
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct DeliveryNumber(SequenceNo);
 
 /// 2.8.9 Transfer Number
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct TransferNumber(SequenceNo);
 
 /// 2.8.10 Sequence No
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct SequenceNo(Uint);
 
 /// 2.8.11 Message Format
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, NonDescribed)]
 pub struct MessageFormat(Uint);
 
 /// 2.8.12 IETF Language Tag
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, NonDescribed)]
 pub struct IetfLanguageTag(Symbol);
 
 /// 2.8.13 Fields
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, NonDescribed)]
 pub struct Fields(BTreeMap<Symbol, Value>);
 
 /// 2.8.14 Error
-#[derive(Debug, Deserialize, Serialize, AmqpContract)]
+#[derive(Debug, Deserialize, Serialize, Described)]
 #[serde(rename_all = "kebab-case")]
 #[amqp_contract(name="amqp:error:list", code=0x0000_0000_0000_001d, encoding="list")]
 pub struct Error {

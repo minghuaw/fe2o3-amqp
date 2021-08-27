@@ -1,9 +1,9 @@
-use fe2o3_amqp::{macros::AmqpContract, types::{Symbol, Uint, Ushort}};
+use fe2o3_amqp::{macros::Described, types::{Symbol, Uint, Ushort}};
 use serde::{Deserialize, Serialize};
 
 use crate::definitions::{Fields, Handle, TransferNumber};
 
-#[derive(Debug, Serialize, Deserialize, AmqpContract)]
+#[derive(Debug, Serialize, Deserialize, Described)]
 #[serde(rename_all = "kebab-case")]
 #[amqp_contract(name="amqp:begin:list", code=0x0000_0000_0000_0011, encoding="list")]
 pub struct Begin {

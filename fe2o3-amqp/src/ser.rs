@@ -1,13 +1,11 @@
-use std::io::Write;
+use std::{convert::TryInto, io::Write};
 
 use serde::{ser, Serialize};
 
-use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, 
-    util::{
+use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, Described, SYMBOL, TIMESTAMP, UUID}, types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         IsArrayElement, NewType,
-    }, value::{U32_MAX_AS_USIZE}
-};
+    }, value::{U32_MAX_AS_USIZE}};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -16,6 +14,31 @@ where
     let mut writer = Vec::new(); // TODO: pre-allocate capacity
     let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
     value.serialize(&mut serializer)?;
+    Ok(writer)
+}
+
+pub fn to_vec_described<T>(value: &Described<T>) -> Result<Vec<u8>, Error> 
+where 
+    T: Serialize,
+{
+    let mut writer = Vec::new();
+    let mut se = Serializer::new(&mut writer, IsArrayElement::False);
+    value.serialize(&mut se)?;
+    Ok(writer)
+}
+
+pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error> 
+where 
+    T: Serialize + TryInto<Described<T>>,
+    T::Error: Serialize,
+{
+    let mut writer = Vec::new();
+    let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
+    let result: Result<Described<_>, _> = value.try_into();
+    match result {
+        Ok(v) => v.serialize(&mut serializer)?,
+        Err(v) => v.serialize(&mut serializer)?
+    };
     Ok(writer)
 }
 

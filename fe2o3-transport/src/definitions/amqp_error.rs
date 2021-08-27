@@ -1,8 +1,9 @@
 
 use fe2o3_amqp::types::{Symbol};
+use fe2o3_amqp::macros::NonDescribed;
 use serde::{de, ser};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, NonDescribed)]
 pub enum AmqpError {
     InternalError,
     NotFound,

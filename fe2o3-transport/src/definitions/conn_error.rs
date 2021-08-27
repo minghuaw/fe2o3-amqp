@@ -1,8 +1,9 @@
+use fe2o3_amqp::macros::NonDescribed;
 use fe2o3_amqp::types::Symbol;
 use serde::{de, ser};
 
 /// TODO: manually implement serialize and deserialize
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, NonDescribed)]
 pub enum ConnectionError {
     ConnectionForced,
     FramingError,
