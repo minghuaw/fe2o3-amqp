@@ -42,11 +42,11 @@ where
     Ok(writer)
 }
 
-pub fn marshal<T>(value: Type<T>) -> Result<Vec<u8>, Error> 
+pub fn marshal<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error> 
 where 
     T: Serialize,
 {
-    match value {
+    match value.into() {
         Type::Described(v) => to_vec(&v),
         Type::NonDescribed(v) => to_vec(&v)
     }
