@@ -2,7 +2,6 @@ use serde::{ser, de};
 
 use fe2o3_amqp::{macros::NonDescribed, types::Symbol};
 
-/// TODO: manually implement serialize and deserialize
 #[derive(Debug, NonDescribed, PartialEq)]
 pub enum SessionError {
     WindowViolation,
