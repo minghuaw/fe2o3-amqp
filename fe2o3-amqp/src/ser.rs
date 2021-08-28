@@ -1182,9 +1182,6 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
     where
         T: Serialize,
     {
-        // match self.role {
-        //     Role::Described => value.serialize(self.as_mut()),
-        //     Role::Value => 
         if key == DESCRIPTOR {
             value.serialize(self.as_mut())
         } else {
@@ -1201,32 +1198,27 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
                 }
             }
         }
-        // }
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        // match self.role {
-        //     Role::Described => Ok(()),
-        //     Role::Value => 
-            match self.val_ty {
-                ValueType::Basic => Ok(()),
-                // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-                ValueType::List => write_list(
-                    &mut self.se.writer,
-                    self.num,
-                    self.buf,
-                    &IsArrayElement::False,
-                ),
-                // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-                ValueType::Map => write_map(
-                    &mut self.se.writer,
-                    self.num,
-                    self.buf,
-                    &IsArrayElement::False,
-                ),
-            }
-        // }
+        match self.val_ty {
+            ValueType::Basic => Ok(()),
+            // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
+            ValueType::List => write_list(
+                &mut self.se.writer,
+                self.num,
+                self.buf,
+                &IsArrayElement::False,
+            ),
+            // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
+            ValueType::Map => write_map(
+                &mut self.se.writer,
+                self.num,
+                self.buf,
+                &IsArrayElement::False,
+            ),
+        }
     }
 }
 
@@ -1846,6 +1838,7 @@ mod test {
         use crate as fe2o3_amqp;
 
         #[derive(Debug, SerializeDescribed)]
+        #[amqp_contract(code=13)]
         struct Foo {
             is_fool: bool,
             a: i32

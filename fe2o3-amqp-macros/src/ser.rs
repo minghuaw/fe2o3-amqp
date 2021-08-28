@@ -43,8 +43,10 @@ fn expand_serialize_on_struct(
                 S: serde::ser::Serializer,
             {
                 use serde::ser::SerializeStruct;
-                let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
-                state.serialize_field(fe2o3_amqp::constants::DESCRIPTOR, &#descriptor)?; // serialize descriptor
+                let mut state = serializer.serialize_struct(#struct_name, #len)?;
+                // serialize descriptor
+                // descriptor does not count towards number of element in list
+                state.serialize_field(fe2o3_amqp::constants::DESCRIPTOR, &#descriptor)?; 
                 #( state.serialize_field(#field_names, &self.#field_idents)?; )*
                 state.end()
             }
