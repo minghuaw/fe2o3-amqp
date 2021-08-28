@@ -106,9 +106,9 @@ mod encoding_type {
 /// There is no generic implementation of serialization. But a inner type
 /// specific implementation will be generated via macro.
 pub struct Described<T> {
-    descriptor: Descriptor,
+    pub descriptor: Descriptor,
     encoding_type: EncodingType,
-    value: T,
+    pub value: T,
 }
 
 impl<T> Described<T> {
@@ -118,6 +118,10 @@ impl<T> Described<T> {
             encoding_type: encoding,
             value,
         }
+    }
+
+    pub fn get_desciptor(&self) -> Descriptor {
+        self.descriptor.clone()
     }
 
     pub fn into_inner(self) -> T {

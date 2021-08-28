@@ -52,6 +52,13 @@ impl<T> From<Described<T>> for Type<T> {
 }
 
 impl<T> Type<T> {
+    pub fn get_desciptor(&self) -> Option<Descriptor> {
+        match self {
+            Type::Described(d) => Some(d.get_desciptor()),
+            Type::NonDescribed(_) => None
+        }
+    }
+
     pub fn into_inner(self) -> T {
         match self {
             Type::Described(d) => {
