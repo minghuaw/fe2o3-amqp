@@ -9,6 +9,7 @@ pub mod ser;
 pub mod types;
 pub mod value;
 pub mod convert;
+pub mod constants;
 
 // Private mods
 mod read;

@@ -4,12 +4,10 @@ use serde::de;
 use serde::ser;
 
 use super::{Descriptor, DESCRIPTOR};
+use crate::constants::DESCRIBED_BASIC;
+use crate::constants::DESCRIBED_LIST;
+use crate::constants::DESCRIBED_MAP;
 use crate::format_code::EncodingCodes;
-
-pub const DESCRIBED_BASIC: &str = "DESCRIBED_BASIC";
-pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
-pub const DESCRIBED_MAP: &str = "DESCRIBED_MAP";
-pub const DESERIALIZE_DESCRIBED: &str = "DESERIALIZE_DESCRIBED";
 
 pub const DESCRIBED_FIELDS: &'static [&'static str] = &["descriptor", "encoding_type", "value"];
 
@@ -165,6 +163,8 @@ impl<'a, T: ser::Serialize> ser::Serialize for Described<T> {
 }
 
 mod described {
+    use crate::constants::DESERIALIZE_DESCRIBED;
+
     use super::*;
     use std::marker::PhantomData;
 

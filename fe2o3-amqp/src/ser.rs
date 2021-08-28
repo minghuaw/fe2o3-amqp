@@ -2,7 +2,7 @@ use std::{io::Write};
 
 use serde::{ser, Serialize};
 
-use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, Described, SYMBOL, TIMESTAMP, Type, UUID}, types::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
+use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, Described, SYMBOL, TIMESTAMP, Type, UUID}, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         IsArrayElement, NewType,
     }, value::{U32_MAX_AS_USIZE}};

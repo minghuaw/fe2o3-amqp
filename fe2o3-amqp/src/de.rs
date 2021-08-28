@@ -1,9 +1,9 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
+use crate::{constants::DESERIALIZE_DESCRIBED, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR, DESERIALIZE_DESCRIBED}, types::{DECIMAL128, DECIMAL32, DECIMAL64, Described, ENCODING_TYPE, SYMBOL, TIMESTAMP, Type, UUID}, util::{
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, DESCRIPTOR}, types::{DECIMAL128, DECIMAL32, DECIMAL64, Described, ENCODING_TYPE, SYMBOL, TIMESTAMP, Type, UUID}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         EnumType, NewType
     }, value::VALUE};
