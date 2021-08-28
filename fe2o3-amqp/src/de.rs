@@ -1187,7 +1187,8 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
         println!(">>> Debug: DescribedAccess::next_element_seed");
         match self.field_role {
             FieldRole::Descriptor => {
-                println!("field_count: {:?}", self.field_count);
+                // descriptor is not counted towards list count in amqp
+                self.field_count -= 1;
                 let result = seed.deserialize(self.as_mut()).map(Some);
                 // consume the list headers
                 match self.as_mut().get_elem_code_or_read_format_code()? {

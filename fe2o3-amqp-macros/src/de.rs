@@ -54,8 +54,8 @@ fn expand_deserialize_on_struct(
             {
                 #[allow(non_camel_case_types)]
                 enum Field {
-                    #(#field_idents, )*
                     descriptor,
+                    #(#field_idents, )*
                     // TODO: considering add ignored
                 }
                 struct FieldVisitor {}
@@ -127,7 +127,8 @@ fn expand_deserialize_on_struct(
                     }
                 }
 
-                const FIELDS: &'static [&'static str] = &[#(#field_names,)*];
+                // DESCRIPTOR is included here for compatibility with other deserializer
+                const FIELDS: &'static [&'static str] = &[fe2o3_amqp::constants::DESCRIPTOR, #(#field_names,)*];
                 deserializer.deserialize_struct(
                     #struct_name,
                     FIELDS,

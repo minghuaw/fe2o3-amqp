@@ -1183,6 +1183,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
         T: Serialize,
     {
         if key == DESCRIPTOR {
+            self.num -= 1;
             value.serialize(self.as_mut())
         } else {
             match self.val_ty {
