@@ -1,7 +1,7 @@
 use fe2o3_amqp::macros::{Described, NonDescribed};
 
 #[derive(Debug, Described)]
-#[amqp_contract(name = "a", code = 0x8, encoding = "list")]
+#[amqp_contract(name = "a", code = 0x18, encoding = "list")]
 struct Test {
     a: i32,
     b: bool,
