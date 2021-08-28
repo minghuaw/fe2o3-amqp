@@ -1,9 +1,9 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{constants::{DESERIALIZE_DESCRIBED, DESCRIPTOR}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
+use crate::{constants::{DESERIALIZE_DESCRIBED, DESCRIPTOR}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, SMALL_ULONG_WIDTH, ULONG0_WIDTH, ULONG_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, }, types::{DECIMAL128, DECIMAL32, DECIMAL64, Described, ENCODING_TYPE, SYMBOL, TIMESTAMP, Type, UUID}, util::{
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, }, types::{DECIMAL128, DECIMAL32, DECIMAL64, Described, Descriptor, ENCODING_TYPE, SYMBOL, TIMESTAMP, Type, UUID}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         EnumType, NewType
     }, value::VALUE};
@@ -311,10 +311,44 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    #[inline]
     fn parse_unit(&mut self) -> Result<(), Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Null => Ok(()),
             _ => Err(Error::InvalidFormatCode),
+        }
+    }
+
+    #[inline]
+    fn parse_described<V>(&mut self, field_count: usize, visitor: V) -> Result<V::Value, Error>
+    where 
+        V: de::Visitor<'de> 
+    {
+        // consume the EncodingCodes::Described byte
+        self.reader.next()?;
+
+        // place descriptor in a separate buf
+        let descriptor_buf = match self.get_elem_code_or_peek_byte()?.try_into()? {
+            EncodingCodes::Ulong 
+            | EncodingCodes::Ulong0
+            | EncodingCodes::SmallUlong
+            | EncodingCodes::Sym8
+            | EncodingCodes::Sym32 => self.reader.read_item_bytes_with_format_code()?,
+            _ => return Err(Error::InvalidFormatCode)
+        };
+
+        match self.get_elem_code_or_peek_byte()?.try_into()? {
+            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
+                visitor.visit_seq(
+                    DescribedAccess::new(self, field_count, Some(descriptor_buf))
+                )
+            },
+            EncodingCodes::Map8 | EncodingCodes::Map32 => {
+                visitor.visit_map(
+                    DescribedAccess::new(self, field_count, Some(descriptor_buf))
+                )
+            },
+            _ => Err(Error::InvalidFormatCode)
         }
     }
 }
@@ -788,11 +822,7 @@ where
             }
             EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
             EncodingCodes::DescribedType => {
-                // if name != DESERIALIZE_DESCRIBED {
-                //     return Err(Error::InvalidFormatCode);
-                // }
-                self.reader.next()?;
-                visitor.visit_seq(DescribedAccess::new(self, fields.len()))
+                self.parse_described(fields.len(), visitor)
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -872,18 +902,6 @@ where
                 let code = self.get_elem_code_or_peek_byte()?;
                 visitor.visit_u8(code)
             },
-            // EnumType::AmqpError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
-            // EnumType::ConnectionError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
-            // EnumType::SessionError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
-            // EnumType::LinkError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
             EnumType::None => {
                 println!("EnumType::None");
                 // The following are the possible identifiers
@@ -1156,14 +1174,16 @@ enum FieldRole {
 /// A special visitor access to the `Described` type
 pub struct DescribedAccess<'a, R> {
     de: &'a mut Deserializer<R>,
+    descriptor_buf: Option<Vec<u8>>,
     field_count: usize,
     field_role: FieldRole,
 }
 
 impl<'a, R> DescribedAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>, field_count: usize) -> Self {
+    pub fn new(de: &'a mut Deserializer<R>, field_count: usize, descriptor_buf: Option<Vec<u8>>) -> Self {
         Self {
             de,
+            descriptor_buf,
             field_count,
             // The first field should be the descriptor
             field_role: FieldRole::Descriptor,
@@ -1184,12 +1204,22 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
+        use std::io::Cursor;
+
         println!(">>> Debug: DescribedAccess::next_element_seed");
         match self.field_role {
             FieldRole::Descriptor => {
                 // descriptor is not counted towards list count in amqp
                 self.field_count -= 1;
-                let result = seed.deserialize(self.as_mut()).map(Some);
+                let descriptor_buf = match self.descriptor_buf.take() {
+                    Some(b) => b,
+                    None => return Ok(None)
+                };
+                let reader = IoReader::new(Cursor::new(descriptor_buf));
+                let mut deserializer = Deserializer::new(reader);
+                let result = seed.deserialize(&mut deserializer).map(Some);
+
+
                 // consume the list headers
                 match self.as_mut().get_elem_code_or_read_format_code()? {
                     EncodingCodes::List0 => {
@@ -1216,22 +1246,12 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                             return Err(de::Error::custom("Invalid length"))
                         }
                     },
-                    EncodingCodes::Map8 => {
-                        todo!()
-                    },
-                    EncodingCodes::Map32 => {
-                        todo!()
-                    }
-                    _ => return Err(de::Error::custom("Invalid format code. Expecting either map or list"))
+                    _ => return Err(de::Error::custom("Invalid format code. Expecting a list"))
                 }
 
                 self.field_role = FieldRole::Fields;
                 result
             }
-            // FieldRole::EncodingType => {
-            //     self.field_role = FieldRole::Value;
-            //     seed.deserialize(self.as_mut()).map(Some)
-            // }
             FieldRole::Fields => {
                 if self.field_count == 0 {
                     return Ok(None)
@@ -1239,8 +1259,37 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 self.field_count -= 1;
                 seed.deserialize(self.as_mut()).map(Some)
             }
-            // FieldRole::End => Ok(None),
         }
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, _seed: K) -> Result<Option<K::Value>, Self::Error>
+    where
+        K: de::DeserializeSeed<'de>,
+    {
+        unreachable!()
+    }
+
+    fn next_value_seed<V>(&mut self, _seed: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::DeserializeSeed<'de>,
+    {
+        unreachable!()
+    }
+
+    fn next_entry_seed<K, V>(
+        &mut self,
+        kseed: K,
+        vseed: V,
+    ) -> Result<Option<(K::Value, V::Value)>, Self::Error>
+    where
+        K: de::DeserializeSeed<'de>,
+        V: de::DeserializeSeed<'de>,
+    {
+        unimplemented!()
     }
 }
 
