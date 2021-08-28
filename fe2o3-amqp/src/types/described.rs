@@ -3,10 +3,11 @@ use std::fmt::Debug;
 use serde::de;
 use serde::ser;
 
-use super::{Descriptor, DESCRIPTOR};
+use super::{Descriptor};
 use crate::constants::DESCRIBED_BASIC;
 use crate::constants::DESCRIBED_LIST;
 use crate::constants::DESCRIBED_MAP;
+use crate::constants::DESCRIPTOR;
 use crate::format_code::EncodingCodes;
 
 pub const DESCRIBED_FIELDS: &'static [&'static str] = &["descriptor", "encoding_type", "value"];

@@ -2,7 +2,9 @@ pub const DESCRIBED_BASIC: &str = "DESCRIBED_BASIC";
 pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
 pub const DESCRIBED_MAP: &str = "DESCRIBED_MAP";
 
-pub const DESCRIPTOR_NAME: &str = "DESCRIPTOR_NAME";
-pub const DESCRIPTOR_CODE: &str = "DESCRIPTOR_CODE";
+pub const DESCRIPTOR: &str = "DESCRIPTOR";
+
+// pub const DESCRIPTOR_NAME: &str = "DESCRIPTOR_NAME";
+// pub const DESCRIPTOR_CODE: &str = "DESCRIPTOR_CODE";
 
 pub const DESERIALIZE_DESCRIBED: &str = "DESERIALIZE_DESCRIBED";

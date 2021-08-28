@@ -245,7 +245,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     where
         T: serde::Serialize,
     {
-        use crate::types::DESCRIPTOR;
+        use crate::constants::DESCRIPTOR;
         use crate::value::VALUE;
 
         if name == DESCRIPTOR || name == VALUE 

@@ -3,10 +3,9 @@ use std::convert::TryInto;
 use serde::de::{self, VariantAccess};
 use serde::ser::Serialize;
 
+use crate::constants::DESCRIPTOR;
 use crate::format_code::EncodingCodes;
 use crate::types::Symbol;
-
-pub const DESCRIPTOR: &str = "DESCRIPTOR";
 
 /// Descriptor of a described type
 ///

@@ -19,12 +19,15 @@ fn expand_serialize_on_struct(
     data: &syn::DataStruct
 ) -> Result<proc_macro2::TokenStream, syn::Error> 
 {
-    let ident_name = ident.to_string();
+    // let ident_name = ident.to_string();
     let descriptor = match attr.code {
-        Some(code) => quote!(fe2o3_amqp::constants::DESCRIPTOR_CODE, #code),
-        None => quote!(fe2o3_amqp::constants::DESCRIPTOR_NAME, #ident_name)
+        Some(code) => quote!(fe2o3_amqp::types::Descriptor::Code(#code)),
+        None => {
+            let name = &attr.name[..];
+            quote!(fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name)))
+        }
     };
-    let name = match attr.encoding {
+    let struct_name = match attr.encoding {
         EncodingType::Basic => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
         EncodingType::Map => quote!(fe2o3_amqp::constants::DESCRIBED_MAP)
@@ -40,8 +43,8 @@ fn expand_serialize_on_struct(
                 S: serde::ser::Serializer,
             {
                 use serde::ser::SerializeStruct;
-                let mut state = serializer.serialize_struct(#name, #len + 1)?;
-                state.serialize_field(#descriptor)?; // serialize descriptor
+                let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
+                state.serialize_field(fe2o3_amqp::constants::DESCRIPTOR, &#descriptor)?; // serialize descriptor
                 #( state.serialize_field(#field_names, &self.#field_idents)?; )*
                 state.end()
             }

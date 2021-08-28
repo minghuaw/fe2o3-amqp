@@ -2,7 +2,7 @@ use std::{io::Write};
 
 use serde::{ser, Serialize};
 
-use crate::{error::Error, format_code::EncodingCodes, types::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, Described, SYMBOL, TIMESTAMP, Type, UUID}, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
+use crate::{error::Error, format_code::EncodingCodes, constants::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, Described, SYMBOL, TIMESTAMP, Type, UUID}, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         IsArrayElement, NewType,
     }, value::{U32_MAX_AS_USIZE}};
@@ -722,7 +722,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedList;
-                    Ok(DescribedSerializer::list_value(Role::Described, self, len))
+                    Ok(DescribedSerializer::list_value(self, len))
                 } else if name == DESCRIBED_MAP {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
@@ -730,7 +730,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedMap;
-                    Ok(DescribedSerializer::map_value(Role::Described, self, len))
+                    Ok(DescribedSerializer::map_value(self, len))
                 } else if name == DESCRIBED_BASIC {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
@@ -738,20 +738,20 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedBasic;
-                    Ok(DescribedSerializer::basic_value(Role::Described, self, len))
+                    Ok(DescribedSerializer::basic_value(self, len))
                 } else {
                     // Only non-described struct will go to this branch
-                    Ok(DescribedSerializer::list_value(Role::Value, self, len))
+                    Ok(DescribedSerializer::list_value(self, len))
                 }
             }
             StructEncoding::DescribedBasic => {
-                Ok(DescribedSerializer::basic_value(Role::Value, self, len))
+                Ok(DescribedSerializer::basic_value(self, len))
             }
             StructEncoding::DescribedList => {
-                Ok(DescribedSerializer::list_value(Role::Value, self, len))
+                Ok(DescribedSerializer::list_value(self, len))
             }
             StructEncoding::DescribedMap => {
-                Ok(DescribedSerializer::map_value(Role::Value, self, len))
+                Ok(DescribedSerializer::map_value(self, len))
             }
         }
     }
@@ -1099,11 +1099,11 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleSerializer<'a, W> {
     }
 }
 
-pub enum Role {
-    Described,
-    // Descriptor,
-    Value,
-}
+// pub enum Role {
+//     Described,
+//     // Descriptor,
+//     Value,
+// }
 
 pub enum ValueType {
     Basic,
@@ -1113,51 +1113,51 @@ pub enum ValueType {
 
 pub struct DescribedSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    role: Role,
+    // role: Role,
     val_ty: ValueType,
     num: usize,
     buf: Vec<u8>,
 }
 
-#[inline]
-pub fn init_vec(role: &Role) -> Vec<u8> {
-    match role {
-        &Role::Value => Vec::new(),
-        _ => Vec::with_capacity(0),
-    }
-}
+// #[inline]
+// pub fn init_vec(role: &Role) -> Vec<u8> {
+//     match role {
+//         &Role::Value => Vec::new(),
+//         _ => Vec::with_capacity(0),
+//     }
+// }
 
 impl<'a, W: 'a> DescribedSerializer<'a, W> {
-    pub fn basic_value(role: Role, se: &'a mut Serializer<W>, num: usize) -> Self {
-        let buf = init_vec(&role);
+    pub fn basic_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+        // let buf = init_vec(&role);
         Self {
             se,
-            role,
+            // role,
             val_ty: ValueType::Basic,
             num,
-            buf,
+            buf: vec![],
         }
     }
 
-    pub fn list_value(role: Role, se: &'a mut Serializer<W>, num: usize) -> Self {
-        let buf = init_vec(&role);
+    pub fn list_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+        // let buf = init_vec(&role);
         Self {
             se,
-            role,
+            // role,
             val_ty: ValueType::List,
             num,
-            buf,
+            buf: vec![],
         }
     }
 
-    pub fn map_value(role: Role, se: &'a mut Serializer<W>, num: usize) -> Self {
-        let buf = init_vec(&role);
+    pub fn map_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+        // let buf = init_vec(&role);
         Self {
             se,
-            role,
+            // role,
             val_ty: ValueType::Map,
             num,
-            buf,
+            buf: vec![],
         }
     }
 }
@@ -1182,9 +1182,13 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
     where
         T: Serialize,
     {
-        match self.role {
-            Role::Described => value.serialize(self.as_mut()),
-            Role::Value => match self.val_ty {
+        // match self.role {
+        //     Role::Described => value.serialize(self.as_mut()),
+        //     Role::Value => 
+        if key == DESCRIPTOR {
+            value.serialize(self.as_mut())
+        } else {
+            match self.val_ty {
                 ValueType::Basic => value.serialize(self.as_mut()),
                 ValueType::List => {
                     let mut serializer = Serializer::described_list(&mut self.buf);
@@ -1195,15 +1199,17 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
                     key.serialize(&mut serializer)?;
                     value.serialize(&mut serializer)
                 }
-            },
+            }
         }
+        // }
     }
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.role {
-            Role::Described => Ok(()),
-            Role::Value => match self.val_ty {
+        // match self.role {
+        //     Role::Described => Ok(()),
+        //     Role::Value => 
+            match self.val_ty {
                 ValueType::Basic => Ok(()),
                 // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
                 ValueType::List => write_list(
@@ -1219,8 +1225,8 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
                     self.buf,
                     &IsArrayElement::False,
                 ),
-            },
-        }
+            }
+        // }
     }
 }
 
@@ -1762,76 +1768,92 @@ mod test {
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
-    #[test]
-    fn test_serialize_described_basic_type() {
-        let value = String::from("amqp");
-        let descriptor = Descriptor::code(100);
-        let described = Described::new(crate::types::EncodingType::Basic, descriptor, &value);
-        let mut expected = vec![
-            EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
-            100u64 as u8,
-            EncodingCodes::Str8 as u8,
-            4 as u8,
-        ];
-        expected.append(&mut value.as_bytes().into());
-        assert_eq_on_serialized_vs_expected(described, expected);
-    }
+    // #[test]
+    // fn test_serialize_described_basic_type() {
+    //     let value = String::from("amqp");
+    //     let descriptor = Descriptor::code(100);
+    //     let described = Described::new(crate::types::EncodingType::Basic, descriptor, &value);
+    //     let mut expected = vec![
+    //         EncodingCodes::DescribedType as u8,
+    //         EncodingCodes::SmallUlong as u8,
+    //         100u64 as u8,
+    //         EncodingCodes::Str8 as u8,
+    //         4 as u8,
+    //     ];
+    //     expected.append(&mut value.as_bytes().into());
+    //     assert_eq_on_serialized_vs_expected(described, expected);
+    // }
+
+    // #[test]
+    // fn test_serialize_described_list_type() {
+    //     let value = Foo {
+    //         a_field: 13,
+    //         b: true,
+    //     };
+    //     let descriptor = Descriptor::code(13);
+    //     let described = Described::new(crate::types::EncodingType::List, descriptor, &value);
+    //     let expected = vec![
+    //         EncodingCodes::DescribedType as u8, // Described type contructor
+    //         EncodingCodes::SmallUlong as u8,    // Descriptor code
+    //         13u8,
+    //         EncodingCodes::List8 as u8,    // List
+    //         4u8,                           // List length in bytes
+    //         2u8,                           // Number of items in list
+    //         EncodingCodes::SmallInt as u8, // Constructor of first item
+    //         13u8,
+    //         EncodingCodes::BooleanTrue as u8, // Constructor of second item
+    //     ];
+    //     assert_eq_on_serialized_vs_expected(described, expected);
+    // }
+
+    // #[test]
+    // fn test_serialize_described_map_type() {
+    //     let value = Foo {
+    //         a_field: 13,
+    //         b: true,
+    //     };
+    //     let descriptor = Descriptor::code(13);
+    //     let described = Described::new(crate::types::EncodingType::Map, descriptor, &value);
+    //     let expected = vec![
+    //         EncodingCodes::DescribedType as u8,
+    //         EncodingCodes::SmallUlong as u8,
+    //         13,
+    //         EncodingCodes::Map8 as u8,
+    //         (1 + 9 + 2 + 3 + 1) as u8, //(count, "a_field", 13, "b", true)
+    //         2,
+    //         EncodingCodes::Str8 as u8,
+    //         7,
+    //         b'a',
+    //         b'_',
+    //         b'f',
+    //         b'i',
+    //         b'e',
+    //         b'l',
+    //         b'd',
+    //         EncodingCodes::SmallInt as u8,
+    //         13,
+    //         EncodingCodes::Str8 as u8,
+    //         1,
+    //         b'b',
+    //         EncodingCodes::BooleanTrue as u8,
+    //     ];
+    //     assert_eq_on_serialized_vs_expected(described, expected);
+    // }
 
     #[test]
-    fn test_serialize_described_list_type() {
-        let value = Foo {
-            a_field: 13,
-            b: true,
-        };
-        let descriptor = Descriptor::code(13);
-        let described = Described::new(crate::types::EncodingType::List, descriptor, &value);
-        let expected = vec![
-            EncodingCodes::DescribedType as u8, // Described type contructor
-            EncodingCodes::SmallUlong as u8,    // Descriptor code
-            13u8,
-            EncodingCodes::List8 as u8,    // List
-            4u8,                           // List length in bytes
-            2u8,                           // Number of items in list
-            EncodingCodes::SmallInt as u8, // Constructor of first item
-            13u8,
-            EncodingCodes::BooleanTrue as u8, // Constructor of second item
-        ];
-        assert_eq_on_serialized_vs_expected(described, expected);
-    }
+    fn test_serialize_described_macro() {
+        use crate::macros::SerializeDescribed;
+        use crate as fe2o3_amqp;
 
-    #[test]
-    fn test_serialize_described_map_type() {
-        let value = Foo {
-            a_field: 13,
-            b: true,
-        };
-        let descriptor = Descriptor::code(13);
-        let described = Described::new(crate::types::EncodingType::Map, descriptor, &value);
-        let expected = vec![
-            EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
-            13,
-            EncodingCodes::Map8 as u8,
-            (1 + 9 + 2 + 3 + 1) as u8, //(count, "a_field", 13, "b", true)
-            2,
-            EncodingCodes::Str8 as u8,
-            7,
-            b'a',
-            b'_',
-            b'f',
-            b'i',
-            b'e',
-            b'l',
-            b'd',
-            EncodingCodes::SmallInt as u8,
-            13,
-            EncodingCodes::Str8 as u8,
-            1,
-            b'b',
-            EncodingCodes::BooleanTrue as u8,
-        ];
-        assert_eq_on_serialized_vs_expected(described, expected);
+        #[derive(Debug, SerializeDescribed)]
+        struct Foo {
+            is_fool: bool,
+            a: i32
+        }
+
+        let foo = Foo {is_fool: true, a: 9};
+        let buf = to_vec(&foo).unwrap();
+        println!("{:x?}", buf);
     }
 
     #[allow(dead_code)]
