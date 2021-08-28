@@ -1,4 +1,4 @@
-pub use fe2o3_amqp_macros::{Described, NonDescribed, SerializeDescribed};
+pub use fe2o3_amqp_macros::{Described, NonDescribed, SerializeDescribed, DeserializeDescribed};
 
 #[cfg(test)]
 mod tests {

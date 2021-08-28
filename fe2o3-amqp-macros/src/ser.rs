@@ -33,6 +33,7 @@ fn expand_serialize_on_struct(
     let field_names: Vec<String> = field_idents.iter().map(|i| i.to_string()).collect();
     let len = field_idents.len();
     let token = quote! {
+        #[automatically_derived]
         impl serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -40,7 +41,7 @@ fn expand_serialize_on_struct(
             {
                 use serde::ser::SerializeStruct;
                 let mut state = serializer.serialize_struct(#name, #len + 1)?;
-                state.serialize_field(#descriptor)?;
+                state.serialize_field(#descriptor)?; // serialize descriptor
                 #( state.serialize_field(#field_names, &self.#field_idents)?; )*
                 state.end()
             }

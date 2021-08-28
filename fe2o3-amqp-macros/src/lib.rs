@@ -210,13 +210,13 @@ pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::
     output.into()
 }
 
-// #[proc_macro_derive(DeserializeDescribed)]
-// pub fn derive_deserialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-//     let input = syn::parse_macro_input!(item as DeriveInput);
-//     let impl_de = de::expand_deserialize(&input)
-//         .unwrap();
-//     let output = quote! {
-//         #impl_de
-//     };
-//     output.into()
-// }
+#[proc_macro_derive(DeserializeDescribed)]
+pub fn derive_deserialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = syn::parse_macro_input!(item as DeriveInput);
+    let impl_de = de::expand_deserialize(&input)
+        .unwrap();
+    let output = quote! {
+        #impl_de
+    };
+    output.into()
+}
