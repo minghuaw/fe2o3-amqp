@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use fe2o3_amqp::{macros::Described, types::{Symbol, Ulong}, value::Value};
 
-use crate::{Source, Target, definitions::{DeliveryTag, Fields, Handle, Role, SequenceNo, SndSettleMode}};
+use crate::{Source, Target, definitions::{DeliveryTag, Fields, Handle, ReceivervSettleMode, Role, SenderSettleMode, SequenceNo}};
 
 #[derive(Debug, Deserialize, Serialize, Described)]
 #[serde(rename_all = "kebab-case")]
@@ -13,8 +13,8 @@ pub struct Attach {
     pub name: String,
     pub handle: Handle,
     pub role: Role,
-    pub snd_settle_mode: Option<SndSettleMode>,
-    pub rcv_settle_mode: Option<SndSettleMode>,
+    pub snd_settle_mode: Option<SenderSettleMode>,
+    pub rcv_settle_mode: Option<ReceivervSettleMode>,
     pub source: Option<Source>,
     pub target: Option<Target>,
     pub unsettled: Option<BTreeMap<DeliveryTag, Value>>,

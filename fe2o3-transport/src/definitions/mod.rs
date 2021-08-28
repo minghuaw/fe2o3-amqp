@@ -11,11 +11,11 @@ pub struct Role(bool);
 
 /// 2.8.2 Sender Settle Mode
 #[derive(Debug, Deserialize, Serialize, NonDescribed)]
-pub struct SndSettleMode(Ubyte);
+pub struct SenderSettleMode(Ubyte);
 
 /// 2.8.3 Receiver Settle Mode
 #[derive(Debug, Deserialize, Serialize, NonDescribed)]
-pub struct RcvSettleMode(Ubyte);
+pub struct ReceivervSettleMode(Ubyte);
 
 /// 2.8.4 Handle
 #[derive(Debug, Deserialize, Serialize, NonDescribed)]
