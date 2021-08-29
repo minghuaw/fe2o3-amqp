@@ -41,7 +41,7 @@
 use fe2o3_amqp::macros::{SerializeComposite, DeserializeComposite};
 
 #[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(name="bar", encoding="map")]
+#[amqp_contract(name="bar", encoding="map", rename_field = "kebab-case")]
 struct Foo {
     is_fool: bool,
     second_field: String,

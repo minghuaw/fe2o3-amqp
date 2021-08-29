@@ -12,7 +12,8 @@ proc-macro = true
 serde = { version = "1.0.127", features = ["derive"] }
 
 [dependencies]
+convert_case = "0.4.0"
 darling = "0.13.0"
 proc-macro2 = "1.0.28"
 quote = "1.0.9"
-syn = "1.0.74"
+syn = { version = "1.0.74", features = ["parsing"] } 
