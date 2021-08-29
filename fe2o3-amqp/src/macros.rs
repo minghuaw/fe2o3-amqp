@@ -2,7 +2,6 @@ pub use fe2o3_amqp_macros::{SerializeComposite, DeserializeComposite};
 
 #[cfg(test)]
 mod tests {
-    use serde::{Deserialize, Serialize};
     use crate::ser::to_vec;
     // use crate::ser::{to_vec, to_vec_described, serialize};
     // use crate::convert::{IntoDescribed};

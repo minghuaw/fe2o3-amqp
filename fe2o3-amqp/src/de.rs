@@ -1,9 +1,9 @@
 use serde::de::{self};
 use std::convert::TryInto;
 
-use crate::{constants::{DESERIALIZE_DESCRIBED, DESCRIPTOR}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, SMALL_ULONG_WIDTH, ULONG0_WIDTH, ULONG_WIDTH, UUID_WIDTH}, format::{
+use crate::{constants::{DESERIALIZE_DESCRIBED, DESCRIPTOR}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, }, types::{DECIMAL128, DECIMAL32, DECIMAL64, Descriptor, SYMBOL, TIMESTAMP, UUID}, util::{
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, }, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         EnumType, NewType
     }, value::VALUE};
@@ -802,8 +802,8 @@ where
             _ => return Err(Error::InvalidFormatCode),
         };
 
-        // AMQP map count includes both key and value, should be halfed
-        let count = count / 2;
+        // // AMQP map count includes both key and value, should be halfed
+        // let count = count / 2;
         visitor.visit_map(MapAccess::new(self, size, count))
     }
 
@@ -901,7 +901,7 @@ where
                 visitor.visit_u8(code)
             },
             EnumType::None => {
-                println!("EnumType::None");
+                println!(">>> Debug: deserialize_identifier EnumType::None");
                 // The following are the possible identifiers
                 match self.get_elem_code_or_peek_byte()?.try_into()? {
                     // If a struct is serialized as a map, then the fields are serialized as str
@@ -1052,18 +1052,25 @@ impl<'a, R> AsMut<Deserializer<R>> for MapAccess<'a, R> {
 impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
     type Error = Error;
 
-    fn next_key_seed<K>(&mut self, _seed: K) -> Result<Option<K::Value>, Self::Error>
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where
         K: de::DeserializeSeed<'de>,
     {
-        unreachable!()
+        match self.count {
+            0 => Ok(None),
+            _ => {
+                self.count -= 1;
+                seed.deserialize(self.as_mut()).map(Some)
+            }
+        }
     }
 
-    fn next_value_seed<V>(&mut self, _seed: V) -> Result<V::Value, Self::Error>
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where
         V: de::DeserializeSeed<'de>,
     {
-        unreachable!()
+        self.count -= 1;
+        seed.deserialize(self.as_mut())
     }
 
     fn next_entry_seed<K, V>(
@@ -1078,7 +1085,8 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
         match self.count {
             0 => Ok(None),
             _ => {
-                self.count = self.count - 1;
+                // AMQP map count includes both key and value
+                self.count -= 2;
                 let key = kseed.deserialize(self.as_mut())?;
                 let val = vseed.deserialize(self.as_mut())?;
                 Ok(Some((key, val)))
@@ -1220,18 +1228,11 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 match self.as_mut().get_elem_code_or_read_format_code()? {
                     EncodingCodes::List0 => {
                         self.field_count = Some(0);
-                        // if self.field_count != 0 {
-                        //     return Err(de::Error::custom("Invalid length"))
-                        // }
                     },
                     EncodingCodes::List8 => {
                         let _size = self.as_mut().reader.next()?;
                         let count = self.as_mut().reader.next()?;
                         self.field_count = Some(count as usize);
-                        // println!("{:?}", count);
-                        // if count as usize != self.field_count {
-                        //     return Err(de::Error::custom("Invalid length"))
-                        // }
                     },
                     EncodingCodes::List32 => {
                         let bytes = self.as_mut().reader.read_const_bytes()?;
@@ -1239,11 +1240,6 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                         let bytes = self.as_mut().reader.read_const_bytes()?;
                         let count = u32::from_be_bytes(bytes);
                         self.field_count = Some(count as usize);
-                        // println!("{:?}", count);
-
-                        // if count as usize != self.field_count {
-                        //     return Err(de::Error::custom("Invalid length"))
-                        // }
                     },
                     _ => return Err(de::Error::custom("Invalid format code. Expecting a list"))
                 }
@@ -1269,18 +1265,84 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
 impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
     type Error = Error;
 
-    fn next_key_seed<K>(&mut self, _seed: K) -> Result<Option<K::Value>, Self::Error>
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
     where
         K: de::DeserializeSeed<'de>,
     {
-        unreachable!()
+        use std::io::Cursor;
+        match self.field_role {
+            FieldRole::Descriptor => {
+                println!(">>> Debug: DescribedAccess::next_key_seed FieldRole::Descriptor");
+                let descriptor_buf = match self.descriptor_buf.take() {
+                    Some(b) => b,
+                    None => return Ok(None)
+                };
+                let reader = IoReader::new(Cursor::new(descriptor_buf));
+                let mut deserializer = Deserializer::new(reader);
+                let result = seed.deserialize(&mut deserializer).map(Some);
+
+                // consume the map headers
+                match self.as_mut().get_elem_code_or_read_format_code()? {
+                    EncodingCodes::Map8 => {
+                        let _size = self.as_mut().reader.next()?;
+                        let count = self.as_mut().reader.next()?;
+                        self.field_count = Some(count as usize);
+                    },
+                    EncodingCodes::Map32 => {
+                        let bytes = self.as_mut().reader.read_const_bytes()?;
+                        let _size = u32::from_be_bytes(bytes);
+                        let bytes = self.as_mut().reader.read_const_bytes()?;
+                        let count = u32::from_be_bytes(bytes);
+                        self.field_count = Some(count as usize);
+                    },
+                    _ => return Err(de::Error::custom("Invalid format code. Expecting a map"))
+                };
+
+                println!(">>> Debug: {:?}", &self.field_count);
+                self.field_role = FieldRole::Fields;
+                result
+            },
+            FieldRole::Fields => {
+                println!(">>> Debug: DescribedAccess::next_key_seed FieldRole::Fields");
+                match self.field_count {
+                    Some(count) => {
+                        match count {
+                            0 => Ok(None),
+                            _ => {
+                                self.field_count = Some(count - 1);
+                                seed.deserialize(self.as_mut()).map(Some)
+                            }
+                        }
+                    },
+                    None => Ok(None)
+                }
+            }
+        }
+
     }
 
-    fn next_value_seed<V>(&mut self, _seed: V) -> Result<V::Value, Self::Error>
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where
         V: de::DeserializeSeed<'de>,
     {
-        unreachable!()
+        match self.field_role {
+            FieldRole::Descriptor => unreachable!(),
+            FieldRole::Fields => {
+                println!(">>> Debug: DescribedAccess::next_value_seed FieldRole::Fields");
+                match self.field_count {
+                    Some(count) => {
+                        match count {
+                            0 => Err(de::Error::custom("Invalid length. Expecting value")),
+                            _ => {
+                                self.field_count = Some(count - 1);
+                                seed.deserialize(self.as_mut())
+                            }
+                        }
+                    },
+                    None => Err(de::Error::custom("Invalid length. Expecting value")),
+                }
+            }
+        }
     }
 
     fn next_entry_seed<K, V>(
@@ -1292,7 +1354,26 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         K: de::DeserializeSeed<'de>,
         V: de::DeserializeSeed<'de>,
     {
-        unimplemented!()
+        match self.field_role {
+            FieldRole::Descriptor => unreachable!(),
+            FieldRole::Fields => {
+                println!(">>> Debug: DescribedAccess::next_entry_seed FieldRole::Fields");
+                match self.field_count {
+                    Some(count) => {
+                        match count {
+                            0 => Ok(None),
+                            _ => {
+                                self.field_count = Some(count - 2);
+                                let key = kseed.deserialize(self.as_mut())?;
+                                let value = vseed.deserialize(self.as_mut())?;
+                                Ok(Some((key, value)))
+                            }
+                        }
+                    },
+                    None => Ok(None)
+                }
+            }
+        }
     }
 }
 
@@ -1606,7 +1687,7 @@ mod tests {
         use crate as fe2o3_amqp;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code=13)]
+        #[amqp_contract(code=13, encoding="map")]
         struct Foo {
             is_fool: bool,
             a: i32

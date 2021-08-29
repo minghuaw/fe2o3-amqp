@@ -1215,7 +1215,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
             ValueType::Map => write_map(
                 &mut self.se.writer,
-                self.num,
+                self.num * 2,
                 self.buf,
                 &IsArrayElement::False,
             ),
