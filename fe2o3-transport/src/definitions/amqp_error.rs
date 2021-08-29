@@ -1,5 +1,4 @@
-
-use fe2o3_amqp::types::{Symbol};
+use fe2o3_amqp::types::Symbol;
 use serde::{de, ser};
 
 #[derive(Debug, PartialEq)]
@@ -16,7 +15,7 @@ pub enum AmqpError {
     PreconditionFailed,
     ResourceDeleted,
     IllegalState,
-    FrameSizeTooSmall
+    FrameSizeTooSmall,
 }
 
 impl AmqpError {
@@ -32,7 +31,7 @@ impl AmqpError {
             AmqpError::NotImplemented => "amqp:not-implemented",
             AmqpError::ResourceLocked => "amqp:resource-locked",
             AmqpError::PreconditionFailed => "amqp:precondition-failed",
-            AmqpError::ResourceDeleted => "amqp:resource-deleted" ,
+            AmqpError::ResourceDeleted => "amqp:resource-deleted",
             AmqpError::IllegalState => "amqp:illegal-state",
             AmqpError::FrameSizeTooSmall => "amqp:frame-size-too-small",
         };
@@ -44,7 +43,7 @@ impl AmqpError {
 impl ser::Serialize for AmqpError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         let val = self.value();
         val.serialize(serializer)
@@ -64,10 +63,10 @@ enum Field {
     PreconditionFailed,
     ResourceDeleted,
     IllegalState,
-    FrameSizeTooSmall
+    FrameSizeTooSmall,
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
@@ -78,7 +77,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de>, 
+        D: serde::Deserializer<'de>,
     {
         let val: String = de::Deserialize::deserialize(deserializer)?;
         let val = match val.as_str() {
@@ -95,7 +94,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:resource-deleted" => Field::ResourceDeleted,
             "amqp:illegal-state" => Field::IllegalState,
             "amqp:frame-size-too-small" => Field::FrameSizeTooSmall,
-            _ => return Err(de::Error::custom("Invalid symbol value for AmqpError"))
+            _ => return Err(de::Error::custom("Invalid symbol value for AmqpError")),
         };
 
         Ok(val)
@@ -105,13 +104,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_identifier(FieldVisitor { })
+        deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = AmqpError;
@@ -122,7 +121,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-        A: de::EnumAccess<'de>, 
+        A: de::EnumAccess<'de>,
     {
         let (val, _) = data.variant()?;
         let val = match val {
@@ -147,7 +146,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for AmqpError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         const VARIANTS: &'static [&'static str] = &[
             "amqp:internal-error",
@@ -160,7 +159,7 @@ impl<'de> de::Deserialize<'de> for AmqpError {
             "amqp:not-implemented",
             "amqp:resource-locked",
             "amqp:precondition-failed",
-            "amqp:resource-deleted" ,
+            "amqp:resource-deleted",
             "amqp:illegal-state",
             "amqp:frame-size-too-small",
         ];
@@ -172,24 +171,24 @@ impl<'de> de::Deserialize<'de> for AmqpError {
 mod tests {
     use std::fmt::Debug;
 
-    use fe2o3_amqp::de::{from_slice};
-    use fe2o3_amqp::ser::to_vec;
-    use fe2o3_amqp::format_code::EncodingCodes;
-    use serde::ser;
-    use serde::de;
     use crate::definitions::AmqpError;
+    use fe2o3_amqp::de::from_slice;
+    use fe2o3_amqp::format_code::EncodingCodes;
+    use fe2o3_amqp::ser::to_vec;
+    use serde::de;
+    use serde::ser;
 
-    fn assert_eq_on_serialized_and_expected<T>(val: T, expected: Vec<u8>) 
-    where 
+    fn assert_eq_on_serialized_and_expected<T>(val: T, expected: Vec<u8>)
+    where
         T: ser::Serialize + Debug + PartialEq,
     {
         let serialized = to_vec(&val).unwrap();
         assert_eq!(serialized, expected)
     }
 
-    fn assert_eq_on_from_slice_and_expected<T>(val: Vec<u8>, expected: T) 
-    where 
-        T: de::DeserializeOwned + Debug + PartialEq
+    fn assert_eq_on_from_slice_and_expected<T>(val: Vec<u8>, expected: T)
+    where
+        T: de::DeserializeOwned + Debug + PartialEq,
     {
         let deserialized: T = from_slice(&val).unwrap();
         assert_eq!(deserialized, expected)

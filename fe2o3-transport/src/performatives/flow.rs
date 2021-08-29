@@ -1,11 +1,18 @@
-
-use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, types::{Boolean, Uint}};
+use fe2o3_amqp::{
+    macros::{DeserializeComposite, SerializeComposite},
+    types::{Boolean, Uint},
+};
 
 use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
 
 #[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
-#[amqp_contract(name="amqp:flow:list", code=0x0000_0000_0000_0013, encoding="list")]
+#[amqp_contract(
+    name = "amqp:flow:list",
+    code = 0x0000_0000_0000_0013,
+    encoding = "list",
+    rename_field = "kebab-case"
+)]
 pub struct Flow {
     next_incoming_id: Option<TransferNumber>,
     incoming_window: Uint,
@@ -17,5 +24,5 @@ pub struct Flow {
     available: Option<Uint>,
     drain: Option<Boolean>,
     echo: Option<Boolean>,
-    properties: Option<Fields>
+    properties: Option<Fields>,
 }

@@ -1,9 +1,12 @@
-
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
+use std::collections::BTreeMap;
 
-use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value, macros::{SerializeComposite, DeserializeComposite}};
+use fe2o3_amqp::{
+    macros::{DeserializeComposite, SerializeComposite},
+    types::{Symbol, Ubyte, Uint},
+    value::Value,
+};
 
 /// 2.8.1 Role
 #[derive(Debug, Deserialize, Serialize)]
@@ -60,18 +63,22 @@ pub struct Fields(BTreeMap<Symbol, Value>);
 /// 2.8.14 Error
 #[derive(Debug, SerializeComposite, DeserializeComposite)]
 // #[serde(rename_all = "kebab-case")] // TODO: add serde compat
-#[amqp_contract(name="amqp:error:list", code=0x0000_0000_0000_001d, encoding="list")]
+#[amqp_contract(
+    name = "amqp:error:list",
+    code = 0x0000_0000_0000_001d,
+    encoding = "list"
+)]
 pub struct Error {
     condition: Symbol,
     description: Option<String>,
-    info: Option<Fields>
+    info: Option<Fields>,
 }
 
 /// 2.8.15 AMQP Error
 mod amqp_error;
 pub use amqp_error::AmqpError;
 
-/// 2.8.16 Connection Error 
+/// 2.8.16 Connection Error
 mod conn_error;
 pub use conn_error::ConnectionError;
 
@@ -79,11 +86,10 @@ pub use conn_error::ConnectionError;
 mod session_error;
 pub use session_error::SessionError;
 
-
 /// 2.8.18 Link Error
 mod link_error;
 pub use link_error::LinkError;
 
 /// 2.8.19 Constant definition
 mod constant_def;
-pub use constant_def::{PORT, SECURE_PORT, MAJOR, MINOR, REVISION, MIN_MAX_FRAME_SIZE};
+pub use constant_def::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, PORT, REVISION, SECURE_PORT};

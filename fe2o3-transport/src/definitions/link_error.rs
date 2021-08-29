@@ -1,6 +1,6 @@
-use serde::{ser, de};
+use serde::{de, ser};
 
-use fe2o3_amqp::{types::Symbol};
+use fe2o3_amqp::types::Symbol;
 
 /// TODO: manually implement Serialize and Deserialize
 #[derive(Debug, PartialEq)]
@@ -19,7 +19,7 @@ impl LinkError {
             &Self::TransferLimitExceeded => "amqp:link:transfer-limit-exceeded",
             &Self::MessageSizeExceeded => "amqp:link:message-size-exceeded",
             &Self::Redirect => "amqp:link:redirect",
-            &Self::Stolen => "amqp:link:stolen"
+            &Self::Stolen => "amqp:link:stolen",
         };
         Symbol::from(val)
     }
@@ -28,7 +28,8 @@ impl LinkError {
 impl ser::Serialize for LinkError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-            S: serde::Serializer {
+        S: serde::Serializer,
+    {
         self.value().serialize(serializer)
     }
 }
@@ -41,7 +42,7 @@ enum Field {
     Stolen,
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
@@ -52,7 +53,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-            D: serde::Deserializer<'de>, {
+        D: serde::Deserializer<'de>,
+    {
         let val: String = de::Deserialize::deserialize(deserializer)?;
         let val = match val.as_str() {
             "amqp:link:detach-forced" => Field::DetachForced,
@@ -60,7 +62,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:link:message-size-exceeded" => Field::MessageSizeExceeded,
             "amqp:link:redirect" => Field::Redirect,
             "amqp:link:stolen" => Field::Stolen,
-            _ => return Err(de::Error::custom("Invalid symbol value for LinkError"))
+            _ => return Err(de::Error::custom("Invalid symbol value for LinkError")),
         };
         Ok(val)
     }
@@ -69,12 +71,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
-        deserializer.deserialize_identifier(FieldVisitor{})
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = LinkError;
@@ -85,14 +88,15 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-            A: de::EnumAccess<'de>, {
+        A: de::EnumAccess<'de>,
+    {
         let (val, _) = data.variant()?;
         let val = match val {
             Field::DetachForced => LinkError::DetachForced,
             Field::TransferLimitExceeded => LinkError::TransferLimitExceeded,
             Field::MessageSizeExceeded => LinkError::MessageSizeExceeded,
             Field::Redirect => LinkError::Redirect,
-            Field::Stolen => LinkError::Stolen
+            Field::Stolen => LinkError::Stolen,
         };
         Ok(val)
     }
@@ -101,7 +105,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for LinkError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         const VARIANTS: &'static [&'static str] = &[
             "amqp:link:detach-forced",
             "amqp:link:transfer-limit-exceeded",
@@ -109,7 +114,7 @@ impl<'de> de::Deserialize<'de> for LinkError {
             "amqp:link:redirect",
             "amqp:link:stolen",
         ];
-        deserializer.deserialize_enum("LINK_ERROR", VARIANTS, Visitor { })
+        deserializer.deserialize_enum("LINK_ERROR", VARIANTS, Visitor {})
     }
 }
 

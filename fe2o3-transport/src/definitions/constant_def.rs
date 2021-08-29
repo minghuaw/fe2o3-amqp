@@ -1,4 +1,3 @@
-
 pub const PORT: u16 = 5672;
 pub const SECURE_PORT: u16 = 5671;
 pub const MAJOR: u8 = 1;

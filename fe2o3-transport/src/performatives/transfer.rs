@@ -1,11 +1,21 @@
+use fe2o3_amqp::{
+    macros::{DeserializeComposite, SerializeComposite},
+    types::Boolean,
+};
 
-use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, types::Boolean};
-
-use crate::{DeliveryState, definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceivervSettleMode}};
+use crate::{
+    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceivervSettleMode},
+    DeliveryState,
+};
 
 #[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
-#[amqp_contract(name="amqp:transfer:list", code=0x0000_0000_0000_0014, encoding="list")]
+#[amqp_contract(
+    name = "amqp:transfer:list",
+    code = 0x0000_0000_0000_0014,
+    encoding = "list",
+    rename_field = "kebab-case"
+)]
 pub struct Transfer {
     handle: Handle,
     delivery_id: Option<DeliveryNumber>,
@@ -17,5 +27,5 @@ pub struct Transfer {
     state: Option<DeliveryState>,
     resume: Option<Boolean>,
     aborted: Option<Boolean>,
-    batchable: Option<Boolean>
+    batchable: Option<Boolean>,
 }
