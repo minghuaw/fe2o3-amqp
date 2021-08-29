@@ -3,13 +3,17 @@ use std::{collections::BTreeMap, convert::TryInto};
 use ordered_float::OrderedFloat;
 use serde::de::{self};
 
-use crate::{error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, 
-    util::{
-        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
-        EnumType, NewType
-    }
-};
 use crate::constants::DESCRIPTOR;
+use crate::{
+    error::Error,
+    format_code::EncodingCodes,
+    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    util::{
+        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR,
+        EnumType,
+        NewType,
+    },
+};
 
 use super::{Value, VALUE};
 
@@ -699,21 +703,15 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         } else {
             match self.value {
                 // An Uint should represent a unit_variant
-                v @ Value::Uint(_) => {
-                    visitor.visit_enum(VariantAccess {
-                        iter: vec![v].into_iter(),
-                    })
-                },
-                Value::List(v) => {
-                    visitor.visit_enum(VariantAccess {
-                        iter: v.into_iter(),
-                    })
-                },
-                v @ Value::Symbol(_) => {
-                    visitor.visit_enum(VariantAccess {
-                        iter: vec![v].into_iter()
-                    })
-                }
+                v @ Value::Uint(_) => visitor.visit_enum(VariantAccess {
+                    iter: vec![v].into_iter(),
+                }),
+                Value::List(v) => visitor.visit_enum(VariantAccess {
+                    iter: v.into_iter(),
+                }),
+                v @ Value::Symbol(_) => visitor.visit_enum(VariantAccess {
+                    iter: vec![v].into_iter(),
+                }),
                 _ => Err(Error::InvalidValue),
             }
         }
@@ -731,7 +729,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             EnumType::Descriptor => {
                 let code = self.value.format_code();
                 visitor.visit_u8(code)
-            },
+            }
             // EnumType::AmqpError => {
             //     self.deserialize_newtype_struct(SYMBOL, visitor)
             // },

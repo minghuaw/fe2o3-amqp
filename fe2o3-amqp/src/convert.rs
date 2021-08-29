@@ -1,4 +1,3 @@
-
 // use crate::types::Described;
 
 // pub trait IntoDescribed: Sized {

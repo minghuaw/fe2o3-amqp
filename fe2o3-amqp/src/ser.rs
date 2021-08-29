@@ -1,11 +1,20 @@
-use std::{io::Write};
+use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{error::Error, format_code::EncodingCodes, constants::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
-        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
-        IsArrayElement, NewType,
-    }, value::{U32_MAX_AS_USIZE}};
+use crate::{
+    constants::DESCRIPTOR,
+    constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
+    error::Error,
+    format_code::EncodingCodes,
+    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    util::{
+        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR,
+        IsArrayElement,
+        NewType,
+    },
+    value::U32_MAX_AS_USIZE,
+};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -17,8 +26,8 @@ where
     Ok(writer)
 }
 
-// pub fn to_vec_described<T>(value: &Described<T>) -> Result<Vec<u8>, Error> 
-// where 
+// pub fn to_vec_described<T>(value: &Described<T>) -> Result<Vec<u8>, Error>
+// where
 //     T: Serialize,
 // {
 //     let mut writer = Vec::new();
@@ -27,8 +36,8 @@ where
 //     Ok(writer)
 // }
 
-// pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error> 
-// where 
+// pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error>
+// where
 //     T: Serialize + TryInto<Described<T>>,
 //     T::Error: Serialize,
 // {
@@ -42,8 +51,8 @@ where
 //     Ok(writer)
 // }
 
-// pub fn serialize<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error> 
-// where 
+// pub fn serialize<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error>
+// where
 //     T: Serialize,
 // {
 //     match value.into() {
@@ -640,8 +649,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         T: Serialize,
     {
         use ser::SerializeSeq;
-        if name == DESCRIPTOR 
-            // || name == VALUE || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR 
+        if name == DESCRIPTOR
+        // || name == VALUE || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR
         {
             value.serialize(self)
         } else {
@@ -744,15 +753,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     Ok(DescribedSerializer::list_value(self, len))
                 }
             }
-            StructEncoding::DescribedBasic => {
-                Ok(DescribedSerializer::basic_value(self, len))
-            }
-            StructEncoding::DescribedList => {
-                Ok(DescribedSerializer::list_value(self, len))
-            }
-            StructEncoding::DescribedMap => {
-                Ok(DescribedSerializer::map_value(self, len))
-            }
+            StructEncoding::DescribedBasic => Ok(DescribedSerializer::basic_value(self, len)),
+            StructEncoding::DescribedList => Ok(DescribedSerializer::list_value(self, len)),
+            StructEncoding::DescribedMap => Ok(DescribedSerializer::map_value(self, len)),
         }
     }
 
@@ -1835,17 +1838,20 @@ mod test {
 
     #[test]
     fn test_serialize_described_macro() {
-        use crate::macros::SerializeComposite;
         use crate as fe2o3_amqp;
+        use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code=13, encoding="map")]
+        #[amqp_contract(code = 13, encoding = "map")]
         struct Foo {
             is_fool: bool,
-            a: i32
+            a: i32,
         }
 
-        let foo = Foo {is_fool: true, a: 9};
+        let foo = Foo {
+            is_fool: true,
+            a: 9,
+        };
         let buf = to_vec(&foo).unwrap();
         println!("{:x?}", buf);
     }

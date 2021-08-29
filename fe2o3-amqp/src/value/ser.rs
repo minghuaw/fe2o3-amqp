@@ -4,13 +4,13 @@ use ordered_float::OrderedFloat;
 use serde::ser;
 use serde_bytes::ByteBuf;
 
-use crate::{error::Error, types::{
+use crate::{
+    error::Error,
+    types::{
         Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, ARRAY, DECIMAL128, DECIMAL32,
         DECIMAL64, SYMBOL, TIMESTAMP, UUID,
-    }, util::{
-        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
-        NewType 
-    }
+    },
+    util::NewType,
 };
 
 use super::Value;
@@ -248,8 +248,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         use crate::constants::DESCRIPTOR;
         use crate::value::VALUE;
 
-        if name == DESCRIPTOR || name == VALUE 
-            // || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR 
+        if name == DESCRIPTOR || name == VALUE
+        // || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR
         {
             value.serialize(self)
         } else {

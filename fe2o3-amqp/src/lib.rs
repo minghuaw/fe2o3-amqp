@@ -1,5 +1,7 @@
 // Public mods
+pub mod constants;
 pub mod contract;
+pub mod convert;
 pub mod de;
 pub mod error;
 pub mod fixed_width;
@@ -8,8 +10,6 @@ pub mod macros;
 pub mod ser;
 pub mod types;
 pub mod value;
-pub mod convert;
-pub mod constants;
 
 // Private mods
 mod read;

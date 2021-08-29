@@ -1,4 +1,4 @@
-pub use fe2o3_amqp_macros::{SerializeComposite, DeserializeComposite};
+pub use fe2o3_amqp_macros::{DeserializeComposite, SerializeComposite};
 
 #[cfg(test)]
 mod tests {
@@ -19,9 +19,8 @@ mod tests {
             b: bool,
         }
 
-        let value = Test {a: 7, b: true};
+        let value = Test { a: 7, b: true };
         let buf = to_vec(&value).unwrap();
         println!("{:x?}", buf);
     }
-
 }
