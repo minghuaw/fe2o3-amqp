@@ -2,7 +2,7 @@ use std::{io::Write};
 
 use serde::{ser, Serialize};
 
-use crate::{error::Error, format_code::EncodingCodes, constants::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, Described, SYMBOL, TIMESTAMP, Type, UUID}, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
+use crate::{error::Error, format_code::EncodingCodes, constants::DESCRIPTOR, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         IsArrayElement, NewType,
     }, value::{U32_MAX_AS_USIZE}};
@@ -17,15 +17,15 @@ where
     Ok(writer)
 }
 
-pub fn to_vec_described<T>(value: &Described<T>) -> Result<Vec<u8>, Error> 
-where 
-    T: Serialize,
-{
-    let mut writer = Vec::new();
-    let mut se = Serializer::new(&mut writer, IsArrayElement::False);
-    value.serialize(&mut se)?;
-    Ok(writer)
-}
+// pub fn to_vec_described<T>(value: &Described<T>) -> Result<Vec<u8>, Error> 
+// where 
+//     T: Serialize,
+// {
+//     let mut writer = Vec::new();
+//     let mut se = Serializer::new(&mut writer, IsArrayElement::False);
+//     value.serialize(&mut se)?;
+//     Ok(writer)
+// }
 
 // pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error> 
 // where 
@@ -42,15 +42,15 @@ where
 //     Ok(writer)
 // }
 
-pub fn serialize<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error> 
-where 
-    T: Serialize,
-{
-    match value.into() {
-        Type::Described(v) => to_vec(&v),
-        Type::NonDescribed(v) => to_vec(&v)
-    }
-}
+// pub fn serialize<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error> 
+// where 
+//     T: Serialize,
+// {
+//     match value.into() {
+//         Type::Described(v) => to_vec(&v),
+//         Type::NonDescribed(v) => to_vec(&v)
+//     }
+// }
 
 #[repr(u8)]
 enum StructEncoding {
@@ -1300,7 +1300,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 mod test {
     use crate::{
         format_code::EncodingCodes,
-        types::Described,
+        // types::Described,
         types::Descriptor,
         types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid},
     };

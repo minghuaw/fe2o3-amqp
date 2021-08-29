@@ -1,10 +1,11 @@
-pub use fe2o3_amqp_macros::{Described, NonDescribed, SerializeDescribed,};
+pub use fe2o3_amqp_macros::{SerializeDescribed, DeserializeDescribed};
 
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
-    use crate::ser::{to_vec, to_vec_described, serialize};
-    use crate::convert::{IntoDescribed};
+    use crate::ser::to_vec;
+    // use crate::ser::{to_vec, to_vec_described, serialize};
+    // use crate::convert::{IntoDescribed};
 
     use super::*;
 
@@ -12,8 +13,8 @@ mod tests {
 
     #[test]
     fn test_macro_integration() {
-        #[derive(Debug, Serialize, Deserialize, Described)]
-        #[amqp_contract(name = "a", code = 0x8, encoding = "list")]
+        #[derive(Debug, SerializeDescribed, DeserializeDescribed)]
+        #[amqp_contract(name = "a", encoding = "list")]
         struct Test {
             a: i32,
             b: bool,
@@ -21,19 +22,7 @@ mod tests {
 
         let value = Test {a: 7, b: true};
         let buf = to_vec(&value).unwrap();
-        println!("{:?}", buf);
-
-        let value = Test {a: 7, b: true};
-        let buf = to_vec(&value.into_described()).unwrap();
-        println!("{:?}", buf);
-
-        let value = Test {a: 7, b: true};
-        let buf = to_vec_described(&value.into_described()).unwrap();
-        println!("{:?}", buf);
-
-        let value = Test {a: 7, b: true};
-        let buf = serialize(&value).unwrap();
-        println!("{:?}", buf);
+        println!("{:x?}", buf);
     }
 
 }

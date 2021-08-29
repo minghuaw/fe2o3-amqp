@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
-use fe2o3_amqp::{macros::Described, types::{Boolean, Uint}};
+
+use fe2o3_amqp::{macros::{DeserializeDescribed, SerializeDescribed}, types::{Boolean, Uint}};
 
 use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
 
-#[derive(Debug, Deserialize, Serialize, Described)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, DeserializeDescribed, SerializeDescribed)]
+// #[serde(rename_all = "kebab-case")]
 #[amqp_contract(name="amqp:flow:list", code=0x0000_0000_0000_0013, encoding="list")]
 pub struct Flow {
     next_incoming_id: Option<TransferNumber>,

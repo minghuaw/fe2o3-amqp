@@ -1,11 +1,10 @@
-use serde::{Deserialize, Serialize};
 
-use fe2o3_amqp::{macros::Described, types::Boolean};
+use fe2o3_amqp::{macros::{DeserializeDescribed, SerializeDescribed}, types::Boolean};
 
 use crate::{DeliveryState, definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceivervSettleMode}};
 
-#[derive(Debug, Deserialize, Serialize, Described)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, DeserializeDescribed, SerializeDescribed)]
+// #[serde(rename_all = "kebab-case")]
 #[amqp_contract(name="amqp:transfer:list", code=0x0000_0000_0000_0014, encoding="list")]
 pub struct Transfer {
     handle: Handle,

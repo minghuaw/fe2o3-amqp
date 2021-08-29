@@ -25,173 +25,173 @@ struct DescribedAttr {
     pub encoding: Option<EncodingType>,
 }
 
-#[proc_macro_derive(Described, attributes(amqp_contract))]
-pub fn derive_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = syn::parse_macro_input!(item as syn::DeriveInput);
-    let ident = &input.ident;
-    let ident_str = ident.to_string();
-    let attr = DescribedAttr::from_derive_input(&input).unwrap();
-    println!("{:?}", &attr);
+// #[proc_macro_derive(Described, attributes(amqp_contract))]
+// pub fn derive_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+//     let input = syn::parse_macro_input!(item as syn::DeriveInput);
+//     let ident = &input.ident;
+//     let ident_str = ident.to_string();
+//     let attr = DescribedAttr::from_derive_input(&input).unwrap();
+//     println!("{:?}", &attr);
 
-    let descriptor = match attr.code {
-        Some(code) => {
-            quote! {
-                fe2o3_amqp::types::Descriptor::Code(#code)
-            }
-        }
-        None => match attr.name {
-            Some(name) => {
-                quote! {
-                    fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name.to_string()))
-                }
-            }
-            None => {
-                quote! {
-                    fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#ident_str))
-                }
-            }
-        },
-    };
+//     let descriptor = match attr.code {
+//         Some(code) => {
+//             quote! {
+//                 fe2o3_amqp::types::Descriptor::Code(#code)
+//             }
+//         }
+//         None => match attr.name {
+//             Some(name) => {
+//                 quote! {
+//                     fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name.to_string()))
+//                 }
+//             }
+//             None => {
+//                 quote! {
+//                     fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#ident_str))
+//                 }
+//             }
+//         },
+//     };
 
-    let encoding = match attr.encoding {
-        Some(enc) => match enc {
-            EncodingType::Basic => quote! { fe2o3_amqp::types::EncodingType::Basic },
-            EncodingType::List => quote! { fe2o3_amqp::types::EncodingType::List },
-            EncodingType::Map => quote! { fe2o3_amqp::types::EncodingType::Map },
-        },
-        None => match input.data {
-            syn::Data::Struct(s) => match &s.fields {
-                syn::Fields::Named(_) => {
-                    quote! { fe2o3_amqp::types::EncodingType::List }
-                }
-                syn::Fields::Unnamed(unnamed) => match s.fields.len() {
-                    0 => {
-                        return Err(syn::Error::new(
-                            unnamed.span(),
-                            "At least one field should be present",
-                        ))
-                        .unwrap_or_else(|err| err.to_compile_error())
-                        .into()
-                    }
-                    1 => {
-                        quote! { fe2o3_amqp::types::EncodingType::Basic }
-                    }
-                    _ => {
-                        quote! { fe2o3_amqp::types::EncodingType::List }
-                    }
-                },
-                syn::Fields::Unit => {
-                    quote! { fe2o3_amqp::types::EncodingType::Basic }
-                }
-            },
-            syn::Data::Enum(e) => {
-                return Err(syn::Error::new(e.enum_token.span, "Enum not implemented"))
-                    .unwrap_or_else(|err| err.to_compile_error())
-                    .into();
-            }
-            syn::Data::Union(u) => {
-                return Err(syn::Error::new(u.union_token.span, "Union not implemented"))
-                    .unwrap_or_else(|err| err.to_compile_error())
-                    .into();
-            }
-        },
-    };
+//     let encoding = match attr.encoding {
+//         Some(enc) => match enc {
+//             EncodingType::Basic => quote! { fe2o3_amqp::types::EncodingType::Basic },
+//             EncodingType::List => quote! { fe2o3_amqp::types::EncodingType::List },
+//             EncodingType::Map => quote! { fe2o3_amqp::types::EncodingType::Map },
+//         },
+//         None => match input.data {
+//             syn::Data::Struct(s) => match &s.fields {
+//                 syn::Fields::Named(_) => {
+//                     quote! { fe2o3_amqp::types::EncodingType::List }
+//                 }
+//                 syn::Fields::Unnamed(unnamed) => match s.fields.len() {
+//                     0 => {
+//                         return Err(syn::Error::new(
+//                             unnamed.span(),
+//                             "At least one field should be present",
+//                         ))
+//                         .unwrap_or_else(|err| err.to_compile_error())
+//                         .into()
+//                     }
+//                     1 => {
+//                         quote! { fe2o3_amqp::types::EncodingType::Basic }
+//                     }
+//                     _ => {
+//                         quote! { fe2o3_amqp::types::EncodingType::List }
+//                     }
+//                 },
+//                 syn::Fields::Unit => {
+//                     quote! { fe2o3_amqp::types::EncodingType::Basic }
+//                 }
+//             },
+//             syn::Data::Enum(e) => {
+//                 return Err(syn::Error::new(e.enum_token.span, "Enum not implemented"))
+//                     .unwrap_or_else(|err| err.to_compile_error())
+//                     .into();
+//             }
+//             syn::Data::Union(u) => {
+//                 return Err(syn::Error::new(u.union_token.span, "Union not implemented"))
+//                     .unwrap_or_else(|err| err.to_compile_error())
+//                     .into();
+//             }
+//         },
+//     };
 
-    let impl_from = quote! {
-        // Auto-generated by `Described` derive macro
-        impl fe2o3_amqp::convert::IntoDescribed for #ident {
-            fn into_described(self) -> fe2o3_amqp::types::Described<#ident> {
-                fe2o3_amqp::types::Described::new(
-                    #encoding,
-                    #descriptor,
-                    self
-                )
-            }
-        }
-        // Auto-generated by `Described` derive macro
-        impl fe2o3_amqp::convert::AsDescribed for #ident {
-            fn as_described(&self) -> fe2o3_amqp::types::Described<&#ident> {
-                fe2o3_amqp::types::Described::new(
-                    #encoding,
-                    #descriptor,
-                    self
-                )
-            }
-        }
-        // Auto-generated by `Described` derive macro
-        impl std::convert::TryFrom<#ident> for fe2o3_amqp::types::Described<#ident> {
-            type Error = #ident;
+//     let impl_from = quote! {
+//         // Auto-generated by `Described` derive macro
+//         impl fe2o3_amqp::convert::IntoDescribed for #ident {
+//             fn into_described(self) -> fe2o3_amqp::types::Described<#ident> {
+//                 fe2o3_amqp::types::Described::new(
+//                     #encoding,
+//                     #descriptor,
+//                     self
+//                 )
+//             }
+//         }
+//         // Auto-generated by `Described` derive macro
+//         impl fe2o3_amqp::convert::AsDescribed for #ident {
+//             fn as_described(&self) -> fe2o3_amqp::types::Described<&#ident> {
+//                 fe2o3_amqp::types::Described::new(
+//                     #encoding,
+//                     #descriptor,
+//                     self
+//                 )
+//             }
+//         }
+//         // Auto-generated by `Described` derive macro
+//         impl std::convert::TryFrom<#ident> for fe2o3_amqp::types::Described<#ident> {
+//             type Error = #ident;
 
-            fn try_from(value: #ident) -> Result<Self, Self::Error> {
-                Ok(fe2o3_amqp::convert::IntoDescribed::into_described(value))
-            }
-        }
-        // Auto-generated by `Described` derive macro
-        impl<'a> std::convert::TryFrom<&'a #ident> for fe2o3_amqp::types::Described<&'a #ident> {
-            type Error = &'a #ident;
+//             fn try_from(value: #ident) -> Result<Self, Self::Error> {
+//                 Ok(fe2o3_amqp::convert::IntoDescribed::into_described(value))
+//             }
+//         }
+//         // Auto-generated by `Described` derive macro
+//         impl<'a> std::convert::TryFrom<&'a #ident> for fe2o3_amqp::types::Described<&'a #ident> {
+//             type Error = &'a #ident;
 
-            fn try_from(value: &'a #ident) -> Result<Self, Self::Error> {
-                Ok(fe2o3_amqp::convert::AsDescribed::as_described(value))
-            }
-        }
+//             fn try_from(value: &'a #ident) -> Result<Self, Self::Error> {
+//                 Ok(fe2o3_amqp::convert::AsDescribed::as_described(value))
+//             }
+//         }
 
-        impl std::convert::From<#ident> for fe2o3_amqp::types::Type<#ident> {
-            fn from(value: #ident) -> Self {
-                let described = fe2o3_amqp::convert::IntoDescribed::into_described(value);
-                fe2o3_amqp::types::Type::Described(described)
-            }
-        }
+//         impl std::convert::From<#ident> for fe2o3_amqp::types::Type<#ident> {
+//             fn from(value: #ident) -> Self {
+//                 let described = fe2o3_amqp::convert::IntoDescribed::into_described(value);
+//                 fe2o3_amqp::types::Type::Described(described)
+//             }
+//         }
 
-        impl<'a> std::convert::From<&'a #ident> for fe2o3_amqp::types::Type<&'a #ident> {
-            fn from(value: &'a #ident) -> Self {
-                let described = fe2o3_amqp::convert::AsDescribed::as_described(value);
-                fe2o3_amqp::types::Type::Described(described)
-            }
-        }
-    };
+//         impl<'a> std::convert::From<&'a #ident> for fe2o3_amqp::types::Type<&'a #ident> {
+//             fn from(value: &'a #ident) -> Self {
+//                 let described = fe2o3_amqp::convert::AsDescribed::as_described(value);
+//                 fe2o3_amqp::types::Type::Described(described)
+//             }
+//         }
+//     };
 
-    let output = quote::quote! {
-        #impl_from
-    };
-    output.into()
-}
+//     let output = quote::quote! {
+//         #impl_from
+//     };
+//     output.into()
+// }
 
-#[proc_macro_derive(NonDescribed)]
-pub fn derive_non_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = syn::parse_macro_input!(item as syn::DeriveInput);
-    let ident = &input.ident;
+// #[proc_macro_derive(NonDescribed)]
+// pub fn derive_non_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+//     let input = syn::parse_macro_input!(item as syn::DeriveInput);
+//     let ident = &input.ident;
 
-    let impl_try_from = quote! {
-        impl std::convert::TryFrom<#ident> for fe2o3_amqp::types::Described<#ident> {
-            type Error = #ident;
+//     let impl_try_from = quote! {
+//         impl std::convert::TryFrom<#ident> for fe2o3_amqp::types::Described<#ident> {
+//             type Error = #ident;
 
-            fn try_from(value: #ident) -> Result<Self, Self::Error> {
-                Err(value)
-            }
-        }
+//             fn try_from(value: #ident) -> Result<Self, Self::Error> {
+//                 Err(value)
+//             }
+//         }
 
-        impl<'a> std::convert::TryFrom<&'a #ident> for fe2o3_amqp::types::Described<&'a #ident> {
-            type Error = &'a #ident;
+//         impl<'a> std::convert::TryFrom<&'a #ident> for fe2o3_amqp::types::Described<&'a #ident> {
+//             type Error = &'a #ident;
 
-            fn try_from(value: &'a #ident) -> Result<Self, Self::Error> {
-                Err(value)
-            }
-        }
+//             fn try_from(value: &'a #ident) -> Result<Self, Self::Error> {
+//                 Err(value)
+//             }
+//         }
 
-        impl std::convert::From<#ident> for fe2o3_amqp::types::Type<#ident> {
-            fn from(value: #ident) -> Self {
-                fe2o3_amqp::types::Type::NonDescribed(value)
-            }
-        }
+//         impl std::convert::From<#ident> for fe2o3_amqp::types::Type<#ident> {
+//             fn from(value: #ident) -> Self {
+//                 fe2o3_amqp::types::Type::NonDescribed(value)
+//             }
+//         }
 
-        impl<'a> std::convert::From<&'a #ident> for fe2o3_amqp::types::Type<&'a #ident> {
-            fn from(value: &'a #ident) -> Self {
-                fe2o3_amqp::types::Type::NonDescribed(value)
-            }
-        }
-    };
-    impl_try_from.into()
-}
+//         impl<'a> std::convert::From<&'a #ident> for fe2o3_amqp::types::Type<&'a #ident> {
+//             fn from(value: &'a #ident) -> Self {
+//                 fe2o3_amqp::types::Type::NonDescribed(value)
+//             }
+//         }
+//     };
+//     impl_try_from.into()
+// }
 
 struct AmqpContractAttr {
     name: String,

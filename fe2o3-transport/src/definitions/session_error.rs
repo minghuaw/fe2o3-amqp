@@ -1,8 +1,8 @@
 use serde::{ser, de};
 
-use fe2o3_amqp::{macros::NonDescribed, types::Symbol};
+use fe2o3_amqp::{types::Symbol};
 
-#[derive(Debug, NonDescribed, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum SessionError {
     WindowViolation,
     ErrantLink,

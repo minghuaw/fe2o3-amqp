@@ -37,12 +37,12 @@ fn expand_serialize_on_struct(
     let len = field_idents.len();
     let token = quote! {
         #[automatically_derived]
-        impl serde::ser::Serialize for #ident {
+        impl fe2o3_amqp::serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: serde::ser::Serializer,
+                S: fe2o3_amqp::serde::ser::Serializer,
             {
-                use serde::ser::SerializeStruct;
+                use fe2o3_amqp::serde::ser::SerializeStruct;
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
                 // serialize descriptor

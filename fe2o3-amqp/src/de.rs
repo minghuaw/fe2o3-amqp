@@ -3,7 +3,7 @@ use std::convert::TryInto;
 
 use crate::{constants::{DESERIALIZE_DESCRIBED, DESCRIPTOR}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, SMALL_ULONG_WIDTH, ULONG0_WIDTH, ULONG_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, DESCRIBED_FIELDS, }, types::{DECIMAL128, DECIMAL32, DECIMAL64, Described, Descriptor, ENCODING_TYPE, SYMBOL, TIMESTAMP, Type, UUID}, util::{
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::{ARRAY, }, types::{DECIMAL128, DECIMAL32, DECIMAL64, Descriptor, SYMBOL, TIMESTAMP, UUID}, util::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR, 
         EnumType, NewType
     }, value::VALUE};
@@ -20,21 +20,21 @@ pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, E
     T::deserialize(&mut de)
 }
 
-pub fn deserialize<'de, T: de::Deserialize<'de>>(bytes: &'de [u8]) -> Result<Type<T>, Error> {
-    let mut reader = SliceReader::new(bytes);
-    match reader.peek()?.try_into()? {
-        EncodingCodes::DescribedType => {
-            let mut de = Deserializer::new(reader);
-            let described: Described<T> = de::Deserialize::deserialize(&mut de)?;
-            Ok(Type::Described(described))
-        },
-        _ => {
-            let mut de = Deserializer::new(reader);
-            let non_described: T = de::Deserialize::deserialize(&mut de)?;
-            Ok(Type::NonDescribed(non_described))
-        }
-    }
-}
+// pub fn deserialize<'de, T: de::Deserialize<'de>>(bytes: &'de [u8]) -> Result<Type<T>, Error> {
+//     let mut reader = SliceReader::new(bytes);
+//     match reader.peek()?.try_into()? {
+//         EncodingCodes::DescribedType => {
+//             let mut de = Deserializer::new(reader);
+//             let described: Described<T> = de::Deserialize::deserialize(&mut de)?;
+//             Ok(Type::Described(described))
+//         },
+//         _ => {
+//             let mut de = Deserializer::new(reader);
+//             let non_described: T = de::Deserialize::deserialize(&mut de)?;
+//             Ok(Type::NonDescribed(non_described))
+//         }
+//     }
+// }
 
 pub struct Deserializer<R> {
     reader: R,
@@ -391,7 +391,7 @@ where
                 self.deserialize_newtype_struct(SYMBOL, visitor)
             }
             EncodingCodes::DescribedType => {
-                self.deserialize_struct(DESERIALIZE_DESCRIBED, DESCRIBED_FIELDS, visitor)
+                self.deserialize_struct(DESERIALIZE_DESCRIBED, &[""], visitor)
             }
             EncodingCodes::Array32 | EncodingCodes::Array8 => {
                 self.deserialize_newtype_struct(ARRAY, visitor)
@@ -845,8 +845,6 @@ where
             println!(">>> Debug EnumType::Descriptor");
             self.enum_type = EnumType::Descriptor;
             visitor.visit_enum(VariantAccess::new(self))
-        } else if name == ENCODING_TYPE {
-            visitor.visit_enum(VariantAccess::new(self))
         } else {
             // TODO: Considering the following enum serialization format
             // `unit_variant` - a single u32
@@ -1223,28 +1221,28 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 // consume the list headers
                 match self.as_mut().get_elem_code_or_read_format_code()? {
                     EncodingCodes::List0 => {
-                        if self.field_count != 0 {
-                            return Err(de::Error::custom("Invalid length"))
-                        }
+                        // if self.field_count != 0 {
+                        //     return Err(de::Error::custom("Invalid length"))
+                        // }
                     },
                     EncodingCodes::List8 => {
                         let _size = self.as_mut().reader.next()?;
                         let count = self.as_mut().reader.next()?;
-                        println!("{:?}", count);
-                        if count as usize != self.field_count {
-                            return Err(de::Error::custom("Invalid length"))
-                        }
+                        // println!("{:?}", count);
+                        // if count as usize != self.field_count {
+                        //     return Err(de::Error::custom("Invalid length"))
+                        // }
                     },
                     EncodingCodes::List32 => {
                         let bytes = self.as_mut().reader.read_const_bytes()?;
                         let _size = u32::from_be_bytes(bytes);
                         let bytes = self.as_mut().reader.read_const_bytes()?;
                         let count = u32::from_be_bytes(bytes);
-                        println!("{:?}", count);
+                        // println!("{:?}", count);
 
-                        if count as usize != self.field_count {
-                            return Err(de::Error::custom("Invalid length"))
-                        }
+                        // if count as usize != self.field_count {
+                        //     return Err(de::Error::custom("Invalid length"))
+                        // }
                     },
                     _ => return Err(de::Error::custom("Invalid format code. Expecting a list"))
                 }
@@ -1295,11 +1293,11 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
 
 #[cfg(test)]
 mod tests {
-    use core::panic;
-
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{format_code::EncodingCodes, ser::to_vec, types::Descriptor, types::{Described, EncodingType}};
+    use crate::{format_code::EncodingCodes, ser::to_vec, types::Descriptor, 
+        // types::{Described, EncodingType}
+    };
 
     use super::{from_reader, from_slice};
 
