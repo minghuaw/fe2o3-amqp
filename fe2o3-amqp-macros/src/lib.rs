@@ -199,7 +199,7 @@ struct AmqpContractAttr {
     encoding: EncodingType
 }
 
-#[proc_macro_derive(SerializeDescribed, attributes(amqp_contract))]
+#[proc_macro_derive(SerializeComposite, attributes(amqp_contract))]
 pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as DeriveInput);
     let impl_ser = ser::expand_serialize(&input)
@@ -210,7 +210,7 @@ pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::
     output.into()
 }
 
-#[proc_macro_derive(DeserializeDescribed)]
+#[proc_macro_derive(DeserializeComposite)]
 pub fn derive_deserialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as DeriveInput);
     let impl_de = de::expand_deserialize(&input)

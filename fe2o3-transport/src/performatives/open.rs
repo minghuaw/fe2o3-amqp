@@ -1,11 +1,11 @@
 use fe2o3_amqp::{
-    macros::{DeserializeDescribed, SerializeDescribed},
+    macros::{DeserializeComposite, SerializeComposite},
     types::{Symbol, Uint, Ushort},
 };
 
 use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 
-#[derive(Debug, DeserializeDescribed, SerializeDescribed)]
+#[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract( name = "amqp:open:list", code = 0x0000_0000_0000_0010, encoding = "list")]
 pub struct Open {

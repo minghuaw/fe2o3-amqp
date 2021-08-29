@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{types::{Symbol, Ulong}, value::Value, macros::{SerializeDescribed, DeserializeDescribed}};
+use fe2o3_amqp::{types::{Symbol, Ulong}, value::Value, macros::{SerializeComposite, DeserializeComposite}};
 
 use crate::{Source, Target, definitions::{DeliveryTag, Fields, Handle, ReceivervSettleMode, Role, SenderSettleMode, SequenceNo}};
 
-#[derive(Debug, DeserializeDescribed, SerializeDescribed)]
+#[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(name="amqp:attach:list", code=0x0000_0000_0000_0012, encoding="list")]
 pub struct Attach {

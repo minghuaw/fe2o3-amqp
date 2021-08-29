@@ -1835,10 +1835,10 @@ mod test {
 
     #[test]
     fn test_serialize_described_macro() {
-        use crate::macros::SerializeDescribed;
+        use crate::macros::SerializeComposite;
         use crate as fe2o3_amqp;
 
-        #[derive(Debug, SerializeDescribed)]
+        #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code=13, encoding="map")]
         struct Foo {
             is_fool: bool,

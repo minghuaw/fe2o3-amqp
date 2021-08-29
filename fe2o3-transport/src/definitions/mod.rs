@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
-use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value, macros::{SerializeDescribed, DeserializeDescribed}};
+use fe2o3_amqp::{types::{Symbol, Ubyte, Uint}, value::Value, macros::{SerializeComposite, DeserializeComposite}};
 
 /// 2.8.1 Role
 #[derive(Debug, Deserialize, Serialize)]
@@ -58,7 +58,7 @@ pub struct IetfLanguageTag(Symbol);
 pub struct Fields(BTreeMap<Symbol, Value>);
 
 /// 2.8.14 Error
-#[derive(Debug, SerializeDescribed, DeserializeDescribed)]
+#[derive(Debug, SerializeComposite, DeserializeComposite)]
 // #[serde(rename_all = "kebab-case")] // TODO: add serde compat
 #[amqp_contract(name="amqp:error:list", code=0x0000_0000_0000_001d, encoding="list")]
 pub struct Error {

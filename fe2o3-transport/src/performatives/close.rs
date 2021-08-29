@@ -1,8 +1,8 @@
-use fe2o3_amqp::macros::{DeserializeDescribed, SerializeDescribed};
+use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::Error;
 
-#[derive(Debug, DeserializeDescribed, SerializeDescribed)]
+#[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(name="amqp:close:list", code=0x0000_0000_0000_0018, encoding="list")]
 pub struct Close {

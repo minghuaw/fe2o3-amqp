@@ -38,9 +38,9 @@
 //     }
 // }
 
-use fe2o3_amqp::macros::{SerializeDescribed, DeserializeDescribed};
+use fe2o3_amqp::macros::{SerializeComposite, DeserializeComposite};
 
-#[derive(SerializeDescribed, DeserializeDescribed)]
+#[derive(SerializeComposite, DeserializeComposite)]
 #[amqp_contract(name="bar", encoding="map")]
 struct Foo {
     is_fool: bool,

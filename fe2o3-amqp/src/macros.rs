@@ -1,4 +1,4 @@
-pub use fe2o3_amqp_macros::{SerializeDescribed, DeserializeDescribed};
+pub use fe2o3_amqp_macros::{SerializeComposite, DeserializeComposite};
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +13,7 @@ mod tests {
 
     #[test]
     fn test_macro_integration() {
-        #[derive(Debug, SerializeDescribed, DeserializeDescribed)]
+        #[derive(Debug, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(name = "a", encoding = "list")]
         struct Test {
             a: i32,
