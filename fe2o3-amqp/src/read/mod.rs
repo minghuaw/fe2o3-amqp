@@ -19,8 +19,6 @@ pub trait Read<'de>: private::Sealed {
     /// Read the next byte
     fn next(&mut self) -> Result<u8, Error>;
 
-    // fn buffer(&mut self) -> &[u8];
-
     /// Read n bytes
     ///
     /// Prefered to use this when the size is small and can be stack allocated

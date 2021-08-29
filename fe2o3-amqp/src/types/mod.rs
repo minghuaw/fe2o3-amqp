@@ -1,6 +1,5 @@
 mod array;
 mod decimal;
-// mod described;
 mod descriptor;
 mod symbol;
 mod timestamp;
@@ -8,7 +7,6 @@ mod uuid;
 
 pub use array::*;
 pub use decimal::*;
-// pub use described::*;
 pub use descriptor::*;
 pub use symbol::*;
 pub use timestamp::*;
@@ -30,41 +28,3 @@ pub type Float = f32;
 pub type Double = f64;
 pub type Char = char;
 pub type Binary = ByteBuf;
-
-// pub enum Type<T> {
-//     Described(Described<T>),
-//     NonDescribed(T)
-// }
-
-// impl<T> Type<T> {
-//     pub fn is_described(&self) -> bool {
-//         match self {
-//             Type::Described(_) => true,
-//             Type::NonDescribed(_) => false
-//         }
-//     }
-// }
-
-// impl<T> From<Described<T>> for Type<T> {
-//     fn from(d: Described<T>) -> Self {
-//         Self::Described(d)
-//     }
-// }
-
-// impl<T> Type<T> {
-//     pub fn get_desciptor(&self) -> Option<Descriptor> {
-//         match self {
-//             Type::Described(d) => Some(d.get_desciptor()),
-//             Type::NonDescribed(_) => None
-//         }
-//     }
-
-//     pub fn into_inner(self) -> T {
-//         match self {
-//             Type::Described(d) => {
-//                 d.into_inner()
-//             },
-//             Type::NonDescribed(v) => v
-//         }
-//     }
-// }

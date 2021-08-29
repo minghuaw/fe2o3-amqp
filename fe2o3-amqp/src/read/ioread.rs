@@ -7,8 +7,6 @@ use super::{private, Read};
 pub struct IoReader<R> {
     // an io reader
     reader: R,
-    // a temporarty buffer holding the next byte
-    // next_byte: Option<u8>,
     buf: Vec<u8>,
 }
 
