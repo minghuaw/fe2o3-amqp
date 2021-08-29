@@ -9,7 +9,6 @@ use crate::{
     format_code::EncodingCodes,
     types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
     util::{
-        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR,
         IsArrayElement,
         NewType,
     },
@@ -25,41 +24,6 @@ where
     value.serialize(&mut serializer)?;
     Ok(writer)
 }
-
-// pub fn to_vec_described<T>(value: &Described<T>) -> Result<Vec<u8>, Error>
-// where
-//     T: Serialize,
-// {
-//     let mut writer = Vec::new();
-//     let mut se = Serializer::new(&mut writer, IsArrayElement::False);
-//     value.serialize(&mut se)?;
-//     Ok(writer)
-// }
-
-// pub fn serialize<T>(value: T) -> Result<Vec<u8>, Error>
-// where
-//     T: Serialize + TryInto<Described<T>>,
-//     T::Error: Serialize,
-// {
-//     let mut writer = Vec::new();
-//     let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
-//     let result: Result<Described<_>, _> = value.try_into();
-//     match result {
-//         Ok(v) => v.serialize(&mut serializer)?,
-//         Err(v) => v.serialize(&mut serializer)?
-//     };
-//     Ok(writer)
-// }
-
-// pub fn serialize<T>(value: impl Into<Type<T>>) -> Result<Vec<u8>, Error>
-// where
-//     T: Serialize,
-// {
-//     match value.into() {
-//         Type::Described(v) => to_vec(&v),
-//         Type::NonDescribed(v) => to_vec(&v)
-//     }
-// }
 
 #[repr(u8)]
 enum StructEncoding {
@@ -1764,78 +1728,6 @@ mod test {
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
-    // #[test]
-    // fn test_serialize_described_basic_type() {
-    //     let value = String::from("amqp");
-    //     let descriptor = Descriptor::code(100);
-    //     let described = Described::new(crate::types::EncodingType::Basic, descriptor, &value);
-    //     let mut expected = vec![
-    //         EncodingCodes::DescribedType as u8,
-    //         EncodingCodes::SmallUlong as u8,
-    //         100u64 as u8,
-    //         EncodingCodes::Str8 as u8,
-    //         4 as u8,
-    //     ];
-    //     expected.append(&mut value.as_bytes().into());
-    //     assert_eq_on_serialized_vs_expected(described, expected);
-    // }
-
-    // #[test]
-    // fn test_serialize_described_list_type() {
-    //     let value = Foo {
-    //         a_field: 13,
-    //         b: true,
-    //     };
-    //     let descriptor = Descriptor::code(13);
-    //     let described = Described::new(crate::types::EncodingType::List, descriptor, &value);
-    //     let expected = vec![
-    //         EncodingCodes::DescribedType as u8, // Described type contructor
-    //         EncodingCodes::SmallUlong as u8,    // Descriptor code
-    //         13u8,
-    //         EncodingCodes::List8 as u8,    // List
-    //         4u8,                           // List length in bytes
-    //         2u8,                           // Number of items in list
-    //         EncodingCodes::SmallInt as u8, // Constructor of first item
-    //         13u8,
-    //         EncodingCodes::BooleanTrue as u8, // Constructor of second item
-    //     ];
-    //     assert_eq_on_serialized_vs_expected(described, expected);
-    // }
-
-    // #[test]
-    // fn test_serialize_described_map_type() {
-    //     let value = Foo {
-    //         a_field: 13,
-    //         b: true,
-    //     };
-    //     let descriptor = Descriptor::code(13);
-    //     let described = Described::new(crate::types::EncodingType::Map, descriptor, &value);
-    //     let expected = vec![
-    //         EncodingCodes::DescribedType as u8,
-    //         EncodingCodes::SmallUlong as u8,
-    //         13,
-    //         EncodingCodes::Map8 as u8,
-    //         (1 + 9 + 2 + 3 + 1) as u8, //(count, "a_field", 13, "b", true)
-    //         2,
-    //         EncodingCodes::Str8 as u8,
-    //         7,
-    //         b'a',
-    //         b'_',
-    //         b'f',
-    //         b'i',
-    //         b'e',
-    //         b'l',
-    //         b'd',
-    //         EncodingCodes::SmallInt as u8,
-    //         13,
-    //         EncodingCodes::Str8 as u8,
-    //         1,
-    //         b'b',
-    //         EncodingCodes::BooleanTrue as u8,
-    //     ];
-    //     assert_eq_on_serialized_vs_expected(described, expected);
-    // }
-
     #[test]
     fn test_serialize_described_macro() {
         use crate as fe2o3_amqp;
@@ -1904,26 +1796,6 @@ mod test {
         ];
         assert_eq_on_serialized_vs_expected(val, expected);
     }
-
-    // #[test]
-    // fn test_serialize_described_unit_variant() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_serialize_described_newtype_variant() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_serialize_described_tuple_variant() {
-    //     unimplemented!()
-    // }
-
-    // #[test]
-    // fn test_serialize_described_struct_variant() {
-    //     unimplemented!()
-    // }
 
     #[test]
     fn test_serializing_dec32() {

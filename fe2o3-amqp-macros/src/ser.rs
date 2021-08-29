@@ -21,7 +21,6 @@ fn expand_serialize_on_struct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> 
 {
-    // let ident_name = ident.to_string();
     let descriptor = match amqp_attr.code {
         Some(code) => quote!(fe2o3_amqp::types::Descriptor::Code(#code)),
         None => {

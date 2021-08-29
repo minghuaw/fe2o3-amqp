@@ -41,9 +41,6 @@ impl<'s> Read<'s> for SliceReader<'s> {
         match self.slice.len() {
             0 => Err(Self::unexpected_eof("")),
             _ => {
-                // let (next, remaining) = self.slice.split_at(1);
-                // self.slice = remaining;
-                // Ok(next[0])
                 let buf = self.get_byte_slice(1)?;
                 Ok(buf[0])
             }
@@ -56,9 +53,6 @@ impl<'s> Read<'s> for SliceReader<'s> {
         if self.slice.len() < n {
             Err(Self::unexpected_eof(""))
         } else {
-            // let (read_slice, remaining) = self.slice.split_at(n);
-            // self.slice = remaining;
-            // Ok(())
             let read_slice = self.get_byte_slice(n)?;
             buf.copy_from_slice(read_slice);
             Ok(())
@@ -217,9 +211,6 @@ mod tests {
         for i in 0..slice.len() {
             let peek = reader.peek().expect("Should not return error");
             let next = reader.next().expect("Should not return error");
-
-            // println!("peek {:?}", peek);
-            // println!("next {:?}", next);
 
             assert_eq!(peek, slice[i]);
             assert_eq!(next, slice[i]);
