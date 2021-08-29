@@ -320,7 +320,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_described<V>(&mut self, field_count: usize, visitor: V) -> Result<V::Value, Error>
+    fn parse_described<V>(&mut self, visitor: V) -> Result<V::Value, Error>
     where 
         V: de::Visitor<'de> 
     {
@@ -340,12 +340,12 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         match self.get_elem_code_or_peek_byte()?.try_into()? {
             EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
                 visitor.visit_seq(
-                    DescribedAccess::new(self, field_count, Some(descriptor_buf))
+                    DescribedAccess::new(self, Some(descriptor_buf))
                 )
             },
             EncodingCodes::Map8 | EncodingCodes::Map32 => {
                 visitor.visit_map(
-                    DescribedAccess::new(self, field_count, Some(descriptor_buf))
+                    DescribedAccess::new(self, Some(descriptor_buf))
                 )
             },
             _ => Err(Error::InvalidFormatCode)
@@ -809,7 +809,7 @@ where
 
     fn deserialize_struct<V>(
         self,
-        name: &'static str,
+        _name: &'static str,
         fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error>
@@ -822,7 +822,7 @@ where
             }
             EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
             EncodingCodes::DescribedType => {
-                self.parse_described(fields.len(), visitor)
+                self.parse_described(visitor)
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -1173,16 +1173,17 @@ enum FieldRole {
 pub struct DescribedAccess<'a, R> {
     de: &'a mut Deserializer<R>,
     descriptor_buf: Option<Vec<u8>>,
-    field_count: usize,
+    field_count: Option<usize>,
     field_role: FieldRole,
 }
 
 impl<'a, R> DescribedAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>, field_count: usize, descriptor_buf: Option<Vec<u8>>) -> Self {
+    pub fn new(de: &'a mut Deserializer<R>, descriptor_buf: Option<Vec<u8>>) -> Self {
         Self {
             de,
             descriptor_buf,
-            field_count,
+            // initilaize to zero for now
+            field_count: Some(0),
             // The first field should be the descriptor
             field_role: FieldRole::Descriptor,
         }
@@ -1207,8 +1208,6 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
         println!(">>> Debug: DescribedAccess::next_element_seed");
         match self.field_role {
             FieldRole::Descriptor => {
-                // descriptor is not counted towards list count in amqp
-                self.field_count -= 1;
                 let descriptor_buf = match self.descriptor_buf.take() {
                     Some(b) => b,
                     None => return Ok(None)
@@ -1217,10 +1216,10 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 let mut deserializer = Deserializer::new(reader);
                 let result = seed.deserialize(&mut deserializer).map(Some);
 
-
                 // consume the list headers
                 match self.as_mut().get_elem_code_or_read_format_code()? {
                     EncodingCodes::List0 => {
+                        self.field_count = Some(0);
                         // if self.field_count != 0 {
                         //     return Err(de::Error::custom("Invalid length"))
                         // }
@@ -1228,6 +1227,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                     EncodingCodes::List8 => {
                         let _size = self.as_mut().reader.next()?;
                         let count = self.as_mut().reader.next()?;
+                        self.field_count = Some(count as usize);
                         // println!("{:?}", count);
                         // if count as usize != self.field_count {
                         //     return Err(de::Error::custom("Invalid length"))
@@ -1238,6 +1238,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                         let _size = u32::from_be_bytes(bytes);
                         let bytes = self.as_mut().reader.read_const_bytes()?;
                         let count = u32::from_be_bytes(bytes);
+                        self.field_count = Some(count as usize);
                         // println!("{:?}", count);
 
                         // if count as usize != self.field_count {
@@ -1251,10 +1252,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 result
             }
             FieldRole::Fields => {
-                if self.field_count == 0 {
-                    return Ok(None)
+                match self.field_count {
+                    Some(c) => {
+                        if c == 0 {
+                            return Ok(None)
+                        }
+                    },
+                    None => return Ok(None)
                 }
-                self.field_count -= 1;
                 seed.deserialize(self.as_mut()).map(Some)
             }
         }
