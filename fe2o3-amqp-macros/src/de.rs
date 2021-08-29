@@ -22,7 +22,8 @@ fn expand_deserialize_on_struct(
     let field_names: Vec<String> = field_idents.iter().map(|f| f.to_string()).collect();
     let field_types: Vec<&syn::Type> = data.fields.iter().map(|f| &f.ty).collect();
     let name = &attr.name[..];
-    let ident_name = ident.to_string();
+    // let ident_name = ident.to_string();
+    
     let struct_name = match attr.encoding {
         EncodingType::Basic => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),

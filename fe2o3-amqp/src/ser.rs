@@ -1839,7 +1839,7 @@ mod test {
         use crate as fe2o3_amqp;
 
         #[derive(Debug, SerializeDescribed)]
-        #[amqp_contract(code=13)]
+        #[amqp_contract(code=13, encoding="map")]
         struct Foo {
             is_fool: bool,
             a: i32
