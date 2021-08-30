@@ -1,4 +1,5 @@
 use darling::FromDeriveInput;
+use proc_macro2::Span;
 use syn::DeriveInput;
 
 use crate::{AmqpContractAttr, DescribedAttr, EncodingType};
@@ -34,19 +35,7 @@ pub(crate) fn convert_to_case(
         "SCREAMING_SNAKE_CASE" => source.to_case(Case::ScreamingSnake),
         "kebab-case" => source.to_case(Case::Kebab),
         e @ _ => {
-            let span = ctx
-                .attrs
-                .iter()
-                .find_map(|attr| match attr.path.get_ident() {
-                    Some(i) => {
-                        if i.to_string() == "rename_all" {
-                            Some(i.span())
-                        } else {
-                            None
-                        }
-                    }
-                    None => None,
-                });
+            let span = get_span_of("rename_all", ctx);
             match span {
                 Some(span) => {
                     return Err(syn::Error::new(
@@ -65,4 +54,20 @@ pub(crate) fn convert_to_case(
     };
 
     Ok(s)
+}
+
+pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
+    ctx
+    .attrs
+    .iter()
+    .find_map(|attr| match attr.path.get_ident() {
+        Some(i) => {
+            if i.to_string() == ident_str {
+                Some(i.span())
+            } else {
+                None
+            }
+        }
+        None => None,
+    })
 }

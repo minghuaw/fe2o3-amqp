@@ -69,7 +69,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         let l = self.buf.len();
 
         if l < n {
-            &mut buf[..l].copy_from_slice(&self.buf[..l]);
+            (&mut buf[..l]).copy_from_slice(&self.buf[..l]);
             self.reader.read_exact(&mut buf[l..])?;
             self.buf.drain(..l);
             Ok(())

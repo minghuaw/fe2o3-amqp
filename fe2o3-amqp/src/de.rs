@@ -747,18 +747,6 @@ where
         visitor.visit_seq(ListAccess::new(self, size, count))
     }
 
-    fn deserialize_tuple_struct<V>(
-        self,
-        _name: &'static str,
-        len: usize,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error>
-    where
-        V: de::Visitor<'de>,
-    {
-        self.deserialize_tuple(len, visitor)
-    }
-
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
@@ -795,6 +783,23 @@ where
         visitor.visit_map(MapAccess::new(self, size, count))
     }
 
+    fn deserialize_tuple_struct<V>(
+        self,
+        _name: &'static str,
+        len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de>,
+    {
+        match self.get_elem_code_or_peek_byte()?.try_into()? {
+            EncodingCodes::DescribedType => {
+                self.parse_described(visitor)
+            },
+            _ => self.deserialize_tuple(len, visitor)
+        }
+    }
+
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
@@ -804,7 +809,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.reader.peek()?.try_into()? {
+        match self.get_elem_code_or_peek_byte()?.try_into()? {
             EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                 self.deserialize_tuple(fields.len(), visitor)
             }
@@ -1627,7 +1632,61 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_described_macro() {
+    fn test_deserialize_unit_struct_with_described_macro() {
+        use crate as fe2o3_amqp;
+        use crate::macros::{DeserializeComposite, SerializeComposite};
+
+        {
+            #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
+            #[amqp_contract(code = 13, encoding = "list")]
+            struct Foo;
+    
+            let foo = Foo;
+            let buf = to_vec(&foo).unwrap();
+            let foo2: Foo = from_slice(&buf).unwrap();
+            assert_eq!(foo, foo2);
+        }
+
+        {
+            #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
+            #[amqp_contract(code = 13, encoding = "list")]
+            struct Foo();
+    
+            let foo = Foo();
+            let buf = to_vec(&foo).unwrap();
+            let foo2: Foo = from_slice(&buf).unwrap();
+            assert_eq!(foo, foo2);
+        }
+
+        {
+            #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
+            #[amqp_contract(code = 13, encoding = "list")]
+            struct Foo{}
+    
+            let foo = Foo{};
+            let buf = to_vec(&foo).unwrap();
+            let foo2: Foo = from_slice(&buf).unwrap();
+            assert_eq!(foo, foo2);
+        }
+    }
+
+    #[test]
+    fn test_deserialize_tuple_struct_with_described_macro() {
+        use crate as fe2o3_amqp;
+        use crate::macros::{DeserializeComposite, SerializeComposite};
+
+        #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
+        #[amqp_contract(code = 13, encoding = "list")]
+        struct Foo(bool, i32);
+
+        let foo = Foo(true, 9);
+        let buf = to_vec(&foo).unwrap();
+        let foo2: Foo = from_slice(&buf).unwrap();
+        assert_eq!(foo, foo2);
+    }
+
+    #[test]
+    fn test_deserialize_struct_with_described_macro() {
         use crate as fe2o3_amqp;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 

@@ -59,8 +59,8 @@ fn expand_serialize_unit_struct(
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
-        EncodingType::Basic => unimplemented!(),
-        EncodingType::Map => unimplemented!(),
+        EncodingType::Basic => panic!("Basic encoding on unit struct is not supported"),
+        EncodingType::Map => panic!("Map encoding on unit struct is not supported"),
     };
     quote! {
         #[automatically_derived]

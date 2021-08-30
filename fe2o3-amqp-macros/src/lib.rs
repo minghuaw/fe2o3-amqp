@@ -39,7 +39,9 @@ pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::
     let input = syn::parse_macro_input!(item as DeriveInput);
     let impl_ser = ser::expand_serialize(&input).unwrap();
     let output = quote! {
-        #impl_ser
+        const _: () = {
+            #impl_ser
+        };
     };
     output.into()
 }
@@ -49,7 +51,9 @@ pub fn derive_deserialize_described(item: proc_macro::TokenStream) -> proc_macro
     let input = syn::parse_macro_input!(item as DeriveInput);
     let impl_de = de::expand_deserialize(&input).unwrap();
     let output = quote! {
-        #impl_de
+        const _:() = {
+            #impl_de
+        };
     };
     output.into()
 }

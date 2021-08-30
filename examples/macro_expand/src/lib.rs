@@ -48,7 +48,8 @@ struct Foo {
 }
 
 #[derive(SerializeComposite, DeserializeComposite)]
+#[amqp_contract(encoding="list")]
 struct Unit { }
 
-#[derive(SerializeComposite)]
+#[derive(SerializeComposite, DeserializeComposite)]
 struct TupleStruct(i32, bool);
