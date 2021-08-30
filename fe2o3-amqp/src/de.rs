@@ -276,18 +276,33 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
-    fn parse_decimal(&mut self) -> Result<Vec<u8>, Error> {
+    // fn parse_decimal_byte_buf(&mut self) -> Result<Vec<u8>, Error> {
+    //     match self.get_elem_code_or_read_format_code()? {
+    //         EncodingCodes::Decimal32 => self.reader.read_bytes(DECIMAL32_WIDTH),
+    //         EncodingCodes::Decimal64 => self.reader.read_bytes(DECIMAL64_WIDTH),
+    //         EncodingCodes::Decimal128 => self.reader.read_bytes(DECIMAL128_WIDTH),
+    //         _ => Err(Error::InvalidFormatCode),
+    //     }
+    // }
+
+    fn parse_decimal<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
+    where 
+        V: de::Visitor<'de>
+    {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Decimal32 => self.reader.read_bytes(DECIMAL32_WIDTH),
-            EncodingCodes::Decimal64 => self.reader.read_bytes(DECIMAL64_WIDTH),
-            EncodingCodes::Decimal128 => self.reader.read_bytes(DECIMAL128_WIDTH),
+            EncodingCodes::Decimal32 => self.reader.forward_read_bytes(DECIMAL32_WIDTH, visitor),
+            EncodingCodes::Decimal64 => self.reader.forward_read_bytes(DECIMAL64_WIDTH, visitor),
+            EncodingCodes::Decimal128 => self.reader.forward_read_bytes(DECIMAL128_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
 
-    fn parse_uuid(&mut self) -> Result<Vec<u8>, Error> {
+    fn parse_uuid<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
+    where 
+        V: de::Visitor<'de>,
+    {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Uuid => self.reader.read_bytes(UUID_WIDTH),
+            EncodingCodes::Uuid => self.reader.forward_read_bytes(UUID_WIDTH, visitor),
             _ => Err(Error::InvalidFormatCode),
         }
     }
@@ -578,18 +593,19 @@ where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug deserialize_byte_buf");
-        match self.new_type {
-            NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
-            NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
-                self.new_type = NewType::None;
-                visitor.visit_byte_buf(self.parse_decimal()?)
-            }
-            NewType::Uuid => {
-                self.new_type = NewType::None;
-                visitor.visit_byte_buf(self.parse_uuid()?)
-            }
-            _ => unreachable!(),
-        }
+        visitor.visit_byte_buf(self.parse_byte_buf()?)
+        // match self.new_type {
+        //     NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
+        //     NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
+        //         self.new_type = NewType::None;
+        //         visitor.visit_byte_buf(self.parse_decimal_byte_buf()?)
+        //     }
+        //     NewType::Uuid => {
+        //         self.new_type = NewType::None;
+        //         visitor.visit_byte_buf(self.parse_uuid()?)
+        //     }
+        //     _ => unreachable!(),
+        // }
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -597,15 +613,29 @@ where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug deserialize_bytes");
-        let len = match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::VBin8 => self.reader.next()? as usize,
-            EncodingCodes::VBin32 => {
-                let bytes = self.reader.read_const_bytes()?;
-                u32::from_be_bytes(bytes) as usize
+        match self.new_type {
+            // Use bytes to reduce number of memcpy
+            NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
+                self.new_type = NewType::None;
+                self.parse_decimal(visitor)
             }
-            _ => return Err(Error::InvalidFormatCode),
-        };
-        self.reader.forward_read_bytes(len, visitor)
+            // Use bytes to reduce number of memcpy
+            NewType::Uuid => {
+                self.new_type = NewType::None;
+                self.parse_uuid(visitor)
+            },
+            _ => {
+                let len = match self.get_elem_code_or_read_format_code()? {
+                    EncodingCodes::VBin8 => self.reader.next()? as usize,
+                    EncodingCodes::VBin32 => {
+                        let bytes = self.reader.read_const_bytes()?;
+                        u32::from_be_bytes(bytes) as usize
+                    }
+                    _ => return Err(Error::InvalidFormatCode),
+                };
+                self.reader.forward_read_bytes(len, visitor)
+            }
+        }
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -647,18 +677,25 @@ where
         println!(">>> Debug deserialize_newtype_struct {:?}", name);
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
+            self.deserialize_string(visitor)
         } else if name == DECIMAL32 {
             self.new_type = NewType::Dec32;
+            self.deserialize_bytes(visitor)
         } else if name == DECIMAL64 {
             self.new_type = NewType::Dec64;
+            self.deserialize_bytes(visitor)
         } else if name == DECIMAL128 {
             self.new_type = NewType::Dec128;
+            self.deserialize_bytes(visitor)
         } else if name == UUID {
             self.new_type = NewType::Uuid;
+            self.deserialize_bytes(visitor)
         } else if name == TIMESTAMP {
             self.new_type = NewType::Timestamp;
+            self.deserialize_i64(visitor)
+        } else {
+            visitor.visit_newtype_struct(self)
         }
-        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -906,6 +943,7 @@ where
                 }
                 // Symbols appears in the transport errors
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                    println!(">>> Debug EncodingCodes::Sym32 | Sym8");
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 _ => Err(Error::InvalidFormatCode),
@@ -940,28 +978,36 @@ where
                     },
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
+                        println!(">>> Debug EncodingCodes::Sym32 | Sym8");
                         self.deserialize_newtype_struct(SYMBOL, visitor)
                     },
                     // Potentially using `Descriptor::Code` as identifier
                     EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                         self.deserialize_u64(visitor)
                     },
-                    // Other types should not be used to serialize identifiers
-                    EncodingCodes::DescribedType => {
-                        self.parse_described_identifier(visitor)
-                    },
+                    // // Other types should not be used to serialize identifiers
+                    // EncodingCodes::DescribedType => {
+                    //     self.parse_described_identifier(visitor)
+                    // },
                     _ => Err(Error::InvalidFormatCode),
                 }
             }
         }
     }
 
+    // Use this to peek inside the buffer without consuming the bytes
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
         // The deserializer will only peek the next u8
-        visitor.visit_u8(self.get_elem_code_or_peek_byte()?)
+        let code = self.reader.peek()?;
+        match code.try_into()? {
+            EncodingCodes::DescribedType => {
+                self.parse_described_identifier(visitor)
+            },
+            _ => visitor.visit_u8(code)
+        }
     }
 }
 
@@ -1381,7 +1427,6 @@ mod tests {
         format_code::EncodingCodes,
         ser::to_vec,
         types::Descriptor,
-        // types::{Described, EncodingType}
     };
 
     use super::{from_reader, from_slice};
@@ -1536,6 +1581,16 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_decimal32() {
+        use crate::ser::to_vec;
+        use crate::types::{Dec32};
+
+        let expected = Dec32::from([1, 2, 3, 4]);
+        let buf = to_vec(&expected).unwrap();
+        assert_eq_from_slice_vs_expected(&buf, expected);
+    }
+
+    #[test]
     fn test_deserialize_decimal() {
         use crate::ser::to_vec;
         use crate::types::{Dec128, Dec32, Dec64};
@@ -1667,6 +1722,7 @@ mod tests {
         use crate::types::Symbol;
 
         let descriptor = Descriptor::Name(Symbol::from("amqp"));
+        // let descriptor = Descriptor::Code(113);
         let buf = to_vec(&descriptor).unwrap();
         assert_eq_from_slice_vs_expected(&buf, descriptor);
     }

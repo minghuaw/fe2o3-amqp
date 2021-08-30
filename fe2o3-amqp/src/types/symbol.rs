@@ -48,6 +48,13 @@ impl<'de> Visitor<'de> for SymbolVisitor {
         formatter.write_str("struct Symbol")
     }
 
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        Ok(Symbol::new(v))
+    }
+
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: serde::Deserializer<'de>,

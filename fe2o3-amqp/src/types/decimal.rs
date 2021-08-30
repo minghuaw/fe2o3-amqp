@@ -9,7 +9,7 @@ use serde_bytes::Bytes;
 use crate::error::Error;
 
 mod dec32 {
-    use serde_bytes::ByteBuf;
+    // use serde_bytes::ByteBuf;
 
     use crate::fixed_width::DECIMAL32_WIDTH;
 
@@ -70,13 +70,21 @@ mod dec32 {
             formatter.write_str("struct Dec32")
         }
 
-        fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
-            D: serde::Deserializer<'de>,
+            E: de::Error, 
         {
-            let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-            Dec32::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+            Dec32::try_from(v)
+                .map_err(|err| de::Error::custom(err.to_string()))
         }
+
+        // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        // where
+        //     D: serde::Deserializer<'de>,
+        // {
+        //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+        //     Dec32::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+        // }
     }
 
     impl<'de> de::Deserialize<'de> for Dec32 {
@@ -90,7 +98,7 @@ mod dec32 {
 }
 
 mod dec64 {
-    use serde_bytes::ByteBuf;
+    // use serde_bytes::ByteBuf;
 
     use crate::fixed_width::DECIMAL64_WIDTH;
 
@@ -145,13 +153,21 @@ mod dec64 {
             formatter.write_str("struct Dec64")
         }
 
-        fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
-            D: serde::Deserializer<'de>,
+            E: de::Error, 
         {
-            let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-            Dec64::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+            Dec64::try_from(v)
+                .map_err(|err| de::Error::custom(err.to_string()))
         }
+
+        // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        // where
+        //     D: serde::Deserializer<'de>,
+        // {
+        //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+        //     Dec64::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+        // }
     }
 
     impl<'de> de::Deserialize<'de> for Dec64 {
@@ -165,7 +181,7 @@ mod dec64 {
 }
 
 mod dec128 {
-    use serde_bytes::ByteBuf;
+    // use serde_bytes::ByteBuf;
 
     use crate::fixed_width::DECIMAL128_WIDTH;
 
@@ -220,13 +236,21 @@ mod dec128 {
             formatter.write_str("struct Dec128")
         }
 
-        fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
-            D: serde::Deserializer<'de>,
+            E: de::Error, 
         {
-            let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-            Dec128::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+            Dec128::try_from(v)
+                .map_err(|err| de::Error::custom(err.to_string()))
         }
+
+        // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        // where
+        //     D: serde::Deserializer<'de>,
+        // {
+        //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+        //     Dec128::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+        // }
     }
 
     impl<'de> de::Deserialize<'de> for Dec128 {

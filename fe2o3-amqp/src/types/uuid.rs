@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use serde::de;
 use serde::ser;
-use serde_bytes::ByteBuf;
+// use serde_bytes::ByteBuf;
 use serde_bytes::Bytes;
 
 use crate::error::Error;
@@ -63,13 +63,21 @@ impl<'de> de::Visitor<'de> for Visitor {
         formatter.write_str("struct Uuid")
     }
 
-    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
     where
-        D: serde::Deserializer<'de>,
+        E: de::Error, 
     {
-        let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-        Uuid::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+        Uuid::try_from(v)
+            .map_err(|err| de::Error::custom(err.to_string()))
     }
+
+    // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    // where
+    //     D: serde::Deserializer<'de>,
+    // {
+    //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
+    //     Uuid::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
+    // }
 }
 
 impl<'de> de::Deserialize<'de> for Uuid {

@@ -95,13 +95,19 @@ impl<'de> de::Visitor<'de> for Visitor {
         formatter.write_str("struct Timestamp")
     }
 
-    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
     where
-        D: serde::Deserializer<'de>,
-    {
-        let val: i64 = de::Deserialize::deserialize(deserializer)?;
-        Ok(Timestamp::from(val))
+            E: de::Error, {
+        Ok(Timestamp::from(v))
     }
+
+    // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    // where
+    //     D: serde::Deserializer<'de>,
+    // {
+    //     let val: i64 = de::Deserialize::deserialize(deserializer)?;
+    //     Ok(Timestamp::from(val))
+    // }
 }
 
 impl<'de> de::Deserialize<'de> for Timestamp {
