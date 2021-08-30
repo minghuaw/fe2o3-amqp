@@ -52,7 +52,7 @@ impl<'de> Visitor<'de> for SymbolVisitor {
     where
         E: de::Error, 
     {
-        Ok(Symbol::new(v))
+        Ok(Symbol::from(v))
     }
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>

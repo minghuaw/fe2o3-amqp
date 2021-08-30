@@ -75,6 +75,30 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         formatter.write_str("variant identifier")
     }
 
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        let val = match v {
+            "amqp:internal-error" => Field::InternalError,
+            "amqp:not-found" => Field::NotFound,
+            "amqp:unauthorized-access" => Field::UnauthorizedAccess,
+            "amqp:decode-error" => Field::DecodeError,
+            "amqp:resource-limit-exceeded" => Field::ResourceLimitExceeded,
+            "amqp:not-allowed" => Field::NotAllowed,
+            "amqp:invalid-field" => Field::InvalidField,
+            "amqp:not-implemented" => Field::NotImplemented,
+            "amqp:resource-locked" => Field::ResourceLocked,
+            "amqp:precondition-failed" => Field::PreconditionFailed,
+            "amqp:resource-deleted" => Field::ResourceDeleted,
+            "amqp:illegal-state" => Field::IllegalState,
+            "amqp:frame-size-too-small" => Field::FrameSizeTooSmall,
+            _ => return Err(de::Error::custom("Invalid symbol value for AmqpError")),
+        };
+
+        Ok(val)   
+    }
+
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: serde::Deserializer<'de>,

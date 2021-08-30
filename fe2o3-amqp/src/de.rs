@@ -563,6 +563,8 @@ where
         match self.new_type {
             NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => {
+                // Leave symbol as visit_string because serde(untagged) 
+                // on descriptor will visit String instead of str
                 self.new_type = NewType::None;
                 visitor.visit_string(self.parse_symbol()?)
             }
@@ -575,7 +577,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        // // TODO: considering adding a buffer to the reader
         println!(">>> Debug: deserialize_str");
         let len = match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Str8 => self.reader.next()? as usize,
@@ -677,6 +678,8 @@ where
         println!(">>> Debug deserialize_newtype_struct {:?}", name);
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
+            // Leave symbol as visit_string because serde(untagged) 
+            // on descriptor will visit String instead of str
             self.deserialize_string(visitor)
         } else if name == DECIMAL32 {
             self.new_type = NewType::Dec32;
