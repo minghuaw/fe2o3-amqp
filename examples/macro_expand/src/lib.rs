@@ -38,10 +38,10 @@
 //     }
 // }
 
-use fe2o3_amqp::macros::{SerializeComposite, DeserializeComposite};
+use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 #[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(name="bar", encoding="map", rename_field = "kebab-case")]
+#[amqp_contract(name = "bar", encoding = "map", rename_field = "kebab-case")]
 struct Foo {
     is_fool: bool,
     second_field: String,

@@ -2,8 +2,8 @@ pub use fe2o3_amqp_macros::{DeserializeComposite, SerializeComposite};
 
 #[cfg(test)]
 mod tests {
-    use crate::ser::to_vec;
     use super::*;
+    use crate::ser::to_vec;
 
     use crate as fe2o3_amqp;
 

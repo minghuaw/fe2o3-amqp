@@ -8,10 +8,7 @@ use crate::{
     error::Error,
     format_code::EncodingCodes,
     types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
-    util::{
-        IsArrayElement,
-        NewType,
-    },
+    util::{IsArrayElement, NewType},
     value::U32_MAX_AS_USIZE,
 };
 
@@ -669,7 +666,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         } else {
             Ok(TupleStructSerializer::fields(self, len))
         }
-
     }
 
     #[inline]
@@ -1082,7 +1078,7 @@ pub struct TupleStructSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     field_role: FieldRole,
     num: usize,
-    buf: Vec<u8>
+    buf: Vec<u8>,
 }
 
 impl<'a, W: 'a> TupleStructSerializer<'a, W> {
@@ -1091,7 +1087,7 @@ impl<'a, W: 'a> TupleStructSerializer<'a, W> {
             se,
             field_role: FieldRole::Descriptor,
             num,
-            buf: Vec::new()
+            buf: Vec::new(),
         }
     }
 
@@ -1100,7 +1096,7 @@ impl<'a, W: 'a> TupleStructSerializer<'a, W> {
             se,
             field_role: FieldRole::Fields,
             num,
-            buf: Vec::new()
+            buf: Vec::new(),
         }
     }
 }
@@ -1117,14 +1113,14 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
 
     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: Serialize 
+        T: Serialize,
     {
         match self.field_role {
             FieldRole::Descriptor => {
                 self.num -= 1;
                 self.field_role = FieldRole::Fields;
                 value.serialize(self.as_mut())
-            },
+            }
             FieldRole::Fields => {
                 let mut serializer = Serializer::described_list(&mut self.buf);
                 value.serialize(&mut serializer)
@@ -1138,7 +1134,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
             &mut self.se.writer,
             self.num,
             self.buf,
-            &IsArrayElement::False
+            &IsArrayElement::False,
         )
     }
 }
@@ -1817,7 +1813,7 @@ mod test {
 
         #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code = 13, encoding = "list")]
-        struct Foo (bool, i32);
+        struct Foo(bool, i32);
 
         let foo = Foo(true, 9);
         let buf = to_vec(&foo).unwrap();

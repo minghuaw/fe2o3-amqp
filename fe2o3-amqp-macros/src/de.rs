@@ -1,49 +1,57 @@
 use quote::quote;
 use syn::DeriveInput;
 
-use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, parse_described_attr}};
+use crate::{
+    util::{convert_to_case, parse_described_attr},
+    AmqpContractAttr, EncodingType,
+};
 
-pub(crate) fn expand_deserialize(input: &syn::DeriveInput) -> Result<proc_macro2::TokenStream, syn::Error> {
+pub(crate) fn expand_deserialize(
+    input: &syn::DeriveInput,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     let attr = parse_described_attr(input);
     let ident = &input.ident;
     match &input.data {
-        syn::Data::Struct(data) => {
-            expand_deserialize_on_struct(&attr, ident, data, input)
-        },
-        _ => unimplemented!()
+        syn::Data::Struct(data) => expand_deserialize_on_struct(&attr, ident, data, input),
+        _ => unimplemented!(),
     }
 }
 
 fn expand_deserialize_on_struct(
-    attr: &AmqpContractAttr, 
-    ident: &syn::Ident, 
+    attr: &AmqpContractAttr,
+    ident: &syn::Ident,
     data: &syn::DataStruct,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let field_idents: Vec<syn::Ident> = data.fields.iter().map(|f| f.ident.clone().unwrap()).collect();
-    let field_names: Vec<String> = field_idents.iter()
-        .map(|i| 
-            convert_to_case(&attr.rename_field, i.to_string(), ctx
-        ).unwrap()).collect();    let field_types: Vec<&syn::Type> = data.fields.iter().map(|f| &f.ty).collect();
-        
-        let struct_name = match attr.encoding {
-            EncodingType::Basic => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
-            EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
-            EncodingType::Map => quote!(fe2o3_amqp::constants::DESCRIBED_MAP)
-        };
-        
+    let field_idents: Vec<syn::Ident> = data
+        .fields
+        .iter()
+        .map(|f| f.ident.clone().unwrap())
+        .collect();
+    let field_names: Vec<String> = field_idents
+        .iter()
+        .map(|i| convert_to_case(&attr.rename_field, i.to_string(), ctx).unwrap())
+        .collect();
+    let field_types: Vec<&syn::Type> = data.fields.iter().map(|f| &f.ty).collect();
+
+    let struct_name = match attr.encoding {
+        EncodingType::Basic => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
+        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
+        EncodingType::Map => quote!(fe2o3_amqp::constants::DESCRIBED_MAP),
+    };
+
     let name = &attr.name[..];
     let evaluate_code = match attr.code {
         Some(code) => quote! {
             fe2o3_amqp::types::Descriptor::Code(c) => {
                 if c != #code {
-                    return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch")) 
+                    return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             }
         },
         None => quote! {
-            fe2o3_amqp::types::Descriptor::Code(_) => return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch")) 
-        }
+            fe2o3_amqp::types::Descriptor::Code(_) => return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
+        },
     };
 
     let evaluate_descriptor = quote! {
@@ -61,7 +69,7 @@ fn expand_deserialize_on_struct(
     //     Some(code) => quote! {
     //         fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     //         where
-    //             E: fe2o3_amqp::serde::de::Error, 
+    //             E: fe2o3_amqp::serde::de::Error,
     //         {
     //             if v == #code {
     //                 Ok(Self::Value::descriptor)
@@ -99,7 +107,7 @@ fn expand_deserialize_on_struct(
 
                     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
                     where
-                        E: fe2o3_amqp::serde::de::Error, 
+                        E: fe2o3_amqp::serde::de::Error,
                     {
                         match v {
                             // #name => Ok(Self::Value::descriptor),
@@ -110,7 +118,7 @@ fn expand_deserialize_on_struct(
 
                     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
                     where
-                        E: fe2o3_amqp::serde::de::Error, 
+                        E: fe2o3_amqp::serde::de::Error,
                     {
                         match v {
                             // b if b == #name.as_bytes() => Ok(Self::Value::descriptor),
@@ -145,7 +153,7 @@ fn expand_deserialize_on_struct(
                             Some(val) => val,
                             None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
                         };
-                        
+
                         #evaluate_descriptor
 
                         #(let #field_idents: #field_types = match seq.next_element()? {
@@ -171,7 +179,7 @@ fn expand_deserialize_on_struct(
 
                         while let Some(key) = map.next_key::<Field>()? {
                             match key {
-                                #( 
+                                #(
                                     Field::#field_idents => {
                                         if #field_idents.is_some() {
                                             return Err(fe2o3_amqp::serde::de::Error::duplicate_field(#field_names))

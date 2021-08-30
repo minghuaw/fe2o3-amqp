@@ -12,10 +12,7 @@ use crate::{
     read::{IoReader, Read, SliceReader},
     types::ARRAY,
     types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
-    util::{
-        EnumType,
-        NewType,
-    },
+    util::{EnumType, NewType},
     value::VALUE,
 };
 
@@ -1279,8 +1276,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
                     _ => {
                         self.field_count -= 1;
                         seed.deserialize(self.as_mut()).map(Some)
-
-                    },
+                    }
                 }
             }
         }
@@ -1657,10 +1653,9 @@ mod tests {
         let foo2: Foo = from_slice(&buf).unwrap();
         assert_eq!(foo, foo2);
 
-
         let bar = Bar {
             is_fool: false,
-            a: 13
+            a: 13,
         };
         let buf = to_vec(&bar).unwrap();
         let bar2: Bar = from_slice(&buf).unwrap();

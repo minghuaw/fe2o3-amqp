@@ -1,10 +1,10 @@
 use darling::{FromDeriveInput, FromMeta};
 use quote::quote;
-use syn::{DeriveInput};
+use syn::DeriveInput;
 
-mod util;
-mod ser;
 mod de;
+mod ser;
+mod util;
 
 #[derive(Debug, Clone, FromMeta)]
 #[darling(default)]
@@ -24,21 +24,20 @@ struct DescribedAttr {
     #[darling(default)]
     pub encoding: Option<EncodingType>,
     #[darling(default)]
-    pub rename_field: String
+    pub rename_field: String,
 }
 
 struct AmqpContractAttr {
     name: String,
     code: Option<u64>,
     encoding: EncodingType,
-    rename_field: String
+    rename_field: String,
 }
 
 #[proc_macro_derive(SerializeComposite, attributes(amqp_contract))]
 pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as DeriveInput);
-    let impl_ser = ser::expand_serialize(&input)
-        .unwrap();
+    let impl_ser = ser::expand_serialize(&input).unwrap();
     let output = quote! {
         #impl_ser
     };
@@ -48,8 +47,7 @@ pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::
 #[proc_macro_derive(DeserializeComposite, attributes(amqp_contract))]
 pub fn derive_deserialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as DeriveInput);
-    let impl_de = de::expand_deserialize(&input)
-        .unwrap();
+    let impl_de = de::expand_deserialize(&input).unwrap();
     let output = quote! {
         #impl_de
     };
