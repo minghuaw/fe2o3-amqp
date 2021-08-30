@@ -113,7 +113,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     type SerializeSeq = SeqSerializer<'a, W>;
     type SerializeTuple = TupleSerializer<'a, W>;
     type SerializeMap = MapSerializer<'a, W>;
-    type SerializeTupleStruct = TupleSerializer<'a, W>;
+    type SerializeTupleStruct = TupleStructSerializer<'a, W>;
     type SerializeStruct = DescribedSerializer<'a, W>;
     type SerializeTupleVariant = VariantSerializer<'a, W>;
 
@@ -656,13 +656,20 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_tuple_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         // This will never be called on a Described type because the Decribed type is
         // a struct.
         // Simply serialize the content as seq
-        self.serialize_tuple(len)
+        if name == DESCRIBED_LIST {
+            let code = [EncodingCodes::DescribedType as u8];
+            self.writer.write_all(&code)?;
+            Ok(TupleStructSerializer::descriptor(self, len))
+        } else {
+            Ok(TupleStructSerializer::fields(self, len))
+        }
+
     }
 
     #[inline]
@@ -1066,11 +1073,75 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleSerializer<'a, W> {
     }
 }
 
-// pub enum Role {
-//     Described,
-//     // Descriptor,
-//     Value,
-// }
+pub enum FieldRole {
+    Descriptor,
+    Fields,
+}
+
+pub struct TupleStructSerializer<'a, W: 'a> {
+    se: &'a mut Serializer<W>,
+    field_role: FieldRole,
+    num: usize,
+    buf: Vec<u8>
+}
+
+impl<'a, W: 'a> TupleStructSerializer<'a, W> {
+    fn descriptor(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se,
+            field_role: FieldRole::Descriptor,
+            num,
+            buf: Vec::new()
+        }
+    }
+
+    fn fields(se: &'a mut Serializer<W>, num: usize) -> Self {
+        Self {
+            se,
+            field_role: FieldRole::Fields,
+            num,
+            buf: Vec::new()
+        }
+    }
+}
+
+impl<'a, W: 'a> AsMut<Serializer<W>> for TupleStructSerializer<'a, W> {
+    fn as_mut(&mut self) -> &mut Serializer<W> {
+        self.se
+    }
+}
+
+impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, W> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: Serialize 
+    {
+        match self.field_role {
+            FieldRole::Descriptor => {
+                self.num -= 1;
+                self.field_role = FieldRole::Fields;
+                value.serialize(self.as_mut())
+            },
+            FieldRole::Fields => {
+                let mut serializer = Serializer::described_list(&mut self.buf);
+                value.serialize(&mut serializer)
+            }
+        }
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        println!("{:x?}", &self.buf);
+        write_list(
+            &mut self.se.writer,
+            self.num,
+            self.buf,
+            &IsArrayElement::False
+        )
+    }
+}
 
 pub enum ValueType {
     Basic,
@@ -1080,19 +1151,10 @@ pub enum ValueType {
 
 pub struct DescribedSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
-    // role: Role,
     val_ty: ValueType,
     num: usize,
     buf: Vec<u8>,
 }
-
-// #[inline]
-// pub fn init_vec(role: &Role) -> Vec<u8> {
-//     match role {
-//         &Role::Value => Vec::new(),
-//         _ => Vec::with_capacity(0),
-//     }
-// }
 
 impl<'a, W: 'a> DescribedSerializer<'a, W> {
     pub fn basic_value(se: &'a mut Serializer<W>, num: usize) -> Self {
@@ -1734,7 +1796,7 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 13, encoding = "map")]
+        #[amqp_contract(code = 13, encoding = "list")]
         struct Foo {
             is_fool: bool,
             a: i32,
@@ -1744,6 +1806,20 @@ mod test {
             is_fool: true,
             a: 9,
         };
+        let buf = to_vec(&foo).unwrap();
+        println!("{:x?}", buf);
+    }
+
+    #[test]
+    fn test_serialize_tuple_struct_with_composite_macro() {
+        use crate as fe2o3_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 13, encoding = "list")]
+        struct Foo (bool, i32);
+
+        let foo = Foo(true, 9);
         let buf = to_vec(&foo).unwrap();
         println!("{:x?}", buf);
     }

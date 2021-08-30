@@ -46,3 +46,9 @@ struct Foo {
     is_fool: bool,
     second_field: String,
 }
+
+// #[derive(SerializeComposite, DeserializeComposite)]
+// struct Unit;
+
+#[derive(SerializeComposite)]
+struct TupleStruct(i32, bool);
