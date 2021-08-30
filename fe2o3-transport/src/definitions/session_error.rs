@@ -47,12 +47,16 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         formatter.write_str("variant identifier")
     }
 
-    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-        D: serde::Deserializer<'de>,
-    {
-        let val: String = de::Deserialize::deserialize(deserializer)?;
-        let val = match val.as_str() {
+            E: de::Error, {
+        self.visit_str(v.as_str())
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+            E: de::Error, {
+        let val = match v {
             "amqp:session:window-violation" => Field::WindowViolation,
             "amqp:session:errant-link" => Field::ErrantLink,
             "amqp:session:handle-in-use" => Field::HandleInUse,
