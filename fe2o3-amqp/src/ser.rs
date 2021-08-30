@@ -1129,7 +1129,6 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        println!("{:x?}", &self.buf);
         write_list(
             &mut self.se.writer,
             self.num,
@@ -1818,6 +1817,43 @@ mod test {
         let foo = Foo(true, 9);
         let buf = to_vec(&foo).unwrap();
         println!("{:x?}", buf);
+    }
+
+    #[test]
+    fn test_serialize_unit_struct_with_composite_macro() {
+        use crate as fe2o3_amqp;
+        use crate::macros::SerializeComposite;
+
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            1,
+            EncodingCodes::List0 as u8
+        ];
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x01, encoding = "list")]
+        struct Foo1;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x01, encoding = "list")]
+        struct Foo2();
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x01, encoding = "list")]
+        struct Foo3{}
+
+        let foo1 = Foo1;
+        let buf1 = to_vec(&foo1).unwrap();
+        assert_eq!(buf1, expected);
+
+        let foo2 = Foo2();
+        let buf2 = to_vec(&foo2).unwrap();
+        println!("{:x?}", buf2);
+
+        let foo3 = Foo3{};
+        let buf3 = to_vec(&foo3).unwrap();
+        println!("{:x?}", buf3);
     }
 
     #[allow(dead_code)]
