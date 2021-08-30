@@ -17,10 +17,10 @@ use crate::{
     rename_field = "kebab-case"
 )]
 pub struct Disposition {
-    role: Role,
-    first: DeliveryNumber,
-    last: Option<DeliveryNumber>,
-    settled: Option<Boolean>,
-    state: Option<DeliveryState>,
-    batchable: Option<Boolean>,
+    pub role: Role,
+    pub first: DeliveryNumber,
+    pub last: Option<DeliveryNumber>,
+    pub settled: Option<Boolean>,
+    pub state: Option<DeliveryState>,
+    pub batchable: Option<Boolean>,
 }

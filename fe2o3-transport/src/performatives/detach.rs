@@ -14,7 +14,7 @@ use crate::definitions::{Error, Handle};
     rename_field = "kebab-case"
 )]
 pub struct Detach {
-    handle: Handle,
-    closed: Option<Boolean>,
-    error: Option<Error>,
+    pub handle: Handle,
+    pub closed: Option<Boolean>,
+    pub error: Option<Error>,
 }

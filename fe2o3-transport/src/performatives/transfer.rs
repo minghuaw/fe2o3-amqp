@@ -17,15 +17,15 @@ use crate::{
     rename_field = "kebab-case"
 )]
 pub struct Transfer {
-    handle: Handle,
-    delivery_id: Option<DeliveryNumber>,
-    delivery_tag: Option<DeliveryTag>,
-    message_format: Option<MessageFormat>,
-    settled: Option<Boolean>,
-    more: Option<Boolean>,
-    rcv_settle_mode: Option<ReceivervSettleMode>,
-    state: Option<DeliveryState>,
-    resume: Option<Boolean>,
-    aborted: Option<Boolean>,
-    batchable: Option<Boolean>,
+    pub handle: Handle,
+    pub delivery_id: Option<DeliveryNumber>,
+    pub delivery_tag: Option<DeliveryTag>,
+    pub message_format: Option<MessageFormat>,
+    pub settled: Option<Boolean>,
+    pub more: Option<Boolean>,
+    pub rcv_settle_mode: Option<ReceivervSettleMode>,
+    pub state: Option<DeliveryState>,
+    pub resume: Option<Boolean>,
+    pub aborted: Option<Boolean>,
+    pub batchable: Option<Boolean>,
 }

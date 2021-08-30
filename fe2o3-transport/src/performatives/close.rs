@@ -11,5 +11,5 @@ use crate::definitions::Error;
     rename_field = "kebab-case"
 )]
 pub struct Close {
-    error: Option<Error>,
+    pub error: Option<Error>,
 }

@@ -14,15 +14,15 @@ use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
     rename_field = "kebab-case"
 )]
 pub struct Flow {
-    next_incoming_id: Option<TransferNumber>,
-    incoming_window: Uint,
-    next_outgoing_id: TransferNumber,
-    outgoing_window: Uint,
-    handle: Option<Handle>,
-    delivery_count: Option<SequenceNo>,
-    link_credit: Option<Uint>,
-    available: Option<Uint>,
-    drain: Option<Boolean>,
-    echo: Option<Boolean>,
-    properties: Option<Fields>,
+    pub next_incoming_id: Option<TransferNumber>,
+    pub incoming_window: Uint,
+    pub next_outgoing_id: TransferNumber,
+    pub outgoing_window: Uint,
+    pub handle: Option<Handle>,
+    pub delivery_count: Option<SequenceNo>,
+    pub link_credit: Option<Uint>,
+    pub available: Option<Uint>,
+    pub drain: Option<Boolean>,
+    pub echo: Option<Boolean>,
+    pub properties: Option<Fields>,
 }
