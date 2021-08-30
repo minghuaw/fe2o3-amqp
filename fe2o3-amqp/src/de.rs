@@ -1,5 +1,5 @@
-use serde::de::{self};
-use std::convert::TryInto;
+use serde::{de::{self}};
+use std::{convert::TryInto};
 
 use crate::{
     constants::{DESCRIPTOR, DESERIALIZE_DESCRIBED},
@@ -337,6 +337,43 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 visitor.visit_map(DescribedAccess::new(self, Some(descriptor_buf)))
             }
             _ => Err(Error::InvalidFormatCode),
+        }
+    }
+
+    #[inline]
+    fn parse_described_identifier<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
+    where 
+        V: de::Visitor<'de>,
+    {
+        let buf = self.reader.peek_bytes(2)?;
+        let code = buf[1];
+        match code.try_into()? {
+            EncodingCodes::Sym8 => {
+                let _buf = self.reader.peek_bytes(3)?;
+                let size = _buf[2] as usize;
+                let slice = self.reader.peek_bytes(3 + size)?;
+                visitor.visit_bytes(slice)
+            },
+            EncodingCodes::Sym32 => {
+                let _buf = self.reader.peek_bytes(2+4)?;
+                let mut size_bytes = [0u8; 4];
+                size_bytes.copy_from_slice(&_buf[2..]);
+                let size = u32::from_be_bytes(size_bytes) as usize;
+                let slice = self.reader.peek_bytes(size + 6)?;
+                visitor.visit_bytes(slice)
+            },
+            EncodingCodes::Ulong0 => {
+                visitor.visit_bytes(buf)
+            },
+            EncodingCodes::SmallUlong => {
+                let slice = self.reader.peek_bytes(3)?;
+                visitor.visit_bytes(slice)
+            },
+            EncodingCodes::Ulong => {
+                let slice = self.reader.peek_bytes(2 + 4)?;
+                visitor.visit_bytes(slice)
+            },
+            _ => Err(Error::InvalidFormatCode)
         }
     }
 }
@@ -900,16 +937,19 @@ where
                     // FIXME: Enum variant currently are serialzied as list of with variant index and a list
                     EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                         self.deserialize_u32(visitor)
-                    }
+                    },
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                         self.deserialize_newtype_struct(SYMBOL, visitor)
-                    }
+                    },
                     // Potentially using `Descriptor::Code` as identifier
                     EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                         self.deserialize_u64(visitor)
-                    }
+                    },
                     // Other types should not be used to serialize identifiers
+                    EncodingCodes::DescribedType => {
+                        self.parse_described_identifier(visitor)
+                    },
                     _ => Err(Error::InvalidFormatCode),
                 }
             }

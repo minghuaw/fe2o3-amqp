@@ -28,6 +28,8 @@ pub trait Read<'de>: private::Sealed {
         Ok(buf)
     }
 
+    fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error>;
+
     fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
         let mut buf = vec![0u8; n];
         self.read_exact(&mut buf)?;
@@ -62,38 +64,6 @@ pub trait Read<'de>: private::Sealed {
                     buf
                 }
             },
-            // Category::Compound(w) => {
-            //     match w {
-            //         CompoundWidth::Zero => {
-            //             return Ok(vec![code_byte])
-            //         },
-            //         CompoundWidth::One => {
-            //             let len = self.next()?;
-            //             let mut buf = vec![0u8; 1 + 1 + len as usize];
-            //             self.read_exact(&mut buf[2..])?;
-            //             buf[1] = len;
-            //             buf
-            //         },
-            //         CompoundWidth::Four => {
-            //             let len_bytes = self.read_const_bytes()?;
-            //             let len = u32::from_be_bytes(len_bytes.clone());
-            //             let mut buf = vec![0u8; 1 + 4 + len as usize];
-            //             self.read_exact(&mut buf[5..])?;
-            //             (&mut buf[1..5]).copy_from_slice(&len_bytes);
-            //             buf
-            //         }
-            //     }
-            // },
-            // Category::Array(w) => {
-            //     match w {
-            //         ArrayWidth::One => {
-            //             let len =
-            //         },
-            //         ArrayWidth::Four => {
-
-            //         }
-            //     }
-            // }
         };
         vec[0] = code_byte;
         Ok(vec)

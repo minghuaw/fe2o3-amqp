@@ -53,6 +53,16 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
+    fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error> {
+        let l = self.buf.len();
+        if l < n {
+            self.fill_buffer(n)?;
+            Ok(&self.buf[..n])
+        } else {
+            Ok(&self.buf[..n])
+        }
+    }
+
     fn next(&mut self) -> Result<u8, Error> {
         match self.pop_first() {
             Some(b) => Ok(b),
@@ -250,5 +260,15 @@ mod tests {
 
         assert!(peek_err.is_err());
         assert!(next_err.is_err());
+    }
+
+    #[test]
+    fn test_peek_bytes() {
+        let mut reader = IoReader::new(SHORT_BUFFER);
+        let peek0 = reader.peek_bytes(2).unwrap().to_vec();
+        let peek1 = reader.peek_bytes(2).unwrap();
+
+        assert_eq!(peek0, &SHORT_BUFFER[..2]);
+        assert_eq!(peek1, &SHORT_BUFFER[..2]);
     }
 }
