@@ -64,10 +64,10 @@ use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 // }
 
 #[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(name = "bar", encoding = "map", rename_field = "kebab-case")]
+#[amqp_contract(code = 0x13, encoding = "list")]
 struct Foo {
     is_fool: Option<bool>,
-    second_field: String,
+    a: Option<i32>,
 }
 
 #[derive(SerializeComposite, DeserializeComposite)]

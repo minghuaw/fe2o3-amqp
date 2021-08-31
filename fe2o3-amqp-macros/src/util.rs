@@ -120,12 +120,4 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
             };
         }
     }
-
-    // quote! {
-    //     macro_rules! tri {
-    //         ($field_ident: expr) => {
-    //             println!("{:?}", $field_ident);
-    //         }
-    //     }
-    // }
 }

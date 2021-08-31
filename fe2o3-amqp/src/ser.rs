@@ -654,7 +654,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_tuple_struct(
         self,
         name: &'static str,
-        len: usize,
+        _len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
         // This will never be called on a Described type because the Decribed type is
         // a struct.
@@ -662,9 +662,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         if name == DESCRIBED_LIST {
             let code = [EncodingCodes::DescribedType as u8];
             self.writer.write_all(&code)?;
-            Ok(TupleStructSerializer::descriptor(self, len))
+            Ok(TupleStructSerializer::descriptor(self))
         } else {
-            Ok(TupleStructSerializer::fields(self, len))
+            Ok(TupleStructSerializer::fields(self))
         }
     }
 
@@ -686,7 +686,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_struct(
         self,
         name: &'static str,
-        len: usize,
+        _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         match self.struct_encoding {
             // A None state indicates a freshly instantiated serializer
@@ -698,7 +698,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedList;
-                    Ok(DescribedSerializer::list_value(self, len))
+                    Ok(DescribedSerializer::list_value(self))
                 } else if name == DESCRIBED_MAP {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
@@ -706,7 +706,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedMap;
-                    Ok(DescribedSerializer::map_value(self, len))
+                    Ok(DescribedSerializer::map_value(self))
                 } else if name == DESCRIBED_BASIC {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
@@ -714,15 +714,15 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedBasic;
-                    Ok(DescribedSerializer::basic_value(self, len))
+                    Ok(DescribedSerializer::basic_value(self))
                 } else {
                     // Only non-described struct will go to this branch
-                    Ok(DescribedSerializer::list_value(self, len))
+                    Ok(DescribedSerializer::list_value(self))
                 }
             }
-            StructEncoding::DescribedBasic => Ok(DescribedSerializer::basic_value(self, len)),
-            StructEncoding::DescribedList => Ok(DescribedSerializer::list_value(self, len)),
-            StructEncoding::DescribedMap => Ok(DescribedSerializer::map_value(self, len)),
+            StructEncoding::DescribedBasic => Ok(DescribedSerializer::basic_value(self)),
+            StructEncoding::DescribedList => Ok(DescribedSerializer::list_value(self)),
+            StructEncoding::DescribedMap => Ok(DescribedSerializer::map_value(self)),
         }
     }
 
@@ -1077,25 +1077,25 @@ pub enum FieldRole {
 pub struct TupleStructSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     field_role: FieldRole,
-    num: usize,
+    count: usize,
     buf: Vec<u8>,
 }
 
 impl<'a, W: 'a> TupleStructSerializer<'a, W> {
-    fn descriptor(se: &'a mut Serializer<W>, num: usize) -> Self {
+    fn descriptor(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
             field_role: FieldRole::Descriptor,
-            num,
+            count: 0,
             buf: Vec::new(),
         }
     }
 
-    fn fields(se: &'a mut Serializer<W>, num: usize) -> Self {
+    fn fields(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
             field_role: FieldRole::Fields,
-            num,
+            count: 0,
             buf: Vec::new(),
         }
     }
@@ -1117,11 +1117,11 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     {
         match self.field_role {
             FieldRole::Descriptor => {
-                self.num -= 1;
                 self.field_role = FieldRole::Fields;
                 value.serialize(self.as_mut())
             }
             FieldRole::Fields => {
+                self.count += 1;
                 let mut serializer = Serializer::described_list(&mut self.buf);
                 value.serialize(&mut serializer)
             }
@@ -1131,7 +1131,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         write_list(
             &mut self.se.writer,
-            self.num,
+            self.count,
             self.buf,
             &IsArrayElement::False,
         )
@@ -1147,40 +1147,40 @@ pub enum ValueType {
 pub struct DescribedSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     val_ty: ValueType,
-    num: usize,
+    count: usize,
     buf: Vec<u8>,
 }
 
 impl<'a, W: 'a> DescribedSerializer<'a, W> {
-    pub fn basic_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn basic_value(se: &'a mut Serializer<W>) -> Self {
         // let buf = init_vec(&role);
         Self {
             se,
             // role,
             val_ty: ValueType::Basic,
-            num,
+            count: 0,
             buf: vec![],
         }
     }
 
-    pub fn list_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn list_value(se: &'a mut Serializer<W>) -> Self {
         // let buf = init_vec(&role);
         Self {
             se,
             // role,
             val_ty: ValueType::List,
-            num,
+            count: 0,
             buf: vec![],
         }
     }
 
-    pub fn map_value(se: &'a mut Serializer<W>, num: usize) -> Self {
+    pub fn map_value(se: &'a mut Serializer<W>) -> Self {
         // let buf = init_vec(&role);
         Self {
             se,
             // role,
             val_ty: ValueType::Map,
-            num,
+            count: 0,
             buf: vec![],
         }
     }
@@ -1207,9 +1207,9 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
         T: Serialize,
     {
         if key == DESCRIPTOR {
-            self.num -= 1;
             value.serialize(self.as_mut())
         } else {
+            self.count += 1;
             match self.val_ty {
                 ValueType::Basic => value.serialize(self.as_mut()),
                 ValueType::List => {
@@ -1232,14 +1232,14 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for DescribedSerializer<'a, W> {
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
             ValueType::List => write_list(
                 &mut self.se.writer,
-                self.num,
+                self.count,
                 self.buf,
                 &IsArrayElement::False,
             ),
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
             ValueType::Map => write_map(
                 &mut self.se.writer,
-                self.num * 2,
+                self.count * 2,
                 self.buf,
                 &IsArrayElement::False,
             ),
@@ -1791,7 +1791,7 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list")]
+        #[amqp_contract(code = 0x13, encoding = "list")]
         struct Foo {
             is_fool: bool,
             a: i32,
@@ -1854,6 +1854,63 @@ mod test {
         let foo3 = Foo3{};
         let buf3 = to_vec(&foo3).unwrap();
         assert_eq!(buf3, expected);
+    }
+
+    #[test]
+    fn test_serialize_composite_with_optional_fields() {
+        use crate as fe2o3_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Foo {
+            is_fool: Option<bool>,
+            a: Option<i32>,
+        }
+
+        let foo = Foo {
+            is_fool: None,
+            a: None,
+        };
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List0 as u8
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
+
+        let foo = Foo {
+            is_fool: Some(true),
+            a: None,
+        };
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            2,
+            1,
+            EncodingCodes::BooleanTrue as u8
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
+
+        let foo = Foo {
+            is_fool: Some(true),
+            a: Some(1),
+        };
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::BooleanTrue as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
     }
 
     #[allow(dead_code)]
