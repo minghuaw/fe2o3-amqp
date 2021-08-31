@@ -1,7 +1,7 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, macro_rules_buffered_null, parse_described_attr}};
+use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_none, parse_described_attr}};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -94,9 +94,13 @@ fn expand_serialize_tuple_struct(
         .enumerate()
         .map(|(i, _)| syn::Index::from(i))
         .collect();
-    // .map(|(i,f)| syn::Ident::new(&i.to_string(), f.span())).collect();
+    let field_types: Vec<&syn::Type> = fields.unnamed.iter().map(|f| &f.ty).collect();
     let len = field_indices.len();
+    let buffer_if_none = macro_rules_buffer_if_none();
+
     quote! {
+        #buffer_if_none
+
         #[automatically_derived]
         impl fe2o3_amqp::serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -104,13 +108,15 @@ fn expand_serialize_tuple_struct(
                 S: fe2o3_amqp::serde::ser::Serializer,
             {
                 use fe2o3_amqp::serde::ser::SerializeTupleStruct;
+                let mut null_count = 0u32;
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_tuple_struct(#struct_name, #len + 1)?;
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in fe2o3_amqp serializer, this will be deducted
                 state.serialize_field(&#descriptor)?;
-                #( state.serialize_field(&self.#field_indices)?; )*
+                // #( state.serialize_field(&self.#field_indices)?; )*
+                #( buffer_if_none!(state, null_count, &self.#field_indices, #field_types); )*
                 state.end()
             }
         }
@@ -141,7 +147,7 @@ fn expand_serialize_struct(
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
     let len = field_idents.len();
-    let buffer_if_none = macro_rules_buffered_null();
+    let buffer_if_none = macro_rules_buffer_if_none();
 
     quote! {
         #buffer_if_none
