@@ -1953,6 +1953,32 @@ mod tests {
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.0.is_none());
         assert!(foo.1.is_some());
+
+        #[derive(Debug, PartialEq, DeserializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Bar {
+            is_fool: Option<bool>,
+            mandatory: u32,
+            a: Option<i32>,
+        }
+        let bar = Bar {
+            is_fool: None,
+            mandatory: 0x13,
+            a: None
+        };
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::Null as u8,
+            EncodingCodes::SmallUint as u8,
+            0x13
+        ];
+        let bar2: Bar = from_slice(&buf).unwrap();
+        assert_eq!(bar, bar2);
     }
 
     #[test]

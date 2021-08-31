@@ -1928,6 +1928,31 @@ mod test {
             1
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Bar {
+            is_fool: Option<bool>,
+            mandatory: u32,
+            a: Option<i32>,
+        }
+        let bar = Bar {
+            is_fool: None,
+            mandatory: 0x13,
+            a: None
+        };
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::Null as u8,
+            EncodingCodes::SmallUint as u8,
+            0x13
+        ];
+        assert_eq_on_serialized_vs_expected(bar, expected);
     }
 
     #[test]
