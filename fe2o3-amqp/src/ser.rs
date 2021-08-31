@@ -1849,11 +1849,11 @@ mod test {
 
         let foo2 = Foo2();
         let buf2 = to_vec(&foo2).unwrap();
-        println!("{:x?}", buf2);
+        assert_eq!(buf2, expected);
 
         let foo3 = Foo3{};
         let buf3 = to_vec(&foo3).unwrap();
-        println!("{:x?}", buf3);
+        assert_eq!(buf3, expected);
     }
 
     #[allow(dead_code)]
