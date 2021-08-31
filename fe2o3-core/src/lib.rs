@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod definitions;
 pub mod performatives;
+pub mod framing;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Source {}

@@ -1,5 +1,5 @@
 [package]
-name = "fe2o3-transport"
+name = "fe2o3-core"
 version = "0.1.0"
 edition = "2018"
 
@@ -7,5 +7,8 @@ edition = "2018"
 
 [dependencies]
 fe2o3-amqp = { version = "0.0.1", path = "../fe2o3-amqp" }
+futures-util = "0.3.17"
 serde = { version = "1.0.127", features = ["derive"] }
 serde_bytes = "0.11.5"
+tokio = { version = "1.10.1", features = ["sync"] }
+tokio-util = { version = "0.6.7", features = ["codec"] }
