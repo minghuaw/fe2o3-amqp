@@ -1893,6 +1893,69 @@ mod tests {
     }
 
     #[test]
+    fn test_deserialize_composite_tuple_with_optional_fields() {
+        use crate as fe2o3_amqp;
+        use crate::macros::{DeserializeComposite};
+
+        #[derive(Debug, DeserializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Foo (Option<bool>, Option<i32>);
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List0 as u8
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.0.is_none());
+        assert!(foo.1.is_none());
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            2,
+            1,
+            EncodingCodes::BooleanTrue as u8
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.0.is_some());
+        assert!(foo.1.is_none());
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::BooleanTrue as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.0.is_some());
+        assert!(foo.1.is_some());
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::Null as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.0.is_none());
+        assert!(foo.1.is_some());
+    }
+
+    #[test]
     fn test_deserialize_nondescribed_struct() {
         use crate::ser::to_vec;
         use serde::{Deserialize, Serialize};

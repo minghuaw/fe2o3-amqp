@@ -139,6 +139,7 @@ fn impl_visit_seq_for_tuple_struct(
     field_types: &Vec<&syn::Type>,
     evaluate_descriptor: &proc_macro2::TokenStream, 
 ) -> proc_macro2::TokenStream {
+    let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
         where
@@ -151,10 +152,13 @@ fn impl_visit_seq_for_tuple_struct(
 
             #evaluate_descriptor
 
-            #(let #field_idents: #field_types = match seq.next_element()? {
-                Some(val) => val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Invalid length"))
-            };)*
+            #unwrap_or_none
+
+            // #(let #field_idents: #field_types = match seq.next_element()? {
+            //     Some(val) => val,
+            //     None => return Err(fe2o3_amqp::serde::de::Error::custom("Invalid length"))
+            // };)*
+            #( unwrap_or_none!(#field_idents, seq, #field_types); )*
 
             Ok( #ident( #(#field_idents, )* ) )
         }
@@ -265,7 +269,6 @@ fn expand_deserialize_struct(
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
 
-    let unwrap_or_none = macro_rules_unwrap_or_none();
     let visit_seq = impl_visit_seq_for_struct(ident, &field_idents, &field_types, evaluate_descriptor);
     let visit_map = match len {
         0 => quote!{},
@@ -273,8 +276,6 @@ fn expand_deserialize_struct(
     };
 
     let token = quote! {
-        #unwrap_or_none
-
         #[automatically_derived]
         impl<'de> fe2o3_amqp::serde::de::Deserialize<'de> for #ident {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -368,6 +369,7 @@ fn impl_visit_seq_for_struct(
     field_types: &Vec<&syn::Type>,
     evaluate_descriptor: &proc_macro2::TokenStream, 
 ) -> proc_macro2::TokenStream {
+    let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
         where
@@ -379,6 +381,8 @@ fn impl_visit_seq_for_struct(
             };
 
             #evaluate_descriptor
+
+            #unwrap_or_none
 
             // #(let #field_idents: #field_types = match seq.next_element()? {
             //     Some(val) => val,

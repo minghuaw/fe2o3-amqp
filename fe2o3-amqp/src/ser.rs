@@ -1930,6 +1930,65 @@ mod test {
         assert_eq_on_serialized_vs_expected(foo, expected);
     }
 
+    #[test]
+    fn test_serialize_composite_tuple_with_optional_fields() {
+        use crate as fe2o3_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Foo (Option<bool>, Option<i32>);
+
+        let foo = Foo (None, None);
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List0 as u8
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
+
+        let foo = Foo (Some(true), None);
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            2,
+            1,
+            EncodingCodes::BooleanTrue as u8
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
+
+        let foo = Foo (Some(true), Some(1));
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::BooleanTrue as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
+
+        let foo = Foo (None, Some(1));
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::Null as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
+    }
+
     #[allow(dead_code)]
     #[derive(Serialize)]
     enum Enumeration {
