@@ -1,5 +1,6 @@
 use darling::FromDeriveInput;
 use proc_macro2::Span;
+use quote::quote;
 use syn::DeriveInput;
 
 use crate::{AmqpContractAttr, DescribedAttr, EncodingType};
@@ -70,4 +71,39 @@ pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
         }
         None => None,
     })
+}
+
+pub(crate) fn macro_rules_buffered_null() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! buffer_if_none {
+            ($state: ident, $nulls: ident, $fid: expr, $fname: expr, Option<$ftype: ty>) => {
+                if $fid.is_some() {
+                    for _ in 0..$nulls {
+                        // name is not used in list encoding
+                        $state.serialize_field("", &())?; // None and () share the same encoding
+                    }
+                    $nulls = 0;
+                    $state.serialize_field($fname, $fid)?;
+                } else {
+                    $nulls += 1;
+                }
+            };
+            ($state: ident, $nulls: ident, $fid: expr, $fname: expr, $ftype: ty) => {
+                for _ in 0..$nulls {
+                    // name is not used in list encoding
+                    $state.serialize_field("", &())?; // None and () share the same encoding
+                }
+                $nulls = 0;
+                $state.serialize_field($fname, $fid)?;
+            };
+        }
+    }
+
+    // quote! {
+    //     macro_rules! tri {
+    //         ($field_ident: expr) => {
+    //             println!("{:?}", $field_ident);
+    //         }
+    //     }
+    // }
 }

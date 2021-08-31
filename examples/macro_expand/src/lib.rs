@@ -40,16 +40,39 @@
 
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
+// macro_rules! buffer_if_none {
+//     ($state: ident, $field_ident: expr, $field_name: expr, Option<$ftype: ty>) => {
+//         // if self.field_ident.is_some() {
+//         //     for _ in 0..null_count {
+//         //         // name is not used in list encoding
+//         //         state.serialize_field("", &())?; // None and () share the same encoding
+//         //     }
+//         //     null_count = 0;
+//             $state.serialize_field($field_name, $field_ident)?;
+//         // } else {
+//         //     null_count += 1;
+//         // }
+//     };
+//     ($state: ident, $field_ident: expr, $field_name: expr, $ftype: ty) => {
+//         // for _ in 0..null_count {
+//         //     // name is not used in list encoding
+//         //     state.serialize_field("", &())?; // None and () share the same encoding
+//         // }
+//         // null_count = 0;
+//         $state.serialize_field($field_name, $field_ident)?;
+//     };
+// }
+
 #[derive(SerializeComposite, DeserializeComposite)]
 #[amqp_contract(name = "bar", encoding = "map", rename_field = "kebab-case")]
 struct Foo {
-    is_fool: bool,
+    is_fool: Option<bool>,
     second_field: String,
 }
 
-#[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(encoding="list")]
-struct Unit { }
+// #[derive(SerializeComposite, DeserializeComposite)]
+// #[amqp_contract(encoding="list")]
+// struct Unit { }
 
-#[derive(SerializeComposite, DeserializeComposite)]
-struct TupleStruct(i32, bool);
+// #[derive(SerializeComposite, DeserializeComposite)]
+// struct TupleStruct(i32, bool);

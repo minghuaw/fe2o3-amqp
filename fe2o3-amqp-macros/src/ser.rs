@@ -1,10 +1,7 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{
-    util::{convert_to_case, parse_described_attr},
-    AmqpContractAttr, EncodingType,
-};
+use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, macro_rules_buffered_null, parse_described_attr}};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -142,9 +139,13 @@ fn expand_serialize_struct(
         .iter()
         .map(|i| convert_to_case(rename_field, i.to_string(), ctx).unwrap())
         .collect();
+    let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
     let len = field_idents.len();
+    let buffer_if_none = macro_rules_buffered_null();
 
     quote! {
+        #buffer_if_none
+
         #[automatically_derived]
         impl fe2o3_amqp::serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -152,13 +153,15 @@ fn expand_serialize_struct(
                 S: fe2o3_amqp::serde::ser::Serializer,
             {
                 use fe2o3_amqp::serde::ser::SerializeStruct;
+                let mut null_count = 0u32;
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in fe2o3_amqp serializer, this will be deducted
                 state.serialize_field(fe2o3_amqp::constants::DESCRIPTOR, &#descriptor)?;
-                #( state.serialize_field(#field_names, &self.#field_idents)?; )*
+                // #( state.serialize_field(#field_names, &self.#field_idents)?; )*
+                #(buffer_if_none!(state, null_count, &self.#field_idents, #field_names, #field_types);) *
                 state.end()
             }
         }
