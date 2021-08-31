@@ -70,9 +70,9 @@ struct Foo {
     a: Option<i32>,
 }
 
-#[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(encoding="list")]
-struct Unit { }
+// #[derive(SerializeComposite, DeserializeComposite)]
+// #[amqp_contract(encoding="list")]
+// struct Unit { }
 
-#[derive(SerializeComposite, DeserializeComposite)]
-struct TupleStruct(Option<i32>, bool);
+// #[derive(SerializeComposite, DeserializeComposite)]
+// struct TupleStruct(Option<i32>, bool);

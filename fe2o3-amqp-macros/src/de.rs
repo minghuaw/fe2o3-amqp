@@ -1,10 +1,7 @@
 use quote::quote;
 use syn::{DeriveInput, Fields, spanned::Spanned};
 
-use crate::{
-    util::{convert_to_case, parse_described_attr, get_span_of},
-    AmqpContractAttr, EncodingType,
-};
+use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, get_span_of, macro_rules_unwrap_or_none, parse_described_attr}};
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
@@ -267,6 +264,8 @@ fn expand_deserialize_struct(
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
+
+    let unwrap_or_none = macro_rules_unwrap_or_none();
     let visit_seq = impl_visit_seq_for_struct(ident, &field_idents, &field_types, evaluate_descriptor);
     let visit_map = match len {
         0 => quote!{},
@@ -274,12 +273,15 @@ fn expand_deserialize_struct(
     };
 
     let token = quote! {
+        #unwrap_or_none
+
         #[automatically_derived]
         impl<'de> fe2o3_amqp::serde::de::Deserialize<'de> for #ident {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
                 D: fe2o3_amqp::serde::de::Deserializer<'de>,
             {
+
                 #deserialize_field
 
                 struct Visitor {}
@@ -378,10 +380,11 @@ fn impl_visit_seq_for_struct(
 
             #evaluate_descriptor
 
-            #(let #field_idents: #field_types = match seq.next_element()? {
-                Some(val) => val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Invalid length"))
-            };)*
+            // #(let #field_idents: #field_types = match seq.next_element()? {
+            //     Some(val) => val,
+            //     None => return Err(fe2o3_amqp::serde::de::Error::custom("Invalid length"))
+            // };)*
+            #( unwrap_or_none!(#field_idents, seq, #field_types); )*
 
             Ok( #ident{ #(#field_idents, )* } )
         }

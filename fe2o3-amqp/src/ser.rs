@@ -1911,6 +1911,23 @@ mod test {
             1
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
+
+        let foo = Foo {
+            is_fool: None,
+            a: Some(1),
+        };
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::Null as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        assert_eq_on_serialized_vs_expected(foo, expected);
     }
 
     #[allow(dead_code)]

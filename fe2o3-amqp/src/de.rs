@@ -643,8 +643,13 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.reader.peek()?.try_into()? {
-            EncodingCodes::Null => visitor.visit_none(),
+        println!(">>> Debug: deserialize_option");
+        match self.get_elem_code_or_peek_byte()?.try_into()? {
+            EncodingCodes::Null => {
+                // consume the Null byte
+                let _ = self.get_elem_code_or_read_format_code()?;
+                visitor.visit_none()
+            },
             _ => visitor.visit_some(self),
         }
     }
@@ -1317,6 +1322,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 if self.field_count == 0 {
                     return Ok(None);
                 }
+                self.field_count -= 1;
                 seed.deserialize(self.as_mut()).map(Some)
             }
         }
@@ -1818,6 +1824,72 @@ mod tests {
         let buf = to_vec(&bar).unwrap();
         let bar2: Bar = from_slice(&buf).unwrap();
         assert_eq!(bar, bar2)
+    }
+
+    #[test]
+    fn test_deserialize_composite_with_optional_fields() {
+        use crate as fe2o3_amqp;
+        use crate::macros::{DeserializeComposite};
+
+        #[derive(Debug, DeserializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Foo {
+            pub is_fool: Option<bool>,
+            pub a: Option<i32>,
+        }
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List0 as u8
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.is_fool.is_none());
+        assert!(foo.a.is_none());
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            2,
+            1,
+            EncodingCodes::BooleanTrue as u8
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.is_fool.is_some());
+        assert!(foo.a.is_none());
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::BooleanTrue as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.is_fool.is_some());
+        assert!(foo.a.is_some());
+
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x13,
+            EncodingCodes::List8 as u8,
+            4,
+            2,
+            EncodingCodes::Null as u8,
+            EncodingCodes::SmallInt as u8,
+            1
+        ];
+        let foo: Foo = from_slice(&buf).unwrap();
+        assert!(foo.is_fool.is_none());
+        assert!(foo.a.is_some());
     }
 
     #[test]

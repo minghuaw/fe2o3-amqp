@@ -78,45 +78,64 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! buffer_if_none {
             // for tuple struct
-            ($state: ident, $nulls: ident, $fid: expr, Option<$ftype: ty>) => {
-                if $fid.is_some() {
+            ($state: ident, $nulls: ident, $fident: expr, Option<$ftype: ty>) => {
+                if $fident.is_some() {
                     for _ in 0..$nulls {
                         $state.serialize_field(&())?; // `None` and `()` share the same encoding
                     }
                     $nulls = 0;
-                    $state.serialize_field($fid)?;
+                    $state.serialize_field($fident)?;
                 } else {
                     $nulls += 1;
                 }
             };
-            ($state: ident, $nulls: ident, $fid: expr, $ftype: ty) => {
+            ($state: ident, $nulls: ident, $fident: expr, $ftype: ty) => {
                 for _ in 0..$nulls {
                     $state.serialize_field(&())?; // `None` and `()` share the same encoding
                 }
                 $nulls = 0;
-                $state.serialize_field($fid)?;
+                $state.serialize_field($fident)?;
             };
 
             // for struct
-            ($state: ident, $nulls: ident, $fid: expr, $fname: expr, Option<$ftype: ty>) => {
-                if $fid.is_some() {
+            ($state: ident, $nulls: ident, $fident: expr, $fname: expr, Option<$ftype: ty>) => {
+                if $fident.is_some() {
                     for _ in 0..$nulls {
                         // name is not used in list encoding
                         $state.serialize_field("", &())?; // `None` and `()` share the same encoding
                     }
                     $nulls = 0;
-                    $state.serialize_field($fname, $fid)?;
+                    $state.serialize_field($fname, $fident)?;
                 } else {
                     $nulls += 1;
                 }
             };
-            ($state: ident, $nulls: ident, $fid: expr, $fname: expr, $ftype: ty) => {
+            ($state: ident, $nulls: ident, $fident: expr, $fname: expr, $ftype: ty) => {
                 for _ in 0..$nulls {
                     // name is not used in list encoding
                     $state.serialize_field("", &())?; // `None` and `()` share the same encoding
                 }
                 $nulls = 0;
-                $state.serialize_field($fname, $fid)?;
+                $state.serialize_field($fname, $fident)?;
+            };
+        }
+    }
+}
+
+pub(crate) fn macro_rules_unwrap_or_none() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! unwrap_or_none {
+            ($fident: ident, $seq: ident, Option<$ftype: ty>) => {
+                let $fident: Option<$ftype> = match $seq.next_element::<Option<$ftype>>()? {
+                    Some(val) => val,
+                    None => None,
+                };
+            };
+            ($fident: ident, $seq: ident, $ftype: ty) => {
+                let $fident: $ftype = match $seq.next_element()? {
+                    Some(val) => val,
+                    None => return Err(fe2o3_amqp::serde::de::Error::custom("Insufficient number of items")),
+                };
             };
         }
     }
