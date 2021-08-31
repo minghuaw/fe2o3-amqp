@@ -283,6 +283,14 @@ impl Deserializer {
             value,
         }
     }
+
+    pub fn array(value: Value) -> Self {
+        Self {
+            new_type: NewType::Array,
+            enum_type: Default::default(),
+            value
+        }
+    }
 }
 
 impl<'de> de::Deserializer<'de> for Deserializer {
@@ -293,6 +301,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_any");
         match &self.value {
             Value::Null => self.deserialize_unit(visitor),
             Value::Bool(_) => self.deserialize_bool(visitor),
@@ -326,6 +335,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_bool");
+
         match self.value {
             Value::Bool(v) => visitor.visit_bool(v),
             _ => Err(Error::InvalidValue),
@@ -337,6 +348,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i8");
+
         match self.value {
             Value::Byte(v) => visitor.visit_i8(v),
             _ => Err(Error::InvalidValue),
@@ -348,6 +361,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i16");
+
         match self.value {
             Value::Short(v) => visitor.visit_i16(v),
             _ => Err(Error::InvalidValue),
@@ -359,6 +374,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i32");
         match self.value {
             Value::Int(v) => visitor.visit_i32(v),
             _ => Err(Error::InvalidValue),
@@ -370,6 +386,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i64");
         match self.new_type {
             NewType::None => match self.value {
                 Value::Long(v) => visitor.visit_i64(v),
@@ -388,6 +405,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u8");
+
         match self.value {
             Value::Ubyte(v) => visitor.visit_u8(v),
             _ => Err(Error::InvalidValue),
@@ -399,6 +418,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u16");
+
         match self.value {
             Value::Ushort(v) => visitor.visit_u16(v),
             _ => Err(Error::InvalidValue),
@@ -410,6 +431,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u32");
+
         match self.value {
             Value::Uint(v) => visitor.visit_u32(v),
             _ => Err(Error::InvalidValue),
@@ -421,6 +444,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u64");
+
         match self.value {
             Value::Ulong(v) => visitor.visit_u64(v),
             _ => Err(Error::InvalidValue),
@@ -432,6 +457,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_f32");
+
         match self.value {
             Value::Float(v) => visitor.visit_f32(v.into_inner()),
             _ => Err(Error::InvalidValue),
@@ -443,6 +470,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_f64");
+
         match self.value {
             Value::Double(v) => visitor.visit_f64(v.into_inner()),
             _ => Err(Error::InvalidValue),
@@ -454,6 +483,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_char");
+
         match self.value {
             Value::Char(v) => visitor.visit_char(v),
             _ => Err(Error::InvalidValue),
@@ -465,6 +496,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_string");
+
         match self.new_type {
             NewType::None => match self.value {
                 Value::String(v) => visitor.visit_string(v),
@@ -483,6 +516,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_str");
+
         self.deserialize_string(visitor)
     }
 
@@ -491,27 +526,14 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_byte_buf");
+
         match self.new_type {
             NewType::None => match self.value {
                 Value::Binary(v) => visitor.visit_byte_buf(v.into_vec()),
                 _ => Err(Error::InvalidValue),
             },
-            NewType::Dec32 => match self.value {
-                Value::Decimal32(v) => visitor.visit_byte_buf(v.into_inner().to_vec()),
-                _ => Err(Error::InvalidValue),
-            },
-            NewType::Dec64 => match self.value {
-                Value::Decimal64(v) => visitor.visit_byte_buf(v.into_inner().to_vec()),
-                _ => Err(Error::InvalidValue),
-            },
-            NewType::Dec128 => match self.value {
-                Value::Decimal128(v) => visitor.visit_byte_buf(v.into_inner().to_vec()),
-                _ => Err(Error::InvalidValue),
-            },
-            NewType::Uuid => match self.value {
-                Value::Uuid(v) => visitor.visit_byte_buf(v.into_inner().to_vec()),
-                _ => Err(Error::InvalidValue),
-            },
+            
             _ => Err(Error::InvalidValue),
         }
     }
@@ -521,7 +543,29 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
-        self.deserialize_byte_buf(visitor)
+        println!(">>> Debug: deserialize_bytes");
+
+        match self.new_type {
+            NewType::Dec32 => match self.value {
+                Value::Decimal32(v) => visitor.visit_bytes(&v.into_inner()),
+                _ => Err(Error::InvalidValue),
+            },
+            NewType::Dec64 => match self.value {
+                Value::Decimal64(v) => visitor.visit_bytes(&v.into_inner()),
+                _ => Err(Error::InvalidValue),
+            },
+            NewType::Dec128 => match self.value {
+                Value::Decimal128(v) => visitor.visit_bytes(&v.into_inner()),
+                _ => Err(Error::InvalidValue),
+            },
+            NewType::Uuid => match self.value {
+                Value::Uuid(v) => visitor.visit_bytes(&v.into_inner()),
+                _ => Err(Error::InvalidValue),
+            },
+            _ => {
+                self.deserialize_byte_buf(visitor)
+            }
+        }
     }
 
     #[inline]
@@ -529,6 +573,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_option");
+
         match self.value {
             Value::Null => visitor.visit_none(),
             _ => visitor.visit_some(self),
@@ -540,6 +586,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_unit");
+
         match self.value {
             Value::Null => visitor.visit_unit(),
             _ => Err(Error::InvalidValue),
@@ -555,6 +603,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_unit_struct");
+
         self.deserialize_unit(visitor)
     }
 
@@ -567,20 +617,32 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_newtype_struct");
+
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
+            self.deserialize_string(visitor)
         } else if name == DECIMAL32 {
             self.new_type = NewType::Dec32;
+            self.deserialize_bytes(visitor)
         } else if name == DECIMAL64 {
             self.new_type = NewType::Dec64;
+            self.deserialize_bytes(visitor)
         } else if name == DECIMAL128 {
             self.new_type = NewType::Dec128;
+            self.deserialize_bytes(visitor)
         } else if name == UUID {
             self.new_type = NewType::Uuid;
+            self.deserialize_bytes(visitor)
         } else if name == TIMESTAMP {
             self.new_type = NewType::Timestamp;
+            self.deserialize_i64(visitor)
+        } else if name == ARRAY {
+            self.new_type = NewType::Array;
+            self.deserialize_seq(visitor)
+        } else {
+            visitor.visit_newtype_struct(self)
         }
-        visitor.visit_newtype_struct(self)
     }
 
     #[inline]
@@ -588,19 +650,21 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_seq");
         match self.new_type {
             NewType::None => match self.value {
                 Value::List(v) => {
                     let iter = v.into_iter();
-                    visitor.visit_seq(SeqAccess { iter })
+                    visitor.visit_seq(SeqAccess { iter, seq_type: SeqType::List })
                 }
                 _ => Err(Error::InvalidValue),
             },
             NewType::Array => match self.value {
                 Value::Array(v) => {
+                    println!("Value::Array");
                     let v = v.into_inner();
                     let iter = v.into_iter();
-                    visitor.visit_seq(SeqAccess { iter })
+                    visitor.visit_seq(SeqAccess { iter, seq_type: SeqType::Array })
                 }
                 _ => Err(Error::InvalidValue),
             },
@@ -613,6 +677,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_tuple");
         self.deserialize_seq(visitor)
     }
 
@@ -626,6 +691,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_tuple_struct");
+
         self.deserialize_tuple(len, visitor)
     }
 
@@ -639,6 +706,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_struct");
+
         self.deserialize_tuple(fields.len(), visitor)
     }
 
@@ -647,6 +716,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_map");
+
         match self.value {
             Value::Map(map) => {
                 let iter = map.into_iter();
@@ -666,6 +737,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_enum");
+
         if name == VALUE {
             self.enum_type = EnumType::Value;
             self.deserialize_any(visitor)
@@ -676,30 +749,6 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 Value::Ulong(_) => self.deserialize_u64(visitor),
                 _ => Err(Error::InvalidValue),
             }
-        // } else if name == AMQP_ERROR {
-        //     self.enum_type = EnumType::AmqpError;
-        //     match self.value {
-        //         Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
-        //         _ => Err(Error::InvalidValue)
-        //     }
-        // } else if name == CONNECTION_ERROR {
-        //     self.enum_type = EnumType::ConnectionError;
-        //     match self.value {
-        //         Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
-        //         _ => Err(Error::InvalidValue)
-        //     }
-        // } else if name == SESSION_ERROR {
-        //     self.enum_type = EnumType::SessionError;
-        //     match self.value {
-        //         Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
-        //         _ => Err(Error::InvalidValue)
-        //     }
-        // } else if name == LINK_ERROR {
-        //     self.enum_type = EnumType::LinkError;
-        //     match self.value {
-        //         Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
-        //         _ => Err(Error::InvalidValue)
-        //     }
         } else {
             match self.value {
                 // An Uint should represent a unit_variant
@@ -721,6 +770,8 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_identifier");
+
         match &self.enum_type {
             EnumType::Value => {
                 let code = self.value.format_code();
@@ -730,18 +781,6 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 let code = self.value.format_code();
                 visitor.visit_u8(code)
             }
-            // EnumType::AmqpError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
-            // EnumType::ConnectionError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
-            // EnumType::SessionError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
-            // EnumType::LinkError => {
-            //     self.deserialize_newtype_struct(SYMBOL, visitor)
-            // },
             EnumType::None => match self.value {
                 Value::Uint(v) => visitor.visit_u32(v),
                 Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
@@ -754,24 +793,53 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_ignored_any");
+
         // self.deserialize_any(visitor)
         visitor.visit_unit()
     }
 }
 
+enum SeqType {
+    List,
+    Array,
+}
+
 pub struct SeqAccess {
     iter: <Vec<Value> as IntoIterator>::IntoIter,
+    seq_type: SeqType,
 }
 
 impl<'de> de::SeqAccess<'de> for SeqAccess {
     type Error = Error;
+
+    // fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+    // where
+    //     T: serde::Deserialize<'de>, 
+    // {
+    //     match self.iter.next() {
+    //         Some(elem) => {
+    //             match self.seq_type {
+    //                 SeqType::Array => T::deserialize(Deserializer::array(elem)).map(Some),
+    //                 SeqType::List => T::deserialize(Deserializer::new(elem)).map(Some)
+    //             }
+    //         },
+    //         None => Ok(None)
+    //     }    
+    // }
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
         T: de::DeserializeSeed<'de>,
     {
         match self.iter.next() {
-            Some(elem) => seed.deserialize(Deserializer::new(elem)).map(Some),
+            Some(elem) => {
+                println!("next_element_seed");
+                match self.seq_type {
+                    SeqType::List => seed.deserialize(Deserializer::new(elem)).map(Some),
+                    SeqType::Array => seed.deserialize(Deserializer::array(elem)).map(Some)
+                }
+            },
             None => Ok(None),
         }
     }
@@ -888,7 +956,7 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
 mod tests {
     use serde::de;
 
-    use crate::value::Value;
+    use crate::value::{Value, ser::to_value};
 
     use super::from_value;
 
@@ -909,6 +977,70 @@ mod tests {
         let value = Value::Bool(false);
         let expected = false;
         assert_eq_from_value_vs_expected(value, expected);
+    }
+
+    #[test]
+    fn test_decimal32_from_value() {
+        use crate::types::{Dec32};
+
+        let expected = Dec32::from([1, 2, 3, 4]);
+        let buf = to_value(&expected).unwrap();
+        assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_decimal64_from_value() {
+        use crate::types::{Dec64};
+
+        let expected = Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]);
+        let buf = to_value(&expected).unwrap();
+        assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_decimal128_from_value() {
+        use crate::types::{Dec128};
+
+        let expected = Dec128::from([1u8; 16]);
+        let buf = to_value(&expected).unwrap();
+        assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_uuid_from_value() {
+        use crate::types::{Uuid};
+
+        let expected = Uuid::from([3u8; 16]);
+        let buf = to_value(&expected).unwrap();
+        assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_timestamp_from_value() {
+        use crate::types::{Timestamp};
+
+        let expected = Timestamp::from(13131313);
+        let buf = to_value(&expected).unwrap();
+        assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_list() {
+
+        let expected = vec![1i32, 2, 3, 4];
+        let buf = to_value(&expected).unwrap();
+        println!("{:x?}", &buf);
+        assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_array() {
+        use crate::types::Array;
+
+        let expected = Array::from(vec![1i32, 2, 3, 4]);
+        let buf = to_value(&expected).unwrap();
+        println!("{:x?}", &buf);
+        assert_eq_from_value_vs_expected(buf, expected);
     }
 
     #[test]

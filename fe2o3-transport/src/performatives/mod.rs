@@ -23,7 +23,7 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Performative {
-    Open(Open),
+    // Open(Open),
     End(End)
 }
 
@@ -33,14 +33,14 @@ mod tests {
 
     use super::End;
     use fe2o3_amqp::ser::to_vec;
-    use fe2o3_amqp::de::from_reader;
+    use fe2o3_amqp::de::from_slice;
 
     #[test]
     fn test_untagged_serde() {
         let end = Performative::End(End {error: None});
         let buf = to_vec(&end).unwrap();
-        let reader = std::io::Cursor::new(buf);
-        let end2: Performative = from_reader(reader).unwrap();
-        // println!("{:x?}", buf );
+        let end2: Result<Performative, _> = from_slice(&buf);
+        println!("{:x?}", buf );
+        println!("{:?}", end2);
     }
 }

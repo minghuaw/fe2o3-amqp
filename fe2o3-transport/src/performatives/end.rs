@@ -17,3 +17,18 @@ use crate::definitions::Error;
 pub struct End {
     pub error: Option<Error>,
 }
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp::{de::from_slice, ser::to_vec};
+
+    use super::*;
+
+    #[test]
+    fn test_serde_end() {
+        let end = End { error: None };
+        let buf = to_vec(&end).unwrap();
+        println!("{:x?}", &buf);
+        let end2: End = from_slice(&buf).unwrap();
+        println!("{:?}", end2);
+    }
+}

@@ -625,6 +625,7 @@ mod tests {
             Value::Int(3),
             Value::Int(4),
         ]));
+        println!("{:?}", val);
         assert_eq_on_value_vs_expected(val, expected);
     }
 
