@@ -3,7 +3,7 @@ use std::{convert::TryInto};
 
 use crate::{constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP, DESCRIPTOR, DESERIALIZE_DESCRIBED}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::ARRAY, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{EnumType, NewType, StructEncoding}, value::VALUE};
+    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::ARRAY, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{EnumType, FieldRole, NewType, StructEncoding}, value::VALUE};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -1291,14 +1291,6 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
         println!(">>> Debug VariantAccess::struct_variant");
         de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }
-}
-
-enum FieldRole {
-    // The descriptor bytes should be consumed
-    Descriptor,
-
-    // The bytes after the descriptor should be consumed
-    Fields,
 }
 
 /// A special visitor access to the `Described` type

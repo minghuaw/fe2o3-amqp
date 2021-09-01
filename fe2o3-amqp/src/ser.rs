@@ -2,7 +2,7 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{constants::DESCRIPTOR, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{IsArrayElement, NewType, StructEncoding}, value::U32_MAX_AS_USIZE};
+use crate::{constants::DESCRIPTOR, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{FieldRole, IsArrayElement, NewType, StructEncoding}, value::U32_MAX_AS_USIZE};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -1051,11 +1051,6 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleSerializer<'a, W> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         <Self as ser::SerializeTuple>::end(self)
     }
-}
-
-pub enum FieldRole {
-    Descriptor,
-    Fields,
 }
 
 pub struct TupleStructSerializer<'a, W: 'a> {

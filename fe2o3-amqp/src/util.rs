@@ -35,6 +35,12 @@ impl Default for EnumType {
     }
 }
 
+/// Described type has the descriptor as the first field
+pub enum FieldRole {
+    Descriptor,
+    Fields,
+}
+
 #[repr(u8)]
 pub enum StructEncoding {
     None,
