@@ -16,6 +16,15 @@ pub enum DeliveryState {
     Received(Received),
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Outcome {
+    Accepted(Accepted),
+    Rejected(Rejected),
+    Released(Released),
+    Modified(Modified),
+}
+
 /// 3.4.1 Received
 ///
 /// <type name="received" class="composite" source="list" provides="delivery-state">

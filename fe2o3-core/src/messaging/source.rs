@@ -3,6 +3,8 @@ use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::{Seconds};
 
+use super::{Address, DistributionMode, FilterSet, NodeProperties, Outcome, TerminusDurability, TerminusExpiryPolicy};
+
 /// 3.5.3 Source
 /// 
 /// <type name="source" class="composite" source="list" provides="source">

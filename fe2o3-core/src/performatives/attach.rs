@@ -6,12 +6,9 @@ use fe2o3_amqp::{
     value::Value,
 };
 
-use crate::{
-    definitions::{
+use crate::{definitions::{
         DeliveryTag, Fields, Handle, ReceivervSettleMode, Role, SenderSettleMode, SequenceNo,
-    },
-    Source, Target,
-};
+    }, messaging::{Source, Target}};
 
 #[derive(Debug, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
