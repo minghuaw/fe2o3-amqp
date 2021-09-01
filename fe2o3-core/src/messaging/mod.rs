@@ -1,6 +1,6 @@
+use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 use fe2o3_amqp::types::Symbol;
-use serde::{Serialize, Deserialize};
-use fe2o3_amqp::macros::{SerializeComposite, DeserializeComposite};
+use serde::{Deserialize, Serialize};
 
 /* -------------------------- 3.2 Messaging Format -------------------------- */
 mod format;
@@ -31,7 +31,6 @@ pub use filter_set::*;
 
 use crate::definitions::Fields;
 
-
 /// 3.5.9 Node Properties
 /// Properties of a node.
 /// <type name="node-properties" class="restricted" source="fields"/>
@@ -39,12 +38,12 @@ use crate::definitions::Fields;
 pub struct NodeProperties(Fields);
 
 // The lifetime of a dynamically generated node.
-// Definitionally, the lifetime will never be less than the lifetime 
-// of the link which caused its creation, however it is possible to 
-// extend the lifetime of dynamically created node using a lifetime 
-// policy. The value of this entry MUST be of a type which provides 
-// the lifetime-policy archetype. The following standard lifetime-policies 
-// are defined below: delete-on-close, delete-on-no-links, 
+// Definitionally, the lifetime will never be less than the lifetime
+// of the link which caused its creation, however it is possible to
+// extend the lifetime of dynamically created node using a lifetime
+// policy. The value of this entry MUST be of a type which provides
+// the lifetime-policy archetype. The following standard lifetime-policies
+// are defined below: delete-on-close, delete-on-no-links,
 // delete-on-no-messages or delete-on-no-links-or-messages.
 //
 // TODO: impl Into Fields
@@ -69,7 +68,7 @@ pub struct SupportedDistMode(Vec<Symbol>);
     code = 0x0000_0000_0000_002b,
     encoding = "list"
 )]
-pub struct DeleteOnClose { }
+pub struct DeleteOnClose {}
 
 /// 3.5.11 Delete On No Links
 /// Lifetime of dynamic node scoped to existence of links to the node
@@ -82,7 +81,7 @@ pub struct DeleteOnClose { }
     code = 0x0000_0000_0000_002c,
     encoding = "list"
 )]
-pub struct DeleteOnNoLinks { }
+pub struct DeleteOnNoLinks {}
 
 /// 3.5.12 Delete On No Messages
 /// Lifetime of dynamic node scoped to existence of messages on the node.
@@ -95,7 +94,7 @@ pub struct DeleteOnNoLinks { }
     code = 0x0000_0000_0000_002d,
     encoding = "list"
 )]
-pub struct DeleteOnNoMessages { }
+pub struct DeleteOnNoMessages {}
 
 /// 3.5.13 Delete On No Links Or Messages
 /// Lifetime of node scoped to existence of messages on or links to the node.
@@ -108,4 +107,4 @@ pub struct DeleteOnNoMessages { }
     code = 0x0000_0000_0000_002e,
     encoding = "list"
 )]
-pub struct DeleteOnNoLinksOrMessages { }
+pub struct DeleteOnNoLinksOrMessages {}

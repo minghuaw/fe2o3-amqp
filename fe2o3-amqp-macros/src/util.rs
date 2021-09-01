@@ -58,19 +58,18 @@ pub(crate) fn convert_to_case(
 }
 
 pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
-    ctx
-    .attrs
-    .iter()
-    .find_map(|attr| match attr.path.get_ident() {
-        Some(i) => {
-            if i.to_string() == ident_str {
-                Some(i.span())
-            } else {
-                None
+    ctx.attrs
+        .iter()
+        .find_map(|attr| match attr.path.get_ident() {
+            Some(i) => {
+                if i.to_string() == ident_str {
+                    Some(i.span())
+                } else {
+                    None
+                }
             }
-        }
-        None => None,
-    })
+            None => None,
+        })
 }
 
 /// Buffer the Null (for None value)

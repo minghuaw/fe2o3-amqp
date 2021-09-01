@@ -1,4 +1,4 @@
-use serde::{ser, de};
+use serde::{de, ser};
 
 /// 3.5.6 Terminus Expiry Policy
 /// <type name="terminus-expiry-policy" class="restricted" source="symbol">
@@ -7,7 +7,7 @@ use serde::{ser, de};
 ///     <choice name="connection-close" value="connection-close"/>
 ///     <choice name="never" value="never"/>
 /// </type>
-/// 
+///
 /// TODO: manually implement serialize and deserialize
 #[derive(Debug)]
 pub enum TerminusExpiryPolicy {
@@ -20,7 +20,8 @@ pub enum TerminusExpiryPolicy {
 impl ser::Serialize for TerminusExpiryPolicy {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-            S: serde::Serializer {
+        S: serde::Serializer,
+    {
         todo!()
     }
 }
@@ -28,7 +29,8 @@ impl ser::Serialize for TerminusExpiryPolicy {
 impl<'de> de::Deserialize<'de> for TerminusExpiryPolicy {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         todo!()
     }
 }

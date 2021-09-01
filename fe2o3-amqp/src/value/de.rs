@@ -288,7 +288,7 @@ impl Deserializer {
         Self {
             new_type: NewType::Array,
             enum_type: Default::default(),
-            value
+            value,
         }
     }
 }
@@ -533,7 +533,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 Value::Binary(v) => visitor.visit_byte_buf(v.into_vec()),
                 _ => Err(Error::InvalidValue),
             },
-            
+
             _ => Err(Error::InvalidValue),
         }
     }
@@ -562,9 +562,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 Value::Uuid(v) => visitor.visit_bytes(&v.into_inner()),
                 _ => Err(Error::InvalidValue),
             },
-            _ => {
-                self.deserialize_byte_buf(visitor)
-            }
+            _ => self.deserialize_byte_buf(visitor),
         }
     }
 
@@ -655,7 +653,10 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             NewType::None => match self.value {
                 Value::List(v) => {
                     let iter = v.into_iter();
-                    visitor.visit_seq(SeqAccess { iter, seq_type: SeqType::List })
+                    visitor.visit_seq(SeqAccess {
+                        iter,
+                        seq_type: SeqType::List,
+                    })
                 }
                 _ => Err(Error::InvalidValue),
             },
@@ -664,7 +665,10 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                     println!("Value::Array");
                     let v = v.into_inner();
                     let iter = v.into_iter();
-                    visitor.visit_seq(SeqAccess { iter, seq_type: SeqType::Array })
+                    visitor.visit_seq(SeqAccess {
+                        iter,
+                        seq_type: SeqType::Array,
+                    })
                 }
                 _ => Err(Error::InvalidValue),
             },
@@ -815,7 +819,7 @@ impl<'de> de::SeqAccess<'de> for SeqAccess {
 
     // fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
     // where
-    //     T: serde::Deserialize<'de>, 
+    //     T: serde::Deserialize<'de>,
     // {
     //     match self.iter.next() {
     //         Some(elem) => {
@@ -825,7 +829,7 @@ impl<'de> de::SeqAccess<'de> for SeqAccess {
     //             }
     //         },
     //         None => Ok(None)
-    //     }    
+    //     }
     // }
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -837,9 +841,9 @@ impl<'de> de::SeqAccess<'de> for SeqAccess {
                 println!("next_element_seed");
                 match self.seq_type {
                     SeqType::List => seed.deserialize(Deserializer::new(elem)).map(Some),
-                    SeqType::Array => seed.deserialize(Deserializer::array(elem)).map(Some)
+                    SeqType::Array => seed.deserialize(Deserializer::array(elem)).map(Some),
                 }
-            },
+            }
             None => Ok(None),
         }
     }
@@ -956,7 +960,7 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
 mod tests {
     use serde::de;
 
-    use crate::value::{Value, ser::to_value};
+    use crate::value::{ser::to_value, Value};
 
     use super::from_value;
 
@@ -981,7 +985,7 @@ mod tests {
 
     #[test]
     fn test_decimal32_from_value() {
-        use crate::types::{Dec32};
+        use crate::types::Dec32;
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_value(&expected).unwrap();
@@ -990,7 +994,7 @@ mod tests {
 
     #[test]
     fn test_decimal64_from_value() {
-        use crate::types::{Dec64};
+        use crate::types::Dec64;
 
         let expected = Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]);
         let buf = to_value(&expected).unwrap();
@@ -999,7 +1003,7 @@ mod tests {
 
     #[test]
     fn test_decimal128_from_value() {
-        use crate::types::{Dec128};
+        use crate::types::Dec128;
 
         let expected = Dec128::from([1u8; 16]);
         let buf = to_value(&expected).unwrap();
@@ -1008,7 +1012,7 @@ mod tests {
 
     #[test]
     fn test_uuid_from_value() {
-        use crate::types::{Uuid};
+        use crate::types::Uuid;
 
         let expected = Uuid::from([3u8; 16]);
         let buf = to_value(&expected).unwrap();
@@ -1017,7 +1021,7 @@ mod tests {
 
     #[test]
     fn test_timestamp_from_value() {
-        use crate::types::{Timestamp};
+        use crate::types::Timestamp;
 
         let expected = Timestamp::from(13131313);
         let buf = to_value(&expected).unwrap();
@@ -1026,7 +1030,6 @@ mod tests {
 
     #[test]
     fn test_deserialize_list() {
-
         let expected = vec![1i32, 2, 3, 4];
         let buf = to_value(&expected).unwrap();
         println!("{:x?}", &buf);

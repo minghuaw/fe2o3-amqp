@@ -2,7 +2,15 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{constants::DESCRIPTOR, constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}, error::Error, format_code::EncodingCodes, types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{FieldRole, IsArrayElement, NewType, StructEncoding}, value::U32_MAX_AS_USIZE};
+use crate::{
+    constants::DESCRIPTOR,
+    constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
+    error::Error,
+    format_code::EncodingCodes,
+    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+    value::U32_MAX_AS_USIZE,
+};
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -1104,17 +1112,18 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                 match self.se.struct_encoding {
                     StructEncoding::None => {
                         // serialize regualr tuple struct as a list like in tuple
-                        let mut serializer = Serializer::new(&mut self.buf, self.se.is_array_elem.clone());
+                        let mut serializer =
+                            Serializer::new(&mut self.buf, self.se.is_array_elem.clone());
                         value.serialize(&mut serializer)
-                    },
+                    }
                     StructEncoding::DescribedBasic => {
                         // simply serialize the value without buffering
                         value.serialize(self.as_mut())
-                    },
+                    }
                     StructEncoding::DescribedList => {
                         let mut serializer = Serializer::described_list(&mut self.buf);
                         value.serialize(&mut serializer)
-                    },
+                    }
                     StructEncoding::DescribedMap => {
                         unreachable!()
                     }
@@ -1133,19 +1142,17 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                     self.buf,
                     &IsArrayElement::False,
                 )
-            },
+            }
             StructEncoding::DescribedBasic => {
                 // simply serialize the value without buffering
                 Ok(())
-            },
-            StructEncoding::DescribedList => {
-                write_list(
-                    &mut self.se.writer,
-                    self.count,
-                    self.buf,
-                    &IsArrayElement::False,
-                )
-            },
+            }
+            StructEncoding::DescribedList => write_list(
+                &mut self.se.writer,
+                self.count,
+                self.buf,
+                &IsArrayElement::False,
+            ),
             StructEncoding::DescribedMap => {
                 unreachable!()
             }
@@ -1214,12 +1221,11 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
             match self.se.struct_encoding {
                 StructEncoding::None => {
                     // normal struct will be serialized as a list
-                    let mut serializer = Serializer::new(&mut self.buf, self.se.is_array_elem.clone());
+                    let mut serializer =
+                        Serializer::new(&mut self.buf, self.se.is_array_elem.clone());
                     value.serialize(&mut serializer)
-                },
-                StructEncoding::DescribedBasic => {
-                    value.serialize(self.as_mut())
-                },
+                }
+                StructEncoding::DescribedBasic => value.serialize(self.as_mut()),
                 StructEncoding::DescribedList => {
                     let mut serializer = Serializer::described_list(&mut self.buf);
                     value.serialize(&mut serializer)
@@ -1238,7 +1244,12 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
         match self.se.struct_encoding {
             StructEncoding::None => {
                 // TODO: deserialize a regular struct from a list
-                write_list(&mut self.se.writer, self.count, self.buf, &self.se.is_array_elem)
+                write_list(
+                    &mut self.se.writer,
+                    self.count,
+                    self.buf,
+                    &self.se.is_array_elem,
+                )
             }
             StructEncoding::DescribedBasic => Ok(()),
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
@@ -1336,7 +1347,11 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 mod test {
     use std::collections::BTreeMap;
 
-    use crate::{format_code::EncodingCodes, types::{Descriptor, Symbol}, types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid}};
+    use crate::{
+        format_code::EncodingCodes,
+        types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid},
+        types::{Descriptor, Symbol},
+    };
 
     use super::*;
 
@@ -1837,7 +1852,7 @@ mod test {
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
             1,
-            EncodingCodes::List0 as u8
+            EncodingCodes::List0 as u8,
         ];
 
         #[derive(Debug, SerializeComposite)]
@@ -1850,7 +1865,7 @@ mod test {
 
         #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code = 0x01, encoding = "list")]
-        struct Foo3{}
+        struct Foo3 {}
 
         let foo1 = Foo1;
         let buf1 = to_vec(&foo1).unwrap();
@@ -1860,7 +1875,7 @@ mod test {
         let buf2 = to_vec(&foo2).unwrap();
         assert_eq!(buf2, expected);
 
-        let foo3 = Foo3{};
+        let foo3 = Foo3 {};
         let buf3 = to_vec(&foo3).unwrap();
         assert_eq!(buf3, expected);
     }
@@ -1877,7 +1892,7 @@ mod test {
         #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code = 0x1, encoding = "basic")]
         struct Wrapper2 {
-            map: BTreeMap<Symbol, i32>
+            map: BTreeMap<Symbol, i32>,
         }
 
         let mut map = BTreeMap::new();
@@ -1912,7 +1927,7 @@ mod test {
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
             0x13,
-            EncodingCodes::List0 as u8
+            EncodingCodes::List0 as u8,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
@@ -1927,7 +1942,7 @@ mod test {
             EncodingCodes::List8 as u8,
             2,
             1,
-            EncodingCodes::BooleanTrue as u8
+            EncodingCodes::BooleanTrue as u8,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
@@ -1944,7 +1959,7 @@ mod test {
             2,
             EncodingCodes::BooleanTrue as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
@@ -1961,7 +1976,7 @@ mod test {
             2,
             EncodingCodes::Null as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
@@ -1975,7 +1990,7 @@ mod test {
         let bar = Bar {
             is_fool: None,
             mandatory: 0x13,
-            a: None
+            a: None,
         };
         let expected = vec![
             EncodingCodes::DescribedType as u8,
@@ -1986,7 +2001,7 @@ mod test {
             2,
             EncodingCodes::Null as u8,
             EncodingCodes::SmallUint as u8,
-            0x13
+            0x13,
         ];
         assert_eq_on_serialized_vs_expected(bar, expected);
     }
@@ -1998,18 +2013,18 @@ mod test {
 
         #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code = 0x13, encoding = "list")]
-        struct Foo (Option<bool>, Option<i32>);
+        struct Foo(Option<bool>, Option<i32>);
 
-        let foo = Foo (None, None);
+        let foo = Foo(None, None);
         let expected = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
             0x13,
-            EncodingCodes::List0 as u8
+            EncodingCodes::List0 as u8,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
-        let foo = Foo (Some(true), None);
+        let foo = Foo(Some(true), None);
         let expected = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
@@ -2017,11 +2032,11 @@ mod test {
             EncodingCodes::List8 as u8,
             2,
             1,
-            EncodingCodes::BooleanTrue as u8
+            EncodingCodes::BooleanTrue as u8,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
-        let foo = Foo (Some(true), Some(1));
+        let foo = Foo(Some(true), Some(1));
         let expected = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
@@ -2031,11 +2046,11 @@ mod test {
             2,
             EncodingCodes::BooleanTrue as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
 
-        let foo = Foo (None, Some(1));
+        let foo = Foo(None, Some(1));
         let expected = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
@@ -2045,7 +2060,7 @@ mod test {
             2,
             EncodingCodes::Null as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         assert_eq_on_serialized_vs_expected(foo, expected);
     }

@@ -41,8 +41,8 @@ impl<T: ser::Serialize> ser::Serialize for Array<T> {
     }
 }
 
-struct Visitor<T> { 
-    marker: PhantomData<T>
+struct Visitor<T> {
+    marker: PhantomData<T>,
 }
 
 impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
@@ -54,18 +54,18 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
     where
-        A: de::SeqAccess<'de>, 
+        A: de::SeqAccess<'de>,
     {
         let mut vec = Vec::new();
         while let Some(elem) = seq.next_element()? {
             vec.push(elem);
-        };
+        }
         Ok(Array::from(vec))
     }
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de>, 
+        D: serde::Deserializer<'de>,
     {
         let vec: Vec<T> = de::Deserialize::deserialize(deserializer)?;
         Ok(Array::from(vec))
@@ -75,8 +75,13 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
 impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Array<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(ARRAY, Visitor { marker: PhantomData })
+        deserializer.deserialize_newtype_struct(
+            ARRAY,
+            Visitor {
+                marker: PhantomData,
+            },
+        )
     }
 }

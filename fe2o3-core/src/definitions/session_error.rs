@@ -49,13 +49,15 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         self.visit_str(v.as_str())
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         let val = match v {
             "amqp:session:window-violation" => Field::WindowViolation,
             "amqp:session:errant-link" => Field::ErrantLink,

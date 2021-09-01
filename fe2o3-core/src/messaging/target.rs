@@ -1,7 +1,7 @@
-use fe2o3_amqp::types::{Boolean, Symbol};
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
+use fe2o3_amqp::types::{Boolean, Symbol};
 
-use crate::definitions::{Seconds};
+use crate::definitions::Seconds;
 
 use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
 
@@ -31,5 +31,5 @@ pub struct Target {
     timeout: Seconds,
     dynamic: Boolean,
     dynamic_node_properties: Option<NodeProperties>,
-    capabilities: Vec<Symbol>
+    capabilities: Vec<Symbol>,
 }

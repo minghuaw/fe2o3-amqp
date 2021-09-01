@@ -9,7 +9,7 @@ use fe2o3_amqp::{
 };
 
 /// 2.8.1 Role
-/// 
+///
 /// <type name="role" class="restricted" source="boolean">
 ///     <choice name="sender" value="false"/>
 ///     <choice name="receiver" value="true"/>

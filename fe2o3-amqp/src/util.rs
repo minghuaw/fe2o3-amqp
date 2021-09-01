@@ -49,7 +49,6 @@ pub enum StructEncoding {
     DescribedBasic,
 }
 
-
 impl Default for StructEncoding {
     fn default() -> Self {
         Self::None

@@ -97,7 +97,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         Ok(Timestamp::from(v))
     }
 

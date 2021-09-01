@@ -20,8 +20,6 @@ mod format;
 
 pub use serde;
 
-pub use ser::to_vec;
 pub use de::{from_reader, from_slice};
-pub use value::{
-    ser::to_value, de::from_value
-};
+pub use ser::to_vec;
+pub use value::{de::from_value, ser::to_value};

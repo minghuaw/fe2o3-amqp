@@ -72,10 +72,9 @@ mod dec32 {
 
         fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
-            E: de::Error, 
+            E: de::Error,
         {
-            Dec32::try_from(v)
-                .map_err(|err| de::Error::custom(err.to_string()))
+            Dec32::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
         }
 
         // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -155,10 +154,9 @@ mod dec64 {
 
         fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
-            E: de::Error, 
+            E: de::Error,
         {
-            Dec64::try_from(v)
-                .map_err(|err| de::Error::custom(err.to_string()))
+            Dec64::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
         }
 
         // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -238,10 +236,9 @@ mod dec128 {
 
         fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
-            E: de::Error, 
+            E: de::Error,
         {
-            Dec128::try_from(v)
-                .map_err(|err| de::Error::custom(err.to_string()))
+            Dec128::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
         }
 
         // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>

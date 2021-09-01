@@ -3,7 +3,10 @@ use fe2o3_amqp::{
     types::Boolean,
 };
 
-use crate::{definitions::{DeliveryNumber, Role}, messaging::DeliveryState};
+use crate::{
+    definitions::{DeliveryNumber, Role},
+    messaging::DeliveryState,
+};
 
 #[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]

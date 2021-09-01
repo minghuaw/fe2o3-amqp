@@ -1,4 +1,4 @@
-use serde::{ser, de};
+use serde::{de, ser};
 
 /// 3.5.7 Standard Distribution Mode
 /// Link distribution policy.
@@ -17,7 +17,8 @@ pub enum DistributionMode {
 impl ser::Serialize for DistributionMode {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-            S: serde::Serializer {
+        S: serde::Serializer,
+    {
         todo!()
     }
 }
@@ -25,7 +26,8 @@ impl ser::Serialize for DistributionMode {
 impl<'de> de::Deserialize<'de> for DistributionMode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         todo!()
     }
 }

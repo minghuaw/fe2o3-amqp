@@ -77,15 +77,15 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         self.visit_str(&v)
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
-        {
+        E: de::Error,
+    {
         let val = match v {
             "amqp:internal-error" => Field::InternalError,
             "amqp:not-found" => Field::NotFound,
@@ -103,7 +103,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             _ => return Err(de::Error::custom("Invalid symbol value for AmqpError")),
         };
 
-        Ok(val)   
+        Ok(val)
     }
 }
 

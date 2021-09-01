@@ -1,12 +1,15 @@
-use fe2o3_amqp::types::{Boolean, Symbol};
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
+use fe2o3_amqp::types::{Boolean, Symbol};
 
-use crate::definitions::{Seconds};
+use crate::definitions::Seconds;
 
-use super::{Address, DistributionMode, FilterSet, NodeProperties, Outcome, TerminusDurability, TerminusExpiryPolicy};
+use super::{
+    Address, DistributionMode, FilterSet, NodeProperties, Outcome, TerminusDurability,
+    TerminusExpiryPolicy,
+};
 
 /// 3.5.3 Source
-/// 
+///
 /// <type name="source" class="composite" source="list" provides="source">
 ///     <descriptor name="amqp:source:list" code="0x00000000:0x00000028"/>
 ///     <field name="address" type="*" requires="address"/>
@@ -39,5 +42,5 @@ pub struct Source {
     filter: Option<FilterSet>,
     default_outcome: Outcome,
     outcomes: Vec<Symbol>,
-    capabilities: Vec<Symbol>
-}   
+    capabilities: Vec<Symbol>,
+}

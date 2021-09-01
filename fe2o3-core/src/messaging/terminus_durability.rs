@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// 3.5.5 Terminus Durability
 /// Durability policy for a terminus.
@@ -11,5 +11,5 @@ use serde::{Serialize, Deserialize};
 pub enum TerminusDurability {
     None,
     Configuration,
-    UnsettledState
+    UnsettledState,
 }

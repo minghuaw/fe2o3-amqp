@@ -1,7 +1,10 @@
 use quote::quote;
-use syn::{DeriveInput, Fields, spanned::Spanned};
+use syn::{spanned::Spanned, DeriveInput, Fields};
 
-use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, get_span_of, macro_rules_unwrap_or_none, parse_described_attr}};
+use crate::{
+    util::{convert_to_case, get_span_of, macro_rules_unwrap_or_none, parse_described_attr},
+    AmqpContractAttr, EncodingType,
+};
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
@@ -48,22 +51,36 @@ fn expand_deserialize_on_datastruct(
     };
 
     match &data.fields {
-        Fields::Named(fields) => {
-            Ok(expand_deserialize_struct(ident, &expecting, &evaluate_descriptor, &attr.encoding, &attr.rename_field, fields, ctx)?)
-        },
-        Fields::Unnamed(fields) => {
-            Ok(expand_deserialize_tuple_struct(ident, name, &evaluate_descriptor, &attr.encoding, fields, ctx)?)
-        },
-        Fields::Unit => {
-            Ok(expand_deserialize_unit_struct(ident, &expecting, &evaluate_descriptor, &attr.encoding, ctx)?)
-        }
+        Fields::Named(fields) => Ok(expand_deserialize_struct(
+            ident,
+            &expecting,
+            &evaluate_descriptor,
+            &attr.encoding,
+            &attr.rename_field,
+            fields,
+            ctx,
+        )?),
+        Fields::Unnamed(fields) => Ok(expand_deserialize_tuple_struct(
+            ident,
+            name,
+            &evaluate_descriptor,
+            &attr.encoding,
+            fields,
+            ctx,
+        )?),
+        Fields::Unit => Ok(expand_deserialize_unit_struct(
+            ident,
+            &expecting,
+            &evaluate_descriptor,
+            &attr.encoding,
+            ctx,
+        )?),
     }
 }
 
-
 fn impl_visit_seq_for_unit_struct(
     ident: &syn::Ident,
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote! {
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -83,9 +100,9 @@ fn impl_visit_seq_for_unit_struct(
 }
 
 fn expand_deserialize_unit_struct(
-    ident: &syn::Ident, 
-    expecting: &str, 
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    ident: &syn::Ident,
+    expecting: &str,
+    evaluate_descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
@@ -93,12 +110,18 @@ fn expand_deserialize_unit_struct(
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-            return Err(syn::Error::new(span, "Basic encoding is not supported for unit struct"))
-        },
+            return Err(syn::Error::new(
+                span,
+                "Basic encoding is not supported for unit struct",
+            ));
+        }
         EncodingType::Map => {
             let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-            return Err(syn::Error::new(span, "Map encoding is not supported for unit struct"))
-        },
+            return Err(syn::Error::new(
+                span,
+                "Map encoding is not supported for unit struct",
+            ));
+        }
     };
     let visit_seq = impl_visit_seq_for_unit_struct(ident, evaluate_descriptor);
     let len = 0usize;
@@ -118,7 +141,7 @@ fn expand_deserialize_unit_struct(
                         formatter.write_str(#expecting)
                     }
 
-                    #visit_seq            
+                    #visit_seq
                 }
 
                 // DESCRIPTOR is included here for compatibility with other deserializer
@@ -137,7 +160,7 @@ fn impl_visit_seq_for_tuple_struct(
     ident: &syn::Ident,
     field_idents: &Vec<syn::Ident>,
     field_types: &Vec<&syn::Type>,
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
@@ -162,9 +185,9 @@ fn impl_visit_seq_for_tuple_struct(
 }
 
 fn expand_deserialize_tuple_struct(
-    ident: &syn::Ident, 
+    ident: &syn::Ident,
     expecting: &str,
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    evaluate_descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     fields: &syn::FieldsUnnamed,
     ctx: &DeriveInput,
@@ -176,13 +199,19 @@ fn expand_deserialize_tuple_struct(
                 quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
             } else {
                 let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-                return Err(syn::Error::new(span, "Basic encoding is not supported for tuple struct"))
+                return Err(syn::Error::new(
+                    span,
+                    "Basic encoding is not supported for tuple struct",
+                ));
             }
-        },
+        }
         EncodingType::Map => {
             let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-            return Err(syn::Error::new(span, "Map encoding is not supported for tuple struct"))
-        },
+            return Err(syn::Error::new(
+                span,
+                "Map encoding is not supported for tuple struct",
+            ));
+        }
     };
     let field_idents: Vec<syn::Ident> = fields
         .unnamed
@@ -191,9 +220,10 @@ fn expand_deserialize_tuple_struct(
         .map(|(i, f)| (format!("field{}", i), f.span()))
         .map(|(id, span)| syn::Ident::new(&id, span))
         .collect();
-    
+
     let field_types: Vec<&syn::Type> = fields.unnamed.iter().map(|f| &f.ty).collect();
-    let visit_seq = impl_visit_seq_for_tuple_struct(ident, &field_idents, &field_types, evaluate_descriptor);
+    let visit_seq =
+        impl_visit_seq_for_tuple_struct(ident, &field_idents, &field_types, evaluate_descriptor);
     let len = field_idents.len();
 
     let token = quote! {
@@ -211,7 +241,7 @@ fn expand_deserialize_tuple_struct(
                         formatter.write_str(#expecting)
                     }
 
-                    #visit_seq            
+                    #visit_seq
                 }
 
                 // DESCRIPTOR is included here for compatibility with other deserializer
@@ -227,9 +257,9 @@ fn expand_deserialize_tuple_struct(
 }
 
 fn expand_deserialize_struct(
-    ident: &syn::Ident, 
+    ident: &syn::Ident,
     expecting: &str,
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    evaluate_descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     rename_field: &str,
     fields: &syn::FieldsNamed,
@@ -238,26 +268,29 @@ fn expand_deserialize_struct(
     let len = fields.named.len();
     let struct_name = match encoding {
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
-        EncodingType::Basic => {
-            match len {
-                0 => {
-                    let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-                    return Err(syn::Error::new(span, "Basic encoding is not supported on unit struct"))
-                },
-                _ => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+        EncodingType::Basic => match len {
+            0 => {
+                let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+                return Err(syn::Error::new(
+                    span,
+                    "Basic encoding is not supported on unit struct",
+                ));
             }
+            _ => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
         },
-        EncodingType::Map => {
-            match len {
-                0 => {
-                    let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-                    return Err(syn::Error::new(span, "Map encoding on unit struct is not implemented"))
-                }
-                _ => quote!(fe2o3_amqp::constants::DESCRIBED_MAP)
+        EncodingType::Map => match len {
+            0 => {
+                let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+                return Err(syn::Error::new(
+                    span,
+                    "Map encoding on unit struct is not implemented",
+                ));
             }
+            _ => quote!(fe2o3_amqp::constants::DESCRIBED_MAP),
         },
     };
-    let field_idents: Vec<syn::Ident> = fields.named
+    let field_idents: Vec<syn::Ident> = fields
+        .named
         .iter()
         .map(|f| f.ident.clone().unwrap())
         .collect();
@@ -269,10 +302,17 @@ fn expand_deserialize_struct(
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
 
-    let visit_seq = impl_visit_seq_for_struct(ident, &field_idents, &field_types, evaluate_descriptor);
+    let visit_seq =
+        impl_visit_seq_for_struct(ident, &field_idents, &field_types, evaluate_descriptor);
     let visit_map = match len {
-        0 => quote!{},
-        _ => impl_visit_map(ident, &field_idents, &field_names, &field_types, evaluate_descriptor)
+        0 => quote! {},
+        _ => impl_visit_map(
+            ident,
+            &field_idents,
+            &field_names,
+            &field_types,
+            evaluate_descriptor,
+        ),
     };
 
     let token = quote! {
@@ -293,7 +333,7 @@ fn expand_deserialize_struct(
                         formatter.write_str(#expecting)
                     }
 
-                    #visit_seq            
+                    #visit_seq
 
                     #visit_map
                 }
@@ -367,7 +407,7 @@ fn impl_visit_seq_for_struct(
     ident: &syn::Ident,
     field_idents: &Vec<syn::Ident>,
     field_types: &Vec<&syn::Type>,
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
@@ -383,7 +423,7 @@ fn impl_visit_seq_for_struct(
             #evaluate_descriptor
 
             #unwrap_or_none
-            
+
             #( unwrap_or_none!(#field_idents, seq, #field_types); )*
 
             Ok( #ident{ #(#field_idents, )* } )
@@ -396,7 +436,7 @@ fn impl_visit_map(
     field_idents: &Vec<syn::Ident>,
     field_names: &Vec<String>,
     field_types: &Vec<&syn::Type>,
-    evaluate_descriptor: &proc_macro2::TokenStream, 
+    evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote! {
         fn visit_map<A>(self, mut __map: A)-> Result<Self::Value, A::Error>

@@ -65,10 +65,9 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
-        Uuid::try_from(v)
-            .map_err(|err| de::Error::custom(err.to_string()))
+        Uuid::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
     }
 
     // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>

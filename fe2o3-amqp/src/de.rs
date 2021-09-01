@@ -1,9 +1,22 @@
-use serde::{de::{self}};
-use std::{convert::TryInto};
+use serde::de::{self};
+use std::convert::TryInto;
 
-use crate::{constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP, DESCRIPTOR, DESERIALIZE_DESCRIBED}, error::Error, fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH}, format::{
+use crate::{
+    constants::{
+        DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP, DESCRIPTOR, DESERIALIZE_DESCRIBED,
+    },
+    error::Error,
+    fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
+    format::{
         OFFSET_ARRAY32, OFFSET_ARRAY8, OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8,
-    }, format_code::EncodingCodes, read::{IoReader, Read, SliceReader}, types::ARRAY, types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID}, util::{EnumType, FieldRole, NewType, StructEncoding}, value::VALUE};
+    },
+    format_code::EncodingCodes,
+    read::{IoReader, Read, SliceReader},
+    types::ARRAY,
+    types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    util::{EnumType, FieldRole, NewType, StructEncoding},
+    value::VALUE,
+};
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
@@ -277,9 +290,9 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     //     }
     // }
 
-    fn parse_decimal<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
-    where 
-        V: de::Visitor<'de>
+    fn parse_decimal<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    where
+        V: de::Visitor<'de>,
     {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Decimal32 => self.reader.forward_read_bytes(DECIMAL32_WIDTH, visitor),
@@ -289,8 +302,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
-    fn parse_uuid<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
-    where 
+    fn parse_uuid<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    where
         V: de::Visitor<'de>,
     {
         match self.get_elem_code_or_read_format_code()? {
@@ -338,8 +351,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     {
         // consume the EncodingCodes::Described byte
         match self.reader.next()?.try_into()? {
-            EncodingCodes::DescribedType => {},
-            _ => return Err(Error::InvalidFormatCode)
+            EncodingCodes::DescribedType => {}
+            _ => return Err(Error::InvalidFormatCode),
         };
 
         // place descriptor in a separate buf
@@ -357,15 +370,15 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_described_basic<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
-    where 
+    fn parse_described_basic<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug parse_described_basic");
         // consume the EncodingCodes::Described byte
         match self.reader.next()?.try_into()? {
-            EncodingCodes::DescribedType => {},
-            _ => return Err(Error::InvalidFormatCode)
+            EncodingCodes::DescribedType => {}
+            _ => return Err(Error::InvalidFormatCode),
         };
 
         // place descriptor in a separate buf
@@ -375,8 +388,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_described_identifier<V>(&mut self, visitor: V) -> Result<V::Value, Error> 
-    where 
+    fn parse_described_identifier<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    where
         V: de::Visitor<'de>,
     {
         let buf = self.reader.peek_bytes(2)?;
@@ -387,27 +400,25 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let size = _buf[2] as usize;
                 let slice = self.reader.peek_bytes(3 + size)?;
                 visitor.visit_bytes(slice)
-            },
+            }
             EncodingCodes::Sym32 => {
-                let _buf = self.reader.peek_bytes(2+4)?;
+                let _buf = self.reader.peek_bytes(2 + 4)?;
                 let mut size_bytes = [0u8; 4];
                 size_bytes.copy_from_slice(&_buf[2..]);
                 let size = u32::from_be_bytes(size_bytes) as usize;
                 let slice = self.reader.peek_bytes(size + 6)?;
                 visitor.visit_bytes(slice)
-            },
-            EncodingCodes::Ulong0 => {
-                visitor.visit_bytes(buf)
-            },
+            }
+            EncodingCodes::Ulong0 => visitor.visit_bytes(buf),
             EncodingCodes::SmallUlong => {
                 let slice = self.reader.peek_bytes(3)?;
                 visitor.visit_bytes(slice)
-            },
+            }
             EncodingCodes::Ulong => {
                 let slice = self.reader.peek_bytes(2 + 4)?;
                 visitor.visit_bytes(slice)
-            },
-            _ => Err(Error::InvalidFormatCode)
+            }
+            _ => Err(Error::InvalidFormatCode),
         }
     }
 }
@@ -582,7 +593,7 @@ where
         match self.new_type {
             NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => {
-                // Leave symbol as visit_string because serde(untagged) 
+                // Leave symbol as visit_string because serde(untagged)
                 // on descriptor will visit String instead of str
                 self.new_type = NewType::None;
                 visitor.visit_string(self.parse_symbol()?)
@@ -643,7 +654,7 @@ where
             NewType::Uuid => {
                 self.new_type = NewType::None;
                 self.parse_uuid(visitor)
-            },
+            }
             _ => {
                 let len = match self.get_elem_code_or_read_format_code()? {
                     EncodingCodes::VBin8 => self.reader.next()? as usize,
@@ -668,7 +679,7 @@ where
                 // consume the Null byte
                 let _ = self.get_elem_code_or_read_format_code()?;
                 visitor.visit_none()
-            },
+            }
             _ => visitor.visit_some(self),
         }
     }
@@ -702,7 +713,7 @@ where
         println!(">>> Debug deserialize_newtype_struct {:?}", name);
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
-            // Leave symbol as visit_string because serde(untagged) 
+            // Leave symbol as visit_string because serde(untagged)
             // on descriptor will visit String instead of str
             self.deserialize_string(visitor)
         } else if name == DECIMAL32 {
@@ -900,10 +911,8 @@ where
             self.parse_described(visitor)
         } else {
             match self.get_elem_code_or_peek_byte()?.try_into()? {
-                EncodingCodes::DescribedType => {
-                    self.parse_described(visitor)
-                },
-                _ => self.deserialize_tuple(len, visitor)
+                EncodingCodes::DescribedType => self.parse_described(visitor),
+                _ => self.deserialize_tuple(len, visitor),
             }
         }
     }
@@ -933,23 +942,15 @@ where
                         EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                             self.deserialize_tuple(fields.len(), visitor)
                         }
-                        EncodingCodes::Map32 | EncodingCodes::Map8 => {
-                            self.deserialize_map(visitor)
-                        },
+                        EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
                         // EncodingCodes::DescribedType => self.parse_described(visitor),
                         _ => Err(Error::InvalidFormatCode),
                     }
                 }
-            },
-            StructEncoding::DescribedBasic => {
-                self.parse_described_basic(visitor)
-            },
-            StructEncoding::DescribedList => {
-                self.parse_described(visitor)
-            },
-            StructEncoding::DescribedMap => {
-                self.parse_described(visitor)
             }
+            StructEncoding::DescribedBasic => self.parse_described_basic(visitor),
+            StructEncoding::DescribedList => self.parse_described(visitor),
+            StructEncoding::DescribedMap => self.parse_described(visitor),
         }
     }
 
@@ -1035,16 +1036,16 @@ where
                     // FIXME: Enum variant currently are serialzied as list of with variant index and a list
                     EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                         self.deserialize_u32(visitor)
-                    },
+                    }
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                         println!(">>> Debug EncodingCodes::Sym32 | Sym8");
                         self.deserialize_newtype_struct(SYMBOL, visitor)
-                    },
+                    }
                     // Potentially using `Descriptor::Code` as identifier
                     EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                         self.deserialize_u64(visitor)
-                    },
+                    }
                     // // Other types should not be used to serialize identifiers
                     // EncodingCodes::DescribedType => {
                     //     self.parse_described_identifier(visitor)
@@ -1063,10 +1064,8 @@ where
         // The deserializer will only peek the next u8
         let code = self.reader.peek()?;
         match code.try_into()? {
-            EncodingCodes::DescribedType => {
-                self.parse_described_identifier(visitor)
-            },
-            _ => visitor.visit_u8(code)
+            EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
+            _ => visitor.visit_u8(code),
         }
     }
 }
@@ -1313,11 +1312,9 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
     }
 
     pub fn consume_list_header(&mut self) -> Result<usize, Error> {
-        // consume the list headers if 
+        // consume the list headers if
         match self.as_mut().get_elem_code_or_read_format_code()? {
-            EncodingCodes::List0 => {
-                Ok(0)
-            }
+            EncodingCodes::List0 => Ok(0),
             EncodingCodes::List8 => {
                 let _size = self.as_mut().reader.next()?;
                 let count = self.as_mut().reader.next()?;
@@ -1335,7 +1332,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
     }
 
     pub fn consume_map_header(&mut self) -> Result<usize, Error> {
-        // consume the list headers if 
+        // consume the list headers if
         match self.as_mut().get_elem_code_or_read_format_code()? {
             EncodingCodes::Map8 => {
                 let _size = self.as_mut().reader.next()?;
@@ -1381,15 +1378,15 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 let result = seed.deserialize(&mut deserializer).map(Some);
 
                 match self.de.struct_encoding {
-                    StructEncoding::None => { 
+                    StructEncoding::None => {
                         unreachable!()
                     }
                     StructEncoding::DescribedBasic => {
                         self.field_count = 1; // There should be only one wrapped element
-                    },
+                    }
                     StructEncoding::DescribedList => {
                         self.field_count = self.consume_list_header()?;
-                    },
+                    }
                     StructEncoding::DescribedMap => {
                         unreachable!()
                     }
@@ -1500,7 +1497,11 @@ mod tests {
 
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{format_code::EncodingCodes, ser::to_vec, types::{Descriptor, Symbol}};
+    use crate::{
+        format_code::EncodingCodes,
+        ser::to_vec,
+        types::{Descriptor, Symbol},
+    };
 
     use super::{from_reader, from_slice};
 
@@ -1656,7 +1657,7 @@ mod tests {
     #[test]
     fn test_deserialize_decimal32() {
         use crate::ser::to_vec;
-        use crate::types::{Dec32};
+        use crate::types::Dec32;
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1809,7 +1810,7 @@ mod tests {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
             #[amqp_contract(code = 13, encoding = "list")]
             struct Foo;
-    
+
             let foo = Foo;
             let buf = to_vec(&foo).unwrap();
             let foo2: Foo = from_slice(&buf).unwrap();
@@ -1820,7 +1821,7 @@ mod tests {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
             #[amqp_contract(code = 13, encoding = "list")]
             struct Foo();
-    
+
             let foo = Foo();
             let buf = to_vec(&foo).unwrap();
             let foo2: Foo = from_slice(&buf).unwrap();
@@ -1830,9 +1831,9 @@ mod tests {
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
             #[amqp_contract(code = 13, encoding = "list")]
-            struct Foo{}
-    
-            let foo = Foo{};
+            struct Foo {}
+
+            let foo = Foo {};
             let buf = to_vec(&foo).unwrap();
             let foo2: Foo = from_slice(&buf).unwrap();
             assert_eq!(foo, foo2);
@@ -1893,7 +1894,7 @@ mod tests {
     #[test]
     fn test_deserialize_composite_with_optional_fields() {
         use crate as fe2o3_amqp;
-        use crate::macros::{DeserializeComposite};
+        use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
         #[amqp_contract(code = 0x13, encoding = "list")]
@@ -1906,7 +1907,7 @@ mod tests {
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
             0x13,
-            EncodingCodes::List0 as u8
+            EncodingCodes::List0 as u8,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.is_fool.is_none());
@@ -1919,7 +1920,7 @@ mod tests {
             EncodingCodes::List8 as u8,
             2,
             1,
-            EncodingCodes::BooleanTrue as u8
+            EncodingCodes::BooleanTrue as u8,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.is_fool.is_some());
@@ -1934,7 +1935,7 @@ mod tests {
             2,
             EncodingCodes::BooleanTrue as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.is_fool.is_some());
@@ -1949,7 +1950,7 @@ mod tests {
             2,
             EncodingCodes::Null as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.is_fool.is_none());
@@ -1959,17 +1960,17 @@ mod tests {
     #[test]
     fn test_deserialize_composite_tuple_with_optional_fields() {
         use crate as fe2o3_amqp;
-        use crate::macros::{DeserializeComposite};
+        use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
         #[amqp_contract(code = 0x13, encoding = "list")]
-        struct Foo (Option<bool>, Option<i32>);
+        struct Foo(Option<bool>, Option<i32>);
 
         let buf = vec![
             EncodingCodes::DescribedType as u8,
             EncodingCodes::SmallUlong as u8,
             0x13,
-            EncodingCodes::List0 as u8
+            EncodingCodes::List0 as u8,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.0.is_none());
@@ -1982,7 +1983,7 @@ mod tests {
             EncodingCodes::List8 as u8,
             2,
             1,
-            EncodingCodes::BooleanTrue as u8
+            EncodingCodes::BooleanTrue as u8,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.0.is_some());
@@ -1997,7 +1998,7 @@ mod tests {
             2,
             EncodingCodes::BooleanTrue as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.0.is_some());
@@ -2012,7 +2013,7 @@ mod tests {
             2,
             EncodingCodes::Null as u8,
             EncodingCodes::SmallInt as u8,
-            1
+            1,
         ];
         let foo: Foo = from_slice(&buf).unwrap();
         assert!(foo.0.is_none());
@@ -2028,7 +2029,7 @@ mod tests {
         let bar = Bar {
             is_fool: None,
             mandatory: 0x13,
-            a: None
+            a: None,
         };
         let buf = vec![
             EncodingCodes::DescribedType as u8,
@@ -2039,7 +2040,7 @@ mod tests {
             2,
             EncodingCodes::Null as u8,
             EncodingCodes::SmallUint as u8,
-            0x13
+            0x13,
         ];
         let bar2: Bar = from_slice(&buf).unwrap();
         assert_eq!(bar, bar2);
@@ -2048,7 +2049,7 @@ mod tests {
     #[test]
     fn test_deserialize_basic_wrapper() {
         use crate as fe2o3_amqp;
-        use crate::macros::{SerializeComposite, DeserializeComposite};
+        use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(code = 0x01, encoding = "basic")]
@@ -2057,7 +2058,7 @@ mod tests {
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(code = 0x1, encoding = "basic")]
         struct Wrapper2 {
-            map: BTreeMap<Symbol, i32>
+            map: BTreeMap<Symbol, i32>,
         }
 
         let mut map = BTreeMap::new();
@@ -2068,7 +2069,7 @@ mod tests {
         let wrapper1: Wrapper = from_slice(&buf).unwrap();
         println!("{:?}", wrapper1);
 
-        let wrapper2 = Wrapper2{map};
+        let wrapper2 = Wrapper2 { map };
         let buf = to_vec(&wrapper2).unwrap();
         let wrapper3: Wrapper2 = from_slice(&buf).unwrap();
         println!("{:?}", &wrapper3);

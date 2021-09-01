@@ -38,7 +38,8 @@ impl<'s> Read<'s> for SliceReader<'s> {
     }
 
     fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error> {
-        self.slice.get(..n)
+        self.slice
+            .get(..n)
             .ok_or_else(|| Self::unexpected_eof("Insufficient bytes in slice"))
     }
 

@@ -1,6 +1,10 @@
+use fe2o3_amqp::{
+    macros::{DeserializeComposite, SerializeComposite},
+    types::{Binary, Boolean, Symbol, Timestamp, Ubyte, Uint, Ulong, Uuid},
+    value::Value,
+};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use serde::{Serialize, Deserialize};
-use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, types::{Binary, Boolean, Symbol, Timestamp, Ubyte, Uint, Ulong, Uuid}, value::Value};
 
 use crate::definitions::{Milliseconds, SequenceNo};
 
@@ -23,12 +27,11 @@ use crate::definitions::{Milliseconds, SequenceNo};
 )]
 pub struct Header {
     durable: Boolean, // TODO: impl default to false
-    priority: Ubyte, // TODO: impl default to 4
+    priority: Ubyte,  // TODO: impl default to 4
     ttl: Option<Milliseconds>,
     first_acquirer: Boolean, // TODO: impl default to false,
-    delivery_count: Uint // TODO: impl default to 0
+    delivery_count: Uint,    // TODO: impl default to 0
 }
-
 
 /// 3.2.2 Delivery Annotations
 /// <type name="delivery-annotations" class="restricted" source="annotations" provides="section">
@@ -40,7 +43,7 @@ pub struct Header {
     code = 0x0000_0000_0000_0071,
     encoding = "basic", // A simple wrapper over a map
 )]
-pub struct DeliveryAnnotations(Annotations); 
+pub struct DeliveryAnnotations(Annotations);
 
 /// 3.2.3 Message Annotations
 /// <type name="message-annotations" class="restricted" source="annotations" provides="section">
@@ -92,7 +95,7 @@ pub struct Properties {
     creation_time: Option<Timestamp>,
     group_id: Option<String>,
     group_sequence: Option<SequenceNo>,
-    reply_to_groud_id: Option<String>
+    reply_to_groud_id: Option<String>,
 }
 
 /// 3.2.5 Application Properties

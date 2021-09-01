@@ -1,7 +1,10 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{AmqpContractAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_none, parse_described_attr}};
+use crate::{
+    util::{convert_to_case, macro_rules_buffer_if_none, parse_described_attr},
+    AmqpContractAttr, EncodingType,
+};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -32,27 +35,36 @@ fn expand_serialize_on_datastruct(
         Fields::Named(fields) => {
             let token = match fields.named.len() {
                 0 => expand_serialize_unit_struct(ident, &descriptor, &amqp_attr.encoding),
-                _ => expand_serialize_struct(ident, &descriptor, &amqp_attr.encoding, &amqp_attr.rename_field, fields, ctx)
+                _ => expand_serialize_struct(
+                    ident,
+                    &descriptor,
+                    &amqp_attr.encoding,
+                    &amqp_attr.rename_field,
+                    fields,
+                    ctx,
+                ),
             };
             Ok(token)
         }
         Fields::Unnamed(fields) => {
             let token = match fields.unnamed.len() {
                 0 => expand_serialize_unit_struct(ident, &descriptor, &amqp_attr.encoding),
-                _ => expand_serialize_tuple_struct(ident, &descriptor, &amqp_attr.encoding, fields)
+                _ => expand_serialize_tuple_struct(ident, &descriptor, &amqp_attr.encoding, fields),
             };
             Ok(token)
         }
-        Fields::Unit => {
-            Ok(expand_serialize_unit_struct(ident, &descriptor, &amqp_attr.encoding))
-        }
+        Fields::Unit => Ok(expand_serialize_unit_struct(
+            ident,
+            &descriptor,
+            &amqp_attr.encoding,
+        )),
     }
 }
 
 fn expand_serialize_unit_struct(
-    ident: &syn::Ident, 
-    descriptor: &proc_macro2::TokenStream, 
-    encoding: &EncodingType
+    ident: &syn::Ident,
+    descriptor: &proc_macro2::TokenStream,
+    encoding: &EncodingType,
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
@@ -78,8 +90,8 @@ fn expand_serialize_unit_struct(
 }
 
 fn expand_serialize_tuple_struct(
-    ident: &syn::Ident, 
-    descriptor: &proc_macro2::TokenStream, 
+    ident: &syn::Ident,
+    descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     fields: &syn::FieldsUnnamed,
 ) -> proc_macro2::TokenStream {
@@ -92,7 +104,7 @@ fn expand_serialize_tuple_struct(
             } else {
                 unimplemented!()
             }
-        },
+        }
         EncodingType::Map => unimplemented!(),
     };
     let field_indices: Vec<syn::Index> = fields
@@ -131,8 +143,8 @@ fn expand_serialize_tuple_struct(
 }
 
 fn expand_serialize_struct(
-    ident: &syn::Ident, 
-    descriptor: &proc_macro2::TokenStream, 
+    ident: &syn::Ident,
+    descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     rename_field: &str,
     fields: &syn::FieldsNamed,
@@ -146,7 +158,7 @@ fn expand_serialize_struct(
             } else {
                 unimplemented!()
             }
-        },
+        }
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
         EncodingType::Map => quote!(fe2o3_amqp::constants::DESCRIBED_MAP),
     };
