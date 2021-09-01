@@ -1,8 +1,20 @@
 use serde::{Serialize, Deserialize};
-use fe2o3_amqp::types::{Boolean, Uint, Ulong};
+use fe2o3_amqp::types::{Boolean, Symbol, Uint, Ulong};
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::{Error, Fields};
+
+
+/// 3.4 Delivery State
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DeliveryState {
+    Accepted(Accepted),
+    Rejected(Rejected),
+    Released(Released),
+    Modified(Modified),
+    Received(Received),
+}
 
 /// 3.4.1 Received
 ///
@@ -91,24 +103,13 @@ pub struct Modified {
     pub message_annotations: Option<Fields>
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum DeliveryState {
-    Accepted(Accepted),
-    Rejected(Rejected),
-    Released(Released),
-    Modified(Modified),
-    Received(Received),
-}
 
 #[cfg(test)]
 mod tests {
     //! Test serialization and deserialization
     use fe2o3_amqp::{ser::to_vec, de::from_slice, format_code::EncodingCodes};
 
-    use crate::messaging::delivery_state::{Modified, Received};
-
-    use super::{Accepted, Rejected, Released, DeliveryState};
+    use super::{Accepted, Rejected, Released, DeliveryState, Modified, Received};
 
     /* ---------------------------- // test Accepted ---------------------------- */
     #[test]

@@ -34,3 +34,18 @@ impl Default for EnumType {
         Self::None
     }
 }
+
+#[repr(u8)]
+pub enum StructEncoding {
+    None,
+    DescribedList,
+    DescribedMap,
+    DescribedBasic,
+}
+
+
+impl Default for StructEncoding {
+    fn default() -> Self {
+        Self::None
+    }
+}

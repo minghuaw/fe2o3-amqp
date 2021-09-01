@@ -85,7 +85,14 @@ fn expand_serialize_tuple_struct(
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
-        EncodingType::Basic => unimplemented!(),
+        EncodingType::Basic => {
+            if fields.unnamed.len() == 1 {
+                // Basic encoding is allowed on newtype struct
+                quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+            } else {
+                unimplemented!()
+            }
+        },
         EncodingType::Map => unimplemented!(),
     };
     let field_indices: Vec<syn::Index> = fields
@@ -132,7 +139,14 @@ fn expand_serialize_struct(
     ctx: &DeriveInput,
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
-        EncodingType::Basic => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
+        EncodingType::Basic => {
+            if fields.named.len() == 1 {
+                // Basic encoding is allowed on newtype struct
+                quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+            } else {
+                unimplemented!()
+            }
+        },
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
         EncodingType::Map => quote!(fe2o3_amqp::constants::DESCRIBED_MAP),
     };

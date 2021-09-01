@@ -25,8 +25,8 @@ fn expand_deserialize_on_datastruct(
 
     let evaluate_code = match attr.code {
         Some(code) => quote! {
-            fe2o3_amqp::types::Descriptor::Code(c) => {
-                if c != #code {
+            fe2o3_amqp::types::Descriptor::Code(__c) => {
+                if __c != #code {
                     return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             }
@@ -37,9 +37,9 @@ fn expand_deserialize_on_datastruct(
     };
 
     let evaluate_descriptor = quote! {
-        match descriptor {
-            fe2o3_amqp::types::Descriptor::Name(symbol) => {
-                if symbol.into_inner() != #name {
+        match __descriptor {
+            fe2o3_amqp::types::Descriptor::Name(__symbol) => {
+                if __symbol.into_inner() != #name {
                     return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             },
@@ -70,7 +70,7 @@ fn impl_visit_seq_for_unit_struct(
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
+            let __descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -145,7 +145,7 @@ fn impl_visit_seq_for_tuple_struct(
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
+            let __descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -176,8 +176,12 @@ fn expand_deserialize_tuple_struct(
     let struct_name = match encoding {
         EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => {
-            let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
-            return Err(syn::Error::new(span, "Basic encoding is not supported for tuple struct"))
+            if fields.unnamed.len() == 1 {
+                quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+            } else {
+                let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+                return Err(syn::Error::new(span, "Basic encoding is not supported for tuple struct"))
+            }
         },
         EncodingType::Map => {
             let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
@@ -375,7 +379,7 @@ fn impl_visit_seq_for_struct(
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
+            let __descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -403,27 +407,27 @@ fn impl_visit_map(
     evaluate_descriptor: &proc_macro2::TokenStream, 
 ) -> proc_macro2::TokenStream {
     quote! {
-        fn visit_map<A>(self, mut map: A)-> Result<Self::Value, A::Error>
+        fn visit_map<A>(self, mut __map: A)-> Result<Self::Value, A::Error>
         where A: fe2o3_amqp::serde::de::MapAccess<'de>
         {
             #(let mut #field_idents: Option<#field_types> = None;)*
 
             // The first should always be the descriptor
-            let descriptor: fe2o3_amqp::types::Descriptor = match map.next_key()? {
+            let __descriptor: fe2o3_amqp::types::Descriptor = match __map.next_key()? {
                 Some(val) => val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
+                None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting__descriptor"))
             };
 
             #evaluate_descriptor
 
-            while let Some(key) = map.next_key::<Field>()? {
+            while let Some(key) = __map.next_key::<Field>()? {
                 match key {
                     #(
                         Field::#field_idents => {
                             if #field_idents.is_some() {
                                 return Err(fe2o3_amqp::serde::de::Error::duplicate_field(#field_names))
                             }
-                            #field_idents = Some(map.next_value()?);
+                            #field_idents = Some(__map.next_value()?);
                         },
                     )*
                 }
