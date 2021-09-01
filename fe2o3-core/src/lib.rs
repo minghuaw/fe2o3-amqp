@@ -10,6 +10,3 @@ pub struct Source {}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Target {}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct DeliveryState {}

@@ -93,7 +93,7 @@ pub struct Modified {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-enum DeliveryState {
+pub enum DeliveryState {
     Accepted(Accepted),
     Rejected(Rejected),
     Released(Released),
