@@ -16,7 +16,7 @@ use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 // #[derive(SerializeComposite, DeserializeComposite)]
 // struct TupleStruct(Option<i32>, bool);
 
-#[derive(Debug, DeserializeComposite)]
+#[derive(Debug, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(code = 0x01, encoding = "basic")]
 struct Wrapper {
     map: BTreeMap<String, i32>,

@@ -309,7 +309,6 @@ mod tests {
     use crate::de::from_reader;
     use crate::from_slice;
     use crate::ser::to_vec;
-    use crate::types::{Described, Descriptor, Symbol};
 
     use super::Value;
 
@@ -323,7 +322,7 @@ mod tests {
 
     #[test]
     fn mem_size_of_value() {
-        let size = std::mem::size_of::<String>();
+        let size = std::mem::size_of::<Value>();
         println!("{:?}", size);
     }
 

@@ -1,4 +1,4 @@
-use fe2o3_amqp::{types::Symbol, value::Value};
+use fe2o3_amqp::{types::{Described, Symbol}, value::Value};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -20,4 +20,4 @@ use std::collections::BTreeMap;
 ///
 /// TODO: add described type representation in Value
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FilterSet(BTreeMap<Symbol, Option<Value>>);
+pub struct FilterSet(BTreeMap<Symbol, Option<Described<Value>>>);
