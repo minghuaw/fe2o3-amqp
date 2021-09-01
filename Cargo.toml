@@ -8,6 +8,8 @@ members = [
     "fe2o3-core",
 
     "fe2o3-engine",
+    "fe2o3-amqp-ext",
+
     "examples/macro_expand"
 ]
 

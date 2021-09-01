@@ -1,0 +1,1 @@
+// Define filters from AMQP Capabilities Registry: Filters
