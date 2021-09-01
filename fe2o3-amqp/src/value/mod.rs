@@ -307,6 +307,7 @@ mod tests {
     use serde::de::DeserializeOwned;
 
     use crate::de::from_reader;
+    use crate::from_slice;
     use crate::ser::to_vec;
     use crate::types::{Described, Descriptor, Symbol};
 
@@ -566,5 +567,26 @@ mod tests {
         println!("{:x?}", &buf);
 
         assert_eq_from_reader_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_described_value() {
+        use crate as fe2o3_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Foo {
+            is_fool: bool,
+            a: i32,
+        }
+        let foo = Foo {
+            is_fool: true,
+            a: 9,
+        };
+        let buf = to_vec(&foo).unwrap();
+        println!("{:x?}", buf);
+        let value: Value = from_slice(&buf).unwrap();
+        println!("{:?}", value);
     }
 }

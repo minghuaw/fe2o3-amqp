@@ -18,6 +18,7 @@ use crate::{
 use super::{Value, VALUE};
 
 enum Field {
+    Described,
     Null,
     Bool,
     Ubyte,
@@ -91,13 +92,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => Field::List,
             EncodingCodes::Map32 | EncodingCodes::Map8 => Field::Map,
             EncodingCodes::Array32 | EncodingCodes::Array8 => Field::Array,
-
-            // The `Value` type cannot hold a `Described` type
-            EncodingCodes::DescribedType => {
-                return Err(de::Error::custom(
-                    "Described type in Value enum is not supported yet",
-                ))
-            } // EncodingCodes::DescribedType => Field::List, // could probably treat it as a list of two items
+            EncodingCodes::DescribedType => Field::Described
         };
         Ok(field)
     }
@@ -129,6 +124,10 @@ impl<'de> de::Visitor<'de> for Visitor {
         let (val, de) = data.variant()?;
 
         match val {
+            Field::Described => {
+                let val = de.newtype_variant()?;
+                Ok(Value::Described(val))
+            }
             Field::Null => {
                 let _: () = de.newtype_variant()?;
                 Ok(Value::Null)
