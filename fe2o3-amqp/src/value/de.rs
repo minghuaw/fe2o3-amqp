@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, convert::TryInto};
 use ordered_float::OrderedFloat;
 use serde::de::{self};
 
-use crate::constants::DESCRIPTOR;
+use crate::constants::{DESCRIBED_BASIC, DESCRIPTOR};
 use crate::{
     error::Error,
     format_code::EncodingCodes,
@@ -303,6 +303,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     {
         println!(">>> Debug: deserialize_any");
         match &self.value {
+            Value::Described(_) => self.deserialize_struct(DESCRIBED_BASIC, &[""], visitor),
             Value::Null => self.deserialize_unit(visitor),
             Value::Bool(_) => self.deserialize_bool(visitor),
             Value::Ubyte(_) => self.deserialize_u8(visitor),

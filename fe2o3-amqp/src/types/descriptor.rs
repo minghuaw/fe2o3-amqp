@@ -6,7 +6,7 @@ use crate::types::Symbol;
 /// 1. amqpnetlite: Symbol
 /// 2. go-amqp: Symbol?
 /// 3. qpid-proton-j2: Symbol
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Descriptor {
     Name(Symbol),

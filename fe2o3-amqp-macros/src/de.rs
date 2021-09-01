@@ -83,12 +83,12 @@ fn impl_visit_seq_for_unit_struct(
     evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     quote! {
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
-                Some(val) => val,
+            let __descriptor: fe2o3_amqp::types::Descriptor = match __seq.next_element()? {
+                Some(__val) => __val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
 
@@ -164,11 +164,11 @@ fn impl_visit_seq_for_tuple_struct(
 ) -> proc_macro2::TokenStream {
     let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
+            let __descriptor: fe2o3_amqp::types::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -177,7 +177,7 @@ fn impl_visit_seq_for_tuple_struct(
 
             #unwrap_or_none
 
-            #( unwrap_or_none!(#field_idents, seq, #field_types); )*
+            #( unwrap_or_none!(#field_idents, __seq, #field_types); )*
 
             Ok( #ident( #(#field_idents, )* ) )
         }
@@ -411,11 +411,11 @@ fn impl_visit_seq_for_struct(
 ) -> proc_macro2::TokenStream {
     let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::types::Descriptor = match seq.next_element()? {
+            let __descriptor: fe2o3_amqp::types::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -424,7 +424,7 @@ fn impl_visit_seq_for_struct(
 
             #unwrap_or_none
 
-            #( unwrap_or_none!(#field_idents, seq, #field_types); )*
+            #( unwrap_or_none!(#field_idents, __seq, #field_types); )*
 
             Ok( #ident{ #(#field_idents, )* } )
         }

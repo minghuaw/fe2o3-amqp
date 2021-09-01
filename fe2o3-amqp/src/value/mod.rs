@@ -2,10 +2,7 @@ use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use crate::{
-    format_code::EncodingCodes,
-    types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
-};
+use crate::{format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Described, Symbol, Timestamp, Uuid}};
 
 pub mod de;
 pub mod ser;
@@ -16,6 +13,9 @@ pub const VALUE: &str = "VALUE";
 /// Primitive type definitions
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
+    /// Described type
+    Described(Described<Value>),
+
     /// Indicates an empty value
     ///
     /// encoding code = 0x40,
@@ -271,6 +271,7 @@ impl Default for Value {
 impl Value {
     pub fn format_code(&self) -> u8 {
         let code = match *self {
+            Value::Described(_) => EncodingCodes::DescribedType,
             Value::Null => EncodingCodes::Null,
             Value::Bool(_) => EncodingCodes::Boolean,
             Value::Ubyte(_) => EncodingCodes::Ubyte,
@@ -307,6 +308,7 @@ mod tests {
 
     use crate::de::from_reader;
     use crate::ser::to_vec;
+    use crate::types::{Described, Descriptor, Symbol};
 
     use super::Value;
 
@@ -316,6 +318,12 @@ mod tests {
     {
         let deserialized: T = from_reader(buf.as_slice()).unwrap();
         assert_eq!(deserialized, expected)
+    }
+
+    #[test]
+    fn mem_size_of_value() {
+        let size = std::mem::size_of::<String>();
+        println!("{:?}", size);
     }
 
     #[test]

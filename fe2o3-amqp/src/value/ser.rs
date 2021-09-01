@@ -22,6 +22,7 @@ impl ser::Serialize for Value {
         S: serde::Serializer,
     {
         match self {
+            Value::Described(v) => v.serialize(serializer),
             Value::Null => serializer.serialize_unit(),
             Value::Bool(v) => serializer.serialize_bool(*v),
             Value::Ubyte(v) => serializer.serialize_u8(*v),
