@@ -154,10 +154,6 @@ fn impl_visit_seq_for_tuple_struct(
 
             #unwrap_or_none
 
-            // #(let #field_idents: #field_types = match seq.next_element()? {
-            //     Some(val) => val,
-            //     None => return Err(fe2o3_amqp::serde::de::Error::custom("Invalid length"))
-            // };)*
             #( unwrap_or_none!(#field_idents, seq, #field_types); )*
 
             Ok( #ident( #(#field_idents, )* ) )
@@ -387,11 +383,7 @@ fn impl_visit_seq_for_struct(
             #evaluate_descriptor
 
             #unwrap_or_none
-
-            // #(let #field_idents: #field_types = match seq.next_element()? {
-            //     Some(val) => val,
-            //     None => return Err(fe2o3_amqp::serde::de::Error::custom("Invalid length"))
-            // };)*
+            
             #( unwrap_or_none!(#field_idents, seq, #field_types); )*
 
             Ok( #ident{ #(#field_idents, )* } )
