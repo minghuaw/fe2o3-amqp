@@ -9,8 +9,31 @@ use fe2o3_amqp::{
 };
 
 /// 2.8.1 Role
+/// 
+/// <type name="role" class="restricted" source="boolean">
+///     <choice name="sender" value="false"/>
+///     <choice name="receiver" value="true"/>
+/// </type>
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Role(bool);
+
+impl Role {
+    pub fn sender() -> Self {
+        Self(false)
+    }
+
+    pub fn receiver() -> Self {
+        Self(true)
+    }
+
+    pub fn is_sender(&self) -> bool {
+        self.0 == false
+    }
+
+    pub fn is_receiver(&self) -> bool {
+        self.0 == true
+    }
+}
 
 /// 2.8.2 Sender Settle Mode
 #[derive(Debug, Deserialize, Serialize)]
@@ -93,3 +116,15 @@ pub use link_error::LinkError;
 /// 2.8.19 Constant definition
 mod constant_def;
 pub use constant_def::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, PORT, REVISION, SECURE_PORT};
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp::ser::to_vec;
+
+    use super::Role;
+
+    #[test]
+    fn test_role() {
+        let role = Role(false);
+    }
+}

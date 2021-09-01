@@ -4,7 +4,6 @@ use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::{Error, Fields};
 
-
 /// 3.4.1 Received
 ///
 /// <type name="received" class="composite" source="list" provides="delivery-state">
@@ -20,8 +19,8 @@ use crate::definitions::{Error, Fields};
     rename_field="kebab-case"
 )]
 pub struct Received {
-    section_number: Uint,
-    section_offset: Ulong
+    pub section_number: Uint,
+    pub section_offset: Ulong
 }
 
 /// 3.4.2 Accepted
@@ -54,7 +53,7 @@ pub struct Accepted { }
     rename_field = "kebab-case"
 )]
 pub struct Rejected {
-    error: Option<Error>
+    pub error: Option<Error>
 }
 
 /// 3.4.4 Released
@@ -87,9 +86,9 @@ pub struct Released { }
     rename_field = "kebab-case"
 )]
 pub struct Modified {
-    delivery_failed: Option<Boolean>,
-    undeliverable_here: Option<Boolean>,
-    message_annotations: Option<Fields>
+    pub delivery_failed: Option<Boolean>,
+    pub undeliverable_here: Option<Boolean>,
+    pub message_annotations: Option<Fields>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,7 +106,9 @@ mod tests {
     //! Test serialization and deserialization
     use fe2o3_amqp::{ser::to_vec, de::from_slice, format_code::EncodingCodes};
 
-    use super::Accepted;
+    use crate::messaging::delivery_state::{Modified, Received};
+
+    use super::{Accepted, Rejected, Released, DeliveryState};
 
     /* ---------------------------- // test Accepted ---------------------------- */
     #[test]
@@ -148,6 +149,97 @@ mod tests {
     /* ------------------------------ test Rejected ----------------------------- */
     #[test]
     fn test_serialize_deserialize_rejected() {
-        
+        let rejected = Rejected { error: None };
+        let buf = to_vec(&rejected).unwrap();
+        let rejected: Rejected = from_slice(&buf).unwrap();
+        assert!(rejected.error.is_none())
+    }
+
+    #[test]
+    fn test_deserialize_rejected_from_list8() {
+        // try deserialize from list8
+        let buf = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            0x25, // descriptor code
+            EncodingCodes::List8 as u8,
+            0, // size
+            0, // count
+        ];
+        let rejected: Rejected = from_slice(&buf).unwrap();
+        assert!(rejected.error.is_none())
+    }
+    
+    /* ------------------------------ test Released ----------------------------- */
+
+    #[test]
+    fn test_serialize_deserialize_released() {
+        let released = Released {};
+        let buf = to_vec(&released).unwrap();
+        let _: Released = from_slice(&buf).unwrap();
+    }
+
+    /* --------------------------- test DeliveryState --------------------------- */
+
+    macro_rules! assert_delivery_state {
+        ($value:ident, $expecting:path) => {
+            match $value {
+                $expecting(_) => {},
+                _ => panic!("Wrong variant")
+            }
+        };
+    }
+
+    #[test]
+    fn test_serialize_deserialize_delivery_state() {
+        // Accepted
+        let state = DeliveryState::Accepted(Accepted { });
+        let buf = to_vec(&state).unwrap();
+        let state2: DeliveryState = from_slice(&buf).unwrap();
+        assert_delivery_state!(state2, DeliveryState::Accepted);
+
+        // Rejected
+        let state = DeliveryState::Rejected(Rejected { error: None });
+        let buf = to_vec(&state).unwrap();
+        let state2: DeliveryState = from_slice(&buf).unwrap();
+        assert_delivery_state!(state2, DeliveryState::Rejected);
+
+        // Released
+        let state = DeliveryState::Released(Released { });
+        let buf = to_vec(&state).unwrap();
+        let state2: DeliveryState = from_slice(&buf).unwrap();
+        assert_delivery_state!(state2, DeliveryState::Released);
+
+        // Rejected
+        let state = DeliveryState::Modified(
+            Modified {
+                delivery_failed: None,
+                undeliverable_here: Some(true),
+                message_annotations: None
+            }
+        );
+        let buf = to_vec(&state).unwrap();
+        let state2: DeliveryState = from_slice(&buf).unwrap();
+        assert_delivery_state!(state2, DeliveryState::Modified);
+        if let DeliveryState::Modified(m) = state2 {
+            assert_eq!(m.delivery_failed, None);
+            assert_eq!(m.undeliverable_here, Some(true));
+            assert!(m.message_annotations.is_none());
+        }
+
+        // Received
+        let state = DeliveryState::Received(
+            Received {
+                section_number: 9,
+                section_offset: 13
+            }
+        );
+        let buf = to_vec(&state).unwrap();
+        let state2 = from_slice(&buf).unwrap();
+        assert_delivery_state!(state2, DeliveryState::Received);
+        if let DeliveryState::Received(r) = state2 {
+            assert_eq!(r.section_number, 9);
+            assert_eq!(r.section_offset, 13);
+        }
     }
 }
