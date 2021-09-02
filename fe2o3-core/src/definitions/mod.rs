@@ -24,6 +24,12 @@ pub use rcv_settle_mode::ReceiverSettleMode;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Handle(Uint);
 
+impl Default for Handle {
+    fn default() -> Self {
+        Handle(u32::MAX)
+    }
+}
+
 /// 2.8.5 Seconds
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Seconds(Uint);
