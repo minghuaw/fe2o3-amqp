@@ -1,4 +1,4 @@
-use fe2o3_amqp::types::Symbol;
+use fe2o3_amqp::types::{SYMBOL, Symbol};
 use serde::{de, ser};
 
 #[derive(Debug, PartialEq)]
@@ -50,29 +50,13 @@ impl ser::Serialize for AmqpError {
     }
 }
 
-enum Field {
-    InternalError,
-    NotFound,
-    UnauthorizedAccess,
-    DecodeError,
-    ResourceLimitExceeded,
-    NotAllowed,
-    InvalidField,
-    NotImplemented,
-    ResourceLocked,
-    PreconditionFailed,
-    ResourceDeleted,
-    IllegalState,
-    FrameSizeTooSmall,
-}
+struct Visitor {}
 
-struct FieldVisitor {}
-
-impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = AmqpError;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("variant identifier")
+        formatter.write_str("enum AmqpError")
     }
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
@@ -87,64 +71,22 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let val = match v {
-            "amqp:internal-error" => Field::InternalError,
-            "amqp:not-found" => Field::NotFound,
-            "amqp:unauthorized-access" => Field::UnauthorizedAccess,
-            "amqp:decode-error" => Field::DecodeError,
-            "amqp:resource-limit-exceeded" => Field::ResourceLimitExceeded,
-            "amqp:not-allowed" => Field::NotAllowed,
-            "amqp:invalid-field" => Field::InvalidField,
-            "amqp:not-implemented" => Field::NotImplemented,
-            "amqp:resource-locked" => Field::ResourceLocked,
-            "amqp:precondition-failed" => Field::PreconditionFailed,
-            "amqp:resource-deleted" => Field::ResourceDeleted,
-            "amqp:illegal-state" => Field::IllegalState,
-            "amqp:frame-size-too-small" => Field::FrameSizeTooSmall,
+            "amqp:internal-error" => AmqpError::InternalError,
+            "amqp:not-found" => AmqpError::NotFound,
+            "amqp:unauthorized-access" => AmqpError::UnauthorizedAccess,
+            "amqp:decode-error" => AmqpError::DecodeError,
+            "amqp:resource-limit-exceeded" => AmqpError::ResourceLimitExceeded,
+            "amqp:not-allowed" => AmqpError::NotAllowed,
+            "amqp:invalid-field" => AmqpError::InvalidField,
+            "amqp:not-implemented" => AmqpError::NotImplemented,
+            "amqp:resource-locked" => AmqpError::ResourceLocked,
+            "amqp:precondition-failed" => AmqpError::PreconditionFailed,
+            "amqp:resource-deleted" => AmqpError::ResourceDeleted,
+            "amqp:illegal-state" => AmqpError::IllegalState,
+            "amqp:frame-size-too-small" => AmqpError::FrameSizeTooSmall,
             _ => return Err(de::Error::custom("Invalid symbol value for AmqpError")),
         };
 
-        Ok(val)
-    }
-}
-
-impl<'de> de::Deserialize<'de> for Field {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_identifier(FieldVisitor {})
-    }
-}
-
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = AmqpError;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum AmqpError")
-    }
-
-    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-    where
-        A: de::EnumAccess<'de>,
-    {
-        let (val, _) = data.variant()?;
-        let val = match val {
-            Field::InternalError => AmqpError::InternalError,
-            Field::NotFound => AmqpError::NotFound,
-            Field::UnauthorizedAccess => AmqpError::UnauthorizedAccess,
-            Field::DecodeError => AmqpError::DecodeError,
-            Field::ResourceLimitExceeded => AmqpError::ResourceLimitExceeded,
-            Field::NotAllowed => AmqpError::NotAllowed,
-            Field::InvalidField => AmqpError::InvalidField,
-            Field::NotImplemented => AmqpError::NotImplemented,
-            Field::ResourceLocked => AmqpError::ResourceDeleted,
-            Field::PreconditionFailed => AmqpError::PreconditionFailed,
-            Field::ResourceDeleted => AmqpError::ResourceDeleted,
-            Field::IllegalState => AmqpError::IllegalState,
-            Field::FrameSizeTooSmall => AmqpError::FrameSizeTooSmall,
-        };
         Ok(val)
     }
 }
@@ -154,24 +96,11 @@ impl<'de> de::Deserialize<'de> for AmqpError {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
-            "amqp:internal-error",
-            "amqp:not-found",
-            "amqp:unauthorized-access",
-            "amqp:decode-error",
-            "amqp:resource-limit-exceeded",
-            "amqp:not-allowed",
-            "amqp:invalid-field",
-            "amqp:not-implemented",
-            "amqp:resource-locked",
-            "amqp:precondition-failed",
-            "amqp:resource-deleted",
-            "amqp:illegal-state",
-            "amqp:frame-size-too-small",
-        ];
-        deserializer.deserialize_enum("AMQP_ERROR", VARIANTS, Visitor {})
+        // deserializer.deserialize_identifier(Visitor {})
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor{})
     }
 }
+
 
 #[cfg(test)]
 mod tests {
