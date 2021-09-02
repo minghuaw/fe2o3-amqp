@@ -5,10 +5,9 @@ use serde::ser;
 // use serde_bytes::ByteBuf;
 use serde_bytes::Bytes;
 
+use crate::constants::UUID;
 use crate::error::Error;
 use crate::fixed_width::UUID_WIDTH;
-
-pub const UUID: &str = "UUID";
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Uuid([u8; UUID_WIDTH]);

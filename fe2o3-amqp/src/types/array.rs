@@ -2,10 +2,9 @@ use std::marker::PhantomData;
 
 use serde::{de, ser};
 
-pub const ARRAY: &str = "ARRAY";
+use crate::constants::ARRAY;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-// #[serde(rename(deserialize = "ARRAY"))]
 pub struct Array<T>(pub Vec<T>);
 
 impl<T> From<Vec<T>> for Array<T> {

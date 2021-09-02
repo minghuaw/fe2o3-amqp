@@ -6,9 +6,11 @@ use serde_bytes::ByteBuf;
 
 use crate::{
     error::Error,
+    constants::{
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID,
+    },
     types::{
-        Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, ARRAY, DECIMAL128, DECIMAL32,
-        DECIMAL64, SYMBOL, TIMESTAMP, UUID,
+        Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, 
     },
     util::NewType,
 };

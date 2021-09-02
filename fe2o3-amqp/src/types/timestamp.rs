@@ -1,7 +1,7 @@
 use serde::de;
 use serde::ser;
 
-pub const TIMESTAMP: &str = "TIMESTAMP";
+use crate::constants::TIMESTAMP;
 
 /// 64-bit two’s-complement integer representing milliseconds since the unix epoch
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -47,14 +47,6 @@ impl<'de> de::Visitor<'de> for Visitor {
     {
         Ok(Timestamp::from(v))
     }
-
-    // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    // where
-    //     D: serde::Deserializer<'de>,
-    // {
-    //     let val: i64 = de::Deserialize::deserialize(deserializer)?;
-    //     Ok(Timestamp::from(val))
-    // }
 }
 
 impl<'de> de::Deserialize<'de> for Timestamp {

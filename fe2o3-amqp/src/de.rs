@@ -3,7 +3,8 @@ use std::convert::TryInto;
 
 use crate::{
     constants::{
-        DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP, DESCRIPTOR, DESERIALIZE_DESCRIBED,
+        DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP, DESCRIPTOR,
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID
     },
     error::Error,
     fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
@@ -12,8 +13,6 @@ use crate::{
     },
     format_code::EncodingCodes,
     read::{IoReader, Read, SliceReader},
-    types::ARRAY,
-    types::{DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
     util::{EnumType, FieldRole, NewType, StructEncoding},
     value::VALUE,
 };
@@ -460,7 +459,8 @@ where
                 self.deserialize_newtype_struct(SYMBOL, visitor)
             }
             EncodingCodes::DescribedType => {
-                self.deserialize_struct(DESERIALIZE_DESCRIBED, &[""], visitor)
+                // This will not handle DescribedBasic types
+                self.deserialize_struct("", &[""], visitor)
             }
             EncodingCodes::Array32 | EncodingCodes::Array8 => {
                 self.deserialize_newtype_struct(ARRAY, visitor)
@@ -942,7 +942,7 @@ where
                             self.deserialize_tuple(fields.len(), visitor)
                         }
                         EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                        // EncodingCodes::DescribedType => self.parse_described(visitor),
+                        EncodingCodes::DescribedType => self.parse_described(visitor),
                         _ => Err(Error::InvalidFormatCode),
                     }
                 }

@@ -11,11 +11,9 @@ use crate::error::Error;
 mod dec32 {
     // use serde_bytes::ByteBuf;
 
-    use crate::fixed_width::DECIMAL32_WIDTH;
+    use crate::{constants::DECIMAL32, fixed_width::DECIMAL32_WIDTH};
 
     use super::*;
-
-    pub const DECIMAL32: &str = "DECIMAL32";
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec32([u8; DECIMAL32_WIDTH]);
@@ -99,11 +97,9 @@ mod dec32 {
 mod dec64 {
     // use serde_bytes::ByteBuf;
 
-    use crate::fixed_width::DECIMAL64_WIDTH;
+    use crate::{constants::DECIMAL64, fixed_width::DECIMAL64_WIDTH};
 
     use super::*;
-
-    pub const DECIMAL64: &str = "DECIMAL64";
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec64([u8; DECIMAL64_WIDTH]);
@@ -181,11 +177,9 @@ mod dec64 {
 mod dec128 {
     // use serde_bytes::ByteBuf;
 
-    use crate::fixed_width::DECIMAL128_WIDTH;
+    use crate::{constants::DECIMAL128, fixed_width::DECIMAL128_WIDTH};
 
     use super::*;
-
-    pub const DECIMAL128: &str = "DECIMAL128";
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec128([u8; DECIMAL128_WIDTH]);

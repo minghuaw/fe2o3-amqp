@@ -4,10 +4,12 @@ use serde::{ser, Serialize};
 
 use crate::{
     constants::DESCRIPTOR,
-    constants::{DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP},
+    constants::{
+        DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID
+    },
     error::Error,
     format_code::EncodingCodes,
-    types::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
     util::{FieldRole, IsArrayElement, NewType, StructEncoding},
     value::U32_MAX_AS_USIZE,
 };
