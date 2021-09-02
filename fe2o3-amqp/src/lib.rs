@@ -10,9 +10,9 @@ pub mod primitives;
 pub mod value;
 pub mod described;
 pub mod descriptor;
+pub mod read;
 
 // Private mods
-mod read;
 mod util;
 
 // experimental
