@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    types::{Boolean, Uint},
+    primitives::{Boolean, Uint},
 };
 
 use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};

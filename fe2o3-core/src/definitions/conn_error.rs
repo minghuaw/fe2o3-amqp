@@ -1,4 +1,4 @@
-use fe2o3_amqp::types::{SYMBOL, Symbol};
+use fe2o3_amqp::{constants::SYMBOL, primitives::{Symbol}};
 use serde::{de, ser};
 
 #[derive(Debug, Clone, PartialEq)]

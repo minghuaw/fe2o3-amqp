@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    types::Boolean,
+    primitives::Boolean,
 };
 
 use crate::definitions::{Error, Handle};

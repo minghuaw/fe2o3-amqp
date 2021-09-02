@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    types::{Symbol, Uint},
+    primitives::{Symbol, Uint},
     value::Value,
 };
 

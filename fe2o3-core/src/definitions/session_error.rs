@@ -1,6 +1,6 @@
 use serde::{de, ser};
 
-use fe2o3_amqp::types::{SYMBOL, Symbol};
+use fe2o3_amqp::{constants::SYMBOL, primitives::{Symbol}};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionError {

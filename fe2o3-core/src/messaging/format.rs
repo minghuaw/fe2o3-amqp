@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    types::{Binary, Boolean, Symbol, Timestamp, Ubyte, Uint, Ulong, Uuid},
+    primitives::{Binary, Boolean, Symbol, Timestamp, Ubyte, Uint, Ulong, Uuid},
     value::Value,
 };
 use serde::{Deserialize, Serialize};

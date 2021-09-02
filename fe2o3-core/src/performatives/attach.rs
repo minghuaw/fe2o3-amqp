@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, types::{Boolean, Symbol, Ulong}, value::Value};
+use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, primitives::{Boolean, Symbol, Ulong}, value::Value};
 
 use crate::{
     definitions::{
