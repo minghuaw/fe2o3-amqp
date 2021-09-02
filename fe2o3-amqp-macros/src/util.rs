@@ -126,14 +126,14 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
 pub(crate) fn macro_rules_unwrap_or_none() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! unwrap_or_none {
-            ($fident: ident, $seq: ident, Option<$ftype: ty>) => {
-                let $fident: Option<$ftype> = match $seq.next_element::<Option<$ftype>>()? {
+            ($fident: ident, $seq: expr, Option<$ftype: ty>) => {
+                let $fident: Option<$ftype> = match $seq {
                     Some(val) => val,
                     None => None,
                 };
             };
             ($fident: ident, $seq: ident, $ftype: ty) => {
-                let $fident: $ftype = match $seq.next_element()? {
+                let $fident: $ftype = match $seq {
                     Some(val) => val,
                     None => return Err(fe2o3_amqp::serde::de::Error::custom("Insufficient number of items")),
                 };
@@ -145,8 +145,8 @@ pub(crate) fn macro_rules_unwrap_or_none() -> proc_macro2::TokenStream {
 pub(crate) fn macro_rules_unwrap_or_default() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! unwrap_or_default {
-            ($fident: ident, $seq: ident, $ftype: ty, $default: expr) => {
-                let $fident: $ftype = match $seq.next_element()? {
+            ($fident: ident, $seq: expr, $ftype: ty, $default: expr) => {
+                let $fident: $ftype = match $seq {
                     Some(val) => val,
                     None => $default,
                 };
