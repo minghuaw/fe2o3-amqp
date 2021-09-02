@@ -2,7 +2,7 @@ use serde::{de, ser};
 
 use fe2o3_amqp::types::{SYMBOL, Symbol};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SessionError {
     WindowViolation,
     ErrantLink,

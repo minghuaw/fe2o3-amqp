@@ -1,7 +1,7 @@
 use fe2o3_amqp::types::{SYMBOL, Symbol};
 use serde::{de, ser};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AmqpError {
     InternalError,
     NotFound,

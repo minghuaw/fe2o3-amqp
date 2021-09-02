@@ -3,12 +3,12 @@ use serde::{ser, de};
 /// 2.8.3 Receiver Settle Mode
 /// Settlement policy for a receiver.
 /// <type name="receiver-settle-mode" class="restricted" source="ubyte">
-///     <choice name="first" value="0"/>
-///     <choice name="second" value="1"/>
 /// </type>
 #[derive(Debug, Clone)]
 pub enum ReceiverSettleMode {
+    /// <choice name="first" value="0"/>
     First,
+    /// <choice name="second" value="1"/>
     Second
 }
 

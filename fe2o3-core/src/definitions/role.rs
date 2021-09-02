@@ -3,12 +3,12 @@ use serde::{ser, de};
 /// 2.8.1 Role
 ///
 /// <type name="role" class="restricted" source="boolean">
-///     <choice name="sender" value="false"/>
-///     <choice name="receiver" value="true"/>
 /// </type>
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Role {
+    /// <choice name="sender" value="false"/>
     Sender,
+    /// <choice name="receiver" value="true"/>
     Receiver
 }
 
