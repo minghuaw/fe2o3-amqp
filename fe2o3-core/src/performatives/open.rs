@@ -16,8 +16,10 @@ use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 pub struct Open {
     pub container_id: String,
     pub hostname: Option<String>,
-    pub max_frame_size: Uint,
-    pub channel_max: Option<Ushort>,
+    #[amqp_contract(default)]
+    pub max_frame_size: MaxFrameSize,
+    #[amqp_contract(default)]
+    pub channel_max: ChannelMax,
     pub idle_time_out: Option<Milliseconds>,
     pub outgoing_locales: Option<Vec<IetfLanguageTag>>,
     pub incoming_locales: Option<Vec<IetfLanguageTag>>,

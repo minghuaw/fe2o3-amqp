@@ -26,11 +26,28 @@ use crate::definitions::{Milliseconds, SequenceNo};
     rename_all = "kebab-case"
 )]
 pub struct Header {
-    durable: Boolean, // TODO: impl default to false
-    priority: Ubyte,  // TODO: impl default to 4
-    ttl: Option<Milliseconds>,
-    first_acquirer: Boolean, // TODO: impl default to false,
-    delivery_count: Uint,    // TODO: impl default to 0
+    #[amqp_contract(default)]
+    pub durable: Boolean, // TODO: impl default to false
+
+    #[amqp_contract(default)]
+    pub priority: Priority,  // TODO: impl default to 4
+    
+    pub ttl: Option<Milliseconds>,
+    
+    #[amqp_contract(default)]
+    pub first_acquirer: Boolean, // TODO: impl default to false,
+    
+    #[amqp_contract(default)]
+    pub delivery_count: Uint,    // TODO: impl default to 0
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Priority(Ubyte);
+
+impl Default for Priority {
+    fn default() -> Self {
+        Self(4)
+    }
 }
 
 /// 3.2.2 Delivery Annotations

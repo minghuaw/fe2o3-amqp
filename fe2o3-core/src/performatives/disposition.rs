@@ -20,7 +20,9 @@ pub struct Disposition {
     pub role: Role,
     pub first: DeliveryNumber,
     pub last: Option<DeliveryNumber>,
-    pub settled: Option<Boolean>,
+    #[amqp_contract(default)]
+    pub settled: Boolean,
     pub state: Option<DeliveryState>,
-    pub batchable: Option<Boolean>,
+    #[amqp_contract(default)]
+    pub batchable: Boolean,
 }

@@ -22,17 +22,33 @@ use crate::{
 )]
 pub struct Attach {
     pub name: String,
+
     pub handle: Handle,
+    
     pub role: Role,
-    pub snd_settle_mode: Option<SenderSettleMode>,
-    pub rcv_settle_mode: Option<ReceivervSettleMode>,
+    
+    #[amqp_contract(default)]
+    pub snd_settle_mode: SenderSettleMode,
+    
+    #[amqp_contract(default)]
+    pub rcv_settle_mode: ReceivervSettleMode,
+    
     pub source: Option<Source>,
+    
     pub target: Option<Target>,
+    
     pub unsettled: Option<BTreeMap<DeliveryTag, Value>>,
-    pub incomplete_unsettled: Option<bool>,
+    
+    #[amqp_contract(default)]
+    pub incomplete_unsettled: bool,
+    
     pub initial_delivery_count: Option<SequenceNo>,
+    
     pub max_message_size: Option<Ulong>,
+    
     pub offered_capabilities: Option<Vec<Symbol>>,
+    
     pub desired_capabilities: Option<Vec<Symbol>>,
+    
     pub properties: Option<Fields>,
 }

@@ -13,8 +13,8 @@ mod role;
 pub use role::Role;
 
 /// 2.8.2 Sender Settle Mode
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SenderSettleMode(Ubyte);
+mod snd_settle_mode;
+pub use snd_settle_mode::SenderSettleMode;
 
 /// 2.8.3 Receiver Settle Mode
 #[derive(Debug, Deserialize, Serialize)]

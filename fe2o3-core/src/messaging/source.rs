@@ -33,9 +33,13 @@ use super::{
 )]
 pub struct Source {
     address: Option<Address>,
+    #[amqp_contract(default)]
     durable: TerminusDurability, // TODO: implement default
+    #[amqp_contract(default)]
     expiry_policy: TerminusExpiryPolicy,
+    #[amqp_contract(default)]
     timeout: Seconds,
+    #[amqp_contract(default)]
     dynamic: Boolean,
     dynamic_node_properties: Option<NodeProperties>,
     distribution_mode: Option<DistributionMode>,

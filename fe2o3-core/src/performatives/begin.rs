@@ -18,6 +18,7 @@ pub struct Begin {
     pub next_outgoing_id: TransferNumber,
     pub incoming_window: Uint,
     pub outgoing_window: Uint,
+    #[amqp_contract(default)]
     pub handle_max: Handle, // default to 4294967295
     pub offered_capabilities: Option<Vec<Symbol>>,
     pub desired_capabilities: Option<Vec<Symbol>>,

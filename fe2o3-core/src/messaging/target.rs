@@ -26,9 +26,13 @@ use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
 )]
 pub struct Target {
     address: Option<Address>,
+    #[amqp_contract(default)]
     durable: TerminusDurability, // TODO: impl default
+    #[amqp_contract(default)]
     expiry_policy: TerminusExpiryPolicy,
+    #[amqp_contract(default)]
     timeout: Seconds,
+    #[amqp_contract(default)]
     dynamic: Boolean,
     dynamic_node_properties: Option<NodeProperties>,
     capabilities: Vec<Symbol>,

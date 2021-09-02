@@ -22,7 +22,9 @@ pub struct Flow {
     pub delivery_count: Option<SequenceNo>,
     pub link_credit: Option<Uint>,
     pub available: Option<Uint>,
-    pub drain: Option<Boolean>,
-    pub echo: Option<Boolean>,
+    #[amqp_contract(default)]
+    pub drain: Boolean,
+    #[amqp_contract(default)]
+    pub echo: Boolean,
     pub properties: Option<Fields>,
 }

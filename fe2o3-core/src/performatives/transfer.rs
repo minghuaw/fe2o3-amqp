@@ -22,10 +22,14 @@ pub struct Transfer {
     pub delivery_tag: Option<DeliveryTag>,
     pub message_format: Option<MessageFormat>,
     pub settled: Option<Boolean>,
-    pub more: Option<Boolean>,
+    #[amqp_contract(default)]
+    pub more: Boolean,
     pub rcv_settle_mode: Option<ReceivervSettleMode>,
     pub state: Option<DeliveryState>,
-    pub resume: Option<Boolean>,
-    pub aborted: Option<Boolean>,
-    pub batchable: Option<Boolean>,
+    #[amqp_contract(default)]
+    pub resume: Boolean,
+    #[amqp_contract(default)]
+    pub aborted: Boolean,
+    #[amqp_contract(default)]
+    pub batchable: Boolean,
 }

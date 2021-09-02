@@ -15,6 +15,7 @@ use crate::definitions::{Error, Handle};
 )]
 pub struct Detach {
     pub handle: Handle,
-    pub closed: Option<Boolean>,
+    #[amqp_contract(default)]
+    pub closed: Boolean,
     pub error: Option<Error>,
 }
