@@ -8,7 +8,7 @@ use serde::{de, ser};
 ///     <choice name="copy" value="copy"/>
 /// </type>
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DistributionMode {
     Move,
     Copy,

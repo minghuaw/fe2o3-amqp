@@ -21,7 +21,7 @@ mod rcv_settle_mode;
 pub use rcv_settle_mode::ReceiverSettleMode;
 
 /// 2.8.4 Handle
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Handle(Uint);
 
 impl Default for Handle {
@@ -41,39 +41,39 @@ impl Default for Seconds {
 }
 
 /// 2.8.6 Milliseconds
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Milliseconds(Uint);
 
 /// 2.8.7 Delivery Tag
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeliveryTag(ByteBuf);
 
 /// 2.8.8 Delivery Number
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DeliveryNumber(SequenceNo);
 
 /// 2.8.9 Transfer Number
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransferNumber(SequenceNo);
 
 /// 2.8.10 Sequence No
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SequenceNo(Uint);
 
 /// 2.8.11 Message Format
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MessageFormat(Uint);
 
 /// 2.8.12 IETF Language Tag
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IetfLanguageTag(Symbol);
 
 /// 2.8.13 Fields
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fields(BTreeMap<Symbol, Value>);
 
 /// 2.8.14 Error
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:error:list",
     code = 0x0000_0000_0000_001d,

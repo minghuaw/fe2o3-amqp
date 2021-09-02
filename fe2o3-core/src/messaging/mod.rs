@@ -34,7 +34,7 @@ use crate::definitions::Fields;
 /// 3.5.9 Node Properties
 /// Properties of a node.
 /// <type name="node-properties" class="restricted" source="fields"/>
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeProperties(Fields);
 
 // The lifetime of a dynamically generated node.

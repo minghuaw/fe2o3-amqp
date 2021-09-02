@@ -204,7 +204,7 @@ pub enum MessageId {
 /// 3.2.15 Address String
 /// Address of a node.
 /// <type name="address-string" class="restricted" source="string" provides="address"/>
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Address(String);
 
 /// 3.2.16 CONSTANTS

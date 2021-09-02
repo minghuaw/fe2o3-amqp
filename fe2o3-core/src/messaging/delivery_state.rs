@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::definitions::{Error, Fields};
 
 /// 3.4 Delivery State
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DeliveryState {
     Accepted(Accepted),
@@ -15,7 +15,7 @@ pub enum DeliveryState {
     Received(Received),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Outcome {
     Accepted(Accepted),
@@ -31,7 +31,7 @@ pub enum Outcome {
 /// <field name="section-number" type="uint" mandatory="true"/>
 /// <field name="section-offset" type="ulong" mandatory="true"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:received:list",
     code = 0x0000_0000_0000_0023,
@@ -49,7 +49,7 @@ pub struct Received {
 /// <type name="accepted" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:accepted:list" code="0x00000000:0x00000024"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:accepted:list",
     code = 0x0000_0000_0000_0024,
@@ -65,7 +65,7 @@ pub struct Accepted {}
 ///     <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
 ///     <field name="error" type="error"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:rejected:list",
     code = 0x0000_0000_0000_0025,
@@ -81,7 +81,7 @@ pub struct Rejected {
 /// <type name="released" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:released:list" code="0x00000000:0x00000026"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:released:list",
     code = 0x000_0000_0000_0026,
@@ -98,7 +98,7 @@ pub struct Released {}
 ///     <field name="undeliverable-here" type="boolean"/>
 ///     <field name="message-annotations" type="fields"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:modified:list",
     code = 0x0000_0000_0000_0027,
