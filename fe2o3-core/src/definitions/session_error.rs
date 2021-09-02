@@ -10,13 +10,13 @@ pub enum SessionError {
     UnattachedHandle,
 }
 
-impl SessionError {
-    pub fn value(&self) -> Symbol {
-        let val = match self {
-            &Self::WindowViolation => "amqp:session:window-violation",
-            &Self::ErrantLink => "amqp:session:errant-link",
-            &Self::HandleInUse => "amqp:session:handle-in-use",
-            &Self::UnattachedHandle => "amqp:session:unattached-handle",
+impl From<&SessionError> for Symbol {
+    fn from(value: &SessionError) -> Self {
+        let val = match value {
+            &SessionError::WindowViolation => "amqp:session:window-violation",
+            &SessionError::ErrantLink => "amqp:session:errant-link",
+            &SessionError::HandleInUse => "amqp:session:handle-in-use",
+            &SessionError::UnattachedHandle => "amqp:session:unattached-handle",
         };
         Symbol::from(val)
     }
@@ -27,7 +27,8 @@ impl ser::Serialize for SessionError {
     where
         S: serde::Serializer,
     {
-        self.value().serialize(serializer)
+        Symbol::from(self)
+            .serialize(serializer)
     }
 }
 

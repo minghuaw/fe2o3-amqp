@@ -8,12 +8,12 @@ pub enum ConnectionError {
     Redirect,
 }
 
-impl ConnectionError {
-    pub fn value(&self) -> Symbol {
-        let val = match self {
-            Self::ConnectionForced => "amqp:connection:forced",
-            Self::FramingError => "amqp:connection:framing-error",
-            Self::Redirect => "amqp:connection:redirect",
+impl From<&ConnectionError> for Symbol {
+    fn from(value: &ConnectionError) -> Self {
+        let val = match value {
+            ConnectionError::ConnectionForced => "amqp:connection:forced",
+            ConnectionError::FramingError => "amqp:connection:framing-error",
+            ConnectionError::Redirect => "amqp:connection:redirect",
         };
         Symbol::from(val)
     }
@@ -24,7 +24,8 @@ impl ser::Serialize for ConnectionError {
     where
         S: serde::Serializer,
     {
-        self.value().serialize(serializer)
+        Symbol::from(self)
+            .serialize(serializer)
     }
 }
 

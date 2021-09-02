@@ -11,14 +11,14 @@ pub enum LinkError {
     Stolen,
 }
 
-impl LinkError {
-    pub fn value(&self) -> Symbol {
-        let val = match self {
-            &Self::DetachForced => "amqp:link:detach-forced",
-            &Self::TransferLimitExceeded => "amqp:link:transfer-limit-exceeded",
-            &Self::MessageSizeExceeded => "amqp:link:message-size-exceeded",
-            &Self::Redirect => "amqp:link:redirect",
-            &Self::Stolen => "amqp:link:stolen",
+impl From<&LinkError> for Symbol {
+    fn from(value: &LinkError) -> Self {
+        let val = match value {
+            &LinkError::DetachForced => "amqp:link:detach-forced",
+            &LinkError::TransferLimitExceeded => "amqp:link:transfer-limit-exceeded",
+            &LinkError::MessageSizeExceeded => "amqp:link:message-size-exceeded",
+            &LinkError::Redirect => "amqp:link:redirect",
+            &LinkError::Stolen => "amqp:link:stolen",
         };
         Symbol::from(val)
     }
@@ -29,7 +29,8 @@ impl ser::Serialize for LinkError {
     where
         S: serde::Serializer,
     {
-        self.value().serialize(serializer)
+        Symbol::from(self)
+            .serialize(serializer)
     }
 }
 
