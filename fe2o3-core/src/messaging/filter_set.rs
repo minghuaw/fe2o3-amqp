@@ -18,6 +18,5 @@ use std::collections::BTreeMap;
 /// A registry of commonly defined filter types and their capabilities is
 /// maintained [AMQPFILTERS].
 ///
-/// TODO: add described type representation in Value
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FilterSet(BTreeMap<Symbol, Option<Described<Value>>>);

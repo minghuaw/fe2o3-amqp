@@ -601,9 +601,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         {
             value.serialize(self)
         } else {
-            // TODO: how should enums be treated?
-            // self.serialize_u32(variant_index)?;
-            // value.serialize(self)
             let mut state = self.serialize_seq(Some(2))?;
             state.serialize_element(&variant_index)?;
             state.serialize_element(value)?;
@@ -1243,7 +1240,6 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         match self.se.struct_encoding {
             StructEncoding::None => {
-                // TODO: deserialize a regular struct from a list
                 write_list(
                     &mut self.se.writer,
                     self.count,

@@ -81,7 +81,6 @@ impl<'de, R: Read<'de>> Deserializer<R> {
 
     #[inline]
     fn parse_bool(&mut self) -> Result<bool, Error> {
-        // TODO: check whether is parsing in an array
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Boolean => {
                 let byte = self.reader.next()?;
@@ -972,7 +971,7 @@ where
             self.enum_type = EnumType::Descriptor;
             visitor.visit_enum(VariantAccess::new(self))
         } else {
-            // TODO: Considering the following enum serialization format
+            // Considering the following enum serialization format
             // `unit_variant` - a single u32
             // generic `newtype_variant` - List([u32, Value])
             // `tuple_variant` and `struct_variant` - List([u32, List([Value, *])])

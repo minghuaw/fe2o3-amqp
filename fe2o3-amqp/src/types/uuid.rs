@@ -69,14 +69,6 @@ impl<'de> de::Visitor<'de> for Visitor {
     {
         Uuid::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
     }
-
-    // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    // where
-    //     D: serde::Deserializer<'de>,
-    // {
-    //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-    //     Uuid::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
-    // }
 }
 
 impl<'de> de::Deserialize<'de> for Uuid {
@@ -88,4 +80,3 @@ impl<'de> de::Deserialize<'de> for Uuid {
     }
 }
 
-// TODO: optional conversion to external type uuid::Uuid;

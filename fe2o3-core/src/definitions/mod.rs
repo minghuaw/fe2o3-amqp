@@ -85,11 +85,11 @@ pub struct Fields(BTreeMap<Symbol, Value>);
 
 /// 2.8.14 Error
 #[derive(Debug, SerializeComposite, DeserializeComposite)]
-// #[serde(rename_all = "kebab-case")] // TODO: add serde compat
 #[amqp_contract(
     name = "amqp:error:list",
     code = 0x0000_0000_0000_001d,
-    encoding = "list"
+    encoding = "list",
+    rename_field = "kebab-case"
 )]
 pub struct Error {
     condition: Symbol,

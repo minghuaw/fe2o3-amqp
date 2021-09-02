@@ -2,7 +2,6 @@ use serde::{de, ser};
 
 use fe2o3_amqp::types::Symbol;
 
-/// TODO: manually implement Serialize and Deserialize
 #[derive(Debug, PartialEq)]
 pub enum LinkError {
     DetachForced,
