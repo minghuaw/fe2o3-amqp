@@ -1,7 +1,7 @@
 use darling::FromDeriveInput;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{DeriveInput, Lit, Meta};
+use syn::{DeriveInput};
 
 use crate::{DescribedStructAttr, DescribedAttr, EncodingType};
 
@@ -117,6 +117,22 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
                     $state.serialize_field("", &())?; // `None` and `()` share the same encoding
                 }
                 $nulls = 0;
+                $state.serialize_field($fname, $fident)?;
+            };
+        }
+    }
+}
+
+pub(crate) fn macro_rules_serialize_if_some() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! serialize_if_some {
+            // for struct
+            ($state: ident, $fident: expr, $fname: expr, Option<$ftype: ty>) => {
+                if $fident.is_some() {
+                    $state.serialize_field($fname, $fident)?;
+                } 
+            };
+            ($state: ident, $fident: expr, $fname: expr, $ftype: ty) => {
                 $state.serialize_field($fname, $fident)?;
             };
         }

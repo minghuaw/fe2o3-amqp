@@ -1,10 +1,7 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{
-    util::{convert_to_case, macro_rules_buffer_if_none, parse_described_struct_attr},
-    DescribedStructAttr, EncodingType,
-};
+use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_none, macro_rules_serialize_if_some, parse_described_struct_attr}};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -173,10 +170,29 @@ fn expand_serialize_struct(
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
     let len = field_idents.len();
-    let buffer_if_none = macro_rules_buffer_if_none();
+    let declarative_macro = match encoding {
+        EncodingType::Basic | EncodingType::List => macro_rules_buffer_if_none(),
+        EncodingType::Map => macro_rules_serialize_if_some(),
+    };
+
+    let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
+    match encoding {
+        EncodingType::Basic | EncodingType::List => {
+            for ((id, name), ty) in field_idents.iter().zip(field_names.iter()).zip(field_types.iter()) {
+                let token = quote!{buffer_if_none!(state, null_count, &self.#id, #name, #ty);};
+                field_impls.push(token);
+            }
+        },
+        EncodingType::Map => {
+            for ((id, name), ty) in field_idents.iter().zip(field_names.iter()).zip(field_types.iter()) {
+                let token = quote!{serialize_if_some!(state, &self.#id, #name, #ty);};
+                field_impls.push(token);
+            }
+        }
+    }
 
     quote! {
-        #buffer_if_none
+        #declarative_macro
 
         #[automatically_derived]
         impl fe2o3_amqp::serde::ser::Serialize for #ident {
@@ -193,7 +209,8 @@ fn expand_serialize_struct(
                 // in fe2o3_amqp serializer, this will be deducted
                 state.serialize_field(fe2o3_amqp::constants::DESCRIPTOR, &#descriptor)?;
                 // #( state.serialize_field(#field_names, &self.#field_idents)?; )*
-                #(buffer_if_none!(state, null_count, &self.#field_idents, #field_names, #field_types);) *
+                // #(buffer_if_none!(state, null_count, &self.#field_idents, #field_names, #field_types);) *
+                #( #field_impls; )*
                 state.end()
             }
         }
