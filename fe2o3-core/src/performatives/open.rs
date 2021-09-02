@@ -16,7 +16,7 @@ use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 pub struct Open {
     pub container_id: String,
     pub hostname: Option<String>,
-    pub max_frame_size: Option<Uint>,
+    pub max_frame_size: Uint,
     pub channel_max: Option<Ushort>,
     pub idle_time_out: Option<Milliseconds>,
     pub outgoing_locales: Option<Vec<IetfLanguageTag>>,
