@@ -1,4 +1,4 @@
-use fe2o3_amqp::types::Symbol;
+use fe2o3_amqp::types::{SYMBOL, Symbol};
 use serde::{de, ser};
 
 #[derive(Debug, PartialEq)]
@@ -29,16 +29,10 @@ impl ser::Serialize for ConnectionError {
     }
 }
 
-enum Field {
-    ConnectionForced,
-    FramingError,
-    Redirect,
-}
+struct Visitor {}
 
-struct FieldVisitor {}
-
-impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = ConnectionError;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("variant identifier")
@@ -56,9 +50,9 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let val = match v {
-            "amqp:connection:forced" => Field::ConnectionForced,
-            "amqp:connection:framing-error" => Field::FramingError,
-            "amqp:connection:redirect" => Field::Redirect,
+            "amqp:connection:forced" => ConnectionError::ConnectionForced,
+            "amqp:connection:framing-error" => ConnectionError::FramingError,
+            "amqp:connection:redirect" => ConnectionError::Redirect,
             _ => {
                 return Err(de::Error::custom(
                     "Invalud symbol value for ConnectionError",
@@ -69,49 +63,12 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     }
 }
 
-impl<'de> de::Deserialize<'de> for Field {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_identifier(FieldVisitor {})
-    }
-}
-
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = ConnectionError;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum ConnectionError")
-    }
-
-    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-    where
-        A: de::EnumAccess<'de>,
-    {
-        let (val, _) = data.variant()?;
-        let val = match val {
-            Field::ConnectionForced => ConnectionError::ConnectionForced,
-            Field::FramingError => ConnectionError::FramingError,
-            Field::Redirect => ConnectionError::Redirect,
-        };
-        Ok(val)
-    }
-}
-
 impl<'de> de::Deserialize<'de> for ConnectionError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
-            "amqp:connection:forced",
-            "amqp:connection:framing-error",
-            "amqp:connection:redirect",
-        ];
-        deserializer.deserialize_enum("CONNECTION_ERROR", VARIANTS, Visitor {})
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor { })
     }
 }
 

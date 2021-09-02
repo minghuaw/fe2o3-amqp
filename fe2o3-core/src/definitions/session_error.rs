@@ -1,6 +1,6 @@
 use serde::{de, ser};
 
-use fe2o3_amqp::types::Symbol;
+use fe2o3_amqp::types::{SYMBOL, Symbol};
 
 #[derive(Debug, PartialEq)]
 pub enum SessionError {
@@ -32,17 +32,10 @@ impl ser::Serialize for SessionError {
     }
 }
 
-enum Field {
-    WindowViolation,
-    ErrantLink,
-    HandleInUse,
-    UnattachedHandle,
-}
+struct Visitor {}
 
-struct FieldVisitor {}
-
-impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = SessionError;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("variant identifier")
@@ -60,44 +53,11 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let val = match v {
-            "amqp:session:window-violation" => Field::WindowViolation,
-            "amqp:session:errant-link" => Field::ErrantLink,
-            "amqp:session:handle-in-use" => Field::HandleInUse,
-            "amqp:session:unattached-handle" => Field::UnattachedHandle,
+            "amqp:session:window-violation" => SessionError::WindowViolation,
+            "amqp:session:errant-link" => SessionError::ErrantLink,
+            "amqp:session:handle-in-use" => SessionError::HandleInUse,
+            "amqp:session:unattached-handle" => SessionError::UnattachedHandle,
             _ => return Err(de::Error::custom("Invalid symbol value for SessionError")),
-        };
-        Ok(val)
-    }
-}
-
-impl<'de> de::Deserialize<'de> for Field {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_identifier(FieldVisitor {})
-    }
-}
-
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = SessionError;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum SessionError")
-    }
-
-    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-    where
-        A: de::EnumAccess<'de>,
-    {
-        let (val, _) = data.variant()?;
-        let val = match val {
-            Field::WindowViolation => SessionError::WindowViolation,
-            Field::ErrantLink => SessionError::ErrantLink,
-            Field::HandleInUse => SessionError::HandleInUse,
-            Field::UnattachedHandle => SessionError::UnattachedHandle,
         };
         Ok(val)
     }
@@ -108,13 +68,7 @@ impl<'de> de::Deserialize<'de> for SessionError {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
-            "amqp:session:window-violation",
-            "amqp:session:errant-link",
-            "amqp:session:handle-in-use",
-            "amqp:session:unattached-handle",
-        ];
-        deserializer.deserialize_enum("SESSION_ERROR", VARIANTS, Visitor {})
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
     }
 }
 

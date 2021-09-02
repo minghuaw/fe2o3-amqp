@@ -1,4 +1,4 @@
-use fe2o3_amqp::types::Symbol;
+use fe2o3_amqp::types::{SYMBOL, Symbol};
 use serde::{de, ser};
 
 /// 3.5.7 Standard Distribution Mode
@@ -35,15 +35,10 @@ impl ser::Serialize for DistributionMode {
     }
 }
 
-enum Field {
-    Move,
-    Copy
-}
+struct Visitor {}
 
-struct FieldVisitor {}
-
-impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = DistributionMode;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("variant identifier")
@@ -59,38 +54,9 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     where
             E: de::Error, {
         let val = match v {
-            "move" => Field::Move,
-            "copy" => Field::Copy,
+            "move" => DistributionMode::Move,
+            "copy" => DistributionMode::Copy,
             _ => return Err(de::Error::custom("Invalid symbol value for DistributionMode")),
-        };
-        Ok(val)
-    }
-}
-
-impl<'de> de::Deserialize<'de> for Field {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-            D: serde::Deserializer<'de> {
-        deserializer.deserialize_identifier(FieldVisitor {})
-    }
-}
-
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = DistributionMode;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum DistributionMode")
-    }
-
-    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-    where
-            A: de::EnumAccess<'de>, {
-        let (val, _) = data.variant()?;
-        let val = match val {
-            Field::Move => DistributionMode::Move,
-            Field::Copy => DistributionMode::Copy
         };
         Ok(val)
     }
@@ -99,12 +65,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for DistributionMode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
-    {
-        const VARIANTS: &'static [&'static str] = &[
-            "move",
-            "copy"
-        ];
-        deserializer.deserialize_enum("std-dist-mode", VARIANTS, Visitor { })
+            D: serde::Deserializer<'de> {
+        deserializer.deserialize_newtype_struct(SYMBOL,Visitor {})
     }
 }
+

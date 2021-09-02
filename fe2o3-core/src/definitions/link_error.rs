@@ -1,6 +1,6 @@
 use serde::{de, ser};
 
-use fe2o3_amqp::types::Symbol;
+use fe2o3_amqp::types::{SYMBOL, Symbol};
 
 #[derive(Debug, PartialEq)]
 pub enum LinkError {
@@ -34,18 +34,10 @@ impl ser::Serialize for LinkError {
     }
 }
 
-enum Field {
-    DetachForced,
-    TransferLimitExceeded,
-    MessageSizeExceeded,
-    Redirect,
-    Stolen,
-}
+struct Visitor {}
 
-struct FieldVisitor {}
-
-impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = LinkError;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("variant identifier")
@@ -63,46 +55,12 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let val = match v {
-            "amqp:link:detach-forced" => Field::DetachForced,
-            "amqp:link:transfer-limit-exceeded" => Field::TransferLimitExceeded,
-            "amqp:link:message-size-exceeded" => Field::MessageSizeExceeded,
-            "amqp:link:redirect" => Field::Redirect,
-            "amqp:link:stolen" => Field::Stolen,
+            "amqp:link:detach-forced" => LinkError::DetachForced,
+            "amqp:link:transfer-limit-exceeded" => LinkError::TransferLimitExceeded,
+            "amqp:link:message-size-exceeded" => LinkError::MessageSizeExceeded,
+            "amqp:link:redirect" => LinkError::Redirect,
+            "amqp:link:stolen" => LinkError::Stolen,
             _ => return Err(de::Error::custom("Invalid symbol value for LinkError")),
-        };
-        Ok(val)
-    }
-}
-
-impl<'de> de::Deserialize<'de> for Field {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_identifier(FieldVisitor {})
-    }
-}
-
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = LinkError;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum LinkError")
-    }
-
-    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-    where
-        A: de::EnumAccess<'de>,
-    {
-        let (val, _) = data.variant()?;
-        let val = match val {
-            Field::DetachForced => LinkError::DetachForced,
-            Field::TransferLimitExceeded => LinkError::TransferLimitExceeded,
-            Field::MessageSizeExceeded => LinkError::MessageSizeExceeded,
-            Field::Redirect => LinkError::Redirect,
-            Field::Stolen => LinkError::Stolen,
         };
         Ok(val)
     }
@@ -113,14 +71,7 @@ impl<'de> de::Deserialize<'de> for LinkError {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
-            "amqp:link:detach-forced",
-            "amqp:link:transfer-limit-exceeded",
-            "amqp:link:message-size-exceeded",
-            "amqp:link:redirect",
-            "amqp:link:stolen",
-        ];
-        deserializer.deserialize_enum("LINK_ERROR", VARIANTS, Visitor {})
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
     }
 }
 

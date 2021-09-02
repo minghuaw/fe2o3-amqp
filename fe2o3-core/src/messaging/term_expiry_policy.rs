@@ -1,4 +1,4 @@
-use fe2o3_amqp::types::Symbol;
+use fe2o3_amqp::types::{SYMBOL, Symbol};
 use serde::{de, ser};
 
 /// 3.5.6 Terminus Expiry Policy
@@ -37,18 +37,10 @@ impl ser::Serialize for TerminusExpiryPolicy {
         Symbol::from(self).serialize(serializer)
     }
 }
+struct Visitor { }
 
-enum Field {
-    LinkDetach,
-    SessionEnd,
-    ConnectionClose,
-    Never,
-}
-
-struct FieldVisitor { }
-
-impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+impl<'de> de::Visitor<'de> for Visitor {
+    type Value = TerminusExpiryPolicy;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("field identifier")
@@ -64,42 +56,11 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     where
             E: de::Error, {
         let val = match v {
-            "link-detach" => Field::LinkDetach,
-            "session-end" => Field::SessionEnd,
-            "connection-close" => Field::ConnectionClose,
-            "never" => Field::Never,
+            "link-detach" => TerminusExpiryPolicy::LinkDetach,
+            "session-end" => TerminusExpiryPolicy::SessionEnd,
+            "connection-close" => TerminusExpiryPolicy::ConnectionClose,
+            "never" => TerminusExpiryPolicy::Never,
             _ => return Err(de::Error::custom("Invalid symbol value for TerminusExpiryPolicy")),
-        };
-        Ok(val)
-    }
-}
-
-impl<'de> de::Deserialize<'de> for Field {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-            D: serde::Deserializer<'de> {
-        deserializer.deserialize_identifier(FieldVisitor { })
-    }
-}
-
-struct Visitor { }
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = TerminusExpiryPolicy;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum TerminusExpiryPolicy")
-    }
-
-    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-    where
-            A: de::EnumAccess<'de>, {
-        let (val, _) = data.variant()?;
-        let val = match val {
-            Field::LinkDetach => TerminusExpiryPolicy::LinkDetach,
-            Field::SessionEnd => TerminusExpiryPolicy::SessionEnd,
-            Field::ConnectionClose => TerminusExpiryPolicy::ConnectionClose,
-            Field::Never => TerminusExpiryPolicy::Never
         };
         Ok(val)
     }
@@ -108,14 +69,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for TerminusExpiryPolicy {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
-    {
-        const VARIANTS: &'static [&'static str] = &[
-            "link-detach",
-            "session-end",
-            "connection-close",
-            "never",
-        ];
-        deserializer.deserialize_enum("terminus-expiry-policy", VARIANTS, Visitor { })
+            D: serde::Deserializer<'de> {
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor { })
     }
 }
