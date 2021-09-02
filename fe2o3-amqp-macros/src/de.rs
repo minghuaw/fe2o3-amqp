@@ -1,7 +1,6 @@
 use darling::FromMeta;
-use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Attribute, AttributeArgs, DeriveInput, Fields, Lit, NestedMeta, Token, parse::Parser, punctuated::Punctuated, spanned::Spanned, token::Comma};
+use syn::{DeriveInput, Fields, spanned::Spanned};
 
 use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none, parse_described_struct_attr}};
 
