@@ -1,10 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{
-    macros::{DeserializeComposite, SerializeComposite},
-    types::{Symbol, Ulong},
-    value::Value,
-};
+use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, types::{Boolean, Symbol, Ulong}, value::Value};
 
 use crate::{
     definitions::{
@@ -69,7 +65,7 @@ pub struct Attach {
     
     /// <field name="incomplete-unsettled" type="boolean" default="false"/>
     #[amqp_contract(default)]
-    pub incomplete_unsettled: bool,
+    pub incomplete_unsettled: Boolean,
     
     /// <field name="initial-delivery-count" type="sequence-no"/>
     pub initial_delivery_count: Option<SequenceNo>,
