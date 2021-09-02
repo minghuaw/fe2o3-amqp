@@ -18,9 +18,9 @@ pub enum AmqpError {
     FrameSizeTooSmall,
 }
 
-impl AmqpError {
-    fn value(&self) -> Symbol {
-        let s = match self {
+impl From<&AmqpError> for Symbol {
+    fn from(value: &AmqpError) -> Self {
+        let s = match value {
             AmqpError::InternalError => "amqp:internal-error",
             AmqpError::NotFound => "amqp:not-found",
             AmqpError::UnauthorizedAccess => "amqp:unauthorized-access",
@@ -45,7 +45,7 @@ impl ser::Serialize for AmqpError {
     where
         S: serde::Serializer,
     {
-        let val = self.value();
+        let val = Symbol::from(self);
         val.serialize(serializer)
     }
 }
