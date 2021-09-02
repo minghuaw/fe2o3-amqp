@@ -3,18 +3,27 @@ use serde::{de, ser};
 
 /// 3.5.6 Terminus Expiry Policy
 /// <type name="terminus-expiry-policy" class="restricted" source="symbol">
-///     <choice name="link-detach" value="link-detach"/>
-///     <choice name="session-end" value="session-end"/>
-///     <choice name="connection-close" value="connection-close"/>
-///     <choice name="never" value="never"/>
 /// </type>
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TerminusExpiryPolicy {
+    /// <choice name="link-detach" value="link-detach"/>
     LinkDetach,
+    
+    /// <choice name="session-end" value="session-end"/>
     SessionEnd,
+    
+    /// <choice name="connection-close" value="connection-close"/>
     ConnectionClose,
+    
+    /// <choice name="never" value="never"/>
     Never,
+}
+
+impl Default for TerminusExpiryPolicy {
+    fn default() -> Self {
+        TerminusExpiryPolicy::SessionEnd
+    }
 }
 
 impl From<&TerminusExpiryPolicy> for Symbol {

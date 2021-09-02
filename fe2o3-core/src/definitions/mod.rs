@@ -31,8 +31,14 @@ impl Default for Handle {
 }
 
 /// 2.8.5 Seconds
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Seconds(Uint);
+
+impl Default for Seconds {
+    fn default() -> Self {
+        Seconds(0)
+    }
+}
 
 /// 2.8.6 Milliseconds
 #[derive(Debug, Serialize, Deserialize)]
