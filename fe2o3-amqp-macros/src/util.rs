@@ -3,16 +3,17 @@ use proc_macro2::Span;
 use quote::quote;
 use syn::DeriveInput;
 
-use crate::{AmqpContractAttr, DescribedAttr, EncodingType};
+use crate::{DescribedStructAttr, DescribedAttr, EncodingType};
 
-pub(crate) fn parse_described_attr(input: &syn::DeriveInput) -> AmqpContractAttr {
+pub(crate) fn parse_described_attr(input: &syn::DeriveInput) -> DescribedStructAttr {
     let attr = DescribedAttr::from_derive_input(&input).unwrap();
 
     let name = attr.name.unwrap_or_else(|| input.ident.to_string());
     let code = attr.code;
     let encoding = attr.encoding.unwrap_or(EncodingType::List);
     let rename_field = attr.rename_field;
-    AmqpContractAttr {
+    let no_descriptor = attr.no_descriptor.is_some();
+    DescribedStructAttr {
         name,
         code,
         encoding,

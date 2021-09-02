@@ -25,9 +25,11 @@ struct DescribedAttr {
     pub encoding: Option<EncodingType>,
     #[darling(default)]
     pub rename_field: String,
+    #[darling(default)]
+    pub no_descriptor: Option<()>,
 }
 
-struct AmqpContractAttr {
+struct DescribedStructAttr {
     name: String,
     code: Option<u64>,
     encoding: EncodingType,

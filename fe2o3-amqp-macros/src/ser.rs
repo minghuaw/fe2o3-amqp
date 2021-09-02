@@ -3,7 +3,7 @@ use syn::{DeriveInput, Fields};
 
 use crate::{
     util::{convert_to_case, macro_rules_buffer_if_none, parse_described_attr},
-    AmqpContractAttr, EncodingType,
+    DescribedStructAttr, EncodingType,
 };
 
 pub(crate) fn expand_serialize(
@@ -18,7 +18,7 @@ pub(crate) fn expand_serialize(
 }
 
 fn expand_serialize_on_datastruct(
-    amqp_attr: &AmqpContractAttr,
+    amqp_attr: &DescribedStructAttr,
     ident: &syn::Ident,
     data: &syn::DataStruct,
     ctx: &DeriveInput,
