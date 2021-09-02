@@ -1,5 +1,5 @@
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
-use fe2o3_amqp::types::{Boolean, Symbol, Uint, Ulong};
+use fe2o3_amqp::types::{Boolean, Uint, Ulong};
 use serde::{Deserialize, Serialize};
 
 use crate::definitions::{Error, Fields};
