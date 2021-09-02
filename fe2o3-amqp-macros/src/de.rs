@@ -26,20 +26,20 @@ fn expand_deserialize_on_datastruct(
 
     let evaluate_code = match attr.code {
         Some(code) => quote! {
-            fe2o3_amqp::types::Descriptor::Code(__c) => {
+            fe2o3_amqp::descriptor::Descriptor::Code(__c) => {
                 if __c != #code {
                     return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             }
         },
         None => quote! {
-            fe2o3_amqp::types::Descriptor::Code(_) => return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
+            fe2o3_amqp::descriptor::Descriptor::Code(_) => return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
         },
     };
 
     let evaluate_descriptor = quote! {
         match __descriptor {
-            fe2o3_amqp::types::Descriptor::Name(__symbol) => {
+            fe2o3_amqp::descriptor::Descriptor::Name(__symbol) => {
                 if __symbol.into_inner() != #name {
                     return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
@@ -85,7 +85,7 @@ fn impl_visit_seq_for_unit_struct(
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::types::Descriptor = match __seq.next_element()? {
+            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(__val) => __val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -166,7 +166,7 @@ fn impl_visit_seq_for_tuple_struct(
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::types::Descriptor = match __seq.next_element()? {
+            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -450,7 +450,7 @@ fn impl_visit_seq_for_struct(
         where
             A: fe2o3_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::types::Descriptor = match __seq.next_element()? {
+            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
@@ -493,7 +493,7 @@ fn impl_visit_map(
             #(let mut #field_idents: Option<#field_types> = None;)*
 
             // The first should always be the descriptor
-            let __descriptor: fe2o3_amqp::types::Descriptor = match __map.next_key()? {
+            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __map.next_key()? {
                 Some(val) => val,
                 None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting__descriptor"))
             };

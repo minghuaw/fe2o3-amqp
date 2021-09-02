@@ -1345,11 +1345,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 mod test {
     use std::collections::BTreeMap;
 
-    use crate::{
-        format_code::EncodingCodes,
-        types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid},
-        types::{Descriptor, Symbol},
-    };
+    use crate::{descriptor::Descriptor, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid, Symbol}};
 
     use super::*;
 

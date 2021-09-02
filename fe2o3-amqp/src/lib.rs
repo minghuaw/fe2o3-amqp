@@ -10,6 +10,7 @@ pub mod ser;
 pub mod types;
 pub mod value;
 pub mod described;
+pub mod descriptor;
 
 // Private mods
 mod read;

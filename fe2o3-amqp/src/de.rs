@@ -1496,11 +1496,7 @@ mod tests {
 
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{
-        format_code::EncodingCodes,
-        ser::to_vec,
-        types::{Descriptor, Symbol},
-    };
+    use crate::{descriptor::Descriptor, format_code::EncodingCodes, ser::to_vec, types::{Symbol}};
 
     use super::{from_reader, from_slice};
 

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use serde::{ser, de};
 
-use crate::{constants::{DESCRIBED_BASIC, DESCRIPTOR}, types::Descriptor};
+use crate::{constants::{DESCRIBED_BASIC, DESCRIPTOR}, descriptor::Descriptor};
 
 /// Contains a Box to descriptor and a Box to value T.
 ///
@@ -82,7 +82,7 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, to_vec, types::Descriptor};
+    use crate::{from_slice, to_vec, descriptor::Descriptor};
 
     use super::Described;
 

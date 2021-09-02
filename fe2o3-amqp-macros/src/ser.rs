@@ -21,10 +21,10 @@ fn expand_serialize_on_datastruct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let descriptor = match amqp_attr.code {
-        Some(code) => quote!(fe2o3_amqp::types::Descriptor::Code(#code)),
+        Some(code) => quote!(fe2o3_amqp::descriptor::Descriptor::Code(#code)),
         None => {
             let name = &amqp_attr.name[..];
-            quote!(fe2o3_amqp::types::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name)))
+            quote!(fe2o3_amqp::descriptor::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name)))
         }
     };
 
