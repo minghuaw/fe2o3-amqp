@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    types::{Symbol, Ubyte, Uint},
+    types::{Symbol, Uint},
     value::Value,
 };
 
@@ -22,7 +22,7 @@ pub use rcv_settle_mode::ReceiverSettleMode;
 
 /// 2.8.4 Handle
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Handle(Uint);
+pub struct Handle(pub Uint);
 
 impl Default for Handle {
     fn default() -> Self {
@@ -32,7 +32,7 @@ impl Default for Handle {
 
 /// 2.8.5 Seconds
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Seconds(Uint);
+pub struct Seconds(pub Uint);
 
 impl Default for Seconds {
     fn default() -> Self {
@@ -42,35 +42,35 @@ impl Default for Seconds {
 
 /// 2.8.6 Milliseconds
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Milliseconds(Uint);
+pub struct Milliseconds(pub Uint);
 
 /// 2.8.7 Delivery Tag
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeliveryTag(ByteBuf);
+pub struct DeliveryTag(pub ByteBuf);
 
 /// 2.8.8 Delivery Number
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct DeliveryNumber(SequenceNo);
+pub struct DeliveryNumber(pub SequenceNo);
 
 /// 2.8.9 Transfer Number
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TransferNumber(SequenceNo);
+pub struct TransferNumber(pub SequenceNo);
 
 /// 2.8.10 Sequence No
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SequenceNo(Uint);
+pub struct SequenceNo(pub Uint);
 
 /// 2.8.11 Message Format
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MessageFormat(Uint);
+pub struct MessageFormat(pub Uint);
 
 /// 2.8.12 IETF Language Tag
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IetfLanguageTag(Symbol);
+pub struct IetfLanguageTag(pub Symbol);
 
 /// 2.8.13 Fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Fields(BTreeMap<Symbol, Value>);
+pub struct Fields(pub BTreeMap<Symbol, Value>);
 
 /// 2.8.14 Error
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
