@@ -12,13 +12,8 @@ use crate::definitions::{Milliseconds, SequenceNo};
 /// Transport headers for a message.
 /// <type name="header" class="composite" source="list" provides="section">
 ///     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
-///     <field name="durable" type="boolean" default="false"/>
-///     <field name="priority" type="ubyte" default="4"/>
-///     <field name="ttl" type="milliseconds"/>
-///     <field name="first-acquirer" type="boolean" default="false"/>
-///     <field name="delivery-count" type="uint" default="0"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:header:list",
     code = 0x0000_0000_0000_0070,
@@ -26,23 +21,28 @@ use crate::definitions::{Milliseconds, SequenceNo};
     rename_all = "kebab-case"
 )]
 pub struct Header {
+    /// <field name="durable" type="boolean" default="false"/>
     #[amqp_contract(default)]
-    pub durable: Boolean, // TODO: impl default to false
-
-    #[amqp_contract(default)]
-    pub priority: Priority,  // TODO: impl default to 4
+    pub durable: Boolean, 
     
+    /// <field name="priority" type="ubyte" default="4"/>
+    #[amqp_contract(default)]
+    pub priority: Priority, 
+    
+    /// <field name="ttl" type="milliseconds"/>
     pub ttl: Option<Milliseconds>,
     
+    /// <field name="first-acquirer" type="boolean" default="false"/>
     #[amqp_contract(default)]
-    pub first_acquirer: Boolean, // TODO: impl default to false,
+    pub first_acquirer: Boolean,
     
+    /// <field name="delivery-count" type="uint" default="0"/>
     #[amqp_contract(default)]
-    pub delivery_count: Uint,    // TODO: impl default to 0
+    pub delivery_count: Uint, 
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Priority(Ubyte);
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Priority(pub Ubyte);
 
 impl Default for Priority {
     fn default() -> Self {
@@ -50,11 +50,23 @@ impl Default for Priority {
     }
 }
 
+impl From<Ubyte> for Priority {
+    fn from(value: Ubyte) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Priority> for Ubyte {
+    fn from(value: Priority) -> Self {
+        value.0
+    }
+}
+
 /// 3.2.2 Delivery Annotations
 /// <type name="delivery-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:delivery-annotations:map" code="0x00000000:0x00000071"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
     code = 0x0000_0000_0000_0071,
@@ -66,7 +78,7 @@ pub struct DeliveryAnnotations(Annotations);
 /// <type name="message-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:message-annotations:map" code="0x00000000:0x00000072"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
     code = 0x0000_0000_0000_0072,
@@ -92,7 +104,7 @@ pub struct MessageAnnotations(Annotations);
 ///     <field name="group-sequence" type="sequence-no"/>
 ///     <field name="reply-to-group-id" type="string"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:properties:list",
     code = 0x0000_0000_0000_0073,
@@ -119,7 +131,7 @@ pub struct Properties {
 /// <type name="application-properties" class="restricted" source="map" provides="section">
 ///     <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:application-properties:map",
     code = 0x0000_0000_0000_0074,
@@ -131,7 +143,7 @@ pub struct ApplicationProperties(BTreeMap<String, Value>);
 /// <type name="data" class="restricted" source="binary" provides="section">
 ///     <descriptor name="amqp:data:binary" code="0x00000000:0x00000075"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:data:binary",
     code = 0x0000_0000_0000_0075,
@@ -143,7 +155,7 @@ pub struct Data(Binary);
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:amqp-sequence:list",
     code = 0x0000_0000_0000_0076,
@@ -155,7 +167,7 @@ pub struct AmqpSequence(Vec<Value>);
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
 ///     <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:amqp-value:*",
     code = 0x0000_0000_0000_0077,
@@ -168,7 +180,7 @@ pub struct AmqpValue(Value);
 /// <type name="footer" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:footer:map" code="0x00000000:0x00000078"/>
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:footer:map",
     code = 0x0000_0000_0000_0078,
@@ -178,10 +190,10 @@ pub struct Footer(Annotations);
 
 /// 3.2.10 Annotations
 /// <type name="annotations" class="restricted" source="map"/>
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Annotations(BTreeMap<Symbol, Value>);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MessageId {
     /// 3.2.11 Message ID ULong
