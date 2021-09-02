@@ -72,7 +72,7 @@ impl From<Priority> for Ubyte {
     code = 0x0000_0000_0000_0071,
     encoding = "basic", // A simple wrapper over a map
 )]
-pub struct DeliveryAnnotations(Annotations);
+pub struct DeliveryAnnotations(pub Annotations);
 
 /// 3.2.3 Message Annotations
 /// <type name="message-annotations" class="restricted" source="annotations" provides="section">
@@ -84,7 +84,7 @@ pub struct DeliveryAnnotations(Annotations);
     code = 0x0000_0000_0000_0072,
     encoding = "basic"
 )]
-pub struct MessageAnnotations(Annotations);
+pub struct MessageAnnotations(pub Annotations);
 
 /// 3.2.4 Properties
 /// Immutable properties of the message.
@@ -137,7 +137,7 @@ pub struct Properties {
     code = 0x0000_0000_0000_0074,
     encoding = "basic"
 )]
-pub struct ApplicationProperties(BTreeMap<String, Value>);
+pub struct ApplicationProperties(pub BTreeMap<String, Value>);
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
@@ -149,7 +149,7 @@ pub struct ApplicationProperties(BTreeMap<String, Value>);
     code = 0x0000_0000_0000_0075,
     encoding = "basic"
 )]
-pub struct Data(Binary);
+pub struct Data(pub Binary);
 
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
@@ -161,7 +161,7 @@ pub struct Data(Binary);
     code = 0x0000_0000_0000_0076,
     encoding = "basic"
 )]
-pub struct AmqpSequence(Vec<Value>);
+pub struct AmqpSequence(pub Vec<Value>);
 
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
@@ -173,7 +173,7 @@ pub struct AmqpSequence(Vec<Value>);
     code = 0x0000_0000_0000_0077,
     encoding = "basic"
 )]
-pub struct AmqpValue(Value);
+pub struct AmqpValue(pub Value);
 
 /// 3.2.9 Footer
 /// Transport footers for a message.
@@ -186,7 +186,7 @@ pub struct AmqpValue(Value);
     code = 0x0000_0000_0000_0078,
     encoding = "basic"
 )]
-pub struct Footer(Annotations);
+pub struct Footer(pub Annotations);
 
 /// 3.2.10 Annotations
 /// <type name="annotations" class="restricted" source="map"/>
@@ -217,7 +217,7 @@ pub enum MessageId {
 /// Address of a node.
 /// <type name="address-string" class="restricted" source="string" provides="address"/>
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Address(String);
+pub struct Address(pub String);
 
 /// 3.2.16 CONSTANTS
 pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
