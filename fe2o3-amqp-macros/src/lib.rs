@@ -36,12 +36,6 @@ struct DescribedStructAttr {
     rename_field: String,
 }
 
-struct DescribedEnumAttr {
-    name: String,
-    code: Option<u64>,
-    no_descriptor: bool,
-}
-
 #[proc_macro_derive(SerializeComposite, attributes(amqp_contract))]
 pub fn derive_serialize_described(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(item as DeriveInput);
