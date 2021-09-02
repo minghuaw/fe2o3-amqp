@@ -1345,7 +1345,7 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 mod test {
     use std::collections::BTreeMap;
 
-    use crate::{descriptor::Descriptor, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid, Symbol}};
+    use crate::{descriptor::Descriptor, format_code::EncodingCodes, primitives::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid, Symbol}};
 
     use super::*;
 
@@ -1757,7 +1757,7 @@ mod test {
 
     #[test]
     fn test_serialize_symbol() {
-        use crate::types::Symbol;
+        use crate::primitives::Symbol;
         let symbol = Symbol::from("amqp");
         let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(symbol, expected);

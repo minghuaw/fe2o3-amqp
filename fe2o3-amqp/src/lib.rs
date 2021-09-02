@@ -7,7 +7,7 @@ pub mod fixed_width;
 pub mod format_code;
 pub mod macros;
 pub mod ser;
-pub mod types;
+pub mod primitives;
 pub mod value;
 pub mod described;
 pub mod descriptor;

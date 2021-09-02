@@ -1,4 +1,4 @@
-use crate::types::Symbol;
+use crate::primitives::Symbol;
 
 /// Descriptor of a described type
 ///

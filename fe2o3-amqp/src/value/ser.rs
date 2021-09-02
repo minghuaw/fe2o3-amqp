@@ -9,7 +9,7 @@ use crate::{
     constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID,
     },
-    types::{
+    primitives::{
         Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, 
     },
     util::NewType,
@@ -582,7 +582,7 @@ mod tests {
     use serde::Serialize;
 
     use crate::{
-        types::{Array, Timestamp},
+        primitives::{Array, Timestamp},
         value::Value,
     };
 

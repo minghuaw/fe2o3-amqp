@@ -1496,7 +1496,7 @@ mod tests {
 
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{descriptor::Descriptor, format_code::EncodingCodes, ser::to_vec, types::{Symbol}};
+    use crate::{descriptor::Descriptor, format_code::EncodingCodes, ser::to_vec, primitives::{Symbol}};
 
     use super::{from_reader, from_slice};
 
@@ -1652,7 +1652,7 @@ mod tests {
     #[test]
     fn test_deserialize_decimal32() {
         use crate::ser::to_vec;
-        use crate::types::Dec32;
+        use crate::primitives::Dec32;
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1662,7 +1662,7 @@ mod tests {
     #[test]
     fn test_deserialize_decimal() {
         use crate::ser::to_vec;
-        use crate::types::{Dec128, Dec32, Dec64};
+        use crate::primitives::{Dec128, Dec32, Dec64};
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1680,7 +1680,7 @@ mod tests {
     #[test]
     fn test_deserialize_uuid() {
         use crate::ser::to_vec;
-        use crate::types::Uuid;
+        use crate::primitives::Uuid;
 
         let expected = Uuid::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let buf = to_vec(&expected).unwrap();
@@ -1690,7 +1690,7 @@ mod tests {
     #[test]
     fn test_deserialize_timestamp() {
         use crate::ser::to_vec;
-        use crate::types::Timestamp;
+        use crate::primitives::Timestamp;
 
         let expected = Timestamp::from(0);
         let buf = to_vec(&expected).unwrap();
@@ -1699,7 +1699,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_symbol() {
-        use crate::types::Symbol;
+        use crate::primitives::Symbol;
         let buf = &[0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
         let expected = Symbol::from("amqp");
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -1708,7 +1708,7 @@ mod tests {
     #[test]
     fn test_deserialize_array() {
         use crate::ser::to_vec;
-        use crate::types::Array;
+        use crate::primitives::Array;
 
         let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1788,7 +1788,7 @@ mod tests {
     #[test]
     fn test_deserialize_descriptor() {
         use crate::ser::to_vec;
-        use crate::types::Symbol;
+        use crate::primitives::Symbol;
 
         let descriptor = Descriptor::Name(Symbol::from("amqp"));
         // let descriptor = Descriptor::Code(113);

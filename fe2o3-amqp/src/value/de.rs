@@ -984,7 +984,7 @@ mod tests {
 
     #[test]
     fn test_decimal32_from_value() {
-        use crate::types::Dec32;
+        use crate::primitives::Dec32;
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_value(&expected).unwrap();
@@ -993,7 +993,7 @@ mod tests {
 
     #[test]
     fn test_decimal64_from_value() {
-        use crate::types::Dec64;
+        use crate::primitives::Dec64;
 
         let expected = Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]);
         let buf = to_value(&expected).unwrap();
@@ -1002,7 +1002,7 @@ mod tests {
 
     #[test]
     fn test_decimal128_from_value() {
-        use crate::types::Dec128;
+        use crate::primitives::Dec128;
 
         let expected = Dec128::from([1u8; 16]);
         let buf = to_value(&expected).unwrap();
@@ -1011,7 +1011,7 @@ mod tests {
 
     #[test]
     fn test_uuid_from_value() {
-        use crate::types::Uuid;
+        use crate::primitives::Uuid;
 
         let expected = Uuid::from([3u8; 16]);
         let buf = to_value(&expected).unwrap();
@@ -1020,7 +1020,7 @@ mod tests {
 
     #[test]
     fn test_timestamp_from_value() {
-        use crate::types::Timestamp;
+        use crate::primitives::Timestamp;
 
         let expected = Timestamp::from(13131313);
         let buf = to_value(&expected).unwrap();
@@ -1037,7 +1037,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_array() {
-        use crate::types::Array;
+        use crate::primitives::Array;
 
         let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_value(&expected).unwrap();

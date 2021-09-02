@@ -24,7 +24,7 @@ fn expand_serialize_on_datastruct(
         Some(code) => quote!(fe2o3_amqp::descriptor::Descriptor::Code(#code)),
         None => {
             let name = &amqp_attr.name[..];
-            quote!(fe2o3_amqp::descriptor::Descriptor::Name(fe2o3_amqp::types::Symbol::from(#name)))
+            quote!(fe2o3_amqp::descriptor::Descriptor::Name(fe2o3_amqp::primitives::Symbol::from(#name)))
         }
     };
 

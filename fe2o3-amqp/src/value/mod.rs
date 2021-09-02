@@ -2,7 +2,7 @@ use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use crate::{described::Described, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}};
+use crate::{described::Described, format_code::EncodingCodes, primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}};
 
 pub mod de;
 pub mod ser;
@@ -458,7 +458,7 @@ mod tests {
 
     #[test]
     fn test_value_decimal32() {
-        use crate::types::Dec32;
+        use crate::primitives::Dec32;
         let expected = Value::Decimal32(Dec32::from([1, 2, 3, 4]));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_value_decimal64() {
-        use crate::types::Dec64;
+        use crate::primitives::Dec64;
         let expected = Value::Decimal64(Dec64::from([1, 2, 3, 4, 5, 6, 7, 8]));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_value_decimal128() {
-        use crate::types::Dec128;
+        use crate::primitives::Dec128;
         let expected = Value::Decimal128(Dec128::from([
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
         ]));
@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn test_value_timestamp() {
-        use crate::types::Timestamp;
+        use crate::primitives::Timestamp;
         let expected = Value::Timestamp(Timestamp::from(13));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_value_uuid() {
-        use crate::types::Uuid;
+        use crate::primitives::Uuid;
         let expected = Value::Uuid(Uuid::from([
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
         ]));
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_value_symbol() {
-        use crate::types::Symbol;
+        use crate::primitives::Symbol;
         let expected = Value::Symbol(Symbol::from("amqp"));
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn test_value_array() {
-        use crate::types::Array;
+        use crate::primitives::Array;
         let vec: Vec<Value> = vec![1i32, 2, 3, 4]
             .iter()
             .map(|val| Value::Int(*val))
