@@ -1,7 +1,7 @@
 use darling::FromDeriveInput;
 use proc_macro2::Span;
 use quote::quote;
-use syn::DeriveInput;
+use syn::{DeriveInput, Lit, Meta};
 
 use crate::{DescribedStructAttr, DescribedAttr, EncodingType};
 
@@ -136,6 +136,19 @@ pub(crate) fn macro_rules_unwrap_or_none() -> proc_macro2::TokenStream {
                 let $fident: $ftype = match $seq.next_element()? {
                     Some(val) => val,
                     None => return Err(fe2o3_amqp::serde::de::Error::custom("Insufficient number of items")),
+                };
+            };
+        }
+    }
+}
+
+pub(crate) fn macro_rules_unwrap_or_default() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! unwrap_or_default {
+            ($fident: ident, $seq: ident, $ftype: ty, $default: expr) => {
+                let $fident: $ftype = match $seq.next_element()? {
+                    Some(val) => val,
+                    None => $default,
                 };
             };
         }

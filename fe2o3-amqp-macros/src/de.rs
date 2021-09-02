@@ -1,10 +1,9 @@
+use darling::FromMeta;
+use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{spanned::Spanned, DeriveInput, Fields};
+use syn::{Attribute, AttributeArgs, DeriveInput, Fields, Lit, NestedMeta, Token, parse::Parser, punctuated::Punctuated, spanned::Spanned, token::Comma};
 
-use crate::{
-    util::{convert_to_case, get_span_of, macro_rules_unwrap_or_none, parse_described_struct_attr},
-    DescribedStructAttr, EncodingType,
-};
+use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none, parse_described_struct_attr}};
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
@@ -299,11 +298,12 @@ fn expand_deserialize_struct(
         .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
+    let field_attrs: Vec<&Vec<Attribute>> = fields.named.iter().map(|f| &f.attrs).collect();
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
 
     let visit_seq =
-        impl_visit_seq_for_struct(ident, &field_idents, &field_types, evaluate_descriptor);
+        impl_visit_seq_for_struct(ident, &field_idents, &field_types, &field_attrs, evaluate_descriptor);
     let visit_map = match len {
         0 => quote! {},
         _ => impl_visit_map(
@@ -403,12 +403,44 @@ fn impl_deserialize_for_field(
     }
 }
 
+#[derive(Debug, darling::FromMeta)]
+struct FieldAttr {
+    default: syn::Lit
+}
+
 fn impl_visit_seq_for_struct(
     ident: &syn::Ident,
     field_idents: &Vec<syn::Ident>,
     field_types: &Vec<&syn::Type>,
+    field_attrs: &Vec<&Vec<Attribute>>,
     evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
+
+    let field_attrs: Vec<Option<FieldAttr>> = field_attrs.iter()
+        .map(|v| {
+            v.iter()
+            .find_map(|a| {
+                let item = a.parse_meta().unwrap();
+                FieldAttr::from_meta(&item).ok()
+            })  
+        })
+        .collect();
+    
+    let mut elements: Vec<proc_macro2::TokenStream> = vec![];
+    for ((id, ty), default) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
+        let token = match default {
+            Some(f) => {
+                let default = f.default;
+                quote! { unwrap_or_default!(#id, __seq, #ty, #default) }
+            },
+            None => {
+                quote! { unwrap_or_none!(#id, __seq, #ty); }
+            }
+        };
+        elements.push(token);
+    }
+
+    let unwrap_or_default = macro_rules_unwrap_or_default();
     let unwrap_or_none = macro_rules_unwrap_or_none();
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
@@ -422,9 +454,11 @@ fn impl_visit_seq_for_struct(
 
             #evaluate_descriptor
 
+            #unwrap_or_default
             #unwrap_or_none
 
-            #( unwrap_or_none!(#field_idents, __seq, #field_types); )*
+            // #( unwrap_or_none!(#field_idents, __seq, #field_types); )*
+            #( #elements; )*
 
             Ok( #ident{ #(#field_idents, )* } )
         }
