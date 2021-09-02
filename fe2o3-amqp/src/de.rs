@@ -1045,10 +1045,10 @@ where
                     EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                         self.deserialize_u64(visitor)
                     }
-                    // // Other types should not be used to serialize identifiers
-                    // EncodingCodes::DescribedType => {
-                    //     self.parse_described_identifier(visitor)
-                    // },
+                    // Other types should not be used to serialize identifiers
+                    EncodingCodes::DescribedType => {
+                        self.parse_described_identifier(visitor)
+                    },
                     _ => Err(Error::InvalidFormatCode),
                 }
             }
@@ -1377,18 +1377,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 let result = seed.deserialize(&mut deserializer).map(Some);
 
                 match self.de.struct_encoding {
-                    StructEncoding::None => {
-                        unreachable!()
-                    }
+                    StructEncoding::None => { }
                     StructEncoding::DescribedBasic => {
                         self.field_count = 1; // There should be only one wrapped element
                     }
                     StructEncoding::DescribedList => {
                         self.field_count = self.consume_list_header()?;
                     }
-                    StructEncoding::DescribedMap => {
-                        unreachable!()
-                    }
+                    StructEncoding::DescribedMap => { }
                 }
 
                 self.field_role = FieldRole::Fields;

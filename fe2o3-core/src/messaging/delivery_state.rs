@@ -185,12 +185,36 @@ mod tests {
     }
 
     /* ------------------------------ test Released ----------------------------- */
-
     #[test]
     fn test_serialize_deserialize_released() {
         let released = Released {};
         let buf = to_vec(&released).unwrap();
         let _: Released = from_slice(&buf).unwrap();
+    }
+
+    /* ------------------------------ test Modified ----------------------------- */
+    #[test]
+    fn test_serialize_deserialize_modified() {
+        let modified = Modified {
+            delivery_failed: None,
+            undeliverable_here: Some(true),
+            message_annotations: None,
+        };
+        let buf = to_vec(&modified).unwrap();
+        let modified2: Modified = from_slice(&buf).unwrap();
+        println!("{:?}", buf);
+    }
+
+    /* ------------------------------ test Received ----------------------------- */
+    #[test]
+    fn test_serialize_deserialize_received() {
+        let received = Received {
+            section_number: 9,
+            section_offset: 13
+        };
+        let buf = to_vec(&received).unwrap();
+        let received2: Received = from_slice(&buf).unwrap();
+        println!("{:?}", received2);
     }
 
     /* --------------------------- test DeliveryState --------------------------- */
@@ -206,31 +230,32 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_delivery_state() {
-        // Accepted
-        let state = DeliveryState::Accepted(Accepted {});
-        let buf = to_vec(&state).unwrap();
-        let state2: DeliveryState = from_slice(&buf).unwrap();
-        assert_delivery_state!(state2, DeliveryState::Accepted);
+        // // Accepted
+        // let state = DeliveryState::Accepted(Accepted {});
+        // let buf = to_vec(&state).unwrap();
+        // let state2: DeliveryState = from_slice(&buf).unwrap();
+        // assert_delivery_state!(state2, DeliveryState::Accepted);
 
-        // Rejected
-        let state = DeliveryState::Rejected(Rejected { error: None });
-        let buf = to_vec(&state).unwrap();
-        let state2: DeliveryState = from_slice(&buf).unwrap();
-        assert_delivery_state!(state2, DeliveryState::Rejected);
+        // // Rejected
+        // let state = DeliveryState::Rejected(Rejected { error: None });
+        // let buf = to_vec(&state).unwrap();
+        // let state2: DeliveryState = from_slice(&buf).unwrap();
+        // assert_delivery_state!(state2, DeliveryState::Rejected);
 
-        // Released
-        let state = DeliveryState::Released(Released {});
-        let buf = to_vec(&state).unwrap();
-        let state2: DeliveryState = from_slice(&buf).unwrap();
-        assert_delivery_state!(state2, DeliveryState::Released);
+        // // Released
+        // let state = DeliveryState::Released(Released {});
+        // let buf = to_vec(&state).unwrap();
+        // let state2: DeliveryState = from_slice(&buf).unwrap();
+        // assert_delivery_state!(state2, DeliveryState::Released);
 
-        // Rejected
+        // Modified
         let state = DeliveryState::Modified(Modified {
             delivery_failed: None,
             undeliverable_here: Some(true),
             message_annotations: None,
         });
         let buf = to_vec(&state).unwrap();
+        println!("{:?}", buf);
         let state2: DeliveryState = from_slice(&buf).unwrap();
         assert_delivery_state!(state2, DeliveryState::Modified);
         if let DeliveryState::Modified(m) = state2 {
@@ -239,17 +264,17 @@ mod tests {
             assert!(m.message_annotations.is_none());
         }
 
-        // Received
-        let state = DeliveryState::Received(Received {
-            section_number: 9,
-            section_offset: 13,
-        });
-        let buf = to_vec(&state).unwrap();
-        let state2 = from_slice(&buf).unwrap();
-        assert_delivery_state!(state2, DeliveryState::Received);
-        if let DeliveryState::Received(r) = state2 {
-            assert_eq!(r.section_number, 9);
-            assert_eq!(r.section_offset, 13);
-        }
+        // // Received
+        // let state = DeliveryState::Received(Received {
+        //     section_number: 9,
+        //     section_offset: 13,
+        // });
+        // let buf = to_vec(&state).unwrap();
+        // let state2 = from_slice(&buf).unwrap();
+        // assert_delivery_state!(state2, DeliveryState::Received);
+        // if let DeliveryState::Received(r) = state2 {
+        //     assert_eq!(r.section_number, 9);
+        //     assert_eq!(r.section_offset, 13);
+        // }
     }
 }
