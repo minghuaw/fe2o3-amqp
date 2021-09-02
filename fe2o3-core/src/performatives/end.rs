@@ -12,7 +12,7 @@ use crate::definitions::Error;
     name = "amqp:end:list",
     code = 0x0000_0000_0000_0017,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct End {
     pub error: Option<Error>,

@@ -18,7 +18,7 @@ use crate::{
     name = "amqp:attach:list",
     code = 0x0000_0000_0000_0012,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Attach {
     pub name: String,

@@ -22,7 +22,7 @@ use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
     name = "amqp:target:list",
     code = 0x0000_0000_0000_0029,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Target {
     address: Option<Address>,

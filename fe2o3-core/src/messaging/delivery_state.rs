@@ -36,7 +36,7 @@ pub enum Outcome {
     name = "amqp:received:list",
     code = 0x0000_0000_0000_0023,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Received {
     pub section_number: Uint,
@@ -54,7 +54,7 @@ pub struct Received {
     name = "amqp:accepted:list",
     code = 0x0000_0000_0000_0024,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Accepted {}
 
@@ -70,7 +70,7 @@ pub struct Accepted {}
     name = "amqp:rejected:list",
     code = 0x0000_0000_0000_0025,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Rejected {
     pub error: Option<Error>,
@@ -86,7 +86,7 @@ pub struct Rejected {
     name = "amqp:released:list",
     code = 0x000_0000_0000_0026,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Released {}
 
@@ -103,7 +103,7 @@ pub struct Released {}
     name = "amqp:modified:list",
     code = 0x0000_0000_0000_0027,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Modified {
     pub delivery_failed: Option<Boolean>,

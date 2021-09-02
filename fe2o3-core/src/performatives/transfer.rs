@@ -14,7 +14,7 @@ use crate::{
     name = "amqp:transfer:list",
     code = 0x0000_0000_0000_0014,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Transfer {
     pub handle: Handle,

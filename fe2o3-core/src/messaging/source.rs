@@ -29,7 +29,7 @@ use super::{
     name = "amqp:source:list",
     code = 0x0000_0000_0000_0028,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Source {
     address: Option<Address>,

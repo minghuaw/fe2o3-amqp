@@ -2,14 +2,14 @@ use quote::quote;
 use syn::{DeriveInput, Fields};
 
 use crate::{
-    util::{convert_to_case, macro_rules_buffer_if_none, parse_described_attr},
+    util::{convert_to_case, macro_rules_buffer_if_none, parse_described_struct_attr},
     DescribedStructAttr, EncodingType,
 };
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let amqp_attr = parse_described_attr(input);
+    let amqp_attr = parse_described_struct_attr(input);
     let ident = &input.ident;
     match &input.data {
         syn::Data::Struct(data) => expand_serialize_on_datastruct(&amqp_attr, ident, data, input),
@@ -146,7 +146,7 @@ fn expand_serialize_struct(
     ident: &syn::Ident,
     descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
-    rename_field: &str,
+    rename_all: &str,
     fields: &syn::FieldsNamed,
     ctx: &DeriveInput,
 ) -> proc_macro2::TokenStream {
@@ -169,7 +169,7 @@ fn expand_serialize_struct(
         .collect();
     let field_names: Vec<String> = field_idents
         .iter()
-        .map(|i| convert_to_case(rename_field, i.to_string(), ctx).unwrap())
+        .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
     let len = field_idents.len();

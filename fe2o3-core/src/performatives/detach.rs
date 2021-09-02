@@ -11,7 +11,7 @@ use crate::definitions::{Error, Handle};
     name = "amqp:detach:list",
     code = 0x0000_0000_0000_0016,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Detach {
     pub handle: Handle,

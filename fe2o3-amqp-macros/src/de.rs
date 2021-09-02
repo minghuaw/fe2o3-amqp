@@ -2,14 +2,14 @@ use quote::quote;
 use syn::{spanned::Spanned, DeriveInput, Fields};
 
 use crate::{
-    util::{convert_to_case, get_span_of, macro_rules_unwrap_or_none, parse_described_attr},
+    util::{convert_to_case, get_span_of, macro_rules_unwrap_or_none, parse_described_struct_attr},
     DescribedStructAttr, EncodingType,
 };
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let attr = parse_described_attr(input);
+    let attr = parse_described_struct_attr(input);
     let ident = &input.ident;
     match &input.data {
         syn::Data::Struct(data) => expand_deserialize_on_datastruct(&attr, ident, data, input),
@@ -261,7 +261,7 @@ fn expand_deserialize_struct(
     expecting: &str,
     evaluate_descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
-    rename_field: &str,
+    rename_all: &str,
     fields: &syn::FieldsNamed,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
@@ -296,7 +296,7 @@ fn expand_deserialize_struct(
         .collect();
     let field_names: Vec<String> = field_idents
         .iter()
-        .map(|i| convert_to_case(rename_field, i.to_string(), ctx).unwrap())
+        .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
 

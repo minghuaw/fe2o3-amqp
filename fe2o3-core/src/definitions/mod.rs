@@ -89,7 +89,7 @@ pub struct Fields(BTreeMap<Symbol, Value>);
     name = "amqp:error:list",
     code = 0x0000_0000_0000_001d,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Error {
     condition: Symbol,

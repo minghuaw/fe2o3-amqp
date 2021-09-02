@@ -14,7 +14,7 @@ use crate::{
     name = "amqp:disposition:list",
     code = 0x0000_0000_0000_0015,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Disposition {
     pub role: Role,

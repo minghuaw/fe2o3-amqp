@@ -8,7 +8,7 @@ use crate::definitions::Error;
     name = "amqp:close:list",
     code = 0x0000_0000_0000_0018,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Close {
     pub error: Option<Error>,

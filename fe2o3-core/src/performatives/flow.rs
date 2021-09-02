@@ -11,7 +11,7 @@ use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
     name = "amqp:flow:list",
     code = 0x0000_0000_0000_0013,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Flow {
     pub next_incoming_id: Option<TransferNumber>,

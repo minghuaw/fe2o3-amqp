@@ -11,7 +11,7 @@ use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
     name = "amqp:open:list",
     code = 0x0000_0000_0000_0010,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Open {
     pub container_id: String,

@@ -1860,14 +1860,14 @@ mod tests {
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list", rename_field = "kebab-case")]
+        #[amqp_contract(code = 13, encoding = "list", rename_all = "kebab-case")]
         struct Foo {
             is_fool: bool,
             a: i32,
         }
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 9, encoding = "list", rename_field = "kebab-case")]
+        #[amqp_contract(code = 9, encoding = "list", rename_all = "kebab-case")]
         struct Bar {
             is_fool: bool,
             a: i32,

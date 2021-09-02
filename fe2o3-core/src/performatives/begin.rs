@@ -11,7 +11,7 @@ use crate::definitions::{Fields, Handle, TransferNumber};
     name = "amqp:begin:list",
     code = 0x0000_0000_0000_0011,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Begin {
     pub remote_channel: Option<Ushort>,

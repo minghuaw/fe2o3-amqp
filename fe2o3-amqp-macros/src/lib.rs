@@ -24,7 +24,7 @@ struct DescribedAttr {
     #[darling(default)]
     pub encoding: Option<EncodingType>,
     #[darling(default)]
-    pub rename_field: String,
+    pub rename_all: String,
     #[darling(default)]
     pub no_descriptor: Option<()>,
 }
@@ -34,6 +34,12 @@ struct DescribedStructAttr {
     code: Option<u64>,
     encoding: EncodingType,
     rename_field: String,
+}
+
+struct DescribedEnumAttr {
+    name: String,
+    code: Option<u64>,
+    no_descriptor: bool,
 }
 
 #[proc_macro_derive(SerializeComposite, attributes(amqp_contract))]

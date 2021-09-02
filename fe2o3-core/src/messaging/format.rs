@@ -23,7 +23,7 @@ use crate::definitions::{Milliseconds, SequenceNo};
     name = "amqp:header:list",
     code = 0x0000_0000_0000_0070,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Header {
     durable: Boolean, // TODO: impl default to false
@@ -80,7 +80,7 @@ pub struct MessageAnnotations(Annotations);
     name = "amqp:properties:list",
     code = 0x0000_0000_0000_0073,
     encoding = "list",
-    rename_field = "kebab-case"
+    rename_all = "kebab-case"
 )]
 pub struct Properties {
     message_id: Option<MessageId>,
