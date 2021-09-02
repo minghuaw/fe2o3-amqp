@@ -4,7 +4,7 @@ use fe2o3_amqp::{
 };
 
 use crate::{
-    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceivervSettleMode},
+    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
     messaging::DeliveryState,
 };
 
@@ -24,7 +24,7 @@ pub struct Transfer {
     pub settled: Option<Boolean>,
     #[amqp_contract(default)]
     pub more: Boolean,
-    pub rcv_settle_mode: Option<ReceivervSettleMode>,
+    pub rcv_settle_mode: Option<ReceiverSettleMode>,
     pub state: Option<DeliveryState>,
     #[amqp_contract(default)]
     pub resume: Boolean,

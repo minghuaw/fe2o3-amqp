@@ -10,7 +10,7 @@ use serde::{ser, de};
 ///     <choice name="settled" value="1"/>
 ///     <choice name="mixed" value="2"/>
 /// </type>
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SenderSettleMode {
     Unsettled,
     Settled,
