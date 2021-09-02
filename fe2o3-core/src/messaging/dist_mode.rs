@@ -4,13 +4,13 @@ use serde::{de, ser};
 /// 3.5.7 Standard Distribution Mode
 /// Link distribution policy.
 /// <type name="std-dist-mode" class="restricted" source="symbol" provides="distribution-mode">
-///     <choice name="move" value="move"/>
-///     <choice name="copy" value="copy"/>
 /// </type>
 ///
 #[derive(Debug, Clone)]
 pub enum DistributionMode {
+    /// <choice name="move" value="move"/>
     Move,
+    /// <choice name="copy" value="copy"/>
     Copy,
 }
 

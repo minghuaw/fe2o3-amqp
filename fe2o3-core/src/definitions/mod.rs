@@ -41,36 +41,28 @@ impl Default for Seconds {
 }
 
 /// 2.8.6 Milliseconds
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Milliseconds(pub Uint);
+pub type Milliseconds = Uint;
 
 /// 2.8.7 Delivery Tag
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeliveryTag(pub ByteBuf);
+pub type DeliveryTag = ByteBuf;
 
 /// 2.8.8 Delivery Number
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct DeliveryNumber(pub SequenceNo);
+pub type DeliveryNumber = SequenceNo;
 
 /// 2.8.9 Transfer Number
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TransferNumber(pub SequenceNo);
+pub type TransferNumber = SequenceNo;
 
 /// 2.8.10 Sequence No
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SequenceNo(pub Uint);
+pub type SequenceNo = Uint;
 
 /// 2.8.11 Message Format
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MessageFormat(pub Uint);
+pub type MessageFormat =  Uint;
 
 /// 2.8.12 IETF Language Tag
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IetfLanguageTag(pub Symbol);
+pub type IetfLanguageTag = Symbol;
 
 /// 2.8.13 Fields
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Fields(pub BTreeMap<Symbol, Value>);
+pub type Fields = BTreeMap<Symbol, Value>;
 
 /// 2.8.14 Error
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
