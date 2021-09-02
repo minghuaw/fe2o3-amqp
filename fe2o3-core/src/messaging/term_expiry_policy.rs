@@ -9,7 +9,6 @@ use serde::{de, ser};
 ///     <choice name="never" value="never"/>
 /// </type>
 ///
-/// TODO: manually implement serialize and deserialize
 #[derive(Debug)]
 pub enum TerminusExpiryPolicy {
     LinkDetach,
