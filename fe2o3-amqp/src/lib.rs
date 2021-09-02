@@ -1,6 +1,5 @@
 // Public mods
 pub mod constants;
-pub mod contract;
 pub mod convert;
 pub mod de;
 pub mod error;

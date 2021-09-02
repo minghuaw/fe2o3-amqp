@@ -21,3 +21,5 @@ impl Default for TerminusDurability {
         TerminusDurability::None
     }
 }
+
+// TODO: test serialization and deserialization

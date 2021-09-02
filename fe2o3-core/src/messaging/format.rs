@@ -190,8 +190,7 @@ pub struct Footer(pub Annotations);
 
 /// 3.2.10 Annotations
 /// <type name="annotations" class="restricted" source="map"/>
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Annotations(BTreeMap<Symbol, Value>);
+pub type Annotations = BTreeMap<Symbol, Value>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -216,8 +215,7 @@ pub enum MessageId {
 /// 3.2.15 Address String
 /// Address of a node.
 /// <type name="address-string" class="restricted" source="string" provides="address"/>
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Address(pub String);
+pub type Address = String;
 
 /// 3.2.16 CONSTANTS
 pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
