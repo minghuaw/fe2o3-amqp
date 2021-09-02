@@ -176,7 +176,7 @@ fn impl_visit_seq_for_tuple_struct(
 
             #unwrap_or_none
 
-            #( unwrap_or_none!(#field_idents, __seq, #field_types); )*
+            #( unwrap_or_none!(#field_idents, __seq.next_element()?, #field_types); )*
 
             Ok( #ident( #(#field_idents, )* ) )
         }
@@ -298,7 +298,7 @@ fn expand_deserialize_struct(
         .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
-    let field_attrs: Vec<Option<FieldAttr>> = fields.named.iter()
+    let field_attrs: Vec<FieldAttr> = fields.named.iter()
         .map(|f| {
             f.attrs.iter()
             .find_map(|a| {
@@ -306,6 +306,7 @@ fn expand_deserialize_struct(
                 FieldAttr::from_meta(&item).ok()
             })  
         })
+        .map(|o| o.unwrap_or(FieldAttr{default: false}))
         .collect();
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
@@ -420,25 +421,26 @@ fn impl_deserialize_for_field(
 
 #[derive(Debug, darling::FromMeta)]
 struct FieldAttr {
-    default: syn::Lit
+    // default: syn::Lit
+    #[darling(default)]
+    default: bool,
 }
 
 fn impl_visit_seq_for_struct(
     ident: &syn::Ident,
     field_idents: &Vec<syn::Ident>,
     field_types: &Vec<&syn::Type>,
-    field_attrs: &Vec<Option<FieldAttr>>,
+    field_attrs: &Vec<FieldAttr>,
     evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {    
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
-    for ((id, ty), default) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
-        let token = match default {
-            Some(f) => {
-                let default = f.default.clone();
-                quote! { unwrap_or_default!(#id, __seq.next_element()?, #ty, #default) }
+    for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
+        let token = match attr.default {
+            true => {
+                quote! { unwrap_or_default!(#id, __seq.next_element()?, #ty) }
             },
-            None => {
-                quote! { unwrap_or_none!(#id, __seq.next_element()?, #ty); }
+            false => {
+                quote! { unwrap_or_none!(#id, __seq.next_element()?, #ty) }
             }
         };
         field_impls.push(token);
@@ -469,17 +471,16 @@ fn impl_visit_map(
     field_idents: &Vec<syn::Ident>,
     field_names: &Vec<String>,
     field_types: &Vec<&syn::Type>,
-    field_attrs: &Vec<Option<FieldAttr>>,
+    field_attrs: &Vec<FieldAttr>,
     evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
-    for ((id, ty), default) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
-        let token = match default {
-            Some(f) => {
-                let default = f.default.clone();
-                quote! { unwrap_or_default!(#id, #id, #ty, #default) }
+    for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
+        let token = match attr.default {
+            true => {
+                quote! { unwrap_or_default!(#id, #id, #ty) }
             },
-            None => {
+            false => {
                 quote! { unwrap_or_none!(#id, #id, #ty); }
             }
         };
@@ -514,10 +515,6 @@ fn impl_visit_map(
             }
 
             #(
-                // let #field_idents = match #field_idents {
-                //     Some(val) => val,
-                //     None => return Err(fe2o3_amqp::serde::de::Error::missing_field(#field_names))
-                // };
                 #field_impls;
             )*
             Ok( #ident{ #(#field_idents, )* } )
