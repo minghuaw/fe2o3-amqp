@@ -2,7 +2,7 @@ use ordered_float::OrderedFloat;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use crate::{format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Described, Symbol, Timestamp, Uuid}};
+use crate::{described::Described, format_code::EncodingCodes, types::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}};
 
 pub mod de;
 pub mod ser;

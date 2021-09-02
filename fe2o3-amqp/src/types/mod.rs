@@ -1,7 +1,6 @@
 mod array;
 mod decimal;
 mod descriptor;
-mod described;
 mod symbol;
 mod timestamp;
 mod uuid;
@@ -9,7 +8,6 @@ mod uuid;
 pub use array::*;
 pub use decimal::*;
 pub use descriptor::*;
-pub use described::*;
 pub use symbol::*;
 pub use timestamp::*;
 pub use uuid::*;

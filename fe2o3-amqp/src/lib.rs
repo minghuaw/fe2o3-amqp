@@ -9,6 +9,7 @@ pub mod macros;
 pub mod ser;
 pub mod types;
 pub mod value;
+pub mod described;
 
 // Private mods
 mod read;
