@@ -1,10 +1,4 @@
-use std::convert::{TryFrom, TryInto};
-
-use ordered_float::OrderedFloat;
-use serde::{ser, de};
-use fe2o3_amqp::{constants::VALUE, format_code::EncodingCodes, value::Value};
-pub use fe2o3_amqp::primitives::*;
-use serde_bytes::ByteBuf;
+use super::*;
 
 /// A subset of `SimpleValue`
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

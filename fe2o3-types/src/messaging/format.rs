@@ -6,7 +6,7 @@ use fe2o3_amqp::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use crate::definitions::{Milliseconds, SequenceNo};
+use crate::{definitions::{Milliseconds, SequenceNo}, primitives::SimpleValue};
 
 /// 3.2.1 Header
 /// Transport headers for a message.
@@ -137,7 +137,7 @@ pub struct Properties {
     code = 0x0000_0000_0000_0074,
     encoding = "basic"
 )]
-pub struct ApplicationProperties(pub BTreeMap<String, Value>);
+pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">

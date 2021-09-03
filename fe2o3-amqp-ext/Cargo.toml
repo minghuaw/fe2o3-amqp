@@ -7,3 +7,4 @@ edition = "2018"
 
 [dependencies]
 fe2o3-amqp = { version = "0.0.1", path = "../fe2o3-amqp" }
+fe2o3-types = { version = "0.1.0", path = "../fe2o3-types" }

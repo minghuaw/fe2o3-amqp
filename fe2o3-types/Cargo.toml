@@ -1,5 +1,5 @@
 [package]
-name = "fe2o3-core"
+name = "fe2o3-types"
 version = "0.1.0"
 edition = "2018"
 

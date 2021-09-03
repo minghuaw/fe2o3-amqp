@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp::{value::Value, DeserializeComposite, SerializeComposite};
+use fe2o3_types::primitives::SimpleValue;
 
 // Define filters from AMQP Capabilities Registry: Filters
 // https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
@@ -44,7 +45,7 @@ pub struct LegacyAmqpTopicBinding(pub String);
     code = 0x0000_468c_0000_0002,
     encoding = "basic"
 )]
-pub struct LegacyAmqpHeadersBinding(pub BTreeMap<String, Value>);
+pub struct LegacyAmqpHeadersBinding(pub BTreeMap<String, SimpleValue>);
 
 /// 2.1 No Local Filter
 /// <type name="no-local-filter" class="composite" source="list" provides="filter">
