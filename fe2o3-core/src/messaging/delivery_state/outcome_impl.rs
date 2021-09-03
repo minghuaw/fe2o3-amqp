@@ -115,6 +115,6 @@ use serde::{de::{self, VariantAccess}, ser};
                 "amqp:released:list",
                 "amqp:modified:list",
             ];
-            deserializer.deserialize_enum("DeliveryState", VARIANTS, Visitor { })
+            deserializer.deserialize_enum("Outcome", VARIANTS, Visitor { })
         }
     }
