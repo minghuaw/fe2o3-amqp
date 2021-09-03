@@ -390,31 +390,51 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     where
         V: de::Visitor<'de>,
     {
+        // [0] is 0x00, 
+        // [1] is format code
         let buf = self.reader.peek_bytes(2)?;
         let code = buf[1];
         match code.try_into()? {
             EncodingCodes::Sym8 => {
+                // [0] is 0x00, 
+                // [1] is format code
+                // [2] is size
                 let _buf = self.reader.peek_bytes(3)?;
                 let size = _buf[2] as usize;
-                let slice = self.reader.peek_bytes(3 + size)?;
-                visitor.visit_bytes(slice)
+                let _buf = self.reader.peek_bytes(3 + size)?;
+                let slice = std::str::from_utf8(&_buf[3..])?;
+                visitor.visit_str(slice)
             }
             EncodingCodes::Sym32 => {
+                // [0] is 0x00, 
+                // [1] is format code
+                // [2..6] are size
                 let _buf = self.reader.peek_bytes(2 + 4)?;
                 let mut size_bytes = [0u8; 4];
                 size_bytes.copy_from_slice(&_buf[2..]);
                 let size = u32::from_be_bytes(size_bytes) as usize;
-                let slice = self.reader.peek_bytes(size + 6)?;
-                visitor.visit_bytes(slice)
+                let _buf = self.reader.peek_bytes(6 + size)?;
+                let slice = std::str::from_utf8(& _buf[6..])?;
+                visitor.visit_str(slice)
             }
-            EncodingCodes::Ulong0 => visitor.visit_bytes(buf),
+            EncodingCodes::Ulong0 => visitor.visit_u64(0),
             EncodingCodes::SmallUlong => {
-                let slice = self.reader.peek_bytes(3)?;
-                visitor.visit_bytes(slice)
+                // [0] is 0x00, 
+                // [1] is format code
+                // [2] is the value
+                let buf = self.reader.peek_bytes(3)?;
+                let value = buf[2];
+                visitor.visit_u64(value as u64)
             }
             EncodingCodes::Ulong => {
-                let slice = self.reader.peek_bytes(2 + 4)?;
-                visitor.visit_bytes(slice)
+                // [0] is 0x00, 
+                // [1] is format code
+                // [2..10] is value bytes
+                let slice = self.reader.peek_bytes(2 + 8)?;
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&slice[2..]);
+                let value = u64::from_be_bytes(bytes);
+                visitor.visit_u64(value)
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -1004,6 +1024,10 @@ where
                 // Symbols appears in the transport errors
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                     println!(">>> Debug EncodingCodes::Sym32 | Sym8");
+                    visitor.visit_enum(VariantAccess::new(self))
+                },
+                // for newtype variant of described type
+                EncodingCodes::DescribedType => {
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 _ => Err(Error::InvalidFormatCode),
