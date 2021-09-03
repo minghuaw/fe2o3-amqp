@@ -55,25 +55,25 @@ use crate::definitions::Fields;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeProperties(Fields);
 
-// The lifetime of a dynamically generated node.
-// Definitionally, the lifetime will never be less than the lifetime
-// of the link which caused its creation, however it is possible to
-// extend the lifetime of dynamically created node using a lifetime
-// policy. The value of this entry MUST be of a type which provides
-// the lifetime-policy archetype. The following standard lifetime-policies
-// are defined below: delete-on-close, delete-on-no-links,
-// delete-on-no-messages or delete-on-no-links-or-messages.
-//
-// TODO: impl Into Fields
-pub enum LifetimePolicy {
-    DeleteOnClose,
-    DeleteOnNoLinks,
-    DeleteOnNoMessages,
-    DeleteOnNoLinksOrMessages,
-}
+// // The lifetime of a dynamically generated node.
+// // Definitionally, the lifetime will never be less than the lifetime
+// // of the link which caused its creation, however it is possible to
+// // extend the lifetime of dynamically created node using a lifetime
+// // policy. The value of this entry MUST be of a type which provides
+// // the lifetime-policy archetype. The following standard lifetime-policies
+// // are defined below: delete-on-close, delete-on-no-links,
+// // delete-on-no-messages or delete-on-no-links-or-messages.
+// //
+// // TODO: impl Into Fields
+// enum LifetimePolicy {
+//     DeleteOnClose,
+//     DeleteOnNoLinks,
+//     DeleteOnNoMessages,
+//     DeleteOnNoLinksOrMessages,
+// }
 
-// TODO: impl into Fields
-pub struct SupportedDistMode(Vec<Symbol>);
+// // TODO: impl into Fields
+// struct SupportedDistMode(Vec<Symbol>);
 
 /// 3.5.10 Delete On Close
 /// Lifetime of dynamic node scoped to lifetime of link which caused creation.
