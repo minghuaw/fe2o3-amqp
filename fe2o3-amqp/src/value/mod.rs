@@ -11,8 +11,6 @@ use crate::{
 pub mod de;
 pub mod ser;
 
-pub const VALUE: &str = "VALUE";
-
 /// Primitive type definitions
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {

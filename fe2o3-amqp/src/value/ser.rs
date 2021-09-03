@@ -244,8 +244,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     where
         T: serde::Serialize,
     {
-        use crate::constants::DESCRIPTOR;
-        use crate::value::VALUE;
+        use crate::constants::{DESCRIPTOR, VALUE};
 
         if name == DESCRIPTOR || name == VALUE
         // || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR

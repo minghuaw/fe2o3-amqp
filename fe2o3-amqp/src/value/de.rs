@@ -14,9 +14,10 @@ use crate::{
         EnumType,
         NewType,
     },
+    constants::{VALUE}
 };
 
-use super::{Value, VALUE};
+use super::{Value};
 
 enum Field {
     Described,
@@ -235,6 +236,7 @@ impl<'de> de::Deserialize<'de> for Value {
         D: serde::Deserializer<'de>,
     {
         const VARIANTS: &'static [&'static str] = &[
+            "Described",
             "Null",
             "Bool",
             "Ubyte",

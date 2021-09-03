@@ -24,10 +24,11 @@ pub use de::{from_reader, from_slice};
 pub use macros::{DeserializeComposite, SerializeComposite};
 pub use ser::to_vec;
 pub use value::{de::from_value, ser::to_value};
+pub use error::Error;
 
 pub mod prelude {
     pub use super::{
         from_reader, from_slice, from_value, to_value, to_vec, DeserializeComposite,
-        SerializeComposite,
+        SerializeComposite, Error
     };
 }

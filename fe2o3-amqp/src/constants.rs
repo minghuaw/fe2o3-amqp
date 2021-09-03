@@ -3,6 +3,7 @@ pub const DESCRIBED_LIST: &str = "DESCRIBED_LIST";
 pub const DESCRIBED_MAP: &str = "DESCRIBED_MAP";
 
 pub const DESCRIPTOR: &str = "DESCRIPTOR";
+pub const VALUE: &str = "VALUE";
 
 pub const ARRAY: &str = "ARRAY";
 pub const DECIMAL32: &str = "DECIMAL32";

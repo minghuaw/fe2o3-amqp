@@ -4,7 +4,7 @@ use std::convert::TryInto;
 use crate::{
     constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, VALUE,
     },
     error::Error,
     fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
@@ -14,7 +14,6 @@ use crate::{
     format_code::EncodingCodes,
     read::{IoReader, Read, SliceReader},
     util::{EnumType, FieldRole, NewType, StructEncoding},
-    value::VALUE,
 };
 
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
