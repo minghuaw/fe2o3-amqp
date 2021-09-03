@@ -26,7 +26,7 @@ pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
     T: Serialize,
 {
-    let mut writer = Vec::new(); // TODO: pre-allocate capacity
+    let mut writer = Vec::new();
     let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
     value.serialize(&mut serializer)?;
     Ok(writer)
