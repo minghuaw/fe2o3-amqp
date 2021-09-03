@@ -23,3 +23,8 @@ pub use serde;
 pub use de::{from_reader, from_slice};
 pub use ser::to_vec;
 pub use value::{de::from_value, ser::to_value};
+pub use macros::{SerializeComposite, DeserializeComposite};
+
+pub mod prelude {
+    pub use super::{from_reader, from_slice, to_vec, from_value, to_value, SerializeComposite, DeserializeComposite};
+}
