@@ -1,5 +1,4 @@
-
-use serde::{ser, de};
+use serde::{de, ser};
 
 /// 2.8.2
 /// sender receiver
@@ -46,12 +45,13 @@ impl From<&SenderSettleMode> for u8 {
 impl ser::Serialize for SenderSettleMode {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-            S: serde::Serializer {
+        S: serde::Serializer,
+    {
         u8::from(self).serialize(serializer)
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = SenderSettleMode;
@@ -62,22 +62,23 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             0 => SenderSettleMode::Unsettled,
             1 => SenderSettleMode::Settled,
             2 => SenderSettleMode::Mixed,
-            _ => return Err(de::Error::custom("Invalid value for SenderSettleMode"))
+            _ => return Err(de::Error::custom("Invalid value for SenderSettleMode")),
         };
-        Ok(val)    
+        Ok(val)
     }
 }
 
 impl<'de> de::Deserialize<'de> for SenderSettleMode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
-        deserializer.deserialize_u8(Visitor { })
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_u8(Visitor {})
     }
 }

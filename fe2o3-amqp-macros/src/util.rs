@@ -1,9 +1,9 @@
 use darling::FromDeriveInput;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{DeriveInput};
+use syn::DeriveInput;
 
-use crate::{DescribedStructAttr, DescribedAttr, EncodingType};
+use crate::{DescribedAttr, DescribedStructAttr, EncodingType};
 
 pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> DescribedStructAttr {
     let attr = DescribedAttr::from_derive_input(&input).unwrap();
@@ -19,8 +19,6 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
         rename_field,
     }
 }
-
-
 
 pub(crate) fn convert_to_case(
     case: &str,
@@ -130,7 +128,7 @@ pub(crate) fn macro_rules_serialize_if_some() -> proc_macro2::TokenStream {
             ($state: ident, $fident: expr, $fname: expr, Option<$ftype: ty>) => {
                 if $fident.is_some() {
                     $state.serialize_field($fname, $fident)?;
-                } 
+                }
             };
             ($state: ident, $fident: expr, $fname: expr, $ftype: ty) => {
                 $state.serialize_field($fname, $fident)?;

@@ -22,26 +22,26 @@ use crate::definitions::{Fields, Handle, TransferNumber};
 pub struct Begin {
     /// <field name="remote-channel" type="ushort"/>
     pub remote_channel: Option<Ushort>,
-    
+
     /// <field name="next-outgoing-id" type="transfer-number" mandatory="true"/>
     pub next_outgoing_id: TransferNumber,
-    
+
     /// <field name="incoming-window" type="uint" mandatory="true"/>
     pub incoming_window: Uint,
-    
+
     /// <field name="outgoing-window" type="uint" mandatory="true"/>
     pub outgoing_window: Uint,
-    
+
     /// <field name="handle-max" type="handle" default="4294967295"/>
     #[amqp_contract(default)]
     pub handle_max: Handle, // default to 4294967295
-    
+
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
     pub offered_capabilities: Option<Vec<Symbol>>,
-    
+
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
     pub desired_capabilities: Option<Vec<Symbol>>,
-    
+
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,
 }

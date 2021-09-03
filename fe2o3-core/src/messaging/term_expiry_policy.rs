@@ -9,13 +9,13 @@ use serde::{de, ser};
 pub enum TerminusExpiryPolicy {
     /// <choice name="link-detach" value="link-detach"/>
     LinkDetach,
-    
+
     /// <choice name="session-end" value="session-end"/>
     SessionEnd,
-    
+
     /// <choice name="connection-close" value="connection-close"/>
     ConnectionClose,
-    
+
     /// <choice name="never" value="never"/>
     Never,
 }
@@ -46,7 +46,7 @@ impl ser::Serialize for TerminusExpiryPolicy {
         Symbol::from(self).serialize(serializer)
     }
 }
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = TerminusExpiryPolicy;
@@ -57,19 +57,25 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         self.visit_str(&v)
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         let val = match v {
             "link-detach" => TerminusExpiryPolicy::LinkDetach,
             "session-end" => TerminusExpiryPolicy::SessionEnd,
             "connection-close" => TerminusExpiryPolicy::ConnectionClose,
             "never" => TerminusExpiryPolicy::Never,
-            _ => return Err(de::Error::custom("Invalid symbol value for TerminusExpiryPolicy")),
+            _ => {
+                return Err(de::Error::custom(
+                    "Invalid symbol value for TerminusExpiryPolicy",
+                ))
+            }
         };
         Ok(val)
     }
@@ -78,7 +84,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for TerminusExpiryPolicy {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
-        deserializer.deserialize_newtype_struct(SYMBOL, Visitor { })
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
     }
 }

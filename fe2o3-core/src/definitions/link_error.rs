@@ -1,6 +1,6 @@
 use serde::{de, ser};
 
-use fe2o3_amqp::{constants::SYMBOL, primitives::{Symbol}};
+use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LinkError {
@@ -29,8 +29,7 @@ impl ser::Serialize for LinkError {
     where
         S: serde::Serializer,
     {
-        Symbol::from(self)
-            .serialize(serializer)
+        Symbol::from(self).serialize(serializer)
     }
 }
 

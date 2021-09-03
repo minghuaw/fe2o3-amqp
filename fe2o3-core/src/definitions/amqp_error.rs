@@ -1,4 +1,4 @@
-use fe2o3_amqp::{constants::SYMBOL, primitives::{Symbol}};
+use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,10 +97,9 @@ impl<'de> de::Deserialize<'de> for AmqpError {
         D: serde::Deserializer<'de>,
     {
         // deserializer.deserialize_identifier(Visitor {})
-        deserializer.deserialize_newtype_struct(SYMBOL, Visitor{})
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
     }
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -78,4 +78,3 @@ impl<'de> de::Deserialize<'de> for Uuid {
         deserializer.deserialize_newtype_struct(UUID, Visitor {})
     }
 }
-

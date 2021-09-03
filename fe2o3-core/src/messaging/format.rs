@@ -23,22 +23,22 @@ use crate::definitions::{Milliseconds, SequenceNo};
 pub struct Header {
     /// <field name="durable" type="boolean" default="false"/>
     #[amqp_contract(default)]
-    pub durable: Boolean, 
-    
+    pub durable: Boolean,
+
     /// <field name="priority" type="ubyte" default="4"/>
     #[amqp_contract(default)]
-    pub priority: Priority, 
-    
+    pub priority: Priority,
+
     /// <field name="ttl" type="milliseconds"/>
     pub ttl: Option<Milliseconds>,
-    
+
     /// <field name="first-acquirer" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub first_acquirer: Boolean,
-    
+
     /// <field name="delivery-count" type="uint" default="0"/>
     #[amqp_contract(default)]
-    pub delivery_count: Uint, 
+    pub delivery_count: Uint,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

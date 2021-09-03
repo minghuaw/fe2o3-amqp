@@ -56,7 +56,7 @@ pub type TransferNumber = SequenceNo;
 pub type SequenceNo = Uint;
 
 /// 2.8.11 Message Format
-pub type MessageFormat =  Uint;
+pub type MessageFormat = Uint;
 
 /// 2.8.12 IETF Language Tag
 pub type IetfLanguageTag = Symbol;
@@ -97,5 +97,3 @@ pub use link_error::LinkError;
 /// 2.8.19 Constant definition
 mod constant_def;
 pub use constant_def::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, PORT, REVISION, SECURE_PORT};
-
-

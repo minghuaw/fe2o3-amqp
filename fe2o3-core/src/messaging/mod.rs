@@ -1,9 +1,8 @@
-use std::collections::BTreeMap;
 use fe2o3_amqp::described::Described;
-use serde::{Deserialize, Serialize};
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
-use fe2o3_amqp::{primitives::{Symbol}, value::Value};
-
+use fe2o3_amqp::{primitives::Symbol, value::Value};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /* -------------------------- 3.2 Messaging Format -------------------------- */
 mod format;

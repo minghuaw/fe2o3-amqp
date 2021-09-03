@@ -21,11 +21,11 @@ use crate::definitions::{Error, Handle};
 pub struct Detach {
     /// <field name="handle" type="handle" mandatory="true"/>
     pub handle: Handle,
-    
+
     /// <field name="closed" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub closed: Boolean,
-    
+
     /// <field name="error" type="error"/>
     pub error: Option<Error>,
 }

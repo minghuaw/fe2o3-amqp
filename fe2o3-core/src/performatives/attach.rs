@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{macros::{DeserializeComposite, SerializeComposite}, primitives::{Boolean, Symbol, Ulong}, value::Value};
+use fe2o3_amqp::{
+    macros::{DeserializeComposite, SerializeComposite},
+    primitives::{Boolean, Symbol, Ulong},
+    value::Value,
+};
 
 use crate::{
     definitions::{
@@ -8,7 +12,6 @@ use crate::{
     },
     messaging::{Source, Target},
 };
-
 
 /// 2.7.3 Attach
 /// Attach a link to a session.
@@ -42,40 +45,40 @@ pub struct Attach {
 
     /// <field name="handle" type="handle" mandatory="true"/>
     pub handle: Handle,
-    
+
     /// <field name="role" type="role" mandatory="true"/>
     pub role: Role,
-    
+
     /// <field name="snd-settle-mode" type="sender-settle-mode" default="mixed"/>
     #[amqp_contract(default)]
     pub snd_settle_mode: SenderSettleMode,
-    
+
     /// <field name="rcv-settle-mode" type="receiver-settle-mode" default="first"/>
     #[amqp_contract(default)]
     pub rcv_settle_mode: ReceiverSettleMode,
-    
+
     /// <field name="source" type="*" requires="source"/>
     pub source: Option<Source>,
-    
+
     /// <field name="target" type="*" requires="target"/>
     pub target: Option<Target>,
-    
+
     /// <field name="unsettled" type="map"/>
     pub unsettled: Option<BTreeMap<DeliveryTag, Value>>,
-    
+
     /// <field name="incomplete-unsettled" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub incomplete_unsettled: Boolean,
-    
+
     /// <field name="initial-delivery-count" type="sequence-no"/>
     pub initial_delivery_count: Option<SequenceNo>,
-    
+
     /// <field name="max-message-size" type="ulong"/>
     pub max_message_size: Option<Ulong>,
-    
+
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
     pub offered_capabilities: Option<Vec<Symbol>>,
-    
+
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
     pub desired_capabilities: Option<Vec<Symbol>>,
 

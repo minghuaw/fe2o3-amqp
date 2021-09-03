@@ -5,8 +5,8 @@ use serde::{ser, Serialize};
 use crate::{
     constants::DESCRIPTOR,
     constants::{
-        DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
+        SYMBOL, TIMESTAMP, UUID,
     },
     error::Error,
     format_code::EncodingCodes,
@@ -20,7 +20,6 @@ const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
 // Variable type will spend 4 bytes on size
 const U32_MAX_MINUS_4: usize = u32::MAX as usize - 4;
 const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
-
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -1249,14 +1248,12 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         match self.se.struct_encoding {
-            StructEncoding::None => {
-                write_list(
-                    &mut self.se.writer,
-                    self.count,
-                    self.buf,
-                    &self.se.is_array_elem,
-                )
-            }
+            StructEncoding::None => write_list(
+                &mut self.se.writer,
+                self.count,
+                self.buf,
+                &self.se.is_array_elem,
+            ),
             StructEncoding::DescribedBasic => Ok(()),
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
             StructEncoding::DescribedList => write_list(
@@ -1353,7 +1350,11 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 mod test {
     use std::collections::BTreeMap;
 
-    use crate::{descriptor::Descriptor, format_code::EncodingCodes, primitives::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid, Symbol}};
+    use crate::{
+        descriptor::Descriptor,
+        format_code::EncodingCodes,
+        primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+    };
 
     use super::*;
 

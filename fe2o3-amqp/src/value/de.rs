@@ -3,7 +3,9 @@ use std::{collections::BTreeMap, convert::TryInto};
 use ordered_float::OrderedFloat;
 use serde::de::{self};
 
-use crate::constants::{DESCRIBED_BASIC, DESCRIPTOR, ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID};
+use crate::constants::{
+    ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
+};
 use crate::{
     error::Error,
     format_code::EncodingCodes,
@@ -91,7 +93,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => Field::List,
             EncodingCodes::Map32 | EncodingCodes::Map8 => Field::Map,
             EncodingCodes::Array32 | EncodingCodes::Array8 => Field::Array,
-            EncodingCodes::DescribedType => Field::Described
+            EncodingCodes::DescribedType => Field::Described,
         };
         Ok(field)
     }

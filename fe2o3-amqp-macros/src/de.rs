@@ -1,8 +1,14 @@
 use darling::FromMeta;
 use quote::quote;
-use syn::{DeriveInput, Fields, spanned::Spanned};
+use syn::{spanned::Spanned, DeriveInput, Fields};
 
-use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none, parse_described_struct_attr}};
+use crate::{
+    util::{
+        convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none,
+        parse_described_struct_attr,
+    },
+    DescribedStructAttr, EncodingType,
+};
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
@@ -297,21 +303,27 @@ fn expand_deserialize_struct(
         .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
-    let field_attrs: Vec<FieldAttr> = fields.named.iter()
+    let field_attrs: Vec<FieldAttr> = fields
+        .named
+        .iter()
         .map(|f| {
-            f.attrs.iter()
-            .find_map(|a| {
+            f.attrs.iter().find_map(|a| {
                 let item = a.parse_meta().unwrap();
                 FieldAttr::from_meta(&item).ok()
-            })  
+            })
         })
-        .map(|o| o.unwrap_or(FieldAttr{default: false}))
+        .map(|o| o.unwrap_or(FieldAttr { default: false }))
         .collect();
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
 
-    let visit_seq =
-        impl_visit_seq_for_struct(ident, &field_idents, &field_types, &field_attrs, evaluate_descriptor);
+    let visit_seq = impl_visit_seq_for_struct(
+        ident,
+        &field_idents,
+        &field_types,
+        &field_attrs,
+        evaluate_descriptor,
+    );
     let visit_map = match len {
         0 => quote! {},
         _ => impl_visit_map(
@@ -323,7 +335,7 @@ fn expand_deserialize_struct(
             evaluate_descriptor,
         ),
     };
-        
+
     let unwrap_or_default = macro_rules_unwrap_or_default();
     let unwrap_or_none = macro_rules_unwrap_or_none();
 
@@ -431,13 +443,13 @@ fn impl_visit_seq_for_struct(
     field_types: &Vec<&syn::Type>,
     field_attrs: &Vec<FieldAttr>,
     evaluate_descriptor: &proc_macro2::TokenStream,
-) -> proc_macro2::TokenStream {    
+) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
     for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
         let token = match attr.default {
             true => {
                 quote! { unwrap_or_default!(#id, __seq.next_element()?, #ty) }
-            },
+            }
             false => {
                 quote! { unwrap_or_none!(#id, __seq.next_element()?, #ty) }
             }
@@ -478,7 +490,7 @@ fn impl_visit_map(
         let token = match attr.default {
             true => {
                 quote! { unwrap_or_default!(#id, #id, #ty) }
-            },
+            }
             false => {
                 quote! { unwrap_or_none!(#id, #id, #ty); }
             }

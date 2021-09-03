@@ -1,4 +1,4 @@
-use serde::{ser, de};
+use serde::{de, ser};
 
 /// 2.8.1 Role
 ///
@@ -9,14 +9,14 @@ pub enum Role {
     /// <choice name="sender" value="false"/>
     Sender,
     /// <choice name="receiver" value="true"/>
-    Receiver
+    Receiver,
 }
 
 impl From<Role> for bool {
     fn from(role: Role) -> Self {
         match role {
             Role::Sender => false,
-            Role::Receiver => true
+            Role::Receiver => true,
         }
     }
 }
@@ -25,17 +25,16 @@ impl From<&Role> for bool {
     fn from(role: &Role) -> Self {
         match role {
             Role::Sender => false,
-            Role::Receiver => true
+            Role::Receiver => true,
         }
     }
 }
-
 
 impl From<bool> for Role {
     fn from(b: bool) -> Self {
         match b {
             false => Role::Sender,
-            true => Role::Receiver
+            true => Role::Receiver,
         }
     }
 }
@@ -43,12 +42,13 @@ impl From<bool> for Role {
 impl ser::Serialize for Role {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-            S: serde::Serializer {
+        S: serde::Serializer,
+    {
         bool::from(self).serialize(serializer)
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = Role;
@@ -56,10 +56,11 @@ impl<'de> de::Visitor<'de> for Visitor {
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("enum Role")
     }
-    
+
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         Ok(Role::from(v))
     }
 }
@@ -67,7 +68,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for Role {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_bool(Visitor {})
     }
 }

@@ -1,4 +1,4 @@
-use fe2o3_amqp::{constants::SYMBOL, primitives::{Symbol}};
+use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,8 +24,7 @@ impl ser::Serialize for ConnectionError {
     where
         S: serde::Serializer,
     {
-        Symbol::from(self)
-            .serialize(serializer)
+        Symbol::from(self).serialize(serializer)
     }
 }
 
@@ -68,7 +67,7 @@ impl<'de> de::Deserialize<'de> for ConnectionError {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(SYMBOL, Visitor { })
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
     }
 }
 

@@ -115,7 +115,12 @@ pub struct Modified {
 #[cfg(test)]
 mod tests {
     //! Test serialization and deserialization
-    use fe2o3_amqp::{de::{Deserializer, from_slice}, format_code::EncodingCodes, read::SliceReader, ser::to_vec};
+    use fe2o3_amqp::{
+        de::{from_slice, Deserializer},
+        format_code::EncodingCodes,
+        read::SliceReader,
+        ser::to_vec,
+    };
     use serde::Deserialize;
 
     use super::{Accepted, DeliveryState, Modified, Received, Rejected, Released};
@@ -213,7 +218,7 @@ mod tests {
     fn test_serialize_deserialize_received() {
         let received = Received {
             section_number: 9,
-            section_offset: 13
+            section_offset: 13,
         };
         let buf = to_vec(&received).unwrap();
         let received2: Received = from_slice(&buf).unwrap();

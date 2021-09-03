@@ -24,37 +24,37 @@ use crate::{
 pub struct Transfer {
     /// <field name="handle" type="handle" mandatory="true"/>
     pub handle: Handle,
-    
+
     /// <field name="delivery-id" type="delivery-number"/>
     pub delivery_id: Option<DeliveryNumber>,
-    
+
     /// <field name="delivery-tag" type="delivery-tag"/>
     pub delivery_tag: Option<DeliveryTag>,
-    
+
     /// <field name="message-format" type="message-format"/>
     pub message_format: Option<MessageFormat>,
-    
+
     /// <field name="settled" type="boolean"/>
     pub settled: Option<Boolean>,
-    
+
     /// <field name="more" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub more: Boolean,
-    
+
     /// <field name="rcv-settle-mode" type="receiver-settle-mode"/>
     pub rcv_settle_mode: Option<ReceiverSettleMode>,
-    
+
     /// <field name="state" type="*" requires="delivery-state"/>
     pub state: Option<DeliveryState>,
-    
+
     /// <field name="resume" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub resume: Boolean,
-    
+
     /// <field name="aborted" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub aborted: Boolean,
-    
+
     /// <field name="batchable" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub batchable: Boolean,

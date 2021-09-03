@@ -3,8 +3,8 @@ use std::convert::TryInto;
 
 use crate::{
     constants::{
-        DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP, DESCRIPTOR,
-        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
     },
     error::Error,
     fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
@@ -390,13 +390,13 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     where
         V: de::Visitor<'de>,
     {
-        // [0] is 0x00, 
+        // [0] is 0x00,
         // [1] is format code
         let buf = self.reader.peek_bytes(2)?;
         let code = buf[1];
         match code.try_into()? {
             EncodingCodes::Sym8 => {
-                // [0] is 0x00, 
+                // [0] is 0x00,
                 // [1] is format code
                 // [2] is size
                 let _buf = self.reader.peek_bytes(3)?;
@@ -406,7 +406,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 visitor.visit_str(slice)
             }
             EncodingCodes::Sym32 => {
-                // [0] is 0x00, 
+                // [0] is 0x00,
                 // [1] is format code
                 // [2..6] are size
                 let _buf = self.reader.peek_bytes(2 + 4)?;
@@ -414,12 +414,12 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 size_bytes.copy_from_slice(&_buf[2..]);
                 let size = u32::from_be_bytes(size_bytes) as usize;
                 let _buf = self.reader.peek_bytes(6 + size)?;
-                let slice = std::str::from_utf8(& _buf[6..])?;
+                let slice = std::str::from_utf8(&_buf[6..])?;
                 visitor.visit_str(slice)
             }
             EncodingCodes::Ulong0 => visitor.visit_u64(0),
             EncodingCodes::SmallUlong => {
-                // [0] is 0x00, 
+                // [0] is 0x00,
                 // [1] is format code
                 // [2] is the value
                 let buf = self.reader.peek_bytes(3)?;
@@ -427,7 +427,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 visitor.visit_u64(value as u64)
             }
             EncodingCodes::Ulong => {
-                // [0] is 0x00, 
+                // [0] is 0x00,
                 // [1] is format code
                 // [2..10] is value bytes
                 let slice = self.reader.peek_bytes(2 + 8)?;
@@ -1025,11 +1025,9 @@ where
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                     println!(">>> Debug EncodingCodes::Sym32 | Sym8");
                     visitor.visit_enum(VariantAccess::new(self))
-                },
-                // for newtype variant of described type
-                EncodingCodes::DescribedType => {
-                    visitor.visit_enum(VariantAccess::new(self))
                 }
+                // for newtype variant of described type
+                EncodingCodes::DescribedType => visitor.visit_enum(VariantAccess::new(self)),
                 _ => Err(Error::InvalidFormatCode),
             }
         }
@@ -1070,9 +1068,7 @@ where
                         self.deserialize_u64(visitor)
                     }
                     // Other types should not be used to serialize identifiers
-                    EncodingCodes::DescribedType => {
-                        self.parse_described_identifier(visitor)
-                    },
+                    EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
                     _ => Err(Error::InvalidFormatCode),
                 }
             }
@@ -1401,14 +1397,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 let result = seed.deserialize(&mut deserializer).map(Some);
 
                 match self.de.struct_encoding {
-                    StructEncoding::None => { }
+                    StructEncoding::None => {}
                     StructEncoding::DescribedBasic => {
                         self.field_count = 1; // There should be only one wrapped element
                     }
                     StructEncoding::DescribedList => {
                         self.field_count = self.consume_list_header()?;
                     }
-                    StructEncoding::DescribedMap => { }
+                    StructEncoding::DescribedMap => {}
                 }
 
                 self.field_role = FieldRole::Fields;
@@ -1516,7 +1512,9 @@ mod tests {
 
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{descriptor::Descriptor, format_code::EncodingCodes, ser::to_vec, primitives::{Symbol}};
+    use crate::{
+        descriptor::Descriptor, format_code::EncodingCodes, primitives::Symbol, ser::to_vec,
+    };
 
     use super::{from_reader, from_slice};
 
@@ -1671,8 +1669,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_decimal32() {
-        use crate::ser::to_vec;
         use crate::primitives::Dec32;
+        use crate::ser::to_vec;
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1681,8 +1679,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_decimal() {
-        use crate::ser::to_vec;
         use crate::primitives::{Dec128, Dec32, Dec64};
+        use crate::ser::to_vec;
 
         let expected = Dec32::from([1, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1699,8 +1697,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_uuid() {
-        use crate::ser::to_vec;
         use crate::primitives::Uuid;
+        use crate::ser::to_vec;
 
         let expected = Uuid::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let buf = to_vec(&expected).unwrap();
@@ -1709,8 +1707,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_timestamp() {
-        use crate::ser::to_vec;
         use crate::primitives::Timestamp;
+        use crate::ser::to_vec;
 
         let expected = Timestamp::from(0);
         let buf = to_vec(&expected).unwrap();
@@ -1727,8 +1725,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_array() {
-        use crate::ser::to_vec;
         use crate::primitives::Array;
+        use crate::ser::to_vec;
 
         let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
@@ -1807,8 +1805,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_descriptor() {
-        use crate::ser::to_vec;
         use crate::primitives::Symbol;
+        use crate::ser::to_vec;
 
         let descriptor = Descriptor::Name(Symbol::from("amqp"));
         // let descriptor = Descriptor::Code(113);

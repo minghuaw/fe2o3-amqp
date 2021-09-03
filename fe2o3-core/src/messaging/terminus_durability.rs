@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 pub enum TerminusDurability {
     /// <choice name="none" value="0"/>
     None,
-    
+
     /// <choice name="configuration" value="1"/>
     Configuration,
-    
+
     /// <choice name="unsettled-state" value="2"/>
     UnsettledState,
 }

@@ -32,14 +32,18 @@ pub enum Performative {
 }
 
 mod performative_impl {
-    use serde::{de::{self, VariantAccess}, ser};
+    use serde::{
+        de::{self, VariantAccess},
+        ser,
+    };
 
     use super::Performative;
 
     impl ser::Serialize for Performative {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
-                S: serde::Serializer {
+            S: serde::Serializer,
+        {
             match self {
                 Performative::Open(value) => value.serialize(serializer),
                 Performative::Begin(value) => value.serialize(serializer),
@@ -49,7 +53,7 @@ mod performative_impl {
                 Performative::Disposition(value) => value.serialize(serializer),
                 Performative::Detach(value) => value.serialize(serializer),
                 Performative::End(value) => value.serialize(serializer),
-                Performative::Close(value) => value.serialize(serializer)
+                Performative::Close(value) => value.serialize(serializer),
             }
         }
     }
@@ -77,7 +81,7 @@ mod performative_impl {
 
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
         where
-            E: de::Error, 
+            E: de::Error,
         {
             let val = match v {
                 "amqp:open:list" => Field::Open,
@@ -89,7 +93,7 @@ mod performative_impl {
                 "amqp:detach:list" => Field::Detach,
                 "amqp:end:list" => Field::End,
                 "amqp:close:list" => Field::Close,
-                _ => return Err(de::Error::custom("Wrong symbol value for descriptor"))
+                _ => return Err(de::Error::custom("Wrong symbol value for descriptor")),
             };
 
             Ok(val)
@@ -97,7 +101,8 @@ mod performative_impl {
 
         fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
         where
-                E: de::Error, {
+            E: de::Error,
+        {
             let val = match v {
                 0x0000_0000_0000_0010 => Field::Open,
                 0x0000_0000_0000_0011 => Field::Begin,
@@ -108,7 +113,7 @@ mod performative_impl {
                 0x0000_0000_0000_0016 => Field::Detach,
                 0x0000_0000_0000_0017 => Field::End,
                 0x0000_0000_0000_0018 => Field::Close,
-                _ => return Err(de::Error::custom("Wrong code value for descriptor"))
+                _ => return Err(de::Error::custom("Wrong code value for descriptor")),
             };
             Ok(val)
         }
@@ -117,12 +122,13 @@ mod performative_impl {
     impl<'de> de::Deserialize<'de> for Field {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-                D: serde::Deserializer<'de> {
-            deserializer.deserialize_identifier(FieldVisitor { })
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_identifier(FieldVisitor {})
         }
     }
 
-    struct Visitor { }
+    struct Visitor {}
 
     impl<'de> de::Visitor<'de> for Visitor {
         type Value = Performative;
@@ -133,14 +139,15 @@ mod performative_impl {
 
         fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
         where
-                A: de::EnumAccess<'de>, {
+            A: de::EnumAccess<'de>,
+        {
             let (val, variant) = data.variant()?;
 
             match val {
                 Field::Open => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Open(value))
-                },
+                }
                 Field::Begin => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Begin(value))
@@ -152,23 +159,23 @@ mod performative_impl {
                 Field::Flow => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Flow(value))
-                },
+                }
                 Field::Transfer => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Transfer(value))
-                },
+                }
                 Field::Disposition => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Disposition(value))
-                },
+                }
                 Field::Detach => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Detach(value))
-                },
+                }
                 Field::End => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::End(value))
-                },
+                }
                 Field::Close => {
                     let value = variant.newtype_variant()?;
                     Ok(Performative::Close(value))
@@ -180,7 +187,8 @@ mod performative_impl {
     impl<'de> de::Deserialize<'de> for Performative {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-                D: serde::Deserializer<'de> {
+            D: serde::Deserializer<'de>,
+        {
             const VARIANTS: &'static [&'static str] = &[
                 "amqp:open:list",
                 "amqp:begin:list",
@@ -192,7 +200,7 @@ mod performative_impl {
                 "amqp:end:list",
                 "amqp:close:list",
             ];
-            deserializer.deserialize_enum("Performative", VARIANTS, Visitor { })
+            deserializer.deserialize_enum("Performative", VARIANTS, Visitor {})
         }
     }
 }

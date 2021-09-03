@@ -1,19 +1,22 @@
-use serde::{de::{self, VariantAccess}, ser};
+use serde::{
+    de::{self, VariantAccess},
+    ser,
+};
 
 use super::DeliveryState;
 
 impl ser::Serialize for DeliveryState {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         match self {
             DeliveryState::Accepted(value) => value.serialize(serializer),
             DeliveryState::Rejected(value) => value.serialize(serializer),
             DeliveryState::Released(value) => value.serialize(serializer),
             DeliveryState::Modified(value) => value.serialize(serializer),
-            DeliveryState::Received(value) => value.serialize(serializer)
-        }        
+            DeliveryState::Received(value) => value.serialize(serializer),
+        }
     }
 }
 
@@ -22,7 +25,7 @@ enum Field {
     Rejected,
     Released,
     Modified,
-    Received
+    Received,
 }
 
 struct FieldVisitor {}
@@ -36,7 +39,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             "amqp:accepted:list" => Field::Accepted,
@@ -44,7 +47,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:released:list" => Field::Released,
             "amqp:modified:list" => Field::Modified,
             "amqp:received:list" => Field::Received,
-            _ => return Err(de::Error::custom("Wrong symbol value for descriptor"))
+            _ => return Err(de::Error::custom("Wrong symbol value for descriptor")),
         };
 
         Ok(val)
@@ -52,14 +55,15 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         let val = match v {
             0x0000_0000_0000_0023 => Field::Received,
             0x0000_0000_0000_0024 => Field::Accepted,
             0x0000_0000_0000_0025 => Field::Rejected,
             0x000_0000_0000_0026 => Field::Released,
             0x0000_0000_0000_0027 => Field::Modified,
-            _ => return Err(de::Error::custom("Wrong code value for descriptor"))
+            _ => return Err(de::Error::custom("Wrong code value for descriptor")),
         };
         Ok(val)
     }
@@ -68,12 +72,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
-        deserializer.deserialize_identifier(FieldVisitor { })
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = DeliveryState;
@@ -84,14 +89,15 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-            A: de::EnumAccess<'de>, {
+        A: de::EnumAccess<'de>,
+    {
         let (val, variant) = data.variant()?;
 
         match val {
             Field::Accepted => {
                 let value = variant.newtype_variant()?;
                 Ok(DeliveryState::Accepted(value))
-            },
+            }
             Field::Rejected => {
                 let value = variant.newtype_variant()?;
                 Ok(DeliveryState::Rejected(value))
@@ -103,7 +109,7 @@ impl<'de> de::Visitor<'de> for Visitor {
             Field::Modified => {
                 let value = variant.newtype_variant()?;
                 Ok(DeliveryState::Modified(value))
-            },
+            }
             Field::Received => {
                 let value = variant.newtype_variant()?;
                 Ok(DeliveryState::Received(value))
@@ -115,7 +121,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for DeliveryState {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-            D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         const VARIANTS: &'static [&'static str] = &[
             "amqp:accepted:list",
             "amqp:rejected:list",
@@ -123,6 +130,6 @@ impl<'de> de::Deserialize<'de> for DeliveryState {
             "amqp:modified:list",
             "amqp:received:list",
         ];
-        deserializer.deserialize_enum("DeliveryState", VARIANTS, Visitor { })
+        deserializer.deserialize_enum("DeliveryState", VARIANTS, Visitor {})
     }
 }

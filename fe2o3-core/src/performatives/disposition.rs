@@ -24,20 +24,20 @@ use crate::{
 pub struct Disposition {
     /// <field name="role" type="role" mandatory="true"/>
     pub role: Role,
-    
+
     /// <field name="first" type="delivery-number" mandatory="true"/>
     pub first: DeliveryNumber,
-    
+
     /// <field name="last" type="delivery-number"/>
     pub last: Option<DeliveryNumber>,
-    
+
     /// <field name="settled" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub settled: Boolean,
-    
+
     /// <field name="state" type="*" requires="delivery-state"/>
     pub state: Option<DeliveryState>,
-    
+
     /// <field name="batchable" type="boolean" default="false"/>
     #[amqp_contract(default)]
     pub batchable: Boolean,

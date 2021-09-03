@@ -5,13 +5,9 @@ use serde::ser;
 use serde_bytes::ByteBuf;
 
 use crate::{
+    constants::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
     error::Error,
-    constants::{
-        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID,
-    },
-    primitives::{
-        Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, 
-    },
+    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
     util::NewType,
 };
 

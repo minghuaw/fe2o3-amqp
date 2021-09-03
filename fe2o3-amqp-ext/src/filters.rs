@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{DeserializeComposite, SerializeComposite, value::Value};
+use fe2o3_amqp::{value::Value, DeserializeComposite, SerializeComposite};
 
 // Define filters from AMQP Capabilities Registry: Filters
 // https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
@@ -33,10 +33,10 @@ pub struct LegacyAmqpTopicBinding(pub String);
 /// <type name="legacy-amqp-headers-binding" class="restricted" source="map" provides="filter">
 ///     <descriptor name="apache.org:legacy-amqp-headers-binding:map" code="0x0000468C:0x00000002"/>
 /// </type>
-/// 
-/// The map has the same restriction as the application-properties section, 
-/// namely that the keys of this are restricted to be of type string 
-/// (which excludes the possibility of a null key) and the values are restricted 
+///
+/// The map has the same restriction as the application-properties section,
+/// namely that the keys of this are restricted to be of type string
+/// (which excludes the possibility of a null key) and the values are restricted
 /// to be of simple types only, that is, excluding map, list, and array types.
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(

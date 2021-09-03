@@ -2,10 +2,9 @@ use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
     primitives::{Symbol, Uint, Ushort},
 };
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
-
 
 /// Negotiate connection parameters.
 /// <type name="open" class="composite" source="list" provides="frame">
@@ -22,33 +21,33 @@ use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 pub struct Open {
     /// <field name="container-id" type="string" mandatory="true"/>
     pub container_id: String,
-    
+
     /// <field name="hostname" type="string"/>
     pub hostname: Option<String>,
-    
+
     /// <field name="max-frame-size" type="uint" default="4294967295"/>
     #[amqp_contract(default)]
     pub max_frame_size: MaxFrameSize,
-    
+
     /// <field name="channel-max" type="ushort" default="65535"/>
     #[amqp_contract(default)]
     pub channel_max: ChannelMax,
-    
+
     /// <field name="idle-time-out" type="milliseconds"/>
     pub idle_time_out: Option<Milliseconds>,
-    
+
     /// <field name="outgoing-locales" type="ietf-language-tag" multiple="true"/>
     pub outgoing_locales: Option<Vec<IetfLanguageTag>>,
-    
+
     /// <field name="incoming-locales" type="ietf-language-tag" multiple="true"/>
     pub incoming_locales: Option<Vec<IetfLanguageTag>>,
-    
+
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
     pub offered_capabilities: Option<Vec<Symbol>>,
-    
+
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
     pub desired_capabilities: Option<Vec<Symbol>>,
-    
+
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,
 }
@@ -73,7 +72,6 @@ impl From<MaxFrameSize> for Uint {
         value.0
     }
 }
-
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ChannelMax(pub Ushort);

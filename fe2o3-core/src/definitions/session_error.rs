@@ -1,6 +1,6 @@
 use serde::{de, ser};
 
-use fe2o3_amqp::{constants::SYMBOL, primitives::{Symbol}};
+use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionError {
@@ -27,8 +27,7 @@ impl ser::Serialize for SessionError {
     where
         S: serde::Serializer,
     {
-        Symbol::from(self)
-            .serialize(serializer)
+        Symbol::from(self).serialize(serializer)
     }
 }
 
