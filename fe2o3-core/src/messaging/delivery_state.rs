@@ -14,7 +14,7 @@ pub enum DeliveryState {
     Received(Received),
 }
 
-mod delivery_state_serde {
+mod delivery_state {
     use serde::{de::{self, VariantAccess}, ser};
 
     use super::DeliveryState;
@@ -145,8 +145,7 @@ mod delivery_state_serde {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 pub enum Outcome {
     Accepted(Accepted),
     Rejected(Rejected),
