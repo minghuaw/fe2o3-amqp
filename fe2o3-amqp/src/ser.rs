@@ -11,8 +11,16 @@ use crate::{
     error::Error,
     format_code::EncodingCodes,
     util::{FieldRole, IsArrayElement, NewType, StructEncoding},
-    value::U32_MAX_AS_USIZE,
 };
+
+// Variable type will spend a byte on size
+const U8_MAX_MINUS_1: usize = u8::MAX as usize - 1;
+const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
+
+// Variable type will spend 4 bytes on size
+const U32_MAX_MINUS_4: usize = u32::MAX as usize - 4;
+const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
+
 
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
@@ -372,11 +380,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     NewType::Symbol => {
                         match l {
                             // sym8
-                            0..=255 => {
+                            0..=U8_MAX_MINUS_1 => {
                                 let code = [EncodingCodes::Sym8 as u8, l as u8];
                                 self.writer.write_all(&code)?;
                             }
-                            256..=U32_MAX_AS_USIZE => {
+                            256..=U32_MAX_MINUS_4 => {
                                 let code = [EncodingCodes::Sym32 as u8];
                                 let width = (l as u32).to_be_bytes();
                                 self.writer.write_all(&code)?;
@@ -389,14 +397,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     NewType::None => {
                         match l {
                             // str8-utf8
-                            0..=255 => {
+                            0..=U8_MAX_MINUS_1 => {
                                 let code = [EncodingCodes::Str8 as u8, l as u8];
                                 // let width: [u8; 1] = (l as u8).to_be_bytes();
                                 self.writer.write_all(&code)?;
                                 // self.writer.write_all(&width)?;
                             }
                             // str32-utf8
-                            256..=U32_MAX_AS_USIZE => {
+                            256..=U32_MAX_MINUS_4 => {
                                 let code = [EncodingCodes::Str32 as u8];
                                 let width: [u8; 4] = (l as u32).to_be_bytes();
                                 self.writer.write_all(&code)?;
@@ -448,14 +456,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     IsArrayElement::False => {
                         match l {
                             // vbin8
-                            0..=255 => {
+                            0..=U8_MAX_MINUS_1 => {
                                 let code = [EncodingCodes::VBin8 as u8];
                                 let width: [u8; 1] = (l as u8).to_be_bytes();
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
                             // vbin32
-                            256..=U32_MAX_AS_USIZE => {
+                            256..=U32_MAX_MINUS_4 => {
                                 let code = [EncodingCodes::VBin32 as u8];
                                 let width: [u8; 4] = (l as u32).to_be_bytes();
                                 self.writer.write_all(&code)?;
@@ -829,7 +837,7 @@ fn write_array<'a, W: Write + 'a>(
     let len = buf.len();
 
     match len {
-        0..=255 => {
+        0..=U8_MAX_MINUS_2 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Array8 as u8];
                 writer.write_all(&code)?;
@@ -839,7 +847,7 @@ fn write_array<'a, W: Write + 'a>(
             let len_num = [len as u8, num as u8];
             writer.write_all(&len_num)?;
         }
-        256..=U32_MAX_AS_USIZE => {
+        256..=U32_MAX_MINUS_8 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Array32 as u8];
                 writer.write_all(&code)?;
@@ -910,7 +918,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&code)?;
         }
         // FIXME: whether `len` should be below 255-1
-        1..=255 => {
+        1..=U8_MAX_MINUS_2 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::List8 as u8];
                 writer.write_all(&code)?;
@@ -921,7 +929,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&len_num)?;
         }
         // FIXME: whether `len` should be below u32::MAX - 4
-        256..=U32_MAX_AS_USIZE => {
+        256..=U32_MAX_MINUS_8 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::List32 as u8];
                 writer.write_all(&code)?;
@@ -1012,7 +1020,7 @@ fn write_map<'a, W: Write + 'a>(
 
     match len {
         // FIXME: Whether `len` should be 255 - 1
-        0..=255 => {
+        0..=U8_MAX_MINUS_2 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Map8 as u8];
                 writer.write_all(&code)?;
@@ -1023,7 +1031,7 @@ fn write_map<'a, W: Write + 'a>(
             writer.write_all(&len_num)?;
         }
         // FIXME: whether `len` should be u32::MAX - 4
-        256..=U32_MAX_AS_USIZE => {
+        256..=U32_MAX_MINUS_8 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Map32 as u8];
                 writer.write_all(&code)?;

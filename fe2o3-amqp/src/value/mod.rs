@@ -7,7 +7,6 @@ use crate::{described::Described, format_code::EncodingCodes, primitives::{Array
 pub mod de;
 pub mod ser;
 
-pub const U32_MAX_AS_USIZE: usize = u32::MAX as usize;
 pub const VALUE: &str = "VALUE";
 
 /// Primitive type definitions
