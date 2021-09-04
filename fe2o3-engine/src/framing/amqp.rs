@@ -1,5 +1,4 @@
 use bytes::{BufMut, BytesMut};
-use fe2o3_amqp::to_vec;
 use fe2o3_types::performatives::Performative;
 use serde::ser::Serialize;
 use tokio_util::codec::Encoder;

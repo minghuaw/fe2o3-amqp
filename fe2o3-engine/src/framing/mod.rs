@@ -7,8 +7,8 @@
 //! Layer 0 should be hidden within the connection and there should be API that provide
 //! access to layer 1 for types that implement Encoder
 
-const FRAME_TYPE_AMQP: u8 = 0x00;
-const FRAME_TYPE_SASL: u8 = 0x01;
+pub const FRAME_TYPE_AMQP: u8 = 0x00;
+pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
 pub mod protocol_header;

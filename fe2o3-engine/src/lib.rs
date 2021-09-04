@@ -1,2 +1,2 @@
-mod error;
-mod framing;
+pub mod error;
+pub mod framing;
