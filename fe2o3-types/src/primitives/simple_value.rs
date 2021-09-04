@@ -64,7 +64,8 @@ impl SimpleValue {
 impl ser::Serialize for SimpleValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-            S: serde::Serializer {
+        S: serde::Serializer,
+    {
         match self {
             SimpleValue::Null => serializer.serialize_unit(),
             SimpleValue::Bool(v) => serializer.serialize_bool(*v),
@@ -115,7 +116,7 @@ enum Field {
     Symbol,
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
@@ -126,7 +127,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         let field = match v
             .try_into()
             .map_err(|_| de::Error::custom("Failed to convert u8 to format code"))?
@@ -158,16 +160,16 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             EncodingCodes::Sym32 | EncodingCodes::Sym8 => Field::Symbol,
 
             // unsupported types
-            EncodingCodes::List0 
-            | EncodingCodes::List32 
-            | EncodingCodes::List8 
-            | EncodingCodes::Map32 
-            | EncodingCodes::Map8 
-            | EncodingCodes::Array32 
+            EncodingCodes::List0
+            | EncodingCodes::List32
+            | EncodingCodes::List8
+            | EncodingCodes::Map32
+            | EncodingCodes::Map8
+            | EncodingCodes::Array32
             | EncodingCodes::Array8
             | EncodingCodes::DescribedType => {
                 return Err(de::Error::custom("Only simple types are supported"))
-            },
+            }
         };
         Ok(field)
     }
@@ -181,7 +183,6 @@ impl<'de> de::Deserialize<'de> for Field {
         deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
-
 
 struct Visitor {}
 
@@ -346,10 +347,9 @@ impl TryFrom<Value> for SimpleValue {
             Value::Binary(v) => SimpleValue::Binary(v),
             Value::String(v) => SimpleValue::String(v),
             Value::Symbol(v) => SimpleValue::Symbol(v),
-            Value::List(_)
-            | Value::Map(_)
-            | Value::Array(_)
-            | Value::Described(_) => return Err(fe2o3_amqp::error::Error::InvalidValue),
+            Value::List(_) | Value::Map(_) | Value::Array(_) | Value::Described(_) => {
+                return Err(fe2o3_amqp::error::Error::InvalidValue)
+            }
         };
         Ok(val)
     }

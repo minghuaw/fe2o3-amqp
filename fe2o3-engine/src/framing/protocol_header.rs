@@ -9,7 +9,7 @@ pub struct ProtocolHeader {
     pub id: ProtocolId,
     pub major: u8,
     pub minor: u8,
-    pub revision: u8
+    pub revision: u8,
 }
 
 impl Default for ProtocolHeader {
@@ -18,14 +18,19 @@ impl Default for ProtocolHeader {
             id: ProtocolId::Amqp,
             major: fe2o3_types::definitions::MAJOR,
             minor: fe2o3_types::definitions::MINOR,
-            revision: fe2o3_types::definitions::REVISION
+            revision: fe2o3_types::definitions::REVISION,
         }
     }
 }
 
 impl ProtocolHeader {
     pub fn new(id: ProtocolId, major: u8, minor: u8, revision: u8) -> Self {
-        Self {id, major, minor, revision}
+        Self {
+            id,
+            major,
+            minor,
+            revision,
+        }
     }
 
     pub fn amqp() -> Self {
@@ -50,7 +55,6 @@ impl ProtocolHeader {
     }
 }
 
-
 impl From<ProtocolHeader> for [u8; 8] {
     fn from(value: ProtocolHeader) -> Self {
         [
@@ -58,10 +62,11 @@ impl From<ProtocolHeader> for [u8; 8] {
             PROTOCOL_HEADER_PREFIX[1], // b'M'
             PROTOCOL_HEADER_PREFIX[2], // b'Q'
             PROTOCOL_HEADER_PREFIX[3], // b'P'
-            value.id as u8, 
-            value.major, 
-            value.minor, 
-            value.revision]
+            value.id as u8,
+            value.major,
+            value.minor,
+            value.revision,
+        ]
     }
 }
 
@@ -70,7 +75,7 @@ impl TryFrom<[u8; 8]> for ProtocolHeader {
 
     fn try_from(v: [u8; 8]) -> Result<Self, Self::Error> {
         if &v[..4] != b"AMQP" {
-            return Err(EngineError::UnexpectedProtocolHeader(v))
+            return Err(EngineError::UnexpectedProtocolHeader(v));
         }
 
         Ok(Self::new(v[4].try_into()?, v[5], v[6], v[7]))
@@ -92,7 +97,7 @@ impl TryFrom<u8> for ProtocolId {
             0x0 => Self::Amqp,
             0x2 => Self::Tls,
             0x3 => Self::Sasl,
-            v @ _ => return Err(EngineError::UnexpectedProtocolId(v))
+            v @ _ => return Err(EngineError::UnexpectedProtocolId(v)),
         };
         Ok(val)
     }

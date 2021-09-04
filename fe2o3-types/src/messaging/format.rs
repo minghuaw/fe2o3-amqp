@@ -6,7 +6,10 @@ use fe2o3_amqp::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use crate::{definitions::{Milliseconds, SequenceNo}, primitives::SimpleValue};
+use crate::{
+    definitions::{Milliseconds, SequenceNo},
+    primitives::SimpleValue,
+};
 
 /// 3.2.1 Header
 /// Transport headers for a message.

@@ -2,10 +2,17 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{constants::DESCRIPTOR, constants::{
+use crate::{
+    constants::DESCRIPTOR,
+    constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
         SYMBOL, TIMESTAMP, UUID,
-    }, error::Error, format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8}, format_code::EncodingCodes, util::{FieldRole, IsArrayElement, NewType, StructEncoding}};
+    },
+    error::Error,
+    format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
+    format_code::EncodingCodes,
+    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+};
 
 // Variable type will spend a byte on size
 const U8_MAX_MINUS_1: usize = u8::MAX as usize - 1;

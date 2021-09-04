@@ -1,8 +1,8 @@
 use std::convert::{TryFrom, TryInto};
 
-use ordered_float::OrderedFloat;
-use serde::{ser, de};
 use fe2o3_amqp::{constants::VALUE, format_code::EncodingCodes};
+use ordered_float::OrderedFloat;
+use serde::{de, ser};
 use serde_bytes::ByteBuf;
 
 pub use fe2o3_amqp::primitives::*;

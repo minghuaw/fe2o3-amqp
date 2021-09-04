@@ -1,8 +1,8 @@
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp::to_vec;
 use fe2o3_types::performatives::Performative;
-use tokio_util::codec::Encoder;
 use serde::ser::Serialize;
+use tokio_util::codec::Encoder;
 
 use crate::error::EngineError;
 
@@ -10,15 +10,12 @@ use super::FRAME_TYPE_AMQP;
 
 pub struct AmqpFrame<T> {
     header: AmqpFrameHeader,
-    body: AmqpFrameBody<T>
+    body: AmqpFrameBody<T>,
 }
 
 impl<T> AmqpFrame<T> {
     pub fn new(header: AmqpFrameHeader, body: AmqpFrameBody<T>) -> Self {
-        Self {
-            header,
-            body
-        }
+        Self { header, body }
     }
 
     pub fn header(&self) -> &AmqpFrameHeader {
@@ -40,15 +37,12 @@ impl<T> AmqpFrame<T> {
 
 pub struct AmqpFrameHeader {
     pub doff: u8,
-    pub channel: u16
+    pub channel: u16,
 }
 
 impl AmqpFrameHeader {
     pub fn new(doff: u8, channel: u16) -> Self {
-        Self {
-            doff,
-            channel
-        }
+        Self { doff, channel }
     }
 
     pub fn data_offset(&self) -> u8 {
@@ -69,7 +63,7 @@ impl<T> AmqpFrameBody<T> {
     pub fn new(performative: Performative, payload: Option<T>) -> Self {
         Self {
             performative,
-            payload
+            payload,
         }
     }
 
@@ -82,7 +76,7 @@ impl<T> AmqpFrameBody<T> {
     }
 }
 
-pub struct AmqpFrameHeaderEncoder { }
+pub struct AmqpFrameHeaderEncoder {}
 
 impl Encoder<AmqpFrameHeader> for AmqpFrameHeaderEncoder {
     type Error = EngineError;
@@ -95,14 +89,14 @@ impl Encoder<AmqpFrameHeader> for AmqpFrameHeaderEncoder {
     }
 }
 
-pub struct AmqpFrameBodyEncoder { }
+pub struct AmqpFrameBodyEncoder {}
 
 impl<T: Serialize> Encoder<AmqpFrameBody<T>> for AmqpFrameBodyEncoder {
     type Error = EngineError;
 
     fn encode(&mut self, item: AmqpFrameBody<T>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         use fe2o3_amqp::ser::Serializer;
-        
+
         // serialize performative
         let mut serializer = Serializer::from(dst.as_mut());
         Serialize::serialize(&item.performative, &mut serializer)?;
@@ -115,16 +109,16 @@ impl<T: Serialize> Encoder<AmqpFrameBody<T>> for AmqpFrameBodyEncoder {
     }
 }
 
-pub struct AmqpFrameEncoder { }
+pub struct AmqpFrameEncoder {}
 
 impl<T: Serialize> Encoder<AmqpFrame<T>> for AmqpFrameEncoder {
     type Error = EngineError;
 
     fn encode(&mut self, item: AmqpFrame<T>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut encoder = AmqpFrameHeaderEncoder { };
+        let mut encoder = AmqpFrameHeaderEncoder {};
         encoder.encode(item.header, dst)?;
 
-        let mut encoder = AmqpFrameBodyEncoder { };
+        let mut encoder = AmqpFrameBodyEncoder {};
         encoder.encode(item.body, dst)
     }
 }

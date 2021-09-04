@@ -12,5 +12,5 @@ pub enum EngineError {
     UnexpectedProtocolId(u8),
 
     #[error("Unexpected Protocol Header. Found {0:?}")]
-    UnexpectedProtocolHeader([u8; 8])
+    UnexpectedProtocolHeader([u8; 8]),
 }

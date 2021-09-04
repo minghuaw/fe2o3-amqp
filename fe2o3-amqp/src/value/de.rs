@@ -7,6 +7,7 @@ use crate::constants::{
     ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
 };
 use crate::{
+    constants::VALUE,
     error::Error,
     format_code::EncodingCodes,
     util::{
@@ -14,10 +15,9 @@ use crate::{
         EnumType,
         NewType,
     },
-    constants::{VALUE}
 };
 
-use super::{Value};
+use super::Value;
 
 enum Field {
     Described,

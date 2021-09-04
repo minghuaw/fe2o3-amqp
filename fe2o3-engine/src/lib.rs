@@ -1,2 +1,2 @@
-mod framing;
 mod error;
+mod framing;
