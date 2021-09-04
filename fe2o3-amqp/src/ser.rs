@@ -46,6 +46,12 @@ pub struct Serializer<W> {
     pub is_array_elem: IsArrayElement,
 }
 
+impl<W: Write> From<W> for Serializer<W> {
+    fn from(writer: W) -> Self {
+        Self::new(writer, IsArrayElement::False)
+    }
+}
+
 impl<W: Write> Serializer<W> {
     pub fn new(writer: W, is_array_elem: IsArrayElement) -> Self {
         Self {

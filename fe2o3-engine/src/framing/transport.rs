@@ -66,7 +66,7 @@ mod tests {
     use bytes::Bytes;
     use tokio::io::{AsyncRead, AsyncWrite};
     use tokio_util::codec::LengthDelimitedCodec;
-    use futures::{StreamExt, SinkExt};
+    use futures_util::{StreamExt, SinkExt};
 
     #[tokio::test]
     async fn test_length_delimited_codec() {

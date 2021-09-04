@@ -6,7 +6,7 @@ pub enum EngineError {
     Io(#[from] std::io::Error),
 
     #[error("Parse Error: {0}")]
-    ParseError(fe2o3_amqp::Error),
+    ParseError(#[from] fe2o3_amqp::Error),
 
     #[error("Unexpected Protocol ID {0:?}")]
     UnexpectedProtocolId(u8),
