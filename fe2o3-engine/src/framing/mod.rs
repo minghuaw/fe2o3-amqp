@@ -7,4 +7,7 @@
 //! Layer 0 should be hidden within the connection and there should be API that provide
 //! access to layer 1 for types that implement Encoder
 
+
 pub mod amqp;
+pub mod transport;
+pub mod protocol_header;

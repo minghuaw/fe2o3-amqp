@@ -16,5 +16,6 @@ path = "../fe2o3-types"
 [dependencies]
 bytes = "1.1.0"
 tokio = "1.11.0"
-tokio-util = "0.6.7"
+tokio-util = { version = "0.6.8", features = ["codec"] }
 futures-util = "0.3.17"
+thiserror = "1.0.28"

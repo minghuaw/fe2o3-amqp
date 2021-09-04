@@ -2,6 +2,7 @@ use bytes::BytesMut;
 use fe2o3_types::performatives::Performative;
 
 pub struct AmqpFrame {
+    size: [u8; 4],
     header: AmqpFrameHeader,
     body: AmqpFrameBody
 }
