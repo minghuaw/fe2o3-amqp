@@ -2,16 +2,10 @@ use std::io::Write;
 
 use serde::{ser, Serialize};
 
-use crate::{
-    constants::DESCRIPTOR,
-    constants::{
+use crate::{constants::DESCRIPTOR, constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
         SYMBOL, TIMESTAMP, UUID,
-    },
-    error::Error,
-    format_code::EncodingCodes,
-    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
-};
+    }, error::Error, format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8}, format_code::EncodingCodes, util::{FieldRole, IsArrayElement, NewType, StructEncoding}};
 
 // Variable type will spend a byte on size
 const U8_MAX_MINUS_1: usize = u8::MAX as usize - 1;
@@ -848,7 +842,7 @@ fn write_array<'a, W: Write + 'a>(
                 writer.write_all(&code)?;
             }
             // `len` must include the one byte taken by `num`
-            let len = len + 1;
+            let len = len + 1; // not using const OFFSET because it includes format code
             let len_num = [len as u8, num as u8];
             writer.write_all(&len_num)?;
         }
@@ -858,7 +852,7 @@ fn write_array<'a, W: Write + 'a>(
                 writer.write_all(&code)?;
             }
             // `len` must include the four bytes taken by `num`
-            let len = len + 4;
+            let len = len + 4; // not using const OFFSET because it includes format code
             let len = (len as u32).to_be_bytes();
             let num = (num as u32).to_be_bytes();
             writer.write_all(&len)?;
@@ -929,7 +923,7 @@ fn write_list<'a, W: Write + 'a>(
                 writer.write_all(&code)?;
             }
             // `len` must include the one byte taken by `num`
-            let len = len + 1;
+            let len = len + OFFSET_LIST8;
             let len_num = [len as u8, num as u8];
             writer.write_all(&len_num)?;
         }
@@ -940,7 +934,7 @@ fn write_list<'a, W: Write + 'a>(
                 writer.write_all(&code)?;
             }
             // Length including the four bytes taken by `num`
-            let len = len + 4;
+            let len = len + OFFSET_LIST32;
             let len: [u8; 4] = (len as u32).to_be_bytes();
             let num: [u8; 4] = (num as u32).to_be_bytes();
             writer.write_all(&len)?;
@@ -1031,7 +1025,7 @@ fn write_map<'a, W: Write + 'a>(
                 writer.write_all(&code)?;
             }
             // `len` must include the one byte taken by `num`
-            let len = len + 1;
+            let len = len + OFFSET_MAP8;
             let len_num = [len as u8, num as u8];
             writer.write_all(&len_num)?;
         }
@@ -1042,7 +1036,7 @@ fn write_map<'a, W: Write + 'a>(
                 writer.write_all(&code)?;
             }
             // `len` must include the four bytes taken by `num`
-            let len = len + 4;
+            let len = len + OFFSET_MAP32;
             let len = (len as u32).to_be_bytes();
             let num = (num as u32).to_be_bytes();
             writer.write_all(&len)?;
