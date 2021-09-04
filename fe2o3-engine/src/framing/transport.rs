@@ -1,19 +1,24 @@
 use std::convert::TryFrom;
 
 use fe2o3_types::performatives::MaxFrameSize;
+use futures_util::{Sink, Stream};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use pin_project_lite::pin_project;
 
 use crate::error::EngineError;
 
 use super::protocol_header::{ProtocolHeader, ProtocolId};
 
-pub struct Transport<T> {
-    framed: Framed<T, LengthDelimitedCodec>
+pin_project! {
+    pub struct Transport<T> {
+        #[pin]
+        framed: Framed<T, LengthDelimitedCodec>
+    }
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin> Transport<T> {
-    pub fn bind(io: T) -> Result<Self, EngineError> {
+impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
+    pub fn bind(io: Io) -> Result<Self, EngineError> {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
@@ -25,7 +30,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Transport<T> {
         )
     }
 
-    pub async fn negotiate(io: &mut T, proto_header: ProtocolHeader) -> Result<ProtocolId, EngineError> {
+    pub async fn negotiate(io: &mut Io, proto_header: ProtocolHeader) -> Result<ProtocolId, EngineError> {
         // negotiation
         let outbound_buf: [u8; 8] = proto_header.clone().into();
         io.write_all(&outbound_buf).await?;
@@ -42,7 +47,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Transport<T> {
         Ok(incoming_header.id)
     }
 
-    pub async fn negotiate_and_bind(mut io: T, proto_header: ProtocolHeader) -> Result<Self, EngineError> {
+    pub async fn negotiate_and_bind(mut io: Io, proto_header: ProtocolHeader) -> Result<Self, EngineError> {
         // bind transport based on proto_id
         match Self::negotiate(&mut io, proto_header).await? {
             ProtocolId::Amqp => {

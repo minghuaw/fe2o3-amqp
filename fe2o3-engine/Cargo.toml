@@ -25,3 +25,4 @@ thiserror = "1.0.28"
 serde = "1.0.130"
 erased-serde = "0.3.16"
 futures-util = { version = "0.3.17", features = ["sink"] }
+pin-project-lite = "0.2.7"
