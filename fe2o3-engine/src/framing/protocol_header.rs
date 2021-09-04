@@ -4,11 +4,12 @@ use crate::error::EngineError;
 
 const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProtocolHeader {
-    id: ProtocolId,
-    major: u8,
-    minor: u8,
-    revision: u8
+    pub id: ProtocolId,
+    pub major: u8,
+    pub minor: u8,
+    pub revision: u8
 }
 
 impl Default for ProtocolHeader {
@@ -49,25 +50,6 @@ impl ProtocolHeader {
     }
 }
 
-pub enum ProtocolId {
-    Amqp = 0x0,
-    Tls = 0x2,
-    Sasl = 0x3,
-}
-
-impl TryFrom<u8> for ProtocolId {
-    type Error = EngineError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        let val = match value {
-            0x0 => Self::Amqp,
-            0x2 => Self::Tls,
-            0x3 => Self::Sasl,
-            v @ _ => return Err(EngineError::UnexpectedProtocolId(v))
-        };
-        Ok(val)
-    }
-}
 
 impl From<ProtocolHeader> for [u8; 8] {
     fn from(value: ProtocolHeader) -> Self {
@@ -92,5 +74,26 @@ impl TryFrom<[u8; 8]> for ProtocolHeader {
         }
 
         Ok(Self::new(v[4].try_into()?, v[5], v[6], v[7]))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProtocolId {
+    Amqp = 0x0,
+    Tls = 0x2,
+    Sasl = 0x3,
+}
+
+impl TryFrom<u8> for ProtocolId {
+    type Error = EngineError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let val = match value {
+            0x0 => Self::Amqp,
+            0x2 => Self::Tls,
+            0x3 => Self::Sasl,
+            v @ _ => return Err(EngineError::UnexpectedProtocolId(v))
+        };
+        Ok(val)
     }
 }

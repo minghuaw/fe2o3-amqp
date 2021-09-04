@@ -73,6 +73,12 @@ impl From<MaxFrameSize> for Uint {
     }
 }
 
+impl From<MaxFrameSize> for usize {
+    fn from(value: MaxFrameSize) -> Self {
+        value.0 as usize
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ChannelMax(pub Ushort);
 

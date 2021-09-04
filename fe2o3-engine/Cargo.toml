@@ -5,6 +5,10 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dev-dependencies]
+tokio = { version = "1.11.0", features = ["rt", "macros"] }
+
+
 [dependencies.fe2o3-amqp]
 version = "0.0.1"
 path = "../fe2o3-amqp"
@@ -15,7 +19,7 @@ path = "../fe2o3-types"
 
 [dependencies]
 bytes = "1.1.0"
-tokio = "1.11.0"
+tokio = { version = "1.11.0", features = ["io-util"] }
 tokio-util = { version = "0.6.8", features = ["codec"] }
-futures-util = "0.3.17"
 thiserror = "1.0.28"
+futures = "0.3.17"

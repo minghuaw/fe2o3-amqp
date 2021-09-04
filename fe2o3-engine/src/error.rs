@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum EngineError {
+    #[error("IO Error: {0:?}")]
+    Io(#[from] std::io::Error),
+
     #[error("Parse Error: {0}")]
     ParseError(fe2o3_amqp::Error),
 
