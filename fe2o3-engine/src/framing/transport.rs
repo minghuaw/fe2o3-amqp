@@ -1,14 +1,16 @@
 use std::convert::TryFrom;
 
+use bytes::{Bytes, BytesMut};
 use fe2o3_types::performatives::MaxFrameSize;
 use futures_util::{Sink, Stream};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use tokio_util::codec::{Encoder, Framed, LengthDelimitedCodec};
 use pin_project_lite::pin_project;
+use serde::ser::Serialize;
 
 use crate::error::EngineError;
 
-use super::protocol_header::{ProtocolHeader, ProtocolId};
+use super::{amqp::{AmqpFrame, AmqpFrameEncoder}, protocol_header::{ProtocolHeader, ProtocolId}};
 
 pin_project! {
     pub struct Transport<T> {
@@ -62,6 +64,38 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
         self.framed.codec_mut()
             .set_max_frame_length(max_frame_size);
         self
+    }
+}
+
+impl<T, Io> Sink<AmqpFrame<T>> for Transport<Io> 
+where 
+    T: Serialize, 
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
+    type Error = EngineError;
+
+    fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.framed.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn start_send(self: std::pin::Pin<&mut Self>, item: AmqpFrame<T>) -> Result<(), Self::Error> {
+        let mut bytesmut = BytesMut::new();
+        let mut encoder = AmqpFrameEncoder { };
+        encoder.encode(item, &mut bytesmut)?;
+        
+        let this = self.project();
+        this.framed.start_send(Bytes::from(bytesmut)).map_err(Into::into)
+    }
+
+    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.framed.poll_flush(cx).map_err(Into::into)
+    }
+
+    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.framed.poll_close(cx).map_err(Into::into)
     }
 }
 

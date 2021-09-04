@@ -115,7 +115,7 @@ impl<T: Serialize> Encoder<AmqpFrameBody<T>> for AmqpFrameBodyEncoder {
     }
 }
 
-struct AmqpFrameEncoder { }
+pub struct AmqpFrameEncoder { }
 
 impl<T: Serialize> Encoder<AmqpFrame<T>> for AmqpFrameEncoder {
     type Error = EngineError;
