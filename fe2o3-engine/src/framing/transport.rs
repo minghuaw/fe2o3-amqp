@@ -25,7 +25,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Transport<T> {
         )
     }
 
-    pub async fn negotiate_and_bind(mut io: T, proto_header: ProtocolHeader) -> Result<Self, EngineError> {
+    pub async fn negotiate(io: &mut T, proto_header: ProtocolHeader) -> Result<ProtocolId, EngineError> {
         // negotiation
         let outbound_buf: [u8; 8] = proto_header.clone().into();
         io.write_all(&outbound_buf).await?;
@@ -39,9 +39,12 @@ impl<T: AsyncRead + AsyncWrite + Unpin> Transport<T> {
         if incoming_header != proto_header {
             return Err(EngineError::UnexpectedProtocolHeader(inbound_buf))
         }
-        
+        Ok(incoming_header.id)
+    }
+
+    pub async fn negotiate_and_bind(mut io: T, proto_header: ProtocolHeader) -> Result<Self, EngineError> {
         // bind transport based on proto_id
-        match proto_header.id {
+        match Self::negotiate(&mut io, proto_header).await? {
             ProtocolId::Amqp => {
                 Self::bind(io)
             },
