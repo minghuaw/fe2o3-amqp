@@ -36,6 +36,25 @@ impl<R: io::Read> IoReader<R> {
             Ok(())
         }
     }
+
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
+
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+    pub fn buf(&self) -> &Vec<u8> {
+        &self.buf
+    }
+
+    pub fn buf_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.buf
+    }
 }
 
 impl<R: io::Read> private::Sealed for IoReader<R> {}

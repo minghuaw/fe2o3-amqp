@@ -13,4 +13,7 @@ pub enum EngineError {
 
     #[error("Unexpected Protocol Header. Found {0:?}")]
     UnexpectedProtocolHeader([u8; 8]),
+
+    #[error("{0}")]
+    Message(&'static str),
 }

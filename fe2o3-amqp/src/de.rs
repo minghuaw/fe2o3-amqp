@@ -47,6 +47,14 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    pub fn reader(&self) -> &R {
+        &self.reader
+    }
+
+    pub fn reader_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
     pub fn symbol(reader: R) -> Self {
         Self {
             reader,
