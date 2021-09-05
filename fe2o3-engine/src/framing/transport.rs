@@ -71,9 +71,8 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
     }
 }
 
-impl<T, Io> Sink<AmqpFrame<T>> for Transport<Io>
+impl<Io> Sink<AmqpFrame> for Transport<Io>
 where
-    T: Serialize,
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     type Error = EngineError;
@@ -86,7 +85,7 @@ where
         this.framed.poll_ready(cx).map_err(Into::into)
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: AmqpFrame<T>) -> Result<(), Self::Error> {
+    fn start_send(self: std::pin::Pin<&mut Self>, item: AmqpFrame) -> Result<(), Self::Error> {
         let mut bytesmut = BytesMut::new();
         let mut encoder = AmqpFrameEncoder {};
         encoder.encode(item, &mut bytesmut)?;

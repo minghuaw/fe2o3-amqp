@@ -1,5 +1,3 @@
-use std::{marker::PhantomData};
-
 use bytes::{Buf, BufMut, BytesMut};
 use fe2o3_amqp::{de::Deserializer, read::{IoReader}};
 use fe2o3_types::performatives::Performative;
@@ -10,13 +8,13 @@ use crate::error::EngineError;
 
 use super::{FRAME_TYPE_AMQP};
 
-pub struct AmqpFrame<T> {
+pub struct AmqpFrame {
     header: AmqpFrameHeader,
-    body: AmqpFrameBody<T>,
+    body: AmqpFrameBody,
 }
 
-impl<T> AmqpFrame<T> {
-    pub fn new(header: AmqpFrameHeader, body: AmqpFrameBody<T>) -> Self {
+impl AmqpFrame {
+    pub fn new(header: AmqpFrameHeader, body: AmqpFrameBody) -> Self {
         Self { header, body }
     }
 
@@ -28,11 +26,11 @@ impl<T> AmqpFrame<T> {
         &mut self.header
     }
 
-    pub fn body(&self) -> &AmqpFrameBody<T> {
+    pub fn body(&self) -> &AmqpFrameBody {
         &self.body
     }
 
-    pub fn body_mut(&mut self) -> &mut AmqpFrameBody<T> {
+    pub fn body_mut(&mut self) -> &mut AmqpFrameBody {
         &mut self.body
     }
 }
@@ -96,13 +94,13 @@ impl Decoder for AmqpFrameHeaderDecoder {
     }
 }
 
-pub struct AmqpFrameBody<T> {
+pub struct AmqpFrameBody {
     pub performative: Performative,
-    pub payload: Option<T>,
+    pub payload: Option<BytesMut>,
 }
 
-impl<T> AmqpFrameBody<T> {
-    pub fn new(performative: Performative, payload: Option<T>) -> Self {
+impl AmqpFrameBody {
+    pub fn new(performative: Performative, payload: Option<BytesMut>) -> Self {
         Self {
             performative,
             payload,
@@ -113,40 +111,35 @@ impl<T> AmqpFrameBody<T> {
         &self.performative
     }
 
-    pub fn payload(&self) -> Option<&T> {
+    pub fn payload(&self) -> Option<&BytesMut> {
         (&self.payload).as_ref()
     }
 }
 
 pub struct AmqpFrameBodyEncoder {}
 
-impl<T: Serialize> Encoder<AmqpFrameBody<T>> for AmqpFrameBodyEncoder {
+impl Encoder<AmqpFrameBody> for AmqpFrameBodyEncoder {
     type Error = EngineError;
 
-    fn encode(&mut self, item: AmqpFrameBody<T>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: AmqpFrameBody, dst: &mut BytesMut) -> Result<(), Self::Error> {
         use fe2o3_amqp::ser::Serializer;
 
         // serialize performative
         let mut serializer = Serializer::from(dst.as_mut());
         Serialize::serialize(&item.performative, &mut serializer)?;
 
-        // serialize payload
+        // copy payload. FIXME: extend from payload
         if let Some(payload) = item.payload {
-            Serialize::serialize(&payload, &mut serializer)?;
+            dst.unsplit(payload)
         }
         Ok(())
     }
 }
 
-pub struct AmqpFrameBodyDecoder<T> {
-    marker: PhantomData<T>
-}
+pub struct AmqpFrameBodyDecoder {}
 
-impl<T> Decoder for AmqpFrameBodyDecoder<T> 
-where 
-    for<'de> T: Deserialize<'de>
-{
-    type Item = AmqpFrameBody<T>;
+impl Decoder for AmqpFrameBodyDecoder {
+    type Item = AmqpFrameBody;
     type Error = EngineError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -154,12 +147,10 @@ where
         let mut deserializer = Deserializer::new(reader);
         let performative: Performative = Deserialize::deserialize(&mut deserializer)?;
 
-        let payload = if deserializer.reader() // get &IoReader
-            .get_ref() // get &Reader<&mut BytesMut>
-            .get_ref() // &get &&mut BytesMut
-            .has_remaining() 
+        let buf_mut = deserializer.reader_mut().get_mut().get_mut();
+        let payload = if buf_mut.has_remaining()
         {
-            Some(T::deserialize(&mut deserializer)?)
+            Some(buf_mut.split())
         } else {
             None
         };
@@ -172,10 +163,10 @@ where
 
 pub struct AmqpFrameEncoder {}
 
-impl<T: Serialize> Encoder<AmqpFrame<T>> for AmqpFrameEncoder {
+impl Encoder<AmqpFrame> for AmqpFrameEncoder {
     type Error = EngineError;
 
-    fn encode(&mut self, item: AmqpFrame<T>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: AmqpFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut encoder = AmqpFrameHeaderEncoder {};
         encoder.encode(item.header, dst)?;
 
@@ -184,15 +175,10 @@ impl<T: Serialize> Encoder<AmqpFrame<T>> for AmqpFrameEncoder {
     }
 }
 
-pub struct AmqpFrameDecoder<T> {
-    marker: PhantomData<T>
-}
+pub struct AmqpFrameDecoder {}
 
-impl<T> Decoder for AmqpFrameDecoder<T> 
-where 
-    for<'de> T: Deserialize<'de>
-{
-    type Item = AmqpFrame<T>;
+impl Decoder for AmqpFrameDecoder {
+    type Item = AmqpFrame;
     type Error = EngineError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -203,9 +189,7 @@ where
             None => return Ok(None)
         };
 
-        let mut body_decoder = AmqpFrameBodyDecoder::<T> {
-            marker: PhantomData
-        };
+        let mut body_decoder = AmqpFrameBodyDecoder {};
         let body = match body_decoder.decode(src)? {
             Some(b) => b,
             None => return Ok(None)
