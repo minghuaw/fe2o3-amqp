@@ -10,12 +10,13 @@ use super::{FRAME_TYPE_AMQP};
 
 pub struct AmqpFrame {
     header: AmqpFrameHeader,
+    ext_header: Option<BytesMut>,
     body: AmqpFrameBody,
 }
 
 impl AmqpFrame {
-    pub fn new(header: AmqpFrameHeader, body: AmqpFrameBody) -> Self {
-        Self { header, body }
+    pub fn new(header: AmqpFrameHeader, ext_header: Option<BytesMut>, body: AmqpFrameBody) -> Self {
+        Self { header, ext_header, body }
     }
 
     pub fn header(&self) -> &AmqpFrameHeader {
@@ -59,6 +60,7 @@ pub struct AmqpFrameHeaderEncoder {}
 impl Encoder<AmqpFrameHeader> for AmqpFrameHeaderEncoder {
     type Error = EngineError;
 
+    // The 4 bytes frame size will be encoded with the LengthDelimitedCodec
     fn encode(&mut self, item: AmqpFrameHeader, dst: &mut BytesMut) -> Result<(), Self::Error> {
         dst.put_u8(item.doff);
         dst.put_u8(FRAME_TYPE_AMQP);
@@ -130,7 +132,7 @@ impl Encoder<AmqpFrameBody> for AmqpFrameBodyEncoder {
 
         // copy payload. FIXME: extend from payload
         if let Some(payload) = item.payload {
-            dst.unsplit(payload)
+            dst.put(payload)
         }
         Ok(())
     }
@@ -166,10 +168,18 @@ pub struct AmqpFrameEncoder {}
 impl Encoder<AmqpFrame> for AmqpFrameEncoder {
     type Error = EngineError;
 
+    // FIXME: doff needs to be calculated at runtime
     fn encode(&mut self, item: AmqpFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        // encode header
         let mut encoder = AmqpFrameHeaderEncoder {};
         encoder.encode(item.header, dst)?;
 
+        // encode extended header
+        if let Some(ext_header) = item.ext_header {
+            dst.put(ext_header)
+        }
+
+        // encode body
         let mut encoder = AmqpFrameBodyEncoder {};
         encoder.encode(item.body, dst)
     }
@@ -189,13 +199,36 @@ impl Decoder for AmqpFrameDecoder {
             None => return Ok(None)
         };
 
+        // decode extended header if there is any
+        let ext_header = match header.data_offset() {
+            0 => None,
+            v @ _ => {
+                let len = (v as usize) * 4 - 8;
+                Some(src.split_to(len))
+            }
+        };
+
         let mut body_decoder = AmqpFrameBodyDecoder {};
         let body = match body_decoder.decode(src)? {
             Some(b) => b,
             None => return Ok(None)
         };
         Ok(Some(
-            AmqpFrame::new(header, body)
+            AmqpFrame::new(header, ext_header, body)
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::BytesMut;
+    use tokio_util::codec::Encoder;
+
+    use super::{AmqpFrameHeader, AmqpFrameHeaderDecoder, AmqpFrameHeaderEncoder};
+
+    #[test]
+    fn test_encode_frame_header() {
+        let mut dst = BytesMut::new();
+        let mut encoder = AmqpFrameHeaderEncoder {};
     }
 }
