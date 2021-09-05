@@ -10,13 +10,12 @@ use super::{FRAME_TYPE_AMQP};
 
 pub struct AmqpFrame {
     channel: u16,
-    ext_header: Option<BytesMut>,
     body: AmqpFrameBody,
 }
 
 impl AmqpFrame {
-    pub fn new(channel: u16, ext_header: Option<BytesMut>, body: AmqpFrameBody) -> Self {
-        Self { channel, ext_header, body }
+    pub fn new(channel: u16, body: AmqpFrameBody) -> Self {
+        Self { channel, body }
     }
 
     pub fn channel(&self) -> &u16 {
@@ -110,25 +109,10 @@ impl Encoder<AmqpFrame> for AmqpFrameEncoder {
 
     // FIXME: doff needs to be calculated at runtime
     fn encode(&mut self, item: AmqpFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        // encode header
-        // let mut encoder = AmqpFrameHeaderEncoder {};
-        // encoder.encode(item.header, dst)?;
-        let doff = match &item.ext_header {
-            Some(eh) => match eh.len() {
-                0 => 2u8,
-                l @ _ => (2 + l / 4) as u8
-            },
-            None => 2u8
-        };
-
+        let doff = 2;
         dst.put_u8(doff);
         dst.put_u8(FRAME_TYPE_AMQP);
         dst.put_u16(item.channel);
-
-        // encode extended header
-        if let Some(ext_header) = item.ext_header {
-            dst.put(ext_header)
-        }
 
         // encode body
         let mut encoder = AmqpFrameBodyEncoder {};
@@ -152,17 +136,22 @@ impl Decoder for AmqpFrameDecoder {
             return Err(EngineError::Message("Only AMQP frame is implemented for now"))
         }
 
-        // decode extended header if there is any
-        let ext_header = match doff {
-            0..=1 => return Err(EngineError::MalformedFrame),
-            2 => {
-                None
-            }
-            v @ _ => {
-                let len = (v as usize) * 4 - 8;
-                Some(src.split_to(len))
-            }
-        };
+        // // decode extended header if there is any
+        // let ext_header = match doff {
+        //     0..=1 => return Err(EngineError::MalformedFrame),
+        //     2 => {
+        //         None
+        //     }
+        //     v @ _ => {
+        //         let len = (v as usize) * 4 - 8;
+        //         Some(src.split_to(len))
+        //     }
+        // };
+        match doff {
+            2 => {},
+            // 0..=1 => return Err(EngineError::MalformedFrame),
+            _ => return Err(EngineError::MalformedFrame),
+        }
 
         let mut body_decoder = AmqpFrameBodyDecoder {};
         let body = match body_decoder.decode(src)? {
@@ -170,7 +159,7 @@ impl Decoder for AmqpFrameDecoder {
             None => return Ok(None)
         };
         Ok(Some(
-            AmqpFrame::new(channel, ext_header, body)
+            AmqpFrame::new(channel, body)
         ))
     }
 }
