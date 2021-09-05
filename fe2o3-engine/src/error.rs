@@ -14,6 +14,9 @@ pub enum EngineError {
     #[error("Unexpected Protocol Header. Found {0:?}")]
     UnexpectedProtocolHeader([u8; 8]),
 
+    #[error("The frame is malformed")]
+    MalformedFrame,
+
     #[error("{0}")]
     Message(&'static str),
 }

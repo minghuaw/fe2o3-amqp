@@ -9,22 +9,22 @@ use crate::error::EngineError;
 use super::{FRAME_TYPE_AMQP};
 
 pub struct AmqpFrame {
-    header: AmqpFrameHeader,
+    channel: u16,
     ext_header: Option<BytesMut>,
     body: AmqpFrameBody,
 }
 
 impl AmqpFrame {
-    pub fn new(header: AmqpFrameHeader, ext_header: Option<BytesMut>, body: AmqpFrameBody) -> Self {
-        Self { header, ext_header, body }
+    pub fn new(channel: u16, ext_header: Option<BytesMut>, body: AmqpFrameBody) -> Self {
+        Self { channel, ext_header, body }
     }
 
-    pub fn header(&self) -> &AmqpFrameHeader {
-        &self.header
+    pub fn channel(&self) -> &u16 {
+        &self.channel
     }
 
-    pub fn header_mut(&mut self) -> &mut AmqpFrameHeader {
-        &mut self.header
+    pub fn channel_mut(&mut self) -> &mut u16 {
+        &mut self.channel
     }
 
     pub fn body(&self) -> &AmqpFrameBody {
@@ -36,65 +36,65 @@ impl AmqpFrame {
     }
 }
 
-pub struct AmqpFrameHeader {
-    pub doff: u8,
-    pub channel: u16,
-}
+// pub struct AmqpFrameHeader {
+//     pub doff: u8,
+//     pub channel: u16,
+// }
 
-impl AmqpFrameHeader {
-    pub fn new(doff: u8, channel: u16) -> Self {
-        Self { doff, channel }
-    }
+// impl AmqpFrameHeader {
+//     pub fn new(doff: u8, channel: u16) -> Self {
+//         Self { doff, channel }
+//     }
 
-    pub fn data_offset(&self) -> u8 {
-        self.doff
-    }
+//     pub fn data_offset(&self) -> u8 {
+//         self.doff
+//     }
 
-    pub fn channel(&self) -> u16 {
-        self.channel
-    }
-}
+//     pub fn channel(&self) -> u16 {
+//         self.channel
+//     }
+// }
 
-pub struct AmqpFrameHeaderEncoder {}
+// pub struct AmqpFrameHeaderEncoder {}
 
-impl Encoder<AmqpFrameHeader> for AmqpFrameHeaderEncoder {
-    type Error = EngineError;
+// impl Encoder<AmqpFrameHeader> for AmqpFrameHeaderEncoder {
+//     type Error = EngineError;
 
-    // The 4 bytes frame size will be encoded with the LengthDelimitedCodec
-    fn encode(&mut self, item: AmqpFrameHeader, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        dst.put_u8(item.doff);
-        dst.put_u8(FRAME_TYPE_AMQP);
-        dst.put_u16(item.channel);
-        Ok(())
-    }
-}
+//     // The 4 bytes frame size will be encoded with the LengthDelimitedCodec
+//     fn encode(&mut self, item: AmqpFrameHeader, dst: &mut BytesMut) -> Result<(), Self::Error> {
+//         dst.put_u8(item.doff);
+//         dst.put_u8(FRAME_TYPE_AMQP);
+//         dst.put_u16(item.channel);
+//         Ok(())
+//     }
+// }
 
-pub struct AmqpFrameHeaderDecoder {}
+// pub struct AmqpFrameHeaderDecoder {}
 
-impl Decoder for AmqpFrameHeaderDecoder {
-    type Item = AmqpFrameHeader;
-    type Error = EngineError;
+// impl Decoder for AmqpFrameHeaderDecoder {
+//     type Item = AmqpFrameHeader;
+//     type Error = EngineError;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() < 4 {
-            // return Err(EngineError::ParseError(fe2o3_amqp::Error::InvalidLength))
-            return Ok(None)
-        }
+//     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+//         if src.len() < 4 {
+//             // return Err(EngineError::ParseError(fe2o3_amqp::Error::InvalidLength))
+//             return Ok(None)
+//         }
 
-        // read four bytes
-        let doff = src.get_u8();
-        let ftype = src.get_u8();
-        let channel = src.get_u16();
+//         // read four bytes
+//         let doff = src.get_u8();
+//         let ftype = src.get_u8();
+//         let channel = src.get_u16();
 
-        // check type byte
-        if ftype != FRAME_TYPE_AMQP {
-            return Err(EngineError::Message("Only AMQP frame is implemented for now"))
-        }
-        Ok(Some(
-            AmqpFrameHeader::new(doff, channel)
-        ))
-    }
-}
+//         // check type byte
+//         if ftype != FRAME_TYPE_AMQP {
+//             return Err(EngineError::Message("Only AMQP frame is implemented for now"))
+//         }
+//         Ok(Some(
+//             AmqpFrameHeader::new(doff, channel)
+//         ))
+//     }
+// }
 
 pub struct AmqpFrameBody {
     pub performative: Performative,
@@ -171,8 +171,19 @@ impl Encoder<AmqpFrame> for AmqpFrameEncoder {
     // FIXME: doff needs to be calculated at runtime
     fn encode(&mut self, item: AmqpFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // encode header
-        let mut encoder = AmqpFrameHeaderEncoder {};
-        encoder.encode(item.header, dst)?;
+        // let mut encoder = AmqpFrameHeaderEncoder {};
+        // encoder.encode(item.header, dst)?;
+        let doff = match &item.ext_header {
+            Some(eh) => match eh.len() {
+                0 => 2u8,
+                l @ _ => (2 + l / 4) as u8
+            },
+            None => 2u8
+        };
+
+        dst.put_u8(doff);
+        dst.put_u8(FRAME_TYPE_AMQP);
+        dst.put_u16(item.channel);
 
         // encode extended header
         if let Some(ext_header) = item.ext_header {
@@ -193,15 +204,26 @@ impl Decoder for AmqpFrameDecoder {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // decode AmqpFrameHeader
-        let mut header_decoder = AmqpFrameHeaderDecoder {};
-        let header = match header_decoder.decode(src)? {
-            Some(h) => h,
-            None => return Ok(None)
-        };
+        // let mut header_decoder = AmqpFrameHeaderDecoder {};
+        // let header = match header_decoder.decode(src)? {
+        //     Some(h) => h,
+        //     None => return Ok(None)
+        // };
+        let doff = src.get_u8();
+        let ftype = src.get_u8();
+        let channel = src.get_u16();
+
+        // check type byte
+        if ftype != FRAME_TYPE_AMQP {
+            return Err(EngineError::Message("Only AMQP frame is implemented for now"))
+        }
 
         // decode extended header if there is any
-        let ext_header = match header.data_offset() {
-            0 => None,
+        let ext_header = match doff {
+            0..=1 => return Err(EngineError::MalformedFrame),
+            2 => {
+                None
+            }
             v @ _ => {
                 let len = (v as usize) * 4 - 8;
                 Some(src.split_to(len))
@@ -214,21 +236,12 @@ impl Decoder for AmqpFrameDecoder {
             None => return Ok(None)
         };
         Ok(Some(
-            AmqpFrame::new(header, ext_header, body)
+            AmqpFrame::new(channel, ext_header, body)
         ))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
-    use tokio_util::codec::Encoder;
 
-    use super::{AmqpFrameHeader, AmqpFrameHeaderDecoder, AmqpFrameHeaderEncoder};
-
-    #[test]
-    fn test_encode_frame_header() {
-        let mut dst = BytesMut::new();
-        let mut encoder = AmqpFrameHeaderEncoder {};
-    }
 }
