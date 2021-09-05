@@ -36,66 +36,6 @@ impl AmqpFrame {
     }
 }
 
-// pub struct AmqpFrameHeader {
-//     pub doff: u8,
-//     pub channel: u16,
-// }
-
-// impl AmqpFrameHeader {
-//     pub fn new(doff: u8, channel: u16) -> Self {
-//         Self { doff, channel }
-//     }
-
-//     pub fn data_offset(&self) -> u8 {
-//         self.doff
-//     }
-
-//     pub fn channel(&self) -> u16 {
-//         self.channel
-//     }
-// }
-
-// pub struct AmqpFrameHeaderEncoder {}
-
-// impl Encoder<AmqpFrameHeader> for AmqpFrameHeaderEncoder {
-//     type Error = EngineError;
-
-//     // The 4 bytes frame size will be encoded with the LengthDelimitedCodec
-//     fn encode(&mut self, item: AmqpFrameHeader, dst: &mut BytesMut) -> Result<(), Self::Error> {
-//         dst.put_u8(item.doff);
-//         dst.put_u8(FRAME_TYPE_AMQP);
-//         dst.put_u16(item.channel);
-//         Ok(())
-//     }
-// }
-
-// pub struct AmqpFrameHeaderDecoder {}
-
-// impl Decoder for AmqpFrameHeaderDecoder {
-//     type Item = AmqpFrameHeader;
-//     type Error = EngineError;
-
-//     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-//         if src.len() < 4 {
-//             // return Err(EngineError::ParseError(fe2o3_amqp::Error::InvalidLength))
-//             return Ok(None)
-//         }
-
-//         // read four bytes
-//         let doff = src.get_u8();
-//         let ftype = src.get_u8();
-//         let channel = src.get_u16();
-
-//         // check type byte
-//         if ftype != FRAME_TYPE_AMQP {
-//             return Err(EngineError::Message("Only AMQP frame is implemented for now"))
-//         }
-//         Ok(Some(
-//             AmqpFrameHeader::new(doff, channel)
-//         ))
-//     }
-// }
-
 pub struct AmqpFrameBody {
     pub performative: Performative,
     pub payload: Option<BytesMut>,
@@ -203,12 +143,6 @@ impl Decoder for AmqpFrameDecoder {
     type Error = EngineError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        // decode AmqpFrameHeader
-        // let mut header_decoder = AmqpFrameHeaderDecoder {};
-        // let header = match header_decoder.decode(src)? {
-        //     Some(h) => h,
-        //     None => return Ok(None)
-        // };
         let doff = src.get_u8();
         let ftype = src.get_u8();
         let channel = src.get_u16();
