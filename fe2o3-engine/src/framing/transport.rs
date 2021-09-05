@@ -1,24 +1,20 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, task::Poll};
 
 use bytes::{Bytes, BytesMut};
 use fe2o3_types::performatives::MaxFrameSize;
 use futures_util::{Sink, Stream};
 use pin_project_lite::pin_project;
-use serde::ser::Serialize;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio_util::codec::{Encoder, Framed, LengthDelimitedCodec};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec};
 
 use crate::error::EngineError;
 
-use super::{
-    amqp::{AmqpFrame, AmqpFrameEncoder},
-    protocol_header::{ProtocolHeader, ProtocolId},
-};
+use super::{amqp::{AmqpFrame, AmqpFrameDecoder, AmqpFrameEncoder}, protocol_header::{ProtocolHeader, ProtocolId}};
 
 pin_project! {
-    pub struct Transport<T> {
+    pub struct Transport<Io> {
         #[pin]
-        framed: Framed<T, LengthDelimitedCodec>
+        framed: Framed<Io, LengthDelimitedCodec>
     }
 }
 
@@ -113,11 +109,37 @@ where
     }
 }
 
+impl<Io> Stream for Transport<Io> 
+where
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
+    type Item = Result<AmqpFrame, EngineError>;
+
+    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.project();
+        match this.framed.poll_next(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(next) => {
+                match next {
+                    Some(item) => {
+                        let mut src = match item {
+                            Ok(b) => b,
+                            Err(err) => return Poll::Ready(Some(Err(err.into())))
+                        };
+                        let mut decoder = AmqpFrameDecoder { };
+                        Poll::Ready(decoder.decode(&mut src).transpose())
+                    },
+                    None => Poll::Ready(None)
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
     use futures_util::{SinkExt, StreamExt};
-    use tokio::io::{AsyncRead, AsyncWrite};
     use tokio_util::codec::LengthDelimitedCodec;
 
     #[tokio::test]
