@@ -13,3 +13,7 @@ pub const FRAME_TYPE_SASL: u8 = 0x01;
 pub mod amqp;
 pub mod protocol_header;
 pub mod transport;
+pub mod connection;
+pub mod session;
+pub mod link;
+pub mod endpoint;
