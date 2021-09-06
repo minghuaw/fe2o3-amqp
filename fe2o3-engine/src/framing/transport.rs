@@ -1,7 +1,6 @@
 use std::{convert::TryFrom, task::Poll};
 
 use bytes::{Bytes, BytesMut};
-use fe2o3_types::performatives::MaxFrameSize;
 use futures_util::{Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -23,7 +22,9 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
-            .max_frame_length(usize::from(MaxFrameSize::default())) // change max frame size later in negotiation
+            // Prior to any explicit negotiation, 
+            // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
+            .max_frame_length(512) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
         Ok(Self { framed })
