@@ -96,7 +96,7 @@ pub enum FrameBody {
 
 impl FrameBody {
     /// The payload will be ignored unless the performative is Transfer
-    pub fn new(performative: Performative, payload: Option<BytesMut>) -> Self {
+    pub fn from_parts(performative: Performative, payload: Option<BytesMut>) -> Self {
         match performative {
             Performative::Open(performative) => FrameBody::Open{performative},
             Performative::Begin(performative) => FrameBody::Begin{performative},
@@ -159,7 +159,7 @@ impl Decoder for FrameBodyCodec {
                 };
                 FrameBody::Transfer {performative, payload}
             },
-            p @ _ => FrameBody::new(p, None)
+            p @ _ => FrameBody::from_parts(p, None)
         };
 
         Ok(Some(frame_body))
