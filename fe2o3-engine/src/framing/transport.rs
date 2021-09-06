@@ -9,7 +9,7 @@ use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec};
 
 use crate::error::EngineError;
 
-use super::{amqp::{AmqpFrame, AmqpFrameDecoder, AmqpFrameEncoder}, protocol_header::{ProtocolHeader, ProtocolId}};
+use super::{amqp::{Frame, FrameCodec}, protocol_header::{ProtocolHeader, ProtocolId}};
 
 pin_project! {
     pub struct Transport<Io> {
@@ -67,7 +67,7 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
     }
 }
 
-impl<Io> Sink<AmqpFrame> for Transport<Io>
+impl<Io> Sink<Frame> for Transport<Io>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -81,9 +81,9 @@ where
         this.framed.poll_ready(cx).map_err(Into::into)
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: AmqpFrame) -> Result<(), Self::Error> {
+    fn start_send(self: std::pin::Pin<&mut Self>, item: Frame) -> Result<(), Self::Error> {
         let mut bytesmut = BytesMut::new();
-        let mut encoder = AmqpFrameEncoder {};
+        let mut encoder = FrameCodec {};
         encoder.encode(item, &mut bytesmut)?;
 
         let this = self.project();
@@ -113,7 +113,7 @@ impl<Io> Stream for Transport<Io>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = Result<AmqpFrame, EngineError>;
+    type Item = Result<Frame, EngineError>;
 
     fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         let this = self.project();
@@ -126,7 +126,7 @@ where
                             Ok(b) => b,
                             Err(err) => return Poll::Ready(Some(Err(err.into())))
                         };
-                        let mut decoder = AmqpFrameDecoder { };
+                        let mut decoder = FrameCodec { };
                         Poll::Ready(decoder.decode(&mut src).transpose())
                     },
                     None => Poll::Ready(None)
