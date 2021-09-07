@@ -19,10 +19,11 @@ path = "../fe2o3-types"
 
 [dependencies]
 bytes = "1.1.0"
-tokio = { version = "1.11.0", features = ["io-util"] }
+tokio = { version = "1.11.0", features = ["io-util", "net"] }
 tokio-util = { version = "0.6.8", features = ["codec"] }
 thiserror = "1.0.28"
 serde = "1.0.130"
 erased-serde = "0.3.16"
 futures-util = { version = "0.3.17", features = ["sink"] }
 pin-project-lite = "0.2.7"
+url = "2.2.2"
