@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, marker::PhantomData};
 
 use fe2o3_amqp::primitives::{Symbol};
 use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{ChannelMax, MaxFrameSize}};
@@ -9,9 +9,11 @@ use crate::error::EngineError;
 
 use super::Connection;
 
+pub struct WithoutContainerId {}
+pub struct WithContainerId {}
 
 /// Connection builder
-pub struct Builder {
+pub struct Builder<Mode> {
     pub container_id: String,
     pub hostname: Option<String>,
     pub max_frame_size: MaxFrameSize,
@@ -21,10 +23,13 @@ pub struct Builder {
     pub incoming_locales: Option<Vec<IetfLanguageTag>>,
     pub offered_capabilities: Option<Vec<Symbol>>,
     pub desired_capabilities: Option<Vec<Symbol>>,
-    pub properties: Option<Fields>
+    pub properties: Option<Fields>,
+
+    // type state marker
+    marker: PhantomData<Mode>
 }
 
-impl Builder {
+impl Builder<WithoutContainerId> {
     pub fn new() -> Self {
         Self {
             container_id: String::new(),
@@ -37,18 +42,37 @@ impl Builder {
             incoming_locales: None,
             offered_capabilities: None,
             desired_capabilities: None,
-            properties: None
+            properties: None,
+
+            marker: PhantomData
         }
     }
+}
 
+impl<Mode> Builder<Mode> {
     // In Rust, it’s more common to pass slices as arguments 
     // rather than vectors when you just want to provide read access. 
     // The same goes for String and &str.
-    pub fn container_id(&mut self, id: String) -> &mut Self {
-        self.container_id = id;
-        self
-    }
+    pub fn container_id(self, id: String) -> Builder<WithContainerId> {
+        Builder::<WithContainerId> {
+            container_id: id,
+            hostname: None,
+            // set to 512 before Open frame is sent
+            max_frame_size: MaxFrameSize(512),
+            channel_max: ChannelMax::default(),
+            idle_time_out: None,
+            outgoing_locales: None,
+            incoming_locales: None,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            properties: None,
 
+            marker: PhantomData
+        }
+    }
+}
+
+impl<Mode> Builder<Mode> {
     pub fn hostname(&mut self, hostname: String) -> &mut Self {
         self.hostname = Some(hostname);
         self
@@ -122,8 +146,10 @@ impl Builder {
         self.properties = Some(properties);
         self
     }
+}
 
-    pub fn build_connection(address: impl TryInto<Url>) -> Result<Connection<TcpStream>, EngineError> {
+impl Builder<WithContainerId> {
+    pub async fn build_connection(self, address: impl TryInto<Url>) -> Result<Connection<TcpStream>, EngineError> {
         todo!()
     }
 }
