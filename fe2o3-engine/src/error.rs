@@ -5,6 +5,12 @@ pub enum EngineError {
     #[error("IO Error: {0:?}")]
     Io(#[from] std::io::Error),
 
+    #[error("Url Error: {0}")]
+    UrlError(#[from] url::ParseError),
+
+    #[error("Connection/transport is not connected")]
+    IsClosed,
+
     #[error("Parse Error: {0}")]
     ParseError(#[from] fe2o3_amqp::Error),
 

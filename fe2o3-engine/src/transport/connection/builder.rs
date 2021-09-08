@@ -1,11 +1,11 @@
-use std::{convert::TryInto, marker::PhantomData};
+use std::{convert::{TryFrom, TryInto}, marker::PhantomData};
 
 use fe2o3_amqp::primitives::{Symbol};
 use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{ChannelMax, MaxFrameSize}};
 use tokio::net::TcpStream;
 use url::Url;
 
-use crate::error::EngineError;
+use crate::{error::EngineError, transport::protocol_header::ProtocolHeader, transport::transport::Transport};
 
 use super::Connection;
 
@@ -149,7 +149,33 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    pub async fn build_connection(self, address: impl TryInto<Url>) -> Result<Connection<TcpStream>, EngineError> {
-        todo!()
-    }
+    // pub async fn create_connection<U>(self, address: U) -> Result<Connection<TcpStream>, EngineError> 
+    // where 
+    //     U: TryInto<Url, Error=url::ParseError>,
+    // {
+    //     let url: Url = address.try_into()
+    //         .map_err(|err| EngineError::UrlError(err))?;
+
+    //     match url.scheme() {
+    //         "amqp" => {
+    //             let addr = url.socket_addrs(|| Some(fe2o3_types::definitions::PORT))?;
+    //             let mut stream = TcpStream::connect(&*addr).await?;
+
+    //             // Negotiate and then bind
+    //             let remote_header = Transport::negotiate(&mut stream, ProtocolHeader::amqp()).await?;
+    //             let transport = Transport::bind(stream)?;
+
+    //             // Send Open frame
+    //             // let local_open =
+    //             todo!()
+    //         },
+    //         "amqps" => {
+    //             todo!()
+    //         }
+    //         _ => {
+    //             return Err(EngineError::Message("Invalid Url scheme"))
+    //         }
+    //     }
+    //     todo!()
+    // }
 }

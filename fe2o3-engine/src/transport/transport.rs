@@ -143,6 +143,8 @@ mod tests {
     use futures_util::{SinkExt, StreamExt};
     use tokio_util::codec::LengthDelimitedCodec;
 
+    use super::Transport;
+
     #[tokio::test]
     async fn test_length_delimited_codec() {
         // test write

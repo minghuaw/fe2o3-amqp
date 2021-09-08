@@ -13,6 +13,12 @@ pub struct Frame {
     body: FrameBody
 }
 
+impl Frame {
+    pub fn channel(&self) -> u16 {
+        self.channel
+    }
+}
+
 pub struct FrameCodec {}
 
 impl Encoder<Frame> for FrameCodec {

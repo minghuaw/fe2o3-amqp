@@ -2,6 +2,8 @@ use bytes::BytesMut;
 use fe2o3_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
 use tokio::sync::mpsc::Sender;
 
+use crate::error::EngineError;
+
 use super::{amqp::{Frame, FrameBody}, connection::OutChanId};
 
 pub enum SessionFrame {
@@ -31,7 +33,17 @@ pub enum SessionFrame {
 
 pub struct SessionHandle {
     id: OutChanId,
-    tx: Sender<SessionFrame>,
+    sender: Sender<Result<SessionFrame, EngineError>>,
+}
+
+impl SessionHandle {
+    pub fn id(&self) -> &OutChanId {
+        &self.id
+    }
+
+    pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrame, EngineError>> {
+        &mut self.sender
+    }
 }
 
 pub enum SessionState {
