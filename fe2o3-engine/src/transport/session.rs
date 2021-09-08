@@ -6,7 +6,12 @@ use crate::error::EngineError;
 
 use super::{amqp::{Frame, FrameBody}, connection::OutChanId};
 
-pub enum SessionFrame {
+pub struct SessionFrame {
+    channel: u16,
+    body: SessionFrameBody
+}
+
+pub enum SessionFrameBody {
     Begin{
         performative: Begin
     },

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::error::EngineError;
-pub use crate::transport::transport::Transport;
+pub use crate::transport::Transport;
 use fe2o3_types::{definitions::Milliseconds, performatives::{ChannelMax, MaxFrameSize, Open}};
 use tokio::{net::TcpStream, sync::mpsc::{Sender, Receiver}};
 use url::Url;

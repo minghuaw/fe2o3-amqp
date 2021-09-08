@@ -1,26 +1,26 @@
 use std::collections::BTreeMap;
 
-use futures_util::stream::Next;
+use fe2o3_types::performatives::{Close, Open};
 use slab::Slab;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
-use crate::transport::session::SessionHandle;
-use crate::transport::transport::Transport;
+use crate::transport::session::{SessionFrame, SessionHandle};
+use crate::transport::Transport;
 
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 
 use super::{InChanId, OutChanId};
 
 pub enum MuxControl {
+    Open(Open),
     NewSession(Option<InChanId>),
-    Stop
+    Close(Close),
 }
 
 pub struct MuxHandle {
@@ -30,16 +30,17 @@ pub struct MuxHandle {
 
 impl MuxHandle {
     pub async fn stop(&mut self) -> Result<(), EngineError> {
-        self.control.send(MuxControl::Stop).await
-            .map_err(|_| EngineError::Message("SendError"))
+        // self.control.send(MuxControl::Stop).await
+        //     .map_err(|_| EngineError::Message("SendError"))
+        todo!()
     }
 }
 
 pub struct Multiplexer {
-    // Sender to Connection Mux
-    session_tx: Sender<Frame>,
+    // Sender to Connection Mux, should be cloned to a new session
+    session_tx: Sender<SessionFrame>,
     // Receiver from Session
-    session_rx: Receiver<Frame>,
+    session_rx: Receiver<SessionFrame>,
     // Receiver from Connection
     control: Receiver<MuxControl>,
     local_sessions: Slab<SessionHandle>,
@@ -69,7 +70,7 @@ impl Multiplexer {
         }
     }
 
-    async fn handle_new_session(&mut self, in_chan: Option<InChanId>) -> Result<(), EngineError> {
+    async fn handle_new_session(&mut self, remote_chan: Option<InChanId>) -> Result<(), EngineError> {
         todo!()
         // get new entry index
         // create new session
@@ -117,50 +118,50 @@ impl Multiplexer {
     {
         let (mut writer, mut reader) = transport.split();
 
-        loop {
-            tokio::select! {
-                control = self.control.recv() => {
-                    match control {
-                        Some(control) => {
-                             match control {
-                                MuxControl::NewSession(in_chan) => {
-                                    self.handle_new_session(in_chan).await?;
-                                    
-                                },
-                                MuxControl::Stop => {
-                                    return Ok(())
-                                }
-                             }
-                        },
-                        None => {
+        // loop {
+        //     tokio::select! {
+        //         control = self.control.recv() => {
+        //             match control {
+        //                 Some(control) => {
+        //                      match control {
+        //                         MuxControl::Open 
+        //                         MuxControl::NewSession(remote_chan) => self.handle_new_session(remote_chan).await?,
+        //                         MuxControl::Close => todo!(),
+        //                      }
+        //                 },
+        //                 None => {
 
-                        }
-                    }
-                },
-                incoming = reader.next() => {
-                    match incoming {
-                        Some(item) => {
-                            if let Some(control) = self.handle_incoming(item).await? {
-                                match control {
-                                    MuxControl::NewSession(in_chan) => self.handle_new_session(in_chan).await?,
-                                    MuxControl::Stop => return Ok(())
-                                }
-                            }
-                        },
-                        None => return Err(EngineError::IsClosed)
-                    }
-                },
-                outgoing = self.session_rx.recv() => {
-                    match outgoing {
-                        Some(item) => {
-                            self.handle_outgoing(item, &mut writer).await?;
-                        },
-                        None => {
+        //                 }
+        //             }
+        //         },
+        //         incoming = reader.next() => {
+        //             match incoming {
+        //                 Some(item) => {
+        //                     if let Some(control) = self.handle_incoming(item).await? {
+        //                         match control {
+        //                             MuxControl::Open(open) => {
+        //                                 todo!()
+        //                             },
+        //                             MuxControl::NewSession(remote_chan) => self.handle_new_session(remote_chan).await?,
+        //                             MuxControl::Close(close) => return Ok(())
+        //                         }
+        //                     }
+        //                 },
+        //                 None => return Err(EngineError::IsClosed)
+        //             }
+        //         },
+        //         outgoing = self.session_rx.recv() => {
+        //             match outgoing {
+        //                 Some(item) => {
+        //                     self.handle_outgoing(item, &mut writer).await?;
+        //                 },
+        //                 None => {
 
-                        }
-                    }
-                }
-            }
-        }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        todo!()
     }
 }

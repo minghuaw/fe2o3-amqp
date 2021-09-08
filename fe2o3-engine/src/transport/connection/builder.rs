@@ -5,7 +5,7 @@ use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performa
 use tokio::net::TcpStream;
 use url::Url;
 
-use crate::{error::EngineError, transport::protocol_header::ProtocolHeader, transport::transport::Transport};
+use crate::{error::EngineError, transport::protocol_header::ProtocolHeader, transport::Transport};
 
 use super::Connection;
 
