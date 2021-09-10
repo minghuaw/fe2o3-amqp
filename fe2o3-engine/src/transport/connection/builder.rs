@@ -73,8 +73,8 @@ impl<Mode> Builder<Mode> {
 }
 
 impl<Mode> Builder<Mode> {
-    pub fn hostname(&mut self, hostname: String) -> &mut Self {
-        self.hostname = Some(hostname);
+    pub fn hostname(&mut self, hostname: impl Into<String>) -> &mut Self {
+        self.hostname = Some(hostname.into());
         self
     }
 
@@ -88,8 +88,8 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn idle_time_out(&mut self, idle_time_out: Milliseconds) -> &mut Self {
-        self.idle_time_out = Some(idle_time_out);
+    pub fn idle_time_out(&mut self, idle_time_out: impl Into<Milliseconds>) -> &mut Self {
+        self.idle_time_out = Some(idle_time_out.into());
         self
     }
 

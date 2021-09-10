@@ -15,11 +15,11 @@ use crate::transport::Transport;
 
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 
-use super::{InChanId, OutChanId};
+use super::{ConnectionState, InChanId, OutChanId};
 
 pub enum MuxControl {
-    Open(Open),
-    NewSession(Option<InChanId>),
+    Open,
+    // NewSession(Option<InChanId>),
     Close(Close),
 }
 
@@ -36,7 +36,13 @@ impl MuxHandle {
     }
 }
 
-pub struct Multiplexer {
+pub struct Mux {
+    local_state: ConnectionState,
+    local_open: Open,
+
+    remote_state: Option<ConnectionState>,
+    remote_open: Option<Open>,
+
     // Sender to Connection Mux, should be cloned to a new session
     session_tx: Sender<SessionFrame>,
     // Receiver from Session
@@ -47,8 +53,8 @@ pub struct Multiplexer {
     in_out_map: BTreeMap<InChanId, OutChanId>,
 }
 
-impl Multiplexer {
-    pub fn spawn<Io>(transport: Transport<Io>, buf_size: usize) -> MuxHandle 
+impl Mux {
+    pub fn spawn<Io>(local_state: ConnectionState, local_open: Open, transport: Transport<Io>, buf_size: usize) -> MuxHandle 
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -56,7 +62,11 @@ impl Multiplexer {
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let local_sessions = Slab::new(); // TODO: pre-allocate capacity
 
-        let mux = Multiplexer {
+        let mux = Self {
+            local_state,
+            local_open,
+            remote_open: None,
+            remote_state: None,
             session_tx,
             session_rx,
             control: control_rx,
@@ -70,7 +80,19 @@ impl Multiplexer {
         }
     }
 
-    async fn handle_new_session(&mut self, remote_chan: Option<InChanId>) -> Result<(), EngineError> {
+    async fn handle_unexpected_drop(&mut self) -> Result<(), EngineError> {
+        todo!()
+    }
+
+    async fn handle_open(&mut self, remote_open: Option<Open>) -> Result<(), EngineError> {
+        todo!()
+    }
+
+    async fn handle_close(&mut self, close: Close) -> Result<(), EngineError> {
+        todo!()
+    }
+
+    async fn handle_new_session(&mut self) -> Result<(), EngineError> {
         todo!()
         // get new entry index
         // create new session
@@ -118,50 +140,21 @@ impl Multiplexer {
     {
         let (mut writer, mut reader) = transport.split();
 
-        // loop {
-        //     tokio::select! {
-        //         control = self.control.recv() => {
-        //             match control {
-        //                 Some(control) => {
-        //                      match control {
-        //                         MuxControl::Open 
-        //                         MuxControl::NewSession(remote_chan) => self.handle_new_session(remote_chan).await?,
-        //                         MuxControl::Close => todo!(),
-        //                      }
-        //                 },
-        //                 None => {
-
-        //                 }
-        //             }
-        //         },
-        //         incoming = reader.next() => {
-        //             match incoming {
-        //                 Some(item) => {
-        //                     if let Some(control) = self.handle_incoming(item).await? {
-        //                         match control {
-        //                             MuxControl::Open(open) => {
-        //                                 todo!()
-        //                             },
-        //                             MuxControl::NewSession(remote_chan) => self.handle_new_session(remote_chan).await?,
-        //                             MuxControl::Close(close) => return Ok(())
-        //                         }
-        //                     }
-        //                 },
-        //                 None => return Err(EngineError::IsClosed)
-        //             }
-        //         },
-        //         outgoing = self.session_rx.recv() => {
-        //             match outgoing {
-        //                 Some(item) => {
-        //                     self.handle_outgoing(item, &mut writer).await?;
-        //                 },
-        //                 None => {
-
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        todo!()
+        loop {
+            tokio::select! {
+                // local controls
+                control = self.control.recv() => {
+                    match control {
+                        Some(control) => {
+                            match control {
+                                MuxControl::Open => self.handle_open(None).await?,
+                                MuxControl::Close(close) => self.handle_close(close).await?
+                            }
+                        },
+                        None => return self.handle_unexpected_drop().await
+                    }
+                },
+            }
+        }
     }
 }

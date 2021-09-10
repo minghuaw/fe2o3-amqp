@@ -1,10 +1,12 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{collections::{BTreeMap, HashMap}, marker::{self, PhantomData}, sync::Arc};
 
 use crate::error::EngineError;
 pub use crate::transport::Transport;
 use fe2o3_types::{definitions::Milliseconds, performatives::{ChannelMax, MaxFrameSize, Open}};
 use tokio::{net::TcpStream, sync::mpsc::{Sender, Receiver}};
 use url::Url;
+
+use self::mux::MuxHandle;
 
 use super::{amqp::{Frame, FrameBody}, protocol_header::ProtocolHeader, session::SessionHandle};
 
@@ -63,22 +65,9 @@ pub enum ConnectionState {
 // }
 // ```
 pub struct Connection<Io> {
-    // The underlying transport
-    transport: Transport<Io>,
-
-    // local state
-    open: Open,
-    state: ConnectionState,
-    max_frame_size: MaxFrameSize,
-    channel_max: ChannelMax,
-    idle_time_outs: Milliseconds,
-
-    local_sessions: BTreeMap<InChanId, SessionHandle>, // TODO: consider removing this
-
-    // remote state
-    remote_open: Open,
-    remote_proto_header: ProtocolHeader,
-    remote_state: ConnectionState, // state is infered not directly communicated
+    local_open: Arc<Open>, // parameters should be set using the builder and not change before reconnect
+    mux: MuxHandle,
+    marker: PhantomData<Io>
 }
 
 impl Connection<TcpStream> {
