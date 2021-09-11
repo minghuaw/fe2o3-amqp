@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::transport::connection::ConnectionState;
+
 #[derive(Debug, Error)]
 pub enum EngineError {
     #[error("IO Error: {0:?}")]
@@ -20,8 +22,14 @@ pub enum EngineError {
     #[error("Unexpected Protocol Header. Found {0:?}")]
     UnexpectedProtocolHeader([u8; 8]),
 
+    #[error("Maximum frame size is exceeded")]
+    MaxFrameSizeExceeded,
+
     #[error("The frame is malformed")]
     MalformedFrame,
+
+    #[error("Invalid Connection State {0:?}")]
+    UnexpectedConnectionState(ConnectionState),
 
     #[error("{0}")]
     Message(&'static str),

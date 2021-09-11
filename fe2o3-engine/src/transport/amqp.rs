@@ -9,13 +9,28 @@ use crate::error::EngineError;
 use super::{FRAME_TYPE_AMQP};
 
 pub struct Frame {
-    channel: u16,
-    body: FrameBody
+    pub channel: u16,
+    pub body: FrameBody
 }
 
 impl Frame {
+    pub fn new(channel: impl Into<u16>, body: FrameBody) -> Self {
+        Self {
+            channel: channel.into(),
+            body
+        }
+    }
+
     pub fn channel(&self) -> u16 {
         self.channel
+    }
+
+    pub fn body(&self) -> &FrameBody {
+        &self.body
+    }
+
+    pub fn into_body(self) -> FrameBody {
+        self.body
     }
 }
 

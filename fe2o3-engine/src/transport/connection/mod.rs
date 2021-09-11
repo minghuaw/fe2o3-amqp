@@ -26,6 +26,7 @@ impl From<u16> for OutChanId {
     }
 }
 
+#[derive(Debug, Clone,)]
 pub enum ConnectionState {
     Start,
     
@@ -65,9 +66,16 @@ pub enum ConnectionState {
 // }
 // ```
 pub struct Connection<Io> {
+    // FIXME: is this really needed?
     local_open: Arc<Open>, // parameters should be set using the builder and not change before reconnect
     mux: MuxHandle,
     marker: PhantomData<Io>
+}
+
+impl<Io> Connection<Io> {
+    pub fn local_open(&self) -> &Open {
+        &self.local_open
+    }
 }
 
 impl Connection<TcpStream> {

@@ -25,12 +25,14 @@ use bytes::{Bytes, BytesMut};
 use futures_util::{Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec};
+use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError};
 
 use crate::error::EngineError;
 
 use amqp::{Frame, FrameCodec};
 use protocol_header::{ProtocolHeader, ProtocolId};
+
+use self::connection::ConnectionState;
 
 pin_project! {
     pub struct Transport<Io> {
@@ -54,34 +56,29 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
 
     pub async fn negotiate(
         io: &mut Io,
+        local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
-    ) -> Result<ProtocolId, EngineError> {
+    ) -> Result<ProtocolHeader, EngineError> {
         // negotiation
         let outbound_buf: [u8; 8] = proto_header.clone().into();
         io.write_all(&outbound_buf).await?;
 
+        // State transition
+        *local_state = ConnectionState::HeaderSent;
+
         // wait for incoming header
         let mut inbound_buf = [0u8; 8];
         io.read_exact(&mut inbound_buf).await?;
+
+        // State transition
+        *local_state = ConnectionState::HeaderExchange;
 
         // check header
         let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
         if incoming_header != proto_header {
             return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
         }
-        Ok(incoming_header.id)
-    }
-
-    pub async fn negotiate_and_bind(
-        mut io: Io,
-        proto_header: ProtocolHeader,
-    ) -> Result<Self, EngineError> {
-        // bind transport based on proto_id
-        match Self::negotiate(&mut io, proto_header).await? {
-            ProtocolId::Amqp => Self::bind(io),
-            ProtocolId::Tls => todo!(),
-            ProtocolId::Sasl => todo!(),
-        }
+        Ok(incoming_header)
     }
 
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
@@ -147,7 +144,16 @@ where
                     Some(item) => {
                         let mut src = match item {
                             Ok(b) => b,
-                            Err(err) => return Poll::Ready(Some(Err(err.into())))
+                            Err(err) => {
+                                use std::any::Any;
+                                let any = &err as &dyn Any;
+                                if any.is::<LengthDelimitedCodecError>() {
+                                    // This should be the only error type
+                                    return Poll::Ready(Some(Err(EngineError::MaxFrameSizeExceeded)))
+                                } else {
+                                    return Poll::Ready(Some(Err(err.into())))
+                                }
+                            }
                         };
                         let mut decoder = FrameCodec { };
                         Poll::Ready(decoder.decode(&mut src).transpose())

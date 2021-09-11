@@ -38,7 +38,7 @@ pub enum SessionFrameBody {
 
 pub struct SessionHandle {
     id: OutChanId,
-    sender: Sender<Result<SessionFrame, EngineError>>,
+    sender: Sender<Result<SessionFrameBody, EngineError>>,
 }
 
 impl SessionHandle {
@@ -46,7 +46,7 @@ impl SessionHandle {
         &self.id
     }
 
-    pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrame, EngineError>> {
+    pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrameBody, EngineError>> {
         &mut self.sender
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::str::EncodeUtf16;
 
 use fe2o3_types::performatives::{Close, Open};
 use slab::Slab;
@@ -10,6 +11,7 @@ use futures_util::{Sink, SinkExt, Stream, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
+use crate::transport::protocol_header::ProtocolHeader;
 use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
 
@@ -20,7 +22,7 @@ use super::{ConnectionState, InChanId, OutChanId};
 pub enum MuxControl {
     Open,
     // NewSession(Option<InChanId>),
-    Close(Close),
+    Close,
 }
 
 pub struct MuxHandle {
@@ -42,6 +44,7 @@ pub struct Mux {
 
     remote_state: Option<ConnectionState>,
     remote_open: Option<Open>,
+    remote_header: ProtocolHeader,
 
     // Sender to Connection Mux, should be cloned to a new session
     session_tx: Sender<SessionFrame>,
@@ -54,10 +57,25 @@ pub struct Mux {
 }
 
 impl Mux {
-    pub fn spawn<Io>(local_state: ConnectionState, local_open: Open, transport: Transport<Io>, buf_size: usize) -> MuxHandle 
+    // Initial exchange of protocol header / connection header should be 
+    // handled before spawning the Mux
+    pub fn spawn<Io>(
+        transport: Transport<Io>, 
+        local_state: ConnectionState, 
+        local_open: Open, 
+        remote_header: ProtocolHeader, 
+        buf_size: usize
+    ) -> Result<MuxHandle, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
+        // check connection state
+        match &local_state {
+            ConnectionState::HeaderExchange => {},
+            ConnectionState::HeaderSent => {}, // TODO: Pipelined open
+            _ => return Err(EngineError::Message("Expecting local_state to be ConnectionState::HeaderExchange"))
+        }
+
         let (session_tx, session_rx) = mpsc::channel(buf_size);
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let local_sessions = Slab::new(); // TODO: pre-allocate capacity
@@ -67,6 +85,7 @@ impl Mux {
             local_open,
             remote_open: None,
             remote_state: None,
+            remote_header,
             session_tx,
             session_rx,
             control: control_rx,
@@ -74,21 +93,54 @@ impl Mux {
             in_out_map: BTreeMap::new()
         };
         let handle = tokio::spawn(mux.mux_loop(transport));
-        MuxHandle {
+        Ok(MuxHandle {
             control: control_tx,
             handle
-        }
+        })
     }
 
     async fn handle_unexpected_drop(&mut self) -> Result<(), EngineError> {
         todo!()
     }
 
-    async fn handle_open(&mut self, remote_open: Option<Open>) -> Result<(), EngineError> {
+    async fn handle_unexpected_eof(&mut self) -> Result<(), EngineError> {
         todo!()
     }
 
-    async fn handle_close(&mut self, close: Close) -> Result<(), EngineError> {
+    async fn handle_open<W>(&mut self, writer: &mut W, remote_open: Option<Open>) -> Result<(), EngineError> 
+    where 
+        W: Sink<Frame, Error=EngineError> + Unpin
+    {
+        match remote_open {
+            Some(open) => {
+                // FIXME: is there anything we need to check?
+                self.remote_open = Some(open);
+                match &self.local_state {
+                    ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
+                    ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
+                    ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
+                    s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+                }
+                Ok(())
+            }
+            // handling a locally initiated open
+            None => {
+                let body = FrameBody::Open{ performative: self.local_open.clone() };
+                let frame = Frame::new(0u16, body);
+                writer.send(frame).await?;
+                // TODO: State transition (Fig. 2.23)
+                match &self.local_state {
+                    ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
+                    ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
+                    ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
+                    s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+                }
+                Ok(())
+            },
+        }
+    }
+
+    async fn handle_close(&mut self, remote_close: Option<Close>) -> Result<(), EngineError> {
         todo!()
     }
 
@@ -147,13 +199,29 @@ impl Mux {
                     match control {
                         Some(control) => {
                             match control {
-                                MuxControl::Open => self.handle_open(None).await?,
-                                MuxControl::Close(close) => self.handle_close(close).await?
+                                MuxControl::Open => self.handle_open(&mut writer, None).await?,
+                                MuxControl::Close => self.handle_close(None).await?
                             }
                         },
                         None => return self.handle_unexpected_drop().await
                     }
                 },
+                next = reader.next() => {
+                    match next {
+                        Some(item) => {
+                            let Frame{channel, body} = item?;
+                            match body {
+                                FrameBody::Open{performative} => self.handle_open(&mut writer, Some(performative)).await?,
+                                FrameBody::Close{performative} => self.handle_close(Some(performative)).await?,
+                                _ => todo!()
+                            }
+                        },
+                        None => return self.handle_unexpected_eof().await
+                    }
+                }
+                next = self.session_rx.recv() => {
+                    todo!()
+                }
             }
         }
     }
