@@ -1,5 +1,5 @@
 use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
-use fe2o3_amqp::primitives::{Boolean, Uint, Ulong};
+use fe2o3_amqp::primitives::{Boolean, UInt, ULong};
 
 use crate::definitions::{Error, Fields};
 
@@ -40,8 +40,8 @@ mod outcome_impl;
     rename_all = "kebab-case"
 )]
 pub struct Received {
-    pub section_number: Uint,
-    pub section_offset: Ulong,
+    pub section_number: UInt,
+    pub section_offset: ULong,
 }
 
 /// 3.4.2 Accepted

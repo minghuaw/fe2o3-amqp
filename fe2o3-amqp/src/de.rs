@@ -157,7 +157,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     #[inline]
     fn parse_u8(&mut self) -> Result<u8, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Ubyte => {
+            EncodingCodes::UByte => {
                 let byte = self.reader.next()?;
                 Ok(byte)
             }
@@ -168,7 +168,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     #[inline]
     fn parse_u16(&mut self) -> Result<u16, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Ushort => {
+            EncodingCodes::UShort => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(u16::from_be_bytes(bytes))
             }
@@ -179,7 +179,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     #[inline]
     fn parse_u32(&mut self) -> Result<u32, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Uint => {
+            EncodingCodes::UInt => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(u32::from_be_bytes(bytes))
             }
@@ -195,7 +195,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     #[inline]
     fn parse_u64(&mut self) -> Result<u64, Error> {
         match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Ulong => {
+            EncodingCodes::ULong => {
                 let bytes = self.reader.read_const_bytes()?;
                 Ok(u64::from_be_bytes(bytes))
             }
@@ -339,7 +339,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     fn buffer_descriptor(&mut self) -> Result<Vec<u8>, Error> {
         // place descriptor in a separate buf
         let descriptor_buf = match self.get_elem_code_or_peek_byte()?.try_into()? {
-            EncodingCodes::Ulong
+            EncodingCodes::ULong
             | EncodingCodes::Ulong0
             | EncodingCodes::SmallUlong
             | EncodingCodes::Sym8
@@ -433,7 +433,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 let value = buf[2];
                 visitor.visit_u64(value as u64)
             }
-            EncodingCodes::Ulong => {
+            EncodingCodes::ULong => {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2..10] is value bytes
@@ -467,12 +467,12 @@ where
             EncodingCodes::Short => self.deserialize_i16(visitor),
             EncodingCodes::Int | EncodingCodes::SmallInt => self.deserialize_i32(visitor),
             EncodingCodes::Long | EncodingCodes::SmallLong => self.deserialize_i64(visitor),
-            EncodingCodes::Ubyte => self.deserialize_u8(visitor),
-            EncodingCodes::Ushort => self.deserialize_u16(visitor),
-            EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
+            EncodingCodes::UByte => self.deserialize_u8(visitor),
+            EncodingCodes::UShort => self.deserialize_u16(visitor),
+            EncodingCodes::UInt | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                 self.deserialize_u32(visitor)
             }
-            EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
+            EncodingCodes::ULong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                 self.deserialize_u64(visitor)
             }
             EncodingCodes::Float => self.deserialize_f32(visitor),
@@ -1003,7 +1003,7 @@ where
             // generic `newtype_variant` - List([u32, Value])
             // `tuple_variant` and `struct_variant` - List([u32, List([Value, *])])
             match self.get_elem_code_or_peek_byte()?.try_into()? {
-                EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => {
+                EncodingCodes::UInt | EncodingCodes::Uint0 | EncodingCodes::SmallUint => {
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 EncodingCodes::List0 => Err(Error::InvalidFormatCode),
@@ -1062,7 +1062,7 @@ where
                     // If a struct is serialized as a map, then the fields are serialized as str
                     EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
                     // FIXME: Enum variant currently are serialzied as list of with variant index and a list
-                    EncodingCodes::Uint | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
+                    EncodingCodes::UInt | EncodingCodes::SmallUint | EncodingCodes::Uint0 => {
                         self.deserialize_u32(visitor)
                     }
                     // Potentially using `Descriptor::Name` as identifier
@@ -1071,7 +1071,7 @@ where
                         self.deserialize_newtype_struct(SYMBOL, visitor)
                     }
                     // Potentially using `Descriptor::Code` as identifier
-                    EncodingCodes::Ulong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
+                    EncodingCodes::ULong | EncodingCodes::SmallUlong | EncodingCodes::Ulong0 => {
                         self.deserialize_u64(visitor)
                     }
                     // Other types should not be used to serialize identifiers
@@ -1591,14 +1591,14 @@ mod tests {
 
     #[test]
     fn test_deserialize_u8() {
-        let buf = &[EncodingCodes::Ubyte as u8, 5u8];
+        let buf = &[EncodingCodes::UByte as u8, 5u8];
         let expected = 5u8;
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_deserialize_u16() {
-        let mut buf = vec![EncodingCodes::Ushort as u8];
+        let mut buf = vec![EncodingCodes::UShort as u8];
         buf.append(&mut 300u16.to_be_bytes().to_vec());
         let expected = 300u16;
         assert_eq_from_reader_vs_expected(&buf, expected);

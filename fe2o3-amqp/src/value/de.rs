@@ -23,10 +23,10 @@ enum Field {
     Described,
     Null,
     Bool,
-    Ubyte,
-    Ushort,
-    Uint,
-    Ulong,
+    UByte,
+    UShort,
+    UInt,
+    ULong,
     Byte,
     Short,
     Int,
@@ -70,11 +70,11 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
                 Field::Bool
             }
-            EncodingCodes::Ubyte => Field::Ubyte,
-            EncodingCodes::Ushort => Field::Ushort,
-            EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::Uint,
-            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
-                Field::Ulong
+            EncodingCodes::UByte => Field::UByte,
+            EncodingCodes::UShort => Field::UShort,
+            EncodingCodes::UInt | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::UInt,
+            EncodingCodes::ULong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+                Field::ULong
             }
             EncodingCodes::Byte => Field::Byte,
             EncodingCodes::Short => Field::Short,
@@ -138,21 +138,21 @@ impl<'de> de::Visitor<'de> for Visitor {
                 let val = de.newtype_variant()?;
                 Ok(Value::Bool(val))
             }
-            Field::Ubyte => {
+            Field::UByte => {
                 let val = de.newtype_variant()?;
-                Ok(Value::Ubyte(val))
+                Ok(Value::UByte(val))
             }
-            Field::Ushort => {
+            Field::UShort => {
                 let val = de.newtype_variant()?;
-                Ok(Value::Ushort(val))
+                Ok(Value::UShort(val))
             }
-            Field::Uint => {
+            Field::UInt => {
                 let val = de.newtype_variant()?;
-                Ok(Value::Uint(val))
+                Ok(Value::UInt(val))
             }
-            Field::Ulong => {
+            Field::ULong => {
                 let val = de.newtype_variant()?;
-                Ok(Value::Ulong(val))
+                Ok(Value::ULong(val))
             }
             Field::Byte => {
                 let val = de.newtype_variant()?;
@@ -239,10 +239,10 @@ impl<'de> de::Deserialize<'de> for Value {
             "Described",
             "Null",
             "Bool",
-            "Ubyte",
-            "Ushort",
-            "Uint",
-            "Ulong",
+            "UByte",
+            "UShort",
+            "UInt",
+            "ULong",
             "Byte",
             "Short",
             "Int",
@@ -308,10 +308,10 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             Value::Described(_) => self.deserialize_struct(DESCRIBED_BASIC, &[""], visitor),
             Value::Null => self.deserialize_unit(visitor),
             Value::Bool(_) => self.deserialize_bool(visitor),
-            Value::Ubyte(_) => self.deserialize_u8(visitor),
-            Value::Ushort(_) => self.deserialize_u16(visitor),
-            Value::Uint(_) => self.deserialize_u32(visitor),
-            Value::Ulong(_) => self.deserialize_u64(visitor),
+            Value::UByte(_) => self.deserialize_u8(visitor),
+            Value::UShort(_) => self.deserialize_u16(visitor),
+            Value::UInt(_) => self.deserialize_u32(visitor),
+            Value::ULong(_) => self.deserialize_u64(visitor),
             Value::Byte(_) => self.deserialize_i8(visitor),
             Value::Short(_) => self.deserialize_i16(visitor),
             Value::Int(_) => self.deserialize_i32(visitor),
@@ -411,7 +411,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         println!(">>> Debug: deserialize_u8");
 
         match self.value {
-            Value::Ubyte(v) => visitor.visit_u8(v),
+            Value::UByte(v) => visitor.visit_u8(v),
             _ => Err(Error::InvalidValue),
         }
     }
@@ -424,7 +424,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         println!(">>> Debug: deserialize_u16");
 
         match self.value {
-            Value::Ushort(v) => visitor.visit_u16(v),
+            Value::UShort(v) => visitor.visit_u16(v),
             _ => Err(Error::InvalidValue),
         }
     }
@@ -437,7 +437,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         println!(">>> Debug: deserialize_u32");
 
         match self.value {
-            Value::Uint(v) => visitor.visit_u32(v),
+            Value::UInt(v) => visitor.visit_u32(v),
             _ => Err(Error::InvalidValue),
         }
     }
@@ -450,7 +450,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
         println!(">>> Debug: deserialize_u64");
 
         match self.value {
-            Value::Ulong(v) => visitor.visit_u64(v),
+            Value::ULong(v) => visitor.visit_u64(v),
             _ => Err(Error::InvalidValue),
         }
     }
@@ -753,13 +753,13 @@ impl<'de> de::Deserializer<'de> for Deserializer {
             self.enum_type = EnumType::Descriptor;
             match &self.value {
                 Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
-                Value::Ulong(_) => self.deserialize_u64(visitor),
+                Value::ULong(_) => self.deserialize_u64(visitor),
                 _ => Err(Error::InvalidValue),
             }
         } else {
             match self.value {
-                // An Uint should represent a unit_variant
-                v @ Value::Uint(_) => visitor.visit_enum(VariantAccess {
+                // An UInt should represent a unit_variant
+                v @ Value::UInt(_) => visitor.visit_enum(VariantAccess {
                     iter: vec![v].into_iter(),
                 }),
                 Value::List(v) => visitor.visit_enum(VariantAccess {
@@ -789,7 +789,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 visitor.visit_u8(code)
             }
             EnumType::None => match self.value {
-                Value::Uint(v) => visitor.visit_u32(v),
+                Value::UInt(v) => visitor.visit_u32(v),
                 Value::Symbol(_) => self.deserialize_newtype_struct(SYMBOL, visitor),
                 _ => Err(Error::InvalidValue),
             },
@@ -1061,7 +1061,7 @@ mod tests {
         }
 
         let expected = Foo::B;
-        let val = Value::Uint(1);
+        let val = Value::UInt(1);
         assert_eq_from_value_vs_expected(val, expected);
     }
 
@@ -1076,7 +1076,7 @@ mod tests {
         }
 
         let expected = Foo::B(13);
-        let val = Value::List(vec![Value::Uint(1), Value::Ulong(13)]);
+        let val = Value::List(vec![Value::UInt(1), Value::ULong(13)]);
         assert_eq_from_value_vs_expected(val, expected);
     }
 
@@ -1091,7 +1091,7 @@ mod tests {
         }
         let expected = Foo::B(13, "amqp".to_string());
         let val = Value::List(vec![
-            Value::Uint(1),
+            Value::UInt(1),
             Value::List(vec![Value::Int(13), Value::String(String::from("amqp"))]),
         ]);
         assert_eq_from_value_vs_expected(val, expected);
@@ -1112,8 +1112,8 @@ mod tests {
             is_a: true,
         };
         let val = Value::List(vec![
-            Value::Uint(0),
-            Value::List(vec![Value::Uint(13), Value::Bool(true)]),
+            Value::UInt(0),
+            Value::List(vec![Value::UInt(13), Value::Bool(true)]),
         ]);
         assert_eq_from_value_vs_expected(val, expected);
     }

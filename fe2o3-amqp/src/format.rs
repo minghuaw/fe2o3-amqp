@@ -84,18 +84,18 @@ impl TryFrom<EncodingCodes> for Category {
             EncodingCodes::BooleanFalse => Category::Fixed(FixedWidth::Zero),
 
             // u8
-            EncodingCodes::Ubyte => Category::Fixed(FixedWidth::One),
+            EncodingCodes::UByte => Category::Fixed(FixedWidth::One),
 
             // u16
-            EncodingCodes::Ushort => Category::Fixed(FixedWidth::Two),
+            EncodingCodes::UShort => Category::Fixed(FixedWidth::Two),
 
             // u32
-            EncodingCodes::Uint => Category::Fixed(FixedWidth::Four),
+            EncodingCodes::UInt => Category::Fixed(FixedWidth::Four),
             EncodingCodes::SmallUint => Category::Fixed(FixedWidth::One),
             EncodingCodes::Uint0 => Category::Fixed(FixedWidth::Zero),
 
             // u64
-            EncodingCodes::Ulong => Category::Fixed(FixedWidth::Eight),
+            EncodingCodes::ULong => Category::Fixed(FixedWidth::Eight),
             EncodingCodes::SmallUlong => Category::Fixed(FixedWidth::One),
             EncodingCodes::Ulong0 => Category::Fixed(FixedWidth::Zero),
 

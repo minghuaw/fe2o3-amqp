@@ -246,7 +246,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
         match self.is_array_elem {
             IsArrayElement::False | IsArrayElement::FirstElement => {
-                let buf = [EncodingCodes::Ubyte as u8, v];
+                let buf = [EncodingCodes::UByte as u8, v];
                 self.writer.write_all(&buf)?;
             }
             IsArrayElement::OtherElement => {
@@ -260,7 +260,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
         if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem {
-            let code = [EncodingCodes::Ushort as u8];
+            let code = [EncodingCodes::UShort as u8];
             self.writer.write_all(&code)?;
         }
         let buf: [u8; 2] = v.to_be_bytes();
@@ -284,7 +284,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                     // uint
                     val @ _ => {
-                        let code = [EncodingCodes::Uint as u8];
+                        let code = [EncodingCodes::UInt as u8];
                         self.writer.write_all(&code)?;
                         let buf: [u8; 4] = val.to_be_bytes();
                         self.writer.write_all(&buf)?;
@@ -292,7 +292,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
             }
             IsArrayElement::FirstElement => {
-                let code = [EncodingCodes::Uint as u8];
+                let code = [EncodingCodes::UInt as u8];
                 self.writer.write_all(&code)?;
                 let buf: [u8; 4] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
@@ -322,7 +322,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     }
                     // ulong
                     val @ _ => {
-                        let code = [EncodingCodes::Ulong as u8];
+                        let code = [EncodingCodes::ULong as u8];
                         self.writer.write_all(&code)?;
                         let buf: [u8; 8] = val.to_be_bytes();
                         self.writer.write_all(&buf)?;
@@ -330,7 +330,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
             }
             IsArrayElement::FirstElement => {
-                let code = [EncodingCodes::Ulong as u8];
+                let code = [EncodingCodes::ULong as u8];
                 self.writer.write_all(&code)?;
                 let buf: [u8; 8] = v.to_be_bytes();
                 self.writer.write_all(&buf)?;
@@ -1446,26 +1446,26 @@ mod test {
     #[test]
     fn test_u8() {
         let val = u8::MIN;
-        let expected = vec![EncodingCodes::Ubyte as u8, 0];
+        let expected = vec![EncodingCodes::UByte as u8, 0];
         assert_eq_on_serialized_vs_expected(val, expected);
 
         let val = u8::MAX;
-        let expected = vec![EncodingCodes::Ubyte as u8, 255];
+        let expected = vec![EncodingCodes::UByte as u8, 255];
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
     #[test]
     fn test_u16() {
         let val = 0u16;
-        let expected = vec![EncodingCodes::Ushort as u8, 0, 0];
+        let expected = vec![EncodingCodes::UShort as u8, 0, 0];
         assert_eq_on_serialized_vs_expected(val, expected);
 
         let val = 131u16;
-        let expected = vec![EncodingCodes::Ushort as u8, 0, 131];
+        let expected = vec![EncodingCodes::UShort as u8, 0, 131];
         assert_eq_on_serialized_vs_expected(val, expected);
 
         let val = 65535u16;
-        let expected = vec![EncodingCodes::Ushort as u8, 255, 255];
+        let expected = vec![EncodingCodes::UShort as u8, 255, 255];
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
@@ -1483,7 +1483,7 @@ mod test {
 
         // uint
         let val = u32::MAX;
-        let mut expected = vec![EncodingCodes::Uint as u8];
+        let mut expected = vec![EncodingCodes::UInt as u8];
         expected.append(&mut vec![255; 4]);
         assert_eq_on_serialized_vs_expected(val, expected);
     }
@@ -1502,7 +1502,7 @@ mod test {
 
         // ulong
         let val = u64::MAX;
-        let mut expected = vec![EncodingCodes::Ulong as u8];
+        let mut expected = vec![EncodingCodes::ULong as u8];
         expected.append(&mut vec![255u8; 8]);
         assert_eq_on_serialized_vs_expected(val, expected);
     }

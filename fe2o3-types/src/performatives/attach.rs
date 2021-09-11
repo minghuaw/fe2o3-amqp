@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, Symbol, Ulong},
+    primitives::{Boolean, Symbol, ULong},
     value::Value,
 };
 
@@ -74,7 +74,7 @@ pub struct Attach {
     pub initial_delivery_count: Option<SequenceNo>,
 
     /// <field name="max-message-size" type="ulong"/>
-    pub max_message_size: Option<Ulong>,
+    pub max_message_size: Option<ULong>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
     pub offered_capabilities: Option<Vec<Symbol>>,

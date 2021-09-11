@@ -44,7 +44,7 @@ pub enum Value {
     /// encoding code = 0x50,
     /// category = fixed, width = 1
     /// label = "8-bit unsigned integer"
-    Ubyte(u8),
+    UByte(u8),
 
     /// Integer in the range 0 to 2^16-1 inclusive
     ///
@@ -52,7 +52,7 @@ pub enum Value {
     /// category = fixed, width = 2
     /// label = "16-bit unsigned integer in network byte order"
     /// (AKA. Big-Endian, rust uses BigEndian by default)
-    Ushort(u16),
+    UShort(u16),
 
     /// Integer in the range 0 to 2^32-1 inclusive
     ///
@@ -68,7 +68,7 @@ pub enum Value {
     /// encoding name = "uint0", encoding code = 0x43
     /// category = fixed, width = 0
     /// label = "the uint value 0"
-    Uint(u32),
+    UInt(u32),
 
     /// Integer in the range 0 to 2^64-1 inclusive
     ///
@@ -84,7 +84,7 @@ pub enum Value {
     /// encoding name = "ulong0", encoding code = 0x44
     /// category = fixed, width = 0
     /// label = "the ulong value 0"
-    Ulong(u64),
+    ULong(u64),
 
     /// Integer in the range -(2^7) to 2^7-1 inclusive
     ///
@@ -275,10 +275,10 @@ impl Value {
             Value::Described(_) => EncodingCodes::DescribedType,
             Value::Null => EncodingCodes::Null,
             Value::Bool(_) => EncodingCodes::Boolean,
-            Value::Ubyte(_) => EncodingCodes::Ubyte,
-            Value::Ushort(_) => EncodingCodes::Ushort,
-            Value::Uint(_) => EncodingCodes::Uint,
-            Value::Ulong(_) => EncodingCodes::Ulong,
+            Value::UByte(_) => EncodingCodes::UByte,
+            Value::UShort(_) => EncodingCodes::UShort,
+            Value::UInt(_) => EncodingCodes::UInt,
+            Value::ULong(_) => EncodingCodes::ULong,
             Value::Byte(_) => EncodingCodes::Byte,
             Value::Short(_) => EncodingCodes::Short,
             Value::Int(_) => EncodingCodes::Int,
@@ -347,14 +347,14 @@ mod tests {
 
     #[test]
     fn test_value_ubyte() {
-        let expected = Value::Ubyte(13);
+        let expected = Value::UByte(13);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[test]
     fn test_value_ushort() {
-        let expected = Value::Ushort(1313);
+        let expected = Value::UShort(1313);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -362,17 +362,17 @@ mod tests {
     #[test]
     fn test_value_uint() {
         // uint0
-        let expected = Value::Uint(0);
+        let expected = Value::UInt(0);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // smalluint
-        let expected = Value::Uint(255);
+        let expected = Value::UInt(255);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // uint
-        let expected = Value::Uint(u32::MAX);
+        let expected = Value::UInt(u32::MAX);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -380,17 +380,17 @@ mod tests {
     #[test]
     fn test_value_ulong() {
         // ulong0
-        let expected = Value::Ulong(0);
+        let expected = Value::ULong(0);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // smallulong
-        let expected = Value::Ulong(255);
+        let expected = Value::ULong(255);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
 
         // ulong
-        let expected = Value::Ulong(u64::MAX);
+        let expected = Value::ULong(u64::MAX);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);
     }
@@ -536,7 +536,7 @@ mod tests {
         let expected = Value::List(
             vec![1u32, 2, 3, 4]
                 .iter()
-                .map(|v| Value::Uint(*v))
+                .map(|v| Value::UInt(*v))
                 .collect(),
         );
         let buf = to_vec(&expected).unwrap();
@@ -547,8 +547,8 @@ mod tests {
     fn test_value_map() {
         use std::collections::BTreeMap;
         let mut map = BTreeMap::new();
-        map.insert(Value::Uint(13), Value::Bool(true));
-        map.insert(Value::Uint(45), Value::Bool(false));
+        map.insert(Value::UInt(13), Value::Bool(true));
+        map.insert(Value::UInt(45), Value::Bool(false));
         let expected = Value::Map(map);
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(buf, expected);

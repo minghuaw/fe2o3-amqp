@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Binary, Boolean, Symbol, Timestamp, Ubyte, Uint, Ulong, Uuid},
+    primitives::{Binary, Boolean, Symbol, Timestamp, UByte, UInt, ULong, Uuid},
     value::Value,
 };
 use serde::{Deserialize, Serialize};
@@ -41,11 +41,11 @@ pub struct Header {
 
     /// <field name="delivery-count" type="uint" default="0"/>
     #[amqp_contract(default)]
-    pub delivery_count: Uint,
+    pub delivery_count: UInt,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Priority(pub Ubyte);
+pub struct Priority(pub UByte);
 
 impl Default for Priority {
     fn default() -> Self {
@@ -53,13 +53,13 @@ impl Default for Priority {
     }
 }
 
-impl From<Ubyte> for Priority {
-    fn from(value: Ubyte) -> Self {
+impl From<UByte> for Priority {
+    fn from(value: UByte) -> Self {
         Self(value)
     }
 }
 
-impl From<Priority> for Ubyte {
+impl From<Priority> for UByte {
     fn from(value: Priority) -> Self {
         value.0
     }
@@ -200,7 +200,7 @@ pub type Annotations = BTreeMap<Symbol, Value>;
 pub enum MessageId {
     /// 3.2.11 Message ID ULong
     /// <type name="message-id-ulong" class="restricted" source="ulong" provides="message-id"/>
-    Ulong(Ulong),
+    ULong(ULong),
 
     /// 3.2.12 Message ID UUID
     /// <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>

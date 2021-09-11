@@ -16,18 +16,18 @@ pub enum EncodingCodes {
     BooleanFalse = 0x42,
 
     /// u8
-    Ubyte = 0x50,
+    UByte = 0x50,
 
     /// u16
-    Ushort = 0x60,
+    UShort = 0x60,
 
     /// u32
-    Uint = 0x70,
+    UInt = 0x70,
     SmallUint = 0x52,
     Uint0 = 0x43,
 
     /// u64
-    Ulong = 0x80,
+    ULong = 0x80,
     SmallUlong = 0x53,
     Ulong0 = 0x44,
 
@@ -106,18 +106,18 @@ impl TryFrom<u8> for EncodingCodes {
             0x42 => EncodingCodes::BooleanFalse,
 
             // u8
-            0x50 => EncodingCodes::Ubyte,
+            0x50 => EncodingCodes::UByte,
 
             // u16
-            0x60 => EncodingCodes::Ushort,
+            0x60 => EncodingCodes::UShort,
 
             // u32
-            0x70 => EncodingCodes::Uint,
+            0x70 => EncodingCodes::UInt,
             0x52 => EncodingCodes::SmallUint,
             0x43 => EncodingCodes::Uint0,
 
             // u64
-            0x80 => EncodingCodes::Ulong,
+            0x80 => EncodingCodes::ULong,
             0x53 => EncodingCodes::SmallUlong,
             0x44 => EncodingCodes::Ulong0,
 

@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Symbol, Uint, Ushort},
+    primitives::{Symbol, UInt, UShort},
 };
 use serde::{Deserialize, Serialize};
 
@@ -53,7 +53,7 @@ pub struct Open {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct MaxFrameSize(pub Uint);
+pub struct MaxFrameSize(pub UInt);
 
 impl Default for MaxFrameSize {
     fn default() -> Self {
@@ -61,13 +61,13 @@ impl Default for MaxFrameSize {
     }
 }
 
-impl From<Uint> for MaxFrameSize {
-    fn from(value: Uint) -> Self {
+impl From<UInt> for MaxFrameSize {
+    fn from(value: UInt) -> Self {
         Self(value)
     }
 }
 
-impl From<MaxFrameSize> for Uint {
+impl From<MaxFrameSize> for UInt {
     fn from(value: MaxFrameSize) -> Self {
         value.0
     }
@@ -80,7 +80,7 @@ impl From<MaxFrameSize> for usize {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct ChannelMax(pub Ushort);
+pub struct ChannelMax(pub UShort);
 
 impl Default for ChannelMax {
     fn default() -> Self {
@@ -88,13 +88,13 @@ impl Default for ChannelMax {
     }
 }
 
-impl From<Ushort> for ChannelMax {
-    fn from(value: Ushort) -> Self {
+impl From<UShort> for ChannelMax {
+    fn from(value: UShort) -> Self {
         Self(value)
     }
 }
 
-impl From<ChannelMax> for Ushort {
+impl From<ChannelMax> for UShort {
     fn from(value: ChannelMax) -> Self {
         value.0
     }

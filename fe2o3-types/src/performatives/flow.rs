@@ -1,6 +1,6 @@
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, Uint},
+    primitives::{Boolean, UInt},
 };
 
 use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
@@ -23,13 +23,13 @@ pub struct Flow {
     pub next_incoming_id: Option<TransferNumber>,
 
     /// <field name="incoming-window" type="uint" mandatory="true"/>
-    pub incoming_window: Uint,
+    pub incoming_window: UInt,
 
     /// <field name="next-outgoing-id" type="transfer-number" mandatory="true"/>
     pub next_outgoing_id: TransferNumber,
 
     /// <field name="outgoing-window" type="uint" mandatory="true"/>
-    pub outgoing_window: Uint,
+    pub outgoing_window: UInt,
 
     /// <field name="handle" type="handle"/>
     pub handle: Option<Handle>,
@@ -38,10 +38,10 @@ pub struct Flow {
     pub delivery_count: Option<SequenceNo>,
 
     /// <field name="link-credit" type="uint"/>
-    pub link_credit: Option<Uint>,
+    pub link_credit: Option<UInt>,
 
     ///     <field name="available" type="uint"/>
-    pub available: Option<Uint>,
+    pub available: Option<UInt>,
 
     /// <field name="drain" type="boolean" default="false"/>
     #[amqp_contract(default)]

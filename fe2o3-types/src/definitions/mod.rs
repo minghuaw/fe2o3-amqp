@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Symbol, Uint},
+    primitives::{Symbol, UInt},
     value::Value,
 };
 
@@ -22,7 +22,7 @@ pub use rcv_settle_mode::ReceiverSettleMode;
 
 /// 2.8.4 Handle
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Handle(pub Uint);
+pub struct Handle(pub UInt);
 
 impl Default for Handle {
     fn default() -> Self {
@@ -32,7 +32,7 @@ impl Default for Handle {
 
 /// 2.8.5 Seconds
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Seconds(pub Uint);
+pub struct Seconds(pub UInt);
 
 impl Default for Seconds {
     fn default() -> Self {
@@ -41,7 +41,7 @@ impl Default for Seconds {
 }
 
 /// 2.8.6 Milliseconds
-pub type Milliseconds = Uint;
+pub type Milliseconds = UInt;
 
 /// 2.8.7 Delivery Tag
 pub type DeliveryTag = ByteBuf;
@@ -53,10 +53,10 @@ pub type DeliveryNumber = SequenceNo;
 pub type TransferNumber = SequenceNo;
 
 /// 2.8.10 Sequence No
-pub type SequenceNo = Uint;
+pub type SequenceNo = UInt;
 
 /// 2.8.11 Message Format
-pub type MessageFormat = Uint;
+pub type MessageFormat = UInt;
 
 /// 2.8.12 IETF Language Tag
 /// TODO: impl Into

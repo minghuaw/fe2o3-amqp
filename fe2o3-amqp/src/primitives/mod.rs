@@ -14,10 +14,10 @@ pub use uuid::*;
 use serde_bytes::ByteBuf;
 
 pub type Boolean = bool;
-pub type Ubyte = u8;
-pub type Ushort = u16;
-pub type Uint = u32;
-pub type Ulong = u64;
+pub type UByte = u8;
+pub type UShort = u16;
+pub type UInt = u32;
+pub type ULong = u64;
 pub type Byte = i8;
 pub type Short = i16;
 pub type Int = i32;

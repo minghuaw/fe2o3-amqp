@@ -23,10 +23,10 @@ impl ser::Serialize for Value {
             Value::Described(v) => v.serialize(serializer),
             Value::Null => serializer.serialize_unit(),
             Value::Bool(v) => serializer.serialize_bool(*v),
-            Value::Ubyte(v) => serializer.serialize_u8(*v),
-            Value::Ushort(v) => serializer.serialize_u16(*v),
-            Value::Uint(v) => serializer.serialize_u32(*v),
-            Value::Ulong(v) => serializer.serialize_u64(*v),
+            Value::UByte(v) => serializer.serialize_u8(*v),
+            Value::UShort(v) => serializer.serialize_u16(*v),
+            Value::UInt(v) => serializer.serialize_u32(*v),
+            Value::ULong(v) => serializer.serialize_u64(*v),
             Value::Byte(v) => serializer.serialize_i8(*v),
             Value::Short(v) => serializer.serialize_i16(*v),
             Value::Int(v) => serializer.serialize_i32(*v),
@@ -115,22 +115,22 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     #[inline]
     fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Ubyte(v))
+        Ok(Value::UByte(v))
     }
 
     #[inline]
     fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Ushort(v))
+        Ok(Value::UShort(v))
     }
 
     #[inline]
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Uint(v))
+        Ok(Value::UInt(v))
     }
 
     #[inline]
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Ulong(v))
+        Ok(Value::ULong(v))
     }
 
     #[inline]
@@ -545,7 +545,7 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let value = Value::List(self.buf);
-        let index = Value::Uint(self.variant_index);
+        let index = Value::UInt(self.variant_index);
         Ok(Value::List(vec![index, value]))
     }
 }
@@ -654,7 +654,7 @@ mod tests {
         }
 
         let val = Foo::B;
-        let expected = Value::Uint(1);
+        let expected = Value::UInt(1);
         assert_eq_on_value_vs_expected(val, expected);
     }
 
@@ -669,7 +669,7 @@ mod tests {
         }
 
         let val = Foo::B(13);
-        let expected = Value::List(vec![Value::Uint(1), Value::Ulong(13)]);
+        let expected = Value::List(vec![Value::UInt(1), Value::ULong(13)]);
         assert_eq_on_value_vs_expected(val, expected);
     }
 
@@ -684,7 +684,7 @@ mod tests {
         }
         let val = Foo::B(13, "amqp".to_string());
         let expected = Value::List(vec![
-            Value::Uint(1),
+            Value::UInt(1),
             Value::List(vec![Value::Int(13), Value::String(String::from("amqp"))]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
@@ -705,8 +705,8 @@ mod tests {
             is_a: true,
         };
         let expected = Value::List(vec![
-            Value::Uint(0),
-            Value::List(vec![Value::Uint(13), Value::Bool(true)]),
+            Value::UInt(0),
+            Value::List(vec![Value::UInt(13), Value::Bool(true)]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
     }

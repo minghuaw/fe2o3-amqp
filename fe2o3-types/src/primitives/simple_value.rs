@@ -5,10 +5,10 @@ use super::*;
 pub enum SimpleValue {
     Null,
     Bool(Boolean),
-    Ubyte(Ubyte),
-    Ushort(Ushort),
-    Uint(Uint),
-    Ulong(Ulong),
+    UByte(UByte),
+    UShort(UShort),
+    UInt(UInt),
+    ULong(ULong),
     Byte(Byte),
     Short(Short),
     Int(Int),
@@ -37,10 +37,10 @@ impl SimpleValue {
         let code = match *self {
             SimpleValue::Null => EncodingCodes::Null,
             SimpleValue::Bool(_) => EncodingCodes::Boolean,
-            SimpleValue::Ubyte(_) => EncodingCodes::Ubyte,
-            SimpleValue::Ushort(_) => EncodingCodes::Ushort,
-            SimpleValue::Uint(_) => EncodingCodes::Uint,
-            SimpleValue::Ulong(_) => EncodingCodes::Ulong,
+            SimpleValue::UByte(_) => EncodingCodes::UByte,
+            SimpleValue::UShort(_) => EncodingCodes::UShort,
+            SimpleValue::UInt(_) => EncodingCodes::UInt,
+            SimpleValue::ULong(_) => EncodingCodes::ULong,
             SimpleValue::Byte(_) => EncodingCodes::Byte,
             SimpleValue::Short(_) => EncodingCodes::Short,
             SimpleValue::Int(_) => EncodingCodes::Int,
@@ -69,10 +69,10 @@ impl ser::Serialize for SimpleValue {
         match self {
             SimpleValue::Null => serializer.serialize_unit(),
             SimpleValue::Bool(v) => serializer.serialize_bool(*v),
-            SimpleValue::Ubyte(v) => serializer.serialize_u8(*v),
-            SimpleValue::Ushort(v) => serializer.serialize_u16(*v),
-            SimpleValue::Uint(v) => serializer.serialize_u32(*v),
-            SimpleValue::Ulong(v) => serializer.serialize_u64(*v),
+            SimpleValue::UByte(v) => serializer.serialize_u8(*v),
+            SimpleValue::UShort(v) => serializer.serialize_u16(*v),
+            SimpleValue::UInt(v) => serializer.serialize_u32(*v),
+            SimpleValue::ULong(v) => serializer.serialize_u64(*v),
             SimpleValue::Byte(v) => serializer.serialize_i8(*v),
             SimpleValue::Short(v) => serializer.serialize_i16(*v),
             SimpleValue::Int(v) => serializer.serialize_i32(*v),
@@ -95,10 +95,10 @@ impl ser::Serialize for SimpleValue {
 enum Field {
     Null,
     Bool,
-    Ubyte,
-    Ushort,
-    Uint,
-    Ulong,
+    UByte,
+    UShort,
+    UInt,
+    ULong,
     Byte,
     Short,
     Int,
@@ -137,11 +137,11 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
                 Field::Bool
             }
-            EncodingCodes::Ubyte => Field::Ubyte,
-            EncodingCodes::Ushort => Field::Ushort,
-            EncodingCodes::Uint | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::Uint,
-            EncodingCodes::Ulong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
-                Field::Ulong
+            EncodingCodes::UByte => Field::UByte,
+            EncodingCodes::UShort => Field::UShort,
+            EncodingCodes::UInt | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::UInt,
+            EncodingCodes::ULong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+                Field::ULong
             }
             EncodingCodes::Byte => Field::Byte,
             EncodingCodes::Short => Field::Short,
@@ -209,21 +209,21 @@ impl<'de> de::Visitor<'de> for Visitor {
                 let val = de.newtype_variant()?;
                 Ok(SimpleValue::Bool(val))
             }
-            Field::Ubyte => {
+            Field::UByte => {
                 let val = de.newtype_variant()?;
-                Ok(SimpleValue::Ubyte(val))
+                Ok(SimpleValue::UByte(val))
             }
-            Field::Ushort => {
+            Field::UShort => {
                 let val = de.newtype_variant()?;
-                Ok(SimpleValue::Ushort(val))
+                Ok(SimpleValue::UShort(val))
             }
-            Field::Uint => {
+            Field::UInt => {
                 let val = de.newtype_variant()?;
-                Ok(SimpleValue::Uint(val))
+                Ok(SimpleValue::UInt(val))
             }
-            Field::Ulong => {
+            Field::ULong => {
                 let val = de.newtype_variant()?;
-                Ok(SimpleValue::Ulong(val))
+                Ok(SimpleValue::ULong(val))
             }
             Field::Byte => {
                 let val = de.newtype_variant()?;
@@ -297,10 +297,10 @@ impl<'de> de::Deserialize<'de> for SimpleValue {
         const VARIANTS: &'static [&'static str] = &[
             "Null",
             "Bool",
-            "Ubyte",
-            "Ushort",
-            "Uint",
-            "Ulong",
+            "UByte",
+            "UShort",
+            "UInt",
+            "ULong",
             "Byte",
             "Short",
             "Int",
@@ -328,10 +328,10 @@ impl TryFrom<Value> for SimpleValue {
         let val = match value {
             Value::Null => SimpleValue::Null,
             Value::Bool(v) => SimpleValue::Bool(v),
-            Value::Ubyte(v) => SimpleValue::Ubyte(v),
-            Value::Ushort(v) => SimpleValue::Ushort(v),
-            Value::Uint(v) => SimpleValue::Uint(v),
-            Value::Ulong(v) => SimpleValue::Ulong(v),
+            Value::UByte(v) => SimpleValue::UByte(v),
+            Value::UShort(v) => SimpleValue::UShort(v),
+            Value::UInt(v) => SimpleValue::UInt(v),
+            Value::ULong(v) => SimpleValue::ULong(v),
             Value::Byte(v) => SimpleValue::Byte(v),
             Value::Short(v) => SimpleValue::Short(v),
             Value::Int(v) => SimpleValue::Int(v),
@@ -360,10 +360,10 @@ impl From<SimpleValue> for Value {
         match value {
             SimpleValue::Null => Value::Null,
             SimpleValue::Bool(v) => Value::Bool(v),
-            SimpleValue::Ubyte(v) => Value::Ubyte(v),
-            SimpleValue::Ushort(v) => Value::Ushort(v),
-            SimpleValue::Uint(v) => Value::Uint(v),
-            SimpleValue::Ulong(v) => Value::Ulong(v),
+            SimpleValue::UByte(v) => Value::UByte(v),
+            SimpleValue::UShort(v) => Value::UShort(v),
+            SimpleValue::UInt(v) => Value::UInt(v),
+            SimpleValue::ULong(v) => Value::ULong(v),
             SimpleValue::Byte(v) => Value::Byte(v),
             SimpleValue::Short(v) => Value::Short(v),
             SimpleValue::Int(v) => Value::Int(v),
