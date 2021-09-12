@@ -72,7 +72,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub async fn new(
+    pub async fn open(
         container_id: String,
         max_frame_size: impl Into<MaxFrameSize>,
         channel_max: impl Into<ChannelMax>,
@@ -93,11 +93,6 @@ impl Connection {
         &mut self.mux
     }
 
-    pub async fn open(&mut self) -> Result<&mut Self, EngineError> {
-        self.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
-        Ok(self)
-    }
-
     pub fn builder() -> Builder<WithoutContainerId> {
         Builder::new()
     }
@@ -107,30 +102,4 @@ impl From<MuxHandle> for Connection {
     fn from(mux: MuxHandle) -> Self {
         Self { mux }
     }
-}
-
-impl Connection {
-    // pub async fn connect(&mut self, url: Url) -> Result<Self, EngineError> {
-    //     match url.scheme() {
-    //         "amqp" => {
-    //             let addr = url.socket_addrs(|| Some(fe2o3_types::definitions::PORT))?;
-    //             let mut stream = TcpStream::connect(&*addr).await?;
-
-    //             // Negotiate and then bind
-    //             let remote_header = Transport::negotiate(&mut stream, ProtocolHeader::amqp()).await?;
-    //             let transport = Transport::bind(stream)?;
-
-    //             // Send Open frame
-    //             let open
-    //             todo!()
-    //         },
-    //         "amqps" => {
-    //             todo!()
-    //         }
-    //         _ => {
-    //             return Err(EngineError::Message("Invalid Url scheme"))
-    //         }
-    //     }
-    // }
-
 }

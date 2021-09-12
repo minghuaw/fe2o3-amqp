@@ -7,7 +7,7 @@ use url::Url;
 
 use crate::{error::EngineError, transport::{Transport, connection::{ConnectionState, mux::Mux}}, transport::protocol_header::ProtocolHeader};
 
-use super::{Connection, mux::DEFAULT_CONNECTION_MUX_BUFFER_SIZE};
+use super::{Connection, mux::{self, DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
 
 pub struct WithoutContainerId {}
 pub struct WithContainerId {}
@@ -219,7 +219,7 @@ impl Builder<WithContainerId> {
 
                 // open Connection
                 let mut connection = Connection::from(mux);
-                connection.open().await?;
+                connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
                 Ok(connection)
             },
             // TLS
