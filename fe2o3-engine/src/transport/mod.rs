@@ -42,7 +42,7 @@ pin_project! {
 }
 
 impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
-    pub fn bind(io: Io) -> Result<Self, EngineError> {
+    pub fn bind(io: Io) -> Self {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
@@ -51,7 +51,7 @@ impl<Io: AsyncRead + AsyncWrite + Unpin> Transport<Io> {
             .max_frame_length(512) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
-        Ok(Self { framed })
+        Self { framed }
     }
 
     pub async fn negotiate(

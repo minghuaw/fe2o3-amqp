@@ -16,6 +16,7 @@ use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
 
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
+pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 
 use super::{ConnectionState, InChanId, OutChanId};
 
@@ -35,6 +36,10 @@ impl MuxHandle {
         // self.control.send(MuxControl::Stop).await
         //     .map_err(|_| EngineError::Message("SendError"))
         todo!()
+    }
+
+    pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
+        &mut self.control
     }
 }
 
@@ -64,7 +69,7 @@ impl Mux {
         local_state: ConnectionState, 
         local_open: Open, 
         remote_header: ProtocolHeader, 
-        buf_size: usize
+        buffer_size: usize
     ) -> Result<MuxHandle, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -76,7 +81,7 @@ impl Mux {
             _ => return Err(EngineError::Message("Expecting local_state to be ConnectionState::HeaderExchange"))
         }
 
-        let (session_tx, session_rx) = mpsc::channel(buf_size);
+        let (session_tx, session_rx) = mpsc::channel(buffer_size);
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let local_sessions = Slab::new(); // TODO: pre-allocate capacity
 

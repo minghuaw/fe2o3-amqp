@@ -34,3 +34,9 @@ pub enum EngineError {
     #[error("{0}")]
     Message(&'static str),
 }
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for EngineError {
+    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Self::Message("SendError")
+    }
+}
