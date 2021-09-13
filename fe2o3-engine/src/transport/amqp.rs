@@ -140,7 +140,7 @@ impl Encoder<FrameBody> for FrameBodyCodec {
     fn encode(&mut self, item: FrameBody, dst: &mut BytesMut) -> Result<(), Self::Error> {
         use fe2o3_amqp::ser::Serializer;
 
-        let mut serializer = Serializer::from(dst.as_mut());
+        let mut serializer = Serializer::from(dst.writer());
         match item {
             FrameBody::Open{performative} => performative.serialize(&mut serializer),
             FrameBody::Begin{performative} => performative.serialize(&mut serializer),
@@ -189,5 +189,34 @@ impl Decoder for FrameBodyCodec {
 
 #[cfg(test)]
 mod tests {
+    use bytes::BytesMut;
+    use fe2o3_types::performatives::Open;
+    use tokio_util::codec::Encoder;
 
+    use super::{FrameBody, FrameBodyCodec};
+
+    #[test]
+    fn test_encoding_frame_body() {
+        let open = Open{
+            container_id: "1234".into(),
+            hostname: Some("127.0.0.1".into()), 
+            max_frame_size: 100.into(),
+            channel_max: 9.into(),
+            idle_time_out: Some(10),
+            outgoing_locales: None,
+            incoming_locales: None,
+            offered_capabilities: None,
+            desired_capabilities: None,
+            properties: None
+        };
+
+        let body = FrameBody::Open {
+            performative: open
+        };
+
+        let mut encoder = FrameBodyCodec {};
+        let mut dst = BytesMut::new();
+        encoder.encode(body, &mut dst).unwrap();
+        println!("{:?}", dst);
+    }
 }

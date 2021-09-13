@@ -10,7 +10,8 @@ members = [
     "fe2o3-engine",
     "fe2o3-amqp-ext",
 
-    "examples/macro_expand"
+    "examples/macro_expand",
+    "examples/protocol_test"
 ]
 
 exclude = [

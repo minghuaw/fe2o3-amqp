@@ -116,6 +116,8 @@ impl Mux {
     where 
         W: Sink<Frame, Error=EngineError> + Unpin
     {
+        println!("hanlde open");
+
         match remote_open {
             Some(open) => {
                 // FIXME: is there anything we need to check?
@@ -130,9 +132,12 @@ impl Mux {
             }
             // handling a locally initiated open
             None => {
-                let body = FrameBody::Open{ performative: self.local_open.clone() };
-                let frame = Frame::new(0u16, body);
+                let frame = Frame::new(
+                    0u16, 
+                    FrameBody::Open{ performative: self.local_open.clone() }
+                );
                 writer.send(frame).await?;
+                println!("Sent frame");
                 // TODO: State transition (Fig. 2.23)
                 match &self.local_state {
                     ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,

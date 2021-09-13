@@ -2,6 +2,7 @@ use std::{convert::{TryFrom, TryInto}, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp::primitives::{Symbol};
 use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
+use serde::de::Unexpected;
 use tokio::{io::{AsyncRead, AsyncWrite}, net::TcpStream};
 use url::Url;
 
@@ -55,9 +56,9 @@ impl<Mode> Builder<Mode> {
     // In Rust, it’s more common to pass slices as arguments 
     // rather than vectors when you just want to provide read access. 
     // The same goes for String and &str.
-    pub fn container_id(self, id: String) -> Builder<WithContainerId> {
+    pub fn container_id(self, id: impl Into<String>) -> Builder<WithContainerId> {
         Builder::<WithContainerId> {
-            container_id: id,
+            container_id: id.into(),
             hostname: None,
             // set to 512 before Open frame is sent
             max_frame_size: MaxFrameSize(512),
@@ -187,6 +188,39 @@ impl Builder<WithContainerId> {
     //     todo!()
     // }
 
+    pub async fn with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
+        // exchange header 
+        let mut local_state = ConnectionState::Start;
+        let remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
+        let transport = Transport::bind(stream);
+        println!("Header exchanged");
+
+        // spawn Connection Mux
+        let local_open = Open {
+            container_id: self.container_id.clone(),
+            hostname: self.hostname.clone(),
+            max_frame_size: self.max_frame_size.clone(),
+            channel_max: self.channel_max.clone(),
+            idle_time_out: self.idle_time_out.clone(),
+            outgoing_locales: self.outgoing_locales.clone(),
+            incoming_locales: self.incoming_locales.clone(),
+            offered_capabilities: self.offered_capabilities.clone(),
+            desired_capabilities: self.desired_capabilities.clone(),
+            properties: self.properties.clone()
+        };
+        let mux = Mux::spawn(transport, local_state, local_open, remote_header, self.buffer_size)?;
+        println!("Mux started");
+
+        // open Connection
+        let mut connection = Connection::from(mux);
+        connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
+        println!("Openning");
+        Ok(connection)
+    }
+
     pub async fn open(&self, url: impl TryInto<Url, Error=url::ParseError>) -> Result<Connection, EngineError> {
         let url: Url = url.try_into()?;
         
@@ -195,32 +229,38 @@ impl Builder<WithContainerId> {
             "amqp" => {
                 // connect TcpStream
                 let addr = url.socket_addrs(|| Some(fe2o3_types::definitions::PORT))?;
-                let mut stream = TcpStream::connect(&*addr).await?;
+                let stream = TcpStream::connect(&*addr).await?;
+                println!("TcpStream connected");
+
+                self.with_stream(stream).await
                 
-                // exchange header 
-                let mut local_state = ConnectionState::Start;
-                let remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
-                let transport = Transport::bind(stream);
+                // // exchange header 
+                // let mut local_state = ConnectionState::Start;
+                // let remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
+                // let transport = Transport::bind(stream);
+                // println!("Header exchanged");
 
-                // spawn Connection Mux
-                let local_open = Open {
-                    container_id: self.container_id.clone(),
-                    hostname: self.hostname.clone(),
-                    max_frame_size: self.max_frame_size.clone(),
-                    channel_max: self.channel_max.clone(),
-                    idle_time_out: self.idle_time_out.clone(),
-                    outgoing_locales: self.outgoing_locales.clone(),
-                    incoming_locales: self.incoming_locales.clone(),
-                    offered_capabilities: self.offered_capabilities.clone(),
-                    desired_capabilities: self.desired_capabilities.clone(),
-                    properties: self.properties.clone()
-                };
-                let mux = Mux::spawn(transport, local_state, local_open, remote_header, self.buffer_size)?;
+                // // spawn Connection Mux
+                // let local_open = Open {
+                //     container_id: self.container_id.clone(),
+                //     hostname: self.hostname.clone(),
+                //     max_frame_size: self.max_frame_size.clone(),
+                //     channel_max: self.channel_max.clone(),
+                //     idle_time_out: self.idle_time_out.clone(),
+                //     outgoing_locales: self.outgoing_locales.clone(),
+                //     incoming_locales: self.incoming_locales.clone(),
+                //     offered_capabilities: self.offered_capabilities.clone(),
+                //     desired_capabilities: self.desired_capabilities.clone(),
+                //     properties: self.properties.clone()
+                // };
+                // let mux = Mux::spawn(transport, local_state, local_open, remote_header, self.buffer_size)?;
+                // println!("Mux started");
 
-                // open Connection
-                let mut connection = Connection::from(mux);
-                connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
-                Ok(connection)
+                // // open Connection
+                // let mut connection = Connection::from(mux);
+                // connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
+                // println!("Openning");
+                // Ok(connection)
             },
             // TLS
             "amqps" => {

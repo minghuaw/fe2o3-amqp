@@ -84,7 +84,7 @@ pub struct ChannelMax(pub UShort);
 
 impl Default for ChannelMax {
     fn default() -> Self {
-        Self(u16::MAX)
+        Self(u16::MAX) // 65535
     }
 }
 
