@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::str::EncodeUtf16;
 
@@ -112,22 +113,24 @@ impl Mux {
         todo!()
     }
 
-    async fn handle_open<W>(&mut self, writer: &mut W, remote_open: Option<Open>) -> Result<(), EngineError> 
+    async fn handle_open<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Option<Open>) -> Result<(), EngineError> 
     where 
-        W: Sink<Frame, Error=EngineError> + Unpin
+        Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!("hanlde open");
 
         match remote_open {
             Some(open) => {
-                // FIXME: is there anything we need to check?
-                self.remote_open = Some(open);
                 match &self.local_state {
                     ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
                     ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
                     ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
                     s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
                 }
+                // FIXME: is there anything we need to check?
+                let max_frame_size = min(self.local_open.max_frame_size.0, open.max_frame_size.0);
+                transport.set_max_frame_size(max_frame_size as usize);
+                self.remote_open = Some(open);
                 Ok(())
             }
             // handling a locally initiated open
@@ -136,7 +139,7 @@ impl Mux {
                     0u16, 
                     FrameBody::Open{ performative: self.local_open.clone() }
                 );
-                writer.send(frame).await?;
+                transport.send(frame).await?;
                 println!("Sent frame");
                 // TODO: State transition (Fig. 2.23)
                 match &self.local_state {
@@ -196,11 +199,11 @@ impl Mux {
         Ok(())
     }
 
-    async fn mux_loop<Io>(mut self, transport: Transport<Io>) -> Result<(), EngineError> 
+    async fn mux_loop<Io>(mut self, mut transport: Transport<Io>) -> Result<(), EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Send + Unpin
     {
-        let (mut writer, mut reader) = transport.split();
+        // let (mut writer, mut reader) = transport.split();
 
         loop {
             tokio::select! {
@@ -209,19 +212,19 @@ impl Mux {
                     match control {
                         Some(control) => {
                             match control {
-                                MuxControl::Open => self.handle_open(&mut writer, None).await?,
+                                MuxControl::Open => self.handle_open(&mut transport, None).await?,
                                 MuxControl::Close => self.handle_close(None).await?
                             }
                         },
                         None => return self.handle_unexpected_drop().await
                     }
                 },
-                next = reader.next() => {
+                next = transport.next() => {
                     match next {
                         Some(item) => {
                             let Frame{channel, body} = item?;
                             match body {
-                                FrameBody::Open{performative} => self.handle_open(&mut writer, Some(performative)).await?,
+                                FrameBody::Open{performative} => self.handle_open(&mut transport, Some(performative)).await?,
                                 FrameBody::Close{performative} => self.handle_close(Some(performative)).await?,
                                 _ => todo!()
                             }
