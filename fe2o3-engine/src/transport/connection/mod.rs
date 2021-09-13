@@ -3,12 +3,13 @@ use std::{collections::{BTreeMap, HashMap}, convert::TryInto, marker::{self, Pha
 use crate::error::EngineError;
 pub use crate::transport::Transport;
 use fe2o3_types::{definitions::Milliseconds, performatives::{ChannelMax, MaxFrameSize, Open}};
-use tokio::{net::TcpStream, sync::mpsc::{Sender, Receiver}};
+use slab::Slab;
+use tokio::{net::TcpStream, sync::{Mutex, mpsc::{Sender, Receiver}}};
 use url::Url;
 
 use self::{builder::WithoutContainerId, mux::MuxHandle};
 
-use super::{amqp::{Frame, FrameBody}, protocol_header::ProtocolHeader, session::SessionHandle};
+use super::{amqp::{Frame, FrameBody}, protocol_header::ProtocolHeader, session::{SessionFrame, SessionHandle}};
 
 mod builder;
 pub use builder::{Builder};
@@ -68,10 +69,19 @@ pub enum ConnectionState {
 pub struct Connection {
     // FIXME: is this really needed?
     // local_open: Arc<Open>, // parameters should be set using the builder and not change before reconnect
+    // tx to conn_mux for session
+    // session_tx: Sender<SessionFrame>,
     mux: MuxHandle,
 }
 
 impl Connection {
+    // pub fn from_parts(session_tx: Sender<SessionFrame>, mux: MuxHandle) -> Self {
+    //     Self {
+    //         session_tx,
+    //         mux
+    //     }
+    // }
+
     pub async fn open(
         container_id: String,
         max_frame_size: impl Into<MaxFrameSize>,
@@ -111,10 +121,6 @@ impl From<MuxHandle> for Connection {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp::to_vec;
-    use fe2o3_types::performatives::Open;
-    use tokio::io::AsyncWriteExt;
-
     use crate::transport::connection::Connection;
 
     #[tokio::test]

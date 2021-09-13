@@ -46,6 +46,7 @@ impl MuxHandle {
 pub struct Mux {
     local_state: ConnectionState,
     local_open: Open,
+    local_sessions: Slab<SessionHandle>,
 
     remote_state: Option<ConnectionState>,
     remote_open: Option<Open>,
@@ -57,7 +58,6 @@ pub struct Mux {
     session_rx: Receiver<SessionFrame>,
     // Receiver from Connection
     control: Receiver<MuxControl>,
-    local_sessions: Slab<SessionHandle>,
     in_out_map: BTreeMap<InChanId, OutChanId>,
 }
 
