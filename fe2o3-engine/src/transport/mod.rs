@@ -22,25 +22,22 @@ pub mod endpoint;
 use std::{convert::TryFrom, task::Poll};
 
 use bytes::{Bytes, BytesMut};
-use futures_util::{Sink, Stream, StreamExt};
+use futures_util::{Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf}};
-use tokio_util::codec::{Decoder, Encoder, Framed, FramedRead, FramedWrite, LengthDelimitedCodec, LengthDelimitedCodecError};
+use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}};
+use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError};
 
 use crate::error::EngineError;
 
 use amqp::{Frame, FrameCodec};
-use protocol_header::{ProtocolHeader, ProtocolId};
+use protocol_header::{ProtocolHeader};
 
 use self::connection::ConnectionState;
 
 pin_project! {
     pub struct Transport<Io> {
         #[pin]
-        framed_read: FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
-        #[pin]
-        framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
-
+        framed: Framed<Io, LengthDelimitedCodec>,
     }
 }
 
@@ -49,26 +46,15 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn bind(io: Io) -> Self {
-        let (reader, writer) = tokio::io::split(io);
-
-        let framed_write = LengthDelimitedCodec::builder()
+        let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
             // Prior to any explicit negotiation, 
             // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
             .max_frame_length(512) // change max frame size later in negotiation
             .length_adjustment(-4)
-            .new_write(writer);
-
-        let framed_read = LengthDelimitedCodec::builder()
-            .big_endian()
-            .length_field_length(4)
-            // Prior to any explicit negotiation, 
-            // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
-            .max_frame_length(512) // change max frame size later in negotiation
-            .length_adjustment(-4)
-            .new_read(reader);
-        Self { framed_read, framed_write }
+            .new_framed(io);
+        Self { framed }
     }
 
     pub async fn negotiate(
@@ -99,8 +85,7 @@ where
     }
 
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
-        self.framed_read.decoder_mut().set_max_frame_length(max_frame_size);
-        self.framed_write.encoder_mut().set_max_frame_length(max_frame_size);
+        self.framed.codec_mut().set_max_frame_length(max_frame_size);
         self
     }
 }
@@ -116,7 +101,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed_write.poll_ready(cx).map_err(Into::into)
+        this.framed.poll_ready(cx).map_err(Into::into)
     }
 
     fn start_send(self: std::pin::Pin<&mut Self>, item: Frame) -> Result<(), Self::Error> {
@@ -127,7 +112,7 @@ where
         println!(">>> Debug start_send() encoded: {:?}", &bytesmut);
 
         let this = self.project();
-        this.framed_write
+        this.framed
             .start_send(Bytes::from(bytesmut))
             .map_err(Into::into)
     }
@@ -137,7 +122,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed_write.poll_flush(cx).map_err(Into::into)
+        this.framed.poll_flush(cx).map_err(Into::into)
     }
 
     fn poll_close(
@@ -145,7 +130,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed_write.poll_close(cx).map_err(Into::into)
+        this.framed.poll_close(cx).map_err(Into::into)
     }
 }
 
@@ -157,7 +142,7 @@ where
 
     fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         let this = self.project();
-        match this.framed_read.poll_next(cx) {
+        match this.framed.poll_next(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(next) => {
                 match next {
@@ -187,8 +172,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
     use bytes::Bytes;
     use fe2o3_types::performatives::Open;
     use futures_util::{SinkExt, StreamExt};
@@ -241,6 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_frame_sink() {
+        // use std::io::Cursor;
         // let mut buf = Vec::new();
         // let io = Cursor::new(&mut buf);        
         // let mut transport = Transport::bind(io);
