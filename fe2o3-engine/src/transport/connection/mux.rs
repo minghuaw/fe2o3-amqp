@@ -26,7 +26,7 @@ use super::{ConnectionState, InChanId, OutChanId};
 pub enum MuxControl {
     Open,
     // NewSession(Option<InChanId>),
-    Close(Option<Error>),
+    Close,
 }
 
 pub struct MuxHandle {
@@ -116,24 +116,6 @@ impl Mux {
     async fn handle_unexpected_eof(&mut self) -> Result<Running, EngineError> {
         todo!()
     }
-
-    // #[inline]
-    // async fn handle_open<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Option<Open>) -> Result<Running, EngineError> 
-    // where 
-    //     Io: AsyncRead + AsyncWrite + Unpin,
-    // {
-    //     println!("hanlde open");
-
-    //     match remote_open {
-    //         Some(open) => {
-                
-    //         }
-    //         // handling a locally initiated open
-    //         None => {
-                
-    //         },
-    //     }
-    // }
 
     #[inline]
     async fn handle_open_send<Io>(&mut self, transport: &mut Transport<Io>) -> Result<Running, EngineError> 
@@ -312,7 +294,7 @@ impl Mux {
                     Some(control) => {
                         match control {
                             MuxControl::Open => self.handle_open_send(transport).await,
-                            MuxControl::Close(error) => self.handle_close_send(transport, error).await,
+                            MuxControl::Close => self.handle_close_send(transport, None).await,
                         }
                     },
                     None => return self.handle_unexpected_drop().await

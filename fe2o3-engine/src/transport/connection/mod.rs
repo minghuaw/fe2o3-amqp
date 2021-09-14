@@ -95,8 +95,8 @@ impl Connection {
             .open(url).await
     }
 
-    pub async fn close(&mut self, error: Option<Error>) -> Result<(), EngineError> {
-        self.mux.control_mut().send(mux::MuxControl::Close(error)).await?;
+    pub async fn close(&mut self) -> Result<(), EngineError> {
+        self.mux.control_mut().send(mux::MuxControl::Close).await?;
         Ok(())
     }
 
