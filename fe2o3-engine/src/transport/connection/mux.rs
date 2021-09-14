@@ -44,6 +44,10 @@ impl MuxHandle {
     pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
         &mut self.control
     }
+
+    pub fn handle_mut(&mut self) -> &mut JoinHandle<Result<(), EngineError>> {
+        &mut self.handle
+    }
 }
 
 pub struct Mux {
@@ -166,35 +170,33 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        match &self.local_state {
+        println!("{:?}", &self.local_state);
+        let result = match &self.local_state {
             ConnectionState::Opened => {
                 self.local_state = ConnectionState::CloseSent;
-                let frame = Frame::new(
-                    0u16,
-                    FrameBody::Close{performative: Close { error: local_error } }
-                );
-                transport.send(frame).await?;
                 Ok(Running::Continue)
             },
             ConnectionState::CloseReceived => {
                 self.local_state = ConnectionState::End;
-                let frame = Frame::new(
-                    0u16,
-                    FrameBody::Close{performative: Close { error: local_error } }
-                );
-                transport.send(frame).await?;
                 Ok(Running::Stop)
             },
             ConnectionState::OpenSent => {
                 self.local_state = ConnectionState::ClosePipe;
-                todo!()
+                Ok(Running::Continue)
             },
             ConnectionState::OpenPipe => {
                 self.local_state = ConnectionState::OpenClosePipe;
-                todo!()
+                Ok(Running::Continue)
             },
             s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
-        }
+        };
+
+        let frame = Frame::new(
+            0u16,
+            FrameBody::Close{performative: Close { error: local_error } }
+        );
+        transport.send(frame).await?;
+        result
     }
 
     #[inline]

@@ -5,7 +5,7 @@ use fe2o3_engine::transport::connection::Connection;
 async fn main() {
     println!("Starting connection");
 
-    let connection = Connection::builder()
+    let mut connection = Connection::builder()
         .container_id("1234")
         .hostname("127.0.0.1")
         .max_frame_size(100)
@@ -14,5 +14,6 @@ async fn main() {
         .open("amqp://127.0.0.1:5674").await
         .unwrap();
 
+    connection.close().await.unwrap();
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 }
