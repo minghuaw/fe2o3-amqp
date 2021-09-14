@@ -2,7 +2,7 @@ use std::{collections::{BTreeMap, HashMap}, convert::TryInto, marker::{self, Pha
 
 use crate::error::EngineError;
 pub use crate::transport::Transport;
-use fe2o3_types::{definitions::Milliseconds, performatives::{ChannelMax, MaxFrameSize, Open}};
+use fe2o3_types::{definitions::{Error, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
 use slab::Slab;
 use tokio::{net::TcpStream, sync::{Mutex, mpsc::{Sender, Receiver}}};
 use url::Url;
@@ -95,8 +95,8 @@ impl Connection {
             .open(url).await
     }
 
-    pub async fn close(&mut self) -> Result<(), EngineError> {
-        self.mux.control_mut().send(mux::MuxControl::Close).await?;
+    pub async fn close(&mut self, error: Option<Error>) -> Result<(), EngineError> {
+        self.mux.control_mut().send(mux::MuxControl::Close(error)).await?;
         Ok(())
     }
 

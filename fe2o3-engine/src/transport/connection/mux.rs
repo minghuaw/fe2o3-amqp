@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 use std::str::EncodeUtf16;
 
+use fe2o3_types::definitions::Error;
 use fe2o3_types::performatives::{Close, Open};
 use slab::Slab;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -15,6 +16,7 @@ use crate::transport::amqp::{Frame, FrameBody};
 use crate::transport::protocol_header::ProtocolHeader;
 use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
+use crate::util::Running;
 
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -24,7 +26,7 @@ use super::{ConnectionState, InChanId, OutChanId};
 pub enum MuxControl {
     Open,
     // NewSession(Option<InChanId>),
-    Close,
+    Close(Option<Error>),
 }
 
 pub struct MuxHandle {
@@ -105,58 +107,98 @@ impl Mux {
         })
     }
 
-    async fn handle_unexpected_drop(&mut self) -> Result<(), EngineError> {
+    #[inline]
+    async fn handle_unexpected_drop(&mut self) -> Result<Running, EngineError> {
         todo!()
     }
 
-    async fn handle_unexpected_eof(&mut self) -> Result<(), EngineError> {
+    #[inline]
+    async fn handle_unexpected_eof(&mut self) -> Result<Running, EngineError> {
         todo!()
     }
 
-    async fn handle_open<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Option<Open>) -> Result<(), EngineError> 
+    // #[inline]
+    // async fn handle_open<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Option<Open>) -> Result<Running, EngineError> 
+    // where 
+    //     Io: AsyncRead + AsyncWrite + Unpin,
+    // {
+    //     println!("hanlde open");
+
+    //     match remote_open {
+    //         Some(open) => {
+                
+    //         }
+    //         // handling a locally initiated open
+    //         None => {
+                
+    //         },
+    //     }
+    // }
+
+    #[inline]
+    async fn handle_open_send<Io>(&mut self, transport: &mut Transport<Io>) -> Result<Running, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        println!("hanlde open");
-
-        match remote_open {
-            Some(open) => {
-                match &self.local_state {
-                    ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
-                    ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
-                    ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-                    s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
-                }
-                // FIXME: is there anything we need to check?
-                let max_frame_size = min(self.local_open.max_frame_size.0, open.max_frame_size.0);
-                transport.set_max_frame_size(max_frame_size as usize);
-                self.remote_open = Some(open);
-                Ok(())
-            }
-            // handling a locally initiated open
-            None => {
-                let frame = Frame::new(
-                    0u16, 
-                    FrameBody::Open{ performative: self.local_open.clone() }
-                );
-                transport.send(frame).await?;
-                println!("Sent frame");
-                // TODO: State transition (Fig. 2.23)
-                match &self.local_state {
-                    ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
-                    ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
-                    ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-                    s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
-                }
-                Ok(())
-            },
+        let frame = Frame::new(
+            0u16, 
+            FrameBody::Open{ performative: self.local_open.clone() }
+        );
+        transport.send(frame).await?;
+        println!("Sent frame");
+        // TODO: State transition (Fig. 2.23)
+        match &self.local_state {
+            ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
+            ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
+            ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
         }
+        Ok(Running::Continue)
     }
 
-    async fn handle_close(&mut self, remote_close: Option<Close>) -> Result<(), EngineError> {
+    #[inline]
+    async fn handle_open_recv<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Open) -> Result<Running, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        match &self.local_state {
+            ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
+            ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
+            ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+        }
+        // FIXME: is there anything we need to check?
+        let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
+        transport.set_max_frame_size(max_frame_size as usize);
+        self.remote_open = Some(remote_open);
+        Ok(Running::Continue)
+    }
+
+    #[inline]
+    async fn handle_close_send<Io>(
+        &mut self, 
+        transport: &mut Transport<Io>, 
+        local_error: Option<Error>, 
+    ) -> Result<Running, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
         todo!()
     }
 
+    #[inline]
+    async fn handle_close_recv<Io>(
+        &mut self, 
+        transport: &mut Transport<Io>, 
+        remote_close: Close, 
+    ) -> Result<Running, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        todo!()
+    }
+
+    #[inline]
     async fn handle_new_session(&mut self) -> Result<(), EngineError> {
         todo!()
         // get new entry index
@@ -164,18 +206,24 @@ impl Mux {
         // the new session should then send a Begin
     }
 
-    async fn handle_incoming(
+    #[inline]
+    async fn handle_incoming<Io>(
         &mut self,
+        transport: &mut Transport<Io>,
         item: Result<Frame, EngineError>,
-    ) -> Result<Option<MuxControl>, EngineError> {
-        let frame = item?; 
-
-        // match frame {
-            
-        // }
-        todo!()
+    ) -> Result<Running, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        let Frame{channel, body} = item?;
+        match body {
+            FrameBody::Open{performative} => self.handle_open_recv(transport, performative).await,
+            FrameBody::Close{performative} => self.handle_close_recv(transport, performative).await,
+            _ => todo!()
+        }
     }
 
+    #[inline]
     async fn handle_outgoing<W>(
         &mut self,
         item: Frame,
@@ -199,6 +247,44 @@ impl Mux {
         Ok(())
     }
 
+    #[inline]
+    async fn handle_error<Io>(&mut self, transport: &mut Transport<Io>, error: EngineError) -> Running 
+    where
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        todo!()
+    }
+
+    #[inline]
+    async fn mux_loop_inner<Io>(&mut self, transport: &mut Transport<Io>) -> Result<Running, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        tokio::select! {
+            // local controls
+            control = self.control.recv() => {
+                match control {
+                    Some(control) => {
+                        match control {
+                            MuxControl::Open => self.handle_open_send(transport).await,
+                            MuxControl::Close(error) => self.handle_close_send(transport, error).await,
+                        }
+                    },
+                    None => return self.handle_unexpected_drop().await
+                }
+            },
+            next = transport.next() => {
+                match next {
+                    Some(item) => return self.handle_incoming(transport, item).await,
+                    None => return self.handle_unexpected_eof().await
+                }
+            }
+            next = self.session_rx.recv() => {
+                todo!()
+            }
+        }
+    }
+
     async fn mux_loop<Io>(mut self, mut transport: Transport<Io>) -> Result<(), EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Send + Unpin
@@ -206,35 +292,12 @@ impl Mux {
         // let (mut writer, mut reader) = transport.split();
 
         loop {
-            tokio::select! {
-                // local controls
-                control = self.control.recv() => {
-                    match control {
-                        Some(control) => {
-                            match control {
-                                MuxControl::Open => self.handle_open(&mut transport, None).await?,
-                                MuxControl::Close => self.handle_close(None).await?
-                            }
-                        },
-                        None => return self.handle_unexpected_drop().await
-                    }
-                },
-                next = transport.next() => {
-                    match next {
-                        Some(item) => {
-                            let Frame{channel, body} = item?;
-                            match body {
-                                FrameBody::Open{performative} => self.handle_open(&mut transport, Some(performative)).await?,
-                                FrameBody::Close{performative} => self.handle_close(Some(performative)).await?,
-                                _ => todo!()
-                            }
-                        },
-                        None => return self.handle_unexpected_eof().await
-                    }
-                }
-                next = self.session_rx.recv() => {
-                    todo!()
-                }
+            let running = match self.mux_loop_inner(&mut transport).await {
+                Ok(running) => running,
+                Err(error) => self.handle_error(&mut transport, error).await
+            };
+            if let Running::Stop = running {
+                return Ok(())
             }
         }
     }
