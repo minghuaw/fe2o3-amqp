@@ -140,19 +140,20 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        let frame = Frame::new(
-            0u16, 
-            FrameBody::Open{ performative: self.local_open.clone() }
-        );
-        transport.send(frame).await?;
-        println!("Sent frame");
-        // TODO: State transition (Fig. 2.23)
+        // State transition (Fig. 2.23)
+        // Return early to avoid sending Open when it's not supposed to
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
             s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
         }
+        let frame = Frame::new(
+            0u16, 
+            FrameBody::Open{ performative: self.local_open.clone() }
+        );
+        transport.send(frame).await?;
+        println!("Sent frame");
         Ok(Running::Continue)
     }
 
@@ -183,7 +184,35 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        todo!()
+        match &self.local_state {
+            ConnectionState::Opened => {
+                self.local_state = ConnectionState::CloseSent;
+                let frame = Frame::new(
+                    0u16,
+                    FrameBody::Close{performative: Close { error: local_error } }
+                );
+                transport.send(frame).await?;
+                Ok(Running::Continue)
+            },
+            ConnectionState::CloseReceived => {
+                self.local_state = ConnectionState::End;
+                let frame = Frame::new(
+                    0u16,
+                    FrameBody::Close{performative: Close { error: local_error } }
+                );
+                transport.send(frame).await?;
+                Ok(Running::Stop)
+            },
+            ConnectionState::OpenSent => {
+                self.local_state = ConnectionState::ClosePipe;
+                todo!()
+            },
+            ConnectionState::OpenPipe => {
+                self.local_state = ConnectionState::OpenClosePipe;
+                todo!()
+            },
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+        }
     }
 
     #[inline]
@@ -195,7 +224,23 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        todo!()
+        match &self.local_state {
+            ConnectionState::Opened => {
+                self.local_state = ConnectionState::CloseReceived;
+                // respond with a Close
+                let frame = Frame::new(
+                    0u16,
+                    FrameBody::Close{ performative: Close { error: None } }
+                );
+                transport.send(frame).await?;
+                Ok(Running::Continue)
+            },
+            ConnectionState::CloseSent => {
+                self.local_state = ConnectionState::End;
+                Ok(Running::Stop)
+            },
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+        }
     }
 
     #[inline]
