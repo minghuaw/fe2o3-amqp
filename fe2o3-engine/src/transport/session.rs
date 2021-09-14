@@ -7,7 +7,7 @@ use crate::error::EngineError;
 use super::{amqp::{Frame, FrameBody}, connection::OutChanId};
 
 pub struct SessionFrame {
-    channel: u16,
+    channel: u16, // outgoing/local channel number
     body: SessionFrameBody
 }
 

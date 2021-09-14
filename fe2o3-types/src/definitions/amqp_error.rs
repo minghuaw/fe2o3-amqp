@@ -1,3 +1,5 @@
+use std::convert::{TryFrom, TryInto};
+
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
 
@@ -40,6 +42,44 @@ impl From<&AmqpError> for Symbol {
     }
 }
 
+impl TryFrom<Symbol> for AmqpError {
+    type Error = Symbol;
+
+    fn try_from(value: Symbol) -> Result<Self, Self::Error> {
+        let val = match value.as_str().try_into() {
+            Ok(val) => val,
+            Err(_) => return Err(value),
+        };
+
+        Ok(val)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for AmqpError {
+    type Error = &'a str;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let val = match value {
+            "amqp:internal-error" => AmqpError::InternalError,
+            "amqp:not-found" => AmqpError::NotFound,
+            "amqp:unauthorized-access" => AmqpError::UnauthorizedAccess,
+            "amqp:decode-error" => AmqpError::DecodeError,
+            "amqp:resource-limit-exceeded" => AmqpError::ResourceLimitExceeded,
+            "amqp:not-allowed" => AmqpError::NotAllowed,
+            "amqp:invalid-field" => AmqpError::InvalidField,
+            "amqp:not-implemented" => AmqpError::NotImplemented,
+            "amqp:resource-locked" => AmqpError::ResourceLocked,
+            "amqp:precondition-failed" => AmqpError::PreconditionFailed,
+            "amqp:resource-deleted" => AmqpError::ResourceDeleted,
+            "amqp:illegal-state" => AmqpError::IllegalState,
+            "amqp:frame-size-too-small" => AmqpError::FrameSizeTooSmall,
+            _ => return Err(value),
+        };
+
+        Ok(val)
+    }
+}
+
 impl ser::Serialize for AmqpError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -70,24 +110,8 @@ impl<'de> de::Visitor<'de> for Visitor {
     where
         E: de::Error,
     {
-        let val = match v {
-            "amqp:internal-error" => AmqpError::InternalError,
-            "amqp:not-found" => AmqpError::NotFound,
-            "amqp:unauthorized-access" => AmqpError::UnauthorizedAccess,
-            "amqp:decode-error" => AmqpError::DecodeError,
-            "amqp:resource-limit-exceeded" => AmqpError::ResourceLimitExceeded,
-            "amqp:not-allowed" => AmqpError::NotAllowed,
-            "amqp:invalid-field" => AmqpError::InvalidField,
-            "amqp:not-implemented" => AmqpError::NotImplemented,
-            "amqp:resource-locked" => AmqpError::ResourceLocked,
-            "amqp:precondition-failed" => AmqpError::PreconditionFailed,
-            "amqp:resource-deleted" => AmqpError::ResourceDeleted,
-            "amqp:illegal-state" => AmqpError::IllegalState,
-            "amqp:frame-size-too-small" => AmqpError::FrameSizeTooSmall,
-            _ => return Err(de::Error::custom("Invalid symbol value for AmqpError")),
-        };
-
-        Ok(val)
+        v.try_into()
+            .map_err(|_| de::Error::custom("Invalid symbol value for AmqpError"))
     }
 }
 

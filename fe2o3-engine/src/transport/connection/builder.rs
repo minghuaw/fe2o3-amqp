@@ -211,7 +211,13 @@ impl Builder<WithContainerId> {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone()
         };
-        let mux = Mux::spawn(transport, local_state, local_open, remote_header, self.buffer_size)?;
+        let mux = Mux::spawn(
+            transport, 
+            local_state, 
+            local_open, 
+            // remote_header, 
+            self.buffer_size
+        )?;
         println!("Mux started");
 
         // open Connection

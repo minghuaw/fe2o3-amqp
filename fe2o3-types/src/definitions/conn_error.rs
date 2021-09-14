@@ -1,3 +1,5 @@
+use std::convert::{TryFrom, TryInto};
+
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
 
@@ -16,6 +18,31 @@ impl From<&ConnectionError> for Symbol {
             ConnectionError::Redirect => "amqp:connection:redirect",
         };
         Symbol::from(val)
+    }
+}
+
+impl TryFrom<Symbol> for ConnectionError {
+    type Error = Symbol;
+
+    fn try_from(value: Symbol) -> Result<Self, Self::Error> {
+        match value.as_str().try_into() {
+            Ok(val) => Ok(val),
+            Err(_) => Err(value)
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a str> for ConnectionError {
+    type Error = &'a str;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let val = match value {
+            "amqp:connection:forced" => ConnectionError::ConnectionForced,
+            "amqp:connection:framing-error" => ConnectionError::FramingError,
+            "amqp:connection:redirect" => ConnectionError::Redirect,
+            _ => return Err(value)
+        };
+        Ok(val)
     }
 }
 
@@ -48,17 +75,10 @@ impl<'de> de::Visitor<'de> for Visitor {
     where
         E: de::Error,
     {
-        let val = match v {
-            "amqp:connection:forced" => ConnectionError::ConnectionForced,
-            "amqp:connection:framing-error" => ConnectionError::FramingError,
-            "amqp:connection:redirect" => ConnectionError::Redirect,
-            _ => {
-                return Err(de::Error::custom(
-                    "Invalud symbol value for ConnectionError",
-                ))
-            }
-        };
-        Ok(val)
+        v.try_into()
+            .map_err(|_| de::Error::custom(
+                "Invalud symbol value for ConnectionError",
+            ))
     }
 }
 

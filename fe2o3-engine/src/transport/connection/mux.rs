@@ -57,7 +57,8 @@ pub struct Mux {
 
     remote_state: Option<ConnectionState>,
     remote_open: Option<Open>,
-    remote_header: ProtocolHeader,
+    remote_sessions: BTreeMap<InChanId, OutChanId>, // maps from remote channel id to local channel id
+    // remote_header: ProtocolHeader,
 
     // Sender to Connection Mux, should be cloned to a new session
     session_tx: Sender<SessionFrame>,
@@ -65,7 +66,7 @@ pub struct Mux {
     session_rx: Receiver<SessionFrame>,
     // Receiver from Connection
     control: Receiver<MuxControl>,
-    in_out_map: BTreeMap<InChanId, OutChanId>,
+
 }
 
 impl Mux {
@@ -75,7 +76,7 @@ impl Mux {
         transport: Transport<Io>, 
         local_state: ConnectionState, 
         local_open: Open, 
-        remote_header: ProtocolHeader, 
+        // remote_header: ProtocolHeader, 
         buffer_size: usize
     ) -> Result<MuxHandle, EngineError>
     where
@@ -95,14 +96,14 @@ impl Mux {
         let mux = Self {
             local_state,
             local_open,
+            local_sessions,
             remote_open: None,
             remote_state: None,
-            remote_header,
+            remote_sessions: BTreeMap::new(),
+            // remote_header,
             session_tx,
             session_rx,
             control: control_rx,
-            local_sessions,
-            in_out_map: BTreeMap::new()
         };
         let handle = tokio::spawn(mux.mux_loop(transport));
         Ok(MuxHandle {
@@ -281,7 +282,12 @@ impl Mux {
     where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        todo!()
+        match error {
+            EngineError::MaxFrameSizeExceeded => {
+                todo!()
+            },
+            _ => Running::Continue
+        }
     }
 
     #[inline]

@@ -15,6 +15,7 @@ mod builder;
 pub use builder::{Builder};
 pub mod mux;
 
+/// Incoming channel id / remote channel id
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InChanId(pub u16);
 
