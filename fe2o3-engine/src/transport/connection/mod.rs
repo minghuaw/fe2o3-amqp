@@ -15,6 +15,8 @@ mod builder;
 pub use builder::{Builder};
 pub mod mux;
 
+pub const MIN_MAX_FRAME_SIZE: u32 = 512;
+
 /// Incoming channel id / remote channel id
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InChanId(pub u16);

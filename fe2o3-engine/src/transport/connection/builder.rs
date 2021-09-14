@@ -8,7 +8,7 @@ use url::Url;
 
 use crate::{error::EngineError, transport::{Transport, connection::{ConnectionState, mux::Mux}}, transport::protocol_header::ProtocolHeader};
 
-use super::{Connection, mux::{self, DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
+use super::{Connection, MIN_MAX_FRAME_SIZE, mux::{self, DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
 
 pub struct WithoutContainerId {}
 pub struct WithContainerId {}
@@ -83,7 +83,9 @@ impl<Mode> Builder<Mode> {
     }
 
     pub fn max_frame_size(&mut self, max_frame_size: impl Into<MaxFrameSize>) -> &mut Self {
-        self.max_frame_size = max_frame_size.into();
+        let max_frame_size = max_frame_size.into();
+        let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size.0);
+        self.max_frame_size = MaxFrameSize::from(max_frame_size);
         self
     }
 
@@ -158,43 +160,13 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    // pub async fn create_connection<U>(self, address: U) -> Result<Connection<TcpStream>, EngineError> 
-    // where 
-    //     U: TryInto<Url, Error=url::ParseError>,
-    // {
-    //     let url: Url = address.try_into()
-    //         .map_err(|err| EngineError::UrlError(err))?;
-
-    //     match url.scheme() {
-    //         "amqp" => {
-    //             let addr = url.socket_addrs(|| Some(fe2o3_types::definitions::PORT))?;
-    //             let mut stream = TcpStream::connect(&*addr).await?;
-
-    //             // Negotiate and then bind
-    //             let remote_header = Transport::negotiate(&mut stream, ProtocolHeader::amqp()).await?;
-    //             let transport = Transport::bind(stream)?;
-
-    //             // Send Open frame
-    //             // let local_open =
-    //             todo!()
-    //         },
-    //         "amqps" => {
-    //             todo!()
-    //         }
-    //         _ => {
-    //             return Err(EngineError::Message("Invalid Url scheme"))
-    //         }
-    //     }
-    //     todo!()
-    // }
-
     pub async fn with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         // exchange header 
         let mut local_state = ConnectionState::Start;
-        let remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
+        let _remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
         let transport = Transport::bind(stream);
         println!("Header exchanged");
 
@@ -239,34 +211,6 @@ impl Builder<WithContainerId> {
                 println!("TcpStream connected");
 
                 self.with_stream(stream).await
-                
-                // // exchange header 
-                // let mut local_state = ConnectionState::Start;
-                // let remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
-                // let transport = Transport::bind(stream);
-                // println!("Header exchanged");
-
-                // // spawn Connection Mux
-                // let local_open = Open {
-                //     container_id: self.container_id.clone(),
-                //     hostname: self.hostname.clone(),
-                //     max_frame_size: self.max_frame_size.clone(),
-                //     channel_max: self.channel_max.clone(),
-                //     idle_time_out: self.idle_time_out.clone(),
-                //     outgoing_locales: self.outgoing_locales.clone(),
-                //     incoming_locales: self.incoming_locales.clone(),
-                //     offered_capabilities: self.offered_capabilities.clone(),
-                //     desired_capabilities: self.desired_capabilities.clone(),
-                //     properties: self.properties.clone()
-                // };
-                // let mux = Mux::spawn(transport, local_state, local_open, remote_header, self.buffer_size)?;
-                // println!("Mux started");
-
-                // // open Connection
-                // let mut connection = Connection::from(mux);
-                // connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
-                // println!("Openning");
-                // Ok(connection)
             },
             // TLS
             "amqps" => {
@@ -275,13 +219,6 @@ impl Builder<WithContainerId> {
             _ => return Err(EngineError::Message("Invalid Url Scheme"))
         }
     }
-
-    // pub async fn open_tls<Io>(&self, url: impl TryInto<Url, Error=url::ParseError>) -> Result<Connection<Io>, EngineError> 
-    // where 
-    //     Io: AsyncRead + AsyncWrite + Unpin,
-    // {
-    //     todo!()
-    // }
 
     pub async fn pipelined_open(&self, url: impl TryInto<Url>) -> Result<Connection, EngineError> {
         todo!()

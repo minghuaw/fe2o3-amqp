@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 use std::str::EncodeUtf16;
 
-use fe2o3_types::definitions::Error;
+use fe2o3_types::definitions::{AmqpError, ConnectionError, Error};
 use fe2o3_types::performatives::{Close, Open};
 use slab::Slab;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -278,15 +278,16 @@ impl Mux {
     }
 
     #[inline]
-    async fn handle_error<Io>(&mut self, transport: &mut Transport<Io>, error: EngineError) -> Running 
+    async fn handle_error<Io>(&mut self, transport: &mut Transport<Io>, error: EngineError) -> Result<Running, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         match error {
             EngineError::MaxFrameSizeExceeded => {
-                todo!()
+                let local_error = Error::from(ConnectionError::FramingError);
+                self.handle_close_send(transport, Some(local_error)).await
             },
-            _ => Running::Continue
+            _ => Ok(Running::Continue)
         }
     }
 
@@ -329,7 +330,22 @@ impl Mux {
         loop {
             let running = match self.mux_loop_inner(&mut transport).await {
                 Ok(running) => running,
-                Err(error) => self.handle_error(&mut transport, error).await
+                Err(error) => {
+                    match self.handle_error(&mut transport, error).await {
+                        Ok(r) => r,
+                        Err(err) => 
+                        {
+                            let local_error = Error::new(AmqpError::InternalError, Some(err.to_string()), None);
+                            match self.handle_close_send(&mut transport, Some(local_error)).await {
+                                Ok(r) => r,
+                                Err(err) => {
+                                    println!("!!! Internal error: {:?}. Likely unrecoverable. Closing the connection", err);
+                                    Running::Stop
+                                }
+                            }
+                        }
+                    }
+                }
             };
             if let Running::Stop = running {
                 return Ok(())

@@ -29,6 +29,19 @@ impl Error {
     }
 }
 
+impl<T> From<T> for Error 
+where 
+    T: Into<ErrorCondition>
+{
+    fn from(condition: T) -> Self {
+        Self {
+            condition: condition.into(),
+            description: None,
+            info: None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
