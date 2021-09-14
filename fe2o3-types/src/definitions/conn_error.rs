@@ -3,11 +3,19 @@ use std::convert::{TryFrom, TryInto};
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
 
+use super::ErrorCondition;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionError {
     ConnectionForced,
     FramingError,
     Redirect,
+}
+
+impl From<ConnectionError> for ErrorCondition {
+    fn from(err: ConnectionError) -> Self {
+        ErrorCondition::ConnectionError(err)
+    }
 }
 
 impl From<&ConnectionError> for Symbol {

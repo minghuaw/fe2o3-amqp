@@ -3,7 +3,6 @@ use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
 use fe2o3_amqp::{
-    macros::{DeserializeComposite, SerializeComposite},
     primitives::{Symbol, UInt},
     value::Value,
 };
@@ -66,18 +65,11 @@ pub type IetfLanguageTag = Symbol;
 pub type Fields = BTreeMap<Symbol, Value>;
 
 /// 2.8.14 Error
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:error:list",
-    code = 0x0000_0000_0000_001d,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Error {
-    condition: Symbol,
-    description: Option<String>,
-    info: Option<Fields>,
-}
+mod error;
+pub use error::Error;
+
+mod error_cond;
+pub use error_cond::ErrorCondition;
 
 /// 2.8.15 AMQP Error
 mod amqp_error;

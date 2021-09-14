@@ -4,6 +4,8 @@ use serde::{de, ser};
 
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 
+use super::ErrorCondition;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LinkError {
     DetachForced,
@@ -11,6 +13,12 @@ pub enum LinkError {
     MessageSizeExceeded,
     Redirect,
     Stolen,
+}
+
+impl From<LinkError> for ErrorCondition {
+    fn from(err: LinkError) -> Self {
+        ErrorCondition::LinkError(err)
+    }
 }
 
 impl From<&LinkError> for Symbol {

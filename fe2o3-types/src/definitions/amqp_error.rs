@@ -3,6 +3,8 @@ use std::convert::{TryFrom, TryInto};
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
 
+use super::ErrorCondition;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AmqpError {
     InternalError,
@@ -18,6 +20,12 @@ pub enum AmqpError {
     ResourceDeleted,
     IllegalState,
     FrameSizeTooSmall,
+}
+
+impl From<AmqpError> for ErrorCondition {
+    fn from(err: AmqpError) -> Self {
+        ErrorCondition::AmqpError(err)
+    }
 }
 
 impl From<&AmqpError> for Symbol {

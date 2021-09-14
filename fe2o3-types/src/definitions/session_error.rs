@@ -4,12 +4,20 @@ use serde::{de, ser};
 
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 
+use super::ErrorCondition;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionError {
     WindowViolation,
     ErrantLink,
     HandleInUse,
     UnattachedHandle,
+}
+
+impl From<SessionError> for ErrorCondition {
+    fn from(err: SessionError) -> Self {
+        ErrorCondition::SessionError(err)
+    }
 }
 
 impl From<&SessionError> for Symbol {
