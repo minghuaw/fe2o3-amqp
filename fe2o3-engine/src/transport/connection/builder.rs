@@ -1,8 +1,7 @@
-use std::{convert::{TryFrom, TryInto}, marker::PhantomData, sync::Arc};
+use std::{convert::{TryInto}, marker::PhantomData};
 
 use fe2o3_amqp::primitives::{Symbol};
 use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
-use serde::de::Unexpected;
 use tokio::{io::{AsyncRead, AsyncWrite}, net::TcpStream};
 use url::Url;
 

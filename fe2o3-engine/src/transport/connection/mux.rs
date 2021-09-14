@@ -1,6 +1,5 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
-use std::str::EncodeUtf16;
 
 use fe2o3_types::definitions::{AmqpError, ConnectionError, Error};
 use fe2o3_types::performatives::{Close, Open};
@@ -9,11 +8,10 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 
-use futures_util::{Sink, SinkExt, Stream, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
-use crate::transport::protocol_header::ProtocolHeader;
 use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
 use crate::util::Running;
@@ -209,6 +207,7 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        // TODO: how to handle or log remote close?
         match &self.local_state {
             ConnectionState::Opened => {
                 self.local_state = ConnectionState::CloseReceived;
