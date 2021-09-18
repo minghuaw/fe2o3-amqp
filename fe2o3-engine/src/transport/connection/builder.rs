@@ -175,7 +175,8 @@ impl Builder<WithContainerId> {
             hostname: self.hostname.clone(),
             max_frame_size: self.max_frame_size.clone(),
             channel_max: self.channel_max.clone(),
-            idle_time_out: self.idle_time_out.clone(),
+            // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
+            idle_time_out: self.idle_time_out.clone().map(|v| v/2), 
             outgoing_locales: self.outgoing_locales.clone(),
             incoming_locales: self.incoming_locales.clone(),
             offered_capabilities: self.offered_capabilities.clone(),

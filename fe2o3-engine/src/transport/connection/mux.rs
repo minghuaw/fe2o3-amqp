@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use fe2o3_types::definitions::{AmqpError, ConnectionError, Error};
 use fe2o3_types::performatives::{Close, Open};
@@ -8,7 +9,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 
-use futures_util::{Sink, SinkExt, StreamExt};
+use futures_util::{FutureExt, Sink, SinkExt, StreamExt};
+use tokio_util::either::Either;
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
@@ -188,7 +190,7 @@ impl Mux {
     async fn handle_close_recv<Io>(
         &mut self, 
         transport: &mut Transport<Io>, 
-        remote_close: Close, 
+        _remote_close: Close, 
     ) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
@@ -290,6 +292,23 @@ impl Mux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: Connection State: {:?}", &self.local_state);
+
+        let incoming_fut = match self.local_open.idle_time_out {
+            None => Either::Left(transport.next()),
+            Some(millis) => {
+                Either::Right(
+                    tokio::time::timeout(
+                        Duration::from_millis(millis as u64 * 2), 
+                        transport.next()
+                    )
+                    .map(move |res| match res {
+                        Ok(opt) => opt,
+                        Err(_elapsed) => Some(Err(EngineError::IdleTimeout(Duration::from_millis(millis as u64 * 2))))
+                    })
+                )
+            },
+        };
+
         tokio::select! {
             // local controls
             control = self.control.recv() => {
@@ -304,7 +323,7 @@ impl Mux {
                 }
             },
             // incoming frames
-            next = transport.next() => {
+            next = incoming_fut => {
                 match next {
                     Some(item) => self.handle_incoming(transport, item).await,
                     None => self.handle_unexpected_eof().await

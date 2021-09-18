@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use thiserror::Error;
 
 use crate::transport::connection::ConnectionState;
@@ -30,6 +32,9 @@ pub enum EngineError {
 
     #[error("Invalid Connection State {0:?}")]
     UnexpectedConnectionState(ConnectionState),
+
+    #[error("Connection error idle timeout {0:?}")]
+    IdleTimeout(Duration),
 
     #[error("{0}")]
     Message(&'static str),
