@@ -630,7 +630,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArrayElement::False
-        println!(">>> Debug serialize_seq");
+        println!(">>> Debug: serialize_seq");
         Ok(SeqSerializer::new(self))
     }
 
@@ -641,7 +641,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // This will be encoded as primitive type `List`
     #[inline]
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        println!(">>> Debug serialize_tuple");
+        println!(">>> Debug: serialize_tuple");
         Ok(TupleSerializer::new(self, len))
     }
 

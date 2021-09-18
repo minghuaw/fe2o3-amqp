@@ -105,7 +105,7 @@ impl Descriptor {
 //     where
 //         A: de::EnumAccess<'de>,
 //     {
-//         println!(">>> Debug visit_enum");
+//         println!(">>> Debug: visit_enum");
 //         let (val, de) = data.variant()?;
 //         match val {
 //             Field::Name => {

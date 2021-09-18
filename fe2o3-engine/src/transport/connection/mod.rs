@@ -1,15 +1,12 @@
-use std::{collections::{BTreeMap, HashMap}, convert::TryInto, marker::{self, PhantomData}, sync::Arc};
+use std::{convert::TryInto};
 
 use crate::error::EngineError;
 pub use crate::transport::Transport;
-use fe2o3_types::{definitions::{Error, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
-use slab::Slab;
-use tokio::{net::TcpStream, sync::{Mutex, mpsc::{Sender, Receiver}}};
+use fe2o3_types::{performatives::{ChannelMax, MaxFrameSize}};
 use url::Url;
 
 use self::{builder::WithoutContainerId, mux::MuxHandle};
 
-use super::{amqp::{Frame, FrameBody}, protocol_header::ProtocolHeader, session::{SessionFrame, SessionHandle}};
 
 mod builder;
 pub use builder::{Builder};
@@ -133,45 +130,21 @@ mod tests {
     #[tokio::test]
     async fn test_connection_codec() {
         use tokio_test::io::Builder;
+        /* tokio_test doesn't seem to handle spawning new tasks */
         let mock = Builder::new()
             .write(b"AMQP")
             .write(&[0, 1, 0, 0])
             .read(b"AMQP")
             .read(&[0, 1, 0, 0])
-            /* tokio_test doesn't seem to handle spawning new tasks */
-            // .write(&[0x0, 0x0, 0x0, 0x26])
-            // .write(&[0x02, 0x0, 0x0, 0x0])
-            // .write(&[
-            //     0x00, 0x53, 0x10, 0xC0, 0x19, 0x05, 0xA1, 0x04, 0x31, 0x32, 
-            //     0x33, 0x34, 0xA1, 0x09, 0x31, 0x32, 0x37, 0x2E, 0x30, 0x2E, 
-            //     0x30, 0x2E, 0x31, 0x52, 0x64, 0x60, 0x00, 0x09, 0x52, 0x0A
-            // ])
             .build();
 
-            let connection = Connection::builder()
-                .container_id("1234")
-                .hostname("127.0.0.1")
-                .max_frame_size(100)
-                .channel_max(9)
-                .idle_time_out(10u32)
-                .with_stream(mock).await
-                .unwrap();
-
-
-        // let open = Open{
-        //     container_id: "1234".into(),
-        //     hostname: Some("127.0.0.1".into()), 
-        //     max_frame_size: 100.into(),
-        //     channel_max: 9.into(),
-        //     idle_time_out: Some(10),
-        //     outgoing_locales: None,
-        //     incoming_locales: None,
-        //     offered_capabilities: None,
-        //     desired_capabilities: None,
-        //     properties: None
-        // };
-
-        // let vec = to_vec(&open).unwrap();
-        // println!("{:x?}", vec);
+        let _ = Connection::builder()
+            .container_id("1234")
+            .hostname("127.0.0.1")
+            .max_frame_size(100)
+            .channel_max(9)
+            .idle_time_out(10u32)
+            .with_stream(mock).await
+            .unwrap();
     }
 }

@@ -111,8 +111,6 @@ where
         let mut encoder = FrameCodec {};
         encoder.encode(item, &mut bytesmut)?;
 
-        println!(">>> Debug start_send() encoded: {:?}", &bytesmut);
-
         let this = self.project();
         this.framed
             .start_send(Bytes::from(bytesmut))

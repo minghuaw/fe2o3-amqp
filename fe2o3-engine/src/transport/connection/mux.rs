@@ -32,12 +32,6 @@ pub struct MuxHandle {
 }
 
 impl MuxHandle {
-    pub async fn stop(&mut self) -> Result<(), EngineError> {
-        // self.control.send(MuxControl::Stop).await
-        //     .map_err(|_| EngineError::Message("SendError"))
-        todo!()
-    }
-
     pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
         &mut self.control
     }
@@ -124,6 +118,8 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        println!(">>> Debug: handle_open_send()");
+
         // State transition (Fig. 2.23)
         // Return early to avoid sending Open when it's not supposed to
         match &self.local_state {
@@ -146,6 +142,8 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        println!(">>> Debug: handle_open_recv()");
+
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
@@ -168,7 +166,7 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        println!("{:?}", &self.local_state);
+        println!(">>> Debug: handle_close_send()");
         // check state first, and return early if state is wrong
         match &self.local_state {
             ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,
@@ -195,6 +193,7 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        println!(">>> Debug: handle_close_recv()");
         // TODO: how to handle or log remote close?
         match &self.local_state {
             ConnectionState::Opened => {
@@ -234,6 +233,7 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        println!(">>> Debug: handle_incoming()");
         let Frame{channel, body} = item?;
         match body {
             FrameBody::Open{performative} => self.handle_open_recv(transport, performative).await,
@@ -289,6 +289,7 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        println!(">>> Debug: Connection State: {:?}", &self.local_state);
         tokio::select! {
             // local controls
             control = self.control.recv() => {
@@ -320,8 +321,6 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Send + Unpin
     {
-        // let (mut writer, mut reader) = transport.split();
-
         loop {
             let running = match self.mux_loop_inner(&mut transport).await {
                 Ok(running) => running,
@@ -335,7 +334,6 @@ impl Mux {
                                 Ok(r) => r,
                                 Err(err) => {
                                     println!("!!! Internal error: {:?}. Likely unrecoverable. Closing the connection", err);
-                                    // Running::Stop
                                     self.local_state = ConnectionState::End;
                                     &self.local_state
                                 }

@@ -379,7 +379,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug parse_described_basic");
+        println!(">>> Debug: parse_described_basic");
         // consume the EncodingCodes::Described byte
         match self.reader.next()?.try_into()? {
             EncodingCodes::DescribedType => {}
@@ -581,7 +581,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_u64");
+        println!(">>> Debug: deserialize_u64");
         visitor.visit_u64(self.parse_u64()?)
     }
 
@@ -649,7 +649,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_byte_buf");
+        println!(">>> Debug: deserialize_byte_buf");
         visitor.visit_byte_buf(self.parse_byte_buf()?)
         // match self.new_type {
         //     NewType::None => visitor.visit_byte_buf(self.parse_byte_buf()?),
@@ -669,7 +669,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_bytes");
+        println!(">>> Debug: deserialize_bytes");
         match self.new_type {
             // Use bytes to reduce number of memcpy
             NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
@@ -736,7 +736,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_newtype_struct {:?}", name);
+        println!(">>> Debug: deserialize_newtype_struct {:?}", name);
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
             // Leave symbol as visit_string because serde(untagged)
@@ -766,7 +766,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_seq");
+        println!(">>> Debug: deserialize_seq");
 
         let code = self.get_elem_code_or_read_format_code()?;
 
@@ -840,7 +840,7 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_tuple");
+        println!(">>> Debug: deserialize_tuple");
 
         // Tuple will always be deserialized as List
         let code = self.get_elem_code_or_read_format_code()?;
@@ -989,12 +989,12 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug deserialize_enum");
+        println!(">>> Debug: deserialize_enum");
         if name == VALUE {
             self.enum_type = EnumType::Value;
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == DESCRIPTOR {
-            println!(">>> Debug EnumType::Descriptor");
+            println!(">>> Debug: EnumType::Descriptor");
             self.enum_type = EnumType::Descriptor;
             visitor.visit_enum(VariantAccess::new(self))
         } else {
@@ -1030,7 +1030,7 @@ where
                 }
                 // Symbols appears in the transport errors
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
-                    println!(">>> Debug EncodingCodes::Sym32 | Sym8");
+                    println!(">>> Debug: EncodingCodes::Sym32 | Sym8");
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 // for newtype variant of described type
@@ -1048,7 +1048,7 @@ where
         match self.enum_type {
             EnumType::Value => {
                 let code = self.get_elem_code_or_peek_byte()?;
-                println!(">>> Debug deserialize_identifier {:x?}", &code);
+                println!(">>> Debug: deserialize_identifier {:x?}", &code);
                 visitor.visit_u8(code)
             }
             EnumType::Descriptor => {
@@ -1067,7 +1067,7 @@ where
                     }
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
-                        println!(">>> Debug EncodingCodes::Sym32 | Sym8");
+                        println!(">>> Debug: EncodingCodes::Sym32 | Sym8");
                         self.deserialize_newtype_struct(SYMBOL, visitor)
                     }
                     // Potentially using `Descriptor::Code` as identifier
@@ -1285,7 +1285,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        println!(">>> Debug VariantAccess::unit_variant");
+        println!(">>> Debug: VariantAccess::unit_variant");
         Ok(())
     }
 
@@ -1293,7 +1293,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug VariantAccess::newtype_variant_seed");
+        println!(">>> Debug: VariantAccess::newtype_variant_seed");
         seed.deserialize(self.de)
     }
 
@@ -1301,7 +1301,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug VariantAccess::tuple_variant");
+        println!(">>> Debug: VariantAccess::tuple_variant");
         de::Deserializer::deserialize_tuple(self.de, len, visitor)
     }
 
@@ -1313,7 +1313,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug VariantAccess::struct_variant");
+        println!(">>> Debug: VariantAccess::struct_variant");
         de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }
 }

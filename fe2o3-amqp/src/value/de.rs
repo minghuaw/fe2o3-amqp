@@ -60,7 +60,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     where
         E: de::Error,
     {
-        println!(">>> Debug visit_u8 {:x?}", v);
+        println!(">>> Debug: visit_u8 {:x?}", v);
 
         let field = match v
             .try_into()
