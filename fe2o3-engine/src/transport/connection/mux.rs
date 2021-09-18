@@ -217,7 +217,9 @@ impl Mux {
                     FrameBody::Close{ performative: Close { error: None } }
                 );
                 transport.send(frame).await?;
-                Ok(Running::Continue)
+                // transition to End state
+                self.local_state = ConnectionState::End;
+                Ok(Running::Stop)
             },
             ConnectionState::CloseSent => {
                 self.local_state = ConnectionState::End;
@@ -299,21 +301,21 @@ impl Mux {
             // local controls
             control = self.control.recv() => {
                 match control {
-                    Some(control) => {
-                        match control {
-                            MuxControl::Open => self.handle_open_send(transport).await,
-                            MuxControl::Close => self.handle_close_send(transport, None).await,
-                        }
+                    Some(control) => match control {
+                        MuxControl::Open => self.handle_open_send(transport).await,
+                        MuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => return self.handle_unexpected_drop().await
                 }
             },
+            // incoming frames
             next = transport.next() => {
                 match next {
                     Some(item) => return self.handle_incoming(transport, item).await,
                     None => return self.handle_unexpected_eof().await
                 }
-            }
+            },
+            // outgoing frames
             next = self.session_rx.recv() => {
                 todo!()
             }
