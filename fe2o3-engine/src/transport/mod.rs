@@ -45,13 +45,13 @@ impl<Io> Transport<Io>
 where 
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn bind(io: Io) -> Self {
+    pub fn bind(io: Io, max_frame_size: usize) -> Self {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
             // Prior to any explicit negotiation, 
             // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
-            .max_frame_length(512) // change max frame size later in negotiation
+            .max_frame_length(max_frame_size) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
         Self { framed }
@@ -238,7 +238,7 @@ mod tests {
                 0x30, 0x2E, 0x31, 0x52, 0x64, 0x60, 0x00, 0x09, 0x52, 0x0A
             ])
             .build();
-        let mut transport = Transport::bind(mock);
+        let mut transport = Transport::bind(mock, 512);
 
         let open = Open{
             container_id: "1234".into(),
