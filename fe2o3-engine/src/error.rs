@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use fe2o3_types::definitions::{AmqpError, ConnectionError};
 use thiserror::Error;
 
 use crate::transport::connection::ConnectionState;
@@ -33,6 +34,12 @@ pub enum EngineError {
     #[error("Invalid Connection State {0:?}")]
     UnexpectedConnectionState(ConnectionState),
 
+    #[error("AMQP Error: {0:?}")]
+    AmqpError(#[from] AmqpError),
+
+    #[error("Connection Error {0:?}")]
+    ConnectionError(#[from] ConnectionError),
+
     #[error("Connection error idle timeout")]
     IdleTimeout,
 
@@ -43,5 +50,13 @@ pub enum EngineError {
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for EngineError {
     fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
         Self::Message("SendError")
+    }
+}
+
+
+impl EngineError {
+    /// The peer sent a frame that is not permitted in the current state.
+    pub fn illegal_state() -> Self {
+        Self::AmqpError(AmqpError::IllegalState)
     }
 }

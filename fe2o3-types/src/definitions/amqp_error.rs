@@ -1,4 +1,4 @@
-use std::convert::{TryFrom, TryInto};
+use std::{convert::{TryFrom, TryInto}, fmt::{Debug, Display}};
 
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
@@ -21,6 +21,14 @@ pub enum AmqpError {
     IllegalState,
     FrameSizeTooSmall,
 }
+
+impl Display for AmqpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self, f)
+    }
+}
+
+impl std::error::Error for AmqpError { }
 
 impl From<AmqpError> for ErrorCondition {
     fn from(err: AmqpError) -> Self {

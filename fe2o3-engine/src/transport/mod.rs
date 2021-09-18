@@ -95,6 +95,14 @@ where
         self
     }
 
+    pub fn idle_timeout(&self) -> &Option<IdleTimeout> {
+        &self.idle_timeout
+    }
+
+    pub fn idle_timeout_mut(&mut self) -> &mut Option<IdleTimeout> {
+        &mut self.idle_timeout
+    }
+
     pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
         self.idle_timeout = Some(IdleTimeout::new(duration));
         self

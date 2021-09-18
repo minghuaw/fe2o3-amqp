@@ -150,7 +150,7 @@ impl Mux {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
             ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            _ => return Err(EngineError::illegal_state())
         }
         // FIXME: is there anything we need to check?
         let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
@@ -213,7 +213,7 @@ impl Mux {
                 self.local_state = ConnectionState::End;
             },
             // other states are invalid
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            s @ _ => return Err(EngineError::illegal_state())
         };
         Ok(&self.local_state)
     }
