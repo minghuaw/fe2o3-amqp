@@ -33,8 +33,8 @@ pub enum EngineError {
     #[error("Invalid Connection State {0:?}")]
     UnexpectedConnectionState(ConnectionState),
 
-    #[error("Connection error idle timeout {0:?}")]
-    IdleTimeout(Duration),
+    #[error("Connection error idle timeout")]
+    IdleTimeout,
 
     #[error("{0}")]
     Message(&'static str),

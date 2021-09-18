@@ -278,6 +278,10 @@ impl Mux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         match error {
+            EngineError::IdleTimeout => {
+                println!("Idle timeout");
+                todo!()
+            },
             EngineError::MaxFrameSizeExceeded => {
                 let local_error = Error::from(ConnectionError::FramingError);
                 self.handle_close_send(transport, Some(local_error)).await
@@ -293,21 +297,21 @@ impl Mux {
     {
         println!(">>> Debug: Connection State: {:?}", &self.local_state);
 
-        let incoming_fut = match self.local_open.idle_time_out {
-            None => Either::Left(transport.next()),
-            Some(millis) => {
-                Either::Right(
-                    tokio::time::timeout(
-                        Duration::from_millis(millis as u64 * 2), 
-                        transport.next()
-                    )
-                    .map(move |res| match res {
-                        Ok(opt) => opt,
-                        Err(_elapsed) => Some(Err(EngineError::IdleTimeout(Duration::from_millis(millis as u64 * 2))))
-                    })
-                )
-            },
-        };
+        // let incoming_fut = match self.local_open.idle_time_out {
+        //     None => Either::Left(transport.next()),
+        //     Some(millis) => {
+        //         Either::Right(
+        //             tokio::time::timeout(
+        //                 Duration::from_millis(millis as u64 * 2), 
+        //                 transport.next()
+        //             )
+        //             .map(move |res| match res {
+        //                 Ok(opt) => opt,
+        //                 Err(_elapsed) => Some(Err(EngineError::IdleTimeout))
+        //             })
+        //         )
+        //     },
+        // };
 
         tokio::select! {
             // local controls
@@ -323,7 +327,7 @@ impl Mux {
                 }
             },
             // incoming frames
-            next = incoming_fut => {
+            next = transport.next() => {
                 match next {
                     Some(item) => self.handle_incoming(transport, item).await,
                     None => self.handle_unexpected_eof().await

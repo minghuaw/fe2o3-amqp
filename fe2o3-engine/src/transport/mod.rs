@@ -19,15 +19,15 @@ pub mod endpoint;
 
 /* -------------------------------- Transport ------------------------------- */
 
-use std::{convert::TryFrom, task::Poll};
+use std::{convert::TryFrom, pin::Pin, task::Poll, time::Duration};
 
 use bytes::{Bytes, BytesMut};
-use futures_util::{Sink, Stream};
+use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}};
+use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}, time::Sleep};
 use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError};
 
-use crate::error::EngineError;
+use crate::{error::EngineError, util::IdleTimeout};
 
 use amqp::{Frame, FrameCodec};
 use protocol_header::{ProtocolHeader};
@@ -38,6 +38,8 @@ pin_project! {
     pub struct Transport<Io> {
         #[pin]
         framed: Framed<Io, LengthDelimitedCodec>,
+        #[pin]
+        idle_timeout: Option<IdleTimeout>
     }
 }
 
@@ -45,7 +47,7 @@ impl<Io> Transport<Io>
 where 
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn bind(io: Io, max_frame_size: usize) -> Self {
+    pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
@@ -54,7 +56,9 @@ where
             .max_frame_length(max_frame_size) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
-        Self { framed }
+        let idle_timeout = idle_timeout.map(|duration| IdleTimeout::new(duration));
+
+        Self { framed, idle_timeout }
     }
 
     pub async fn negotiate(
@@ -88,6 +92,11 @@ where
 
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         self.framed.codec_mut().set_max_frame_length(max_frame_size);
+        self
+    }
+
+    pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
+        self.idle_timeout = Some(IdleTimeout::new(duration));
         self
     }
 }
@@ -142,9 +151,14 @@ where
 
     fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         let this = self.project();
+
+        // First poll codec
         match this.framed.poll_next(cx) {
-            Poll::Pending => Poll::Pending,
             Poll::Ready(next) => {
+                if let Some(mut delay) = this.idle_timeout.as_pin_mut() {
+                    delay.reset();
+                }
+
                 match next {
                     Some(item) => {
                         let mut src = match item {
@@ -165,7 +179,18 @@ where
                     },
                     None => Poll::Ready(None)
                 }
-            }
+            },
+            Poll::Pending => {
+                // check if idle timeout has exceeded
+                if let Some(delay) = this.idle_timeout.as_pin_mut() {
+                    match delay.poll(cx) {
+                        Poll::Ready(()) => return Poll::Ready(Some(Err(EngineError::IdleTimeout))),
+                        Poll::Pending => return Poll::Pending
+                    }
+                }
+
+                Poll::Pending
+            },
         }
     }
 }
@@ -239,7 +264,7 @@ mod tests {
                 0x09, 0x52, 0x05
             ])
             .build();
-        let mut transport = Transport::bind(mock, 1000);
+        let mut transport = Transport::bind(mock, 1000, None);
 
         let open = Open{
             container_id: "1234".into(),

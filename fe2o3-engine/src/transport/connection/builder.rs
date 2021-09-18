@@ -1,4 +1,4 @@
-use std::{convert::{TryInto}, marker::PhantomData};
+use std::{convert::{TryInto}, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp::primitives::{Symbol};
 use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
@@ -166,7 +166,8 @@ impl Builder<WithContainerId> {
         // exchange header 
         let mut local_state = ConnectionState::Start;
         let _remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
-        let transport = Transport::bind(stream, self.max_frame_size.0 as usize);
+        let idle_timeout = self.idle_time_out.map(|millis| Duration::from_millis(millis as u64)); 
+        let transport = Transport::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
         println!("Header exchanged");
 
         // spawn Connection Mux
