@@ -14,7 +14,6 @@ use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
 use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
-use crate::util::Running;
 
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -111,17 +110,17 @@ impl Mux {
     }
 
     #[inline]
-    async fn handle_unexpected_drop(&mut self) -> Result<Running, EngineError> {
+    async fn handle_unexpected_drop(&mut self) -> Result<&ConnectionState, EngineError> {
         todo!()
     }
 
     #[inline]
-    async fn handle_unexpected_eof(&mut self) -> Result<Running, EngineError> {
+    async fn handle_unexpected_eof(&mut self) -> Result<&ConnectionState, EngineError> {
         todo!()
     }
 
     #[inline]
-    async fn handle_open_send<Io>(&mut self, transport: &mut Transport<Io>) -> Result<Running, EngineError> 
+    async fn handle_open_send<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -139,11 +138,11 @@ impl Mux {
         );
         transport.send(frame).await?;
         println!("Sent frame");
-        Ok(Running::Continue)
+        Ok(&self.local_state)
     }
 
     #[inline]
-    async fn handle_open_recv<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Open) -> Result<Running, EngineError> 
+    async fn handle_open_recv<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Open) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -157,7 +156,7 @@ impl Mux {
         let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
         transport.set_max_frame_size(max_frame_size as usize);
         self.remote_open = Some(remote_open);
-        Ok(Running::Continue)
+        Ok(&self.local_state)
     }
 
     #[inline]
@@ -165,28 +164,17 @@ impl Mux {
         &mut self, 
         transport: &mut Transport<Io>, 
         local_error: Option<Error>, 
-    ) -> Result<Running, EngineError> 
+    ) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!("{:?}", &self.local_state);
-        let result = match &self.local_state {
-            ConnectionState::Opened => {
-                self.local_state = ConnectionState::CloseSent;
-                Ok(Running::Continue)
-            },
-            ConnectionState::CloseReceived => {
-                self.local_state = ConnectionState::End;
-                Ok(Running::Stop)
-            },
-            ConnectionState::OpenSent => {
-                self.local_state = ConnectionState::ClosePipe;
-                Ok(Running::Continue)
-            },
-            ConnectionState::OpenPipe => {
-                self.local_state = ConnectionState::OpenClosePipe;
-                Ok(Running::Continue)
-            },
+        // check state first, and return early if state is wrong
+        match &self.local_state {
+            ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,
+            ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
+            ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
+            ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
             s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
         };
 
@@ -195,7 +183,7 @@ impl Mux {
             FrameBody::Close{performative: Close { error: local_error } }
         );
         transport.send(frame).await?;
-        result
+        Ok(&self.local_state)
     }
 
     #[inline]
@@ -203,7 +191,7 @@ impl Mux {
         &mut self, 
         transport: &mut Transport<Io>, 
         remote_close: Close, 
-    ) -> Result<Running, EngineError> 
+    ) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -219,19 +207,18 @@ impl Mux {
                 transport.send(frame).await?;
                 // transition to End state
                 self.local_state = ConnectionState::End;
-                Ok(Running::Stop)
             },
             ConnectionState::CloseSent => {
                 self.local_state = ConnectionState::End;
-                Ok(Running::Stop)
             },
             // other states are invalid
             s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
-        }
+        };
+        Ok(&self.local_state)
     }
 
     #[inline]
-    async fn handle_new_session(&mut self) -> Result<(), EngineError> {
+    async fn handle_new_session(&mut self) -> Result<&ConnectionState, EngineError> {
         todo!()
         // get new entry index
         // create new session
@@ -243,7 +230,7 @@ impl Mux {
         &mut self,
         transport: &mut Transport<Io>,
         item: Result<Frame, EngineError>,
-    ) -> Result<Running, EngineError> 
+    ) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -260,27 +247,31 @@ impl Mux {
         &mut self,
         item: Frame,
         writer: &mut W,
-    ) -> Result<(), EngineError> 
+    ) -> Result<&ConnectionState, EngineError> 
     where 
         W: Sink<Frame, Error = EngineError> + Unpin
     {
-        // get outgoing channel id
-        let chan = OutChanId::from(item.channel());
-        // send frames out
-        if let Err(err) = writer.send(item).await {
-            if let Some(session) = self.local_sessions.get_mut(chan.0 as usize) {
-                session.sender_mut()
-                    .send(Err(err)).await
-                    .map_err(|_| EngineError::Message("SendError"))?;
-            } else {
-                return Err(err)
-            }
-        }
-        Ok(())
+        // // get outgoing channel id
+        // let chan = OutChanId::from(item.channel());
+        // // send frames out
+        // if let Err(err) = writer.send(item).await {
+        //     if let Some(session) = self.local_sessions.get_mut(chan.0 as usize) {
+        //         session.sender_mut()
+        //             .send(Err(err)).await
+        //             .map_err(|_| EngineError::Message("SendError"))?;
+        //     } else {
+        //         return Err(err)
+        //     }
+        // }
+        // Ok(&self.local_state)
+
+        // looks like wrong
+
+        todo!()
     }
 
     #[inline]
-    async fn handle_error<Io>(&mut self, transport: &mut Transport<Io>, error: EngineError) -> Result<Running, EngineError>
+    async fn handle_error<Io>(&mut self, transport: &mut Transport<Io>, error: EngineError) -> Result<&ConnectionState, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -289,12 +280,12 @@ impl Mux {
                 let local_error = Error::from(ConnectionError::FramingError);
                 self.handle_close_send(transport, Some(local_error)).await
             },
-            _ => Ok(Running::Continue)
+            _ => Ok(&self.local_state)
         }
     }
 
     #[inline]
-    async fn mux_loop_inner<Io>(&mut self, transport: &mut Transport<Io>) -> Result<Running, EngineError> 
+    async fn mux_loop_inner<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -306,14 +297,16 @@ impl Mux {
                         MuxControl::Open => self.handle_open_send(transport).await,
                         MuxControl::Close => self.handle_close_send(transport, None).await,
                     },
-                    None => return self.handle_unexpected_drop().await
+                    None => {
+                        self.handle_unexpected_drop().await
+                    }
                 }
             },
             // incoming frames
             next = transport.next() => {
                 match next {
-                    Some(item) => return self.handle_incoming(transport, item).await,
-                    None => return self.handle_unexpected_eof().await
+                    Some(item) => self.handle_incoming(transport, item).await,
+                    None => self.handle_unexpected_eof().await
                 }
             },
             // outgoing frames
@@ -342,14 +335,16 @@ impl Mux {
                                 Ok(r) => r,
                                 Err(err) => {
                                     println!("!!! Internal error: {:?}. Likely unrecoverable. Closing the connection", err);
-                                    Running::Stop
+                                    // Running::Stop
+                                    self.local_state = ConnectionState::End;
+                                    &self.local_state
                                 }
                             }
                         }
                     }
                 }
             };
-            if let Running::Stop = running {
+            if let ConnectionState::End = running {
                 return Ok(())
             }
         }

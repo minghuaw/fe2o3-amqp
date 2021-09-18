@@ -15,5 +15,4 @@ async fn main() {
         .unwrap();
 
     connection.close().await.unwrap();
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 }
