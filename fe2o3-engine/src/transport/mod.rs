@@ -230,22 +230,23 @@ mod tests {
         // let mut transport = Transport::bind(io);
 
         let mock = tokio_test::io::Builder::new()
-            .write(&[0x0, 0x0, 0x0, 0x26])
+            .write(&[0x0, 0x0, 0x0, 0x29])
             .write(&[0x02, 0x0, 0x0, 0x0])
             .write(&[
-                0x00, 0x53, 0x10, 0xC0, 0x19, 0x05, 0xA1, 0x04, 0x31, 0x32, 
+                0x00, 0x53, 0x10, 0xC0, 0x1c, 0x05, 0xA1, 0x04, 0x31, 0x32, 
                 0x33, 0x34, 0xA1, 0x09, 0x31, 0x32, 0x37, 0x2E, 0x30, 0x2E, 
-                0x30, 0x2E, 0x31, 0x52, 0x64, 0x60, 0x00, 0x09, 0x52, 0x0A
+                0x30, 0x2E, 0x31, 0x70, 0x00,  0x00, 0x03, 0xe8, 0x60, 0x00, 
+                0x09, 0x52, 0x05
             ])
             .build();
-        let mut transport = Transport::bind(mock, 512);
+        let mut transport = Transport::bind(mock, 1000);
 
         let open = Open{
             container_id: "1234".into(),
             hostname: Some("127.0.0.1".into()), 
-            max_frame_size: 100.into(),
+            max_frame_size: 1000.into(),
             channel_max: 9.into(),
-            idle_time_out: Some(10),
+            idle_time_out: Some(5),
             outgoing_locales: None,
             incoming_locales: None,
             offered_capabilities: None,

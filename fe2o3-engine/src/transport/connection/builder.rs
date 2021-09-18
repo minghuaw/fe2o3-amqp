@@ -166,7 +166,7 @@ impl Builder<WithContainerId> {
         // exchange header 
         let mut local_state = ConnectionState::Start;
         let _remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
-        let transport = Transport::bind(stream);
+        let transport = Transport::bind(stream, self.max_frame_size.0 as usize);
         println!("Header exchanged");
 
         // spawn Connection Mux
