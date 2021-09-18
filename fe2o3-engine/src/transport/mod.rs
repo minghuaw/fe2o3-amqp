@@ -73,14 +73,16 @@ where
         let mut inbound_buf = [0u8; 8];
         io.read_exact(&mut inbound_buf).await?;
 
-        // State transition
-        *local_state = ConnectionState::HeaderExchange;
-
         // check header
         let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
         if incoming_header != proto_header {
+            *local_state = ConnectionState::End;
             return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
         }
+
+        // State transition
+        *local_state = ConnectionState::HeaderExchange;
+
         Ok(incoming_header)
     }
 

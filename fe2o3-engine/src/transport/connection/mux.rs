@@ -225,6 +225,7 @@ impl Mux {
                 self.local_state = ConnectionState::End;
                 Ok(Running::Stop)
             },
+            // other states are invalid
             s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
         }
     }
