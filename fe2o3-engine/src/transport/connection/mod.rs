@@ -9,6 +9,7 @@ use self::{builder::WithoutContainerId, mux::MuxHandle};
 
 
 mod builder;
+mod heartbeat;
 pub use builder::{Builder};
 pub mod mux;
 
