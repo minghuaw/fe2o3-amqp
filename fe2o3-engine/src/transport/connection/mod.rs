@@ -97,12 +97,13 @@ impl Connection {
     }
 
     pub async fn close(&mut self) -> Result<(), EngineError> {
-        self.mux.control_mut().send(mux::MuxControl::Close).await?;
-        // Ok(())
-        match self.mux.handle_mut().await {
-            Ok(res) => res,
-            Err(_) => Err(EngineError::Message("JoinError"))
-        }
+        // self.mux.control_mut().send(mux::MuxControl::Close).await?;
+        // // Ok(())
+        // match self.mux.handle_mut().await {
+        //     Ok(res) => res,
+        //     Err(_) => Err(EngineError::Message("JoinError"))
+        // }
+        self.mux.close().await
     }
 
     pub fn mux(&self) -> &MuxHandle {

@@ -21,7 +21,7 @@ pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 use super::{ConnectionState, InChanId, OutChanId};
 
 pub enum MuxControl {
-    Open,
+    // Open,
     // NewSession(Option<InChanId>),
     Close,
 }
@@ -32,13 +32,20 @@ pub struct MuxHandle {
 }
 
 impl MuxHandle {
-    pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
-        &mut self.control
+    pub async fn close(&mut self) -> Result<(), EngineError> {
+        self.control.send(MuxControl::Close).await?;
+        match (&mut self.handle).await {
+            Ok(r) => r,
+            Err(_) => Err(EngineError::Message("Join Error"))
+        }
     }
+    // pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
+    //     &mut self.control
+    // }
 
-    pub fn handle_mut(&mut self) -> &mut JoinHandle<Result<(), EngineError>> {
-        &mut self.handle
-    }
+    // pub fn handle_mut(&mut self) -> &mut JoinHandle<Result<(), EngineError>> {
+    //     &mut self.handle
+    // }
 }
 
 pub struct Mux {
@@ -61,47 +68,47 @@ pub struct Mux {
 }
 
 impl Mux {
-    // Initial exchange of protocol header / connection header should be 
-    // handled before spawning the Mux
-    pub fn spawn<Io>(
-        transport: Transport<Io>, 
-        local_state: ConnectionState, 
-        local_open: Open, 
-        // remote_header: ProtocolHeader, 
-        buffer_size: usize
-    ) -> Result<MuxHandle, EngineError>
-    where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
-        // check connection state
-        match &local_state {
-            ConnectionState::HeaderExchange => {},
-            ConnectionState::HeaderSent => {}, // TODO: Pipelined open
-            _ => return Err(EngineError::Message("Expecting local_state to be ConnectionState::HeaderExchange"))
-        }
+    // // Initial exchange of protocol header / connection header should be 
+    // // handled before spawning the Mux
+    // pub fn spawn<Io>(
+    //     transport: Transport<Io>, 
+    //     local_state: ConnectionState, 
+    //     local_open: Open, 
+    //     // remote_header: ProtocolHeader, 
+    //     buffer_size: usize
+    // ) -> Result<MuxHandle, EngineError>
+    // where
+    //     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    // {
+    //     // check connection state
+    //     match &local_state {
+    //         ConnectionState::HeaderExchange => {},
+    //         ConnectionState::HeaderSent => {}, // TODO: Pipelined open
+    //         _ => return Err(EngineError::Message("Expecting local_state to be ConnectionState::HeaderExchange"))
+    //     }
 
-        let (session_tx, session_rx) = mpsc::channel(buffer_size);
-        let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
-        let local_sessions = Slab::new(); // TODO: pre-allocate capacity
+    //     let (session_tx, session_rx) = mpsc::channel(buffer_size);
+    //     let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+    //     let local_sessions = Slab::new(); // TODO: pre-allocate capacity
 
-        let mux = Self {
-            local_state,
-            local_open,
-            local_sessions,
-            remote_open: None,
-            remote_state: None,
-            remote_sessions: BTreeMap::new(),
-            // remote_header,
-            session_tx,
-            session_rx,
-            control: control_rx,
-        };
-        let handle = tokio::spawn(mux.mux_loop(transport));
-        Ok(MuxHandle {
-            control: control_tx,
-            handle
-        })
-    }
+    //     let mux = Self {
+    //         local_state,
+    //         local_open,
+    //         local_sessions,
+    //         remote_open: None,
+    //         remote_state: None,
+    //         remote_sessions: BTreeMap::new(),
+    //         // remote_header,
+    //         session_tx,
+    //         session_rx,
+    //         control: control_rx,
+    //     };
+    //     let handle = tokio::spawn(mux.mux_loop(transport));
+    //     Ok(MuxHandle {
+    //         control: control_tx,
+    //         handle
+    //     })
+    // }
 
     pub async fn open<Io>(
         mut transport: Transport<Io>,
@@ -395,7 +402,7 @@ impl Mux {
             control = self.control.recv() => {
                 match control {
                     Some(control) => match control {
-                        MuxControl::Open => self.handle_open_send(transport).await,
+                        // MuxControl::Open => self.handle_open_send(transport).await,
                         MuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {

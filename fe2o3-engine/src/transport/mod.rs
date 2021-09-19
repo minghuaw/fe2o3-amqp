@@ -164,6 +164,26 @@ where
     }
 }
 
+
+async fn read_and_compare_proto_header<Io>(
+    io: &mut Io,
+    local_state: &mut ConnectionState,
+    proto_header: &ProtocolHeader
+) -> Result<ProtocolHeader, EngineError> 
+where 
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut inbound_buf = [0u8; 8];
+    io.read_exact(&mut inbound_buf).await?;
+    // check header
+    let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
+    if incoming_header != *proto_header {
+        *local_state = ConnectionState::End;
+        return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
+    }
+    Ok(incoming_header)
+}
+
 impl<Io> Sink<Frame> for Transport<Io>
 where
     Io: AsyncWrite + Unpin,

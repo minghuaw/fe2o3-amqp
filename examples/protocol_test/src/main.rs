@@ -10,9 +10,9 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("1234")
         .hostname("127.0.0.1")
-        .max_frame_size(100)
+        .max_frame_size(1000)
         .channel_max(9)
-        .idle_time_out(500 as u32)
+        .idle_time_out(50_000 as u32)
         .open("amqp://127.0.0.1:5674").await
         .unwrap();
 

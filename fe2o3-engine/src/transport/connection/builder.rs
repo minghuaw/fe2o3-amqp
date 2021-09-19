@@ -184,18 +184,18 @@ impl Builder<WithContainerId> {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone()
         };
-        let mux = Mux::spawn(
+        let mux = Mux::open(
             transport, 
             local_state, 
             local_open, 
             // remote_header, 
             self.buffer_size
-        )?;
+        ).await?;
         println!("Mux started");
 
         // open Connection
         let mut connection = Connection::from(mux);
-        connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
+        // connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
         println!("Openning");
         Ok(connection)
     }
