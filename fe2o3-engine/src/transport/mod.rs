@@ -68,36 +68,78 @@ where
 
         Self { framed, idle_timeout }
     }
+    pub async fn send_proto_header(
+        io: &mut Io,
+        local_state: &mut ConnectionState,
+        proto_header: ProtocolHeader
+    ) -> Result<(), EngineError> {
+        let buf: [u8; 8] = proto_header.into();
+        match local_state {
+            ConnectionState::Start => {
+                io.write_all(&buf).await?;
+                *local_state = ConnectionState::HeaderSent;
+            },
+            ConnectionState::HeaderReceived => {
+                io.write_all(&buf).await?;
+                *local_state = ConnectionState::HeaderExchange
+            },
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+        }
+        Ok(())
+    }
+    
+    pub async fn recv_proto_header(
+        io: &mut Io,
+        local_state: &mut ConnectionState,
+        proto_header: ProtocolHeader,
+    ) -> Result<ProtocolHeader, EngineError> {
+        // wait for incoming header
+        match local_state {
+            ConnectionState::Start => {
+                let incoming_header = read_and_compare_proto_header(io, local_state, &proto_header).await?;
+                *local_state = ConnectionState::HeaderReceived;
+                Ok(incoming_header)
+            },
+            ConnectionState::HeaderSent => {
+                let incoming_header = read_and_compare_proto_header(io, local_state, &proto_header).await?;
+                *local_state = ConnectionState::HeaderExchange;
+                Ok(incoming_header)
+            },
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+        }
+    }
 
     pub async fn negotiate(
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, EngineError> {
-        // negotiation
-        let outbound_buf: [u8; 8] = proto_header.clone().into();
-        io.write_all(&outbound_buf).await?;
+        // // negotiation
+        // let outbound_buf: [u8; 8] = proto_header.clone().into();
+        // io.write_all(&outbound_buf).await?;
 
-        // State transition
-        *local_state = ConnectionState::HeaderSent;
+        // // State transition
+        // *local_state = ConnectionState::HeaderSent;
 
-        // wait for incoming header
-        let mut inbound_buf = [0u8; 8];
-        io.read_exact(&mut inbound_buf).await?;
+        // // wait for incoming header
+        // let mut inbound_buf = [0u8; 8];
+        // io.read_exact(&mut inbound_buf).await?;
 
-        // check header
-        let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
-        if incoming_header != proto_header {
-            *local_state = ConnectionState::End;
-            return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
-        }
+        // // check header
+        // let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
+        // if incoming_header != proto_header {
+        //     *local_state = ConnectionState::End;
+        //     return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
+        // }
 
-        // State transition
-        *local_state = ConnectionState::HeaderExchange;
+        // // State transition
+        // *local_state = ConnectionState::HeaderExchange;
+        Self::send_proto_header(io, local_state, proto_header.clone()).await?;
+        let incoming_header = Self::recv_proto_header(io, local_state, proto_header).await?;
 
         Ok(incoming_header)
     }
-
+    
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         self.framed.codec_mut().set_max_frame_length(max_frame_size);
         self
