@@ -7,7 +7,7 @@ use url::Url;
 
 use crate::{error::EngineError, transport::{Transport, connection::{ConnectionState, mux::Mux}}, transport::protocol_header::ProtocolHeader};
 
-use super::{Connection, MIN_MAX_FRAME_SIZE, mux::{self, DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
+use super::{Connection, MIN_MAX_FRAME_SIZE, mux::{DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
 
 pub struct WithoutContainerId {}
 pub struct WithContainerId {}
@@ -219,14 +219,14 @@ impl Builder<WithContainerId> {
         }
     }
 
-    pub async fn pipelined_open_with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
+    pub async fn pipelined_open_with_stream<Io>(&self, mut _stream: Io) -> Result<Connection, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     { 
         todo!()
     }
 
-    pub async fn pipelined_open(&self, url: impl TryInto<Url>) -> Result<Connection, EngineError> {
+    pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<Connection, EngineError> {
         todo!()
     }
 }
