@@ -255,6 +255,18 @@ mod tests {
             .unwrap();
     }
 
+
+    #[tokio::test]
+    async fn test_empty_frame_with_length_delimited_codec() {
+        let mock = Builder::new()
+            .write(&[0x00, 0x00, 0x00, 0x08]) // size of the frame
+            .write(&[0x02, 0x00, 0x00, 0x00])
+            .build();
+        let mut transport = Transport::bind(mock, 512, None);
+        let frame = Frame::empty();
+        transport.send(frame).await.unwrap();
+    }
+
     #[tokio::test]
     async fn test_frame_sink() {
         // use std::io::Cursor;

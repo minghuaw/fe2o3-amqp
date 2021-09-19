@@ -8,6 +8,7 @@ use crate::error::EngineError;
 
 use super::{FRAME_TYPE_AMQP};
 
+#[derive(Debug)]
 pub struct Frame {
     pub channel: u16,
     pub body: FrameBody
@@ -31,6 +32,13 @@ impl Frame {
 
     pub fn into_body(self) -> FrameBody {
         self.body
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            channel: 0,
+            body: FrameBody::empty()
+        }
     }
 }
 
@@ -83,7 +91,7 @@ impl Decoder for FrameCodec {
     }
 }
 
-
+#[derive(Debug)]
 pub enum FrameBody {
     Open{
         performative: Open
@@ -112,7 +120,9 @@ pub enum FrameBody {
     },
     Close {
         performative: Close
-    }
+    },
+    // An empty frame used only for heartbeat
+    Empty,
 }
 
 impl FrameBody {
@@ -129,6 +139,10 @@ impl FrameBody {
             Performative::End(performative) => FrameBody::End{performative},
             Performative::Close(performative) => FrameBody::Close{performative},
         }
+    }
+
+    pub fn empty() -> Self {
+        Self::Empty
     }
 }
 
@@ -157,7 +171,7 @@ impl Encoder<FrameBody> for FrameBodyCodec {
             FrameBody::Detach{performative} => performative.serialize(&mut serializer),
             FrameBody::End{performative} => performative.serialize(&mut serializer),
             FrameBody::Close{performative} => performative.serialize(&mut serializer),
-
+            FrameBody::Empty => Ok(())
         }.map_err(Into::into)
     }
 }
@@ -167,6 +181,9 @@ impl Decoder for FrameBodyCodec {
     type Error = EngineError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.len() == 0 {
+            return Ok(Some(FrameBody::Empty))
+        }
         let reader = IoReader::new(src.reader());
         let mut deserializer = Deserializer::new(reader);
         let performative: Performative = Deserialize::deserialize(&mut deserializer)?;
@@ -191,9 +208,9 @@ impl Decoder for FrameBodyCodec {
 mod tests {
     use bytes::BytesMut;
     use fe2o3_types::performatives::Open;
-    use tokio_util::codec::Encoder;
+    use tokio_util::codec::{Decoder, Encoder};
 
-    use super::{FrameBody, FrameBodyCodec};
+    use super::{Frame, FrameBody, FrameBodyCodec, FrameCodec};
 
     #[test]
     fn test_encoding_frame_body() {
@@ -218,5 +235,22 @@ mod tests {
         let mut dst = BytesMut::new();
         encoder.encode(body, &mut dst).unwrap();
         println!("{:?}", dst);
+    }
+
+    #[test]
+    fn test_encoding_empty_frame() {
+        let empty = Frame::empty();
+        let mut encoder = FrameCodec {};
+        let mut dst = BytesMut::new();
+        encoder.encode(empty, &mut dst).unwrap();
+        println!("{:x?}", dst);
+    }
+
+    #[test]
+    fn test_decode_empty_frame() {
+        let mut decoder = FrameCodec {} ;
+        let mut src = BytesMut::from(&[0x02, 0x00, 0x00, 0x00][..]);
+        let frame = decoder.decode(&mut src).unwrap();
+        println!("{:?}", frame);
     }
 }
