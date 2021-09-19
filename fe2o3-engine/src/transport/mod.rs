@@ -177,6 +177,7 @@ where
         match this.framed.poll_next(cx) {
             Poll::Ready(next) => {
                 if let Some(mut delay) = this.idle_timeout.as_pin_mut() {
+                    println!(">>> Debug: poll_next() resetting idle_timeout");
                     delay.reset();
                 }
 

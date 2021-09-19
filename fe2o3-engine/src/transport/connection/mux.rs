@@ -103,6 +103,67 @@ impl Mux {
         })
     }
 
+    pub async fn open<Io>(
+        mut transport: Transport<Io>,
+        local_state: ConnectionState, 
+        local_open: Open, 
+        buffer_size: usize
+    ) -> Result<MuxHandle, EngineError> 
+    where
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
+        match local_state {
+            ConnectionState::HeaderExchange => {},
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s))
+        };
+
+        let (session_tx, session_rx) = mpsc::channel(buffer_size);
+        let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+        let local_sessions = Slab::new(); // TODO: pre-allocate capacity
+
+        let mut mux = Self {
+            local_state,
+            local_open,
+            local_sessions,
+            remote_open: None,
+            remote_state: None,
+            remote_sessions: BTreeMap::new(),
+            // remote_header,
+            session_tx,
+            session_rx,
+            control: control_rx,
+        };
+        // Send Open
+        mux.handle_open_send(&mut transport).await?;
+        // Recv Open
+        if let Err(err) = mux.recv_open(&mut transport).await {
+            if let EngineError::ConnectionError(conn_err) = err {
+                let local_error = Error::from(conn_err);
+                mux.handle_close_send(&mut transport, Some(local_error)).await?;
+            } else {
+                return Err(err)
+            }
+        };
+
+        // TODO: set remote heartbeat
+
+        // spawn mux loop
+        let handle = tokio::spawn(mux.mux_loop(transport));
+        Ok(MuxHandle {
+            control: control_tx,
+            handle
+        })
+    }
+
+    pub fn pipelined_open<Io>(
+        transport: Transport<Io>,
+        local_state: ConnectionState, 
+        local_open: Open, 
+        buffer_size: usize
+    ) -> Result<MuxHandle, EngineError> {
+        todo!()
+    }
+
     #[inline]
     async fn handle_unexpected_drop(&mut self) -> Result<&ConnectionState, EngineError> {
         todo!()
@@ -119,6 +180,7 @@ impl Mux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_open_send()");
+        println!(">>> Debug: {:?}", self.local_open);
 
         // State transition (Fig. 2.23)
         // Return early to avoid sending Open when it's not supposed to
@@ -138,6 +200,22 @@ impl Mux {
     }
 
     #[inline]
+    async fn recv_open<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        let frame = match transport.next().await {
+            Some(frame) => frame?,
+            None => return self.handle_unexpected_eof().await
+        };
+        let remote_open = match frame.body {
+            FrameBody::Open{performative} => performative,
+            _ => return Err(EngineError::ConnectionError(ConnectionError::FramingError))
+        };
+        self.handle_open_recv(transport, remote_open).await
+    }
+
+    #[inline]
     async fn handle_open_recv<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Open) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
@@ -148,7 +226,7 @@ impl Mux {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
             ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-            _ => return Err(EngineError::illegal_state())
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
         }
         // FIXME: is there anything we need to check?
         let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
@@ -156,6 +234,7 @@ impl Mux {
         self.remote_open = Some(remote_open);
         Ok(&self.local_state)
     }
+
 
     #[inline]
     async fn handle_close_send<Io>(
