@@ -1,6 +1,5 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use fe2o3_types::definitions::{AmqpError, ConnectionError, Error};
 use fe2o3_types::performatives::{Close, Open};
@@ -9,8 +8,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 
-use futures_util::{FutureExt, Sink, SinkExt, StreamExt};
-use tokio_util::either::Either;
+use futures_util::{Sink, SinkExt, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
