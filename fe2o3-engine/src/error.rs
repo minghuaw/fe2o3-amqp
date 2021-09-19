@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use fe2o3_types::definitions::{AmqpError, ConnectionError};
 use thiserror::Error;
 

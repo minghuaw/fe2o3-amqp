@@ -146,7 +146,7 @@ mod tests {
             .max_frame_size(100)
             .channel_max(9)
             .idle_time_out(10u32)
-            .with_stream(mock).await
+            .open_with_stream(mock).await
             .unwrap();
     }
 }

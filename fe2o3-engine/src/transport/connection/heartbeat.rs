@@ -3,10 +3,8 @@ use std::{task::Poll, time::Duration};
 use futures_util::{Stream, stream::Iter};
 use pin_project_lite::pin_project;
 
-use tokio::{sync::mpsc::{Receiver, Sender}, time::{Instant, Sleep}};
+use tokio::{time::{Instant}};
 use tokio_stream::wrappers::IntervalStream;
-
-use super::mux::MuxControl;
 
 pin_project! {
     /// A wrapper over an `Option<IntervalStream>` which will never tick ready if the underlying 
@@ -31,13 +29,13 @@ impl HeartBeat {
         Self { interval }
     }
 
-    pub fn set_period(&mut self, period: Duration) -> &mut Self {
-        let interval = Some(
-            IntervalStream::new(tokio::time::interval(period))
-        );
-        self.interval = interval;
-        self
-    }
+    // pub fn set_period(&mut self, period: Duration) -> &mut Self {
+    //     let interval = Some(
+    //         IntervalStream::new(tokio::time::interval(period))
+    //     );
+    //     self.interval = interval;
+    //     self
+    // }
 }
 
 impl Stream for HeartBeat {

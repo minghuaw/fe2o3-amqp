@@ -159,7 +159,7 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    pub async fn with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
+    pub async fn open_with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -184,6 +184,9 @@ impl Builder<WithContainerId> {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone()
         };
+
+        println!(">>> Debug: with_stream() - starting Mux");
+        // open Connection
         let mux = Mux::open(
             transport, 
             local_state, 
@@ -191,12 +194,7 @@ impl Builder<WithContainerId> {
             // remote_header, 
             self.buffer_size
         ).await?;
-        println!("Mux started");
-
-        // open Connection
-        let mut connection = Connection::from(mux);
-        // connection.mux_mut().control_mut().send(mux::MuxControl::Open).await?;
-        println!("Openning");
+        let connection = Connection::from(mux);
         Ok(connection)
     }
 
@@ -211,7 +209,7 @@ impl Builder<WithContainerId> {
                 let stream = TcpStream::connect(&*addr).await?;
                 println!("TcpStream connected");
 
-                self.with_stream(stream).await
+                self.open_with_stream(stream).await
             },
             // TLS
             "amqps" => {
@@ -219,6 +217,13 @@ impl Builder<WithContainerId> {
             },
             _ => return Err(EngineError::Message("Invalid Url Scheme"))
         }
+    }
+
+    pub async fn pipelined_open_with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    { 
+        todo!()
     }
 
     pub async fn pipelined_open(&self, url: impl TryInto<Url>) -> Result<Connection, EngineError> {

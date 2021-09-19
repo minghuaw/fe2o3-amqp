@@ -72,48 +72,8 @@ pub struct Mux {
 }
 
 impl Mux {
-    // // Initial exchange of protocol header / connection header should be 
-    // // handled before spawning the Mux
-    // pub fn spawn<Io>(
-    //     transport: Transport<Io>, 
-    //     local_state: ConnectionState, 
-    //     local_open: Open, 
-    //     // remote_header: ProtocolHeader, 
-    //     buffer_size: usize
-    // ) -> Result<MuxHandle, EngineError>
-    // where
-    //     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    // {
-    //     // check connection state
-    //     match &local_state {
-    //         ConnectionState::HeaderExchange => {},
-    //         ConnectionState::HeaderSent => {}, // TODO: Pipelined open
-    //         _ => return Err(EngineError::Message("Expecting local_state to be ConnectionState::HeaderExchange"))
-    //     }
-
-    //     let (session_tx, session_rx) = mpsc::channel(buffer_size);
-    //     let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
-    //     let local_sessions = Slab::new(); // TODO: pre-allocate capacity
-
-    //     let mux = Self {
-    //         local_state,
-    //         local_open,
-    //         local_sessions,
-    //         remote_open: None,
-    //         remote_state: None,
-    //         remote_sessions: BTreeMap::new(),
-    //         // remote_header,
-    //         session_tx,
-    //         session_rx,
-    //         control: control_rx,
-    //     };
-    //     let handle = tokio::spawn(mux.mux_loop(transport));
-    //     Ok(MuxHandle {
-    //         control: control_tx,
-    //         handle
-    //     })
-    // }
-
+    // Initial exchange of protocol header / connection header should be 
+    // handled before spawning the Mux
     pub async fn open<Io>(
         mut transport: Transport<Io>,
         local_state: ConnectionState, 
@@ -145,6 +105,7 @@ impl Mux {
             session_rx,
             control: control_rx,
         };
+        println!(">>> Debug: open() - Openning");
         // Send Open
         mux.handle_open_send(&mut transport).await?;
         // Recv Open
@@ -247,7 +208,7 @@ impl Mux {
         match &remote_open.idle_time_out {
             Some(millis) => {
                 let period = Duration::from_millis(*millis as u64);
-                self.heartbeat.set_period(period);
+                self.heartbeat = HeartBeat::new(period);
             },
             None => self.heartbeat = HeartBeat::never()
         };
@@ -404,22 +365,6 @@ impl Mux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: Connection State: {:?}", &self.local_state);
-
-        // let incoming_fut = match self.local_open.idle_time_out {
-        //     None => Either::Left(transport.next()),
-        //     Some(millis) => {
-        //         Either::Right(
-        //             tokio::time::timeout(
-        //                 Duration::from_millis(millis as u64 * 2), 
-        //                 transport.next()
-        //             )
-        //             .map(move |res| match res {
-        //                 Ok(opt) => opt,
-        //                 Err(_elapsed) => Some(Err(EngineError::IdleTimeout))
-        //             })
-        //         )
-        //     },
-        // };
 
         tokio::select! {
             // local controls

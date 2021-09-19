@@ -114,26 +114,6 @@ where
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, EngineError> {
-        // // negotiation
-        // let outbound_buf: [u8; 8] = proto_header.clone().into();
-        // io.write_all(&outbound_buf).await?;
-
-        // // State transition
-        // *local_state = ConnectionState::HeaderSent;
-
-        // // wait for incoming header
-        // let mut inbound_buf = [0u8; 8];
-        // io.read_exact(&mut inbound_buf).await?;
-
-        // // check header
-        // let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
-        // if incoming_header != proto_header {
-        //     *local_state = ConnectionState::End;
-        //     return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
-        // }
-
-        // // State transition
-        // *local_state = ConnectionState::HeaderExchange;
         Self::send_proto_header(io, local_state, proto_header.clone()).await?;
         let incoming_header = Self::recv_proto_header(io, local_state, proto_header).await?;
 

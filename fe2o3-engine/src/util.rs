@@ -5,7 +5,7 @@
 
 use std::{pin::Pin, task::Poll, time::{Duration}};
 use futures_util::Future;
-use tokio::time::{Instant, error::Elapsed};
+use tokio::time::{Instant};
 
 use tokio::time::Sleep;
 
