@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use fe2o3_types::definitions::{AmqpError, ConnectionError, Error};
 use fe2o3_types::performatives::{Close, Open};
@@ -14,6 +15,8 @@ use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
 use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
+
+use super::heartbeat::HeartBeat;
 
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -57,6 +60,7 @@ pub struct Mux {
     remote_open: Option<Open>,
     remote_sessions: BTreeMap<InChanId, OutChanId>, // maps from remote channel id to local channel id
     // remote_header: ProtocolHeader,
+    heartbeat: HeartBeat,
 
     // Sender to Connection Mux, should be cloned to a new session
     session_tx: Sender<SessionFrame>,
@@ -136,6 +140,7 @@ impl Mux {
             remote_state: None,
             remote_sessions: BTreeMap::new(),
             // remote_header,
+            heartbeat: HeartBeat::never(),
             session_tx,
             session_rx,
             control: control_rx,
@@ -151,8 +156,6 @@ impl Mux {
                 return Err(err)
             }
         };
-
-        // TODO: set remote heartbeat
 
         // spawn mux loop
         let handle = tokio::spawn(mux.mux_loop(transport));
@@ -238,10 +241,20 @@ impl Mux {
         // FIXME: is there anything we need to check?
         let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
         transport.set_max_frame_size(max_frame_size as usize);
+
+        // Set heartbeat here because in pipelined-open, the Open frame 
+        // may be recved after mux loop is started
+        match &remote_open.idle_time_out {
+            Some(millis) => {
+                let period = Duration::from_millis(*millis as u64);
+                self.heartbeat.set_period(period);
+            },
+            None => self.heartbeat = HeartBeat::never()
+        };
         self.remote_open = Some(remote_open);
+
         Ok(&self.local_state)
     }
-
 
     #[inline]
     async fn handle_close_send<Io>(
@@ -324,6 +337,7 @@ impl Mux {
         match body {
             FrameBody::Open{performative} => self.handle_open_recv(transport, performative).await,
             FrameBody::Close{performative} => self.handle_close_recv(transport, performative).await,
+            FrameBody::Empty => Ok(&self.local_state),
             _ => todo!()
         }
     }
@@ -375,6 +389,16 @@ impl Mux {
     }
 
     #[inline]
+    async fn handle_heartbeat<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
+        let frame = Frame::empty();
+        transport.send(frame).await?;
+        Ok(&self.local_state)
+    }
+
+    #[inline]
     async fn mux_loop_inner<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
@@ -420,6 +444,10 @@ impl Mux {
             // outgoing frames
             next = self.session_rx.recv() => {
                 todo!()
+            },
+            // heartbeat
+            _ = self.heartbeat.next() => {
+                self.handle_heartbeat(transport).await
             }
         }
     }
