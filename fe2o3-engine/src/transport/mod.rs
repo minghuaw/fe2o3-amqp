@@ -19,12 +19,12 @@ pub mod endpoint;
 
 /* -------------------------------- Transport ------------------------------- */
 
-use std::{convert::TryFrom, pin::Pin, task::Poll, time::Duration};
+use std::{convert::TryFrom, task::Poll, time::Duration};
 
 use bytes::{Bytes, BytesMut};
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}, time::Sleep};
+use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}};
 use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError};
 
 use crate::{error::EngineError, util::IdleTimeout};
@@ -56,7 +56,15 @@ where
             .max_frame_length(max_frame_size) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
-        let idle_timeout = idle_timeout.map(|duration| IdleTimeout::new(duration));
+        let idle_timeout = match idle_timeout {
+            Some(duration) => {
+                match duration.is_zero() {
+                    true => None,
+                    false => Some(IdleTimeout::new(duration))
+                }
+            },
+            None => None
+        };
 
         Self { framed, idle_timeout }
     }
@@ -104,7 +112,12 @@ where
     }
 
     pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
-        self.idle_timeout = Some(IdleTimeout::new(duration));
+        let idle_timeout = match duration.is_zero() {
+            true => None,
+            false => Some(IdleTimeout::new(duration))
+        };
+
+        self.idle_timeout = idle_timeout;
         self
     }
 }
