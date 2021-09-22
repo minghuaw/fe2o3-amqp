@@ -192,12 +192,13 @@ impl Mux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_open_recv()");
+        println!(">>> Debug: {:?}", &remote_open);
 
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
             ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            _ => return Err(EngineError::illegal_state()),
         }
         // FIXME: is there anything we need to check?
         let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
@@ -271,7 +272,7 @@ impl Mux {
                 self.local_state = ConnectionState::End;
             },
             // other states are invalid
-            s @ _ => return Err(EngineError::illegal_state())
+            _ => return Err(EngineError::illegal_state()),
         };
         Ok(&self.local_state)
     }
@@ -345,6 +346,14 @@ impl Mux {
                 let local_error = Error::from(ConnectionError::FramingError);
                 self.handle_close_send(transport, Some(local_error)).await
             },
+            EngineError::AmqpError(amqp_err) => {
+                match amqp_err {
+                    AmqpError::IllegalState => {
+                        todo!()
+                    },
+                    _ => todo!()
+                }
+            }
             _ => Ok(&self.local_state)
         }
     }
@@ -354,6 +363,10 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        if let ConnectionState::Start | ConnectionState::End = &self.local_state {
+            return Ok(&self.local_state)
+        }
+
         let frame = Frame::empty();
         transport.send(frame).await?;
         Ok(&self.local_state)
