@@ -81,6 +81,8 @@ impl Builder {
     }
 
     pub async fn begin(&mut self, connection: &mut Connection) -> Result<Session, EngineError> {
+        
+
         todo!()
     }
 }

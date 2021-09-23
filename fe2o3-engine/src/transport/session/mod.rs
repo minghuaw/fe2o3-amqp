@@ -72,7 +72,7 @@ pub enum SessionState {
 /// Session handle held by the connection mux
 pub(crate) struct SessionHandle {
     id: OutgoingChannelId,
-    sender: Sender<Result<SessionFrameBody, EngineError>>,
+    sender: Sender<Result<SessionFrame, EngineError>>,
 }
 
 impl SessionHandle {
@@ -80,7 +80,7 @@ impl SessionHandle {
         &self.id
     }
 
-    pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrameBody, EngineError>> {
+    pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrame, EngineError>> {
         &mut self.sender
     }
 }

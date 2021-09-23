@@ -29,6 +29,18 @@ impl Default for Handle {
     }
 }
 
+impl From<UInt> for Handle {
+    fn from(val: UInt) -> Self {
+        Self(val)
+    }
+}
+
+impl From<Handle> for UInt {
+    fn from(val: Handle) -> Self {
+        val.0
+    }
+}
+
 /// 2.8.5 Seconds
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Seconds(pub UInt);

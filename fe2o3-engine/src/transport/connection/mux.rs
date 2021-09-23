@@ -2,11 +2,13 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use fe2o3_types::definitions::{AmqpError, ConnectionError, Error};
-use fe2o3_types::performatives::{Close, Open};
+use fe2o3_amqp::primitives::UInt;
+use fe2o3_types::definitions::{AmqpError, ConnectionError, Error, Handle};
+use fe2o3_types::performatives::{Begin, Close, Open};
 use slab::Slab;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use futures_util::{Sink, SinkExt, StreamExt};
@@ -25,7 +27,10 @@ use super::{ConnectionState, IncomingChannelId, OutgoingChannelId};
 
 pub(crate) enum ConnMuxControl {
     // Open,
-    NewSession(SessionLocalOption),
+    NewSession{
+        resp: oneshot::Sender<Result<JoinHandle<Result<(), EngineError>>, EngineError>>,
+        option: SessionLocalOption,
+    },
     Close,
 }
 
@@ -45,13 +50,6 @@ impl ConnMuxHandle {
             Err(_) => Err(EngineError::Message("Join Error")),
         }
     }
-    // pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
-    //     &mut self.control
-    // }
-
-    // pub fn handle_mut(&mut self) -> &mut JoinHandle<Result<(), EngineError>> {
-    //     &mut self.handle
-    // }
 }
 
 pub struct ConnMux {
@@ -301,8 +299,39 @@ impl ConnMux {
     /// TODO: Simply create a new session and let the session takes care 
     /// of sending Begin?
     #[inline]
-    async fn handle_new_session(&mut self, local_option: SessionLocalOption) -> Result<&ConnectionState, EngineError> {
+    async fn handle_local_new_session(
+        &mut self, 
+        resp: oneshot::Sender<Result<JoinHandle<Result<(), EngineError>>, EngineError>>,
+        local_option: SessionLocalOption
+    ) -> Result<&ConnectionState, EngineError> {
         // get new entry index
+        let entry = self.local_sessions.vacant_entry();
+        let key = entry.key();
+        
+        // check if there is enough
+        if key > self.local_open.channel_max.0 as usize {
+            resp.send(Err(EngineError::AmqpError(AmqpError::NotAllowed)))
+                .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
+            return Err(EngineError::Message("Exceeding max number of channel is not allowed"))
+        }
+
+        let outgoing_chan = OutgoingChannelId(key as u16);
+
+        // send Begin frame to remote peer
+        let begin = Begin {
+            // The remote-channel field of a begin frame MUST be empty 
+            // for a locally initiated session, and MUST be set when announcing 
+            // the endpoint created as a result of a remotely initiated session.
+            remote_channel: None,
+            next_outgoing_id: local_option.next_outgoing_id,
+            incoming_window: local_option.incoming_window,
+            outgoing_window: local_option.outgoing_window,
+            handle_max: Handle::from(local_option.handle_max),
+            offered_capabilities: local_option.offered_capabilities,
+            desired_capabilities: local_option.desired_capabilities,
+            properties: local_option.properties,
+        };
+
         // create new session
         // the new session should then send a Begin
 
@@ -422,7 +451,10 @@ impl ConnMux {
                 match control {
                     Some(control) => match control {
                         // MuxControl::Open => self.handle_open_send(transport).await,
-                        ConnMuxControl::NewSession(local_option) => self.handle_new_session(local_option).await,
+                        ConnMuxControl::NewSession{
+                            resp,
+                            option,
+                        } => self.handle_local_new_session(resp, option).await,
                         ConnMuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {

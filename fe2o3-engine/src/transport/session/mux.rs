@@ -1,28 +1,36 @@
-use std::thread::JoinHandle;
 
-use fe2o3_amqp::primitives::UInt;
-use fe2o3_types::definitions::{SequenceNo, TransferNumber};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use fe2o3_amqp::primitives::{Symbol, UInt};
+use fe2o3_types::definitions::{Fields, SequenceNo, TransferNumber};
+use tokio::{sync::mpsc::{self, Receiver, Sender}, task::JoinHandle};
 
 use crate::{error::EngineError, transport::connection};
 
-use super::{SessionFrame, SessionState};
+use super::{SessionFrame, SessionFrameBody, SessionState};
 
 pub(crate) struct SessionLocalOption {
     // control
-    control: Receiver<SessionMuxControl>,
+    pub control: Receiver<SessionMuxControl>,
     
     // local states
-    outgoing: Sender<SessionFrame>,
-    local_channel: u16,
-    local_state: SessionState,
+    pub outgoing: Sender<SessionFrame>,
+    pub local_channel: u16,
+    // local_state: SessionState,
 
-    next_incoming_id: TransferNumber,
-    incoming_window: TransferNumber,
-    next_outgoing_id: TransferNumber,
-    outgoing_window: TransferNumber,
+    pub next_incoming_id: TransferNumber,
+    pub incoming_window: TransferNumber,
+    pub next_outgoing_id: TransferNumber,
+    pub outgoing_window: TransferNumber,
 
-    handle_max: UInt,
+    pub handle_max: UInt,
+
+    /// <field name="offered-capabilities" type="symbol" multiple="true"/>
+    pub offered_capabilities: Option<Vec<Symbol>>,
+
+    /// <field name="desired-capabilities" type="symbol" multiple="true"/>
+    pub desired_capabilities: Option<Vec<Symbol>>,
+
+    /// <field name="properties" type="fields"/>
+    pub properties: Option<Fields>,
 }
 
 pub(crate) enum SessionMuxControl {
@@ -31,7 +39,8 @@ pub(crate) enum SessionMuxControl {
 
 pub(crate) struct SessionMuxHandle {
     control: Sender<SessionMuxControl>,
-    // handle: JoinHandle<Result<(), EngineError>>, // JoinHandle to session mux
+    // TODO: send back using a oneshot channel?
+    handle: JoinHandle<Result<(), EngineError>>, // JoinHandle to session mux
 }
 
 /// Mux has to be started from the Connection's Mux
@@ -52,7 +61,7 @@ pub(crate) struct SessionMux {
     handle_max: UInt,
 
     // remote states
-    incoming: Receiver<SessionFrame>,
+    incoming: Receiver<Result<SessionFrame, EngineError>>,
     // remote_channel: u16,
 
     remote_incoming_window: SequenceNo,
@@ -60,25 +69,31 @@ pub(crate) struct SessionMux {
 }
 
 impl SessionMux {
-    pub async fn begin_with_option(
-        incoming: Receiver<SessionFrame>,
+    pub async fn spawn_with_option(
+        incoming: Receiver<Result<SessionFrame, EngineError>>,
         // remote_channel: u16,
         remote_incoming_window: SequenceNo,
         remote_outgoing_window: SequenceNo,
         // local options
         local_option: SessionLocalOption,
-    ) -> Result<SessionMuxHandle, EngineError> {
+    ) -> Result<JoinHandle<Result<(), EngineError>>, EngineError> {
         let SessionLocalOption {
             control,
             outgoing,
             local_channel,
-            local_state,
+            // local_state,
             next_incoming_id,
             incoming_window,
             next_outgoing_id,
             outgoing_window,
             handle_max,
+            
+            offered_capabilities,
+            desired_capabilities,
+            properties,
         } = local_option;
+
+        let local_state = SessionState::Unmapped;
 
         let mux = SessionMux {
             outgoing,
@@ -96,7 +111,8 @@ impl SessionMux {
             control,
         };
 
-        todo!()
+        let handle = tokio::spawn(mux.mux_loop());
+        Ok(handle)
     }
 
     async fn mux_loop(mut self) -> Result<(), EngineError> {
