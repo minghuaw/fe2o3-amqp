@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use fe2o3_engine::transport::connection::Connection;
 
-
 #[tokio::main]
 async fn main() {
     println!("Starting connection");
@@ -13,7 +12,8 @@ async fn main() {
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .open("amqp://127.0.0.1:5674").await
+        .open("amqp://127.0.0.1:5674")
+        .await
         .unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;

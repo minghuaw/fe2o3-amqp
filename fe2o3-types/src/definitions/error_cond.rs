@@ -1,6 +1,6 @@
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 
-use serde::{ser, de};
+use serde::{de, ser};
 
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 
@@ -40,19 +40,19 @@ impl ErrorCondition {
 impl ser::Serialize for ErrorCondition {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         match self {
             Self::AmqpError(err) => err.serialize(serializer),
             Self::ConnectionError(err) => err.serialize(serializer),
             Self::SessionError(err) => err.serialize(serializer),
             Self::LinkError(err) => err.serialize(serializer),
-            Self::Custom(err) => err.serialize(serializer)
+            Self::Custom(err) => err.serialize(serializer),
         }
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = ErrorCondition;
@@ -63,41 +63,41 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
     where
-            E: de::Error, {
+        E: de::Error,
+    {
         self.visit_str(v.as_str())
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let v = match AmqpError::try_from(v) {
             Ok(val) => return Ok(ErrorCondition::AmqpError(val)),
-            Err(e) => e
+            Err(e) => e,
         };
         let v = match ConnectionError::try_from(v) {
             Ok(val) => return Ok(ErrorCondition::ConnectionError(val)),
-            Err(e) => e
+            Err(e) => e,
         };
         let v = match SessionError::try_from(v) {
             Ok(val) => return Ok(ErrorCondition::SessionError(val)),
-            Err(e) => e
+            Err(e) => e,
         };
         let v = match LinkError::try_from(v) {
             Ok(val) => return Ok(ErrorCondition::LinkError(val)),
-            Err(e) => e
+            Err(e) => e,
         };
         Ok(ErrorCondition::Custom(Symbol::from(v)))
     }
 }
 
-
 impl<'de> de::Deserialize<'de> for ErrorCondition {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {} )
+        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
     }
 }
 

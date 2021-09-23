@@ -3,9 +3,9 @@
 //     Continue,
 // }
 
-use std::{pin::Pin, task::Poll, time::{Duration}};
 use futures_util::Future;
-use tokio::time::{Instant};
+use std::{pin::Pin, task::Poll, time::Duration};
+use tokio::time::Instant;
 
 use tokio::time::Sleep;
 
@@ -13,9 +13,8 @@ use tokio::time::Sleep;
 
 pub struct IdleTimeout {
     delay: Pin<Box<Sleep>>,
-    duration: Duration
+    duration: Duration,
 }
-
 
 impl IdleTimeout {
     pub fn new(duration: Duration) -> Self {
@@ -29,7 +28,7 @@ impl IdleTimeout {
 
     pub fn reset(&mut self) {
         let now = Instant::now();
-        let next= now + self.duration;
+        let next = now + self.duration;
         self.delay.as_mut().reset(next);
     }
 }
@@ -39,7 +38,6 @@ impl Future for IdleTimeout {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         self.delay.as_mut().poll(cx)
-            // .map(|_| IdleTimeoutElapsed {  } )
+        // .map(|_| IdleTimeoutElapsed {  } )
     }
 }
-

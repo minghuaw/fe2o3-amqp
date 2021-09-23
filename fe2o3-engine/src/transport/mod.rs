@@ -11,11 +11,11 @@ pub const FRAME_TYPE_AMQP: u8 = 0x00;
 pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
-pub mod protocol_header;
 pub mod connection;
-pub mod session;
-pub mod link;
 pub mod endpoint;
+pub mod link;
+pub mod protocol_header;
+pub mod session;
 
 /* -------------------------------- Transport ------------------------------- */
 
@@ -24,13 +24,15 @@ use std::{convert::TryFrom, task::Poll, time::Duration};
 use bytes::{Bytes, BytesMut};
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}};
-use tokio_util::codec::{Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_util::codec::{
+    Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
+};
 
 use crate::{error::EngineError, util::IdleTimeout};
 
 use amqp::{Frame, FrameCodec};
-use protocol_header::{ProtocolHeader};
+use protocol_header::ProtocolHeader;
 
 use self::connection::ConnectionState;
 
@@ -43,51 +45,52 @@ pin_project! {
     }
 }
 
-impl<Io> Transport<Io> 
-where 
+impl<Io> Transport<Io>
+where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
-            // Prior to any explicit negotiation, 
+            // Prior to any explicit negotiation,
             // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
             .max_frame_length(max_frame_size) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
         let idle_timeout = match idle_timeout {
-            Some(duration) => {
-                match duration.is_zero() {
-                    true => None,
-                    false => Some(IdleTimeout::new(duration))
-                }
+            Some(duration) => match duration.is_zero() {
+                true => None,
+                false => Some(IdleTimeout::new(duration)),
             },
-            None => None
+            None => None,
         };
 
-        Self { framed, idle_timeout }
+        Self {
+            framed,
+            idle_timeout,
+        }
     }
     pub async fn send_proto_header(
         io: &mut Io,
         local_state: &mut ConnectionState,
-        proto_header: ProtocolHeader
+        proto_header: ProtocolHeader,
     ) -> Result<(), EngineError> {
         let buf: [u8; 8] = proto_header.into();
         match local_state {
             ConnectionState::Start => {
                 io.write_all(&buf).await?;
                 *local_state = ConnectionState::HeaderSent;
-            },
+            }
             ConnectionState::HeaderReceived => {
                 io.write_all(&buf).await?;
                 *local_state = ConnectionState::HeaderExchange
-            },
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            }
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
         }
         Ok(())
     }
-    
+
     pub async fn recv_proto_header(
         io: &mut Io,
         local_state: &mut ConnectionState,
@@ -96,16 +99,18 @@ where
         // wait for incoming header
         match local_state {
             ConnectionState::Start => {
-                let incoming_header = read_and_compare_proto_header(io, local_state, &proto_header).await?;
+                let incoming_header =
+                    read_and_compare_proto_header(io, local_state, &proto_header).await?;
                 *local_state = ConnectionState::HeaderReceived;
                 Ok(incoming_header)
-            },
+            }
             ConnectionState::HeaderSent => {
-                let incoming_header = read_and_compare_proto_header(io, local_state, &proto_header).await?;
+                let incoming_header =
+                    read_and_compare_proto_header(io, local_state, &proto_header).await?;
                 *local_state = ConnectionState::HeaderExchange;
                 Ok(incoming_header)
-            },
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            }
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
         }
     }
 
@@ -119,7 +124,7 @@ where
 
         Ok(incoming_header)
     }
-    
+
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         self.framed.codec_mut().set_max_frame_length(max_frame_size);
         self
@@ -136,7 +141,7 @@ where
     pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
         let idle_timeout = match duration.is_zero() {
             true => None,
-            false => Some(IdleTimeout::new(duration))
+            false => Some(IdleTimeout::new(duration)),
         };
 
         self.idle_timeout = idle_timeout;
@@ -144,13 +149,12 @@ where
     }
 }
 
-
 async fn read_and_compare_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
-    proto_header: &ProtocolHeader
-) -> Result<ProtocolHeader, EngineError> 
-where 
+    proto_header: &ProtocolHeader,
+) -> Result<ProtocolHeader, EngineError>
+where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     let mut inbound_buf = [0u8; 8];
@@ -206,13 +210,16 @@ where
     }
 }
 
-impl<Io> Stream for Transport<Io> 
+impl<Io> Stream for Transport<Io>
 where
     Io: AsyncRead + Unpin,
 {
     type Item = Result<Frame, EngineError>;
 
-    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
         let this = self.project();
 
         // First poll codec
@@ -232,29 +239,31 @@ where
                                 let any = &err as &dyn Any;
                                 if any.is::<LengthDelimitedCodecError>() {
                                     // This should be the only error type
-                                    return Poll::Ready(Some(Err(EngineError::MaxFrameSizeExceeded)))
+                                    return Poll::Ready(Some(Err(
+                                        EngineError::MaxFrameSizeExceeded,
+                                    )));
                                 } else {
-                                    return Poll::Ready(Some(Err(err.into())))
+                                    return Poll::Ready(Some(Err(err.into())));
                                 }
                             }
                         };
-                        let mut decoder = FrameCodec { };
+                        let mut decoder = FrameCodec {};
                         Poll::Ready(decoder.decode(&mut src).transpose())
-                    },
-                    None => Poll::Ready(None)
+                    }
+                    None => Poll::Ready(None),
                 }
-            },
+            }
             Poll::Pending => {
                 // check if idle timeout has exceeded
                 if let Some(delay) = this.idle_timeout.as_pin_mut() {
                     match delay.poll(cx) {
                         Poll::Ready(()) => return Poll::Ready(Some(Err(EngineError::IdleTimeout))),
-                        Poll::Pending => return Poll::Pending
+                        Poll::Pending => return Poll::Pending,
                     }
                 }
 
                 Poll::Pending
-            },
+            }
         }
     }
 }
@@ -264,10 +273,15 @@ mod tests {
     use bytes::Bytes;
     use fe2o3_types::performatives::Open;
     use futures_util::{SinkExt, StreamExt};
-    use tokio_util::codec::LengthDelimitedCodec;
     use tokio_test::io::Builder;
+    use tokio_util::codec::LengthDelimitedCodec;
 
-    use super::{Transport, amqp::{FrameBody, Frame}, connection::ConnectionState, protocol_header::ProtocolHeader};
+    use super::{
+        amqp::{Frame, FrameBody},
+        connection::ConnectionState,
+        protocol_header::ProtocolHeader,
+        Transport,
+    };
 
     #[tokio::test]
     async fn test_length_delimited_codec() {
@@ -276,7 +290,7 @@ mod tests {
         let mut framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
-            // Prior to any explicit negotiation, 
+            // Prior to any explicit negotiation,
             // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
             .max_frame_length(512) // change max frame size later in negotiation
             .length_adjustment(-4)
@@ -307,10 +321,10 @@ mod tests {
             .build();
 
         let mut local_state = ConnectionState::Start;
-        Transport::negotiate(&mut mock, &mut local_state, ProtocolHeader::amqp()).await
+        Transport::negotiate(&mut mock, &mut local_state, ProtocolHeader::amqp())
+            .await
             .unwrap();
     }
-
 
     #[tokio::test]
     async fn test_empty_frame_with_length_delimited_codec() {
@@ -327,24 +341,23 @@ mod tests {
     async fn test_frame_sink() {
         // use std::io::Cursor;
         // let mut buf = Vec::new();
-        // let io = Cursor::new(&mut buf);        
+        // let io = Cursor::new(&mut buf);
         // let mut transport = Transport::bind(io);
 
         let mock = tokio_test::io::Builder::new()
             .write(&[0x0, 0x0, 0x0, 0x29])
             .write(&[0x02, 0x0, 0x0, 0x0])
             .write(&[
-                0x00, 0x53, 0x10, 0xC0, 0x1c, 0x05, 0xA1, 0x04, 0x31, 0x32, 
-                0x33, 0x34, 0xA1, 0x09, 0x31, 0x32, 0x37, 0x2E, 0x30, 0x2E, 
-                0x30, 0x2E, 0x31, 0x70, 0x00,  0x00, 0x03, 0xe8, 0x60, 0x00, 
-                0x09, 0x52, 0x05
+                0x00, 0x53, 0x10, 0xC0, 0x1c, 0x05, 0xA1, 0x04, 0x31, 0x32, 0x33, 0x34, 0xA1, 0x09,
+                0x31, 0x32, 0x37, 0x2E, 0x30, 0x2E, 0x30, 0x2E, 0x31, 0x70, 0x00, 0x00, 0x03, 0xe8,
+                0x60, 0x00, 0x09, 0x52, 0x05,
             ])
             .build();
         let mut transport = Transport::bind(mock, 1000, None);
 
-        let open = Open{
+        let open = Open {
             container_id: "1234".into(),
-            hostname: Some("127.0.0.1".into()), 
+            hostname: Some("127.0.0.1".into()),
             max_frame_size: 1000.into(),
             channel_max: 9.into(),
             idle_time_out: Some(5),
@@ -352,12 +365,10 @@ mod tests {
             incoming_locales: None,
             offered_capabilities: None,
             desired_capabilities: None,
-            properties: None
+            properties: None,
         };
 
-        let body = FrameBody::Open {
-            performative: open
-        };
+        let body = FrameBody::Open { performative: open };
         let frame = Frame::new(0u16, body);
 
         transport.send(frame).await.unwrap();

@@ -1,4 +1,7 @@
-use std::{convert::{TryFrom, TryInto}, fmt::{Debug, Display}};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::{Debug, Display},
+};
 
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
@@ -28,7 +31,7 @@ impl Display for AmqpError {
     }
 }
 
-impl std::error::Error for AmqpError { }
+impl std::error::Error for AmqpError {}
 
 impl From<AmqpError> for ErrorCondition {
     fn from(err: AmqpError) -> Self {

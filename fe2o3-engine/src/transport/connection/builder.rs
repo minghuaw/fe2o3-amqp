@@ -1,13 +1,26 @@
-use std::{convert::{TryInto}, marker::PhantomData, time::Duration};
+use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
-use fe2o3_amqp::primitives::{Symbol};
-use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
-use tokio::{io::{AsyncRead, AsyncWrite}, net::TcpStream};
+use fe2o3_amqp::primitives::Symbol;
+use fe2o3_types::{
+    definitions::{Fields, IetfLanguageTag, Milliseconds},
+    performatives::{ChannelMax, MaxFrameSize, Open},
+};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 use url::Url;
 
-use crate::{error::EngineError, transport::{Transport, connection::{ConnectionState, mux::ConnMux}}, transport::protocol_header::ProtocolHeader};
+use crate::{
+    error::EngineError,
+    transport::protocol_header::ProtocolHeader,
+    transport::{
+        connection::{mux::ConnMux, ConnectionState},
+        Transport,
+    },
+};
 
-use super::{Connection, MIN_MAX_FRAME_SIZE, mux::{DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
+use super::{mux::DEFAULT_CONNECTION_MUX_BUFFER_SIZE, Connection, MIN_MAX_FRAME_SIZE};
 
 pub struct WithoutContainerId {}
 pub struct WithContainerId {}
@@ -27,7 +40,7 @@ pub struct Builder<Mode> {
 
     pub buffer_size: usize,
     // type state marker
-    marker: PhantomData<Mode>
+    marker: PhantomData<Mode>,
 }
 
 impl Builder<WithoutContainerId> {
@@ -46,14 +59,14 @@ impl Builder<WithoutContainerId> {
             properties: None,
 
             buffer_size: DEFAULT_CONNECTION_MUX_BUFFER_SIZE,
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }
 
 impl<Mode> Builder<Mode> {
-    // In Rust, it’s more common to pass slices as arguments 
-    // rather than vectors when you just want to provide read access. 
+    // In Rust, it’s more common to pass slices as arguments
+    // rather than vectors when you just want to provide read access.
     // The same goes for String and &str.
     pub fn container_id(self, id: impl Into<String>) -> Builder<WithContainerId> {
         Builder::<WithContainerId> {
@@ -70,7 +83,7 @@ impl<Mode> Builder<Mode> {
             properties: None,
 
             buffer_size: self.buffer_size,
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }
@@ -101,9 +114,7 @@ impl<Mode> Builder<Mode> {
     pub fn add_outgoing_locales(&mut self, locale: impl Into<IetfLanguageTag>) -> &mut Self {
         match &mut self.outgoing_locales {
             Some(locales) => locales.push(locale.into()),
-            None => {
-                self.outgoing_locales = Some(vec![locale.into()])
-            }
+            None => self.outgoing_locales = Some(vec![locale.into()]),
         }
         self
     }
@@ -116,7 +127,7 @@ impl<Mode> Builder<Mode> {
     pub fn add_incoming_locales(&mut self, locale: impl Into<IetfLanguageTag>) -> &mut Self {
         match &mut self.incoming_locales {
             Some(locales) => locales.push(locale.into()),
-            None => self.incoming_locales = Some(vec![locale.into()])
+            None => self.incoming_locales = Some(vec![locale.into()]),
         }
         self
     }
@@ -124,7 +135,7 @@ impl<Mode> Builder<Mode> {
     pub fn add_offered_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
-            None => self.offered_capabilities = Some(vec![capability.into()])
+            None => self.offered_capabilities = Some(vec![capability.into()]),
         }
         self
     }
@@ -137,7 +148,7 @@ impl<Mode> Builder<Mode> {
     pub fn add_desired_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
-            None => self.desired_capabilities = Some(vec![capability.into()])
+            None => self.desired_capabilities = Some(vec![capability.into()]),
         }
         self
     }
@@ -159,14 +170,17 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    pub async fn open_with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError> 
-    where 
+    pub async fn open_with_stream<Io>(&self, mut stream: Io) -> Result<Connection, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        // exchange header 
+        // exchange header
         let mut local_state = ConnectionState::Start;
-        let _remote_header = Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
-        let idle_timeout = self.idle_time_out.map(|millis| Duration::from_millis(millis as u64)); 
+        let _remote_header =
+            Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
+        let idle_timeout = self
+            .idle_time_out
+            .map(|millis| Duration::from_millis(millis as u64));
         let transport = Transport::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
         println!("Header exchanged");
 
@@ -177,30 +191,34 @@ impl Builder<WithContainerId> {
             max_frame_size: self.max_frame_size.clone(),
             channel_max: self.channel_max.clone(),
             // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
-            idle_time_out: self.idle_time_out.clone().map(|v| v/2), 
+            idle_time_out: self.idle_time_out.clone().map(|v| v / 2),
             outgoing_locales: self.outgoing_locales.clone(),
             incoming_locales: self.incoming_locales.clone(),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone()
+            properties: self.properties.clone(),
         };
 
         println!(">>> Debug: with_stream() - starting Mux");
         // open Connection
         let mux = ConnMux::open(
-            transport, 
-            local_state, 
-            local_open, 
-            // remote_header, 
-            self.buffer_size
-        ).await?;
+            transport,
+            local_state,
+            local_open,
+            // remote_header,
+            self.buffer_size,
+        )
+        .await?;
         let connection = Connection::from(mux);
         Ok(connection)
     }
 
-    pub async fn open(&self, url: impl TryInto<Url, Error=url::ParseError>) -> Result<Connection, EngineError> {
+    pub async fn open(
+        &self,
+        url: impl TryInto<Url, Error = url::ParseError>,
+    ) -> Result<Connection, EngineError> {
         let url: Url = url.try_into()?;
-        
+
         // check scheme
         match url.scheme() {
             "amqp" => {
@@ -210,19 +228,22 @@ impl Builder<WithContainerId> {
                 println!("TcpStream connected");
 
                 self.open_with_stream(stream).await
-            },
+            }
             // TLS
             "amqps" => {
                 todo!()
-            },
-            _ => return Err(EngineError::Message("Invalid Url Scheme"))
+            }
+            _ => return Err(EngineError::Message("Invalid Url Scheme")),
         }
     }
 
-    pub async fn pipelined_open_with_stream<Io>(&self, mut _stream: Io) -> Result<Connection, EngineError> 
-    where 
+    pub async fn pipelined_open_with_stream<Io>(
+        &self,
+        mut _stream: Io,
+    ) -> Result<Connection, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    { 
+    {
         todo!()
     }
 

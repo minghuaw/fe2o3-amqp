@@ -1,24 +1,26 @@
 use bytes::{Buf, BufMut, BytesMut};
-use fe2o3_amqp::{de::Deserializer, read::{IoReader}};
-use fe2o3_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer};
-use serde::{Deserialize, ser::Serialize};
+use fe2o3_amqp::{de::Deserializer, read::IoReader};
+use fe2o3_types::performatives::{
+    Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
+};
+use serde::{ser::Serialize, Deserialize};
 use tokio_util::codec::{Decoder, Encoder};
 
 use crate::error::EngineError;
 
-use super::{FRAME_TYPE_AMQP};
+use super::FRAME_TYPE_AMQP;
 
 #[derive(Debug)]
 pub struct Frame {
     pub channel: u16,
-    pub body: FrameBody
+    pub body: FrameBody,
 }
 
 impl Frame {
     pub fn new(channel: impl Into<u16>, body: FrameBody) -> Self {
         Self {
             channel: channel.into(),
-            body
+            body,
         }
     }
 
@@ -37,7 +39,7 @@ impl Frame {
     pub fn empty() -> Self {
         Self {
             channel: 0,
-            body: FrameBody::empty()
+            body: FrameBody::empty(),
         }
     }
 }
@@ -54,7 +56,7 @@ impl Encoder<Frame> for FrameCodec {
         dst.put_u16(item.channel);
 
         // encode frame body
-        let mut encoder = FrameBodyCodec{};
+        let mut encoder = FrameBodyCodec {};
         encoder.encode(item.body, dst)
     }
 }
@@ -70,11 +72,13 @@ impl Decoder for FrameCodec {
 
         // check type byte
         if ftype != FRAME_TYPE_AMQP {
-            return Err(EngineError::Message("Only AMQP frame is implemented for now"))
+            return Err(EngineError::Message(
+                "Only AMQP frame is implemented for now",
+            ));
         }
 
         match doff {
-            2 => {},
+            2 => {}
             // 0..=1 => return Err(EngineError::MalformedFrame),
             _ => return Err(EngineError::MalformedFrame),
         }
@@ -83,43 +87,41 @@ impl Decoder for FrameCodec {
         let mut decoder = FrameBodyCodec {};
         let body = match decoder.decode(src)? {
             Some(b) => b,
-            None => return Ok(None)
+            None => return Ok(None),
         };
-        Ok(Some(
-            Frame{channel, body}
-        ))
+        Ok(Some(Frame { channel, body }))
     }
 }
 
 #[derive(Debug)]
 pub enum FrameBody {
-    Open{
-        performative: Open
+    Open {
+        performative: Open,
     },
-    Begin{
-        performative: Begin
+    Begin {
+        performative: Begin,
     },
-    Attach{
-        performative: Attach
+    Attach {
+        performative: Attach,
     },
-    Flow{
-        performative: Flow
+    Flow {
+        performative: Flow,
     },
-    Transfer{
+    Transfer {
         performative: Transfer,
         payload: Option<BytesMut>,
     },
     Disposition {
-        performative: Disposition
+        performative: Disposition,
     },
     Detach {
-        performative: Detach
+        performative: Detach,
     },
     End {
-        performative: End
+        performative: End,
     },
     Close {
-        performative: Close
+        performative: Close,
     },
     // An empty frame used only for heartbeat
     Empty,
@@ -129,15 +131,18 @@ impl FrameBody {
     /// The payload will be ignored unless the performative is Transfer
     pub fn from_parts(performative: Performative, payload: Option<BytesMut>) -> Self {
         match performative {
-            Performative::Open(performative) => FrameBody::Open{performative},
-            Performative::Begin(performative) => FrameBody::Begin{performative},
-            Performative::Attach(performative) => FrameBody::Attach{performative},
-            Performative::Flow(performative) => FrameBody::Flow{performative},
-            Performative::Transfer(performative) => FrameBody::Transfer{performative, payload},
-            Performative::Disposition(performative) => FrameBody::Disposition{performative},
-            Performative::Detach(performative) => FrameBody::Detach{performative},
-            Performative::End(performative) => FrameBody::End{performative},
-            Performative::Close(performative) => FrameBody::Close{performative},
+            Performative::Open(performative) => FrameBody::Open { performative },
+            Performative::Begin(performative) => FrameBody::Begin { performative },
+            Performative::Attach(performative) => FrameBody::Attach { performative },
+            Performative::Flow(performative) => FrameBody::Flow { performative },
+            Performative::Transfer(performative) => FrameBody::Transfer {
+                performative,
+                payload,
+            },
+            Performative::Disposition(performative) => FrameBody::Disposition { performative },
+            Performative::Detach(performative) => FrameBody::Detach { performative },
+            Performative::End(performative) => FrameBody::End { performative },
+            Performative::Close(performative) => FrameBody::Close { performative },
         }
     }
 
@@ -156,23 +161,27 @@ impl Encoder<FrameBody> for FrameBodyCodec {
 
         let mut serializer = Serializer::from(dst.writer());
         match item {
-            FrameBody::Open{performative} => performative.serialize(&mut serializer),
-            FrameBody::Begin{performative} => performative.serialize(&mut serializer),
-            FrameBody::Attach{performative} => performative.serialize(&mut serializer),
-            FrameBody::Flow{performative} => performative.serialize(&mut serializer),
-            FrameBody::Transfer{performative, payload} => {
+            FrameBody::Open { performative } => performative.serialize(&mut serializer),
+            FrameBody::Begin { performative } => performative.serialize(&mut serializer),
+            FrameBody::Attach { performative } => performative.serialize(&mut serializer),
+            FrameBody::Flow { performative } => performative.serialize(&mut serializer),
+            FrameBody::Transfer {
+                performative,
+                payload,
+            } => {
                 performative.serialize(&mut serializer)?;
                 if let Some(payload) = payload {
                     dst.put(payload);
                 }
                 Ok(())
-            },
+            }
             FrameBody::Disposition { performative } => performative.serialize(&mut serializer),
-            FrameBody::Detach{performative} => performative.serialize(&mut serializer),
-            FrameBody::End{performative} => performative.serialize(&mut serializer),
-            FrameBody::Close{performative} => performative.serialize(&mut serializer),
-            FrameBody::Empty => Ok(())
-        }.map_err(Into::into)
+            FrameBody::Detach { performative } => performative.serialize(&mut serializer),
+            FrameBody::End { performative } => performative.serialize(&mut serializer),
+            FrameBody::Close { performative } => performative.serialize(&mut serializer),
+            FrameBody::Empty => Ok(()),
+        }
+        .map_err(Into::into)
     }
 }
 
@@ -182,7 +191,7 @@ impl Decoder for FrameBodyCodec {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if src.len() == 0 {
-            return Ok(Some(FrameBody::Empty))
+            return Ok(Some(FrameBody::Empty));
         }
         let reader = IoReader::new(src.reader());
         let mut deserializer = Deserializer::new(reader);
@@ -195,9 +204,12 @@ impl Decoder for FrameBodyCodec {
                 } else {
                     None
                 };
-                FrameBody::Transfer {performative, payload}
-            },
-            p @ _ => FrameBody::from_parts(p, None)
+                FrameBody::Transfer {
+                    performative,
+                    payload,
+                }
+            }
+            p @ _ => FrameBody::from_parts(p, None),
         };
 
         Ok(Some(frame_body))
@@ -214,9 +226,9 @@ mod tests {
 
     #[test]
     fn test_encoding_frame_body() {
-        let open = Open{
+        let open = Open {
             container_id: "1234".into(),
-            hostname: Some("127.0.0.1".into()), 
+            hostname: Some("127.0.0.1".into()),
             max_frame_size: 100.into(),
             channel_max: 9.into(),
             idle_time_out: Some(10),
@@ -224,12 +236,10 @@ mod tests {
             incoming_locales: None,
             offered_capabilities: None,
             desired_capabilities: None,
-            properties: None
+            properties: None,
         };
 
-        let body = FrameBody::Open {
-            performative: open
-        };
+        let body = FrameBody::Open { performative: open };
 
         let mut encoder = FrameBodyCodec {};
         let mut dst = BytesMut::new();
@@ -248,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_decode_empty_frame() {
-        let mut decoder = FrameCodec {} ;
+        let mut decoder = FrameCodec {};
         let mut src = BytesMut::from(&[0x02, 0x00, 0x00, 0x00][..]);
         let frame = decoder.decode(&mut src).unwrap();
         println!("{:?}", frame);

@@ -1,4 +1,7 @@
-use std::{convert::{TryFrom, TryInto}, fmt::{Debug, Display}};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::{Debug, Display},
+};
 
 use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
 use serde::{de, ser};
@@ -18,7 +21,7 @@ impl Display for ConnectionError {
     }
 }
 
-impl std::error::Error for ConnectionError { }
+impl std::error::Error for ConnectionError {}
 
 impl From<ConnectionError> for ErrorCondition {
     fn from(err: ConnectionError) -> Self {
@@ -43,7 +46,7 @@ impl TryFrom<Symbol> for ConnectionError {
     fn try_from(value: Symbol) -> Result<Self, Self::Error> {
         match value.as_str().try_into() {
             Ok(val) => Ok(val),
-            Err(_) => Err(value)
+            Err(_) => Err(value),
         }
     }
 }
@@ -56,7 +59,7 @@ impl<'a> TryFrom<&'a str> for ConnectionError {
             "amqp:connection:forced" => ConnectionError::ConnectionForced,
             "amqp:connection:framing-error" => ConnectionError::FramingError,
             "amqp:connection:redirect" => ConnectionError::Redirect,
-            _ => return Err(value)
+            _ => return Err(value),
         };
         Ok(val)
     }
@@ -92,9 +95,7 @@ impl<'de> de::Visitor<'de> for Visitor {
         E: de::Error,
     {
         v.try_into()
-            .map_err(|_| de::Error::custom(
-                "Invalud symbol value for ConnectionError",
-            ))
+            .map_err(|_| de::Error::custom("Invalud symbol value for ConnectionError"))
     }
 }
 

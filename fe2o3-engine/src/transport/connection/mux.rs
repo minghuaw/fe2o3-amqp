@@ -13,7 +13,7 @@ use futures_util::{Sink, SinkExt, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
-use crate::transport::session::{SessionFrame, SessionHandle};
+use crate::transport::session::{SessionFrame, SessionHandle, SessionLocalOption};
 use crate::transport::Transport;
 
 use super::heartbeat::HeartBeat;
@@ -21,15 +21,15 @@ use super::heartbeat::HeartBeat;
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 
-use super::{ConnectionState, InChanId, OutChanId};
+use super::{ConnectionState, IncomingChannelId, OutgoingChannelId};
 
-pub enum ConnMuxControl {
+pub(crate) enum ConnMuxControl {
     // Open,
-    // NewSession(Option<InChanId>),
+    NewSession(SessionLocalOption),
     Close,
 }
 
-pub struct MuxHandle {
+pub struct ConnMuxHandle {
     control: Sender<ConnMuxControl>,
     handle: JoinHandle<Result<(), EngineError>>,
 
@@ -37,12 +37,12 @@ pub struct MuxHandle {
     session_tx: Sender<SessionFrame>,
 }
 
-impl MuxHandle {
+impl ConnMuxHandle {
     pub async fn close(&mut self) -> Result<(), EngineError> {
         self.control.send(ConnMuxControl::Close).await?;
         match (&mut self.handle).await {
             Ok(r) => r,
-            Err(_) => Err(EngineError::Message("Join Error"))
+            Err(_) => Err(EngineError::Message("Join Error")),
         }
     }
     // pub fn control_mut(&mut self) -> &mut Sender<MuxControl> {
@@ -57,11 +57,11 @@ impl MuxHandle {
 pub struct ConnMux {
     local_state: ConnectionState,
     local_open: Open,
-    local_sessions: Slab<SessionHandle>,
+    local_sessions: Slab<SessionHandle>, // Slab is indexed with OutgoingChannel
 
     remote_state: Option<ConnectionState>,
     remote_open: Option<Open>,
-    remote_sessions: BTreeMap<InChanId, OutChanId>, // maps from remote channel id to local channel id
+    remote_sessions: BTreeMap<IncomingChannelId, OutgoingChannelId>, // maps from remote channel id to local channel id
     // remote_header: ProtocolHeader,
     heartbeat: HeartBeat,
 
@@ -69,24 +69,23 @@ pub struct ConnMux {
     session_rx: Receiver<SessionFrame>,
     // Receiver from Connection
     control: Receiver<ConnMuxControl>,
-
 }
 
 impl ConnMux {
-    // Initial exchange of protocol header / connection header should be 
+    // Initial exchange of protocol header / connection header should be
     // handled before spawning the Mux
     pub async fn open<Io>(
         mut transport: Transport<Io>,
-        local_state: ConnectionState, 
-        local_open: Open, 
-        buffer_size: usize
-    ) -> Result<MuxHandle, EngineError> 
+        local_state: ConnectionState,
+        local_open: Open,
+        buffer_size: usize,
+    ) -> Result<ConnMuxHandle, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         match local_state {
-            ConnectionState::HeaderExchange => {},
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s))
+            ConnectionState::HeaderExchange => {}
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s)),
         };
 
         let (session_tx, session_rx) = mpsc::channel(buffer_size);
@@ -113,15 +112,16 @@ impl ConnMux {
         if let Err(err) = mux.recv_open(&mut transport).await {
             if let EngineError::ConnectionError(conn_err) = err {
                 let local_error = Error::from(conn_err);
-                mux.handle_close_send(&mut transport, Some(local_error)).await?;
+                mux.handle_close_send(&mut transport, Some(local_error))
+                    .await?;
             } else {
-                return Err(err)
+                return Err(err);
             }
         };
 
         // spawn mux loop
         let handle = tokio::spawn(mux.mux_loop(transport));
-        Ok(MuxHandle {
+        Ok(ConnMuxHandle {
             control: control_tx,
             handle,
             session_tx,
@@ -130,10 +130,10 @@ impl ConnMux {
 
     pub fn pipelined_open<Io>(
         transport: Transport<Io>,
-        local_state: ConnectionState, 
-        local_open: Open, 
-        buffer_size: usize
-    ) -> Result<MuxHandle, EngineError> {
+        local_state: ConnectionState,
+        local_open: Open,
+        buffer_size: usize,
+    ) -> Result<ConnMuxHandle, EngineError> {
         todo!()
     }
 
@@ -148,8 +148,11 @@ impl ConnMux {
     }
 
     #[inline]
-    async fn handle_open_send<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
-    where 
+    async fn handle_open_send<Io>(
+        &mut self,
+        transport: &mut Transport<Io>,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_open_send()");
@@ -161,11 +164,13 @@ impl ConnMux {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
         }
         let frame = Frame::new(
-            0u16, 
-            FrameBody::Open{ performative: self.local_open.clone() }
+            0u16,
+            FrameBody::Open {
+                performative: self.local_open.clone(),
+            },
         );
         transport.send(frame).await?;
         println!("Sent frame");
@@ -173,24 +178,31 @@ impl ConnMux {
     }
 
     #[inline]
-    async fn recv_open<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
-    where 
+    async fn recv_open<Io>(
+        &mut self,
+        transport: &mut Transport<Io>,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         let frame = match transport.next().await {
             Some(frame) => frame?,
-            None => return self.handle_unexpected_eof().await
+            None => return self.handle_unexpected_eof().await,
         };
         let remote_open = match frame.body {
-            FrameBody::Open{performative} => performative,
-            _ => return Err(EngineError::ConnectionError(ConnectionError::FramingError))
+            FrameBody::Open { performative } => performative,
+            _ => return Err(EngineError::ConnectionError(ConnectionError::FramingError)),
         };
         self.handle_open_recv(transport, remote_open).await
     }
 
     #[inline]
-    async fn handle_open_recv<Io>(&mut self, transport: &mut Transport<Io>, remote_open: Open) -> Result<&ConnectionState, EngineError> 
-    where 
+    async fn handle_open_recv<Io>(
+        &mut self,
+        transport: &mut Transport<Io>,
+        remote_open: Open,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_open_recv()");
@@ -203,17 +215,20 @@ impl ConnMux {
             _ => return Err(EngineError::illegal_state()),
         }
         // FIXME: is there anything we need to check?
-        let max_frame_size = min(self.local_open.max_frame_size.0, remote_open.max_frame_size.0);
+        let max_frame_size = min(
+            self.local_open.max_frame_size.0,
+            remote_open.max_frame_size.0,
+        );
         transport.set_max_frame_size(max_frame_size as usize);
 
-        // Set heartbeat here because in pipelined-open, the Open frame 
+        // Set heartbeat here because in pipelined-open, the Open frame
         // may be recved after mux loop is started
         match &remote_open.idle_time_out {
             Some(millis) => {
                 let period = Duration::from_millis(*millis as u64);
                 self.heartbeat = HeartBeat::new(period);
-            },
-            None => self.heartbeat = HeartBeat::never()
+            }
+            None => self.heartbeat = HeartBeat::never(),
         };
         self.remote_open = Some(remote_open);
 
@@ -222,11 +237,11 @@ impl ConnMux {
 
     #[inline]
     async fn handle_close_send<Io>(
-        &mut self, 
-        transport: &mut Transport<Io>, 
-        local_error: Option<Error>, 
-    ) -> Result<&ConnectionState, EngineError> 
-    where 
+        &mut self,
+        transport: &mut Transport<Io>,
+        local_error: Option<Error>,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_close_send()");
@@ -236,12 +251,14 @@ impl ConnMux {
             ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
             ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
             ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone()))
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
         };
 
         let frame = Frame::new(
             0u16,
-            FrameBody::Close{performative: Close { error: local_error } }
+            FrameBody::Close {
+                performative: Close { error: local_error },
+            },
         );
         transport.send(frame).await?;
         Ok(&self.local_state)
@@ -249,11 +266,11 @@ impl ConnMux {
 
     #[inline]
     async fn handle_close_recv<Io>(
-        &mut self, 
-        transport: &mut Transport<Io>, 
-        _remote_close: Close, 
-    ) -> Result<&ConnectionState, EngineError> 
-    where 
+        &mut self,
+        transport: &mut Transport<Io>,
+        _remote_close: Close,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_close_recv()");
@@ -264,27 +281,32 @@ impl ConnMux {
                 // respond with a Close
                 let frame = Frame::new(
                     0u16,
-                    FrameBody::Close{ performative: Close { error: None } }
+                    FrameBody::Close {
+                        performative: Close { error: None },
+                    },
                 );
                 transport.send(frame).await?;
                 // transition to End state
                 self.local_state = ConnectionState::End;
-            },
+            }
             ConnectionState::CloseSent => {
                 self.local_state = ConnectionState::End;
-            },
+            }
             // other states are invalid
             _ => return Err(EngineError::illegal_state()),
         };
         Ok(&self.local_state)
     }
 
+    /// TODO: Simply create a new session and let the session takes care 
+    /// of sending Begin?
     #[inline]
-    async fn handle_new_session(&mut self) -> Result<&ConnectionState, EngineError> {
-        todo!()
+    async fn handle_new_session(&mut self, local_option: SessionLocalOption) -> Result<&ConnectionState, EngineError> {
         // get new entry index
         // create new session
         // the new session should then send a Begin
+
+        todo!()
     }
 
     #[inline]
@@ -292,17 +314,21 @@ impl ConnMux {
         &mut self,
         transport: &mut Transport<Io>,
         item: Result<Frame, EngineError>,
-    ) -> Result<&ConnectionState, EngineError> 
-    where 
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_incoming()");
-        let Frame{channel, body} = item?;
+        let Frame { channel, body } = item?;
         match body {
-            FrameBody::Open{performative} => self.handle_open_recv(transport, performative).await,
-            FrameBody::Close{performative} => self.handle_close_recv(transport, performative).await,
+            FrameBody::Open { performative } => {
+                self.handle_open_recv(transport, performative).await
+            }
+            FrameBody::Close { performative } => {
+                self.handle_close_recv(transport, performative).await
+            }
             FrameBody::Empty => Ok(&self.local_state),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 
@@ -311,9 +337,9 @@ impl ConnMux {
         &mut self,
         item: Frame,
         writer: &mut W,
-    ) -> Result<&ConnectionState, EngineError> 
-    where 
-        W: Sink<Frame, Error = EngineError> + Unpin
+    ) -> Result<&ConnectionState, EngineError>
+    where
+        W: Sink<Frame, Error = EngineError> + Unpin,
     {
         // // get outgoing channel id
         // let chan = OutChanId::from(item.channel());
@@ -335,7 +361,11 @@ impl ConnMux {
     }
 
     #[inline]
-    async fn handle_error<Io>(&mut self, transport: &mut Transport<Io>, error: EngineError) -> Result<&ConnectionState, EngineError>
+    async fn handle_error<Io>(
+        &mut self,
+        transport: &mut Transport<Io>,
+        error: EngineError,
+    ) -> Result<&ConnectionState, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
@@ -343,26 +373,27 @@ impl ConnMux {
             EngineError::IdleTimeout => {
                 println!("Idle timeout");
                 todo!()
-            },
+            }
             EngineError::MaxFrameSizeExceeded => {
                 let local_error = Error::from(ConnectionError::FramingError);
                 self.handle_close_send(transport, Some(local_error)).await
-            },
-            EngineError::AmqpError(amqp_err) => {
-                match amqp_err {
-                    AmqpError::IllegalState => {
-                        todo!()
-                    },
-                    _ => todo!()
-                }
             }
-            _ => Ok(&self.local_state)
+            EngineError::AmqpError(amqp_err) => match amqp_err {
+                AmqpError::IllegalState => {
+                    todo!()
+                }
+                _ => todo!(),
+            },
+            _ => Ok(&self.local_state),
         }
     }
 
     #[inline]
-    async fn handle_heartbeat<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
-    where 
+    async fn handle_heartbeat<Io>(
+        &mut self,
+        transport: &mut Transport<Io>,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         match &self.local_state {
@@ -376,8 +407,11 @@ impl ConnMux {
     }
 
     #[inline]
-    async fn mux_loop_inner<Io>(&mut self, transport: &mut Transport<Io>) -> Result<&ConnectionState, EngineError> 
-    where 
+    async fn mux_loop_inner<Io>(
+        &mut self,
+        transport: &mut Transport<Io>,
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: Connection State: {:?}", &self.local_state);
@@ -388,6 +422,7 @@ impl ConnMux {
                 match control {
                     Some(control) => match control {
                         // MuxControl::Open => self.handle_open_send(transport).await,
+                        ConnMuxControl::NewSession(local_option) => self.handle_new_session(local_option).await,
                         ConnMuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {
@@ -413,33 +448,34 @@ impl ConnMux {
         }
     }
 
-    async fn mux_loop<Io>(mut self, mut transport: Transport<Io>) -> Result<(), EngineError> 
-    where 
-        Io: AsyncRead + AsyncWrite + Send + Unpin
+    async fn mux_loop<Io>(mut self, mut transport: Transport<Io>) -> Result<(), EngineError>
+    where
+        Io: AsyncRead + AsyncWrite + Send + Unpin,
     {
         loop {
             let running = match self.mux_loop_inner(&mut transport).await {
                 Ok(running) => running,
-                Err(error) => {
-                    match self.handle_error(&mut transport, error).await {
-                        Ok(r) => r,
-                        Err(err) => 
+                Err(error) => match self.handle_error(&mut transport, error).await {
+                    Ok(r) => r,
+                    Err(err) => {
+                        let local_error =
+                            Error::new(AmqpError::InternalError, Some(err.to_string()), None);
+                        match self
+                            .handle_close_send(&mut transport, Some(local_error))
+                            .await
                         {
-                            let local_error = Error::new(AmqpError::InternalError, Some(err.to_string()), None);
-                            match self.handle_close_send(&mut transport, Some(local_error)).await {
-                                Ok(r) => r,
-                                Err(err) => {
-                                    println!("!!! Internal error: {:?}. Likely unrecoverable. Closing the connection", err);
-                                    self.local_state = ConnectionState::End;
-                                    &self.local_state
-                                }
+                            Ok(r) => r,
+                            Err(err) => {
+                                println!("!!! Internal error: {:?}. Likely unrecoverable. Closing the connection", err);
+                                self.local_state = ConnectionState::End;
+                                &self.local_state
                             }
                         }
                     }
-                }
+                },
             };
             if let ConnectionState::End = running {
-                return Ok(())
+                return Ok(());
             }
         }
     }

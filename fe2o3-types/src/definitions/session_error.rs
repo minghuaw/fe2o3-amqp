@@ -38,7 +38,7 @@ impl TryFrom<Symbol> for SessionError {
     fn try_from(value: Symbol) -> Result<Self, Self::Error> {
         match value.as_str().try_into() {
             Ok(val) => Ok(val),
-            Err(_) => Err(value)
+            Err(_) => Err(value),
         }
     }
 }
@@ -52,7 +52,7 @@ impl<'a> TryFrom<&'a str> for SessionError {
             "amqp:session:errant-link" => SessionError::ErrantLink,
             "amqp:session:handle-in-use" => SessionError::HandleInUse,
             "amqp:session:unattached-handle" => SessionError::UnattachedHandle,
-            _ => return Err(value)
+            _ => return Err(value),
         };
         Ok(val)
     }

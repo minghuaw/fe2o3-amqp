@@ -51,7 +51,6 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for EngineError {
     }
 }
 
-
 impl EngineError {
     /// The peer sent a frame that is not permitted in the current state.
     pub fn illegal_state() -> Self {

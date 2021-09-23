@@ -1,4 +1,4 @@
-use fe2o3_amqp::macros::{SerializeComposite, DeserializeComposite};
+use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use super::{ErrorCondition, Fields};
 
@@ -17,27 +17,27 @@ pub struct Error {
 
 impl Error {
     pub fn new(
-        condition: impl Into<ErrorCondition>, 
-        description: Option<String>, 
-        info: Option<Fields>) -> Self 
-    {
+        condition: impl Into<ErrorCondition>,
+        description: Option<String>,
+        info: Option<Fields>,
+    ) -> Self {
         Self {
             condition: condition.into(),
             description: description.map(Into::into),
-            info: info.map(Into::into)
+            info: info.map(Into::into),
         }
     }
 }
 
-impl<T> From<T> for Error 
-where 
-    T: Into<ErrorCondition>
+impl<T> From<T> for Error
+where
+    T: Into<ErrorCondition>,
 {
     fn from(condition: T) -> Self {
         Self {
             condition: condition.into(),
             description: None,
-            info: None
+            info: None,
         }
     }
 }

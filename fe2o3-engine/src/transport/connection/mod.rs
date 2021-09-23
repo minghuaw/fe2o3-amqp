@@ -1,37 +1,39 @@
-use std::{convert::TryInto};
+use std::convert::TryInto;
 
 use crate::error::EngineError;
 pub use crate::transport::Transport;
-use fe2o3_types::{performatives::{ChannelMax, MaxFrameSize}};
+use fe2o3_types::performatives::{Begin, ChannelMax, MaxFrameSize};
 use url::Url;
 
-use self::{builder::WithoutContainerId, mux::MuxHandle};
+use self::{builder::WithoutContainerId, mux::ConnMuxHandle};
 
 mod builder;
 mod heartbeat;
 mod mux;
 
-pub use builder::{Builder};
+pub use builder::Builder;
+
+use super::session::Session;
 
 pub const MIN_MAX_FRAME_SIZE: u32 = 512;
 
 /// Incoming channel id / remote channel id
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct InChanId(pub u16);
+pub struct IncomingChannelId(pub u16);
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct OutChanId(pub u16);
+pub struct OutgoingChannelId(pub u16);
 
-impl From<u16> for OutChanId {
+impl From<u16> for OutgoingChannelId {
     fn from(val: u16) -> Self {
         Self(val)
     }
 }
 
-#[derive(Debug, Clone,)]
+#[derive(Debug, Clone)]
 pub enum ConnectionState {
     Start,
-    
+
     HeaderReceived,
 
     HeaderSent,
@@ -51,7 +53,7 @@ pub enum ConnectionState {
     Opened,
 
     CloseReceived,
-    
+
     CloseSent,
 
     Discarding,
@@ -60,11 +62,11 @@ pub enum ConnectionState {
 }
 
 // brw can still be used as background task
-// The broker message can be 
-// ```rust 
+// The broker message can be
+// ```rust
 // enum Message {
-    // Incoming(Frame),
-    // Outgoing(Frame)
+// Incoming(Frame),
+// Outgoing(Frame)
 // }
 // ```
 pub struct Connection {
@@ -72,7 +74,7 @@ pub struct Connection {
     // local_open: Arc<Open>, // parameters should be set using the builder and not change before reconnect
     // tx to conn_mux for session
     // session_tx: Sender<SessionFrame>,
-    mux: MuxHandle,
+    mux: ConnMuxHandle,
 }
 
 impl Connection {
@@ -83,17 +85,30 @@ impl Connection {
     //     }
     // }
 
+    pub fn mux(&self) -> &ConnMuxHandle {
+        &self.mux
+    }
+
+    pub fn mux_mut(&mut self) -> &mut ConnMuxHandle {
+        &mut self.mux
+    }
+
+    pub fn builder() -> Builder<WithoutContainerId> {
+        Builder::new()
+    }
+
     pub async fn open(
         container_id: String,
         max_frame_size: impl Into<MaxFrameSize>,
         channel_max: impl Into<ChannelMax>,
-        url: impl TryInto<Url, Error=url::ParseError>
+        url: impl TryInto<Url, Error = url::ParseError>,
     ) -> Result<Connection, EngineError> {
         Connection::builder()
             .container_id(container_id)
             .max_frame_size(max_frame_size)
             .channel_max(channel_max)
-            .open(url).await
+            .open(url)
+            .await
     }
 
     pub async fn close(&mut self) -> Result<(), EngineError> {
@@ -106,21 +121,14 @@ impl Connection {
         self.mux.close().await
     }
 
-    pub fn mux(&self) -> &MuxHandle {
-        &self.mux
+    pub(crate) async fn create_session(&mut self, local_begin: Begin) -> Result<Session, EngineError> {
+        todo!()
     }
 
-    pub fn mux_mut(&mut self) -> &mut MuxHandle {
-        &mut self.mux
-    }
-
-    pub fn builder() -> Builder<WithoutContainerId> {
-        Builder::new()
-    }
 }
 
-impl From<MuxHandle> for Connection {
-    fn from(mux: MuxHandle) -> Self {
+impl From<ConnMuxHandle> for Connection {
+    fn from(mux: ConnMuxHandle) -> Self {
         Self { mux }
     }
 }
@@ -146,7 +154,8 @@ mod tests {
             .max_frame_size(100)
             .channel_max(9)
             .idle_time_out(10u32)
-            .open_with_stream(mock).await
+            .open_with_stream(mock)
+            .await
             .unwrap();
     }
 }

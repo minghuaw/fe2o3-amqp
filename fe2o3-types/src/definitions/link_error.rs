@@ -40,7 +40,7 @@ impl TryFrom<Symbol> for LinkError {
     fn try_from(value: Symbol) -> Result<Self, Self::Error> {
         match value.as_str().try_into() {
             Ok(val) => Ok(val),
-            Err(_) => Err(value)
+            Err(_) => Err(value),
         }
     }
 }
@@ -90,7 +90,8 @@ impl<'de> de::Visitor<'de> for Visitor {
     where
         E: de::Error,
     {
-        v.try_into().map_err(|_| de::Error::custom("Invalid symbol value for LinkError"))
+        v.try_into()
+            .map_err(|_| de::Error::custom("Invalid symbol value for LinkError"))
     }
 }
 
