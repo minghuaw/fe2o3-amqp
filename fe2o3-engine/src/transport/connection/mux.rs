@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use fe2o3_amqp::primitives::UInt;
 use fe2o3_types::definitions::{AmqpError, ConnectionError, Error, Handle};
-use fe2o3_types::performatives::{Begin, Close, Open};
+use fe2o3_types::performatives::{Begin, ChannelMax, Close, Open};
 use slab::Slab;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -63,6 +63,9 @@ pub struct ConnMux {
     // remote_header: ProtocolHeader,
     heartbeat: HeartBeat,
 
+    // mutual limitations
+    channel_max: u16,
+
     // Receiver from Session
     session_rx: Receiver<SessionFrame>,
     // Receiver from Connection
@@ -89,6 +92,7 @@ impl ConnMux {
         let (session_tx, session_rx) = mpsc::channel(buffer_size);
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let local_sessions = Slab::new(); // TODO: pre-allocate capacity
+        let channel_max = local_open.channel_max.0;
 
         let mut mux = Self {
             local_state,
@@ -100,6 +104,8 @@ impl ConnMux {
             // remote_header,
             heartbeat: HeartBeat::never(),
             // session_tx,
+
+            channel_max,
             session_rx,
             control: control_rx,
         };
@@ -213,11 +219,19 @@ impl ConnMux {
             _ => return Err(EngineError::illegal_state()),
         }
         // FIXME: is there anything we need to check?
+        // set max_frame_size to mutually acceptable
         let max_frame_size = min(
             self.local_open.max_frame_size.0,
             remote_open.max_frame_size.0,
         );
         transport.set_max_frame_size(max_frame_size as usize);
+
+        // set channel_max to mutually acceptable
+        let channel_max = min(
+            self.local_open.channel_max.0,
+            remote_open.channel_max.0
+        );
+        self.channel_max = channel_max;
 
         // Set heartbeat here because in pipelined-open, the Open frame
         // may be recved after mux loop is started
@@ -309,7 +323,7 @@ impl ConnMux {
         let key = entry.key();
         
         // check if there is enough
-        if key > self.local_open.channel_max.0 as usize {
+        if key > self.channel_max as usize {
             resp.send(Err(EngineError::AmqpError(AmqpError::NotAllowed)))
                 .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
             return Err(EngineError::Message("Exceeding max number of channel is not allowed"))

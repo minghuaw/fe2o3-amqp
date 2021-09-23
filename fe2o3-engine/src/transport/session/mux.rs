@@ -37,12 +37,6 @@ pub(crate) enum SessionMuxControl {
     End,
 }
 
-pub(crate) struct SessionMuxHandle {
-    control: Sender<SessionMuxControl>,
-    // TODO: send back using a oneshot channel?
-    handle: JoinHandle<Result<(), EngineError>>, // JoinHandle to session mux
-}
-
 /// Mux has to be started from the Connection's Mux
 pub(crate) struct SessionMux {
     // control

@@ -1,9 +1,11 @@
 use bytes::BytesMut;
 use fe2o3_amqp::primitives::UInt;
 use fe2o3_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
-use tokio::sync::mpsc::Sender;
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
 use crate::error::EngineError;
+
+use self::mux::SessionMuxControl;
 
 use super::{
     amqp::{Frame, FrameBody},
@@ -87,4 +89,8 @@ impl SessionHandle {
 
 /// Session API available for public
 /// TODO: Only care about creating new local session for now.
-pub struct Session {}
+pub struct Session {
+    mux: Sender<SessionMuxControl>,
+    // TODO: send back using a oneshot channel?
+    handle: JoinHandle<Result<(), EngineError>>, // JoinHandle to session mux
+}

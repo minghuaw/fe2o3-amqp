@@ -81,7 +81,11 @@ impl Builder {
     }
 
     pub async fn begin(&mut self, connection: &mut Connection) -> Result<Session, EngineError> {
-        
+        // create a oneshot channel to receive result of session creation
+
+        // send session options and oneshot sender to Connection's Mux
+
+        // .awaiting result
 
         todo!()
     }
