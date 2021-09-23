@@ -3,9 +3,10 @@ use std::convert::TryInto;
 use crate::error::EngineError;
 pub use crate::transport::Transport;
 use fe2o3_types::performatives::{Begin, ChannelMax, MaxFrameSize};
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use url::Url;
 
-use self::{builder::WithoutContainerId, mux::ConnMuxHandle};
+use self::{builder::WithoutContainerId, mux::ConnMuxControl};
 
 mod builder;
 mod heartbeat;
@@ -13,7 +14,7 @@ mod mux;
 
 pub use builder::Builder;
 
-use super::session::Session;
+use super::session::{Session, SessionFrame};
 
 pub const MIN_MAX_FRAME_SIZE: u32 = 512;
 
@@ -73,25 +74,21 @@ pub struct Connection {
     // FIXME: is this really needed?
     // local_open: Arc<Open>, // parameters should be set using the builder and not change before reconnect
     // tx to conn_mux for session
-    // session_tx: Sender<SessionFrame>,
-    mux: ConnMuxHandle,
+    // mux: ConnMuxHandle,
+    
+    mux: Sender<ConnMuxControl>,
+    handle: JoinHandle<Result<(), EngineError>>,
+    session_tx: Sender<SessionFrame>,
 }
 
 impl Connection {
-    // pub fn from_parts(session_tx: Sender<SessionFrame>, mux: MuxHandle) -> Self {
-    //     Self {
-    //         session_tx,
-    //         mux
-    //     }
+    // pub fn mux(&self) -> &ConnMuxHandle {
+    //     &self.mux
     // }
 
-    pub fn mux(&self) -> &ConnMuxHandle {
-        &self.mux
-    }
-
-    pub fn mux_mut(&mut self) -> &mut ConnMuxHandle {
-        &mut self.mux
-    }
+    // pub fn mux_mut(&mut self) -> &mut ConnMuxHandle {
+    //     &mut self.mux
+    // }
 
     pub fn builder() -> Builder<WithoutContainerId> {
         Builder::new()
@@ -112,13 +109,13 @@ impl Connection {
     }
 
     pub async fn close(&mut self) -> Result<(), EngineError> {
-        // self.mux.control_mut().send(mux::MuxControl::Close).await?;
-        // // Ok(())
-        // match self.mux.handle_mut().await {
-        //     Ok(res) => res,
-        //     Err(_) => Err(EngineError::Message("JoinError"))
-        // }
-        self.mux.close().await
+        self.mux.send(mux::ConnMuxControl::Close).await?;
+        // Ok(())
+        match (&mut self.handle).await {
+            Ok(res) => res,
+            Err(_) => Err(EngineError::Message("JoinError"))
+        }
+        // self.mux.close().await
     }
 
     pub(crate) async fn create_session(&mut self, local_begin: Begin) -> Result<Session, EngineError> {
@@ -127,11 +124,11 @@ impl Connection {
 
 }
 
-impl From<ConnMuxHandle> for Connection {
-    fn from(mux: ConnMuxHandle) -> Self {
-        Self { mux }
-    }
-}
+// impl From<ConnMuxHandle> for Connection {
+//     fn from(mux: ConnMuxHandle) -> Self {
+//         Self { mux }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

@@ -23,7 +23,7 @@ use super::heartbeat::HeartBeat;
 const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 
-use super::{ConnectionState, IncomingChannelId, OutgoingChannelId};
+use super::{Connection, ConnectionState, IncomingChannelId, OutgoingChannelId};
 
 pub(crate) enum ConnMuxControl {
     // Open,
@@ -34,23 +34,23 @@ pub(crate) enum ConnMuxControl {
     Close,
 }
 
-pub struct ConnMuxHandle {
-    control: Sender<ConnMuxControl>,
-    handle: JoinHandle<Result<(), EngineError>>,
+// pub struct ConnMuxHandle {
+//     control: Sender<ConnMuxControl>,
+//     handle: JoinHandle<Result<(), EngineError>>,
 
-    // Sender to Connection Mux, should be cloned to a new session
-    session_tx: Sender<SessionFrame>,
-}
+//     // Sender to Connection Mux, should be cloned to a new session
+//     session_tx: Sender<SessionFrame>,
+// }
 
-impl ConnMuxHandle {
-    pub async fn close(&mut self) -> Result<(), EngineError> {
-        self.control.send(ConnMuxControl::Close).await?;
-        match (&mut self.handle).await {
-            Ok(r) => r,
-            Err(_) => Err(EngineError::Message("Join Error")),
-        }
-    }
-}
+// impl ConnMuxHandle {
+//     pub async fn close(&mut self) -> Result<(), EngineError> {
+//         self.control.send(ConnMuxControl::Close).await?;
+//         match (&mut self.handle).await {
+//             Ok(r) => r,
+//             Err(_) => Err(EngineError::Message("Join Error")),
+//         }
+//     }
+// }
 
 pub struct ConnMux {
     local_state: ConnectionState,
@@ -77,7 +77,7 @@ impl ConnMux {
         local_state: ConnectionState,
         local_open: Open,
         buffer_size: usize,
-    ) -> Result<ConnMuxHandle, EngineError>
+    ) -> Result<Connection, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -119,8 +119,8 @@ impl ConnMux {
 
         // spawn mux loop
         let handle = tokio::spawn(mux.mux_loop(transport));
-        Ok(ConnMuxHandle {
-            control: control_tx,
+        Ok(Connection {
+            mux: control_tx,
             handle,
             session_tx,
         })
@@ -131,7 +131,7 @@ impl ConnMux {
         local_state: ConnectionState,
         local_open: Open,
         buffer_size: usize,
-    ) -> Result<ConnMuxHandle, EngineError> {
+    ) -> Result<Connection, EngineError> {
         todo!()
     }
 
