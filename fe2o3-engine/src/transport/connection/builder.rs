@@ -5,7 +5,7 @@ use fe2o3_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performa
 use tokio::{io::{AsyncRead, AsyncWrite}, net::TcpStream};
 use url::Url;
 
-use crate::{error::EngineError, transport::{Transport, connection::{ConnectionState, mux::Mux}}, transport::protocol_header::ProtocolHeader};
+use crate::{error::EngineError, transport::{Transport, connection::{ConnectionState, mux::ConnMux}}, transport::protocol_header::ProtocolHeader};
 
 use super::{Connection, MIN_MAX_FRAME_SIZE, mux::{DEFAULT_CONNECTION_MUX_BUFFER_SIZE}};
 
@@ -187,7 +187,7 @@ impl Builder<WithContainerId> {
 
         println!(">>> Debug: with_stream() - starting Mux");
         // open Connection
-        let mux = Mux::open(
+        let mux = ConnMux::open(
             transport, 
             local_state, 
             local_open, 

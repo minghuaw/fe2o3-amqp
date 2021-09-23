@@ -6,6 +6,9 @@ use crate::error::EngineError;
 
 use super::{amqp::{Frame, FrameBody}, connection::OutChanId};
 
+mod mux;
+mod builder;
+
 pub struct SessionFrame {
     channel: u16, // outgoing/local channel number
     body: SessionFrameBody
@@ -36,7 +39,30 @@ pub enum SessionFrameBody {
     },
 }
 
-pub struct SessionHandle {
+// 2.5.5 Session States
+// UNMAPPED
+// BEGIN SENT
+// BEGIN RCVD
+// MAPPED END SENT
+// END RCVD
+// DISCARDING
+pub enum SessionState {
+    Unmapped,
+
+    BeginSent,
+
+    BeginReceived,
+
+    MappedEndSent,
+
+    EndReceived,
+
+    Discarding
+}
+
+
+/// Session handle held by the connection mux
+pub(crate) struct SessionHandle {
     id: OutChanId,
     sender: Sender<Result<SessionFrameBody, EngineError>>,
 }
@@ -51,10 +77,8 @@ impl SessionHandle {
     }
 }
 
-pub enum SessionState {
-
-}
-
+/// Session API available for public
+/// TODO: Only care about creating new local session for now.
 pub struct Session {
-    id: OutChanId,
+
 }

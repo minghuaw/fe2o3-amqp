@@ -7,11 +7,11 @@ use url::Url;
 
 use self::{builder::WithoutContainerId, mux::MuxHandle};
 
-
 mod builder;
 mod heartbeat;
+mod mux;
+
 pub use builder::{Builder};
-pub mod mux;
 
 pub const MIN_MAX_FRAME_SIZE: u32 = 512;
 

@@ -23,20 +23,23 @@ pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 
 use super::{ConnectionState, InChanId, OutChanId};
 
-pub enum MuxControl {
+pub enum ConnMuxControl {
     // Open,
     // NewSession(Option<InChanId>),
     Close,
 }
 
 pub struct MuxHandle {
-    control: Sender<MuxControl>,
+    control: Sender<ConnMuxControl>,
     handle: JoinHandle<Result<(), EngineError>>,
+
+    // Sender to Connection Mux, should be cloned to a new session
+    session_tx: Sender<SessionFrame>,
 }
 
 impl MuxHandle {
     pub async fn close(&mut self) -> Result<(), EngineError> {
-        self.control.send(MuxControl::Close).await?;
+        self.control.send(ConnMuxControl::Close).await?;
         match (&mut self.handle).await {
             Ok(r) => r,
             Err(_) => Err(EngineError::Message("Join Error"))
@@ -51,7 +54,7 @@ impl MuxHandle {
     // }
 }
 
-pub struct Mux {
+pub struct ConnMux {
     local_state: ConnectionState,
     local_open: Open,
     local_sessions: Slab<SessionHandle>,
@@ -62,16 +65,14 @@ pub struct Mux {
     // remote_header: ProtocolHeader,
     heartbeat: HeartBeat,
 
-    // Sender to Connection Mux, should be cloned to a new session
-    session_tx: Sender<SessionFrame>,
     // Receiver from Session
     session_rx: Receiver<SessionFrame>,
     // Receiver from Connection
-    control: Receiver<MuxControl>,
+    control: Receiver<ConnMuxControl>,
 
 }
 
-impl Mux {
+impl ConnMux {
     // Initial exchange of protocol header / connection header should be 
     // handled before spawning the Mux
     pub async fn open<Io>(
@@ -101,7 +102,7 @@ impl Mux {
             remote_sessions: BTreeMap::new(),
             // remote_header,
             heartbeat: HeartBeat::never(),
-            session_tx,
+            // session_tx,
             session_rx,
             control: control_rx,
         };
@@ -122,7 +123,8 @@ impl Mux {
         let handle = tokio::spawn(mux.mux_loop(transport));
         Ok(MuxHandle {
             control: control_tx,
-            handle
+            handle,
+            session_tx,
         })
     }
 
@@ -363,8 +365,9 @@ impl Mux {
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
     {
-        if let ConnectionState::Start | ConnectionState::End = &self.local_state {
-            return Ok(&self.local_state)
+        match &self.local_state {
+            ConnectionState::Start | ConnectionState::End => return Ok(&self.local_state),
+            _ => {}
         }
 
         let frame = Frame::empty();
@@ -385,7 +388,7 @@ impl Mux {
                 match control {
                     Some(control) => match control {
                         // MuxControl::Open => self.handle_open_send(transport).await,
-                        MuxControl::Close => self.handle_close_send(transport, None).await,
+                        ConnMuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {
                         self.handle_unexpected_drop().await
