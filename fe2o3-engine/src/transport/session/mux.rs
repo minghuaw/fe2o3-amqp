@@ -1,9 +1,20 @@
-
 use fe2o3_amqp::primitives::{Symbol, UInt};
-use fe2o3_types::{definitions::{Fields, Handle, SequenceNo, TransferNumber}, performatives::Begin};
-use tokio::{sync::mpsc::{self, Receiver, Sender}, task::JoinHandle};
+use fe2o3_types::{
+    definitions::{Fields, Handle, SequenceNo, TransferNumber},
+    performatives::Begin,
+};
+use tokio::{
+    sync::mpsc::{self, Receiver, Sender},
+    task::JoinHandle,
+};
 
-use crate::{error::EngineError, transport::{connection::{self, DEFAULT_CONTROL_CHAN_BUF, OutgoingChannelId}, session::SessionHandle}};
+use crate::{
+    error::EngineError,
+    transport::{
+        connection::{self, OutgoingChannelId, DEFAULT_CONTROL_CHAN_BUF},
+        session::SessionHandle,
+    },
+};
 
 use super::{Session, SessionFrame, SessionFrameBody, SessionState};
 
@@ -29,14 +40,14 @@ pub(crate) struct SessionMux {
     next_outgoing_id: TransferNumber,
     incoming_window: TransferNumber,
     outgoing_window: TransferNumber,
-    
+
     handle_max: Handle,
-    
+
     // remote states
     incoming: Receiver<Result<SessionFrame, EngineError>>,
-    
+
     // initialize with 0 first and change after receiving the remote Begin
-    next_incoming_id: TransferNumber, 
+    next_incoming_id: TransferNumber,
     remote_incoming_window: SequenceNo,
     remote_outgoing_window: SequenceNo,
 }
@@ -61,7 +72,7 @@ impl SessionMux {
     //         next_outgoing_id,
     //         outgoing_window,
     //         handle_max,
-            
+
     //         offered_capabilities,
     //         desired_capabilities,
     //         properties,
@@ -103,7 +114,6 @@ impl SessionMux {
         properties: Option<Fields>,
         buffer_size: usize,
     ) -> Result<Session, EngineError> {
-
         // channels
         let (control_tx, control) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
 
@@ -123,9 +133,9 @@ impl SessionMux {
         };
 
         let handle = tokio::spawn(mux.mux_loop());
-        let session = Session{
+        let session = Session {
             mux: control_tx,
-            handle
+            handle,
         };
 
         // Send begin

@@ -27,7 +27,7 @@ use super::{Connection, ConnectionState, IncomingChannelId, OutgoingChannelId};
 
 pub(crate) enum ConnMuxControl {
     // Open,
-    NewSession{
+    NewSession {
         handle: SessionHandle,
         resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
     },
@@ -86,7 +86,6 @@ impl ConnMux {
             // remote_header,
             heartbeat: HeartBeat::never(),
             // session_tx,
-
             channel_max,
             session_rx,
             control: control_rx,
@@ -209,10 +208,7 @@ impl ConnMux {
         transport.set_max_frame_size(max_frame_size as usize);
 
         // set channel_max to mutually acceptable
-        let channel_max = min(
-            self.local_open.channel_max.0,
-            remote_open.channel_max.0
-        );
+        let channel_max = min(self.local_open.channel_max.0, remote_open.channel_max.0);
         self.channel_max = channel_max;
 
         // Set heartbeat here because in pipelined-open, the Open frame
@@ -292,27 +288,29 @@ impl ConnMux {
         Ok(&self.local_state)
     }
 
-    /// TODO: Simply create a new session and let the session takes care 
+    /// TODO: Simply create a new session and let the session takes care
     /// of sending Begin?
     #[inline]
     async fn handle_local_new_session<Io>(
-        &mut self, 
+        &mut self,
         transport: &mut Transport<Io>,
         handle: SessionHandle,
         resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
-    ) -> Result<&ConnectionState, EngineError> 
-    where 
+    ) -> Result<&ConnectionState, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         // get new entry index
         let entry = self.local_sessions.vacant_entry();
         let channel = entry.key();
-        
+
         // check if there is enough
         if channel > self.channel_max as usize {
             resp.send(Err(EngineError::AmqpError(AmqpError::NotAllowed)))
                 .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
-            return Err(EngineError::Message("Exceeding max number of channel is not allowed"))
+            return Err(EngineError::Message(
+                "Exceeding max number of channel is not allowed",
+            ));
         }
 
         let outgoing_chan = OutgoingChannelId(channel as u16);

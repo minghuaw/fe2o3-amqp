@@ -2,9 +2,15 @@ use fe2o3_amqp::primitives::{Symbol, UInt};
 use fe2o3_types::definitions::{Fields, Handle, TransferNumber};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{error::EngineError, transport::{connection::{ConnMuxControl, Connection, DEFAULT_CONTROL_CHAN_BUF}, session::{SessionMux, SessionState}}};
+use crate::{
+    error::EngineError,
+    transport::{
+        connection::{ConnMuxControl, Connection, DEFAULT_CONTROL_CHAN_BUF},
+        session::{SessionMux, SessionState},
+    },
+};
 
-use super::{DEFAULT_WINDOW, Session, SessionHandle, mux::DEFAULT_SESSION_MUX_BUFFER_SIZE};
+use super::{mux::DEFAULT_SESSION_MUX_BUFFER_SIZE, Session, SessionHandle, DEFAULT_WINDOW};
 
 pub struct Builder {
     pub next_outgoing_id: TransferNumber,
@@ -51,7 +57,6 @@ impl Builder {
         self
     }
 
-
     pub fn add_offered_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -94,7 +99,7 @@ impl Builder {
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
         let (to_session, incoming) = mpsc::channel(self.buffer_size);
 
-        let session_handle = SessionHandle{ sender: to_session };
+        let session_handle = SessionHandle { sender: to_session };
         let control = ConnMuxControl::NewSession {
             handle: session_handle,
             resp: oneshot_tx,
@@ -102,22 +107,23 @@ impl Builder {
         connection.mux_mut().send(control).await?;
 
         // .awaiting result
-        let local_channel = oneshot_rx.await
+        let local_channel = oneshot_rx
+            .await
             .map_err(|_| EngineError::Message("RecvError from oneshot::Receiver"))??;
 
         let session = SessionMux::spawn(
-            local_state, 
-            local_channel, 
-            incoming, 
-            connection.session_tx().clone(), 
-            self.next_outgoing_id, 
-            self.incoming_window, 
-            self.outgoing_window, 
-            self.handle_max.clone(), 
-            self.offered_capabilities.clone(), 
-            self.desired_capabilities.clone(), 
+            local_state,
+            local_channel,
+            incoming,
+            connection.session_tx().clone(),
+            self.next_outgoing_id,
+            self.incoming_window,
+            self.outgoing_window,
+            self.handle_max.clone(),
+            self.offered_capabilities.clone(),
+            self.desired_capabilities.clone(),
             self.properties.clone(),
-            self.buffer_size, 
+            self.buffer_size,
         )?;
 
         // send a begin frame to remote session

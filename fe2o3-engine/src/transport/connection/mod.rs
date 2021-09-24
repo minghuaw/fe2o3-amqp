@@ -7,7 +7,7 @@ use futures_util::Sink;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use url::Url;
 
-use self::{builder::WithoutContainerId};
+use self::builder::WithoutContainerId;
 
 mod builder;
 mod heartbeat;
@@ -78,7 +78,6 @@ pub struct Connection {
     // local_open: Arc<Open>, // parameters should be set using the builder and not change before reconnect
     // tx to conn_mux for session
     // mux: ConnMuxHandle,
-    
     mux: Sender<ConnMuxControl>,
     handle: JoinHandle<Result<(), EngineError>>,
     session_tx: Sender<SessionFrame>,
@@ -120,15 +119,17 @@ impl Connection {
         // Ok(())
         match (&mut self.handle).await {
             Ok(res) => res,
-            Err(_) => Err(EngineError::Message("JoinError"))
+            Err(_) => Err(EngineError::Message("JoinError")),
         }
         // self.mux.close().await
     }
 
-    pub(crate) async fn create_session(&mut self, local_begin: Begin) -> Result<Session, EngineError> {
+    pub(crate) async fn create_session(
+        &mut self,
+        local_begin: Begin,
+    ) -> Result<Session, EngineError> {
         todo!()
     }
-
 }
 
 // impl From<ConnMuxHandle> for Connection {

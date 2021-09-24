@@ -15,7 +15,7 @@ use super::{
 mod builder;
 mod mux;
 
-pub(crate) use mux::{SessionMux};
+pub(crate) use mux::SessionMux;
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 100;
@@ -89,9 +89,9 @@ impl SessionHandle {
 
 /// Session API available for public
 /// TODO: Only care about creating new local session for now.
-/// 
+///
 /// How should a new session be created?
-/// 
+///
 pub struct Session {
     mux: Sender<SessionMuxControl>,
     // TODO: send back using a oneshot channel?
