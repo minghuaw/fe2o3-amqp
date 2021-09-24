@@ -15,7 +15,7 @@ use super::{
 mod builder;
 mod mux;
 
-pub(crate) use mux::{SessionLocalOption, SessionMux};
+pub(crate) use mux::{SessionMux};
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 100;

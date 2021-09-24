@@ -2,7 +2,7 @@ use fe2o3_amqp::primitives::{Symbol, UInt};
 use fe2o3_types::definitions::{Fields, Handle, TransferNumber};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{error::EngineError, transport::{connection::{ConnMuxControl, Connection, DEFAULT_CONTROL_CHAN_BUF}, session::{SessionLocalOption, SessionMux, SessionState}}};
+use crate::{error::EngineError, transport::{connection::{ConnMuxControl, Connection, DEFAULT_CONTROL_CHAN_BUF}, session::{SessionMux, SessionState}}};
 
 use super::{DEFAULT_WINDOW, Session, SessionHandle, mux::DEFAULT_SESSION_MUX_BUFFER_SIZE};
 

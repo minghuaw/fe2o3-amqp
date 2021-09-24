@@ -1,6 +1,6 @@
 
 use fe2o3_amqp::primitives::{Symbol, UInt};
-use fe2o3_types::definitions::{Fields, Handle, SequenceNo, TransferNumber};
+use fe2o3_types::{definitions::{Fields, Handle, SequenceNo, TransferNumber}, performatives::Begin};
 use tokio::{sync::mpsc::{self, Receiver, Sender}, task::JoinHandle};
 
 use crate::{error::EngineError, transport::{connection::{self, DEFAULT_CONTROL_CHAN_BUF, OutgoingChannelId}, session::SessionHandle}};
@@ -8,32 +8,6 @@ use crate::{error::EngineError, transport::{connection::{self, DEFAULT_CONTROL_C
 use super::{Session, SessionFrame, SessionFrameBody, SessionState};
 
 pub const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
-
-pub(crate) struct SessionLocalOption {
-    // control
-    pub control: Receiver<SessionMuxControl>,
-    
-    // local states
-    pub outgoing: Sender<SessionFrame>,
-    // pub local_channel: u16,
-    // local_state: SessionState,
-
-    // pub next_incoming_id: TransferNumber,
-    pub incoming_window: TransferNumber,
-    pub next_outgoing_id: TransferNumber,
-    pub outgoing_window: TransferNumber,
-
-    pub handle_max: UInt,
-
-    /// <field name="offered-capabilities" type="symbol" multiple="true"/>
-    pub offered_capabilities: Option<Vec<Symbol>>,
-
-    /// <field name="desired-capabilities" type="symbol" multiple="true"/>
-    pub desired_capabilities: Option<Vec<Symbol>>,
-
-    /// <field name="properties" type="fields"/>
-    pub properties: Option<Fields>,
-}
 
 pub(crate) enum SessionMuxControl {
     End,
@@ -45,21 +19,24 @@ pub(crate) struct SessionMux {
     control: Receiver<SessionMuxControl>,
 
     // local states
+    // A `local_begin` is not used here (unlike in ConnMux)
+    // because the following local states are subject to change
+    // during the operation.
     outgoing: Sender<SessionFrame>,
     local_channel: OutgoingChannelId,
     local_state: SessionState,
 
-    next_incoming_id: TransferNumber, // initialize with 0 first and change after receiving the remote Begin
-    incoming_window: TransferNumber,
     next_outgoing_id: TransferNumber,
+    incoming_window: TransferNumber,
     outgoing_window: TransferNumber,
-
+    
     handle_max: Handle,
-
+    
     // remote states
     incoming: Receiver<Result<SessionFrame, EngineError>>,
-    // remote_channel: u16,
-
+    
+    // initialize with 0 first and change after receiving the remote Begin
+    next_incoming_id: TransferNumber, 
     remote_incoming_window: SequenceNo,
     remote_outgoing_window: SequenceNo,
 }
@@ -150,6 +127,10 @@ impl SessionMux {
             mux: control_tx,
             handle
         };
+
+        // Send begin
+        todo!();
+
         Ok(session)
     }
 

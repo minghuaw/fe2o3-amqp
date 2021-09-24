@@ -15,7 +15,7 @@ use futures_util::{Sink, SinkExt, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
-use crate::transport::session::{SessionFrame, SessionHandle, SessionLocalOption};
+use crate::transport::session::{SessionFrame, SessionHandle};
 use crate::transport::Transport;
 
 use super::heartbeat::HeartBeat;
