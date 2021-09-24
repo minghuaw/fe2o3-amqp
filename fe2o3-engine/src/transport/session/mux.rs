@@ -52,7 +52,53 @@ pub(crate) struct SessionMux {
 }
 
 impl SessionMux {
-    pub fn spawn(
+    // pub fn spawn(
+    //     local_state: SessionState,
+    //     local_channel: OutgoingChannelId,
+    //     incoming: Receiver<Result<SessionFrame, EngineError>>,
+    //     outgoing: Sender<SessionFrame>,
+    //     next_outgoing_id: TransferNumber,
+    //     incoming_window: TransferNumber,
+    //     outgoing_window: TransferNumber,
+    //     handle_max: Handle,
+    //     offered_capabilities: Option<Vec<Symbol>>,
+    //     desired_capabilities: Option<Vec<Symbol>>,
+    //     properties: Option<Fields>,
+    // ) -> Result<Session, EngineError> {
+    //     // channels
+    //     let (control_tx, control) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+
+    //     let mux = SessionMux {
+    //         control,
+    //         outgoing,
+    //         local_channel,
+    //         local_state,
+    //         next_incoming_id: 0, // initialize with 0 and update when remote Begin is received
+    //         incoming_window,
+    //         next_outgoing_id,
+    //         outgoing_window,
+    //         handle_max,
+    //         incoming,
+    //         remote_incoming_window: 0, // initialize with 0 and update when remote Begin is received
+    //         remote_outgoing_window: 0, // initialize with 0 and update when remote Begin is received
+    //         offered_capabilities,
+    //         desired_capabilities,
+    //         properties
+    //     };
+
+    //     let handle = tokio::spawn(mux.mux_loop());
+    //     let session = Session {
+    //         mux: control_tx,
+    //         handle,
+    //     };
+
+    //     // Send begin and wait for begin
+    //     todo!();
+
+    //     Ok(session)
+    // }
+
+    pub async fn begin(
         local_state: SessionState,
         local_channel: OutgoingChannelId,
         incoming: Receiver<Result<SessionFrame, EngineError>>,
@@ -68,7 +114,7 @@ impl SessionMux {
         // channels
         let (control_tx, control) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
 
-        let mux = SessionMux {
+        let mut mux = SessionMux {
             control,
             outgoing,
             local_channel,
@@ -86,19 +132,25 @@ impl SessionMux {
             properties
         };
 
+        // Send begin and wait for begin
+        mux.send_begin().await?;
+        mux.recv_begin().await?;
+
         let handle = tokio::spawn(mux.mux_loop());
         let session = Session {
             mux: control_tx,
             handle,
         };
 
-        // Send begin and wait for begin
-        todo!();
-
         Ok(session)
     }
+}
 
-    pub async fn send_begin(&mut self) -> Result<&SessionState, EngineError> {
+
+
+/* ----------------------------- private methods ---------------------------- */
+impl SessionMux {
+    async fn send_begin(&mut self) -> Result<&SessionState, EngineError> {
         let performative = Begin {
             remote_channel: None,
             next_outgoing_id: self.next_outgoing_id,
@@ -130,9 +182,9 @@ impl SessionMux {
         Ok(&self.local_state)
     }
 
-    // pub fn spawn(self) -> JoinHandle<Result<(), EngineError>> {
-    //     tokio::spawn(self.mux_loop())
-    // }
+    async fn  recv_begin(&mut self) -> Result<&SessionState, EngineError> {
+        todo!()
+    }
 
     async fn mux_loop(mut self) -> Result<(), EngineError> {
         loop {

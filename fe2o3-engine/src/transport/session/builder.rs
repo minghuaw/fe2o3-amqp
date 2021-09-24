@@ -111,7 +111,7 @@ impl Builder {
             .await
             .map_err(|_| EngineError::Message("RecvError from oneshot::Receiver"))??;
 
-        let session = SessionMux::spawn(
+        let session = SessionMux::begin(
             local_state,
             local_channel,
             incoming,
@@ -123,7 +123,7 @@ impl Builder {
             self.offered_capabilities.clone(),
             self.desired_capabilities.clone(),
             self.properties.clone(),
-        )?;
+        ).await?;
 
         Ok(session)
     }

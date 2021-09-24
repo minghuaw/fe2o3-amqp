@@ -300,6 +300,20 @@ impl ConnMux {
     where
         Io: AsyncRead + AsyncWrite + Unpin,
     {
+        match &self.local_state {
+            ConnectionState::Start 
+            | ConnectionState::HeaderSent
+            | ConnectionState::HeaderReceived
+            | ConnectionState::HeaderExchange
+            | ConnectionState::CloseSent
+            | ConnectionState::Discarding
+            | ConnectionState::End => {
+                return Err(EngineError::illegal_state())
+            },
+            // TODO: what about pipelined open?
+            _ => {}
+        }
+
         // get new entry index
         let entry = self.local_sessions.vacant_entry();
         let channel = entry.key();
@@ -330,6 +344,9 @@ impl ConnMux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         println!(">>> Debug: handle_incoming()");
+
+        // TODO: check local state
+
         let Frame { channel, body } = item?;
         match body {
             FrameBody::Open { performative } => {
