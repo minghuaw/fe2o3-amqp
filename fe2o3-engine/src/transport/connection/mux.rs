@@ -334,6 +334,7 @@ impl ConnMux {
         }
 
         let outgoing_chan = OutgoingChannelId(channel as u16);
+        // let (tx, rx) = mpsc::cha
 
         // send Begin frame to remote peer
         let performative = Begin {
@@ -353,7 +354,7 @@ impl ConnMux {
         transport.send(frame).await?;
 
         // spin up local session and let local session handle remote begin?
-        let session_mux = 
+        // let session_mux = 
 
         todo!()
     }
