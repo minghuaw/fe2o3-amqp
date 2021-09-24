@@ -8,13 +8,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{
-    error::EngineError,
-    transport::{
-        connection::{self, OutgoingChannelId, DEFAULT_CONTROL_CHAN_BUF},
-        session::SessionHandle,
-    },
-};
+use crate::{error::EngineError, transport::{amqp::{Frame, FrameBody}, connection::{self, OutgoingChannelId, DEFAULT_CONTROL_CHAN_BUF}, session::SessionHandle}};
 
 use super::{Session, SessionFrame, SessionFrameBody, SessionState};
 
@@ -50,56 +44,14 @@ pub(crate) struct SessionMux {
     next_incoming_id: TransferNumber,
     remote_incoming_window: SequenceNo,
     remote_outgoing_window: SequenceNo,
+
+    // capabilities
+    offered_capabilities: Option<Vec<Symbol>>,
+    desired_capabilities: Option<Vec<Symbol>>,
+    properties: Option<Fields>,
 }
 
 impl SessionMux {
-    // pub async fn spawn_with_option(
-    //     incoming: Receiver<Result<SessionFrame, EngineError>>,
-    //     next_incoming_id: TransferNumber, // should be set after remote begin is received
-    //     // remote_channel: u16,
-    //     remote_incoming_window: Option<SequenceNo>,
-    //     remote_outgoing_window: Option<SequenceNo>,
-    //     local_channel: u16, // local channel number should be assigned by Connection Mux
-    //     local_option: SessionLocalOption,
-    // ) -> Result<JoinHandle<Result<(), EngineError>>, EngineError> {
-    //     let SessionLocalOption {
-    //         control,
-    //         outgoing,
-    //         // local_channel,
-    //         // local_state,
-    //         // next_incoming_id,
-    //         incoming_window,
-    //         next_outgoing_id,
-    //         outgoing_window,
-    //         handle_max,
-
-    //         offered_capabilities,
-    //         desired_capabilities,
-    //         properties,
-    //     } = local_option;
-
-    //     let local_state = SessionState::Unmapped;
-
-    //     let mux = SessionMux {
-    //         outgoing,
-    //         local_channel,
-    //         local_state,
-    //         next_incoming_id,
-    //         incoming_window,
-    //         next_outgoing_id,
-    //         outgoing_window,
-    //         handle_max,
-
-    //         incoming,
-    //         remote_incoming_window,
-    //         remote_outgoing_window,
-    //         control,
-    //     };
-
-    //     let handle = tokio::spawn(mux.mux_loop());
-    //     Ok(handle)
-    // }
-
     pub fn spawn(
         local_state: SessionState,
         local_channel: OutgoingChannelId,
@@ -112,7 +64,6 @@ impl SessionMux {
         offered_capabilities: Option<Vec<Symbol>>,
         desired_capabilities: Option<Vec<Symbol>>,
         properties: Option<Fields>,
-        buffer_size: usize,
     ) -> Result<Session, EngineError> {
         // channels
         let (control_tx, control) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
@@ -130,6 +81,9 @@ impl SessionMux {
             incoming,
             remote_incoming_window: 0, // initialize with 0 and update when remote Begin is received
             remote_outgoing_window: 0, // initialize with 0 and update when remote Begin is received
+            offered_capabilities,
+            desired_capabilities,
+            properties
         };
 
         let handle = tokio::spawn(mux.mux_loop());
@@ -138,10 +92,42 @@ impl SessionMux {
             handle,
         };
 
-        // Send begin
+        // Send begin and wait for begin
         todo!();
 
         Ok(session)
+    }
+
+    pub async fn send_begin(&mut self) -> Result<&SessionState, EngineError> {
+        let performative = Begin {
+            remote_channel: None,
+            next_outgoing_id: self.next_outgoing_id,
+            incoming_window: self.incoming_window,
+            outgoing_window: self.outgoing_window,
+            handle_max: self.handle_max.clone(),
+            offered_capabilities: self.offered_capabilities.clone(),
+            desired_capabilities: self.desired_capabilities.clone(),
+            properties: self.properties.clone()
+        };
+
+        let frame = SessionFrame::new(
+            self.local_channel.0,
+            SessionFrameBody::begin(performative)
+        );
+
+        match &self.local_state {
+            SessionState::Unmapped => {
+                self.outgoing.send(frame).await?;
+                self.local_state = SessionState::BeginSent;
+            },
+            SessionState::BeginReceived => {
+                self.outgoing.send(frame).await?;
+                self.local_state = SessionState::Mapped;
+            },
+            _ => return Err(EngineError::illegal_state())
+        }
+
+        Ok(&self.local_state)
     }
 
     // pub fn spawn(self) -> JoinHandle<Result<(), EngineError>> {

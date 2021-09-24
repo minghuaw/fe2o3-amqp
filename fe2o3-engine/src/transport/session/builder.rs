@@ -123,11 +123,8 @@ impl Builder {
             self.offered_capabilities.clone(),
             self.desired_capabilities.clone(),
             self.properties.clone(),
-            self.buffer_size,
         )?;
 
-        // send a begin frame to remote session
-
-        todo!()
+        Ok(session)
     }
 }

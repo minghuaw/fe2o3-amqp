@@ -148,7 +148,9 @@ pub enum SessionState {
 
     BeginReceived,
 
-    MappedEndSent,
+    Mapped,
+    
+    EndSent,
 
     EndReceived,
 
