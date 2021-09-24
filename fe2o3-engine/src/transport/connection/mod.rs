@@ -3,14 +3,17 @@ use std::convert::TryInto;
 use crate::error::EngineError;
 pub use crate::transport::Transport;
 use fe2o3_types::performatives::{Begin, ChannelMax, MaxFrameSize};
+use futures_util::Sink;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use url::Url;
 
-use self::{builder::WithoutContainerId, mux::ConnMuxControl};
+use self::{builder::WithoutContainerId};
 
 mod builder;
 mod heartbeat;
 mod mux;
+
+pub(crate) use mux::{ConnMuxControl};
 
 pub use builder::Builder;
 
@@ -86,9 +89,13 @@ impl Connection {
     //     &self.mux
     // }
 
-    // pub fn mux_mut(&mut self) -> &mut ConnMuxHandle {
-    //     &mut self.mux
-    // }
+    pub(crate) fn mux_mut(&mut self) -> &mut Sender<ConnMuxControl> {
+        &mut self.mux
+    }
+
+    pub(crate) fn session_tx(&self) -> &Sender<SessionFrame> {
+        &self.session_tx
+    }
 
     pub fn builder() -> Builder<WithoutContainerId> {
         Builder::new()

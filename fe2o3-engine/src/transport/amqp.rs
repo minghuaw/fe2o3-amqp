@@ -145,6 +145,42 @@ impl FrameBody {
             Performative::Close(performative) => FrameBody::Close { performative },
         }
     }
+    
+    pub fn open(performative: Open) -> Self {
+        Self::Open{performative}
+    }
+
+    pub fn begin(performative: Begin) -> Self {
+        Self::Begin{performative}
+    }
+
+    pub fn attach(performative: Attach) -> Self {
+        Self::Attach{performative}
+    }
+
+    pub fn flow(performative: Flow) -> Self {
+        Self::Flow{performative}
+    }
+
+    pub fn transfer(performative: Transfer, payload: Option<BytesMut>) -> Self {
+        Self::Transfer{performative, payload}
+    }
+
+    pub fn disposition(performative: Disposition) -> Self {
+        Self::Disposition{performative}
+    }
+
+    pub fn detach(performative: Detach) -> Self {
+        Self::Detach{performative}
+    }
+
+    pub fn end(performative: End) -> Self {
+        Self::End{performative}
+    }
+
+    pub fn close(performative: Close) -> Self {
+        Self::Close{performative}
+    }
 
     pub fn empty() -> Self {
         Self::Empty

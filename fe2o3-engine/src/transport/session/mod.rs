@@ -5,7 +5,7 @@ use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
 use crate::error::EngineError;
 
-use self::mux::SessionMuxControl;
+use self::{builder::Builder, mux::SessionMuxControl};
 
 use super::{
     amqp::{Frame, FrameBody},
@@ -15,7 +15,7 @@ use super::{
 mod builder;
 mod mux;
 
-pub(crate) use mux::{SessionLocalOption};
+pub(crate) use mux::{SessionLocalOption, SessionMux};
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 100;
@@ -93,4 +93,10 @@ pub struct Session {
     mux: Sender<SessionMuxControl>,
     // TODO: send back using a oneshot channel?
     handle: JoinHandle<Result<(), EngineError>>, // JoinHandle to session mux
+}
+
+impl Session {
+    pub fn builder() -> Builder {
+        Builder::new()
+    }
 }

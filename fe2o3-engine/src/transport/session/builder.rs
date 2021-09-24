@@ -1,9 +1,10 @@
 use fe2o3_amqp::primitives::{Symbol, UInt};
 use fe2o3_types::definitions::{Fields, Handle, TransferNumber};
+use tokio::sync::{mpsc, oneshot};
 
-use crate::{error::EngineError, transport::connection::Connection};
+use crate::{error::EngineError, transport::{connection::{ConnMuxControl, Connection}, session::SessionLocalOption}};
 
-use super::{DEFAULT_WINDOW, Session, SessionHandle};
+use super::{DEFAULT_WINDOW, Session, SessionHandle, mux::DEFAULT_SESSION_MUX_BUFFER_SIZE};
 
 pub struct Builder {
     pub next_outgoing_id: TransferNumber,
@@ -13,6 +14,7 @@ pub struct Builder {
     pub offered_capabilities: Option<Vec<Symbol>>,
     pub desired_capabilities: Option<Vec<Symbol>>,
     pub properties: Option<Fields>,
+    pub buffer_size: usize,
 }
 
 impl Builder {
@@ -24,7 +26,8 @@ impl Builder {
             handle_max: Default::default(),
             offered_capabilities: None,
             desired_capabilities: None,
-            properties: None
+            properties: None,
+            buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
         }
     }
 
@@ -80,13 +83,41 @@ impl Builder {
         self
     }
 
+    pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
+        self.buffer_size = buffer_size;
+        self
+    }
+
     pub async fn begin(&mut self, connection: &mut Connection) -> Result<Session, EngineError> {
         // create a oneshot channel to receive result of session creation
+        let (oneshot_tx, oneshot_rx) = oneshot::channel();
+        let (control_tx, control_rx) = mpsc::channel(self.buffer_size);
 
         // send session options and oneshot sender to Connection's Mux
+        let option = SessionLocalOption {
+            control: control_rx,
+            outgoing: connection.session_tx().clone(),
+            next_outgoing_id: self.next_outgoing_id,
+            incoming_window: self.incoming_window,
+            outgoing_window: self.outgoing_window,
+            handle_max: self.handle_max.0,
+            offered_capabilities: self.offered_capabilities.clone(),
+            desired_capabilities: self.desired_capabilities.clone(),
+            properties: self.properties.clone()
+        };
+        let control = ConnMuxControl::NewSession {
+            resp: oneshot_tx,
+            option
+        };
+        connection.mux_mut().send(control).await?;
 
         // .awaiting result
+        let handle = oneshot_rx.await
+            .map_err(|_| EngineError::Message("RecvError from oneshot::Receiver"))??;
 
-        todo!()
+        Ok(Session {
+            mux: control_tx,
+            handle
+        })
     }
 }

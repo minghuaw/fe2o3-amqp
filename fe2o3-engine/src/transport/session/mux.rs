@@ -7,16 +7,18 @@ use crate::{error::EngineError, transport::connection};
 
 use super::{SessionFrame, SessionFrameBody, SessionState};
 
+pub const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
+
 pub(crate) struct SessionLocalOption {
     // control
     pub control: Receiver<SessionMuxControl>,
     
     // local states
     pub outgoing: Sender<SessionFrame>,
-    pub local_channel: u16,
+    // pub local_channel: u16,
     // local_state: SessionState,
 
-    pub next_incoming_id: TransferNumber,
+    // pub next_incoming_id: TransferNumber,
     pub incoming_window: TransferNumber,
     pub next_outgoing_id: TransferNumber,
     pub outgoing_window: TransferNumber,
@@ -58,25 +60,26 @@ pub(crate) struct SessionMux {
     incoming: Receiver<Result<SessionFrame, EngineError>>,
     // remote_channel: u16,
 
-    remote_incoming_window: SequenceNo,
-    remote_outgoing_window: SequenceNo,
+    remote_incoming_window: Option<SequenceNo>,
+    remote_outgoing_window: Option<SequenceNo>,
 }
 
 impl SessionMux {
     pub async fn spawn_with_option(
         incoming: Receiver<Result<SessionFrame, EngineError>>,
+        next_incoming_id: TransferNumber, // should be set after remote begin is received
         // remote_channel: u16,
-        remote_incoming_window: SequenceNo,
-        remote_outgoing_window: SequenceNo,
-        // local options
+        remote_incoming_window: Option<SequenceNo>,
+        remote_outgoing_window: Option<SequenceNo>,
+        local_channel: u16, // local channel number should be assigned by Connection Mux
         local_option: SessionLocalOption,
     ) -> Result<JoinHandle<Result<(), EngineError>>, EngineError> {
         let SessionLocalOption {
             control,
             outgoing,
-            local_channel,
+            // local_channel,
             // local_state,
-            next_incoming_id,
+            // next_incoming_id,
             incoming_window,
             next_outgoing_id,
             outgoing_window,
@@ -110,6 +113,9 @@ impl SessionMux {
     }
 
     async fn mux_loop(mut self) -> Result<(), EngineError> {
-        todo!()
+        loop {
+            println!(">>> Debug SessionMux mux_loop");
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
     }
 }

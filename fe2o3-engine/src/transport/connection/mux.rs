@@ -313,26 +313,30 @@ impl ConnMux {
     /// TODO: Simply create a new session and let the session takes care 
     /// of sending Begin?
     #[inline]
-    async fn handle_local_new_session(
+    async fn handle_local_new_session<Io>(
         &mut self, 
+        transport: &mut Transport<Io>,
         resp: oneshot::Sender<Result<JoinHandle<Result<(), EngineError>>, EngineError>>,
         local_option: SessionLocalOption
-    ) -> Result<&ConnectionState, EngineError> {
+    ) -> Result<&ConnectionState, EngineError> 
+    where 
+        Io: AsyncRead + AsyncWrite + Unpin,
+    {
         // get new entry index
         let entry = self.local_sessions.vacant_entry();
-        let key = entry.key();
+        let channel = entry.key();
         
         // check if there is enough
-        if key > self.channel_max as usize {
+        if channel > self.channel_max as usize {
             resp.send(Err(EngineError::AmqpError(AmqpError::NotAllowed)))
                 .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
             return Err(EngineError::Message("Exceeding max number of channel is not allowed"))
         }
 
-        let outgoing_chan = OutgoingChannelId(key as u16);
+        let outgoing_chan = OutgoingChannelId(channel as u16);
 
         // send Begin frame to remote peer
-        let begin = Begin {
+        let performative = Begin {
             // The remote-channel field of a begin frame MUST be empty 
             // for a locally initiated session, and MUST be set when announcing 
             // the endpoint created as a result of a remotely initiated session.
@@ -345,9 +349,11 @@ impl ConnMux {
             desired_capabilities: local_option.desired_capabilities,
             properties: local_option.properties,
         };
+        let frame = Frame::new(channel as u16, FrameBody::begin(performative));
+        transport.send(frame).await?;
 
-        // create new session
-        // the new session should then send a Begin
+        // spin up local session and let local session handle remote begin?
+        let session_mux = 
 
         todo!()
     }
@@ -468,7 +474,7 @@ impl ConnMux {
                         ConnMuxControl::NewSession{
                             resp,
                             option,
-                        } => self.handle_local_new_session(resp, option).await,
+                        } => self.handle_local_new_session(transport, resp, option).await,
                         ConnMuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {
