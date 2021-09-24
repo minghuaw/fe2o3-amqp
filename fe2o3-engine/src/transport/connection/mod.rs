@@ -13,7 +13,7 @@ mod builder;
 mod heartbeat;
 mod mux;
 
-pub(crate) use mux::{ConnMuxControl};
+pub(crate) use mux::{ConnMuxControl, DEFAULT_CONTROL_CHAN_BUF};
 
 pub use builder::Builder;
 

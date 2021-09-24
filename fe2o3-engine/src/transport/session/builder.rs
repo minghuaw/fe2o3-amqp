@@ -2,7 +2,7 @@ use fe2o3_amqp::primitives::{Symbol, UInt};
 use fe2o3_types::definitions::{Fields, Handle, TransferNumber};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{error::EngineError, transport::{connection::{ConnMuxControl, Connection}, session::SessionLocalOption}};
+use crate::{error::EngineError, transport::{connection::{ConnMuxControl, Connection, DEFAULT_CONTROL_CHAN_BUF}, session::{SessionLocalOption, SessionMux, SessionState}}};
 
 use super::{DEFAULT_WINDOW, Session, SessionHandle, mux::DEFAULT_SESSION_MUX_BUFFER_SIZE};
 
@@ -89,35 +89,39 @@ impl Builder {
     }
 
     pub async fn begin(&mut self, connection: &mut Connection) -> Result<Session, EngineError> {
+        let local_state = SessionState::Unmapped;
         // create a oneshot channel to receive result of session creation
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
-        let (control_tx, control_rx) = mpsc::channel(self.buffer_size);
+        let (to_session, incoming) = mpsc::channel(self.buffer_size);
 
-        // send session options and oneshot sender to Connection's Mux
-        let option = SessionLocalOption {
-            control: control_rx,
-            outgoing: connection.session_tx().clone(),
-            next_outgoing_id: self.next_outgoing_id,
-            incoming_window: self.incoming_window,
-            outgoing_window: self.outgoing_window,
-            handle_max: self.handle_max.0,
-            offered_capabilities: self.offered_capabilities.clone(),
-            desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone()
-        };
+        let session_handle = SessionHandle{ sender: to_session };
         let control = ConnMuxControl::NewSession {
+            handle: session_handle,
             resp: oneshot_tx,
-            option
         };
         connection.mux_mut().send(control).await?;
 
         // .awaiting result
-        let handle = oneshot_rx.await
+        let local_channel = oneshot_rx.await
             .map_err(|_| EngineError::Message("RecvError from oneshot::Receiver"))??;
 
-        Ok(Session {
-            mux: control_tx,
-            handle
-        })
+        let session = SessionMux::spawn(
+            local_state, 
+            local_channel, 
+            incoming, 
+            connection.session_tx().clone(), 
+            self.next_outgoing_id, 
+            self.incoming_window, 
+            self.outgoing_window, 
+            self.handle_max.clone(), 
+            self.offered_capabilities.clone(), 
+            self.desired_capabilities.clone(), 
+            self.properties.clone(),
+            self.buffer_size, 
+        )?;
+
+        // send a begin frame to remote session
+
+        todo!()
     }
 }

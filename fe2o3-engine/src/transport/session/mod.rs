@@ -73,14 +73,14 @@ pub enum SessionState {
 
 /// Session handle held by the connection mux
 pub(crate) struct SessionHandle {
-    id: OutgoingChannelId,
+    // id: OutgoingChannelId,
     sender: Sender<Result<SessionFrame, EngineError>>,
 }
 
 impl SessionHandle {
-    pub fn id(&self) -> &OutgoingChannelId {
-        &self.id
-    }
+    // pub fn id(&self) -> &OutgoingChannelId {
+    //     &self.id
+    // }
 
     pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrame, EngineError>> {
         &mut self.sender
@@ -89,6 +89,9 @@ impl SessionHandle {
 
 /// Session API available for public
 /// TODO: Only care about creating new local session for now.
+/// 
+/// How should a new session be created?
+/// 
 pub struct Session {
     mux: Sender<SessionMuxControl>,
     // TODO: send back using a oneshot channel?

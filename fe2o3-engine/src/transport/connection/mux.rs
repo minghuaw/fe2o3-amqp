@@ -20,7 +20,7 @@ use crate::transport::Transport;
 
 use super::heartbeat::HeartBeat;
 
-const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
+pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 10;
 pub const DEFAULT_CONNECTION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 
 use super::{Connection, ConnectionState, IncomingChannelId, OutgoingChannelId};
@@ -28,29 +28,11 @@ use super::{Connection, ConnectionState, IncomingChannelId, OutgoingChannelId};
 pub(crate) enum ConnMuxControl {
     // Open,
     NewSession{
-        resp: oneshot::Sender<Result<JoinHandle<Result<(), EngineError>>, EngineError>>,
-        option: SessionLocalOption,
+        handle: SessionHandle,
+        resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
     },
     Close,
 }
-
-// pub struct ConnMuxHandle {
-//     control: Sender<ConnMuxControl>,
-//     handle: JoinHandle<Result<(), EngineError>>,
-
-//     // Sender to Connection Mux, should be cloned to a new session
-//     session_tx: Sender<SessionFrame>,
-// }
-
-// impl ConnMuxHandle {
-//     pub async fn close(&mut self) -> Result<(), EngineError> {
-//         self.control.send(ConnMuxControl::Close).await?;
-//         match (&mut self.handle).await {
-//             Ok(r) => r,
-//             Err(_) => Err(EngineError::Message("Join Error")),
-//         }
-//     }
-// }
 
 pub struct ConnMux {
     local_state: ConnectionState,
@@ -316,8 +298,8 @@ impl ConnMux {
     async fn handle_local_new_session<Io>(
         &mut self, 
         transport: &mut Transport<Io>,
-        resp: oneshot::Sender<Result<JoinHandle<Result<(), EngineError>>, EngineError>>,
-        local_option: SessionLocalOption
+        handle: SessionHandle,
+        resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
     ) -> Result<&ConnectionState, EngineError> 
     where 
         Io: AsyncRead + AsyncWrite + Unpin,
@@ -334,29 +316,10 @@ impl ConnMux {
         }
 
         let outgoing_chan = OutgoingChannelId(channel as u16);
-        // let (tx, rx) = mpsc::cha
-
-        // send Begin frame to remote peer
-        let performative = Begin {
-            // The remote-channel field of a begin frame MUST be empty 
-            // for a locally initiated session, and MUST be set when announcing 
-            // the endpoint created as a result of a remotely initiated session.
-            remote_channel: None,
-            next_outgoing_id: local_option.next_outgoing_id,
-            incoming_window: local_option.incoming_window,
-            outgoing_window: local_option.outgoing_window,
-            handle_max: Handle::from(local_option.handle_max),
-            offered_capabilities: local_option.offered_capabilities,
-            desired_capabilities: local_option.desired_capabilities,
-            properties: local_option.properties,
-        };
-        let frame = Frame::new(channel as u16, FrameBody::begin(performative));
-        transport.send(frame).await?;
-
-        // spin up local session and let local session handle remote begin?
-        // let session_mux = 
-
-        todo!()
+        entry.insert(handle);
+        resp.send(Ok(outgoing_chan))
+            .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
+        Ok(&self.local_state)
     }
 
     #[inline]
@@ -473,9 +436,9 @@ impl ConnMux {
                     Some(control) => match control {
                         // MuxControl::Open => self.handle_open_send(transport).await,
                         ConnMuxControl::NewSession{
+                            handle,
                             resp,
-                            option,
-                        } => self.handle_local_new_session(transport, resp, option).await,
+                        } => self.handle_local_new_session(transport, handle, resp).await,
                         ConnMuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {
