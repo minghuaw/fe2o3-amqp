@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use fe2o3_engine::transport::connection::Connection;
+use fe2o3_engine::transport::session::Session;
 
 #[tokio::main]
 async fn main() {
@@ -15,6 +16,8 @@ async fn main() {
         .open("amqp://127.0.0.1:5674")
         .await
         .unwrap();
+
+    let session = Session::begin(&mut connection).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 

@@ -151,6 +151,7 @@ impl SessionMux {
 /* ----------------------------- private methods ---------------------------- */
 impl SessionMux {
     async fn send_begin(&mut self) -> Result<&SessionState, EngineError> {
+        println!(">>> Debug: send_begin()");
         let performative = Begin {
             remote_channel: None,
             next_outgoing_id: self.next_outgoing_id,

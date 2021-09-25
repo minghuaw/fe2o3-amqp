@@ -56,4 +56,16 @@ impl EngineError {
     pub fn illegal_state() -> Self {
         Self::AmqpError(AmqpError::IllegalState)
     }
+
+    pub fn not_found() -> Self {
+        Self::AmqpError(AmqpError::NotFound)
+    }
+
+    pub fn invalid_field() -> Self {
+        Self::AmqpError(AmqpError::InvalidField)
+    }
+
+    pub fn not_allowed() -> Self {
+        Self::AmqpError(AmqpError::NotAllowed)
+    }
 }

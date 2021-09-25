@@ -2,17 +2,14 @@ use std::convert::TryFrom;
 
 use bytes::BytesMut;
 use fe2o3_amqp::primitives::UInt;
-use fe2o3_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
+use fe2o3_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
 use crate::error::EngineError;
 
 use self::{builder::Builder, mux::SessionMuxControl};
 
-use super::{
-    amqp::{Frame, FrameBody},
-    connection::OutgoingChannelId,
-};
+use super::{amqp::{Frame, FrameBody}, connection::{Connection, OutgoingChannelId}};
 
 mod builder;
 mod mux;
@@ -20,11 +17,11 @@ mod mux;
 pub(crate) use mux::SessionMux;
 
 /// Default incoming_window and outgoing_window
-pub const DEFAULT_WINDOW: UInt = 100;
+pub const DEFAULT_WINDOW: UInt = 2048;
 
-pub struct SessionFrame {
-    channel: u16, // outgoing/local channel number
-    body: SessionFrameBody,
+pub(crate) struct SessionFrame {
+    pub channel: u16, // outgoing/local channel number
+    pub body: SessionFrameBody,
 }
 
 impl SessionFrame {
@@ -36,7 +33,7 @@ impl SessionFrame {
     }
 }
 
-pub enum SessionFrameBody {
+pub(crate) enum SessionFrameBody {
     Begin {
         performative: Begin,
     },
@@ -94,6 +91,36 @@ impl SessionFrameBody {
     }
 }
 
+pub(crate) struct NonSessionFrame {
+    pub channel: u16,
+    pub body: NonSessionFrameBody,
+}
+
+pub(crate) enum NonSessionFrameBody {
+    Open {
+        performative: Open,
+    },
+    Close {
+        performative: Close,
+    },
+    // An empty frame used only for heartbeat
+    Empty,
+}
+
+impl NonSessionFrameBody {
+    pub fn open(performative: Open) -> Self {
+        Self::Open { performative }
+    }
+
+    pub fn close(performative: Close) -> Self {
+        Self::Close { performative }
+    }
+
+    pub fn empty() -> Self {
+        Self::Empty
+    }
+}
+
 impl From<SessionFrame> for Frame {
     fn from(value: SessionFrame) -> Self {
         let channel = value.channel;
@@ -111,7 +138,7 @@ impl From<SessionFrame> for Frame {
 }
 
 impl TryFrom<Frame> for SessionFrame {
-    type Error = Frame;
+    type Error = NonSessionFrame;
 
     fn try_from(value: Frame) -> Result<Self, Self::Error> {
         let channel = value.channel;
@@ -124,7 +151,18 @@ impl TryFrom<Frame> for SessionFrame {
             FrameBody::Disposition{performative} => SessionFrameBody::disposition(performative),
             FrameBody::Detach{performative} => SessionFrameBody::detach(performative),
             FrameBody::End{performative} => SessionFrameBody::end(performative),
-            _ => return Err(value)
+            FrameBody::Open{performative} => return Err(NonSessionFrame{
+                channel, 
+                body: NonSessionFrameBody::open(performative)
+            }),
+            FrameBody::Close{performative} => return Err(NonSessionFrame{
+                channel,
+                body: NonSessionFrameBody::close(performative)
+            }),
+            FrameBody::Empty => return Err(NonSessionFrame{
+                channel,
+                body: NonSessionFrameBody::empty()
+            })
         };
 
         Ok(Self {
@@ -187,5 +225,10 @@ pub struct Session {
 impl Session {
     pub fn builder() -> Builder {
         Builder::new()
+    }
+
+    pub async fn begin(connection: &mut Connection) -> Result<Self, EngineError> {
+        Self::builder()
+            .begin(connection).await
     }
 }

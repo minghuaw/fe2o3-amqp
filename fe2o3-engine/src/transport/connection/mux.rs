@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::time::Duration;
 
 use fe2o3_amqp::primitives::UInt;
@@ -15,7 +16,7 @@ use futures_util::{Sink, SinkExt, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
-use crate::transport::session::{SessionFrame, SessionHandle};
+use crate::transport::session::{NonSessionFrame, NonSessionFrameBody, SessionFrame, SessionFrameBody, SessionHandle};
 use crate::transport::Transport;
 
 use super::heartbeat::HeartBeat;
@@ -121,7 +122,9 @@ impl ConnMux {
     ) -> Result<Connection, EngineError> {
         todo!()
     }
+}
 
+impl ConnMux {
     #[inline]
     async fn handle_unexpected_drop(&mut self) -> Result<&ConnectionState, EngineError> {
         todo!()
@@ -291,15 +294,11 @@ impl ConnMux {
     /// TODO: Simply create a new session and let the session takes care
     /// of sending Begin?
     #[inline]
-    async fn handle_local_new_session<Io>(
+    async fn handle_local_new_session(
         &mut self,
-        transport: &mut Transport<Io>,
         handle: SessionHandle,
         resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
-    ) -> Result<&ConnectionState, EngineError>
-    where
-        Io: AsyncRead + AsyncWrite + Unpin,
-    {
+    ) -> Result<&ConnectionState, EngineError> {
         match &self.local_state {
             ConnectionState::Start 
             | ConnectionState::HeaderSent
@@ -345,47 +344,91 @@ impl ConnMux {
     {
         println!(">>> Debug: handle_incoming()");
 
-        // TODO: check local state
-
-        let Frame { channel, body } = item?;
-        match body {
-            FrameBody::Open { performative } => {
-                self.handle_open_recv(transport, performative).await
+        // local_state should be checked in each sub-handler
+        match item?.try_into() {
+            Ok(frame) => self.handle_incoming_session_frame(frame).await,
+            Err(frame) => {
+                let NonSessionFrame{channel: _, body} = frame;
+                match body {
+                    NonSessionFrameBody::Open{performative} => {
+                        self.handle_open_recv(transport, performative).await
+                    },
+                    NonSessionFrameBody::Close{performative} => {
+                        self.handle_close_recv(transport, performative).await
+                    },
+                    NonSessionFrameBody::Empty => Ok(&self.local_state),
+                }
             }
-            FrameBody::Close { performative } => {
-                self.handle_close_recv(transport, performative).await
-            }
-            FrameBody::Empty => Ok(&self.local_state),
-            _ => todo!(),
         }
+    }
+
+    #[inline]
+    async fn handle_incoming_session_frame(
+        &mut self,
+        frame: SessionFrame
+    ) -> Result<&ConnectionState, EngineError> {
+        println!(">>> Debug: handle_incoming_session_frame()");
+        match &self.local_state {
+            ConnectionState::Opened => { }, // TODO: is there any other state that should accept session frames?
+            _ => return Err(EngineError::illegal_state())
+        }
+
+        match &frame.body {
+            SessionFrameBody::Begin{performative} => {
+                let local_channel = performative.remote_channel
+                    .ok_or_else(|| EngineError::not_allowed())?;
+                let remote_channel = frame.channel;
+
+                let key = IncomingChannelId(remote_channel);
+                let value = OutgoingChannelId(local_channel);
+
+                // check whether there is existing sessions
+                if self.remote_sessions.contains_key(&key) {
+                    return Err(EngineError::not_allowed()) // FIXME: what error should be returned here?
+                }
+
+                self.remote_sessions.insert(key, value);
+
+                // forward begin frame to session mux
+                let handle = self.local_sessions.get_mut(local_channel as usize)
+                    .ok_or_else(|| EngineError::not_found())?;
+                handle.sender_mut().send(Ok(frame)).await?;
+            },
+            SessionFrameBody::End{performative: _} => {
+
+            },
+            _ => {
+                let remote_channel = IncomingChannelId(frame.channel);
+                let local_channel = self.remote_sessions.get(&remote_channel)
+                    .ok_or_else(|| EngineError::Message("Unexpected remote channel from frame"))?;
+                let handle = self.local_sessions.get_mut(local_channel.0 as usize)
+                    .ok_or_else(|| EngineError::not_found())?;
+                handle.sender_mut().send(Ok(frame)).await?;
+            }
+        }
+        
+        Ok(&self.local_state)
     }
 
     #[inline]
     async fn handle_outgoing<W>(
         &mut self,
-        item: Frame,
         writer: &mut W,
+        item: SessionFrame,
     ) -> Result<&ConnectionState, EngineError>
     where
         W: Sink<Frame, Error = EngineError> + Unpin,
     {
-        // // get outgoing channel id
-        // let chan = OutChanId::from(item.channel());
-        // // send frames out
-        // if let Err(err) = writer.send(item).await {
-        //     if let Some(session) = self.local_sessions.get_mut(chan.0 as usize) {
-        //         session.sender_mut()
-        //             .send(Err(err)).await
-        //             .map_err(|_| EngineError::Message("SendError"))?;
-        //     } else {
-        //         return Err(err)
-        //     }
+        println!(">>> Debug: handle_outgoing");
+
+        // TODO: check local state
+        // match self.local_state {
+
         // }
-        // Ok(&self.local_state)
 
-        // looks like wrong
-
-        todo!()
+        let frame: Frame = item.into();
+        writer.send(frame).await?;
+        Ok(&self.local_state)
     }
 
     #[inline]
@@ -425,7 +468,9 @@ impl ConnMux {
         Io: AsyncRead + AsyncWrite + Unpin,
     {
         match &self.local_state {
-            ConnectionState::Start | ConnectionState::End => return Ok(&self.local_state),
+            ConnectionState::Start 
+            | ConnectionState::CloseSent
+            | ConnectionState::End => return Ok(&self.local_state),
             _ => {}
         }
 
@@ -453,7 +498,7 @@ impl ConnMux {
                         ConnMuxControl::NewSession{
                             handle,
                             resp,
-                        } => self.handle_local_new_session(transport, handle, resp).await,
+                        } => self.handle_local_new_session(handle, resp).await,
                         ConnMuxControl::Close => self.handle_close_send(transport, None).await,
                     },
                     None => {
@@ -468,9 +513,12 @@ impl ConnMux {
                     None => self.handle_unexpected_eof().await
                 }
             },
-            // outgoing frames
+            // outgoing frames from session
             next = self.session_rx.recv() => {
-                todo!()
+                match next {
+                    Some(item) => self.handle_outgoing(transport, item).await,
+                    None => self.handle_unexpected_eof().await
+                }
             },
             // heartbeat
             _ = self.heartbeat.next() => {
