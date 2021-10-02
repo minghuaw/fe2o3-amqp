@@ -1,5 +1,4 @@
 // Public mods
-pub mod constants;
 pub mod de;
 pub mod described;
 pub mod descriptor;
@@ -10,6 +9,10 @@ pub mod primitives;
 pub mod read;
 pub mod ser;
 pub mod value;
+
+// Private mod but is used by derive macros
+#[doc(hidden)]
+pub mod constants;
 
 // Private mods
 mod util;

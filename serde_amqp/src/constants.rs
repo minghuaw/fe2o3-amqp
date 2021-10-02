@@ -1,7 +1,11 @@
 // Public constants that are also used in derive macros
+#[doc(hidden)]
 pub const DESCRIBED_BASIC: &str = "AMQP1.0_DESCRIBED_BASIC";
+#[doc(hidden)]
 pub const DESCRIBED_LIST: &str = "AMQP1.0_DESCRIBED_LIST";
+#[doc(hidden)]
 pub const DESCRIBED_MAP: &str = "AMQP1.0_DESCRIBED_MAP";
+#[doc(hidden)]
 pub const DESCRIPTOR: &str = "AMQP1.0_DESCRIPTOR";
 
 // These constants should only be public on the crate level
