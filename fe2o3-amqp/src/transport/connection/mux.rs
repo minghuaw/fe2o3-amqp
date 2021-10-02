@@ -307,7 +307,7 @@ impl ConnMux {
             | ConnectionState::CloseSent
             | ConnectionState::Discarding
             | ConnectionState::End => {
-                return Err(EngineError::illegal_state())
+                return Err(EngineError::Message("Illegal local state"))
             },
             // TODO: what about pipelined open?
             _ => {}
@@ -375,20 +375,6 @@ impl ConnMux {
 
         match &frame.body { 
             SessionFrameBody::Begin{performative} => {
-                // match performative.remote_channel {
-                //     Some(local_channel) => {
-                //         // let local_channel = performative.remote_channel
-                //         //     .ok_or_else(|| EngineError::not_allowed())?;
-                //         let remote_channel = frame.channel;
-        
-                //         // forward begin frame to session mux
-                //         let handle = self.local_sessions.get_mut(local_channel as usize)
-                //             .ok_or_else(|| EngineError::not_found())?;
-                //     },
-                //     None => {
-                //         todo!()
-                //     }
-                // }
                 let remote_channel = frame.channel;
                 let handle = self.handle_intercepted_incoming_begin(remote_channel, performative)?;
                 handle.sender_mut().send(Ok(frame)).await?;
@@ -436,7 +422,7 @@ impl ConnMux {
     }
 
     #[inline]
-    async fn handle_outgoing<W>(
+    async fn handle_outgoing_session_frame<W>(
         &mut self,
         writer: &mut W,
         item: SessionFrame,
@@ -445,11 +431,19 @@ impl ConnMux {
         W: Sink<Frame, Error = EngineError> + Unpin,
     {
         println!(">>> Debug: handle_outgoing");
-
-        // TODO: check local state
-        // match self.local_state {
-
-        // }
+        match &self.local_state {
+            ConnectionState::Start 
+            | ConnectionState::HeaderSent
+            | ConnectionState::HeaderReceived
+            | ConnectionState::HeaderExchange
+            | ConnectionState::CloseSent
+            | ConnectionState::Discarding
+            | ConnectionState::End => {
+                return Err(EngineError::Message("Illegal local state"))
+            },
+            // TODO: what about pipelined open?
+            _ => {}
+        }
 
         let frame: Frame = item.into();
         writer.send(frame).await?;
@@ -504,60 +498,51 @@ impl ConnMux {
         Ok(&self.local_state)
     }
 
-    #[inline]
-    async fn mux_loop_inner<Io>(
-        &mut self,
-        transport: &mut Transport<Io>,
-    ) -> Result<&ConnectionState, EngineError>
-    where
-        Io: AsyncRead + AsyncWrite + Unpin,
-    {
-        println!(">>> Debug: Connection State: {:?}", &self.local_state);
-
-        tokio::select! {
-            // local controls
-            control = self.control.recv() => {
-                match control {
-                    Some(control) => match control {
-                        // MuxControl::Open => self.handle_open_send(transport).await,
-                        ConnMuxControl::NewSession{
-                            handle,
-                            resp,
-                        } => self.handle_local_new_session(handle, resp).await,
-                        ConnMuxControl::Close => self.handle_close_send(transport, None).await,
-                    },
-                    None => {
-                        self.handle_unexpected_drop().await
-                    }
-                }
-            },
-            // incoming frames
-            next = transport.next() => {
-                match next {
-                    Some(item) => self.handle_incoming(transport, item).await,
-                    None => self.handle_unexpected_eof().await
-                }
-            },
-            // outgoing frames from session
-            next = self.session_rx.recv() => {
-                match next {
-                    Some(item) => self.handle_outgoing(transport, item).await,
-                    None => self.handle_unexpected_eof().await
-                }
-            },
-            // heartbeat
-            _ = self.heartbeat.next() => {
-                self.handle_heartbeat(transport).await
-            }
-        }
-    }
-
     async fn mux_loop<Io>(mut self, mut transport: Transport<Io>) -> Result<(), EngineError>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin,
     {
         loop {
-            let running = match self.mux_loop_inner(&mut transport).await {
+            let result = tokio::select! {
+                // local controls
+                control = self.control.recv() => {
+                    match control {
+                        Some(control) => match control {
+                            // MuxControl::Open => self.handle_open_send(transport).await,
+                            ConnMuxControl::NewSession{
+                                handle,
+                                resp,
+                            } => self.handle_local_new_session(handle, resp).await,
+                            ConnMuxControl::Close => self.handle_close_send(&mut transport, None).await,
+                        },
+                        None => {
+                            // TODO: The connection should probably stop then
+                            self.handle_unexpected_drop().await
+                        }
+                    }
+                },
+                // incoming frames
+                next = transport.next() => {
+                    match next {
+                        Some(item) => self.handle_incoming(&mut transport, item).await,
+                        None => self.handle_unexpected_eof().await
+                    }
+                },
+                // outgoing frames from session
+                next = self.session_rx.recv() => {
+                    match next {
+                        Some(item) => self.handle_outgoing_session_frame(&mut transport, item).await,
+                        None => self.handle_unexpected_eof().await
+                    }
+                },
+                // heartbeat
+                _ = self.heartbeat.next() => {
+                    self.handle_heartbeat(&mut transport).await
+                }
+            };
+
+            // handle error
+            let state = match result {
                 Ok(running) => running,
                 Err(error) => match self.handle_error(&mut transport, error).await {
                     Ok(r) => r,
@@ -578,7 +563,9 @@ impl ConnMux {
                     }
                 },
             };
-            if let ConnectionState::End = running {
+
+            // stop the Mux if connection is ended
+            if let ConnectionState::End = state {
                 return Ok(());
             }
         }
