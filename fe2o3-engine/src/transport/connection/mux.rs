@@ -373,29 +373,36 @@ impl ConnMux {
             _ => return Err(EngineError::illegal_state())
         }
 
-        match &frame.body {
+        match &frame.body { 
             SessionFrameBody::Begin{performative} => {
-                let local_channel = performative.remote_channel
-                    .ok_or_else(|| EngineError::not_allowed())?;
-                let remote_channel = frame.channel;
-
-                let key = IncomingChannelId(remote_channel);
-                let value = OutgoingChannelId(local_channel);
-
-                // check whether there is existing sessions
-                if self.remote_sessions.contains_key(&key) {
-                    return Err(EngineError::not_allowed()) // FIXME: what error should be returned here?
+                match performative.remote_channel {
+                    Some(local_channel) => {
+                        // let local_channel = performative.remote_channel
+                        //     .ok_or_else(|| EngineError::not_allowed())?;
+                        let remote_channel = frame.channel;
+        
+                        let key = IncomingChannelId(remote_channel);
+                        let value = OutgoingChannelId(local_channel);
+        
+                        // check whether there is existing sessions
+                        if self.remote_sessions.contains_key(&key) {
+                            return Err(EngineError::not_allowed()) // FIXME: what error should be returned here?
+                        }
+        
+                        self.remote_sessions.insert(key, value);
+        
+                        // forward begin frame to session mux
+                        let handle = self.local_sessions.get_mut(local_channel as usize)
+                            .ok_or_else(|| EngineError::not_found())?;
+                        handle.sender_mut().send(Ok(frame)).await?;
+                    },
+                    None => {
+                        todo!()
+                    }
                 }
-
-                self.remote_sessions.insert(key, value);
-
-                // forward begin frame to session mux
-                let handle = self.local_sessions.get_mut(local_channel as usize)
-                    .ok_or_else(|| EngineError::not_found())?;
-                handle.sender_mut().send(Ok(frame)).await?;
             },
             SessionFrameBody::End{performative: _} => {
-
+                // stop session mux?
             },
             _ => {
                 let remote_channel = IncomingChannelId(frame.channel);

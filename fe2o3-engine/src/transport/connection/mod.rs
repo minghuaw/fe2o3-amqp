@@ -84,10 +84,6 @@ pub struct Connection {
 }
 
 impl Connection {
-    // pub fn mux(&self) -> &ConnMuxHandle {
-    //     &self.mux
-    // }
-
     pub(crate) fn mux_mut(&mut self) -> &mut Sender<ConnMuxControl> {
         &mut self.mux
     }
@@ -131,12 +127,6 @@ impl Connection {
         todo!()
     }
 }
-
-// impl From<ConnMuxHandle> for Connection {
-//     fn from(mux: ConnMuxHandle) -> Self {
-//         Self { mux }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

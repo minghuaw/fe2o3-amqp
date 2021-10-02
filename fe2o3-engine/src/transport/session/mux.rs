@@ -183,8 +183,22 @@ impl SessionMux {
         Ok(&self.local_state)
     }
 
-    async fn  recv_begin(&mut self) -> Result<&SessionState, EngineError> {
-        todo!()
+    async fn recv_begin(&mut self) -> Result<&SessionState, EngineError> {
+        let frame = match self.incoming.recv().await {
+            Some(frame) => frame?,
+            None => return Err(EngineError::Message("Unexpected Eof of SessionFrame")) // TODO: send back error?
+        };
+        let remote_begin = match frame.body {
+            SessionFrameBody::Begin{performative} => performative,
+            _ => return Err(EngineError::Message("Expecting Begin"))
+        };
+        
+        self.next_incoming_id = remote_begin.next_outgoing_id;
+        self.remote_incoming_window = remote_begin.incoming_window;
+        self.remote_outgoing_window = remote_begin.outgoing_window;
+
+        // TODO: is there anything else to check?
+        Ok(&self.local_state)
     }
 
     async fn mux_loop(mut self) -> Result<(), EngineError> {
