@@ -1355,12 +1355,10 @@ impl<'a, W: Write + 'a> ser::SerializeStructVariant for VariantSerializer<'a, W>
 
 #[cfg(test)]
 mod test {
-    use std::collections::BTreeMap;
-
     use crate::{
         descriptor::Descriptor,
         format_code::EncodingCodes,
-        primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+        primitives::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid},
     };
 
     use super::*;
@@ -1819,6 +1817,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(val, expected);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_described_macro() {
         use crate as serde_amqp;
@@ -1839,6 +1838,7 @@ mod test {
         println!("{:x?}", buf);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_tuple_struct_with_composite_macro() {
         use crate as serde_amqp;
@@ -1853,6 +1853,7 @@ mod test {
         println!("{:x?}", buf);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_unit_struct_with_composite_macro() {
         use crate as serde_amqp;
@@ -1890,9 +1891,12 @@ mod test {
         assert_eq!(buf3, expected);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_composite_macro_wrapper() {
+        use std::collections::BTreeMap;
         use crate as serde_amqp;
+        use crate::primitives::Symbol;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
@@ -1917,6 +1921,7 @@ mod test {
         println!("{:x?}", &buf);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_composite_with_optional_fields() {
         use crate as serde_amqp;
@@ -2016,6 +2021,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(bar, expected);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_composite_tuple_with_optional_fields() {
         use crate as serde_amqp;

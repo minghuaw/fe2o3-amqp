@@ -1515,12 +1515,10 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use serde::{de::DeserializeOwned, Deserialize};
 
     use crate::{
-        descriptor::Descriptor, format_code::EncodingCodes, primitives::Symbol, ser::to_vec,
+        descriptor::Descriptor, format_code::EncodingCodes,
     };
 
     use super::{from_reader, from_slice};
@@ -1821,9 +1819,11 @@ mod tests {
         assert_eq_from_slice_vs_expected(&buf, descriptor);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_unit_struct_with_described_macro() {
         use crate as serde_amqp;
+        use crate::ser::to_vec;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         {
@@ -1860,9 +1860,11 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_tuple_struct_with_described_macro() {
         use crate as serde_amqp;
+        use crate::ser::to_vec;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
@@ -1875,9 +1877,11 @@ mod tests {
         assert_eq!(foo, foo2);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_struct_with_described_macro() {
         use crate as serde_amqp;
+        use crate::ser::to_vec;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
@@ -1911,6 +1915,7 @@ mod tests {
         assert_eq!(bar, bar2)
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_composite_with_optional_fields() {
         use crate as serde_amqp;
@@ -1977,6 +1982,7 @@ mod tests {
         assert!(foo.a.is_some());
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_composite_tuple_with_optional_fields() {
         use crate as serde_amqp;
@@ -2066,9 +2072,13 @@ mod tests {
         assert_eq!(bar, bar2);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_basic_wrapper() {
+        use std::collections::BTreeMap;
         use crate as serde_amqp;
+        use crate::ser::to_vec;
+        use crate::primitives::Symbol;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]

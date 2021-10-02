@@ -308,7 +308,6 @@ mod tests {
     use serde::de::DeserializeOwned;
 
     use crate::de::from_reader;
-    use crate::from_slice;
     use crate::ser::to_vec;
 
     use super::Value;
@@ -569,9 +568,11 @@ mod tests {
         assert_eq_from_reader_vs_expected(buf, expected);
     }
 
+    #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_described_value() {
         use crate as serde_amqp;
+        use crate::from_slice;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
