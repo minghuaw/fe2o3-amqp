@@ -40,7 +40,7 @@ pub struct ConnMux {
     local_open: Open,
     local_sessions: Slab<SessionHandle>, // Slab is indexed with OutgoingChannel
 
-    remote_state: Option<ConnectionState>,
+    remote_state: Option<ConnectionState>, // TODO: how to estimate the remote state?
     remote_open: Option<Open>,
     remote_sessions: BTreeMap<IncomingChannelId, OutgoingChannelId>, // maps from remote channel id to local channel id
     // remote_header: ProtocolHeader,
@@ -375,31 +375,23 @@ impl ConnMux {
 
         match &frame.body { 
             SessionFrameBody::Begin{performative} => {
-                match performative.remote_channel {
-                    Some(local_channel) => {
-                        // let local_channel = performative.remote_channel
-                        //     .ok_or_else(|| EngineError::not_allowed())?;
-                        let remote_channel = frame.channel;
+                // match performative.remote_channel {
+                //     Some(local_channel) => {
+                //         // let local_channel = performative.remote_channel
+                //         //     .ok_or_else(|| EngineError::not_allowed())?;
+                //         let remote_channel = frame.channel;
         
-                        let key = IncomingChannelId(remote_channel);
-                        let value = OutgoingChannelId(local_channel);
-        
-                        // check whether there is existing sessions
-                        if self.remote_sessions.contains_key(&key) {
-                            return Err(EngineError::not_allowed()) // FIXME: what error should be returned here?
-                        }
-        
-                        self.remote_sessions.insert(key, value);
-        
-                        // forward begin frame to session mux
-                        let handle = self.local_sessions.get_mut(local_channel as usize)
-                            .ok_or_else(|| EngineError::not_found())?;
-                        handle.sender_mut().send(Ok(frame)).await?;
-                    },
-                    None => {
-                        todo!()
-                    }
-                }
+                //         // forward begin frame to session mux
+                //         let handle = self.local_sessions.get_mut(local_channel as usize)
+                //             .ok_or_else(|| EngineError::not_found())?;
+                //     },
+                //     None => {
+                //         todo!()
+                //     }
+                // }
+                let remote_channel = frame.channel;
+                let handle = self.handle_intercepted_incoming_begin(remote_channel, performative)?;
+                handle.sender_mut().send(Ok(frame)).await?;
             },
             SessionFrameBody::End{performative: _} => {
                 // stop session mux?
@@ -415,6 +407,32 @@ impl ConnMux {
         }
         
         Ok(&self.local_state)
+    }
+
+    #[inline]
+    fn handle_intercepted_incoming_begin(
+        &mut self,
+        remote_channel: u16,
+        remote_begin: &Begin,
+    ) -> Result<&mut SessionHandle, EngineError> {
+        println!(">>> Debug: handle_intercepted_incoming_begin()");
+        match remote_begin.remote_channel {
+            Some(local_channel) => {
+                let key = IncomingChannelId(remote_channel);
+                let value = OutgoingChannelId(local_channel);
+                // check whether there is existing sessions
+                if self.remote_sessions.contains_key(&key) {
+                    return Err(EngineError::not_allowed()) // FIXME: what error should be returned here?
+                }
+        
+                self.remote_sessions.insert(key, value);
+                self.local_sessions.get_mut(local_channel as usize)
+                    .ok_or_else(|| EngineError::not_found())
+            },
+            None => {
+                todo!()
+            }
+        }
     }
 
     #[inline]

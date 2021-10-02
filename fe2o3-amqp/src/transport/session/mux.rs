@@ -203,7 +203,7 @@ impl SessionMux {
 
     async fn mux_loop(mut self) -> Result<(), EngineError> {
         loop {
-            println!(">>> Debug SessionMux mux_loop");
+            println!(">>> Debug: SessionMux mux_loop");
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     }

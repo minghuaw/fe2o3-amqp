@@ -2,8 +2,7 @@ use std::convert::TryInto;
 
 use crate::error::EngineError;
 pub use crate::transport::Transport;
-use fe2o3_amqp_types::performatives::{Begin, ChannelMax, MaxFrameSize};
-use futures_util::Sink;
+use fe2o3_amqp_types::performatives::{ChannelMax, MaxFrameSize};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use url::Url;
 
@@ -17,7 +16,7 @@ pub(crate) use mux::{ConnMuxControl, DEFAULT_CONTROL_CHAN_BUF};
 
 pub use builder::Builder;
 
-use super::session::{Session, SessionFrame};
+use super::session::{SessionFrame};
 
 pub const MIN_MAX_FRAME_SIZE: u32 = 512;
 
@@ -118,13 +117,6 @@ impl Connection {
             Err(_) => Err(EngineError::Message("JoinError")),
         }
         // self.mux.close().await
-    }
-
-    pub(crate) async fn create_session(
-        &mut self,
-        local_begin: Begin,
-    ) -> Result<Session, EngineError> {
-        todo!()
     }
 }
 
