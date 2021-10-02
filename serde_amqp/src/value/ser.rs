@@ -5,7 +5,7 @@ use serde::ser;
 use serde_bytes::ByteBuf;
 
 use crate::{
-    constants::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
+    __constants::{ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, SYMBOL, TIMESTAMP, UUID},
     error::Error,
     primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
     util::NewType,
@@ -244,7 +244,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     where
         T: serde::Serialize,
     {
-        use crate::constants::{DESCRIPTOR, VALUE};
+        use crate::__constants::{DESCRIPTOR, VALUE};
 
         if name == DESCRIPTOR || name == VALUE
         // || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR

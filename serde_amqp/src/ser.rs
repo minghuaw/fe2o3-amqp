@@ -3,10 +3,9 @@ use std::io::Write;
 use serde::{ser, Serialize};
 
 use crate::{
-    constants::DESCRIPTOR,
-    constants::{
+    __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        SYMBOL, TIMESTAMP, UUID,
+        SYMBOL, TIMESTAMP, UUID, DESCRIPTOR
     },
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},

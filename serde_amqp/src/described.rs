@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use serde::{de, ser};
 
 use crate::{
-    constants::{DESCRIBED_BASIC, DESCRIPTOR},
+    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
     descriptor::Descriptor,
 };
 

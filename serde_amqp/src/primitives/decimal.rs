@@ -11,7 +11,7 @@ use crate::error::Error;
 mod dec32 {
     // use serde_bytes::ByteBuf;
 
-    use crate::{constants::DECIMAL32, fixed_width::DECIMAL32_WIDTH};
+    use crate::{__constants::DECIMAL32, fixed_width::DECIMAL32_WIDTH};
 
     use super::*;
 
@@ -97,7 +97,7 @@ mod dec32 {
 mod dec64 {
     // use serde_bytes::ByteBuf;
 
-    use crate::{constants::DECIMAL64, fixed_width::DECIMAL64_WIDTH};
+    use crate::{__constants::DECIMAL64, fixed_width::DECIMAL64_WIDTH};
 
     use super::*;
 
@@ -177,7 +177,7 @@ mod dec64 {
 mod dec128 {
     // use serde_bytes::ByteBuf;
 
-    use crate::{constants::DECIMAL128, fixed_width::DECIMAL128_WIDTH};
+    use crate::{__constants::DECIMAL128, fixed_width::DECIMAL128_WIDTH};
 
     use super::*;
 

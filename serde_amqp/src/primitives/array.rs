@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use serde::{de, ser};
 
-use crate::constants::ARRAY;
+use crate::__constants::ARRAY;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Array<T>(pub Vec<T>);

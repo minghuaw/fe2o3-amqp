@@ -2,7 +2,7 @@ use serde::de::{self};
 use std::convert::TryInto;
 
 use crate::{
-    constants::{
+    __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
         DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, VALUE,
     },

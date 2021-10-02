@@ -3,7 +3,7 @@ use serde::{
     Serialize,
 };
 
-use crate::constants::SYMBOL;
+use crate::__constants::SYMBOL;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(String);

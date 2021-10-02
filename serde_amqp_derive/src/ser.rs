@@ -70,7 +70,7 @@ fn expand_serialize_unit_struct(
     encoding: &EncodingType,
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => panic!("Basic encoding on unit struct is not supported"),
         EncodingType::Map => panic!("Map encoding on unit struct is not supported"),
     };
@@ -99,11 +99,11 @@ fn expand_serialize_tuple_struct(
     fields: &syn::FieldsUnnamed,
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             if fields.unnamed.len() == 1 {
                 // Basic encoding is allowed on newtype struct
-                quote!(serde_amqp::constants::DESCRIBED_BASIC)
+                quote!(serde_amqp::__constants::DESCRIBED_BASIC)
             } else {
                 unimplemented!()
             }
@@ -157,13 +157,13 @@ fn expand_serialize_struct(
         EncodingType::Basic => {
             if fields.named.len() == 1 {
                 // Basic encoding is allowed on newtype struct
-                quote!(serde_amqp::constants::DESCRIBED_BASIC)
+                quote!(serde_amqp::__constants::DESCRIBED_BASIC)
             } else {
                 unimplemented!()
             }
         }
-        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
-        EncodingType::Map => quote!(serde_amqp::constants::DESCRIBED_MAP),
+        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+        EncodingType::Map => quote!(serde_amqp::__constants::DESCRIBED_MAP),
     };
     let field_idents: Vec<syn::Ident> = fields
         .named
@@ -221,7 +221,7 @@ fn expand_serialize_struct(
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in serde_amqp serializer, this will be deducted
-                state.serialize_field(serde_amqp::constants::DESCRIPTOR, &#descriptor)?;
+                state.serialize_field(serde_amqp::__constants::DESCRIPTOR, &#descriptor)?;
                 // #( state.serialize_field(#field_names, &self.#field_idents)?; )*
                 // #(buffer_if_none!(state, null_count, &self.#field_idents, #field_names, #field_types);) *
                 #( #field_impls; )*

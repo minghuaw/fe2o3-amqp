@@ -111,7 +111,7 @@ fn expand_deserialize_unit_struct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
             return Err(syn::Error::new(
@@ -197,10 +197,10 @@ fn expand_deserialize_tuple_struct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             if fields.unnamed.len() == 1 {
-                quote!(serde_amqp::constants::DESCRIBED_BASIC)
+                quote!(serde_amqp::__constants::DESCRIBED_BASIC)
             } else {
                 let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
                 return Err(syn::Error::new(
@@ -271,7 +271,7 @@ fn expand_deserialize_struct(
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let len = fields.named.len();
     let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => match len {
             0 => {
                 let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
@@ -280,7 +280,7 @@ fn expand_deserialize_struct(
                     "Basic encoding is not supported on unit struct",
                 ));
             }
-            _ => quote!(serde_amqp::constants::DESCRIBED_BASIC),
+            _ => quote!(serde_amqp::__constants::DESCRIBED_BASIC),
         },
         EncodingType::Map => match len {
             0 => {
@@ -290,7 +290,7 @@ fn expand_deserialize_struct(
                     "Map encoding on unit struct is not implemented",
                 ));
             }
-            _ => quote!(serde_amqp::constants::DESCRIBED_MAP),
+            _ => quote!(serde_amqp::__constants::DESCRIBED_MAP),
         },
     };
     let field_idents: Vec<syn::Ident> = fields
@@ -366,7 +366,7 @@ fn expand_deserialize_struct(
                 }
 
                 // DESCRIPTOR is included here for compatibility with other deserializer
-                const FIELDS: &'static [&'static str] = &[serde_amqp::constants::DESCRIPTOR, #(#field_names,)*];
+                const FIELDS: &'static [&'static str] = &[serde_amqp::__constants::DESCRIPTOR, #(#field_names,)*];
                 deserializer.deserialize_struct(
                     #struct_name,
                     FIELDS,

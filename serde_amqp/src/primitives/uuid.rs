@@ -5,7 +5,7 @@ use serde::ser;
 // use serde_bytes::ByteBuf;
 use serde_bytes::Bytes;
 
-use crate::constants::UUID;
+use crate::__constants::UUID;
 use crate::error::Error;
 use crate::fixed_width::UUID_WIDTH;
 

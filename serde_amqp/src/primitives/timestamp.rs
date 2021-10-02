@@ -1,7 +1,7 @@
 use serde::de;
 use serde::ser;
 
-use crate::constants::TIMESTAMP;
+use crate::__constants::TIMESTAMP;
 
 /// 64-bit two’s-complement integer representing milliseconds since the unix epoch
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

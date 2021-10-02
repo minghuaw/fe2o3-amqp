@@ -11,8 +11,10 @@ pub mod ser;
 pub mod value;
 
 // Private mod but is used by derive macros
+// This is to avoid accidental misuse
 #[doc(hidden)]
-pub mod constants;
+#[path ="constants.rs"]
+pub mod __constants;
 
 // Private mods
 mod util;

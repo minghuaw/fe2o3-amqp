@@ -3,11 +3,10 @@ use std::{collections::BTreeMap, convert::TryInto};
 use ordered_float::OrderedFloat;
 use serde::de::{self};
 
-use crate::constants::{
-    ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
-};
 use crate::{
-    constants::VALUE,
+    __constants::{
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, VALUE
+    },
     error::Error,
     format_code::EncodingCodes,
     util::{
