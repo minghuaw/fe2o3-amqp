@@ -4,11 +4,12 @@ mod symbol;
 mod timestamp;
 mod uuid;
 
-pub use array::*;
-pub use decimal::*;
-pub use symbol::*;
-pub use timestamp::*;
-pub use uuid::*;
+// to avoid ambiguity
+pub use crate::primitives::array::*;
+pub use crate::primitives::decimal::*;
+pub use crate::primitives::symbol::*;
+pub use crate::primitives::timestamp::*;
+pub use crate::primitives::uuid::*;
 
 // Alias for the primitive types to match those in the spec
 use serde_bytes::ByteBuf;
