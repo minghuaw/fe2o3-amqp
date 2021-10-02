@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
+use fe2o3_amqp::{primitives::Symbol};
 use serde::{de, ser};
 
 use super::ErrorCondition;
@@ -74,37 +74,14 @@ impl ser::Serialize for ConnectionError {
     }
 }
 
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = ConnectionError;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("variant identifier")
-    }
-
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        self.visit_str(v.as_str())
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        v.try_into()
-            .map_err(|_| de::Error::custom("Invalud symbol value for ConnectionError"))
-    }
-}
-
 impl<'de> de::Deserialize<'de> for ConnectionError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
+        Symbol::deserialize(deserializer)?
+            .try_into()
+            .map_err(|_| de::Error::custom("Invalid symbol value for SessionError"))
     }
 }
 

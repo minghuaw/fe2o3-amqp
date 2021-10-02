@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use fe2o3_amqp::{constants::SYMBOL, primitives::Symbol};
+use fe2o3_amqp::{primitives::Symbol};
 use serde::{de, ser};
 
 use super::ErrorCondition;
@@ -65,12 +65,10 @@ impl TryFrom<Symbol> for AmqpError {
     type Error = Symbol;
 
     fn try_from(value: Symbol) -> Result<Self, Self::Error> {
-        let val = match value.as_str().try_into() {
-            Ok(val) => val,
-            Err(_) => return Err(value),
-        };
-
-        Ok(val)
+        match value.as_str().try_into() {
+            Ok(val) => Ok(val),
+            Err(_) => Err(value),
+        }
     }
 }
 
@@ -109,38 +107,14 @@ impl ser::Serialize for AmqpError {
     }
 }
 
-struct Visitor {}
-
-impl<'de> de::Visitor<'de> for Visitor {
-    type Value = AmqpError;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum AmqpError")
-    }
-
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        self.visit_str(&v)
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        v.try_into()
-            .map_err(|_| de::Error::custom("Invalid symbol value for AmqpError"))
-    }
-}
-
 impl<'de> de::Deserialize<'de> for AmqpError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        // deserializer.deserialize_identifier(Visitor {})
-        deserializer.deserialize_newtype_struct(SYMBOL, Visitor {})
+        Symbol::deserialize(deserializer)?
+            .try_into()
+            .map_err(|_| de::Error::custom("Invalid symbol value for AmqpError"))
     }
 }
 
