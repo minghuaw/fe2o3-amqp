@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use fe2o3_engine::transport::connection::Connection;
-use fe2o3_engine::transport::session::Session;
+use fe2o3_amqp::transport::connection::Connection;
+use fe2o3_amqp::transport::session::Session;
 
 #[tokio::main]
 async fn main() {
