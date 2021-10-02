@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use fe2o3_amqp::{constants::VALUE, format_code::EncodingCodes};
+use fe2o3_amqp::{format_code::EncodingCodes};
 use ordered_float::OrderedFloat;
 use serde::{de, ser};
 use serde_bytes::ByteBuf;
