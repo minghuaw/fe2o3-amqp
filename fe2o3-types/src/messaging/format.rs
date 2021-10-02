@@ -1,4 +1,4 @@
-use fe2o3_amqp::{
+use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
     primitives::{Binary, Boolean, Symbol, Timestamp, UByte, UInt, ULong, Uuid},
     value::Value,

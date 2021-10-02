@@ -76,7 +76,7 @@ impl<'de> de::Deserialize<'de> for Role {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp::{from_slice, ser::to_vec};
+    use serde_amqp::{from_slice, ser::to_vec};
 
     use super::Role;
 

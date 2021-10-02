@@ -210,8 +210,8 @@ mod tests {
     use super::Performative;
 
     use super::End;
-    use fe2o3_amqp::de::from_slice;
-    use fe2o3_amqp::ser::to_vec;
+    use serde_amqp::de::from_slice;
+    use serde_amqp::ser::to_vec;
 
     #[test]
     fn test_untagged_serde() {

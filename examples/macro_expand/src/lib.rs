@@ -1,6 +1,6 @@
 // use std::collections::BTreeMap;
 
-// use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
+// use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 // #[derive(SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(code = 0x13, encoding = "map")]
@@ -32,8 +32,8 @@
 
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
-use fe2o3_amqp::primitives::{Boolean, UInt, ULong};
+use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
+use serde_amqp::primitives::{Boolean, UInt, ULong};
 use serde::{Deserialize, Serialize};
 
 // use crate::definitions::{Error, Fields};

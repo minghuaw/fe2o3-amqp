@@ -1,6 +1,6 @@
 use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
-use fe2o3_amqp::primitives::Symbol;
+use serde_amqp::primitives::Symbol;
 use fe2o3_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds},
     performatives::{ChannelMax, MaxFrameSize, Open},

@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use serde::{de, ser};
 
-use fe2o3_amqp::{primitives::Symbol};
+use serde_amqp::{primitives::Symbol};
 
 use super::{AmqpError, ConnectionError, LinkError, SessionError};
 
@@ -121,7 +121,7 @@ impl<'de> de::Deserialize<'de> for ErrorCondition {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp::{format_code::EncodingCodes, from_slice};
+    use serde_amqp::{format_code::EncodingCodes, from_slice};
 
     use crate::definitions::AmqpError;
 

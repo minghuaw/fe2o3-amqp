@@ -1,5 +1,5 @@
-use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
-use fe2o3_amqp::primitives::{Boolean, UInt, ULong};
+use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
+use serde_amqp::primitives::{Boolean, UInt, ULong};
 
 use crate::definitions::{Error, Fields};
 
@@ -115,7 +115,7 @@ pub struct Modified {
 #[cfg(test)]
 mod tests {
     //! Test serialization and deserialization
-    use fe2o3_amqp::{
+    use serde_amqp::{
         de::{from_slice, Deserializer},
         format_code::EncodingCodes,
         read::SliceReader,

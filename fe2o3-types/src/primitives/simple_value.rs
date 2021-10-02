@@ -104,7 +104,7 @@ impl<'de> de::Deserialize<'de> for SimpleValue {
 }
 
 impl TryFrom<Value> for SimpleValue {
-    type Error = fe2o3_amqp::error::Error;
+    type Error = serde_amqp::error::Error;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         let val = match value {
@@ -130,7 +130,7 @@ impl TryFrom<Value> for SimpleValue {
             Value::String(v) => SimpleValue::String(v),
             Value::Symbol(v) => SimpleValue::Symbol(v),
             Value::List(_) | Value::Map(_) | Value::Array(_) | Value::Described(_) => {
-                return Err(fe2o3_amqp::error::Error::InvalidValue)
+                return Err(serde_amqp::error::Error::InvalidValue)
             }
         };
         Ok(val)

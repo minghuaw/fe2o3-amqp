@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use fe2o3_amqp::{primitives::Symbol};
+use serde_amqp::{primitives::Symbol};
 use serde::{de, ser};
 
 use super::ErrorCondition;
@@ -87,7 +87,7 @@ impl<'de> de::Deserialize<'de> for ConnectionError {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp::{de::from_slice, format_code::EncodingCodes, ser::to_vec};
+    use serde_amqp::{de::from_slice, format_code::EncodingCodes, ser::to_vec};
 
     use super::ConnectionError;
 

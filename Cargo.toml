@@ -1,8 +1,8 @@
 [workspace]
 members = [
     # serde 
-    "fe2o3-amqp-macros",
-    "fe2o3-amqp",
+    "serde_amqp_derive",
+    "serde_amqp",
 
     # frame transport
     "fe2o3-types",

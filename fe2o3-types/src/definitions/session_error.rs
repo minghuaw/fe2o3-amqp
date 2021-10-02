@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 
 use serde::{de, ser};
 
-use fe2o3_amqp::{primitives::Symbol};
+use serde_amqp::{primitives::Symbol};
 
 use super::ErrorCondition;
 
@@ -82,7 +82,7 @@ impl<'de> de::Deserialize<'de> for SessionError {
 #[cfg(test)]
 mod tests {
 
-    use fe2o3_amqp::{de::from_slice, ser::to_vec};
+    use serde_amqp::{de::from_slice, ser::to_vec};
 
     use super::*;
 

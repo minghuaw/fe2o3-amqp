@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{
+use serde_amqp::{
     primitives::{Symbol, UInt},
     value::Value,
 };

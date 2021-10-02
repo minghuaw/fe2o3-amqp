@@ -1,5 +1,5 @@
 use bytes::{Buf, BufMut, BytesMut};
-use fe2o3_amqp::{de::Deserializer, read::IoReader};
+use serde_amqp::{de::Deserializer, read::IoReader};
 use fe2o3_types::performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
 };
@@ -196,7 +196,7 @@ impl Encoder<FrameBody> for FrameBodyCodec {
     type Error = EngineError;
 
     fn encode(&mut self, item: FrameBody, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        use fe2o3_amqp::ser::Serializer;
+        use serde_amqp::ser::Serializer;
 
         let mut serializer = Serializer::from(dst.writer());
         match item {

@@ -15,7 +15,7 @@ pub enum EngineError {
     IsClosed,
 
     #[error("Parse Error: {0}")]
-    ParseError(#[from] fe2o3_amqp::Error),
+    ParseError(#[from] serde_amqp::Error),
 
     #[error("Unexpected Protocol ID {0:?}")]
     UnexpectedProtocolId(u8),

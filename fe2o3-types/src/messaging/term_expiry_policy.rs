@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use fe2o3_amqp::{primitives::Symbol};
+use serde_amqp::{primitives::Symbol};
 use serde::{de::{self}, ser};
 
 /// 3.5.6 Terminus Expiry Policy

@@ -1821,7 +1821,7 @@ mod test {
 
     #[test]
     fn test_serialize_described_macro() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
@@ -1841,7 +1841,7 @@ mod test {
 
     #[test]
     fn test_serialize_tuple_struct_with_composite_macro() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
@@ -1855,7 +1855,7 @@ mod test {
 
     #[test]
     fn test_serialize_unit_struct_with_composite_macro() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         let expected = vec![
@@ -1892,7 +1892,7 @@ mod test {
 
     #[test]
     fn test_serialize_composite_macro_wrapper() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
@@ -1919,7 +1919,7 @@ mod test {
 
     #[test]
     fn test_serialize_composite_with_optional_fields() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
@@ -2018,7 +2018,7 @@ mod test {
 
     #[test]
     fn test_serialize_composite_tuple_with_optional_fields() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]

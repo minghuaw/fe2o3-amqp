@@ -27,10 +27,10 @@ fn expand_serialize_on_datastruct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let descriptor = match amqp_attr.code {
-        Some(code) => quote!(fe2o3_amqp::descriptor::Descriptor::Code(#code)),
+        Some(code) => quote!(serde_amqp::descriptor::Descriptor::Code(#code)),
         None => {
             let name = &amqp_attr.name[..];
-            quote!(fe2o3_amqp::descriptor::Descriptor::Name(fe2o3_amqp::primitives::Symbol::from(#name)))
+            quote!(serde_amqp::descriptor::Descriptor::Name(serde_amqp::primitives::Symbol::from(#name)))
         }
     };
 
@@ -70,18 +70,18 @@ fn expand_serialize_unit_struct(
     encoding: &EncodingType,
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
-        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => panic!("Basic encoding on unit struct is not supported"),
         EncodingType::Map => panic!("Map encoding on unit struct is not supported"),
     };
     quote! {
         #[automatically_derived]
-        impl fe2o3_amqp::serde::ser::Serialize for #ident {
+        impl serde_amqp::serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: fe2o3_amqp::serde::ser::Serializer,
+                S: serde_amqp::serde::ser::Serializer,
             {
-                use fe2o3_amqp::serde::ser::SerializeTupleStruct;
+                use serde_amqp::serde::ser::SerializeTupleStruct;
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_tuple_struct(#struct_name, 0 + 1)?;
                 // serialize descriptor
@@ -99,11 +99,11 @@ fn expand_serialize_tuple_struct(
     fields: &syn::FieldsUnnamed,
 ) -> proc_macro2::TokenStream {
     let struct_name = match encoding {
-        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             if fields.unnamed.len() == 1 {
                 // Basic encoding is allowed on newtype struct
-                quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+                quote!(serde_amqp::constants::DESCRIBED_BASIC)
             } else {
                 unimplemented!()
             }
@@ -124,18 +124,18 @@ fn expand_serialize_tuple_struct(
         #buffer_if_none
 
         #[automatically_derived]
-        impl fe2o3_amqp::serde::ser::Serialize for #ident {
+        impl serde_amqp::serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: fe2o3_amqp::serde::ser::Serializer,
+                S: serde_amqp::serde::ser::Serializer,
             {
-                use fe2o3_amqp::serde::ser::SerializeTupleStruct;
+                use serde_amqp::serde::ser::SerializeTupleStruct;
                 let mut null_count = 0u32;
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_tuple_struct(#struct_name, #len + 1)?;
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
-                // in fe2o3_amqp serializer, this will be deducted
+                // in serde_amqp serializer, this will be deducted
                 state.serialize_field(&#descriptor)?;
                 // #( state.serialize_field(&self.#field_indices)?; )*
                 #( buffer_if_none!(state, null_count, &self.#field_indices, #field_types); )*
@@ -157,13 +157,13 @@ fn expand_serialize_struct(
         EncodingType::Basic => {
             if fields.named.len() == 1 {
                 // Basic encoding is allowed on newtype struct
-                quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+                quote!(serde_amqp::constants::DESCRIBED_BASIC)
             } else {
                 unimplemented!()
             }
         }
-        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
-        EncodingType::Map => quote!(fe2o3_amqp::constants::DESCRIBED_MAP),
+        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
+        EncodingType::Map => quote!(serde_amqp::constants::DESCRIBED_MAP),
     };
     let field_idents: Vec<syn::Ident> = fields
         .named
@@ -209,19 +209,19 @@ fn expand_serialize_struct(
         #declarative_macro
 
         #[automatically_derived]
-        impl fe2o3_amqp::serde::ser::Serialize for #ident {
+        impl serde_amqp::serde::ser::Serialize for #ident {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: fe2o3_amqp::serde::ser::Serializer,
+                S: serde_amqp::serde::ser::Serializer,
             {
-                use fe2o3_amqp::serde::ser::SerializeStruct;
+                use serde_amqp::serde::ser::SerializeStruct;
                 let mut null_count = 0u32;
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
-                // in fe2o3_amqp serializer, this will be deducted
-                state.serialize_field(fe2o3_amqp::constants::DESCRIPTOR, &#descriptor)?;
+                // in serde_amqp serializer, this will be deducted
+                state.serialize_field(serde_amqp::constants::DESCRIPTOR, &#descriptor)?;
                 // #( state.serialize_field(#field_names, &self.#field_idents)?; )*
                 // #(buffer_if_none!(state, null_count, &self.#field_idents, #field_names, #field_types);) *
                 #( #field_impls; )*

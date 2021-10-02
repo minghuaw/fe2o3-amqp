@@ -1,4 +1,4 @@
-use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
+use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use super::{ErrorCondition, Fields};
 
@@ -45,7 +45,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use fe2o3_amqp::{from_slice, to_vec};
+    use serde_amqp::{from_slice, to_vec};
 
     use crate::definitions::AmqpError;
 

@@ -1,4 +1,4 @@
-use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
+use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::Error;
 
@@ -19,7 +19,7 @@ pub struct End {
 }
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp::{de::from_slice, ser::to_vec};
+    use serde_amqp::{de::from_slice, ser::to_vec};
 
     use super::*;
 

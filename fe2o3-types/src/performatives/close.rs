@@ -1,4 +1,4 @@
-use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
+use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::Error;
 

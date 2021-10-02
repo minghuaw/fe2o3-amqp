@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use fe2o3_amqp::{primitives::Symbol};
+use serde_amqp::{primitives::Symbol};
 use serde::{de, ser};
 
 use super::ErrorCondition;
@@ -123,9 +123,9 @@ mod tests {
     use std::fmt::Debug;
 
     use crate::definitions::AmqpError;
-    use fe2o3_amqp::de::from_slice;
-    use fe2o3_amqp::format_code::EncodingCodes;
-    use fe2o3_amqp::ser::to_vec;
+    use serde_amqp::de::from_slice;
+    use serde_amqp::format_code::EncodingCodes;
+    use serde_amqp::ser::to_vec;
     use serde::de;
     use serde::ser;
 

@@ -1,4 +1,4 @@
-use fe2o3_amqp::primitives::{Symbol, UInt};
+use serde_amqp::primitives::{Symbol, UInt};
 use fe2o3_types::{
     definitions::{Fields, Handle, SequenceNo, TransferNumber},
     performatives::Begin,

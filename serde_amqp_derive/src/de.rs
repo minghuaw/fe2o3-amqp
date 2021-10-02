@@ -32,22 +32,22 @@ fn expand_deserialize_on_datastruct(
 
     let evaluate_code = match attr.code {
         Some(code) => quote! {
-            fe2o3_amqp::descriptor::Descriptor::Code(__c) => {
+            serde_amqp::descriptor::Descriptor::Code(__c) => {
                 if __c != #code {
-                    return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
+                    return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             }
         },
         None => quote! {
-            fe2o3_amqp::descriptor::Descriptor::Code(_) => return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
+            serde_amqp::descriptor::Descriptor::Code(_) => return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
         },
     };
 
     let evaluate_descriptor = quote! {
         match __descriptor {
-            fe2o3_amqp::descriptor::Descriptor::Name(__symbol) => {
+            serde_amqp::descriptor::Descriptor::Name(__symbol) => {
                 if __symbol.into_inner() != #name {
-                    return Err(fe2o3_amqp::serde::de::Error::custom("Descriptor mismatch"))
+                    return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             },
             #evaluate_code
@@ -89,11 +89,11 @@ fn impl_visit_seq_for_unit_struct(
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
-            A: fe2o3_amqp::serde::de::SeqAccess<'de>,
+            A: serde_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __seq.next_element()? {
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(__val) => __val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
 
             #evaluate_descriptor
@@ -111,7 +111,7 @@ fn expand_deserialize_unit_struct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let struct_name = match encoding {
-        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
             return Err(syn::Error::new(
@@ -132,13 +132,13 @@ fn expand_deserialize_unit_struct(
 
     let token = quote! {
         #[automatically_derived]
-        impl<'de> fe2o3_amqp::serde::de::Deserialize<'de> for #ident {
+        impl<'de> serde_amqp::serde::de::Deserialize<'de> for #ident {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: fe2o3_amqp::serde::de::Deserializer<'de>,
+                D: serde_amqp::serde::de::Deserializer<'de>,
             {
                 struct Visitor {}
-                impl<'de> fe2o3_amqp::serde::de::Visitor<'de> for Visitor {
+                impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
                     type Value = #ident;
 
                     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -170,11 +170,11 @@ fn impl_visit_seq_for_tuple_struct(
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
-            A: fe2o3_amqp::serde::de::SeqAccess<'de>,
+            A: serde_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __seq.next_element()? {
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
 
             #evaluate_descriptor
@@ -197,10 +197,10 @@ fn expand_deserialize_tuple_struct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let struct_name = match encoding {
-        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => {
             if fields.unnamed.len() == 1 {
-                quote!(fe2o3_amqp::constants::DESCRIBED_BASIC)
+                quote!(serde_amqp::constants::DESCRIBED_BASIC)
             } else {
                 let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
                 return Err(syn::Error::new(
@@ -232,13 +232,13 @@ fn expand_deserialize_tuple_struct(
 
     let token = quote! {
         #[automatically_derived]
-        impl<'de> fe2o3_amqp::serde::de::Deserialize<'de> for #ident {
+        impl<'de> serde_amqp::serde::de::Deserialize<'de> for #ident {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: fe2o3_amqp::serde::de::Deserializer<'de>,
+                D: serde_amqp::serde::de::Deserializer<'de>,
             {
                 struct Visitor {}
-                impl<'de> fe2o3_amqp::serde::de::Visitor<'de> for Visitor {
+                impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
                     type Value = #ident;
 
                     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -271,7 +271,7 @@ fn expand_deserialize_struct(
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let len = fields.named.len();
     let struct_name = match encoding {
-        EncodingType::List => quote!(fe2o3_amqp::constants::DESCRIBED_LIST),
+        EncodingType::List => quote!(serde_amqp::constants::DESCRIBED_LIST),
         EncodingType::Basic => match len {
             0 => {
                 let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
@@ -280,7 +280,7 @@ fn expand_deserialize_struct(
                     "Basic encoding is not supported on unit struct",
                 ));
             }
-            _ => quote!(fe2o3_amqp::constants::DESCRIBED_BASIC),
+            _ => quote!(serde_amqp::constants::DESCRIBED_BASIC),
         },
         EncodingType::Map => match len {
             0 => {
@@ -290,7 +290,7 @@ fn expand_deserialize_struct(
                     "Map encoding on unit struct is not implemented",
                 ));
             }
-            _ => quote!(fe2o3_amqp::constants::DESCRIBED_MAP),
+            _ => quote!(serde_amqp::constants::DESCRIBED_MAP),
         },
     };
     let field_idents: Vec<syn::Ident> = fields
@@ -344,16 +344,16 @@ fn expand_deserialize_struct(
         #unwrap_or_none
 
         #[automatically_derived]
-        impl<'de> fe2o3_amqp::serde::de::Deserialize<'de> for #ident {
+        impl<'de> serde_amqp::serde::de::Deserialize<'de> for #ident {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: fe2o3_amqp::serde::de::Deserializer<'de>,
+                D: serde_amqp::serde::de::Deserializer<'de>,
             {
 
                 #deserialize_field
 
                 struct Visitor {}
-                impl<'de> fe2o3_amqp::serde::de::Visitor<'de> for Visitor {
+                impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
                     type Value = #ident;
 
                     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -366,7 +366,7 @@ fn expand_deserialize_struct(
                 }
 
                 // DESCRIPTOR is included here for compatibility with other deserializer
-                const FIELDS: &'static [&'static str] = &[fe2o3_amqp::constants::DESCRIPTOR, #(#field_names,)*];
+                const FIELDS: &'static [&'static str] = &[serde_amqp::constants::DESCRIPTOR, #(#field_names,)*];
                 deserializer.deserialize_struct(
                     #struct_name,
                     FIELDS,
@@ -389,7 +389,7 @@ fn impl_deserialize_for_field(
             // TODO: considering add ignored
         }
         struct FieldVisitor {}
-        impl<'de> fe2o3_amqp::serde::de::Visitor<'de> for FieldVisitor {
+        impl<'de> serde_amqp::serde::de::Visitor<'de> for FieldVisitor {
             type Value = Field;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -398,31 +398,31 @@ fn impl_deserialize_for_field(
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
-                E: fe2o3_amqp::serde::de::Error,
+                E: serde_amqp::serde::de::Error,
             {
                 match v {
                     // #name => Ok(Self::Value::descriptor),
                     #(#field_names => Ok(Self::Value::#field_idents),)*
-                    _ => Err(fe2o3_amqp::serde::de::Error::custom("Unknown identifier"))
+                    _ => Err(serde_amqp::serde::de::Error::custom("Unknown identifier"))
                 }
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
             where
-                E: fe2o3_amqp::serde::de::Error,
+                E: serde_amqp::serde::de::Error,
             {
                 match v {
                     // b if b == #name.as_bytes() => Ok(Self::Value::descriptor),
                     #(b if b == #field_names.as_bytes() => Ok(Self::Value::#field_idents),)*
-                    _ => Err(fe2o3_amqp::serde::de::Error::custom("Unknown identifier"))
+                    _ => Err(serde_amqp::serde::de::Error::custom("Unknown identifier"))
                 }
             }
 
         }
-        impl<'de> fe2o3_amqp::serde::de::Deserialize<'de> for Field {
+        impl<'de> serde_amqp::serde::de::Deserialize<'de> for Field {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: fe2o3_amqp::serde::de::Deserializer<'de>,
+                D: serde_amqp::serde::de::Deserializer<'de>,
             {
                 deserializer.deserialize_identifier(FieldVisitor{})
             }
@@ -460,11 +460,11 @@ fn impl_visit_seq_for_struct(
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
-            A: fe2o3_amqp::serde::de::SeqAccess<'de>,
+            A: serde_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __seq.next_element()? {
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting descriptor"))
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
             };
 
             #evaluate_descriptor
@@ -500,14 +500,14 @@ fn impl_visit_map(
 
     quote! {
         fn visit_map<A>(self, mut __map: A)-> Result<Self::Value, A::Error>
-        where A: fe2o3_amqp::serde::de::MapAccess<'de>
+        where A: serde_amqp::serde::de::MapAccess<'de>
         {
             #(let mut #field_idents: Option<#field_types> = None;)*
 
             // The first should always be the descriptor
-            let __descriptor: fe2o3_amqp::descriptor::Descriptor = match __map.next_key()? {
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __map.next_key()? {
                 Some(val) => val,
-                None => return Err(fe2o3_amqp::serde::de::Error::custom("Expecting__descriptor"))
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting__descriptor"))
             };
 
             #evaluate_descriptor
@@ -517,7 +517,7 @@ fn impl_visit_map(
                     #(
                         Field::#field_idents => {
                             if #field_idents.is_some() {
-                                return Err(fe2o3_amqp::serde::de::Error::duplicate_field(#field_names))
+                                return Err(serde_amqp::serde::de::Error::duplicate_field(#field_names))
                             }
                             #field_idents = Some(__map.next_value()?);
                         },

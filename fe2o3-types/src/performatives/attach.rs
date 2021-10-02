@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{
+use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
     primitives::{Boolean, Symbol, ULong},
     value::Value,

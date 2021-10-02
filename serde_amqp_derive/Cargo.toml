@@ -1,5 +1,5 @@
 [package]
-name = "fe2o3-amqp-macros"
+name = "serde_amqp_derive"
 version = "0.1.0"
 edition = "2018"
 

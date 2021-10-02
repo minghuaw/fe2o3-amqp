@@ -149,7 +149,7 @@ pub(crate) fn macro_rules_unwrap_or_none() -> proc_macro2::TokenStream {
             ($fident: ident, $seq: expr, $ftype: ty) => {
                 let $fident: $ftype = match $seq {
                     Some(val) => val,
-                    None => return Err(fe2o3_amqp::serde::de::Error::custom("Insufficient number of items")),
+                    None => return Err(serde_amqp::serde::de::Error::custom("Insufficient number of items")),
                 };
             };
         }

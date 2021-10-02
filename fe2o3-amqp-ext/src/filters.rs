@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp::{value::Value, DeserializeComposite, SerializeComposite};
+use serde_amqp::{value::Value, DeserializeComposite, SerializeComposite};
 use fe2o3_types::primitives::SimpleValue;
 
 // Define filters from AMQP Capabilities Registry: Filters

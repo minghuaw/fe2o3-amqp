@@ -1823,7 +1823,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_unit_struct_with_described_macro() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         {
@@ -1862,7 +1862,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_tuple_struct_with_described_macro() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
@@ -1877,7 +1877,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_struct_with_described_macro() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
@@ -1913,7 +1913,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_composite_with_optional_fields() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
@@ -1979,7 +1979,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_composite_tuple_with_optional_fields() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
@@ -2068,7 +2068,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_basic_wrapper() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::{DeserializeComposite, SerializeComposite};
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]

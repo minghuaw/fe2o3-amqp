@@ -571,7 +571,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_described_value() {
-        use crate as fe2o3_amqp;
+        use crate as serde_amqp;
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]

@@ -1,11 +1,11 @@
-pub use fe2o3_amqp_macros::{DeserializeComposite, SerializeComposite};
+pub use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ser::to_vec;
 
-    use crate as fe2o3_amqp;
+    use crate as serde_amqp;
 
     #[test]
     fn test_macro_integration() {

@@ -1,5 +1,5 @@
-use fe2o3_amqp::macros::{DeserializeComposite, SerializeComposite};
-use fe2o3_amqp::primitives::{Boolean, Symbol};
+use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
+use serde_amqp::primitives::{Boolean, Symbol};
 
 use crate::definitions::Seconds;
 

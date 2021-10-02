@@ -9,9 +9,9 @@ edition = "2018"
 tokio = { version = "1.11.0", features = ["rt", "macros"] }
 tokio-test = { version = "0.4.2" }
 
-[dependencies.fe2o3-amqp]
+[dependencies.serde_amqp]
 version = "0.0.1"
-path = "../fe2o3-amqp"
+path = "../serde_amqp"
 
 [dependencies.fe2o3-types]
 version = "0.1.0"
