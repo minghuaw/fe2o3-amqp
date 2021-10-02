@@ -16,9 +16,9 @@ impl Default for ProtocolHeader {
     fn default() -> Self {
         Self {
             id: ProtocolId::Amqp,
-            major: fe2o3_types::definitions::MAJOR,
-            minor: fe2o3_types::definitions::MINOR,
-            revision: fe2o3_types::definitions::REVISION,
+            major: fe2o3_amqp_types::definitions::MAJOR,
+            minor: fe2o3_amqp_types::definitions::MINOR,
+            revision: fe2o3_amqp_types::definitions::REVISION,
         }
     }
 }

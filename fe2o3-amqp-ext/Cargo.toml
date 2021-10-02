@@ -7,4 +7,4 @@ edition = "2018"
 
 [dependencies]
 serde_amqp = { version = "0.0.1", path = "../serde_amqp" }
-fe2o3-types = { version = "0.1.0", path = "../fe2o3-types" }
+fe2o3-amqp-types = { version = "0.1.0", path = "../fe2o3-amqp-types" }

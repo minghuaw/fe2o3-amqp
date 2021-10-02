@@ -1,5 +1,5 @@
 use serde_amqp::primitives::{Symbol, UInt};
-use fe2o3_types::{
+use fe2o3_amqp_types::{
     definitions::{Fields, Handle, SequenceNo, TransferNumber},
     performatives::Begin,
 };

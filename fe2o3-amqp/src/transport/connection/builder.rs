@@ -1,7 +1,7 @@
 use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
 use serde_amqp::primitives::Symbol;
-use fe2o3_types::{
+use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds},
     performatives::{ChannelMax, MaxFrameSize, Open},
 };
@@ -223,7 +223,7 @@ impl Builder<WithContainerId> {
         match url.scheme() {
             "amqp" => {
                 // connect TcpStream
-                let addr = url.socket_addrs(|| Some(fe2o3_types::definitions::PORT))?;
+                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
                 let stream = TcpStream::connect(&*addr).await?;
                 println!("TcpStream connected");
 

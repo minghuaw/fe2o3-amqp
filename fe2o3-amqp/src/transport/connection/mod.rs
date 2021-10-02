@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use crate::error::EngineError;
 pub use crate::transport::Transport;
-use fe2o3_types::performatives::{Begin, ChannelMax, MaxFrameSize};
+use fe2o3_amqp_types::performatives::{Begin, ChannelMax, MaxFrameSize};
 use futures_util::Sink;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use url::Url;

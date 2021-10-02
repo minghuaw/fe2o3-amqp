@@ -271,7 +271,7 @@ where
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-    use fe2o3_types::performatives::Open;
+    use fe2o3_amqp_types::performatives::Open;
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
     use tokio_util::codec::LengthDelimitedCodec;

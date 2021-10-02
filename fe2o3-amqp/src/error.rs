@@ -1,4 +1,4 @@
-use fe2o3_types::definitions::{AmqpError, ConnectionError};
+use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 use thiserror::Error;
 
 use crate::transport::connection::ConnectionState;

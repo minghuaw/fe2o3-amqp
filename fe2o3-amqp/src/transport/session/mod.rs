@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use bytes::BytesMut;
 use serde_amqp::primitives::UInt;
-use fe2o3_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer};
+use fe2o3_amqp_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
 use crate::error::EngineError;

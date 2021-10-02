@@ -4,8 +4,8 @@ use std::convert::TryInto;
 use std::time::Duration;
 
 use serde_amqp::primitives::UInt;
-use fe2o3_types::definitions::{AmqpError, ConnectionError, Error, Handle};
-use fe2o3_types::performatives::{Begin, ChannelMax, Close, Open};
+use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError, Error, Handle};
+use fe2o3_amqp_types::performatives::{Begin, ChannelMax, Close, Open};
 use slab::Slab;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::{self, Receiver, Sender};

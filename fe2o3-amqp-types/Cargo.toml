@@ -1,5 +1,5 @@
 [package]
-name = "fe2o3-types"
+name = "fe2o3-amqp-types"
 version = "0.1.0"
 edition = "2018"
 

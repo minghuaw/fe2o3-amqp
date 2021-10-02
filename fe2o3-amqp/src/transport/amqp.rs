@@ -1,6 +1,6 @@
 use bytes::{Buf, BufMut, BytesMut};
 use serde_amqp::{de::Deserializer, read::IoReader};
-use fe2o3_types::performatives::{
+use fe2o3_amqp_types::performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
 };
 use serde::{ser::Serialize, Deserialize};
@@ -258,7 +258,7 @@ impl Decoder for FrameBodyCodec {
 #[cfg(test)]
 mod tests {
     use bytes::BytesMut;
-    use fe2o3_types::performatives::Open;
+    use fe2o3_amqp_types::performatives::Open;
     use tokio_util::codec::{Decoder, Encoder};
 
     use super::{Frame, FrameBody, FrameBodyCodec, FrameCodec};
