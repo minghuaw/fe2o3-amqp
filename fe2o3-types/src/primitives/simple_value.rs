@@ -92,30 +92,6 @@ impl ser::Serialize for SimpleValue {
     }
 }
 
-enum Field {
-    Null,
-    Bool,
-    UByte,
-    UShort,
-    UInt,
-    ULong,
-    Byte,
-    Short,
-    Int,
-    Long,
-    Float,
-    Double,
-    Decimal32,
-    Decimal64,
-    Decimal128,
-    Char,
-    Timestamp,
-    Uuid,
-    Binary,
-    String,
-    Symbol,
-}
-
 impl<'de> de::Deserialize<'de> for SimpleValue {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
