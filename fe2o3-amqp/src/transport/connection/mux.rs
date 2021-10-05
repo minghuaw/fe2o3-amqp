@@ -272,15 +272,7 @@ impl ConnMux {
             ConnectionState::Opened => {
                 self.local_state = ConnectionState::CloseReceived;
                 // respond with a Close
-                let frame = Frame::new(
-                    0u16,
-                    FrameBody::Close {
-                        performative: Close { error: None },
-                    },
-                );
-                transport.send(frame).await?;
-                // transition to End state
-                self.local_state = ConnectionState::End;
+                self.handle_close_send(transport, None).await?;
             }
             ConnectionState::CloseSent => {
                 self.local_state = ConnectionState::End;
@@ -540,27 +532,13 @@ impl ConnMux {
                     self.handle_heartbeat(&mut transport).await
                 }
             };
-
             // handle error
             let state = match result {
                 Ok(running) => running,
                 Err(error) => match self.handle_error(&mut transport, error).await {
                     Ok(r) => r,
-                    Err(err) => {
-                        let local_error =
-                            Error::new(AmqpError::InternalError, Some(err.to_string()), None);
-                        match self
-                            .handle_close_send(&mut transport, Some(local_error))
-                            .await
-                        {
-                            Ok(r) => r,
-                            Err(err) => {
-                                println!("!!! Internal error: {:?}. Likely unrecoverable. Closing the connection", err);
-                                self.local_state = ConnectionState::End;
-                                &self.local_state
-                            }
-                        }
-                    }
+                    // TODO: abort the Mux if the error cannot be handled?
+                    Err(error) => return Err(error)
                 },
             };
 

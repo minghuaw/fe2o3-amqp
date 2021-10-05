@@ -33,6 +33,12 @@ impl From<u16> for OutgoingChannelId {
     }
 }
 
+impl From<OutgoingChannelId> for u16 {
+    fn from(value: OutgoingChannelId) -> Self {
+        value.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
     Start,

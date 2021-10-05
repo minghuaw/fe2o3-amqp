@@ -1,14 +1,10 @@
-use serde_amqp::primitives::{Symbol, UInt};
-use fe2o3_amqp_types::{
-    definitions::{Fields, Handle, SequenceNo, TransferNumber},
-    performatives::Begin,
-};
+use serde_amqp::primitives::{Symbol};
+use fe2o3_amqp_types::{definitions::{Error, Fields, Handle, SequenceNo, TransferNumber}, performatives::{Begin, End}};
 use tokio::{
     sync::mpsc::{self, Receiver, Sender},
-    task::JoinHandle,
 };
 
-use crate::{error::EngineError, transport::{amqp::{Frame, FrameBody}, connection::{self, OutgoingChannelId, DEFAULT_CONTROL_CHAN_BUF}, session::SessionHandle}};
+use crate::{error::EngineError, transport::{connection::{OutgoingChannelId, DEFAULT_CONTROL_CHAN_BUF}}};
 
 use super::{Session, SessionFrame, SessionFrameBody, SessionState};
 
@@ -52,52 +48,6 @@ pub(crate) struct SessionMux {
 }
 
 impl SessionMux {
-    // pub fn spawn(
-    //     local_state: SessionState,
-    //     local_channel: OutgoingChannelId,
-    //     incoming: Receiver<Result<SessionFrame, EngineError>>,
-    //     outgoing: Sender<SessionFrame>,
-    //     next_outgoing_id: TransferNumber,
-    //     incoming_window: TransferNumber,
-    //     outgoing_window: TransferNumber,
-    //     handle_max: Handle,
-    //     offered_capabilities: Option<Vec<Symbol>>,
-    //     desired_capabilities: Option<Vec<Symbol>>,
-    //     properties: Option<Fields>,
-    // ) -> Result<Session, EngineError> {
-    //     // channels
-    //     let (control_tx, control) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
-
-    //     let mux = SessionMux {
-    //         control,
-    //         outgoing,
-    //         local_channel,
-    //         local_state,
-    //         next_incoming_id: 0, // initialize with 0 and update when remote Begin is received
-    //         incoming_window,
-    //         next_outgoing_id,
-    //         outgoing_window,
-    //         handle_max,
-    //         incoming,
-    //         remote_incoming_window: 0, // initialize with 0 and update when remote Begin is received
-    //         remote_outgoing_window: 0, // initialize with 0 and update when remote Begin is received
-    //         offered_capabilities,
-    //         desired_capabilities,
-    //         properties
-    //     };
-
-    //     let handle = tokio::spawn(mux.mux_loop());
-    //     let session = Session {
-    //         mux: control_tx,
-    //         handle,
-    //     };
-
-    //     // Send begin and wait for begin
-    //     todo!();
-
-    //     Ok(session)
-    // }
-
     pub async fn begin(
         local_state: SessionState,
         local_channel: OutgoingChannelId,
@@ -146,10 +96,9 @@ impl SessionMux {
     }
 }
 
-
-
 /* ----------------------------- private methods ---------------------------- */
 impl SessionMux {
+    #[inline]
     async fn send_begin(&mut self) -> Result<&SessionState, EngineError> {
         println!(">>> Debug: send_begin()");
         let performative = Begin {
@@ -183,7 +132,9 @@ impl SessionMux {
         Ok(&self.local_state)
     }
 
+    #[inline]
     async fn recv_begin(&mut self) -> Result<&SessionState, EngineError> {
+        println!(">>> Debug: recv_begin");
         let frame = match self.incoming.recv().await {
             Some(frame) => frame?,
             None => return Err(EngineError::Message("Unexpected Eof of SessionFrame")) // TODO: send back error?
@@ -193,6 +144,18 @@ impl SessionMux {
             _ => return Err(EngineError::Message("Expecting Begin"))
         };
         
+        self.handle_begin_recv(remote_begin).await
+    } 
+
+    #[inline]
+    async fn handle_begin_recv(&mut self, remote_begin: Begin) -> Result<&SessionState, EngineError> {
+        println!(">>> DebugL handle_begin_recv()");
+        match &self.local_state {
+            SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
+            SessionState::BeginSent => self.local_state = SessionState::Mapped,
+            _ => return Err(EngineError::illegal_state())
+        }
+        
         self.next_incoming_id = remote_begin.next_outgoing_id;
         self.remote_incoming_window = remote_begin.incoming_window;
         self.remote_outgoing_window = remote_begin.outgoing_window;
@@ -201,10 +164,101 @@ impl SessionMux {
         Ok(&self.local_state)
     }
 
+    #[inline]
+    async fn handle_end_send(&mut self, local_error: Option<Error>) -> Result<&SessionState, EngineError> {
+        println!(">>> Debug: handle_end_send()");
+        match &self.local_state {
+            SessionState::Mapped => {
+                if local_error.is_some() {
+                    self.local_state = SessionState::Discarding;
+                } else {
+                    self.local_state = SessionState::EndSent;
+                }
+            }
+            SessionState::EndReceived => self.local_state = SessionState::Unmapped,
+            _ => return Err(EngineError::illegal_state())
+        }
+
+        let frame = SessionFrame::new(
+            self.local_channel.0, 
+            SessionFrameBody::end(End { error: local_error })
+        );
+        self.outgoing.send(frame).await?;
+        Ok(&self.local_state)
+    }
+
+    #[inline]
+    async fn handle_end_recv(&mut self, _remote_end: End) -> Result<&SessionState, EngineError> {
+        println!(">>> Debug: handle_end_recv()");
+
+        match &self.local_state {
+            SessionState::Mapped => {
+                self.local_state = SessionState::EndReceived;
+                // TODO: respond with an end?
+                self.handle_end_send(None).await?;
+            },
+            SessionState::Discarding | SessionState::EndSent => self.local_state = SessionState::Unmapped,
+            _ => return Err(EngineError::illegal_state())
+        }
+        Ok(&self.local_state)
+    }
+
+    #[inline]
+    async fn handle_incoming(&mut self, item: Result<SessionFrame, EngineError>) -> Result<&SessionState, EngineError> {
+        let frame = item?;
+        // local state check should be checked in each sub-handlers
+        let remote_channel = frame.channel;
+        match frame.body {
+            SessionFrameBody::Begin{performative} => self.handle_begin_recv(performative).await,
+            SessionFrameBody::End{performative} => self.handle_end_recv(performative).await,
+            _ => todo!()
+        }
+    }
+
+    #[inline]
+    async fn handle_error(&mut self, error: EngineError) -> &SessionState {
+        todo!()
+    }
+
+    #[inline]
     async fn mux_loop(mut self) -> Result<(), EngineError> {
         loop {
-            println!(">>> Debug: SessionMux mux_loop");
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let result = tokio::select! {
+                // local controls
+                control = self.control.recv() => {
+                    match control {
+                        Some(control) => match control {
+                            SessionMuxControl::End => {
+                                self.handle_end_send(None).await
+                            }
+                        },
+                        None => {
+                            // TODO: the session should probably stop when control is dropped
+                            todo!()
+                        }
+                    }
+                },
+                // incoming session frames
+                next = self.incoming.recv() => {
+                    match next {
+                        Some(item) => self.handle_incoming(item).await,
+                        
+                        // TODO: "Sessions end automatically when the connection is closed or interrupted"
+                        None => todo!()
+                    }
+                }
+            };
+
+            let state = match result {
+                Ok(state) => state,
+                Err(error) => self.handle_error(error).await
+            };
+
+            // There is no obligation to retain a session endpoint
+            // after it transitions to the UNMAPPED state.
+            if let SessionState::Unmapped = state {
+                return Ok(())
+            }
         }
     }
 }

@@ -231,4 +231,12 @@ impl Session {
         Self::builder()
             .begin(connection).await
     }
+
+    pub async fn end(&mut self) -> Result<(), EngineError> {
+        self.mux.send(mux::SessionMuxControl::End).await?;
+        match (&mut self.handle).await {
+            Ok(res) => res,
+            Err(_) => Err(EngineError::Message("JoinError")),
+        }
+    }
 }

@@ -17,9 +17,10 @@ async fn main() {
         .await
         .unwrap();
 
-    let session = Session::begin(&mut connection).await.unwrap();
+    let mut session = Session::begin(&mut connection).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
+    // session.end().await.unwrap();
     connection.close().await.unwrap();
 }
