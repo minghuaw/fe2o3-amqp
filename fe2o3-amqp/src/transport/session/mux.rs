@@ -149,7 +149,7 @@ impl SessionMux {
 
     #[inline]
     async fn handle_begin_recv(&mut self, remote_begin: Begin) -> Result<&SessionState, EngineError> {
-        println!(">>> DebugL handle_begin_recv()");
+        println!(">>> Debug: handle_begin_recv()");
         match &self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
@@ -205,6 +205,7 @@ impl SessionMux {
 
     #[inline]
     async fn handle_incoming(&mut self, item: Result<SessionFrame, EngineError>) -> Result<&SessionState, EngineError> {
+        println!(">>> Debug: session/mux.rs handle_incoming()");
         let frame = item?;
         // local state check should be checked in each sub-handlers
         let remote_channel = frame.channel;
@@ -240,9 +241,9 @@ impl SessionMux {
                 },
                 // incoming session frames
                 next = self.incoming.recv() => {
+                    println!("session mux recved a frame");
                     match next {
                         Some(item) => self.handle_incoming(item).await,
-                        
                         // TODO: "Sessions end automatically when the connection is closed or interrupted"
                         None => todo!()
                     }

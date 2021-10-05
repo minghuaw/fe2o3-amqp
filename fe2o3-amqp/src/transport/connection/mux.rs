@@ -16,7 +16,7 @@ use futures_util::{Sink, SinkExt, StreamExt};
 
 use crate::error::EngineError;
 use crate::transport::amqp::{Frame, FrameBody};
-use crate::transport::session::{NonSessionFrame, NonSessionFrameBody, SessionFrame, SessionFrameBody, SessionHandle};
+use crate::transport::session::{self, NonSessionFrame, NonSessionFrameBody, SessionFrame, SessionFrameBody, SessionHandle};
 use crate::transport::Transport;
 
 use super::heartbeat::HeartBeat;
@@ -39,10 +39,11 @@ pub struct ConnMux {
     local_state: ConnectionState,
     local_open: Open,
     local_sessions: Slab<SessionHandle>, // Slab is indexed with OutgoingChannel
+    session_by_outgoing_channel: BTreeMap<OutgoingChannelId, usize>,
 
     remote_state: Option<ConnectionState>, // TODO: how to estimate the remote state?
     remote_open: Option<Open>,
-    remote_sessions: BTreeMap<IncomingChannelId, OutgoingChannelId>, // maps from remote channel id to local channel id
+    session_by_incoming_channel: BTreeMap<IncomingChannelId, usize>, // maps from remote channel id to local channel id
     // remote_header: ProtocolHeader,
     heartbeat: HeartBeat,
 
@@ -81,9 +82,10 @@ impl ConnMux {
             local_state,
             local_open,
             local_sessions,
+            session_by_outgoing_channel: BTreeMap::new(),
             remote_open: None,
             remote_state: None,
-            remote_sessions: BTreeMap::new(),
+            session_by_incoming_channel: BTreeMap::new(),
             // remote_header,
             heartbeat: HeartBeat::never(),
             // session_tx,
@@ -319,6 +321,7 @@ impl ConnMux {
         }
 
         let outgoing_chan = OutgoingChannelId(channel as u16);
+        self.session_by_outgoing_channel.insert(outgoing_chan.clone(), channel);
         entry.insert(handle);
         resp.send(Ok(outgoing_chan))
             .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
@@ -365,25 +368,34 @@ impl ConnMux {
             _ => return Err(EngineError::illegal_state())
         }
 
-        match &frame.body { 
+        let remote_channel = frame.channel;
+        let handle = match &frame.body { 
             SessionFrameBody::Begin{performative} => {
-                let remote_channel = frame.channel;
-                let handle = self.handle_intercepted_incoming_begin(remote_channel, performative)?;
-                handle.sender_mut().send(Ok(frame)).await?;
+                self.handle_intercepted_incoming_begin(remote_channel, performative)?
             },
             SessionFrameBody::End{performative: _} => {
-                // stop session mux?
+                // Only assume the session state becomes EndRecved
+                // and thus only removes the entry from the `remote_sessions` map
+                // and then forward the frame to session
+                let incoming_chan = IncomingChannelId(remote_channel);
+                let session_id = match self.session_by_incoming_channel.remove(&incoming_chan) {
+                    Some(outgoing_id) => outgoing_id,
+                    None => return Err(EngineError::not_found())
+                };
+
+                self.local_sessions.get_mut(session_id)
+                    .ok_or_else(|| EngineError::not_found())?
             },
             _ => {
-                let remote_channel = IncomingChannelId(frame.channel);
-                let local_channel = self.remote_sessions.get(&remote_channel)
+                let incoming_chan = IncomingChannelId(remote_channel);
+                let session_id = self.session_by_incoming_channel.get(&incoming_chan)
                     .ok_or_else(|| EngineError::Message("Unexpected remote channel from frame"))?;
-                let handle = self.local_sessions.get_mut(local_channel.0 as usize)
-                    .ok_or_else(|| EngineError::not_found())?;
-                handle.sender_mut().send(Ok(frame)).await?;
+                self.local_sessions.get_mut(*session_id)
+                    .ok_or_else(|| EngineError::not_found())?
             }
-        }
-        
+        };
+
+        handle.sender_mut().send(Ok(frame)).await?;
         Ok(&self.local_state)
     }
 
@@ -397,14 +409,16 @@ impl ConnMux {
         match remote_begin.remote_channel {
             Some(local_channel) => {
                 let key = IncomingChannelId(remote_channel);
-                let value = OutgoingChannelId(local_channel);
+                let outgoing_chan = OutgoingChannelId(local_channel);
+                let value = self.session_by_outgoing_channel.get(&outgoing_chan)
+                    .ok_or_else(|| EngineError::not_found())?;
                 // check whether there is existing sessions
-                if self.remote_sessions.contains_key(&key) {
+                if self.session_by_incoming_channel.contains_key(&key) {
                     return Err(EngineError::not_allowed()) // FIXME: what error should be returned here?
                 }
         
-                self.remote_sessions.insert(key, value);
-                self.local_sessions.get_mut(local_channel as usize)
+                self.session_by_incoming_channel.insert(key, *value);
+                self.local_sessions.get_mut(*value)
                     .ok_or_else(|| EngineError::not_found())
             },
             None => {
@@ -435,6 +449,19 @@ impl ConnMux {
             },
             // TODO: what about pipelined open?
             _ => {}
+        }
+
+        // check if the frame is End
+        if let &SessionFrameBody::End{performative: _} = &item.body {
+            // remove local outgoing channel number
+            let key = OutgoingChannelId(item.channel);
+            let session_id = self.session_by_outgoing_channel.remove(&key)
+                .ok_or_else(|| EngineError::Message("Local session id is not found"))?;
+            let session = self.local_sessions.
+
+            // remove local session from session map when the corresponding
+            // SessionMux is dropped
+            todo!()
         }
 
         let frame: Frame = item.into();

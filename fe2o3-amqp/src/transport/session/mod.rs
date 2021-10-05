@@ -206,6 +206,10 @@ impl SessionHandle {
     //     &self.id
     // }
 
+    pub fn sender(&self) -> &Sender<Result<SessionFrame, EngineError>> {
+        &self.sender
+    }
+
     pub fn sender_mut(&mut self) -> &mut Sender<Result<SessionFrame, EngineError>> {
         &mut self.sender
     }
