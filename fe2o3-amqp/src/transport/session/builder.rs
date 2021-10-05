@@ -105,13 +105,16 @@ impl Builder {
             resp: oneshot_tx,
         };
         connection.mux_mut().send(control).await?;
+        let conn_mux = connection.mux_mut().clone();
 
         // .awaiting result
-        let local_channel = oneshot_rx
+        let (local_channel, session_id) = oneshot_rx
             .await
             .map_err(|_| EngineError::Message("RecvError from oneshot::Receiver"))??;
 
         let session = SessionMux::begin(
+            conn_mux,
+            session_id,
             local_state,
             local_channel,
             incoming,

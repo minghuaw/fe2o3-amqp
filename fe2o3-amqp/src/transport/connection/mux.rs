@@ -30,8 +30,9 @@ pub(crate) enum ConnMuxControl {
     // Open,
     NewSession {
         handle: SessionHandle,
-        resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
+        resp: oneshot::Sender<Result<(OutgoingChannelId, usize), EngineError>>,
     },
+    DropSession(usize),
     Close,
 }
 
@@ -291,7 +292,7 @@ impl ConnMux {
     async fn handle_local_new_session(
         &mut self,
         handle: SessionHandle,
-        resp: oneshot::Sender<Result<OutgoingChannelId, EngineError>>,
+        resp: oneshot::Sender<Result<(OutgoingChannelId, usize), EngineError>>,
     ) -> Result<&ConnectionState, EngineError> {
         match &self.local_state {
             ConnectionState::Start 
@@ -323,7 +324,7 @@ impl ConnMux {
         let outgoing_chan = OutgoingChannelId(channel as u16);
         self.session_by_outgoing_channel.insert(outgoing_chan.clone(), channel);
         entry.insert(handle);
-        resp.send(Ok(outgoing_chan))
+        resp.send(Ok((outgoing_chan, channel)))
             .map_err(|_| EngineError::Message("Oneshot receiver is already dropped"))?;
         Ok(&self.local_state)
     }
@@ -457,11 +458,6 @@ impl ConnMux {
             let key = OutgoingChannelId(item.channel);
             let session_id = self.session_by_outgoing_channel.remove(&key)
                 .ok_or_else(|| EngineError::Message("Local session id is not found"))?;
-            let session = self.local_sessions.
-
-            // remove local session from session map when the corresponding
-            // SessionMux is dropped
-            todo!()
         }
 
         let frame: Frame = item.into();
@@ -532,6 +528,11 @@ impl ConnMux {
                                 handle,
                                 resp,
                             } => self.handle_local_new_session(handle, resp).await,
+                            ConnMuxControl::DropSession(key) => {
+                                println!(">>> Debug: dropping local session");
+                                self.local_sessions.remove(key);
+                                Ok(&self.local_state)
+                            },
                             ConnMuxControl::Close => self.handle_close_send(&mut transport, None).await,
                         },
                         None => {

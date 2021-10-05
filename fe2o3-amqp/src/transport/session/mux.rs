@@ -4,7 +4,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use crate::{error::EngineError, transport::{connection::{OutgoingChannelId, DEFAULT_CONTROL_CHAN_BUF}}};
+use crate::{error::EngineError, transport::{connection::{ConnMuxControl, DEFAULT_CONTROL_CHAN_BUF, OutgoingChannelId}}};
 
 use super::{Session, SessionFrame, SessionFrameBody, SessionState};
 
@@ -18,6 +18,9 @@ pub(crate) enum SessionMuxControl {
 pub(crate) struct SessionMux {
     // control
     control: Receiver<SessionMuxControl>,
+    // conn_mux
+    conn_mux: Sender<ConnMuxControl>,
+    session_id: usize,
 
     // local states
     // A `local_begin` is not used here (unlike in ConnMux)
@@ -49,6 +52,8 @@ pub(crate) struct SessionMux {
 
 impl SessionMux {
     pub async fn begin(
+        conn_mux: Sender<ConnMuxControl>,
+        session_id: usize,
         local_state: SessionState,
         local_channel: OutgoingChannelId,
         incoming: Receiver<Result<SessionFrame, EngineError>>,
@@ -66,6 +71,8 @@ impl SessionMux {
 
         let mut mux = SessionMux {
             control,
+            conn_mux,
+            session_id,
             outgoing,
             local_channel,
             local_state,
@@ -258,8 +265,12 @@ impl SessionMux {
             // There is no obligation to retain a session endpoint
             // after it transitions to the UNMAPPED state.
             if let SessionState::Unmapped = state {
-                return Ok(())
+                break;
             }
         }
+
+        println!(">>> Debug: Sending DropSession to ConnMux");
+        self.conn_mux.send(ConnMuxControl::DropSession(self.session_id)).await?;
+        Ok(())
     }
 }
