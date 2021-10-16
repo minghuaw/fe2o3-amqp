@@ -29,3 +29,4 @@ pin-project-lite = "0.2.7"
 url = "2.2.2"
 slab = "0.4.4"
 tokio-stream = { version = "0.1.7", features = ["time"] }
+async-trait = "0.1.51"

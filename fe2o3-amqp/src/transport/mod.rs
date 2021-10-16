@@ -16,6 +16,7 @@ pub mod endpoint;
 pub mod link;
 pub mod protocol_header;
 pub mod session;
+pub mod handler;
 
 /* -------------------------------- Transport ------------------------------- */
 
