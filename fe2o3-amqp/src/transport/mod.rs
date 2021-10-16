@@ -369,7 +369,7 @@ mod tests {
             properties: None,
         };
 
-        let body = FrameBody::Open { performative: open };
+        let body = FrameBody::open(open);
         let frame = Frame::new(0u16, body);
 
         transport.send(frame).await.unwrap();

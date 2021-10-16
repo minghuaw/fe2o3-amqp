@@ -147,7 +147,7 @@ impl SessionMux {
             None => return Err(EngineError::Message("Unexpected Eof of SessionFrame")) // TODO: send back error?
         };
         let remote_begin = match frame.body {
-            SessionFrameBody::Begin{performative} => performative,
+            SessionFrameBody::Begin(performative) => performative,
             _ => return Err(EngineError::Message("Expecting Begin"))
         };
         
@@ -217,8 +217,8 @@ impl SessionMux {
         // local state check should be checked in each sub-handlers
         let remote_channel = frame.channel;
         match frame.body {
-            SessionFrameBody::Begin{performative} => self.handle_begin_recv(performative).await,
-            SessionFrameBody::End{performative} => self.handle_end_recv(performative).await,
+            SessionFrameBody::Begin(performative) => self.handle_begin_recv(performative).await,
+            SessionFrameBody::End(performative) => self.handle_end_recv(performative).await,
             _ => todo!()
         }
     }

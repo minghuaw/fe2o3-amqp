@@ -95,34 +95,18 @@ impl Decoder for FrameCodec {
 
 #[derive(Debug)]
 pub enum FrameBody {
-    Open {
-        performative: Open,
-    },
-    Begin {
-        performative: Begin,
-    },
-    Attach {
-        performative: Attach,
-    },
-    Flow {
-        performative: Flow,
-    },
+    Open(Open),
+    Begin(Begin),
+    Attach(Attach),
+    Flow(Flow),
     Transfer {
         performative: Transfer,
         payload: Option<BytesMut>,
     },
-    Disposition {
-        performative: Disposition,
-    },
-    Detach {
-        performative: Detach,
-    },
-    End {
-        performative: End,
-    },
-    Close {
-        performative: Close,
-    },
+    Disposition(Disposition),
+    Detach(Detach),
+    End(End),
+    Close(Close),
     // An empty frame used only for heartbeat
     Empty,
 }
@@ -131,35 +115,35 @@ impl FrameBody {
     /// The payload will be ignored unless the performative is Transfer
     pub fn from_parts(performative: Performative, payload: Option<BytesMut>) -> Self {
         match performative {
-            Performative::Open(performative) => FrameBody::Open { performative },
-            Performative::Begin(performative) => FrameBody::Begin { performative },
-            Performative::Attach(performative) => FrameBody::Attach { performative },
-            Performative::Flow(performative) => FrameBody::Flow { performative },
+            Performative::Open(performative) => FrameBody::Open (performative),
+            Performative::Begin(performative) => FrameBody::Begin (performative),
+            Performative::Attach(performative) => FrameBody::Attach (performative),
+            Performative::Flow(performative) => FrameBody::Flow (performative),
             Performative::Transfer(performative) => FrameBody::Transfer {
                 performative,
                 payload,
             },
-            Performative::Disposition(performative) => FrameBody::Disposition { performative },
-            Performative::Detach(performative) => FrameBody::Detach { performative },
-            Performative::End(performative) => FrameBody::End { performative },
-            Performative::Close(performative) => FrameBody::Close { performative },
+            Performative::Disposition(performative) => FrameBody::Disposition (performative),
+            Performative::Detach(performative) => FrameBody::Detach (performative),
+            Performative::End(performative) => FrameBody::End (performative),
+            Performative::Close(performative) => FrameBody::Close (performative),
         }
     }
 
     pub fn open(performative: Open) -> Self {
-        Self::Open { performative }
+        Self::Open (performative)
     }
 
     pub fn begin(performative: Begin) -> Self {
-        Self::Begin { performative }
+        Self::Begin (performative)
     }
 
     pub fn attach(performative: Attach) -> Self {
-        Self::Attach { performative }
+        Self::Attach (performative)
     }
 
     pub fn flow(performative: Flow) -> Self {
-        Self::Flow { performative }
+        Self::Flow (performative)
     }
 
     pub fn transfer(performative: Transfer, payload: Option<BytesMut>) -> Self {
@@ -170,19 +154,19 @@ impl FrameBody {
     }
 
     pub fn disposition(performative: Disposition) -> Self {
-        Self::Disposition { performative }
+        Self::Disposition (performative)
     }
 
     pub fn detach(performative: Detach) -> Self {
-        Self::Detach { performative }
+        Self::Detach (performative)
     }
 
     pub fn end(performative: End) -> Self {
-        Self::End { performative }
+        Self::End (performative)
     }
 
     pub fn close(performative: Close) -> Self {
-        Self::Close { performative }
+        Self::Close (performative)
     }
 
     pub fn empty() -> Self {
@@ -200,10 +184,10 @@ impl Encoder<FrameBody> for FrameBodyCodec {
 
         let mut serializer = Serializer::from(dst.writer());
         match item {
-            FrameBody::Open { performative } => performative.serialize(&mut serializer),
-            FrameBody::Begin { performative } => performative.serialize(&mut serializer),
-            FrameBody::Attach { performative } => performative.serialize(&mut serializer),
-            FrameBody::Flow { performative } => performative.serialize(&mut serializer),
+            FrameBody::Open (performative) => performative.serialize(&mut serializer),
+            FrameBody::Begin (performative) => performative.serialize(&mut serializer),
+            FrameBody::Attach (performative) => performative.serialize(&mut serializer),
+            FrameBody::Flow (performative) => performative.serialize(&mut serializer),
             FrameBody::Transfer {
                 performative,
                 payload,
@@ -214,10 +198,10 @@ impl Encoder<FrameBody> for FrameBodyCodec {
                 }
                 Ok(())
             }
-            FrameBody::Disposition { performative } => performative.serialize(&mut serializer),
-            FrameBody::Detach { performative } => performative.serialize(&mut serializer),
-            FrameBody::End { performative } => performative.serialize(&mut serializer),
-            FrameBody::Close { performative } => performative.serialize(&mut serializer),
+            FrameBody::Disposition (performative) => performative.serialize(&mut serializer),
+            FrameBody::Detach (performative) => performative.serialize(&mut serializer),
+            FrameBody::End (performative) => performative.serialize(&mut serializer),
+            FrameBody::Close (performative) => performative.serialize(&mut serializer),
             FrameBody::Empty => Ok(()),
         }
         .map_err(Into::into)
@@ -278,7 +262,7 @@ mod tests {
             properties: None,
         };
 
-        let body = FrameBody::Open { performative: open };
+        let body = FrameBody::open(open);
 
         let mut encoder = FrameBodyCodec {};
         let mut dst = BytesMut::new();

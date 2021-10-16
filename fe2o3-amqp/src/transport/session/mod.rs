@@ -34,41 +34,29 @@ impl SessionFrame {
 }
 
 pub(crate) enum SessionFrameBody {
-    Begin {
-        performative: Begin,
-    },
-    Attach {
-        performative: Attach,
-    },
-    Flow {
-        performative: Flow,
-    },
+    Begin(Begin),
+    Attach(Attach),
+    Flow(Flow),
     Transfer {
         performative: Transfer,
         payload: Option<BytesMut>,
     },
-    Disposition {
-        performative: Disposition,
-    },
-    Detach {
-        performative: Detach,
-    },
-    End {
-        performative: End,
-    },
+    Disposition(Disposition),
+    Detach(Detach),
+    End(End),
 }
 
 impl SessionFrameBody {
     pub fn begin(performative: Begin) -> Self {
-        Self::Begin { performative }
+        Self::Begin (performative)
     }
 
     pub fn attach(performative: Attach) -> Self {
-        Self::Attach { performative }
+        Self::Attach (performative)
     }
 
     pub fn flow(performative: Flow) -> Self {
-        Self::Flow { performative }
+        Self::Flow (performative)
     }
 
     pub fn transfer(performative: Transfer, payload: Option<BytesMut>) -> Self {
@@ -79,15 +67,15 @@ impl SessionFrameBody {
     }
 
     pub fn disposition(performative: Disposition) -> Self {
-        Self::Disposition { performative }
+        Self::Disposition (performative)
     }
 
     pub fn detach(performative: Detach) -> Self {
-        Self::Detach { performative }
+        Self::Detach (performative)
     }
 
     pub fn end(performative: End) -> Self {
-        Self::End { performative }
+        Self::End (performative)
     }
 }
 
@@ -97,23 +85,19 @@ pub(crate) struct NonSessionFrame {
 }
 
 pub(crate) enum NonSessionFrameBody {
-    Open {
-        performative: Open,
-    },
-    Close {
-        performative: Close,
-    },
+    Open(Open),
+    Close(Close),
     // An empty frame used only for heartbeat
     Empty,
 }
 
 impl NonSessionFrameBody {
     pub fn open(performative: Open) -> Self {
-        Self::Open { performative }
+        Self::Open (performative)
     }
 
     pub fn close(performative: Close) -> Self {
-        Self::Close { performative }
+        Self::Close (performative)
     }
 
     pub fn empty() -> Self {
@@ -125,13 +109,13 @@ impl From<SessionFrame> for Frame {
     fn from(value: SessionFrame) -> Self {
         let channel = value.channel;
         let body = match value.body {
-            SessionFrameBody::Begin{performative} => FrameBody::begin(performative),
-            SessionFrameBody::Attach{performative} => FrameBody::attach(performative),
-            SessionFrameBody::Flow{performative} => FrameBody::flow(performative),
+            SessionFrameBody::Begin(performative) => FrameBody::begin(performative),
+            SessionFrameBody::Attach(performative) => FrameBody::attach(performative),
+            SessionFrameBody::Flow(performative) => FrameBody::flow(performative),
             SessionFrameBody::Transfer{performative, payload} => FrameBody::transfer(performative, payload),
-            SessionFrameBody::Disposition{performative} => FrameBody::disposition(performative),
-            SessionFrameBody::Detach{performative} => FrameBody::detach(performative),
-            SessionFrameBody::End{performative} => FrameBody::end(performative)
+            SessionFrameBody::Disposition(performative) => FrameBody::disposition(performative),
+            SessionFrameBody::Detach(performative) => FrameBody::detach(performative),
+            SessionFrameBody::End(performative) => FrameBody::end(performative)
         };
         Self::new(channel, body)
     }
@@ -144,18 +128,18 @@ impl TryFrom<Frame> for SessionFrame {
         let channel = value.channel;
 
         let body = match value.body {
-            FrameBody::Begin{performative} => SessionFrameBody::begin(performative),
-            FrameBody::Attach{performative} => SessionFrameBody::attach(performative),
-            FrameBody::Flow{performative} => SessionFrameBody::flow(performative),
+            FrameBody::Begin(performative) => SessionFrameBody::begin(performative),
+            FrameBody::Attach(performative) => SessionFrameBody::attach(performative),
+            FrameBody::Flow(performative) => SessionFrameBody::flow(performative),
             FrameBody::Transfer{performative, payload} => SessionFrameBody::transfer(performative, payload),
-            FrameBody::Disposition{performative} => SessionFrameBody::disposition(performative),
-            FrameBody::Detach{performative} => SessionFrameBody::detach(performative),
-            FrameBody::End{performative} => SessionFrameBody::end(performative),
-            FrameBody::Open{performative} => return Err(NonSessionFrame{
+            FrameBody::Disposition(performative) => SessionFrameBody::disposition(performative),
+            FrameBody::Detach(performative) => SessionFrameBody::detach(performative),
+            FrameBody::End(performative) => SessionFrameBody::end(performative),
+            FrameBody::Open(performative) => return Err(NonSessionFrame{
                 channel, 
                 body: NonSessionFrameBody::open(performative)
             }),
-            FrameBody::Close{performative} => return Err(NonSessionFrame{
+            FrameBody::Close(performative) => return Err(NonSessionFrame{
                 channel,
                 body: NonSessionFrameBody::close(performative)
             }),

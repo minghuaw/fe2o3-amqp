@@ -27,62 +27,67 @@ use crate::transport::amqp::Frame;
 #[async_trait]
 pub trait Connection {
     type Error;
+    type Session: Session;
 
     /// Reacting to remote Open frame
-    async fn handle_remote_open(&mut self, channel: u16, open: &mut Open) -> Result<(), Self::Error>;
+    async fn on_incoming_open(&mut self, channel: u16, open: &mut Open) -> Result<(), Self::Error>;
 
     /// Reacting to remote Begin frame
-    async fn intercept_remote_begin(&mut self, channel: u16, begin: &mut Begin) -> Result<(), Self::Error>;
+    async fn on_incoming_begin(&mut self, channel: u16, begin: &mut Begin) -> Result<(), Self::Error>;
 
     /// Reacting to remote End frame
-    async fn intercept_remote_end(&mut self, channel: u16, end: &mut End) -> Result<(), Self::Error>;
+    async fn on_incoming_end(&mut self, channel: u16, end: &mut End) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
-    async fn handle_remote_close(&mut self, channel: u16, close: &mut Close) -> Result<(), Self::Error>;
+    async fn on_incoming_close(&mut self, channel: u16, close: &mut Close) -> Result<(), Self::Error>;
 
-    async fn handle_local_open(&mut self, channel: u16, open: &mut Open) -> Result<Frame, Self::Error>;
+    async fn on_outgoing_open(&mut self, channel: u16, open: &mut Open) -> Result<Frame, Self::Error>;
 
-    async fn intercept_local_begin(&mut self, channel: u16, begin: &mut Begin) -> Result<Frame, Self::Error>;
+    async fn on_outgoing_begin(&mut self, channel: u16, begin: &mut Begin) -> Result<Frame, Self::Error>;
 
-    async fn intercept_local_end(&mut self, channel: u16, end: &mut End) -> Result<Frame, Self::Error>;
+    async fn on_outgoing_end(&mut self, channel: u16, end: &mut End) -> Result<Frame, Self::Error>;
 
-    async fn handle_local_close(&mut self, channel: u16, close: &mut Close) -> Result<Frame, Self::Error>;
+    async fn on_outgoing_close(&mut self, channel: u16, close: &mut Close) -> Result<Frame, Self::Error>;
+
+    fn session_mut_by_incoming_channel(&mut self, channel: u16) -> &mut Self::Session;
+
+    fn session_mut_by_outgoing_channel(&mut self, channel: u16) -> &mut Self::Session;
 }
 
 #[async_trait]
 pub trait Session {
     type Error;
 
-    async fn handle_remote_begin() -> Result<(), Self::Error>;
-    async fn intercept_remote_attach() -> Result<(), Self::Error>;
-    async fn intercept_remote_flow() -> Result<(), Self::Error>;
-    async fn intercept_remote_transfer() -> Result<(), Self::Error>;
-    async fn intercept_remote_disposition() -> Result<(), Self::Error>;
-    async fn intercept_remote_detach() -> Result<(), Self::Error>;
-    async fn handle_remote_end() -> Result<(), Self::Error>;
+    async fn on_incoming_begin() -> Result<(), Self::Error>;
+    async fn on_incoming_attach() -> Result<(), Self::Error>;
+    async fn on_incoming_flow() -> Result<(), Self::Error>;
+    async fn on_incoming_transfer() -> Result<(), Self::Error>;
+    async fn on_incoming_disposition() -> Result<(), Self::Error>;
+    async fn on_incoming_detach() -> Result<(), Self::Error>;
+    async fn on_incoming_end() -> Result<(), Self::Error>;
 
-    async fn handle_local_begin() -> Result<(), Self::Error>;
-    async fn intercept_local_attach() -> Result<(), Self::Error>;
-    async fn intercept_local_flow() -> Result<(), Self::Error>;
-    async fn intercept_local_transfer() -> Result<(), Self::Error>;
-    async fn intercept_local_disposition() -> Result<(), Self::Error>;
-    async fn intercept_local_detach() -> Result<(), Self::Error>;
-    async fn handle_local_end() -> Result<(), Self::Error>;
+    async fn on_outgoing_begin() -> Result<(), Self::Error>;
+    async fn on_outgoing_attach() -> Result<(), Self::Error>;
+    async fn on_outgoing_flow() -> Result<(), Self::Error>;
+    async fn on_outgoing_transfer() -> Result<(), Self::Error>;
+    async fn on_outgoing_disposition() -> Result<(), Self::Error>;
+    async fn on_outgoing_detach() -> Result<(), Self::Error>;
+    async fn on_outgoing_end() -> Result<(), Self::Error>;
 }
 
 #[async_trait]
 pub trait Link {
     type Error;
 
-    async fn handle_remote_attach() -> Result<(), Self::Error>;
-    async fn handle_remote_flow() -> Result<(), Self::Error>;
-    async fn handle_remote_transfer() -> Result<(), Self::Error>;
-    async fn handle_remote_disposition() -> Result<(), Self::Error>;
-    async fn handle_remote_detach() -> Result<(), Self::Error>;
+    async fn on_incoming_attach() -> Result<(), Self::Error>;
+    async fn on_incoming_flow() -> Result<(), Self::Error>;
+    async fn on_incoming_transfer() -> Result<(), Self::Error>;
+    async fn on_incoming_disposition() -> Result<(), Self::Error>;
+    async fn on_incoming_detach() -> Result<(), Self::Error>;
 
-    async fn handle_local_attach() -> Result<(), Self::Error>;
-    async fn handle_local_flow() -> Result<(), Self::Error>;
-    async fn handle_local_transfer() -> Result<(), Self::Error>;
-    async fn handle_local_disposition() -> Result<(), Self::Error>;
-    async fn handle_local_detach() -> Result<(), Self::Error>;
+    async fn on_outgoing_attach() -> Result<(), Self::Error>;
+    async fn on_outgoing_flow() -> Result<(), Self::Error>;
+    async fn on_outgoing_transfer() -> Result<(), Self::Error>;
+    async fn on_outgoing_disposition() -> Result<(), Self::Error>;
+    async fn on_outgoing_detach() -> Result<(), Self::Error>;
 }

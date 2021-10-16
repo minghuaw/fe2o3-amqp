@@ -159,9 +159,7 @@ impl ConnMux {
         }
         let frame = Frame::new(
             0u16,
-            FrameBody::Open {
-                performative: self.local_open.clone(),
-            },
+            FrameBody::Open(self.local_open.clone()),
         );
         transport.send(frame).await?;
         println!("Sent frame");
@@ -181,7 +179,7 @@ impl ConnMux {
             None => return self.handle_unexpected_eof().await,
         };
         let remote_open = match frame.body {
-            FrameBody::Open { performative } => performative,
+            FrameBody::Open(performative ) => performative,
             _ => return Err(EngineError::ConnectionError(ConnectionError::FramingError)),
         };
         self.handle_open_recv(transport, remote_open).await
@@ -252,9 +250,7 @@ impl ConnMux {
 
         let frame = Frame::new(
             0u16,
-            FrameBody::Close {
-                performative: Close { error: local_error },
-            },
+            FrameBody::Close(Close { error: local_error} ),
         );
         transport.send(frame).await?;
         Ok(&self.local_state)
@@ -346,10 +342,10 @@ impl ConnMux {
             Err(frame) => {
                 let NonSessionFrame{channel: _, body} = frame;
                 match body {
-                    NonSessionFrameBody::Open{performative} => {
+                    NonSessionFrameBody::Open(performative) => {
                         self.handle_open_recv(transport, performative).await
                     },
-                    NonSessionFrameBody::Close{performative} => {
+                    NonSessionFrameBody::Close(performative) => {
                         self.handle_close_recv(transport, performative).await
                     },
                     NonSessionFrameBody::Empty => Ok(&self.local_state),
@@ -371,10 +367,10 @@ impl ConnMux {
 
         let remote_channel = frame.channel;
         let handle = match &frame.body { 
-            SessionFrameBody::Begin{performative} => {
+            SessionFrameBody::Begin(performative) => {
                 self.handle_intercepted_incoming_begin(remote_channel, performative)?
             },
-            SessionFrameBody::End{performative: _} => {
+            SessionFrameBody::End(performative) => {
                 // Only assume the session state becomes EndRecved
                 // and thus only removes the entry from the `remote_sessions` map
                 // and then forward the frame to session
@@ -453,7 +449,7 @@ impl ConnMux {
         }
 
         // check if the frame is End
-        if let &SessionFrameBody::End{performative: _} = &item.body {
+        if let &SessionFrameBody::End(ref performative) = &item.body {
             // remove local outgoing channel number
             let key = OutgoingChannelId(item.channel);
             let session_id = self.session_by_outgoing_channel.remove(&key)
