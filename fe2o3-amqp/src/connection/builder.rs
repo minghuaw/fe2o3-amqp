@@ -15,6 +15,9 @@ use crate::{connection::{Connection, ConnectionState}, error::EngineError, trans
 use super::ConnectionHandle;
 use super::engine::ConnectionEngine;
 
+pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
+pub const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
+
 pub struct WithoutContainerId {}
 pub struct WithContainerId {}
 
@@ -31,7 +34,7 @@ pub struct Builder<Mode> {
     pub desired_capabilities: Option<Vec<Symbol>>,
     pub properties: Option<Fields>,
 
-    // pub buffer_size: usize,
+    pub buffer_size: usize,
     // type state marker
     marker: PhantomData<Mode>,
 }
@@ -51,7 +54,7 @@ impl Builder<WithoutContainerId> {
             desired_capabilities: None,
             properties: None,
 
-            // buffer_size: DEFAULT_CONNECTION_MUX_BUFFER_SIZE,
+            buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             marker: PhantomData,
         }
     }
@@ -75,7 +78,7 @@ impl<Mode> Builder<Mode> {
             desired_capabilities: None,
             properties: None,
 
-            // buffer_size: self.buffer_size,
+            buffer_size: self.buffer_size,
             marker: PhantomData,
         }
     }
@@ -156,10 +159,10 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    // pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
-    //     self.buffer_size = buffer_size;
-    //     self
-    // }
+    pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
+        self.buffer_size = buffer_size;
+        self
+    }
 }
 
 impl Builder<WithContainerId> {
@@ -195,7 +198,7 @@ impl Builder<WithContainerId> {
         };
         
         // create channels
-        let (connection_control_tx, connection_control_rx) = mpsc::unbounded_channel();
+        let (connection_control_tx, connection_control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         // let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
         
         let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);

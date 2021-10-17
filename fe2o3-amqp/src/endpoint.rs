@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer};
 use futures_util::Sink;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::{error::EngineError, session::SessionFrame, transport::{amqp::Frame}};
 
@@ -37,16 +37,21 @@ pub trait Connection {
     fn local_state_mut(&mut self) -> &mut Self::State;
     fn local_open(&self) -> &Open;
 
-    async fn create_session(&mut self) -> Result<(u16, UnboundedReceiver<SessionFrame>), Self::Error>;
+    fn create_session(&mut self, tx: Sender<SessionFrame>) -> Result<(u16, usize), Self::Error>;
+    fn drop_session(&mut self, session_id: usize);
+
+    // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
 
     /// Reacting to remote Open frame
     async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error>;
 
     /// Reacting to remote Begin frame
-    async fn on_incoming_begin(&mut self, channel: u16, begin: &mut Begin) -> Result<(), Self::Error>;
+    /// 
+    /// Do NOT forward to session here. Forwarding is handled elsewhere.
+    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(&mut self, channel: u16, end: &mut End) -> Result<(), Self::Error>;
+    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
     async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error>;
@@ -63,9 +68,9 @@ pub trait Connection {
     async fn on_outgoing_close<W>(&mut self, writer: &mut W, channel: u16, close: Close) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>>;
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>>;
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>>;
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>>;
 }
 
 #[async_trait]

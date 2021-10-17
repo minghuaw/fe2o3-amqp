@@ -8,7 +8,7 @@ use fe2o3_amqp_types::definitions::ConnectionError;
 use fe2o3_amqp_types::performatives::Close;
 use tokio::io::{AsyncRead, AsyncWrite};
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
-use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
+use tokio::sync::mpsc::{Receiver};
 use tokio::task::JoinHandle;
 
 use crate::connection::Connection;
@@ -30,8 +30,8 @@ pub enum Running {
 pub struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
     connection: C,
-    connection_control: UnboundedReceiver<ConnectionControl>,
-    // session_control: UnboundedReceiver<SessionControl>, 
+    connection_control: Receiver<ConnectionControl>,
+    // session_control: Receiver<SessionControl>, 
 
     heartbeat: HeartBeat,
 }
@@ -44,8 +44,8 @@ where
     pub fn new(
         transport: Transport<Io>, 
         connection: C,
-        connection_control: UnboundedReceiver<ConnectionControl>,
-        // session_control: UnboundedReceiver<SessionControl>, 
+        connection_control: Receiver<ConnectionControl>,
+        // session_control: Receiver<SessionControl>, 
     ) -> Self {
         Self {
             transport,
@@ -60,8 +60,8 @@ where
     pub(crate) async fn open(
         transport: Transport<Io>, 
         connection: C,
-        connection_control: UnboundedReceiver<ConnectionControl>,
-        // session_control: UnboundedReceiver<SessionControl>, 
+        connection_control: Receiver<ConnectionControl>,
+        // session_control: Receiver<SessionControl>, 
     ) -> Result<Self, EngineError> {
         use crate::transport::amqp::FrameBody;
 
@@ -128,13 +128,17 @@ where
     Io: AsyncRead + AsyncWrite + Send + Unpin,
     C: endpoint::Connection<State = ConnectionState> + Send + 'static,
 {
-    async fn forward_incoming_session_frame(&mut self, channel: u16, frame: SessionFrame) -> Result<(), EngineError> {
-        // match self.connection.session_tx_by_incoming_channel(channel) {
-        //     Some(tx) => tx.send(frame),
-        //     None => 
-        // }
+    async fn forward_to_session(&mut self, channel: u16, frame: SessionFrame) -> Result<(), EngineError> {
+        match &self.connection.local_state() {
+            ConnectionState::Opened => { },
+            _ => return Err(EngineError::illegal_state())
+        };
 
-        todo!()
+        match self.connection.session_tx_by_incoming_channel(channel) {
+            Some(tx) => tx.send(frame).await?,
+            None => return Err(EngineError::not_found()),
+        };
+        Ok(())
     }
 
     async fn on_incoming(&mut self, incoming: Result<Frame, EngineError>) -> Result<Running, EngineError> {
@@ -168,32 +172,32 @@ where
                     None => self.heartbeat = HeartBeat::never(),
                 };
             },
-            FrameBody::Begin(mut begin) => {
-                self.connection.on_incoming_begin(channel, &mut begin).await
+            FrameBody::Begin(begin) => {
+                self.connection.on_incoming_begin(channel, begin).await
                     .map_err(Into::into)?;
-                let sframe = SessionFrame::new(channel, SessionFrameBody::begin(begin));
-                match self.connection.session_tx_by_incoming_channel(channel) {
-                    Some(tx) => tx.send(sframe)?,
-                    None => todo!()
-                }
             },
             FrameBody::Attach(attach) => {
-                todo!()
+                let sframe = SessionFrame::new(channel, SessionFrameBody::attach(attach));
+                self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Flow(flow) => {
-                todo!()
+                let sframe = SessionFrame::new(channel, SessionFrameBody::flow(flow));
+                self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Transfer{performative, payload} => {
-                todo!()
+                let sframe = SessionFrame::new(channel, SessionFrameBody::transfer(performative, payload));
+                self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Disposition(disposition) => {
-                todo!()
+                let sframe = SessionFrame::new(channel, SessionFrameBody::disposition(disposition));
+                self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Detach(detach) => {
-                todo!()
+                let sframe = SessionFrame::new(channel, SessionFrameBody::detach(detach));
+                self.forward_to_session(channel, sframe).await?;
             },
-            FrameBody::End(mut end) => {
-                self.connection.on_incoming_end(channel, &mut end).await
+            FrameBody::End(end) => {
+                self.connection.on_incoming_end(channel, end).await
                     .map_err(Into::into)?;
             },
             FrameBody::Close(close) => {
@@ -223,10 +227,12 @@ where
                 let close = Close::new(error);
                 self.connection.on_outgoing_close(&mut self.transport, 0, close).await
                     .map_err(Into::into)?;
-            }
-            ConnectionControl::Begin => {
-                todo!()
-            }
+            },
+            ConnectionControl::CreateSession{tx, responder} => {
+                let (channel, session_id) = self.connection.create_session(tx).map_err(Into::into)?;
+                responder.send((channel, session_id)).map_err(|_| EngineError::Message("Oneshot channel dropped"))?;
+            },
+            ConnectionControl::DropSession(session_id) => self.connection.drop_session(session_id)
         }
 
         match self.connection.local_state() {

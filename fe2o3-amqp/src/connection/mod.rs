@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open}, primitives::Symbol};
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
-use tokio::{sync::mpsc::{self, UnboundedReceiver, UnboundedSender}, task::JoinHandle};
+use tokio::{sync::mpsc::{self, Receiver, Sender}, task::JoinHandle};
 use url::Url;
 
-use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::Session, transport::{amqp::{Frame, FrameBody}}, session::SessionFrame};
+use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::{Session, SessionFrameBody}, session::SessionFrame, transport::{amqp::{Frame, FrameBody}}};
 
 use self::builder::WithoutContainerId;
 
@@ -49,15 +49,15 @@ pub enum ConnectionState {
 }
 
 pub struct ConnectionHandle {
-    control: UnboundedSender<ConnectionControl>,
+    control: Sender<ConnectionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
 
-    // session_control: UnboundedSender<SessionControl>,
+    // session_control: Sender<SessionControl>,
 }
 
 impl ConnectionHandle {
     pub async fn close(self) -> Result<(), EngineError> {
-        self.control.send(ConnectionControl::Close(None))?;
+        self.control.send(ConnectionControl::Close(None)).await?;
         match (self.handle).await {
             Ok(res) => res,
             Err(_) => Err(EngineError::Message("JoinError")),
@@ -66,12 +66,12 @@ impl ConnectionHandle {
 }
 
 pub struct Connection {
-    control: UnboundedSender<ConnectionControl>,
+    control: Sender<ConnectionControl>,
 
     // local 
     local_state: ConnectionState,
     local_open: Open,
-    local_sessions: Slab<UnboundedSender<SessionFrame>>,
+    local_sessions: Slab<Sender<SessionFrame>>,
     session_by_incoming_channel: BTreeMap<u16, usize>,
     session_by_outgoing_channel: BTreeMap<u16, usize>,
 
@@ -106,7 +106,7 @@ impl Connection {
 /* ------------------------------- Private API ------------------------------ */
 impl Connection {
     fn new(
-        control: UnboundedSender<ConnectionControl>,
+        control: Sender<ConnectionControl>,
         local_state: ConnectionState, 
         local_open: Open
     ) -> Self {
@@ -143,7 +143,7 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
-    async fn create_session(&mut self) -> Result<(u16, UnboundedReceiver<SessionFrame>), Self::Error> {
+    fn create_session(&mut self, tx: Sender<SessionFrame>) -> Result<(u16, usize), Self::Error> {
         match &self.local_state {
             ConnectionState::Start 
             | ConnectionState::HeaderSent
@@ -168,13 +168,31 @@ impl endpoint::Connection for Connection {
                 "Exceeding max number of channel is not allowed",
             ));
         } else {
-            let (tx, rx) = mpsc::unbounded_channel();
             entry.insert(tx);
             let channel = session_id as u16; // TODO: a different way of allocating session id?
             self.session_by_outgoing_channel.insert(channel, session_id);
-            Ok((channel, rx))
+            Ok((channel, session_id))
         }
     }
+
+    fn drop_session(&mut self, session_id: usize) {
+        self.local_sessions.remove(session_id);
+    }
+
+    // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error> {
+    //     match &self.local_state {
+    //         ConnectionState::Opened => { },
+    //         _ => return Err(EngineError::illegal_state())
+    //     };
+
+    //     let session_id = self.session_by_incoming_channel.get(&incoming_channel)
+    //         .ok_or_else(|| EngineError::not_found())?;
+    //     match self.local_sessions.get_mut(*session_id) {
+    //         Some(tx) => tx.send(frame).await?,
+    //         None => return Err(EngineError::not_found()),
+    //     };
+    //     Ok(())
+    // }
 
     /// Reacting to remote Open frame
     async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error> {
@@ -193,13 +211,55 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Begin frame
-    async fn on_incoming_begin(&mut self, channel: u16, begin: &mut Begin) -> Result<(), Self::Error> {
-        todo!()
+    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+        println!(">>> Debug: on_incoming_begin");
+        match &self.local_state {
+            ConnectionState::Opened => {},
+            // TODO: what about pipelined
+            _ => return Err(EngineError::illegal_state())
+        }
+
+        match begin.remote_channel {
+            Some(outgoing_channel) => {
+                let session_id = self.session_by_outgoing_channel.get(&outgoing_channel)
+                    .ok_or_else(|| EngineError::not_found())?;
+
+                if self.session_by_incoming_channel.contains_key(&channel) {
+                    return Err(EngineError::not_allowed())
+                }
+                self.session_by_incoming_channel.insert(channel, *session_id);
+
+                // forward begin to session
+                let tx = self.local_sessions.get_mut(*session_id)
+                    .ok_or_else(|| EngineError::not_found())?;
+                let sframe = SessionFrame::new(channel, SessionFrameBody::begin(begin));
+                tx.send(sframe).await?;
+            },
+            None => todo!()
+        }
+        
+        Ok(())
     }
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(&mut self, channel: u16, end: &mut End) -> Result<(), Self::Error> {
-        todo!()
+    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
+        println!(">>> Debug: on_incoming_end");
+
+        match &self.local_state {
+            ConnectionState::Opened => {},
+            _ => return Err(EngineError::illegal_state())
+        }
+
+        // Forward to session
+        let sframe = SessionFrame::new(channel, SessionFrameBody::end(end));
+        // Drop incoming channel
+        let session_id = self.session_by_incoming_channel.remove(&channel)
+            .ok_or_else(|| EngineError::not_found())?;
+        self.local_sessions.get_mut(session_id)
+            .ok_or_else(|| EngineError::not_found())?
+            .send(sframe).await?;
+        
+        Ok(())
     }
 
     /// Reacting to remote Close frame
@@ -208,7 +268,7 @@ impl endpoint::Connection for Connection {
         match &self.local_state {
             ConnectionState::Opened => {
                 self.local_state = ConnectionState::CloseReceived;
-                self.control.send(ConnectionControl::Close(None))?;
+                self.control.send(ConnectionControl::Close(None)).await?;
             },
             ConnectionState::CloseSent => self.local_state = ConnectionState::End,
             _ => return Err(EngineError::illegal_state()),
@@ -245,13 +305,35 @@ impl endpoint::Connection for Connection {
     async fn on_outgoing_begin<W>(&mut self, writer: &mut W, channel: u16, begin: Begin) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin
     {
-        todo!()
+        println!(">>> Debug: on_outgoing_begin");
+
+        match &self.local_state {
+            ConnectionState::Opened => {},
+            _ => return Err(EngineError::Message("Illegal local connection state"))
+        }
+
+        let frame = Frame::new(channel, FrameBody::begin(begin));
+        writer.send(frame).await?;
+
+        Ok(())
     }
 
     async fn on_outgoing_end<W>(&mut self, writer: &mut W, channel: u16, end: End) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin
     {
-        todo!()
+        println!(">>> Debug: on_outgoing_end");    
+        
+        self.session_by_outgoing_channel.remove(&channel)
+            .ok_or_else(|| EngineError::Message("Local session id is not found"))?;
+        let frame = Frame::new(channel, FrameBody::end(end));
+        
+        match &self.local_state {
+            ConnectionState::Opened => {},
+            _ => return Err(EngineError::Message("Illegal local connection state"))
+        }
+
+        writer.send(frame).await?;
+        Ok(())
     }
 
     // TODO: set a timeout for recving incoming Close
@@ -274,12 +356,12 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>> {
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>> {
         let session_id = self.session_by_incoming_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
     }
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>> {
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>> {
         let session_id = self.session_by_outgoing_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
     }
