@@ -5,7 +5,7 @@ use std::cmp::min;
 use std::time::Duration;
 
 use fe2o3_amqp_types::definitions::ConnectionError;
-use fe2o3_amqp_types::performatives::Close;
+use fe2o3_amqp_types::performatives::{Attach, Close};
 use tokio::io::{AsyncRead, AsyncWrite};
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use tokio::sync::mpsc::{Receiver};
@@ -31,6 +31,7 @@ pub struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
     connection: C,
     connection_control: Receiver<ConnectionControl>,
+    outgoing_session_frames: Receiver<SessionFrame>,
     // session_control: Receiver<SessionControl>, 
 
     heartbeat: HeartBeat,
@@ -45,6 +46,7 @@ where
         transport: Transport<Io>, 
         connection: C,
         connection_control: Receiver<ConnectionControl>,
+        outgoing_session_frames: Receiver<SessionFrame>,
         // session_control: Receiver<SessionControl>, 
     ) -> Self {
         Self {
@@ -52,6 +54,7 @@ where
             connection,
             connection_control,
             // session_control,
+            outgoing_session_frames,
             heartbeat: HeartBeat::never(),
         }
     }
@@ -61,6 +64,7 @@ where
         transport: Transport<Io>, 
         connection: C,
         connection_control: Receiver<ConnectionControl>,
+        outgoing_session_frames: Receiver<SessionFrame>,
         // session_control: Receiver<SessionControl>, 
     ) -> Result<Self, EngineError> {
         use crate::transport::amqp::FrameBody;
@@ -69,6 +73,7 @@ where
             transport,
             connection,
             connection_control,
+            outgoing_session_frames,
             // session_control,
             heartbeat: HeartBeat::never(),
         };
@@ -242,6 +247,47 @@ where
     }
 
     #[inline]
+    async fn on_outgoing_session_frames(&mut self, frame: SessionFrame) -> Result<Running, EngineError> {
+        use crate::transport::amqp::FrameBody;
+
+        match self.connection.local_state() {
+            ConnectionState::Opened => {},
+            _ => return Err(EngineError::Message("Illegal local connection state"))
+        }
+
+        let SessionFrame { channel, body } = frame;
+
+        let frame = match body {
+            SessionFrameBody::Begin(begin) => {
+                self.connection.on_outgoing_begin(channel, begin).await 
+                    .map_err(Into::into)?
+            },
+            SessionFrameBody::Attach(attach) => {
+                Frame::new(channel, FrameBody::attach(attach))
+            },
+            SessionFrameBody::Flow(flow) => {
+                Frame::new(channel, FrameBody::flow(flow))
+            },
+            SessionFrameBody::Transfer{performative, payload} => {
+                Frame::new(channel, FrameBody::transfer(performative, payload))
+            },
+            SessionFrameBody::Disposition(disposition) => {
+                Frame::new(channel, FrameBody::disposition(disposition))
+            },
+            SessionFrameBody::Detach(detach) => {
+                Frame::new(channel, FrameBody::detach(detach))
+            },
+            SessionFrameBody::End(end) => {
+                self.connection.on_outgoing_end(channel, end).await
+                    .map_err(Into::into)?
+            }
+        };
+
+        self.transport.send(frame).await?;
+        Ok(Running::Continue)
+    }
+
+    #[inline]
     async fn on_heartbeat(&mut self) -> Result<Running, EngineError> {
         match &self.connection.local_state() {
             ConnectionState::Start 
@@ -271,6 +317,12 @@ where
                         None => todo!()
                     }
                 },
+                outgoing = self.outgoing_session_frames.recv() => {
+                    match outgoing {
+                        Some(frame) => self.on_outgoing_session_frames(frame).await,
+                        None => todo!()
+                    }
+                }
             };
 
             match result {

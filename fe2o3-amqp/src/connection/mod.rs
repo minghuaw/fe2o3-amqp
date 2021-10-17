@@ -52,6 +52,9 @@ pub struct ConnectionHandle {
     control: Sender<ConnectionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
 
+    // outgoing channel for session
+    outgoing: Sender<SessionFrame>,
+
     // session_control: Sender<SessionControl>,
 }
 
@@ -302,8 +305,7 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    async fn on_outgoing_begin<W>(&mut self, writer: &mut W, channel: u16, begin: Begin) -> Result<(), Self::Error>
-        where W: Sink<Frame, Error = EngineError> + Send + Unpin
+    async fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>
     {
         println!(">>> Debug: on_outgoing_begin");
 
@@ -313,27 +315,16 @@ impl endpoint::Connection for Connection {
         }
 
         let frame = Frame::new(channel, FrameBody::begin(begin));
-        writer.send(frame).await?;
-
-        Ok(())
+        Ok(frame)
     }
 
-    async fn on_outgoing_end<W>(&mut self, writer: &mut W, channel: u16, end: End) -> Result<(), Self::Error>
-        where W: Sink<Frame, Error = EngineError> + Send + Unpin
-    {
+    async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error> {
         println!(">>> Debug: on_outgoing_end");    
         
         self.session_by_outgoing_channel.remove(&channel)
             .ok_or_else(|| EngineError::Message("Local session id is not found"))?;
         let frame = Frame::new(channel, FrameBody::end(end));
-        
-        match &self.local_state {
-            ConnectionState::Opened => {},
-            _ => return Err(EngineError::Message("Illegal local connection state"))
-        }
-
-        writer.send(frame).await?;
-        Ok(())
+        Ok(frame)
     }
 
     // TODO: set a timeout for recving incoming Close

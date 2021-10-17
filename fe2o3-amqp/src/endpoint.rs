@@ -58,15 +58,13 @@ pub trait Connection {
 
     async fn on_outgoing_open<W>(&mut self, writer: &mut W, channel: u16, open: Open) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
-
-    async fn on_outgoing_begin<W>(&mut self, writer: &mut W, channel: u16, begin: Begin) -> Result<(), Self::Error>
-        where W: Sink<Frame, Error = EngineError> + Send + Unpin;
-
-    async fn on_outgoing_end<W>(&mut self, writer: &mut W, channel: u16, end: End) -> Result<(), Self::Error>
-        where W: Sink<Frame, Error = EngineError> + Send + Unpin;
-
+        
     async fn on_outgoing_close<W>(&mut self, writer: &mut W, channel: u16, close: Close) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
+        
+    async fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>;
+
+    async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
 
     fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>>;
 

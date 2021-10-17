@@ -199,6 +199,7 @@ impl Builder<WithContainerId> {
         
         // create channels
         let (connection_control_tx, connection_control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
         // let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
         
         let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
@@ -206,6 +207,7 @@ impl Builder<WithContainerId> {
             transport,
             connection,
             connection_control_rx,
+            outgoing_rx,
             // session_control_rx
         ).await?;
         let handle = engine.spawn();
@@ -213,6 +215,7 @@ impl Builder<WithContainerId> {
         let connection_handle = ConnectionHandle {
             control: connection_control_tx,
             handle,
+            outgoing: outgoing_tx
             // session_control: session_control_tx
         };
 
