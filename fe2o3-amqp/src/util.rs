@@ -11,6 +11,11 @@ use tokio::time::Sleep;
 
 // pub struct IdleTimeoutElapsed {}
 
+pub enum Running {
+    Continue,
+    Stop,
+}
+
 pub struct IdleTimeout {
     delay: Pin<Box<Sleep>>,
     duration: Duration,

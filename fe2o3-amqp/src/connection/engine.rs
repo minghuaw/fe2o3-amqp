@@ -14,6 +14,7 @@ use tokio::task::JoinHandle;
 use crate::connection::Connection;
 use crate::control::{ConnectionControl, SessionControl};
 use crate::session::{SessionFrame, SessionFrameBody};
+use crate::util::Running;
 use crate::{connection, endpoint};
 use crate::error::EngineError;
 use crate::transport::Transport;
@@ -22,10 +23,6 @@ use crate::transport::amqp::Frame;
 use super::ConnectionState;
 use super::heartbeat::HeartBeat;
 
-pub enum Running {
-    Continue,
-    Stop,
-}
 
 pub struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
