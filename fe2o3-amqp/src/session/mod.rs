@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
+use fe2o3_amqp_types::{definitions::Error, performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}};
+use tokio::sync::mpsc::Sender;
 
 use crate::{endpoint, error::EngineError, transport::{amqp::Frame}};
 
@@ -48,7 +49,7 @@ impl endpoint::Session for Session {
     fn local_state(&self) -> &Self::State {
         todo!()
     }
-    
+
     fn local_state_mut(&mut self) -> &mut Self::State {
         todo!()
     }
@@ -81,31 +82,31 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_outgoing_begin(&mut self, begin: Begin) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_begin(&mut self, writer: &mut Sender<SessionFrame>) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_attach(&mut self, attach: Attach) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_flow(&mut self, flow: Flow) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_disposition(&mut self, disposition: Disposition) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_disposition(&mut self, disposition: Disposition) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_detach(&mut self, detach: Detach) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_end(&mut self, end: End) -> Result<Frame, Self::Error> {
+    async fn on_outgoing_end(&mut self, writer: &mut Sender<SessionFrame>, error: Option<Error>) -> Result<(), Self::Error> {
         todo!()
     }
 }
