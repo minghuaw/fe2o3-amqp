@@ -9,7 +9,7 @@ use url::Url;
 use self::builder::WithoutContainerId;
 
 mod builder;
-mod heartbeat;
+pub mod heartbeat;
 mod mux;
 
 pub(crate) use mux::{ConnMuxControl, DEFAULT_CONTROL_CHAN_BUF};
