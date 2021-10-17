@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 use thiserror::Error;
 
-use crate::transport::connection::ConnectionState;
+use crate::connection::ConnectionState;
 
 #[derive(Debug, Error)]
 pub enum EngineError {

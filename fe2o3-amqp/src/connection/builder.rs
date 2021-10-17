@@ -8,13 +8,12 @@ use tokio::{
 };
 use url::Url;
 
-use crate::{connection::Connection, engine::Engine, error::EngineError, transport::protocol_header::ProtocolHeader, transport::{
-        connection::{ConnectionState},
+use crate::{connection::{Connection, ConnectionState}, error::EngineError, transport::protocol_header::ProtocolHeader, transport::{
         Transport,
     }};
 
 use super::ConnectionHandle;
-
+use super::engine::ConnectionEngine;
 
 pub struct WithoutContainerId {}
 pub struct WithContainerId {}
@@ -197,21 +196,21 @@ impl Builder<WithContainerId> {
         
         // create channels
         let (connection_control_tx, connection_control_rx) = mpsc::unbounded_channel();
-        let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
+        // let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
         
         let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
-        let engine = Engine::open(
+        let engine = ConnectionEngine::open(
             transport,
             connection,
             connection_control_rx,
-            session_control_rx
+            // session_control_rx
         ).await?;
         let handle = engine.spawn();
 
         let connection_handle = ConnectionHandle {
             control: connection_control_tx,
             handle,
-            session_control: session_control_tx
+            // session_control: session_control_tx
         };
 
         Ok(connection_handle)

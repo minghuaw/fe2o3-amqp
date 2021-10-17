@@ -17,23 +17,25 @@ use crate::{connection, endpoint};
 use crate::error::EngineError;
 use crate::transport::Transport;
 use crate::transport::amqp::Frame;
-use crate::transport::connection::{ConnectionState, heartbeat::HeartBeat};
+
+use super::ConnectionState;
+use super::heartbeat::HeartBeat;
 
 pub enum Running {
     Continue,
     Stop,
 }
 
-pub struct Engine<Io, C> {
+pub struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
     connection: C,
     connection_control: UnboundedReceiver<ConnectionControl>,
-    session_control: UnboundedReceiver<SessionControl>, 
+    // session_control: UnboundedReceiver<SessionControl>, 
 
     heartbeat: HeartBeat,
 }
 
-impl<Io, C> Engine<Io, C> 
+impl<Io, C> ConnectionEngine<Io, C> 
 where 
     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     C: endpoint::Connection<State = ConnectionState> + Send + 'static,
@@ -42,13 +44,13 @@ where
         transport: Transport<Io>, 
         connection: C,
         connection_control: UnboundedReceiver<ConnectionControl>,
-        session_control: UnboundedReceiver<SessionControl>, 
+        // session_control: UnboundedReceiver<SessionControl>, 
     ) -> Self {
         Self {
             transport,
             connection,
             connection_control,
-            session_control,
+            // session_control,
             heartbeat: HeartBeat::never(),
         }
     }
@@ -58,7 +60,7 @@ where
         transport: Transport<Io>, 
         connection: C,
         connection_control: UnboundedReceiver<ConnectionControl>,
-        session_control: UnboundedReceiver<SessionControl>, 
+        // session_control: UnboundedReceiver<SessionControl>, 
     ) -> Result<Self, EngineError> {
         use crate::transport::amqp::FrameBody;
 
@@ -66,7 +68,7 @@ where
             transport,
             connection,
             connection_control,
-            session_control,
+            // session_control,
             heartbeat: HeartBeat::never(),
         };
 
@@ -120,14 +122,13 @@ where
     }
 }
 
-impl<Io, C> Engine<Io, C> 
+impl<Io, C> ConnectionEngine<Io, C> 
 where 
     Io: AsyncRead + AsyncWrite + Send + Unpin,
     C: endpoint::Connection<State = ConnectionState> + Send + 'static,
 {
     async fn on_incoming(&mut self, incoming: Result<Frame, EngineError>) -> Result<Running, EngineError> {
         use crate::transport::amqp::FrameBody;
-        use crate::endpoint::Session;
 
         let frame = incoming?;
 
@@ -160,10 +161,6 @@ where
             FrameBody::Begin(mut begin) => {
                 self.connection.on_incoming_begin(channel, &mut begin).await
                     .map_err(Into::into)?;
-                self.connection.session_mut_by_incoming_channel(channel)
-                    .map_err(Into::into)?
-                    .on_incoming_begin(begin).await
-                    .map_err(Into::into)?;
             },
             FrameBody::Attach(attach) => {
                 todo!()
@@ -182,10 +179,6 @@ where
             },
             FrameBody::End(mut end) => {
                 self.connection.on_incoming_end(channel, &mut end).await
-                    .map_err(Into::into)?;
-                self.connection.session_mut_by_incoming_channel(channel)
-                    .map_err(Into::into)?
-                    .on_incoming_end(end).await
                     .map_err(Into::into)?;
             },
             FrameBody::Close(close) => self.connection.on_incoming_close(channel, close).await
@@ -226,11 +219,6 @@ where
     }
 
     #[inline]
-    async fn on_session_control(&mut self, control: SessionControl) -> Result<Running, EngineError> {
-        todo!()
-    }
-
-    #[inline]
     async fn on_heartbeat(&mut self) -> Result<Running, EngineError> {
         match &self.connection.local_state() {
             ConnectionState::Start 
@@ -260,12 +248,6 @@ where
                         None => todo!()
                     }
                 },
-                control = self.session_control.recv() => {
-                    match control {
-                        Some(control) => self.on_session_control(control).await,
-                        None => todo!(),
-                    }
-                }
             };
 
             match result {

@@ -19,7 +19,7 @@ pub(crate) use mux::SessionMux;
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 2048;
 
-pub(crate) struct SessionFrame {
+pub struct SessionFrame {
     pub channel: u16, // outgoing/local channel number
     pub body: SessionFrameBody,
 }
@@ -33,7 +33,7 @@ impl SessionFrame {
     }
 }
 
-pub(crate) enum SessionFrameBody {
+pub enum SessionFrameBody {
     Begin(Begin),
     Attach(Attach),
     Flow(Flow),
@@ -79,12 +79,12 @@ impl SessionFrameBody {
     }
 }
 
-pub(crate) struct NonSessionFrame {
+pub struct NonSessionFrame {
     pub channel: u16,
     pub body: NonSessionFrameBody,
 }
 
-pub(crate) enum NonSessionFrameBody {
+pub enum NonSessionFrameBody {
     Open(Open),
     Close(Close),
     // An empty frame used only for heartbeat

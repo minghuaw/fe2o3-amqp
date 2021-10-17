@@ -11,11 +11,11 @@ pub const FRAME_TYPE_AMQP: u8 = 0x00;
 pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
-pub mod connection;
+// pub mod connection;
+// pub mod session;
 pub mod endpoint;
 pub mod link;
 pub mod protocol_header;
-pub mod session;
 pub mod handler;
 
 /* -------------------------------- Transport ------------------------------- */
@@ -30,12 +30,12 @@ use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
 };
 
-use crate::{error::EngineError, util::IdleTimeout};
+use crate::{connection::ConnectionState, error::EngineError, util::IdleTimeout};
 
 use amqp::{Frame, FrameCodec};
 use protocol_header::ProtocolHeader;
 
-use self::connection::ConnectionState;
+// use self::connection::ConnectionState;
 
 pin_project! {
     pub struct Transport<Io> {
@@ -277,9 +277,10 @@ mod tests {
     use tokio_test::io::Builder;
     use tokio_util::codec::LengthDelimitedCodec;
 
+    use crate::connection::ConnectionState;
+
     use super::{
         amqp::{Frame, FrameBody},
-        connection::ConnectionState,
         protocol_header::ProtocolHeader,
         Transport,
     };

@@ -1,23 +1,58 @@
-use std::{cmp::min, convert::TryInto};
+use std::{cmp::min, collections::BTreeMap, convert::TryInto};
 
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open}, primitives::Symbol};
 use futures_util::{Sink, SinkExt};
-use tokio::{sync::mpsc::{UnboundedSender}, task::JoinHandle};
+use slab::Slab;
+use tokio::{sync::mpsc::{self, UnboundedReceiver, UnboundedSender}, task::JoinHandle};
 use url::Url;
 
-use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::Session, transport::{amqp::{Frame, FrameBody}, connection::ConnectionState}};
+use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::Session, transport::{amqp::{Frame, FrameBody}}, session::SessionFrame};
 
 use self::builder::WithoutContainerId;
 
 pub mod builder;
+pub mod engine;
+pub mod heartbeat;
+
+
+#[derive(Debug, Clone)]
+pub enum ConnectionState {
+    Start,
+
+    HeaderReceived,
+
+    HeaderSent,
+
+    HeaderExchange,
+
+    OpenPipe,
+
+    OpenClosePipe,
+
+    OpenReceived,
+
+    OpenSent,
+
+    ClosePipe,
+
+    Opened,
+
+    CloseReceived,
+
+    CloseSent,
+
+    Discarding,
+
+    End,
+}
 
 pub struct ConnectionHandle {
     control: UnboundedSender<ConnectionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
 
-    session_control: UnboundedSender<SessionControl>,
+    // session_control: UnboundedSender<SessionControl>,
 }
 
 impl ConnectionHandle {
@@ -36,6 +71,9 @@ pub struct Connection {
     // local 
     local_state: ConnectionState,
     local_open: Open,
+    local_sessions: Slab<UnboundedSender<SessionFrame>>,
+    session_by_incoming_channel: BTreeMap<u16, usize>,
+    session_by_outgoing_channel: BTreeMap<u16, usize>,
 
     // remote 
     remote_open: Option<Open>,
@@ -77,8 +115,12 @@ impl Connection {
             control,
             local_state,
             local_open,
+            local_sessions: Slab::new(),
+            session_by_incoming_channel: BTreeMap::new(),
+            session_by_outgoing_channel: BTreeMap::new(),
+
             remote_open: None,
-            agreed_channel_max
+            agreed_channel_max,
         }
     }
 }
@@ -99,6 +141,39 @@ impl endpoint::Connection for Connection {
 
     fn local_open(&self) -> &Open {
         &self.local_open
+    }
+
+    async fn create_session(&mut self) -> Result<(u16, UnboundedReceiver<SessionFrame>), Self::Error> {
+        match &self.local_state {
+            ConnectionState::Start 
+            | ConnectionState::HeaderSent
+            | ConnectionState::HeaderReceived
+            | ConnectionState::HeaderExchange
+            | ConnectionState::CloseSent
+            | ConnectionState::Discarding
+            | ConnectionState::End => {
+                return Err(EngineError::Message("Illegal local state"))
+            },
+            // TODO: what about pipelined open?
+            _ => {}
+        };
+
+        // get new entry index
+        let entry = self.local_sessions.vacant_entry();
+        let session_id = entry.key();
+
+        // check if there is enough
+        if session_id > self.agreed_channel_max as usize {
+            return Err(EngineError::Message(
+                "Exceeding max number of channel is not allowed",
+            ));
+        } else {
+            let (tx, rx) = mpsc::unbounded_channel();
+            entry.insert(tx);
+            let channel = session_id as u16; // TODO: a different way of allocating session id?
+            self.session_by_outgoing_channel.insert(channel, session_id);
+            Ok((channel, rx))
+        }
     }
 
     /// Reacting to remote Open frame
@@ -197,14 +272,6 @@ impl endpoint::Connection for Connection {
             s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
         }
         Ok(())
-    }
-
-    fn session_mut_by_incoming_channel(&mut self, channel: u16) -> Result<&mut Self::Session, Self::Error> {
-        todo!()
-    }
-
-    fn session_mut_by_outgoing_channel(&mut self, channel: u16) -> Result<&mut Self::Session, Self::Error> {
-        todo!()
     }
 }
 
