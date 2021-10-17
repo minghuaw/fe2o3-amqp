@@ -18,7 +18,8 @@ pub enum ConnectionControl {
 }
 
 pub enum SessionControl {
-
+    Begin,
+    End,
 }
 
 pub enum LinkControl {

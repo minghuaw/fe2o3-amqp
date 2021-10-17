@@ -27,7 +27,7 @@ use super::heartbeat::HeartBeat;
 pub struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
     connection: C,
-    connection_control: Receiver<ConnectionControl>,
+    control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
     // session_control: Receiver<SessionControl>, 
 
@@ -42,14 +42,14 @@ where
     pub fn new(
         transport: Transport<Io>, 
         connection: C,
-        connection_control: Receiver<ConnectionControl>,
+        control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
         // session_control: Receiver<SessionControl>, 
     ) -> Self {
         Self {
             transport,
             connection,
-            connection_control,
+            control,
             // session_control,
             outgoing_session_frames,
             heartbeat: HeartBeat::never(),
@@ -60,7 +60,7 @@ where
     pub(crate) async fn open(
         transport: Transport<Io>, 
         connection: C,
-        connection_control: Receiver<ConnectionControl>,
+        control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
         // session_control: Receiver<SessionControl>, 
     ) -> Result<Self, EngineError> {
@@ -69,7 +69,7 @@ where
         let mut engine = Self {
             transport,
             connection,
-            connection_control,
+            control,
             outgoing_session_frames,
             // session_control,
             heartbeat: HeartBeat::never(),
@@ -218,7 +218,7 @@ where
     }
 
     #[inline]
-    async fn on_connection_control(&mut self, control: ConnectionControl) -> Result<Running, EngineError> {
+    async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, EngineError> {
         match control {
             ConnectionControl::Open => {
                 let open = self.connection.local_open().clone();
@@ -308,9 +308,9 @@ where
                         None => todo!(),
                     }
                 },
-                control = self.connection_control.recv() => {
+                control = self.control.recv() => {
                     match control {
-                        Some(control) => self.on_connection_control(control).await,
+                        Some(control) => self.on_control(control).await,
                         None => todo!()
                     }
                 },

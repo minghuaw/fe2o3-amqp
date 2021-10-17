@@ -78,6 +78,7 @@ pub trait Session {
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
+    
 
     async fn on_incoming_begin(&mut self, begin: Begin) -> Result<(), Self::Error>;
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
