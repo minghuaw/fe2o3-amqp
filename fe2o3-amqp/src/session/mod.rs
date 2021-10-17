@@ -56,23 +56,23 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_incoming_attach(&mut self, attach: &mut Attach) -> Result<(), Self::Error> {
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_incoming_flow(&mut self, flow: &mut Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_incoming_transfer(&mut self, transfer: &mut Transfer, payload: &mut Option<BytesMut>) -> Result<(), Self::Error> {
+    async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_incoming_disposition(&mut self, disposition: &mut Disposition) -> Result<(), Self::Error> {
+    async fn on_incoming_disposition(&mut self, disposition: Disposition) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_incoming_detach(&mut self, detach: &mut Detach) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
         todo!()
     }
 
