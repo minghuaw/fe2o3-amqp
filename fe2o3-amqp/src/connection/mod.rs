@@ -273,5 +273,15 @@ impl endpoint::Connection for Connection {
         }
         Ok(())
     }
+
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>> {
+        let session_id = self.session_by_incoming_channel.get(&channel)?;
+        self.local_sessions.get_mut(*session_id)
+    }
+
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>> {
+        let session_id = self.session_by_outgoing_channel.get(&channel)?;
+        self.local_sessions.get_mut(*session_id)
+    }
 }
 

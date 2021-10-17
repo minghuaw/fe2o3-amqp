@@ -13,6 +13,7 @@ use tokio::task::JoinHandle;
 
 use crate::connection::Connection;
 use crate::control::{ConnectionControl, SessionControl};
+use crate::session::{SessionFrame, SessionFrameBody};
 use crate::{connection, endpoint};
 use crate::error::EngineError;
 use crate::transport::Transport;
@@ -127,6 +128,15 @@ where
     Io: AsyncRead + AsyncWrite + Send + Unpin,
     C: endpoint::Connection<State = ConnectionState> + Send + 'static,
 {
+    async fn forward_incoming_session_frame(&mut self, channel: u16, frame: SessionFrame) -> Result<(), EngineError> {
+        // match self.connection.session_tx_by_incoming_channel(channel) {
+        //     Some(tx) => tx.send(frame),
+        //     None => 
+        // }
+
+        todo!()
+    }
+
     async fn on_incoming(&mut self, incoming: Result<Frame, EngineError>) -> Result<Running, EngineError> {
         use crate::transport::amqp::FrameBody;
 
@@ -161,6 +171,11 @@ where
             FrameBody::Begin(mut begin) => {
                 self.connection.on_incoming_begin(channel, &mut begin).await
                     .map_err(Into::into)?;
+                let sframe = SessionFrame::new(channel, SessionFrameBody::begin(begin));
+                match self.connection.session_tx_by_incoming_channel(channel) {
+                    Some(tx) => tx.send(sframe)?,
+                    None => todo!()
+                }
             },
             FrameBody::Attach(attach) => {
                 todo!()
@@ -181,8 +196,10 @@ where
                 self.connection.on_incoming_end(channel, &mut end).await
                     .map_err(Into::into)?;
             },
-            FrameBody::Close(close) => self.connection.on_incoming_close(channel, close).await
-                .map_err(Into::into)?,
+            FrameBody::Close(close) => {
+                self.connection.on_incoming_close(channel, close).await
+                    .map_err(Into::into)?
+            },
             FrameBody::Empty => {
                 // do nothing, IdleTimeout is tracked by Transport
             }

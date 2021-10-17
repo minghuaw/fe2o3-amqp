@@ -62,6 +62,10 @@ pub trait Connection {
 
     async fn on_outgoing_close<W>(&mut self, writer: &mut W, channel: u16, close: Close) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
+
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>>;
+
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut UnboundedSender<SessionFrame>>;
 }
 
 #[async_trait]
