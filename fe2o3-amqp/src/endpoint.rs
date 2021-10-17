@@ -20,13 +20,14 @@
 //!         endpoint)
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::performatives::{Begin, Close, End, Open};
+use bytes::BytesMut;
+use fe2o3_amqp_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer};
 
-use crate::transport::amqp::Frame;
+use crate::{error::EngineError, transport::amqp::Frame};
 
 #[async_trait]
 pub trait Connection {
-    type Error;
+    type Error: Into<EngineError>;
     type Session: Session;
 
     /// Reacting to remote Open frame
@@ -49,35 +50,35 @@ pub trait Connection {
 
     async fn on_outgoing_close(&mut self, channel: u16, close: &mut Close) -> Result<Frame, Self::Error>;
 
-    fn session_mut_by_incoming_channel(&mut self, channel: u16) -> &mut Self::Session;
+    fn session_mut_by_incoming_channel(&mut self, channel: u16) -> Result<&mut Self::Session, Self::Error>;
 
-    fn session_mut_by_outgoing_channel(&mut self, channel: u16) -> &mut Self::Session;
+    fn session_mut_by_outgoing_channel(&mut self, channel: u16) -> Result<&mut Self::Session, Self::Error>;
 }
 
 #[async_trait]
 pub trait Session {
-    type Error;
+    type Error: Into<EngineError>;
 
-    async fn on_incoming_begin() -> Result<(), Self::Error>;
-    async fn on_incoming_attach() -> Result<(), Self::Error>;
-    async fn on_incoming_flow() -> Result<(), Self::Error>;
-    async fn on_incoming_transfer() -> Result<(), Self::Error>;
-    async fn on_incoming_disposition() -> Result<(), Self::Error>;
-    async fn on_incoming_detach() -> Result<(), Self::Error>;
-    async fn on_incoming_end() -> Result<(), Self::Error>;
+    async fn on_incoming_begin(&mut self, begin: &mut Begin) -> Result<(), Self::Error>;
+    async fn on_incoming_attach(&mut self, attach: &mut Attach) -> Result<(), Self::Error>;
+    async fn on_incoming_flow(&mut self, flow: &mut Flow) -> Result<(), Self::Error>;
+    async fn on_incoming_transfer(&mut self, transfer: &mut Transfer, payload: &mut Option<BytesMut>) -> Result<(), Self::Error>;
+    async fn on_incoming_disposition(&mut self, disposition: &mut Disposition) -> Result<(), Self::Error>;
+    async fn on_incoming_detach(&mut self, detach: &mut Detach) -> Result<(), Self::Error>;
+    async fn on_incoming_end(&mut self, end: &mut End) -> Result<(), Self::Error>;
 
-    async fn on_outgoing_begin() -> Result<(), Self::Error>;
-    async fn on_outgoing_attach() -> Result<(), Self::Error>;
-    async fn on_outgoing_flow() -> Result<(), Self::Error>;
-    async fn on_outgoing_transfer() -> Result<(), Self::Error>;
-    async fn on_outgoing_disposition() -> Result<(), Self::Error>;
-    async fn on_outgoing_detach() -> Result<(), Self::Error>;
-    async fn on_outgoing_end() -> Result<(), Self::Error>;
+    async fn on_outgoing_begin(&mut self, begin: &mut Begin) -> Result<(), Self::Error>;
+    async fn on_outgoing_attach(&mut self, attach: &mut Attach) -> Result<(), Self::Error>;
+    async fn on_outgoing_flow(&mut self, flow: &mut Flow) -> Result<(), Self::Error>;
+    async fn on_outgoing_transfer(&mut self, transfer: &mut Transfer, payload: &mut Option<BytesMut>) -> Result<(), Self::Error>;
+    async fn on_outgoing_disposition(&mut self, disposition: &mut Disposition) -> Result<(), Self::Error>;
+    async fn on_outgoing_detach(&mut self, detach: &mut Detach) -> Result<(), Self::Error>;
+    async fn on_outgoing_end(&mut self, end: &mut End) -> Result<(), Self::Error>;
 }
 
 #[async_trait]
 pub trait Link {
-    type Error;
+    type Error: Into<EngineError>;
 
     async fn on_incoming_attach() -> Result<(), Self::Error>;
     async fn on_incoming_flow() -> Result<(), Self::Error>;
