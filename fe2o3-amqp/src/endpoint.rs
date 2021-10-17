@@ -37,7 +37,7 @@ pub trait Connection {
     fn local_state_mut(&mut self) -> &mut Self::State;
     fn local_open(&self) -> &Open;
 
-    fn create_session(&mut self, tx: Sender<SessionFrame>) -> Result<(u16, usize), Self::Error>;
+    fn create_session(&mut self, tx: Sender<Result<SessionFrame, EngineError>>) -> Result<(u16, usize), Self::Error>;
     fn drop_session(&mut self, session_id: usize);
 
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
@@ -66,9 +66,9 @@ pub trait Connection {
 
     async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>>;
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Result<SessionFrame, EngineError>>>;
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionFrame>>;
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Result<SessionFrame, EngineError>>>;
 }
 
 #[async_trait]

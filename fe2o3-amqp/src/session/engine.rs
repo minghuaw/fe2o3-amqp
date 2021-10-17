@@ -1,10 +1,10 @@
 use tokio::{sync::mpsc::{Receiver, Sender}, task::JoinHandle};
 
-use crate::{control::SessionControl, endpoint, error::EngineError};
+use crate::{control::SessionControl, endpoint, error::EngineError, session::Session, util::Running};
 
 use super::{SessionFrame, SessionFrameBody, SessionState};
 
-pub struct Engine<S> {
+pub struct SessionEngine<S> {
     session: S,
     control: Receiver<SessionControl>,
     incoming: Receiver<Result<SessionFrame, EngineError>>,
@@ -13,22 +13,53 @@ pub struct Engine<S> {
     // outgoing_link_frames : Receiver<LinkFrame>,
 }
 
-impl<S> Engine<S> 
+impl<S> SessionEngine<S> 
 where 
     S: endpoint::Session<State = SessionState> + Send + 'static
 {
-    pub fn new(
+    // pub fn new(
+    //     session: S,
+    //     control: Receiver<SessionControl>,
+    //     incoming: Receiver<Result<SessionFrame, EngineError>>,
+    //     outgoing: Sender<SessionFrame>,
+    // ) -> Self {
+    //     Self {
+    //         session,
+    //         control,
+    //         incoming,
+    //         outgoing
+    //     }
+    // }
+
+    pub async fn begin(
         session: S,
         control: Receiver<SessionControl>,
         incoming: Receiver<Result<SessionFrame, EngineError>>,
         outgoing: Sender<SessionFrame>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, EngineError> {
+        let mut engine = Self {
             session,
             control,
             incoming,
             outgoing
-        }
+        };
+
+        // send a begin
+        engine.session.on_outgoing_begin(&mut engine.outgoing).await
+            .map_err(Into::into)?;
+        // wait for an incoming begin
+        let frame = match engine.incoming.recv().await {
+            Some(frame) => frame?,
+            None => todo!()
+        };
+        let SessionFrame { channel: _, body } = frame;
+        let remote_begin = match body {
+            SessionFrameBody::Begin(begin) => begin,
+            _ => return Err(EngineError::illegal_state())
+        };
+        engine.session.on_incoming_begin(remote_begin).await
+            .map_err(Into::into)?;
+        Ok(engine)
     }
 
     pub fn spawn(self) ->JoinHandle<Result<(), EngineError>> {
@@ -36,7 +67,7 @@ where
     }
 
     #[inline]
-    async fn on_incoming(&mut self, incoming: Result<SessionFrame, EngineError>) -> Result<(), EngineError> {
+    async fn on_incoming(&mut self, incoming: Result<SessionFrame, EngineError>) -> Result<Running, EngineError> {
         let SessionFrame { channel, body } = incoming?;
 
         match body {
@@ -69,18 +100,29 @@ where
                     .map_err(Into::into)?;
             }
         }
-        Ok(())
+
+        match self.session.local_state() {
+            SessionState::Unmapped => Ok(Running::Stop),
+            _ => Ok(Running::Continue)
+        }
     }
 
     #[inline]
-    async fn on_control(&mut self, control: SessionControl) -> Result<(), EngineError> {
+    async fn on_control(&mut self, control: SessionControl) -> Result<Running, EngineError> {
         match control {
             SessionControl::Begin => {
-                todo!()
+                self.session.on_outgoing_begin(&mut self.outgoing).await
+                    .map_err(Into::into)?;
             },
-            SessionControl::End => {
-                todo!()
+            SessionControl::End(error) => {
+                self.session.on_outgoing_end(&mut self.outgoing, error).await
+                    .map_err(Into::into)?;
             }
+        }
+
+        match self.session.local_state() {
+            SessionState::Unmapped => Ok(Running::Stop),
+            _ => Ok(Running::Continue)
         }
     }
 
@@ -101,7 +143,17 @@ where
                 }
             };
 
-
+            match result {
+                Ok(running) => {
+                    match running {
+                        Running::Continue => {},
+                        Running::Stop => break,
+                    }
+                },
+                Err(err) => {
+                    todo!()
+                }
+            }
         }
 
         Ok(())

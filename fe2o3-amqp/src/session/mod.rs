@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::{definitions::Error, performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}};
-use tokio::sync::mpsc::Sender;
+use fe2o3_amqp_types::{definitions::{Error, Fields, Handle, SequenceNo, TransferNumber}, performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}, primitives::Symbol};
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
-use crate::{endpoint, error::EngineError, transport::{amqp::Frame}};
+use crate::{control::SessionControl, endpoint, error::EngineError, transport::{amqp::Frame}};
 
 mod frame;
 pub use frame::*;
 pub mod engine;
+pub mod builder;
 
 // 2.5.5 Session States
 // UNMAPPED
@@ -34,11 +35,74 @@ pub enum SessionState {
 
 
 pub struct SessionHandle { 
+    control: Sender<SessionControl>,
+    handle: JoinHandle<Result<(), EngineError>>,
 
 }
 
 pub struct Session {
+    control: Sender<SessionControl>,
+    session_id: usize,
+    outgoing_channel: u16,
 
+    // local amqp states
+    local_state: SessionState,    
+    next_outgoing_id: TransferNumber,
+    incoming_window: TransferNumber,
+    outgoing_window: TransferNumber,
+    handle_max: Handle,
+
+    // initialize with 0 first and change after receiving the remote Begin
+    next_incoming_id: TransferNumber,
+    remote_incoming_window: SequenceNo,
+    remote_outgoing_window: SequenceNo,
+
+    // capabilities
+    offered_capabilities: Option<Vec<Symbol>>,
+    desired_capabilities: Option<Vec<Symbol>>,
+    properties: Option<Fields>,
+}
+
+impl Session {
+    pub fn new(
+        control: Sender<SessionControl>,
+        session_id: usize,
+        outgoing_channel: u16,
+
+        // local amqp states
+        local_state: SessionState,    
+        next_outgoing_id: TransferNumber,
+        incoming_window: TransferNumber,
+        outgoing_window: TransferNumber,
+        handle_max: Handle,
+
+        // initialize with 0 first and change after receiving the remote Begin
+        next_incoming_id: TransferNumber,
+        remote_incoming_window: SequenceNo,
+        remote_outgoing_window: SequenceNo,
+
+        // capabilities
+        offered_capabilities: Option<Vec<Symbol>>,
+        desired_capabilities: Option<Vec<Symbol>>,
+        properties: Option<Fields>,
+    ) -> Self {
+        Self {
+            control,
+            session_id,
+            outgoing_channel,
+            local_state,
+            next_outgoing_id,
+            incoming_window,
+            outgoing_window,
+            handle_max,
+            next_incoming_id,
+            remote_incoming_window,
+            remote_outgoing_window,
+            offered_capabilities,
+            desired_capabilities,
+            properties
+        }
+    }
 }
 
 #[async_trait]
@@ -47,11 +111,11 @@ impl endpoint::Session for Session {
     type State = SessionState;
 
     fn local_state(&self) -> &Self::State {
-        todo!()
+        &self.local_state
     }
 
     fn local_state_mut(&mut self) -> &mut Self::State {
-        todo!()
+        &mut self.local_state
     }
 
     async fn on_incoming_begin(&mut self, begin: Begin) -> Result<(), Self::Error> {

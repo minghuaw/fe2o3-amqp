@@ -39,22 +39,22 @@ where
     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     C: endpoint::Connection<State = ConnectionState> + Send + 'static,
 {
-    pub fn new(
-        transport: Transport<Io>, 
-        connection: C,
-        control: Receiver<ConnectionControl>,
-        outgoing_session_frames: Receiver<SessionFrame>,
-        // session_control: Receiver<SessionControl>, 
-    ) -> Self {
-        Self {
-            transport,
-            connection,
-            control,
-            // session_control,
-            outgoing_session_frames,
-            heartbeat: HeartBeat::never(),
-        }
-    }
+    // pub fn new(
+    //     transport: Transport<Io>, 
+    //     connection: C,
+    //     control: Receiver<ConnectionControl>,
+    //     outgoing_session_frames: Receiver<SessionFrame>,
+    //     // session_control: Receiver<SessionControl>, 
+    // ) -> Self {
+    //     Self {
+    //         transport,
+    //         connection,
+    //         control,
+    //         // session_control,
+    //         outgoing_session_frames,
+    //         heartbeat: HeartBeat::never(),
+    //     }
+    // }
 
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
@@ -88,7 +88,7 @@ where
         let Frame{channel, body} = frame;
         let remote_open = match body {
             FrameBody::Open(open) => open,
-            _ => return Err(EngineError::ConnectionError(ConnectionError::FramingError)),
+            _ => return Err(EngineError::illegal_state()),
         };
 
         // Handle incoming remote_open
@@ -134,7 +134,7 @@ where
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
-            Some(tx) => tx.send(frame).await?,
+            Some(tx) => tx.send(Ok(frame)).await?,
             None => return Err(EngineError::not_found()),
         };
         Ok(())
