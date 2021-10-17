@@ -194,12 +194,12 @@ impl Builder<WithContainerId> {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone(),
         };
-        let connection = Connection::new(local_state, local_open);
-
+        
         // create channels
         let (connection_control_tx, connection_control_rx) = mpsc::unbounded_channel();
         let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
-
+        
+        let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
         let engine = Engine::open(
             transport,
             connection,

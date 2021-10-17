@@ -1,10 +1,11 @@
-use std::cmp::min;
+use std::{cmp::min, convert::TryInto};
 
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open}, primitives::Symbol};
 use futures_util::{Sink, SinkExt};
 use tokio::{sync::mpsc::{UnboundedSender}, task::JoinHandle};
+use url::Url;
 
 use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::Session, transport::{amqp::{Frame, FrameBody}, connection::ConnectionState}};
 
@@ -19,7 +20,19 @@ pub struct ConnectionHandle {
     session_control: UnboundedSender<SessionControl>,
 }
 
+impl ConnectionHandle {
+    pub async fn close(self) -> Result<(), EngineError> {
+        self.control.send(ConnectionControl::Close(None))?;
+        match (self.handle).await {
+            Ok(res) => res,
+            Err(_) => Err(EngineError::Message("JoinError")),
+        }
+    }
+}
+
 pub struct Connection {
+    control: UnboundedSender<ConnectionControl>,
+
     // local 
     local_state: ConnectionState,
     local_open: Open,
@@ -36,16 +49,32 @@ impl Connection {
     pub fn builder() -> builder::Builder<WithoutContainerId> {
         builder::Builder::new()
     }
+
+    pub async fn open(
+        container_id: String,
+        max_frame_size: impl Into<MaxFrameSize>,
+        channel_max: impl Into<ChannelMax>,
+        url: impl TryInto<Url, Error = url::ParseError>,
+    ) -> Result<ConnectionHandle, EngineError> {
+        Connection::builder()
+            .container_id(container_id)
+            .max_frame_size(max_frame_size)
+            .channel_max(channel_max)
+            .open(url)
+            .await
+    }
 }
 
 /* ------------------------------- Private API ------------------------------ */
 impl Connection {
     fn new(
+        control: UnboundedSender<ConnectionControl>,
         local_state: ConnectionState, 
         local_open: Open
     ) -> Self {
         let agreed_channel_max = local_open.channel_max.0;
         Self {
+            control,
             local_state,
             local_open,
             remote_open: None,
@@ -99,8 +128,22 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error> {
-        todo!()
+    async fn on_incoming_close(&mut self, _channel: u16, close: Close) -> Result<(), Self::Error> {
+        println!(">>> Debug: on_incoming_close");
+        match &self.local_state {
+            ConnectionState::Opened => {
+                self.local_state = ConnectionState::CloseReceived;
+                self.control.send(ConnectionControl::Close(None))?;
+            },
+            ConnectionState::CloseSent => self.local_state = ConnectionState::End,
+            _ => return Err(EngineError::illegal_state()),
+        };
+
+        if let Some(err) = close.error {
+            println!("Remote error {:?}", err);
+            todo!()
+        }
+        Ok(())
     }
 
     async fn on_outgoing_open<W>(&mut self, writer: &mut W, channel: u16, open: Open) -> Result<(), Self::Error> 
@@ -136,10 +179,24 @@ impl endpoint::Connection for Connection {
         todo!()
     }
 
+    // TODO: set a timeout for recving incoming Close
     async fn on_outgoing_close<W>(&mut self, writer: &mut W, channel: u16, close: Close) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin 
     {
-        todo!()
+        let frame = Frame::new(
+            channel, 
+            FrameBody::Close(close),
+        );
+        writer.send(frame).await?;
+
+        match &self.local_state {
+            ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,
+            ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
+            ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
+            ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
+            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
+        }
+        Ok(())
     }
 
     fn session_mut_by_incoming_channel(&mut self, channel: u16) -> Result<&mut Self::Session, Self::Error> {

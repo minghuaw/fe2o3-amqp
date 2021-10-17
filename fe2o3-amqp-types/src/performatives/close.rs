@@ -13,3 +13,11 @@ use crate::definitions::Error;
 pub struct Close {
     pub error: Option<Error>,
 }
+
+impl Close {
+    pub fn new(error: Option<Error>) -> Self {
+        Self {
+            error
+        }
+    }
+}

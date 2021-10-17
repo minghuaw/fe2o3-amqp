@@ -5,6 +5,7 @@ use std::cmp::min;
 use std::time::Duration;
 
 use fe2o3_amqp_types::definitions::ConnectionError;
+use fe2o3_amqp_types::performatives::Close;
 use tokio::io::{AsyncRead, AsyncWrite};
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
@@ -202,9 +203,26 @@ where
 
     #[inline]
     async fn on_connection_control(&mut self, control: ConnectionControl) -> Result<Running, EngineError> {
-        
-        
-        todo!()
+        match control {
+            ConnectionControl::Open => {
+                let open = self.connection.local_open().clone();
+                self.connection.on_outgoing_open(&mut self.transport, 0, open).await
+                    .map_err(Into::into)?;
+            },
+            ConnectionControl::Close(error) => {
+                let close = Close::new(error);
+                self.connection.on_outgoing_close(&mut self.transport, 0, close).await
+                    .map_err(Into::into)?;
+            }
+            ConnectionControl::Begin => {
+                todo!()
+            }
+        }
+
+        match self.connection.local_state() {
+            ConnectionState::End => Ok(Running::Stop),
+            _ => Ok(Running::Continue)
+        }
     }
 
     #[inline]
