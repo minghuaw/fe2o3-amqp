@@ -21,7 +21,7 @@
 
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer};
+use fe2o3_amqp_types::{definitions::Error, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}};
 use futures_util::Sink;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -56,10 +56,10 @@ pub trait Connection {
     /// Reacting to remote Close frame
     async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error>;
 
-    async fn on_outgoing_open<W>(&mut self, writer: &mut W, channel: u16, open: Open) -> Result<(), Self::Error>
+    async fn on_outgoing_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
         
-    async fn on_outgoing_close<W>(&mut self, writer: &mut W, channel: u16, close: Close) -> Result<(), Self::Error>
+    async fn on_outgoing_close<W>(&mut self, writer: &mut W, error: Option<Error>) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
         
     async fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>;
@@ -78,7 +78,7 @@ pub trait Session {
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
-    
+
 
     async fn on_incoming_begin(&mut self, begin: Begin) -> Result<(), Self::Error>;
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;

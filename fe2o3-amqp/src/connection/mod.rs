@@ -2,7 +2,7 @@ use std::{cmp::min, collections::BTreeMap, convert::TryInto};
 
 use async_trait::async_trait;
 
-use fe2o3_amqp_types::{definitions::{Fields, IetfLanguageTag, Milliseconds}, performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open}, primitives::Symbol};
+use fe2o3_amqp_types::{definitions::{Error, Fields, IetfLanguageTag, Milliseconds}, performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open}, primitives::Symbol};
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{sync::mpsc::{self, Receiver, Sender}, task::JoinHandle};
@@ -284,14 +284,14 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    async fn on_outgoing_open<W>(&mut self, writer: &mut W, channel: u16, open: Open) -> Result<(), Self::Error> 
+    async fn on_outgoing_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error> 
     where 
         W: Sink<Frame, Error = EngineError> + Send + Unpin,
     {
         println!(">>> Debug: on_outgoing_open");
 
-        let body = FrameBody::open(open.clone());
-        let frame = Frame::new(channel, body);
+        let body = FrameBody::open(self.local_open.clone());
+        let frame = Frame::new(0u16, body);
         writer.send(frame).await?;
 
         // change local state after successfully sending the frame
@@ -328,12 +328,12 @@ impl endpoint::Connection for Connection {
     }
 
     // TODO: set a timeout for recving incoming Close
-    async fn on_outgoing_close<W>(&mut self, writer: &mut W, channel: u16, close: Close) -> Result<(), Self::Error>
+    async fn on_outgoing_close<W>(&mut self, writer: &mut W, error: Option<Error>) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin 
     {
         let frame = Frame::new(
-            channel, 
-            FrameBody::Close(close),
+            0u16, 
+            FrameBody::Close(Close { error }),
         );
         writer.send(frame).await?;
 
