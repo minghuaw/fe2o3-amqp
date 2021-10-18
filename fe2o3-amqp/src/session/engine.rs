@@ -52,12 +52,12 @@ where
             Some(frame) => frame?,
             None => todo!()
         };
-        let SessionFrame { channel: _, body } = frame;
+        let SessionFrame { channel, body } = frame;
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
             _ => return Err(EngineError::illegal_state())
         };
-        engine.session.on_incoming_begin(remote_begin).await
+        engine.session.on_incoming_begin(channel, remote_begin).await
             .map_err(Into::into)?;
         Ok(engine)
     }
@@ -72,31 +72,31 @@ where
 
         match body {
             SessionFrameBody::Begin(begin) => {
-                self.session.on_incoming_begin(begin).await
+                self.session.on_incoming_begin(channel, begin).await
                     .map_err(Into::into)?;
             },
             SessionFrameBody::Attach(attach) => {
-                self.session.on_incoming_attach(attach).await
+                self.session.on_incoming_attach(channel, attach).await
                     .map_err(Into::into)?;
             },
             SessionFrameBody::Flow(flow) => {
-                self.session.on_incoming_flow(flow).await
+                self.session.on_incoming_flow(channel, flow).await
                     .map_err(Into::into)?;
             },
             SessionFrameBody::Transfer{performative, payload} => {
-                self.session.on_incoming_transfer(performative, payload).await
+                self.session.on_incoming_transfer(channel, performative, payload).await
                     .map_err(Into::into)?;
             },
             SessionFrameBody::Disposition(disposition) => {
-                self.session.on_incoming_disposition(disposition).await
+                self.session.on_incoming_disposition(channel, disposition).await
                     .map_err(Into::into)?;
             },
             SessionFrameBody::Detach(detach) => {
-                self.session.on_incoming_detach(detach).await
+                self.session.on_incoming_detach(channel, detach).await
                     .map_err(Into::into)?;
             },
             SessionFrameBody::End(end) => {
-                self.session.on_incoming_end(end).await
+                self.session.on_incoming_end(channel, end).await
                     .map_err(Into::into)?;
             }
         }
@@ -155,6 +155,8 @@ where
                 }
             }
         }
+
+        println!(">>> Debug: SessionEngine exiting event_loop");
 
         Ok(())
     }

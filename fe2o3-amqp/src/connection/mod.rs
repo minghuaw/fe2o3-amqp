@@ -59,9 +59,9 @@ pub struct ConnectionHandle {
 }
 
 impl ConnectionHandle {
-    pub async fn close(self) -> Result<(), EngineError> {
+    pub async fn close(&mut self) -> Result<(), EngineError> {
         self.control.send(ConnectionControl::Close(None)).await?;
-        match (self.handle).await {
+        match (&mut self.handle).await {
             Ok(res) => res,
             Err(_) => Err(EngineError::Message("JoinError")),
         }

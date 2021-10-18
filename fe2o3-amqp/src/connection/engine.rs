@@ -301,19 +301,29 @@ where
                 incoming = self.transport.next() => {
                     match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
-                        None => todo!(),
+                        None => {
+                            // Incoming stream is closed
+                            println!(">>> Debug: Incoming connection is dropped");
+                            Ok(Running::Stop)
+                        },
                     }
                 },
                 control = self.control.recv() => {
                     match control {
                         Some(control) => self.on_control(control).await,
-                        None => todo!()
+                        None => {
+                            // All control channel are dropped (which is impossible)
+                            Ok(Running::Stop)
+                        }
                     }
                 },
                 outgoing = self.outgoing_session_frames.recv() => {
                     match outgoing {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
-                        None => todo!()
+                        None => {
+                            // all sessions are dropped
+                            Ok(Running::Stop)
+                        }
                     }
                 }
             };
@@ -330,6 +340,8 @@ where
                 }
             }
         }
+
+        println!(">>> Debug: ConnectionEngine exiting event_loop");
 
         Ok(())
     }

@@ -2,7 +2,7 @@ use serde_amqp::primitives::{Symbol, UInt};
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use tokio::sync::{mpsc};
 
-use crate::{connection::ConnectionHandle, control::{ConnectionControl, SessionControl}, error::EngineError, session::{SessionFrame, SessionState, engine::SessionEngine}};
+use crate::{connection::ConnectionHandle, control::{ConnectionControl, SessionControl}, error::EngineError, session::{SessionState, engine::SessionEngine}};
 
 use super::SessionHandle;
 
@@ -118,6 +118,7 @@ impl Builder {
             self.incoming_window,
             self.outgoing_window,
             self.handle_max.clone(),
+            None,
             0,
             0,
             0,

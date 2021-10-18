@@ -80,13 +80,13 @@ pub trait Session {
     fn local_state_mut(&mut self) -> &mut Self::State;
 
 
-    async fn on_incoming_begin(&mut self, begin: Begin) -> Result<(), Self::Error>;
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
-    async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
-    async fn on_incoming_disposition(&mut self, disposition: Disposition) -> Result<(), Self::Error>;
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
-    async fn on_incoming_end(&mut self, end: End) -> Result<(), Self::Error>;
+    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
+    async fn on_incoming_attach(&mut self, channel: u16, attach: Attach) -> Result<(), Self::Error>;
+    async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error>;
+    async fn on_incoming_transfer(&mut self, channel: u16,  transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
+    async fn on_incoming_disposition(&mut self, channel: u16, disposition: Disposition) -> Result<(), Self::Error>;
+    async fn on_incoming_detach(&mut self, channel: u16, detach: Detach) -> Result<(), Self::Error>;
+    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
     async fn on_outgoing_begin(&mut self, writer: &mut Sender<SessionFrame>) -> Result<(), Self::Error>;
     async fn on_outgoing_end(&mut self, writer: &mut Sender<SessionFrame>, error: Option<Error>) -> Result<(), Self::Error>;

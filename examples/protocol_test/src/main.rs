@@ -4,6 +4,7 @@ use std::time::Duration;
 // use fe2o3_amqp::transport::session::Session;
 
 use fe2o3_amqp::connection::Connection;
+use fe2o3_amqp::session::Session;
 
 #[tokio::main]
 async fn main() {
@@ -19,10 +20,10 @@ async fn main() {
         .await
         .unwrap();
 
-    // let mut session = Session::begin(&mut connection).await.unwrap();
+    let mut session = Session::begin(&mut connection).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // session.end().await.unwrap();
+    session.end().await.unwrap();
     connection.close().await.unwrap();
 }
