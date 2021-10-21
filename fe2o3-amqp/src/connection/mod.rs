@@ -182,21 +182,6 @@ impl endpoint::Connection for Connection {
         self.local_sessions.remove(session_id);
     }
 
-    // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error> {
-    //     match &self.local_state {
-    //         ConnectionState::Opened => { },
-    //         _ => return Err(EngineError::illegal_state())
-    //     };
-
-    //     let session_id = self.session_by_incoming_channel.get(&incoming_channel)
-    //         .ok_or_else(|| EngineError::not_found())?;
-    //     match self.local_sessions.get_mut(*session_id) {
-    //         Some(tx) => tx.send(frame).await?,
-    //         None => return Err(EngineError::not_found()),
-    //     };
-    //     Ok(())
-    // }
-
     /// Reacting to remote Open frame
     async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error> {
         match &self.local_state {
