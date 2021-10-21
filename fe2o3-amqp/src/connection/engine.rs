@@ -256,19 +256,19 @@ where
                     .map_err(Into::into)?
             },
             SessionFrameBody::Attach(attach) => {
-                Frame::new(channel, FrameBody::attach(attach))
+                Frame::new(channel, FrameBody::Attach(attach))
             },
             SessionFrameBody::Flow(flow) => {
-                Frame::new(channel, FrameBody::flow(flow))
+                Frame::new(channel, FrameBody::Flow(flow))
             },
             SessionFrameBody::Transfer{performative, payload} => {
-                Frame::new(channel, FrameBody::transfer(performative, payload))
+                Frame::new(channel, FrameBody::Transfer{performative, payload})
             },
             SessionFrameBody::Disposition(disposition) => {
-                Frame::new(channel, FrameBody::disposition(disposition))
+                Frame::new(channel, FrameBody::Disposition(disposition))
             },
             SessionFrameBody::Detach(detach) => {
-                Frame::new(channel, FrameBody::detach(detach))
+                Frame::new(channel, FrameBody::Detach(detach))
             },
             SessionFrameBody::End(end) => {
                 self.connection.on_outgoing_end(channel, end).await

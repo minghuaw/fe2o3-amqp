@@ -290,7 +290,7 @@ impl endpoint::Connection for Connection {
     {
         println!(">>> Debug: on_outgoing_open");
 
-        let body = FrameBody::open(self.local_open.clone());
+        let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
         writer.send(frame).await?;
 
@@ -314,7 +314,7 @@ impl endpoint::Connection for Connection {
             _ => return Err(EngineError::Message("Illegal local connection state"))
         }
 
-        let frame = Frame::new(channel, FrameBody::begin(begin));
+        let frame = Frame::new(channel, FrameBody::Begin(begin));
         Ok(frame)
     }
 
@@ -323,7 +323,7 @@ impl endpoint::Connection for Connection {
         
         self.session_by_outgoing_channel.remove(&channel)
             .ok_or_else(|| EngineError::Message("Local session id is not found"))?;
-        let frame = Frame::new(channel, FrameBody::end(end));
+        let frame = Frame::new(channel, FrameBody::End(end));
         Ok(frame)
     }
 
