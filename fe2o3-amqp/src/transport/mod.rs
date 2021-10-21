@@ -11,12 +11,7 @@ pub const FRAME_TYPE_AMQP: u8 = 0x00;
 pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
-// pub mod connection;
-// pub mod session;
-pub mod endpoint;
-pub mod link;
 pub mod protocol_header;
-pub mod handler;
 
 /* -------------------------------- Transport ------------------------------- */
 
