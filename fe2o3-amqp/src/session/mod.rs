@@ -209,7 +209,7 @@ impl endpoint::Session for Session {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone()
         };
-        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::begin(begin));
+        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::Begin(begin));
 
         // check local states
         match &self.local_state {
@@ -261,7 +261,7 @@ impl endpoint::Session for Session {
 
         let frame = SessionFrame::new(
             self.outgoing_channel,
-            SessionFrameBody::end(End { error })
+            SessionFrameBody::End(End { error })
         );
         writer.send(frame).await?;
         Ok(())

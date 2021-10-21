@@ -176,23 +176,23 @@ where
                     .map_err(Into::into)?;
             },
             FrameBody::Attach(attach) => {
-                let sframe = SessionFrame::new(channel, SessionFrameBody::attach(attach));
+                let sframe = SessionFrame::new(channel, SessionFrameBody::Attach(attach));
                 self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Flow(flow) => {
-                let sframe = SessionFrame::new(channel, SessionFrameBody::flow(flow));
+                let sframe = SessionFrame::new(channel, SessionFrameBody::Flow(flow));
                 self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Transfer{performative, payload} => {
-                let sframe = SessionFrame::new(channel, SessionFrameBody::transfer(performative, payload));
+                let sframe = SessionFrame::new(channel, SessionFrameBody::Transfer{performative, payload});
                 self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Disposition(disposition) => {
-                let sframe = SessionFrame::new(channel, SessionFrameBody::disposition(disposition));
+                let sframe = SessionFrame::new(channel, SessionFrameBody::Disposition(disposition));
                 self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::Detach(detach) => {
-                let sframe = SessionFrame::new(channel, SessionFrameBody::detach(detach));
+                let sframe = SessionFrame::new(channel, SessionFrameBody::Detach(detach));
                 self.forward_to_session(channel, sframe).await?;
             },
             FrameBody::End(end) => {

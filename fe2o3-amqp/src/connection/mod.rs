@@ -235,7 +235,7 @@ impl endpoint::Connection for Connection {
                 // forward begin to session
                 let tx = self.local_sessions.get_mut(*session_id)
                     .ok_or_else(|| EngineError::not_found())?;
-                let sframe = SessionFrame::new(channel, SessionFrameBody::begin(begin));
+                let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
                 tx.send(Ok(sframe)).await?;
             },
             None => todo!()
@@ -254,7 +254,7 @@ impl endpoint::Connection for Connection {
         }
 
         // Forward to session
-        let sframe = SessionFrame::new(channel, SessionFrameBody::end(end));
+        let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
         // Drop incoming channel
         let session_id = self.session_by_incoming_channel.remove(&channel)
             .ok_or_else(|| EngineError::not_found())?;
