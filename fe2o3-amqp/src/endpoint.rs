@@ -21,7 +21,7 @@
 
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::{definitions::Error, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}};
+use fe2o3_amqp_types::{definitions::{Error, Role}, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}};
 use futures_util::Sink;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -100,6 +100,7 @@ pub trait Session {
 
 #[async_trait]
 pub trait Link {
+    const ROLE: Role;
     type Error: Into<EngineError>;
 
     async fn on_incoming_attach() -> Result<(), Self::Error>;
