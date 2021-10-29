@@ -23,6 +23,8 @@ use crate::transport::amqp::Frame;
 use super::ConnectionState;
 use super::heartbeat::HeartBeat;
 
+pub(crate) type SessionId = usize;
+
 
 pub struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
