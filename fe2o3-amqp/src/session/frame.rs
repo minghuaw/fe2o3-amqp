@@ -19,7 +19,7 @@ impl SessionFrame {
 }
 
 pub enum SessionFrameBody {
-    Begin(Begin),
+    // Frames handled by Link
     Attach(Attach),
     Flow(Flow),
     Transfer {
@@ -28,5 +28,8 @@ pub enum SessionFrameBody {
     },
     Disposition(Disposition),
     Detach(Detach),
+
+    // Frames handled by Session
+    Begin(Begin),
     End(End),
 }

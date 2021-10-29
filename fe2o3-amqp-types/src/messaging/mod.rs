@@ -4,6 +4,9 @@ use serde_amqp::{primitives::Symbol, value::Value};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+mod message;
+pub use message::*;
+
 /* -------------------------- 3.2 Messaging Format -------------------------- */
 mod format;
 pub use format::*;

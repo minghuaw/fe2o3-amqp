@@ -1,4 +1,4 @@
-use tokio::{sync::mpsc::{Receiver, Sender}, task::JoinHandle};
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{control::SessionControl, endpoint, error::EngineError, session::Session, util::Running};
 
@@ -6,9 +6,9 @@ use super::{SessionFrame, SessionFrameBody, SessionState};
 
 pub struct SessionEngine<S> {
     session: S,
-    control: Receiver<SessionControl>,
-    incoming: Receiver<Result<SessionFrame, EngineError>>,
-    outgoing: Sender<SessionFrame>,
+    control: mpsc::Receiver<SessionControl>,
+    incoming: mpsc::Receiver<Result<SessionFrame, EngineError>>,
+    outgoing: mpsc::Sender<SessionFrame>,
 
     // outgoing_link_frames : Receiver<LinkFrame>,
 }
@@ -33,9 +33,9 @@ where
 
     pub async fn begin(
         session: S,
-        control: Receiver<SessionControl>,
-        incoming: Receiver<Result<SessionFrame, EngineError>>,
-        outgoing: Sender<SessionFrame>,
+        control: mpsc::Receiver<SessionControl>,
+        incoming: mpsc::Receiver<Result<SessionFrame, EngineError>>,
+        outgoing: mpsc::Sender<SessionFrame>,
     ) -> Result<Self, EngineError> {
         let mut engine = Self {
             session,

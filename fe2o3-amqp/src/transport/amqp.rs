@@ -95,8 +95,7 @@ impl Decoder for FrameCodec {
 
 #[derive(Debug)]
 pub enum FrameBody {
-    Open(Open),
-    Begin(Begin),
+    // Frames handled by Link
     Attach(Attach),
     Flow(Flow),
     Transfer {
@@ -105,7 +104,13 @@ pub enum FrameBody {
     },
     Disposition(Disposition),
     Detach(Detach),
+    
+    // Frames handled by Session
+    Begin(Begin),
     End(End),
+
+    // Frames handled by Connection
+    Open(Open),
     Close(Close),
     // An empty frame used only for heartbeat
     Empty,

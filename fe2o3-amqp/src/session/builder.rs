@@ -109,23 +109,23 @@ impl Builder {
         let (outgoing_channel, session_id) = oneshot_rx.await
             .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
 
-        let session = Session::new(
-            session_control_tx.clone(),
+        let session = Session {
+            control: session_control_tx.clone(),
             session_id,
             outgoing_channel,
             local_state,
-            self.next_outgoing_id,
-            self.incoming_window,
-            self.outgoing_window,
-            self.handle_max.clone(),
-            None,
-            0,
-            0,
-            0,
-            self.offered_capabilities.clone(),
-            self.desired_capabilities.clone(),
-            self.properties.clone()
-        );
+            next_outgoing_id: self.next_outgoing_id,
+            incoming_window: self.incoming_window,
+            outgoing_window: self.outgoing_window,
+            handle_max: self.handle_max.clone(),
+            incoming_channel: None,
+            next_incoming_id: 0,
+            remote_incoming_window: 0,
+            remote_outgoing_window: 0,
+            offered_capabilities: self.offered_capabilities.clone(),
+            desired_capabilities: self.desired_capabilities.clone(),
+            properties: self.properties.clone()
+        };
         let engine = SessionEngine::begin(session, session_control_rx, incoming_rx, conn.outgoing.clone()).await?;
         let handle = engine.spawn();
         let handle = SessionHandle {
