@@ -20,10 +20,8 @@ pub enum ConnectionControl {
 pub enum SessionControl {
     Begin,
     End(Option<Error>),
-    // CreateLink {
-
-    // },
-    // DropLink,
+    CreateLink ,
+    DropLink,
 }
 
 pub enum LinkControl {

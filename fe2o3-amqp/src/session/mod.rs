@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{definitions::{Error, Fields, Handle, SequenceNo, TransferNumber}, performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}, primitives::Symbol};
-use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{connection::ConnectionHandle, control::SessionControl, endpoint, error::EngineError, transport::{amqp::Frame}};
+use crate::{connection::ConnectionHandle, control::SessionControl, endpoint, error::EngineError, link::frame::LinkFrame, transport::{amqp::Frame}};
 
 mod frame;
 pub use frame::*;
@@ -35,8 +35,10 @@ pub enum SessionState {
 
 
 pub struct SessionHandle { 
-    control: Sender<SessionControl>,
+    control: mpsc::Sender<SessionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
+
+    pub(crate) outgoing: mpsc::Sender<LinkFrame>,
 }
 
 impl SessionHandle {
@@ -50,7 +52,7 @@ impl SessionHandle {
 }
 
 pub struct Session {
-    control: Sender<SessionControl>,
+    control: mpsc::Sender<SessionControl>,
     session_id: usize,
     outgoing_channel: u16,
 
@@ -203,7 +205,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_outgoing_begin(&mut self, writer: &mut Sender<SessionFrame>) -> Result<(), Self::Error> {
+    async fn on_outgoing_begin(&mut self, writer: &mut mpsc::Sender<SessionFrame>) -> Result<(), Self::Error> {
         let begin = Begin {
             remote_channel: self.incoming_channel,
             next_outgoing_id: self.next_outgoing_id,
@@ -252,7 +254,7 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_outgoing_end(&mut self, writer: &mut Sender<SessionFrame>, error: Option<Error>) -> Result<(), Self::Error> {
+    async fn on_outgoing_end(&mut self, writer: &mut mpsc::Sender<SessionFrame>, error: Option<Error>) -> Result<(), Self::Error> {
         match self.local_state {
             SessionState::Mapped => {
                 match error.is_some() {

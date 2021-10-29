@@ -2,7 +2,7 @@ use serde_amqp::primitives::{Symbol, UInt};
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use tokio::sync::{mpsc};
 
-use crate::{connection::ConnectionHandle, control::{ConnectionControl, SessionControl}, error::EngineError, session::{SessionState, engine::SessionEngine}};
+use crate::{connection::{ConnectionHandle, builder::DEFAULT_OUTGOING_BUFFER_SIZE}, control::{ConnectionControl, SessionControl}, error::EngineError, session::{SessionState, engine::SessionEngine}};
 
 use super::SessionHandle;
 
@@ -100,6 +100,7 @@ impl Builder {
         let (session_control_tx, session_control_rx) = mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
         let (oneshot_tx, oneshot_rx) = oneshot::channel::<(u16, usize)>();
         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(DEFAULT_OUTGOING_BUFFER_SIZE);
 
         // create session in connection::Engine
         conn.control.send(ConnectionControl::CreateSession{
@@ -126,11 +127,18 @@ impl Builder {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone()
         };
-        let engine = SessionEngine::begin(session, session_control_rx, incoming_rx, conn.outgoing.clone()).await?;
+        let engine = SessionEngine::begin(
+            session, 
+            session_control_rx, 
+            incoming_rx, 
+            conn.outgoing.clone(), 
+            outgoing_rx
+        ).await?;
         let handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,
-            handle
+            handle,
+            outgoing: outgoing_tx,
         };
         Ok(handle)
     }

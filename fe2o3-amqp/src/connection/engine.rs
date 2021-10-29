@@ -319,8 +319,8 @@ where
                         }
                     }
                 },
-                outgoing = self.outgoing_session_frames.recv() => {
-                    match outgoing {
+                frame = self.outgoing_session_frames.recv() => {
+                    match frame {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
                         None => {
                             // all sessions are dropped

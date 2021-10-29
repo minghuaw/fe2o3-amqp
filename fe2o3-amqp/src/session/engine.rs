@@ -1,6 +1,6 @@
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{control::SessionControl, endpoint, error::EngineError, session::Session, util::Running};
+use crate::{control::SessionControl, endpoint, error::EngineError, link::frame::LinkFrame, util::Running};
 
 use super::{SessionFrame, SessionFrameBody, SessionState};
 
@@ -10,38 +10,26 @@ pub struct SessionEngine<S> {
     incoming: mpsc::Receiver<Result<SessionFrame, EngineError>>,
     outgoing: mpsc::Sender<SessionFrame>,
 
-    // outgoing_link_frames : Receiver<LinkFrame>,
+    outgoing_link_frames : mpsc::Receiver<LinkFrame>,
 }
 
 impl<S> SessionEngine<S> 
 where 
     S: endpoint::Session<State = SessionState> + Send + 'static
 {
-    // pub fn new(
-    //     session: S,
-    //     control: Receiver<SessionControl>,
-    //     incoming: Receiver<Result<SessionFrame, EngineError>>,
-    //     outgoing: Sender<SessionFrame>,
-    // ) -> Self {
-    //     Self {
-    //         session,
-    //         control,
-    //         incoming,
-    //         outgoing
-    //     }
-    // }
-
     pub async fn begin(
         session: S,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<Result<SessionFrame, EngineError>>,
         outgoing: mpsc::Sender<SessionFrame>,
+        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
     ) -> Result<Self, EngineError> {
         let mut engine = Self {
             session,
             control,
             incoming,
-            outgoing
+            outgoing,
+            outgoing_link_frames,
         };
 
         // send a begin
@@ -117,6 +105,12 @@ where
             SessionControl::End(error) => {
                 self.session.on_outgoing_end(&mut self.outgoing, error).await
                     .map_err(Into::into)?;
+            },
+            SessionControl::CreateLink => {
+                todo!()
+            },
+            SessionControl::DropLink => {
+                todo!()
             }
         }
 
@@ -124,6 +118,11 @@ where
             SessionState::Unmapped => Ok(Running::Stop),
             _ => Ok(Running::Continue)
         }
+    }
+
+    #[inline]
+    async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, EngineError> {
+        todo!()
     }
 
     async fn event_loop(mut self) -> Result<(), EngineError> {
@@ -139,6 +138,15 @@ where
                     match control {
                         Some(control) => self.on_control(control).await,
                         None => todo!()
+                    }
+                },
+                frame = self.outgoing_link_frames.recv() => {
+                    match frame {
+                        Some(frame) => self.on_outgoing_link_frames(frame).await,
+                        None => {
+                            // all Links and SessionHandle are dropped
+                            todo!()
+                        }
                     }
                 }
             };
