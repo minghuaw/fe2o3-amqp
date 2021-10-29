@@ -2,8 +2,8 @@ pub mod frame;
 pub mod sender;
 pub mod receiver;
 
-pub use sender::*;
-pub use receiver::*;
+pub use sender::SenderLink;
+pub use receiver::ReceiverLink;
 
 pub enum LinkState {
     /// The initial state after initialization
