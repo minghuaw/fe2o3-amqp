@@ -1,10 +1,6 @@
 use std::marker::PhantomData;
 
-use fe2o3_amqp_types::{
-    definitions::{ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{Source, Target},
-    primitives::{Symbol, ULong},
-};
+use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, primitives::{Symbol, ULong}};
 
 use crate::connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE;
 
@@ -31,6 +27,7 @@ pub struct Builder<Role, NameState> {
     pub max_message_size: Option<ULong>,
     pub offered_capabilities: Option<Vec<Symbol>>,
     pub desired_capabilities: Option<Vec<Symbol>>,
+    pub properties: Option<Fields>,
 
     pub buffer_size: usize,
 
@@ -51,8 +48,9 @@ impl<Role> Builder<Role, WithoutName> {
             max_message_size: Default::default(),
             offered_capabilities: Default::default(),
             desired_capabilities: Default::default(),
+            properties: Default::default(),
+            
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
-
             role: PhantomData,
             name_state: PhantomData,
         }
@@ -82,6 +80,8 @@ impl<Role, NameState> Builder<Role, NameState> {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
+            properties: Default::default(),
+
             role: PhantomData,
             name_state: self.name_state,
         }
@@ -99,6 +99,8 @@ impl<Role, NameState> Builder<Role, NameState> {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
+            properties: Default::default(),
+
             role: PhantomData,
             name_state: self.name_state,
         }
@@ -114,11 +116,61 @@ impl<Role, NameState> Builder<Role, NameState> {
         self
     }
 
-    // pub fn source(&mut self, source: Source) -> &mut 
+    pub fn source(&mut self, source: Option<Source>) -> &mut Self {
+        self.source = source;
+        self
+    }
+
+    pub fn target(&mut self, target: Option<Target>) -> &mut Self {
+        self.target = target;
+        self
+    }
+
+    pub fn max_message_size(&mut self, max_size: Option<ULong>) -> &mut Self {
+        self.max_message_size = max_size;
+        self
+    }
+
+    pub fn add_offered_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+        match &mut self.offered_capabilities {
+            Some(capabilities) => capabilities.push(capability.into()),
+            None => self.offered_capabilities = Some(vec![capability.into()]),
+        }
+        self
+    }
+
+    pub fn set_offered_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
+        self.offered_capabilities = capabilities;
+        self
+    }
+
+    pub fn add_desired_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+        match &mut self.desired_capabilities {
+            Some(capabilities) => capabilities.push(capability.into()),
+            None => self.desired_capabilities = Some(vec![capability.into()]),
+        }
+        self
+    }
+
+    pub fn set_desired_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
+        self.desired_capabilities = capabilities;
+        self
+    }
+
+    pub fn properties(&mut self, properties: Option<Fields>) -> &mut Self {
+        self.properties = properties;
+        self
+    }
 }
 
 impl<NameState> Builder<role::Sender, NameState> {
-
+    /// This MUST NOT be null if role is sender,
+    /// and it is ignored if the role is receiver.
+    /// See subsection 2.6.7.
+    pub fn initial_delivery_count(&mut self, count: SequenceNo) -> &mut Self {
+        self.initial_delivery_count = count;
+        self
+    }
 }
 
 impl<NameState> Builder<role::Receiver, NameState> {

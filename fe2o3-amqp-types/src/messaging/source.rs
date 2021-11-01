@@ -13,7 +13,7 @@ use super::{
 /// <type name="source" class="composite" source="list" provides="source">
 ///     <descriptor name="amqp:source:list" code="0x00000000:0x00000028"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:source:list",
     code = 0x0000_0000_0000_0028,
@@ -50,11 +50,29 @@ pub struct Source {
     pub filter: Option<FilterSet>,
 
     /// <field name="default-outcome" type="*" requires="outcome"/>
-    pub default_outcome: Outcome,
+    pub default_outcome: Option<Outcome>,
 
     /// <field name="outcomes" type="symbol" multiple="true"/>
-    pub outcomes: Vec<Symbol>,
+    pub outcomes: Option<Vec<Symbol>>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
-    pub capabilities: Vec<Symbol>,
+    pub capabilities: Option<Vec<Symbol>>,
+}
+
+impl Source {
+    pub fn builder() -> Builder {
+        todo!()
+    }
+}
+
+pub struct Builder {
+    source: Source
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        Self {
+            source: Default::default()
+        }
+    }
 }
