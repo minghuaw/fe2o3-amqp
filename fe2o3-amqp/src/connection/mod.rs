@@ -8,7 +8,7 @@ use slab::Slab;
 use tokio::{sync::mpsc::{self, Receiver, Sender}, task::JoinHandle};
 use url::Url;
 
-use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::{Session, SessionFrameBody}, session::SessionFrame, transport::{amqp::{Frame, FrameBody}}};
+use crate::{control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, session::{Session, SessionFrameBody, SessionIncomingItem}, session::SessionFrame, transport::{amqp::{Frame, FrameBody}}};
 
 use self::builder::WithoutContainerId;
 
@@ -74,7 +74,7 @@ pub struct Connection {
     // local 
     local_state: ConnectionState,
     local_open: Open,
-    local_sessions: Slab<Sender<Result<SessionFrame, EngineError>>>,
+    local_sessions: Slab<Sender<SessionIncomingItem>>,
     session_by_incoming_channel: BTreeMap<u16, usize>,
     session_by_outgoing_channel: BTreeMap<u16, usize>,
 
@@ -133,6 +133,7 @@ impl endpoint::Connection for Connection {
     type Error = EngineError;
     type State = ConnectionState;
     type Session = Session;
+    type SessionItem = SessionIncomingItem;
 
     fn local_state(&self) -> &Self::State {
         &self.local_state
@@ -146,7 +147,7 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
-    fn create_session(&mut self, tx: Sender<Result<SessionFrame, EngineError>>) -> Result<(u16, usize), Self::Error> {
+    fn create_session(&mut self, tx: Sender<Self::SessionItem>) -> Result<(u16, usize), Self::Error> {
         match &self.local_state {
             ConnectionState::Start 
             | ConnectionState::HeaderSent
@@ -332,12 +333,12 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Result<SessionFrame, EngineError>>> {
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>> {
         let session_id = self.session_by_incoming_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
     }
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Result<SessionFrame, EngineError>>> {
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>> {
         let session_id = self.session_by_outgoing_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
     }

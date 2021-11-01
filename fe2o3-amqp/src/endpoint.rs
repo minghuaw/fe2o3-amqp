@@ -21,23 +21,26 @@
 
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::{definitions::{Error, Role}, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}};
+use fe2o3_amqp_types::{definitions::{Error, Handle, Role}, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}};
 use futures_util::Sink;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::{error::EngineError, session::SessionFrame, transport::{amqp::Frame}};
+use crate::{connection::engine::SessionId, error::EngineError, session::{SessionFrame, SessionIncomingItem}, transport::{amqp::Frame}};
 
 #[async_trait]
 pub trait Connection {
     type Error: Into<EngineError> + Send;
     type State: Send;
     type Session: Session + Send;
+    type SessionItem;
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
     fn local_open(&self) -> &Open;
 
-    fn create_session(&mut self, tx: Sender<Result<SessionFrame, EngineError>>) -> Result<(u16, usize), Self::Error>;
+    // Allocate outgoing channel id and session id to a new session
+    fn create_session(&mut self, tx: Sender<Self::SessionItem>) -> Result<(u16, SessionId), Self::Error>;
+    // Remove outgoing id and session id association
     fn drop_session(&mut self, session_id: usize);
 
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
@@ -56,19 +59,25 @@ pub trait Connection {
     /// Reacting to remote Close frame
     async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error>;
 
+    /// Sending out an Open frame
+    /// 
+    /// The write is passed in is because sending an Open frame also changes the local
+    /// connection state. If the sending fails outside, coming back 
+    /// and revert the state changes would be too complicated
     async fn on_outgoing_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
         
     async fn on_outgoing_close<W>(&mut self, writer: &mut W, error: Option<Error>) -> Result<(), Self::Error>
         where W: Sink<Frame, Error = EngineError> + Send + Unpin;
         
+    /// Intercepting and outgoing Begin frame
     async fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>;
 
     async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Result<SessionFrame, EngineError>>>;
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>>;
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Result<SessionFrame, EngineError>>>;
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>>;
 }
 
 #[async_trait]
@@ -79,6 +88,9 @@ pub trait Session {
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
 
+    // Allocate new local handle for new Link
+    fn create_link(&mut self) -> Result<Handle, EngineError>;
+    fn drop_link(&mut self, handle: Handle);
 
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
     async fn on_incoming_attach(&mut self, channel: u16, attach: Attach) -> Result<(), Self::Error>;

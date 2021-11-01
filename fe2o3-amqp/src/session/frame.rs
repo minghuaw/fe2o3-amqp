@@ -1,6 +1,9 @@
 use bytes::BytesMut;
 use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
 
+use crate::error::EngineError;
+
+pub type SessionIncomingItem = Result<SessionFrame, EngineError>;
 
 /// A subset of AMQP frames that should be handled or intercepted by
 /// a Session endpoint.

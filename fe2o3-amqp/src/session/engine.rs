@@ -2,12 +2,12 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{control::SessionControl, endpoint, error::EngineError, link::frame::LinkFrame, util::Running};
 
-use super::{SessionFrame, SessionFrameBody, SessionState};
+use super::{SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
 
 pub struct SessionEngine<S> {
     session: S,
     control: mpsc::Receiver<SessionControl>,
-    incoming: mpsc::Receiver<Result<SessionFrame, EngineError>>,
+    incoming: mpsc::Receiver<SessionIncomingItem>,
     outgoing: mpsc::Sender<SessionFrame>,
 
     outgoing_link_frames : mpsc::Receiver<LinkFrame>,
@@ -20,7 +20,7 @@ where
     pub async fn begin(
         session: S,
         control: mpsc::Receiver<SessionControl>,
-        incoming: mpsc::Receiver<Result<SessionFrame, EngineError>>,
+        incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
     ) -> Result<Self, EngineError> {
@@ -55,7 +55,7 @@ where
     }
 
     #[inline]
-    async fn on_incoming(&mut self, incoming: Result<SessionFrame, EngineError>) -> Result<Running, EngineError> {
+    async fn on_incoming(&mut self, incoming: SessionIncomingItem) -> Result<Running, EngineError> {
         let SessionFrame { channel, body } = incoming?;
 
         match body {

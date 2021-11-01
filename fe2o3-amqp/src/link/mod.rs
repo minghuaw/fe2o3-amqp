@@ -27,3 +27,9 @@ pub enum LinkState {
     /// The link is detached
     Detached,
 }
+
+pub type LinkIncomingItem = LinkFrame;
+
+pub enum LinkFrame {
+
+}
