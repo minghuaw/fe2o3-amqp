@@ -9,6 +9,7 @@ use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
     rename_all = "kebab-case"
 )]
 struct Foo {
+    b: u64,
     is_fool: Option<bool>,
     #[amqp_contract(default)]
     a: i32,

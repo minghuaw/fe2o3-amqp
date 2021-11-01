@@ -83,10 +83,9 @@ pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
         })
 }
 
-/// Buffer the Null (for None value)
-pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
+pub(crate) fn macro_rules_buffer_if_none_for_tuple_struct() -> proc_macro2::TokenStream {
     quote! {
-        macro_rules! buffer_if_none {
+        macro_rules! buffer_if_none_for_tuple {
             // for tuple struct
             ($state: ident, $nulls: ident, $fident: expr, Option<$ftype: ty>) => {
                 if $fident.is_some() {
@@ -106,26 +105,31 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
                 $nulls = 0;
                 $state.serialize_field($fident)?;
             };
+        }
+    }
+}
 
+/// Buffer the Null (for None value)
+pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! buffer_if_none {
             // for struct
             ($state: ident, $nulls: ident, $fident: expr, $fname: expr, Option<$ftype: ty>) => {
                 if $fident.is_some() {
-                    for _ in 0..$nulls {
+                    for field_name in $nulls.drain(..) {
                         // name is not used in list encoding
-                        $state.serialize_field("", &())?; // `None` and `()` share the same encoding
+                        $state.serialize_field(field_name, &())?; // `None` and `()` share the same encoding
                     }
-                    $nulls = 0;
                     $state.serialize_field($fname, $fident)?;
                 } else {
-                    $nulls += 1;
+                    $nulls.push($fname);
                 }
             };
             ($state: ident, $nulls: ident, $fident: expr, $fname: expr, $ftype: ty) => {
-                for _ in 0..$nulls {
+                for field_name in $nulls.drain(..) {
                     // name is not used in list encoding
-                    $state.serialize_field("", &())?; // `None` and `()` share the same encoding
+                    $state.serialize_field(field_name, &())?; // `None` and `()` share the same encoding
                 }
-                $nulls = 0;
                 $state.serialize_field($fname, $fident)?;
             };
         }
@@ -136,31 +140,17 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
 pub(crate) fn macro_rules_buffer_if_eq_default() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! buffer_if_eq_default {
-            // for tuple struct
-            ($state: ident, $nulls: ident, $fident: expr, $ftype: ty) => {
-                if *$fident != <$ftype as Default>::default() {
-                    for _ in 0..$nulls {
-                        $state.serialize_field(&())?; // `None` and `()` share the same encoding
-                    }
-                    $nulls = 0;
-                    $state.serialize_field($fident)?;
-                } else {
-                    $nulls += 1;
-                }
-            };
-
             // for struct
             ($state: ident, $nulls: ident, $fident: expr, $fname: expr, $ftype: ty) => {
                 if *$fident != <$ftype as Default>::default() {
                     // Only serialize if value is not equal to default
-                    for _ in 0..$nulls {
+                    for field_name in $nulls.drain(..) {
                         // name is not used in list encoding
-                        $state.serialize_field("", &())?; // `None` and `()` share the same encoding
+                        $state.serialize_field(field_name, &())?; // `None` and `()` share the same encoding
                     }
-                    $nulls = 0;
                     $state.serialize_field($fname, $fident)?;
                 } else {
-                    $nulls += 1;
+                    $nulls.push($fname);
                 }
             };
         }

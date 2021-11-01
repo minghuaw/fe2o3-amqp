@@ -1,7 +1,7 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_none, macro_rules_buffer_if_eq_default, macro_rules_serialize_if_some, macro_rules_serialize_if_neq_default, parse_described_struct_attr, parse_named_field_attrs}};
+use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_eq_default, macro_rules_buffer_if_none, macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default, macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs}};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -112,7 +112,7 @@ fn expand_serialize_tuple_struct(
         .collect();
     let field_types: Vec<&syn::Type> = fields.unnamed.iter().map(|f| &f.ty).collect();
     let len = field_indices.len();
-    let buffer_if_none = macro_rules_buffer_if_none();
+    let buffer_if_none = macro_rules_buffer_if_none_for_tuple_struct();
 
     quote! {
         #buffer_if_none
@@ -202,10 +202,10 @@ fn expand_serialize_struct(
             {
                 let token = match attr.default {
                     true => quote! {
-                        buffer_if_eq_default!(state, null_count, &self.#id, #name, #ty);
+                        buffer_if_eq_default!(state, nulls, &self.#id, #name, #ty);
                     },
                     false => quote! {
-                        buffer_if_none!(state, null_count, &self.#id, #name, #ty);
+                        buffer_if_none!(state, nulls, &self.#id, #name, #ty);
                     }
                 };
                 field_impls.push(token);
@@ -241,7 +241,8 @@ fn expand_serialize_struct(
                 S: serde_amqp::serde::ser::Serializer,
             {
                 use serde_amqp::serde::ser::SerializeStruct;
-                let mut null_count = 0u32;
+                // let mut null_count = 0u32;
+                let mut nulls: Vec<&str> = Vec::new();
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
                 // serialize descriptor
