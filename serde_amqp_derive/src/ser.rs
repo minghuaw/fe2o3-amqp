@@ -102,7 +102,7 @@ fn expand_serialize_tuple_struct(
                 unimplemented!()
             }
         }
-        EncodingType::Map => unimplemented!(),
+        EncodingType::Map => panic!("Map encoding for tuple struct is not supported"),
     };
     let field_indices: Vec<syn::Index> = fields
         .unnamed
@@ -132,7 +132,7 @@ fn expand_serialize_tuple_struct(
                 // in serde_amqp serializer, this will be deducted
                 state.serialize_field(&#descriptor)?;
                 // #( state.serialize_field(&self.#field_indices)?; )*
-                #( buffer_if_none!(state, null_count, &self.#field_indices, #field_types); )*
+                #( buffer_if_none_for_tuple!(state, null_count, &self.#field_indices, #field_types); )*
                 state.end()
             }
         }
