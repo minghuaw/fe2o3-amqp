@@ -93,19 +93,6 @@ pub struct MessageAnnotations(pub Annotations);
 /// Immutable properties of the message.
 /// <type name="properties" class="composite" source="list" provides="section">
 ///     <descriptor name="amqp:properties:list" code="0x00000000:0x00000073"/>
-///     <field name="message-id" type="*" requires="message-id"/>
-///     <field name="user-id" type="binary"/>
-///     <field name="to" type="*" requires="address"/>
-///     <field name="subject" type="string"/>
-///     <field name="reply-to" type="*" requires="address"/>
-///     <field name="correlation-id" type="*" requires="message-id"/>
-///     <field name="content-type" type="symbol"/>
-///     <field name="content-encoding" type="symbol"/>
-///     <field name="absolute-expiry-time" type="timestamp"/>
-///     <field name="creation-time" type="timestamp"/>
-///     <field name="group-id" type="string"/>
-///     <field name="group-sequence" type="sequence-no"/>
-///     <field name="reply-to-group-id" type="string"/>
 /// </type>
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
@@ -115,18 +102,43 @@ pub struct MessageAnnotations(pub Annotations);
     rename_all = "kebab-case"
 )]
 pub struct Properties {
+    /// <field name="message-id" type="*" requires="message-id"/>
     message_id: Option<MessageId>,
+    
+    /// <field name="user-id" type="binary"/>
     user_id: Option<Binary>,
+    
+    /// <field name="to" type="*" requires="address"/>
     to: Option<Address>,
+    
+    /// <field name="subject" type="string"/>
     subject: Option<String>,
+    
+    /// <field name="reply-to" type="*" requires="address"/>
     reply_to: Option<Address>,
+    
+    /// <field name="correlation-id" type="*" requires="message-id"/>
     correlation_id: Option<MessageId>,
+    
+    /// <field name="content-type" type="symbol"/>
     content_type: Option<Symbol>,
+    
+    /// <field name="content-encoding" type="symbol"/>
     content_encoding: Option<Symbol>,
+    
+    /// <field name="absolute-expiry-time" type="timestamp"/>
     absolute_expiry_time: Option<Timestamp>,
+    
+    /// <field name="creation-time" type="timestamp"/>
     creation_time: Option<Timestamp>,
+    
+    /// <field name="group-id" type="string"/>
     group_id: Option<String>,
+    
+    /// <field name="group-sequence" type="sequence-no"/>
     group_sequence: Option<SequenceNo>,
+
+    /// <field name="reply-to-group-id" type="string"/>
     reply_to_groud_id: Option<String>,
 }
 

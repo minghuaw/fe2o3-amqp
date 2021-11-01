@@ -2,11 +2,9 @@ use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::Error;
 
-// <type name="end" class="composite" source="list" provides="frame">
-// <descriptor name="amqp:end:list" code="0x00000000:0x00000017"/>
-// <field name="error" type="error"/>
-// </type>
-
+/// <type name="end" class="composite" source="list" provides="frame">
+/// <descriptor name="amqp:end:list" code="0x00000000:0x00000017"/>
+/// </type>
 #[derive(Debug, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:end:list",
@@ -15,6 +13,7 @@ use crate::definitions::Error;
     rename_all = "kebab-case"
 )]
 pub struct End {
+    // <field name="error" type="error"/>
     pub error: Option<Error>,
 }
 #[cfg(test)]

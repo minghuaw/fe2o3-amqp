@@ -29,8 +29,6 @@ mod outcome_impl;
 ///
 /// <type name="received" class="composite" source="list" provides="delivery-state">
 /// <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
-/// <field name="section-number" type="uint" mandatory="true"/>
-/// <field name="section-offset" type="ulong" mandatory="true"/>
 /// </type>
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
@@ -40,7 +38,10 @@ mod outcome_impl;
     rename_all = "kebab-case"
 )]
 pub struct Received {
+    /// <field name="section-number" type="uint" mandatory="true"/>
     pub section_number: UInt,
+    
+    /// <field name="section-offset" type="ulong" mandatory="true"/>
     pub section_offset: ULong,
 }
 
@@ -64,7 +65,6 @@ pub struct Accepted {}
 ///
 /// <type name="rejected" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
-///     <field name="error" type="error"/>
 /// </type>
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
@@ -74,6 +74,7 @@ pub struct Accepted {}
     rename_all = "kebab-case"
 )]
 pub struct Rejected {
+    /// <field name="error" type="error"/>
     pub error: Option<Error>,
 }
 
@@ -95,9 +96,6 @@ pub struct Released {}
 /// The modified outcome.
 /// <type name="modified" class="composite" source="list" provides="delivery-state, outcome">
 ///     <descriptor name="amqp:modified:list" code="0x00000000:0x00000027"/>
-///     <field name="delivery-failed" type="boolean"/>
-///     <field name="undeliverable-here" type="boolean"/>
-///     <field name="message-annotations" type="fields"/>
 /// </type>
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
@@ -107,8 +105,13 @@ pub struct Released {}
     rename_all = "kebab-case"
 )]
 pub struct Modified {
+    /// <field name="delivery-failed" type="boolean"/>
     pub delivery_failed: Option<Boolean>,
+    
+    /// <field name="undeliverable-here" type="boolean"/>
     pub undeliverable_here: Option<Boolean>,
+    
+    /// <field name="message-annotations" type="fields"/>
     pub message_annotations: Option<Fields>,
 }
 

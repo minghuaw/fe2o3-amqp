@@ -2,6 +2,9 @@ use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use super::{ErrorCondition, Fields};
 
+/// <type name="error" class="composite" source="list">
+/// <descriptor name="amqp:error:list" code="0x00000000:0x0000001d"/>
+/// </type>
 #[derive(Debug, Clone, PartialEq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:error:list",
@@ -10,8 +13,13 @@ use super::{ErrorCondition, Fields};
     rename_all = "kebab-case"
 )]
 pub struct Error {
+    /// <field name="condition" type="symbol" requires="error-condition" mandatory="true"/>
     condition: ErrorCondition,
+    
+    /// <field name="description" type="string"/>
     description: Option<String>,
+    
+    /// <field name="info" type="fields"/>
     info: Option<Fields>,
 }
 

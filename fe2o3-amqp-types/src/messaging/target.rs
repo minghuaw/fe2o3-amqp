@@ -41,5 +41,5 @@ pub struct Target {
     dynamic_node_properties: Option<NodeProperties>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
-    capabilities: Vec<Symbol>,
+    capabilities: Option<Vec<Symbol>>,
 }

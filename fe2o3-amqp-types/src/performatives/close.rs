@@ -2,6 +2,9 @@ use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use crate::definitions::Error;
 
+/// <type name="close" class="composite" source="list" provides="frame">
+/// <descriptor name="amqp:close:list" code="0x00000000:0x00000018"/>
+/// </type>
 #[derive(Debug, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
@@ -11,6 +14,7 @@ use crate::definitions::Error;
     rename_all = "kebab-case"
 )]
 pub struct Close {
+    /// <field name="error" type="error"/>
     pub error: Option<Error>,
 }
 
