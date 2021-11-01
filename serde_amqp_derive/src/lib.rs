@@ -16,6 +16,7 @@ enum EncodingType {
 
 #[derive(Debug, Clone, FromDeriveInput)]
 #[darling(attributes(amqp_contract))]
+#[allow(dead_code)]
 struct DescribedAttr {
     #[darling(default)]
     pub name: Option<String>,
