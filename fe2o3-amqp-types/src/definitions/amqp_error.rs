@@ -3,8 +3,8 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use serde_amqp::{primitives::Symbol};
 use serde::{de, ser};
+use serde_amqp::primitives::Symbol;
 
 use super::ErrorCondition;
 
@@ -123,11 +123,11 @@ mod tests {
     use std::fmt::Debug;
 
     use crate::definitions::AmqpError;
+    use serde::de;
+    use serde::ser;
     use serde_amqp::de::from_slice;
     use serde_amqp::format_code::EncodingCodes;
     use serde_amqp::ser::to_vec;
-    use serde::de;
-    use serde::ser;
 
     fn assert_eq_on_serialized_and_expected<T>(val: T, expected: Vec<u8>)
     where

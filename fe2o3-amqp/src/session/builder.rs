@@ -1,8 +1,13 @@
-use serde_amqp::primitives::{Symbol, UInt};
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
-use tokio::sync::{mpsc};
+use serde_amqp::primitives::{Symbol, UInt};
+use tokio::sync::mpsc;
 
-use crate::{connection::{ConnectionHandle, builder::DEFAULT_OUTGOING_BUFFER_SIZE}, control::{ConnectionControl, SessionControl}, error::EngineError, session::{SessionState, engine::SessionEngine}};
+use crate::{
+    connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
+    control::{ConnectionControl, SessionControl},
+    error::EngineError,
+    session::{engine::SessionEngine, SessionState},
+};
 
 use super::SessionHandle;
 
@@ -64,8 +69,8 @@ impl Builder {
         self
     }
 
-    pub fn set_offered_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
-        self.offered_capabilities = Some(capabilities);
+    pub fn set_offered_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
+        self.offered_capabilities = capabilities;
         self
     }
 
@@ -77,13 +82,13 @@ impl Builder {
         self
     }
 
-    pub fn set_desired_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
-        self.desired_capabilities = Some(capabilities);
+    pub fn set_desired_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
+        self.desired_capabilities = capabilities;
         self
     }
 
-    pub fn properties(&mut self, properties: Fields) -> &mut Self {
-        self.properties = Some(properties);
+    pub fn properties(&mut self, properties: Option<Fields>) -> &mut Self {
+        self.properties = properties;
         self
     }
 
@@ -92,22 +97,29 @@ impl Builder {
         self
     }
 
-    pub async fn begin(&mut self, conn: &mut ConnectionHandle) -> Result<SessionHandle, EngineError> {
-        use tokio::sync::oneshot;
+    pub async fn begin(
+        &mut self,
+        conn: &mut ConnectionHandle,
+    ) -> Result<SessionHandle, EngineError> {
         use super::Session;
+        use tokio::sync::oneshot;
 
         let local_state = SessionState::Unmapped;
-        let (session_control_tx, session_control_rx) = mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+        let (session_control_tx, session_control_rx) =
+            mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
         let (oneshot_tx, oneshot_rx) = oneshot::channel::<(u16, usize)>();
         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(DEFAULT_OUTGOING_BUFFER_SIZE);
 
         // create session in connection::Engine
-        conn.control.send(ConnectionControl::CreateSession{
-            tx: incoming_tx,
-            responder: oneshot_tx
-        }).await?;
-        let (outgoing_channel, session_id) = oneshot_rx.await
+        conn.control
+            .send(ConnectionControl::CreateSession {
+                tx: incoming_tx,
+                responder: oneshot_tx,
+            })
+            .await?;
+        let (outgoing_channel, session_id) = oneshot_rx
+            .await
             .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
 
         let session = Session {
@@ -125,15 +137,16 @@ impl Builder {
             remote_outgoing_window: 0,
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone()
+            properties: self.properties.clone(),
         };
         let engine = SessionEngine::begin(
-            session, 
-            session_control_rx, 
-            incoming_rx, 
-            conn.outgoing.clone(), 
-            outgoing_rx
-        ).await?;
+            session,
+            session_control_rx,
+            incoming_rx,
+            conn.outgoing.clone(),
+            outgoing_rx,
+        )
+        .await?;
         let handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,

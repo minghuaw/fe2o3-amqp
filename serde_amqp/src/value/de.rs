@@ -5,7 +5,8 @@ use serde::de::{self};
 
 use crate::{
     __constants::{
-        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, VALUE
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIPTOR, SYMBOL, TIMESTAMP,
+        UUID, VALUE,
     },
     error::Error,
     format_code::EncodingCodes,

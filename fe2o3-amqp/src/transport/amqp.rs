@@ -1,9 +1,9 @@
 use bytes::{Buf, BufMut, BytesMut};
-use serde_amqp::{de::Deserializer, read::IoReader};
 use fe2o3_amqp_types::performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
 };
 use serde::{ser::Serialize, Deserialize};
+use serde_amqp::{de::Deserializer, read::IoReader};
 use tokio_util::codec::{Decoder, Encoder};
 
 use crate::error::EngineError;
@@ -104,7 +104,7 @@ pub enum FrameBody {
     },
     Disposition(Disposition),
     Detach(Detach),
-    
+
     // Frames handled by Session
     Begin(Begin),
     End(End),
@@ -120,18 +120,18 @@ impl FrameBody {
     /// The payload will be ignored unless the performative is Transfer
     pub fn from_parts(performative: Performative, payload: Option<BytesMut>) -> Self {
         match performative {
-            Performative::Open(performative) => FrameBody::Open (performative),
-            Performative::Begin(performative) => FrameBody::Begin (performative),
-            Performative::Attach(performative) => FrameBody::Attach (performative),
-            Performative::Flow(performative) => FrameBody::Flow (performative),
+            Performative::Open(performative) => FrameBody::Open(performative),
+            Performative::Begin(performative) => FrameBody::Begin(performative),
+            Performative::Attach(performative) => FrameBody::Attach(performative),
+            Performative::Flow(performative) => FrameBody::Flow(performative),
             Performative::Transfer(performative) => FrameBody::Transfer {
                 performative,
                 payload,
             },
-            Performative::Disposition(performative) => FrameBody::Disposition (performative),
-            Performative::Detach(performative) => FrameBody::Detach (performative),
-            Performative::End(performative) => FrameBody::End (performative),
-            Performative::Close(performative) => FrameBody::Close (performative),
+            Performative::Disposition(performative) => FrameBody::Disposition(performative),
+            Performative::Detach(performative) => FrameBody::Detach(performative),
+            Performative::End(performative) => FrameBody::End(performative),
+            Performative::Close(performative) => FrameBody::Close(performative),
         }
     }
 }
@@ -146,10 +146,10 @@ impl Encoder<FrameBody> for FrameBodyCodec {
 
         let mut serializer = Serializer::from(dst.writer());
         match item {
-            FrameBody::Open (performative) => performative.serialize(&mut serializer),
-            FrameBody::Begin (performative) => performative.serialize(&mut serializer),
-            FrameBody::Attach (performative) => performative.serialize(&mut serializer),
-            FrameBody::Flow (performative) => performative.serialize(&mut serializer),
+            FrameBody::Open(performative) => performative.serialize(&mut serializer),
+            FrameBody::Begin(performative) => performative.serialize(&mut serializer),
+            FrameBody::Attach(performative) => performative.serialize(&mut serializer),
+            FrameBody::Flow(performative) => performative.serialize(&mut serializer),
             FrameBody::Transfer {
                 performative,
                 payload,
@@ -160,10 +160,10 @@ impl Encoder<FrameBody> for FrameBodyCodec {
                 }
                 Ok(())
             }
-            FrameBody::Disposition (performative) => performative.serialize(&mut serializer),
-            FrameBody::Detach (performative) => performative.serialize(&mut serializer),
-            FrameBody::End (performative) => performative.serialize(&mut serializer),
-            FrameBody::Close (performative) => performative.serialize(&mut serializer),
+            FrameBody::Disposition(performative) => performative.serialize(&mut serializer),
+            FrameBody::Detach(performative) => performative.serialize(&mut serializer),
+            FrameBody::End(performative) => performative.serialize(&mut serializer),
+            FrameBody::Close(performative) => performative.serialize(&mut serializer),
             FrameBody::Empty => Ok(()),
         }
         .map_err(Into::into)

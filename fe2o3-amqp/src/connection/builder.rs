@@ -1,19 +1,25 @@
 use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
+use fe2o3_amqp_types::{
+    definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
+    performatives::{ChannelMax, MaxFrameSize, Open},
+};
 use serde_amqp::primitives::Symbol;
-use fe2o3_amqp_types::{definitions::{Fields, IetfLanguageTag, MIN_MAX_FRAME_SIZE, Milliseconds}, performatives::{ChannelMax, MaxFrameSize, Open}};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 use url::Url;
 
-use crate::{connection::{Connection, ConnectionState}, error::EngineError, transport::protocol_header::ProtocolHeader, transport::{
-        Transport,
-    }};
+use crate::{
+    connection::{Connection, ConnectionState},
+    error::EngineError,
+    transport::protocol_header::ProtocolHeader,
+    transport::Transport,
+};
 
-use super::ConnectionHandle;
 use super::engine::ConnectionEngine;
+use super::ConnectionHandle;
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -166,8 +172,11 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    pub async fn open_with_stream<Io>(&self, mut stream: Io) -> Result<ConnectionHandle, EngineError> 
-    where 
+    pub async fn open_with_stream<Io>(
+        &self,
+        mut stream: Io,
+    ) -> Result<ConnectionHandle, EngineError>
+    where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         use tokio::sync::mpsc;
@@ -196,12 +205,13 @@ impl Builder<WithContainerId> {
             desired_capabilities: self.desired_capabilities.clone(),
             properties: self.properties.clone(),
         };
-        
+
         // create channels
-        let (connection_control_tx, connection_control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+        let (connection_control_tx, connection_control_rx) =
+            mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
         // let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
-        
+
         let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
         let engine = ConnectionEngine::open(
             transport,
@@ -209,14 +219,14 @@ impl Builder<WithContainerId> {
             connection_control_rx,
             outgoing_rx,
             // session_control_rx
-        ).await?;
+        )
+        .await?;
         let handle = engine.spawn();
 
         let connection_handle = ConnectionHandle {
             control: connection_control_tx,
             handle,
-            outgoing: outgoing_tx
-            // session_control: session_control_tx
+            outgoing: outgoing_tx, // session_control: session_control_tx
         };
 
         Ok(connection_handle)
@@ -256,7 +266,10 @@ impl Builder<WithContainerId> {
         todo!()
     }
 
-    pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, EngineError> {
+    pub async fn pipelined_open(
+        &self,
+        _url: impl TryInto<Url>,
+    ) -> Result<ConnectionHandle, EngineError> {
         todo!()
     }
 }

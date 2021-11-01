@@ -5,7 +5,7 @@ use serde::{ser, Serialize};
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        SYMBOL, TIMESTAMP, UUID, DESCRIPTOR
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
     },
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
@@ -1893,10 +1893,10 @@ mod test {
     #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_serialize_composite_macro_wrapper() {
-        use std::collections::BTreeMap;
         use crate as serde_amqp;
-        use crate::primitives::Symbol;
         use crate::macros::SerializeComposite;
+        use crate::primitives::Symbol;
+        use std::collections::BTreeMap;
 
         #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code = 0x01, encoding = "basic")]

@@ -4,18 +4,22 @@ use fe2o3_amqp_types::{messaging::Message, performatives::Disposition};
 
 use crate::{error::EngineError, session::SessionHandle};
 
-pub mod builder;
+use super::{
+    builder::{self, WithoutName},
+    role,
+};
 
-pub struct SenderLink {
-    
-}
+pub struct SenderLink {}
 
 impl SenderLink {
-    pub fn builder() -> builder::Builder {
+    pub fn builder() -> builder::Builder<role::Sender, WithoutName> {
         todo!()
     }
 
-    pub async fn attach(session: &mut SessionHandle, name: impl Into<String>) -> Result<Self, EngineError> {
+    pub async fn attach(
+        session: &mut SessionHandle,
+        name: impl Into<String>,
+    ) -> Result<Self, EngineError> {
         todo!()
     }
 
@@ -23,9 +27,13 @@ impl SenderLink {
         todo!()
     }
 
-    pub async fn send_with_timeout(&mut self, message: Message, timeout: Duration) -> Result<Disposition, EngineError> {
+    pub async fn send_with_timeout(
+        &mut self,
+        message: Message,
+        timeout: Duration,
+    ) -> Result<Disposition, EngineError> {
         todo!()
-    } 
+    }
 
     pub async fn detach(&mut self) -> Result<(), EngineError> {
         todo!()
@@ -33,7 +41,4 @@ impl SenderLink {
 }
 
 /// TODO: impl `futures_util::io::IntoSink`
-pub struct SenderLinkSink {
-
-}
-
+pub struct SenderLinkSink {}

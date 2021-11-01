@@ -1517,9 +1517,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
 mod tests {
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{
-        descriptor::Descriptor, format_code::EncodingCodes,
-    };
+    use crate::{descriptor::Descriptor, format_code::EncodingCodes};
 
     use super::{from_reader, from_slice};
 
@@ -1823,8 +1821,8 @@ mod tests {
     #[test]
     fn test_deserialize_unit_struct_with_described_macro() {
         use crate as serde_amqp;
-        use crate::ser::to_vec;
         use crate::macros::{DeserializeComposite, SerializeComposite};
+        use crate::ser::to_vec;
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
@@ -1864,8 +1862,8 @@ mod tests {
     #[test]
     fn test_deserialize_tuple_struct_with_described_macro() {
         use crate as serde_amqp;
-        use crate::ser::to_vec;
         use crate::macros::{DeserializeComposite, SerializeComposite};
+        use crate::ser::to_vec;
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(code = 13, encoding = "list")]
@@ -1881,8 +1879,8 @@ mod tests {
     #[test]
     fn test_deserialize_struct_with_described_macro() {
         use crate as serde_amqp;
-        use crate::ser::to_vec;
         use crate::macros::{DeserializeComposite, SerializeComposite};
+        use crate::ser::to_vec;
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(code = 13, encoding = "list", rename_all = "kebab-case")]
@@ -2075,11 +2073,11 @@ mod tests {
     #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_deserialize_basic_wrapper() {
-        use std::collections::BTreeMap;
         use crate as serde_amqp;
-        use crate::ser::to_vec;
-        use crate::primitives::Symbol;
         use crate::macros::{DeserializeComposite, SerializeComposite};
+        use crate::primitives::Symbol;
+        use crate::ser::to_vec;
+        use std::collections::BTreeMap;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(code = 0x01, encoding = "basic")]

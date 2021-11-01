@@ -1,7 +1,10 @@
 use std::convert::{TryFrom, TryInto};
 
-use serde_amqp::{primitives::Symbol};
-use serde::{de::{self}, ser};
+use serde::{
+    de::{self},
+    ser,
+};
+use serde_amqp::primitives::Symbol;
 
 /// 3.5.7 Standard Distribution Mode
 /// Link distribution policy.
@@ -34,7 +37,7 @@ impl<'a> TryFrom<&'a str> for DistributionMode {
         let val = match value {
             "move" => DistributionMode::Move,
             "copy" => DistributionMode::Copy,
-            _ => return Err(value)
+            _ => return Err(value),
         };
         Ok(val)
     }

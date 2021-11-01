@@ -1,9 +1,9 @@
+use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
     primitives::{Binary, Boolean, Symbol, Timestamp, UByte, UInt, ULong, Uuid},
     value::Value,
 };
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::{

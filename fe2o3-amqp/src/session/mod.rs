@@ -1,14 +1,28 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::{definitions::{Error, Fields, Handle, SequenceNo, TransferNumber}, performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}, primitives::Symbol};
-use tokio::{sync::mpsc::{self, Sender}, task::JoinHandle};
+use fe2o3_amqp_types::{
+    definitions::{Error, Fields, Handle, SequenceNo, TransferNumber},
+    performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
+    primitives::Symbol,
+};
+use tokio::{
+    sync::mpsc::{self, Sender},
+    task::JoinHandle,
+};
 
-use crate::{connection::ConnectionHandle, control::SessionControl, endpoint, error::EngineError, link::{LinkFrame, LinkIncomingItem}, transport::{amqp::Frame}};
+use crate::{
+    connection::ConnectionHandle,
+    control::SessionControl,
+    endpoint,
+    error::EngineError,
+    link::{LinkFrame, LinkIncomingItem},
+    transport::amqp::Frame,
+};
 
 mod frame;
 pub use frame::*;
-pub mod engine;
 pub mod builder;
+pub mod engine;
 
 // 2.5.5 Session States
 // UNMAPPED
@@ -25,7 +39,7 @@ pub enum SessionState {
     BeginReceived,
 
     Mapped,
-    
+
     EndSent,
 
     EndReceived,
@@ -33,8 +47,7 @@ pub enum SessionState {
     Discarding,
 }
 
-
-pub struct SessionHandle { 
+pub struct SessionHandle {
     control: mpsc::Sender<SessionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
 
@@ -46,7 +59,7 @@ impl SessionHandle {
         self.control.send(SessionControl::End(None)).await?;
         match (&mut self.handle).await {
             Ok(res) => res,
-            Err(_) => Err(EngineError::Message("JoinError"))
+            Err(_) => Err(EngineError::Message("JoinError")),
         }
     }
 }
@@ -57,7 +70,7 @@ pub struct Session {
     outgoing_channel: u16,
 
     // local amqp states
-    local_state: SessionState,    
+    local_state: SessionState,
     next_outgoing_id: TransferNumber,
     incoming_window: TransferNumber,
     outgoing_window: TransferNumber,
@@ -83,7 +96,7 @@ impl Session {
     //     outgoing_channel: u16,
 
     //     // local amqp states
-    //     local_state: SessionState,    
+    //     local_state: SessionState,
     //     next_outgoing_id: TransferNumber,
     //     incoming_window: TransferNumber,
     //     outgoing_window: TransferNumber,
@@ -130,9 +143,7 @@ impl Session {
     }
 
     pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, EngineError> {
-        Session::builder()
-            .begin(conn)
-            .await
+        Session::builder().begin(conn).await
     }
 }
 
@@ -161,7 +172,7 @@ impl endpoint::Session for Session {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
-            _ => return Err(EngineError::illegal_state())
+            _ => return Err(EngineError::illegal_state()),
         }
 
         self.incoming_channel = Some(channel);
@@ -172,7 +183,11 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_incoming_attach(&mut self, channel: u16, attach: Attach) -> Result<(), Self::Error> {
+    async fn on_incoming_attach(
+        &mut self,
+        channel: u16,
+        attach: Attach,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
@@ -180,30 +195,45 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_incoming_transfer(&mut self, channel: u16, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error> {
+    async fn on_incoming_transfer(
+        &mut self,
+        channel: u16,
+        transfer: Transfer,
+        payload: Option<BytesMut>,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_incoming_disposition(&mut self, channel: u16, disposition: Disposition) -> Result<(), Self::Error> {
+    async fn on_incoming_disposition(
+        &mut self,
+        channel: u16,
+        disposition: Disposition,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
-    async fn on_incoming_detach(&mut self, channel: u16, detach: Detach) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(
+        &mut self,
+        channel: u16,
+        detach: Detach,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
         if Some(channel) != self.incoming_channel {
-            return Err(EngineError::Message("Incoming channel mismatch"))
+            return Err(EngineError::Message("Incoming channel mismatch"));
         }
-        
+
         match self.local_state {
             SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
                 self.control.send(SessionControl::End(None)).await?;
-            },
-            SessionState::Discarding | SessionState::EndSent => self.local_state = SessionState::Unmapped,
-            _ => return Err(EngineError::illegal_state())
+            }
+            SessionState::Discarding | SessionState::EndSent => {
+                self.local_state = SessionState::Unmapped
+            }
+            _ => return Err(EngineError::illegal_state()),
         }
 
         if let Some(error) = end.error {
@@ -213,7 +243,10 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_outgoing_begin(&mut self, writer: &mut mpsc::Sender<SessionFrame>) -> Result<(), Self::Error> {
+    async fn on_outgoing_begin(
+        &mut self,
+        writer: &mut mpsc::Sender<SessionFrame>,
+    ) -> Result<(), Self::Error> {
         let begin = Begin {
             remote_channel: self.incoming_channel,
             next_outgoing_id: self.next_outgoing_id,
@@ -222,7 +255,7 @@ impl endpoint::Session for Session {
             handle_max: self.handle_max.clone(),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone()
+            properties: self.properties.clone(),
         };
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::Begin(begin));
 
@@ -231,14 +264,14 @@ impl endpoint::Session for Session {
             SessionState::Unmapped => {
                 writer.send(frame).await?;
                 self.local_state = SessionState::BeginSent;
-            },
+            }
             SessionState::BeginReceived => {
                 writer.send(frame).await?;
                 self.local_state = SessionState::Mapped;
-            },
-            _ => return Err(EngineError::Message("Illegal local state"))
+            }
+            _ => return Err(EngineError::Message("Illegal local state")),
         }
-        
+
         Ok(())
     }
 
@@ -250,11 +283,18 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_outgoing_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<SessionFrame, Self::Error> {
+    async fn on_outgoing_transfer(
+        &mut self,
+        transfer: Transfer,
+        payload: Option<BytesMut>,
+    ) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_disposition(&mut self, disposition: Disposition) -> Result<SessionFrame, Self::Error> {
+    async fn on_outgoing_disposition(
+        &mut self,
+        disposition: Disposition,
+    ) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
@@ -262,22 +302,21 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_outgoing_end(&mut self, writer: &mut mpsc::Sender<SessionFrame>, error: Option<Error>) -> Result<(), Self::Error> {
+    async fn on_outgoing_end(
+        &mut self,
+        writer: &mut mpsc::Sender<SessionFrame>,
+        error: Option<Error>,
+    ) -> Result<(), Self::Error> {
         match self.local_state {
-            SessionState::Mapped => {
-                match error.is_some() {
-                    true => self.local_state = SessionState::Discarding,
-                    false => self.local_state = SessionState::EndSent,
-                }
+            SessionState::Mapped => match error.is_some() {
+                true => self.local_state = SessionState::Discarding,
+                false => self.local_state = SessionState::EndSent,
             },
             SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(EngineError::Message("Illegal local state"))
+            _ => return Err(EngineError::Message("Illegal local state")),
         }
 
-        let frame = SessionFrame::new(
-            self.outgoing_channel,
-            SessionFrameBody::End(End { error })
-        );
+        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
         writer.send(frame).await?;
         Ok(())
     }

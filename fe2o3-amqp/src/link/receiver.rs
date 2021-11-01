@@ -2,18 +2,22 @@ use fe2o3_amqp_types::messaging::Message;
 
 use crate::{error::EngineError, session::SessionHandle};
 
-pub mod builder;
+use super::{
+    builder::{self, WithoutName},
+    role,
+};
 
-pub struct ReceiverLink {
-    
-}
+pub struct ReceiverLink {}
 
 impl ReceiverLink {
-    pub fn builder() -> builder::Builder {
+    pub fn builder() -> builder::Builder<role::Receiver, WithoutName> {
         todo!()
     }
 
-    pub async fn attach(session: &mut SessionHandle, name: impl Into<String>) -> Result<Self, EngineError> {
+    pub async fn attach(
+        session: &mut SessionHandle,
+        name: impl Into<String>,
+    ) -> Result<Self, EngineError> {
         todo!()
     }
 
@@ -31,6 +35,4 @@ impl ReceiverLink {
 }
 
 /// TODO: impl `futures_util::future::IntoStream`
-pub struct ReceiverLinkStream {
-
-}
+pub struct ReceiverLinkStream {}

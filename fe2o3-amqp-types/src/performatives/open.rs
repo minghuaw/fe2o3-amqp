@@ -1,8 +1,8 @@
+use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
     primitives::{Symbol, UInt, UShort},
 };
-use serde::{Deserialize, Serialize};
 
 use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 

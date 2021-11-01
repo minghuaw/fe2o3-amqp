@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use serde_amqp::described::Described;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::{primitives::Symbol, value::Value};
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 mod message;

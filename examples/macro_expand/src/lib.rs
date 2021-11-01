@@ -32,9 +32,9 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Boolean, UInt, ULong};
-use serde::{Deserialize, Serialize};
 
 // use crate::definitions::{Error, Fields};
 

@@ -115,13 +115,13 @@ pub struct Modified {
 #[cfg(test)]
 mod tests {
     //! Test serialization and deserialization
+    use serde::Deserialize;
     use serde_amqp::{
         de::{from_slice, Deserializer},
         format_code::EncodingCodes,
         read::SliceReader,
         ser::to_vec,
     };
-    use serde::Deserialize;
 
     use super::{Accepted, DeliveryState, Modified, Received, Rejected, Released};
 

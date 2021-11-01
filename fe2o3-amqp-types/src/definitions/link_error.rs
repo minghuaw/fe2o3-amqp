@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 
 use serde::{de, ser};
 
-use serde_amqp::{primitives::Symbol};
+use serde_amqp::primitives::Symbol;
 
 use super::ErrorCondition;
 

@@ -1,6 +1,9 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use super::{ApplicationProperties, Data, DeliveryAnnotations, Footer, Header, MessageAnnotations, Properties};
+use super::{
+    ApplicationProperties, Data, DeliveryAnnotations, Footer, Header, MessageAnnotations,
+    Properties,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -10,5 +13,5 @@ pub struct Message {
     properties: Properties,
     application_properties: ApplicationProperties,
     data: Data,
-    footer: Footer
+    footer: Footer,
 }

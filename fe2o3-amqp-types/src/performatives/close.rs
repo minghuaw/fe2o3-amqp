@@ -16,8 +16,6 @@ pub struct Close {
 
 impl Close {
     pub fn new(error: Option<Error>) -> Self {
-        Self {
-            error
-        }
+        Self { error }
     }
 }

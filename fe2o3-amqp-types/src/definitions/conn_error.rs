@@ -3,8 +3,8 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use serde_amqp::{primitives::Symbol};
 use serde::{de, ser};
+use serde_amqp::primitives::Symbol;
 
 use super::ErrorCondition;
 

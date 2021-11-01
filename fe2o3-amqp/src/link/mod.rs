@@ -1,15 +1,25 @@
 mod frame;
 pub use frame::*;
-pub mod sender;
+pub mod builder;
 pub mod receiver;
+pub mod sender;
 
-pub use sender::SenderLink;
 pub use receiver::ReceiverLink;
+pub use sender::SenderLink;
+
+pub mod role {
+
+    /// Type state for link::builder::Builder
+    pub struct Sender {}
+
+    /// Type state for link::builder::Builder
+    pub struct Receiver {}
+}
 
 pub enum LinkState {
     /// The initial state after initialization
     Unattached,
-    
+
     /// An attach frame has been sent
     AttachSent,
 
@@ -29,6 +39,4 @@ pub enum LinkState {
     Detached,
 }
 
-pub enum LinkFrame {
-
-}
+pub enum LinkFrame {}

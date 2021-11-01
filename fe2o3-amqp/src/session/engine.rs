@@ -1,6 +1,8 @@
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{control::SessionControl, endpoint, error::EngineError, link::LinkFrame, util::Running};
+use crate::{
+    control::SessionControl, endpoint, error::EngineError, link::LinkFrame, util::Running,
+};
 
 use super::{SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
 
@@ -10,12 +12,12 @@ pub struct SessionEngine<S> {
     incoming: mpsc::Receiver<SessionIncomingItem>,
     outgoing: mpsc::Sender<SessionFrame>,
 
-    outgoing_link_frames : mpsc::Receiver<LinkFrame>,
+    outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl<S> SessionEngine<S> 
-where 
-    S: endpoint::Session<State = SessionState> + Send + 'static
+impl<S> SessionEngine<S>
+where
+    S: endpoint::Session<State = SessionState> + Send + 'static,
 {
     pub async fn begin(
         session: S,
@@ -33,24 +35,30 @@ where
         };
 
         // send a begin
-        engine.session.on_outgoing_begin(&mut engine.outgoing).await
+        engine
+            .session
+            .on_outgoing_begin(&mut engine.outgoing)
+            .await
             .map_err(Into::into)?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame?,
-            None => todo!()
+            None => todo!(),
         };
         let SessionFrame { channel, body } = frame;
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
-            _ => return Err(EngineError::illegal_state())
+            _ => return Err(EngineError::illegal_state()),
         };
-        engine.session.on_incoming_begin(channel, remote_begin).await
+        engine
+            .session
+            .on_incoming_begin(channel, remote_begin)
+            .await
             .map_err(Into::into)?;
         Ok(engine)
     }
 
-    pub fn spawn(self) ->JoinHandle<Result<(), EngineError>> {
+    pub fn spawn(self) -> JoinHandle<Result<(), EngineError>> {
         tokio::spawn(self.event_loop())
     }
 
@@ -60,38 +68,55 @@ where
 
         match body {
             SessionFrameBody::Begin(begin) => {
-                self.session.on_incoming_begin(channel, begin).await
+                self.session
+                    .on_incoming_begin(channel, begin)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionFrameBody::Attach(attach) => {
-                self.session.on_incoming_attach(channel, attach).await
+                self.session
+                    .on_incoming_attach(channel, attach)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionFrameBody::Flow(flow) => {
-                self.session.on_incoming_flow(channel, flow).await
+                self.session
+                    .on_incoming_flow(channel, flow)
+                    .await
                     .map_err(Into::into)?;
-            },
-            SessionFrameBody::Transfer{performative, payload} => {
-                self.session.on_incoming_transfer(channel, performative, payload).await
+            }
+            SessionFrameBody::Transfer {
+                performative,
+                payload,
+            } => {
+                self.session
+                    .on_incoming_transfer(channel, performative, payload)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionFrameBody::Disposition(disposition) => {
-                self.session.on_incoming_disposition(channel, disposition).await
+                self.session
+                    .on_incoming_disposition(channel, disposition)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionFrameBody::Detach(detach) => {
-                self.session.on_incoming_detach(channel, detach).await
+                self.session
+                    .on_incoming_detach(channel, detach)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionFrameBody::End(end) => {
-                self.session.on_incoming_end(channel, end).await
+                self.session
+                    .on_incoming_end(channel, end)
+                    .await
                     .map_err(Into::into)?;
             }
         }
 
         match self.session.local_state() {
             SessionState::Unmapped => Ok(Running::Stop),
-            _ => Ok(Running::Continue)
+            _ => Ok(Running::Continue),
         }
     }
 
@@ -99,16 +124,20 @@ where
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, EngineError> {
         match control {
             SessionControl::Begin => {
-                self.session.on_outgoing_begin(&mut self.outgoing).await
+                self.session
+                    .on_outgoing_begin(&mut self.outgoing)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionControl::End(error) => {
-                self.session.on_outgoing_end(&mut self.outgoing, error).await
+                self.session
+                    .on_outgoing_end(&mut self.outgoing, error)
+                    .await
                     .map_err(Into::into)?;
-            },
+            }
             SessionControl::CreateLink => {
                 todo!()
-            },
+            }
             SessionControl::DropLink => {
                 todo!()
             }
@@ -116,7 +145,7 @@ where
 
         match self.session.local_state() {
             SessionState::Unmapped => Ok(Running::Stop),
-            _ => Ok(Running::Continue)
+            _ => Ok(Running::Continue),
         }
     }
 
@@ -152,11 +181,9 @@ where
             };
 
             match result {
-                Ok(running) => {
-                    match running {
-                        Running::Continue => {},
-                        Running::Stop => break,
-                    }
+                Ok(running) => match running {
+                    Running::Continue => {}
+                    Running::Stop => break,
                 },
                 Err(err) => {
                     todo!()
@@ -169,4 +196,3 @@ where
         Ok(())
     }
 }
-
