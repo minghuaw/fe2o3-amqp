@@ -1,7 +1,7 @@
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Boolean, Symbol};
 
-use crate::definitions::Seconds;
+use crate::definitions::{Fields, Seconds};
 
 use super::{
     Address, DistributionMode, FilterSet, NodeProperties, Outcome, TerminusDurability,
@@ -76,7 +76,62 @@ impl Builder {
         }
     }
 
-    // pub fn address(&mut self, address: impl Into<Address>) -> &mut Self {
-    //     self.source.address = 
-    // }
+    pub fn address(&mut self, address: impl Into<Address>) -> &mut Self {
+        self.source.address = Some(address.into());
+        self
+    }
+
+    pub fn durable(&mut self, durability: TerminusDurability) -> &mut Self {
+        self.source.durable = durability;
+        self
+    }
+
+    pub fn expiry_policy(&mut self, policy: TerminusExpiryPolicy) -> &mut Self {
+        self.source.expiry_policy = policy;
+        self
+    }
+
+    pub fn timeout(&mut self, timeout: impl Into<Seconds>) -> &mut Self {
+        self.source.timeout = timeout.into();
+        self
+    }
+
+    pub fn dynamic(&mut self, dynamic: bool) -> &mut Self {
+        self.source.dynamic = dynamic;
+        self
+    }
+
+    pub fn dynamic_node_properties(&mut self, properties: impl Into<Fields>) -> &mut Self {
+        self.source.dynamic_node_properties = Some(properties.into());
+        self
+    }
+
+    pub fn distribution_mode(&mut self, mode: DistributionMode) -> &mut Self {
+        self.source.distribution_mode = Some(mode);
+        self
+    }
+
+    pub fn filter(&mut self, filter_set: impl Into<FilterSet>) -> &mut Self {
+        self.source.filter = Some(filter_set.into());
+        self
+    }
+
+    pub fn default_outcome(&mut self, outcome: Outcome) -> &mut Self {
+        self.source.default_outcome = Some(outcome.into());
+        self
+    }
+
+    pub fn outcomes(&mut self, outcomes: Vec<Symbol>) -> &mut Self {
+        self.source.outcomes = Some(outcomes);
+        self
+    }
+
+    pub fn capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+        self.source.capabilities = Some(capabilities);
+        self
+    }
+
+    pub fn build(self) -> Source {
+        self.source
+    }
 }

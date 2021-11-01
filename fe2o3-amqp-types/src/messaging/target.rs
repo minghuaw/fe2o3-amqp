@@ -1,7 +1,7 @@
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Boolean, Symbol};
 
-use crate::definitions::Seconds;
+use crate::definitions::{Fields, Seconds};
 
 use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
 
@@ -10,7 +10,7 @@ use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
 /// <type name="target" class="composite" source="list" provides="target">
 ///     <descriptor name="amqp:target:list" code="0x00000000:0x00000029"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:target:list",
     code = 0x0000_0000_0000_0029,
@@ -42,4 +42,55 @@ pub struct Target {
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
     capabilities: Option<Vec<Symbol>>,
+}
+
+pub struct Builder {
+    pub target: Target
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        Self {
+            target: Default::default()
+        }
+    }
+
+    pub fn address(&mut self, address: impl Into<Address>) -> &mut Self {
+        self.target.address = Some(address.into());
+        self
+    }
+
+    pub fn durable(&mut self, durability: TerminusDurability) -> &mut Self {
+        self.target.durable = durability;
+        self
+    }
+
+    pub fn expiry_policy(&mut self, policy: TerminusExpiryPolicy) -> &mut Self {
+        self.target.expiry_policy = policy;
+        self
+    }
+
+    pub fn timeout(&mut self, timeout: impl Into<Seconds>) -> &mut Self {
+        self.target.timeout = timeout.into();
+        self
+    }
+
+    pub fn dynamic(&mut self, dynamic: bool) -> &mut Self {
+        self.target.dynamic = dynamic;
+        self
+    }
+
+    pub fn dynamic_node_properties(&mut self, properties: impl Into<Fields>) -> &mut Self {
+        self.target.dynamic_node_properties = Some(properties.into());
+        self
+    }
+
+    pub fn capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+        self.target.capabilities = Some(capabilities);
+        self
+    }
+
+    pub fn build(self) -> Target {
+        self.target
+    }
 }

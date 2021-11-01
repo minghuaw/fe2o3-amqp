@@ -1,11 +1,10 @@
-use serde::{Deserialize, Serialize};
 use serde_amqp::described::Described;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::{primitives::Symbol, value::Value};
 use std::collections::BTreeMap;
 
-mod message;
-pub use message::*;
+pub mod message;
+pub use message::Message;
 
 /* -------------------------- 3.2 Messaging Format -------------------------- */
 mod format;
@@ -16,20 +15,20 @@ mod delivery_state;
 pub use delivery_state::*;
 
 /* -------------------------- 3.5 Source and Target ------------------------- */
-mod source;
-pub use source::*;
+pub mod source;
+pub use source::Source;
 
-mod target;
-pub use target::*;
+pub mod target;
+pub use target::Target;
 
-mod terminus_durability;
-pub use terminus_durability::*;
+pub mod terminus_durability;
+pub use terminus_durability::TerminusDurability;
 
-mod term_expiry_policy;
-pub use term_expiry_policy::*;
+pub mod term_expiry_policy;
+pub use term_expiry_policy::TerminusExpiryPolicy;
 
-mod dist_mode;
-pub use dist_mode::*;
+pub mod dist_mode;
+pub use dist_mode::DistributionMode;
 
 /// 3.5.8 Filter Set
 /// <type name="filter-set" class="restricted" source="map"/>
@@ -54,8 +53,8 @@ use crate::definitions::Fields;
 /// 3.5.9 Node Properties
 /// Properties of a node.
 /// <type name="node-properties" class="restricted" source="fields"/>
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeProperties(Fields);
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+pub type NodeProperties = Fields;
 
 // // The lifetime of a dynamically generated node.
 // // Definitionally, the lifetime will never be less than the lifetime
