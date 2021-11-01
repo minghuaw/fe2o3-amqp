@@ -1,9 +1,9 @@
-use darling::FromDeriveInput;
+use darling::{FromDeriveInput, FromMeta};
 use proc_macro2::Span;
 use quote::quote;
-use syn::DeriveInput;
+use syn::{DeriveInput, Field};
 
-use crate::{DescribedAttr, DescribedStructAttr, EncodingType};
+use crate::{DescribedAttr, DescribedStructAttr, EncodingType, FieldAttr};
 
 pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> DescribedStructAttr {
     let attr = DescribedAttr::from_derive_input(&input).unwrap();
@@ -55,6 +55,17 @@ pub(crate) fn convert_to_case(
     };
 
     Ok(s)
+}
+
+pub(crate) fn parse_named_field_attrs<'a>(fields: impl Iterator<Item = &'a Field>) -> Vec<FieldAttr> {
+    fields.map(|f| {
+        f.attrs.iter().find_map(|a| {
+            let item = a.parse_meta().unwrap();
+            FieldAttr::from_meta(&item).ok()
+        })
+    })
+    .map(|o| o.unwrap_or_else(|| FieldAttr { default: false }))
+    .collect()
 }
 
 pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
@@ -121,6 +132,41 @@ pub(crate) fn macro_rules_buffer_if_none() -> proc_macro2::TokenStream {
     }
 }
 
+/// Buffer the Null (for None value)
+pub(crate) fn macro_rules_buffer_if_eq_default() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! buffer_if_eq_default {
+            // for tuple struct
+            ($state: ident, $nulls: ident, $fident: expr, $ftype: ty) => {
+                if *$fident != <$ftype as Default>::default() {
+                    for _ in 0..$nulls {
+                        $state.serialize_field(&())?; // `None` and `()` share the same encoding
+                    }
+                    $nulls = 0;
+                    $state.serialize_field($fident)?;
+                } else {
+                    $nulls += 1;
+                }
+            };
+
+            // for struct
+            ($state: ident, $nulls: ident, $fident: expr, $fname: expr, $ftype: ty) => {
+                if *$fident != <$ftype as Default>::default() {
+                    // Only serialize if value is not equal to default
+                    for _ in 0..$nulls {
+                        // name is not used in list encoding
+                        $state.serialize_field("", &())?; // `None` and `()` share the same encoding
+                    }
+                    $nulls = 0;
+                    $state.serialize_field($fname, $fident)?;
+                } else {
+                    $nulls += 1;
+                }
+            };
+        }
+    }
+}
+
 pub(crate) fn macro_rules_serialize_if_some() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! serialize_if_some {
@@ -137,12 +183,15 @@ pub(crate) fn macro_rules_serialize_if_some() -> proc_macro2::TokenStream {
     }
 }
 
-pub(crate) fn macro_rules_serialize_if_not_default() -> proc_macro2::TokenStream {
+pub(crate) fn macro_rules_serialize_if_neq_default() -> proc_macro2::TokenStream {
     quote! {
-        macro_rules! serialize_if_not_default() {
-            () => {
-                todo!()
-            }
+        macro_rules! serialize_if_neq_default {
+            // for struct
+            ($state: ident, $fident: expr, $fname: expr, $ftype: ty) => {
+                if *$fident != <$ftype as Default>::default() {
+                    $state.serialize_field($fname, $fident)?;
+                }
+            };
         }
     }
 }

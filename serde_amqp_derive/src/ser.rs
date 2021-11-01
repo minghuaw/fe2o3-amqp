@@ -1,13 +1,7 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{
-    util::{
-        convert_to_case, macro_rules_buffer_if_none, macro_rules_serialize_if_some,
-        parse_described_struct_attr,
-    },
-    DescribedStructAttr, EncodingType,
-};
+use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_none, macro_rules_buffer_if_eq_default, macro_rules_serialize_if_some, macro_rules_serialize_if_neq_default, parse_described_struct_attr, parse_named_field_attrs}};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -153,6 +147,7 @@ fn expand_serialize_struct(
     fields: &syn::FieldsNamed,
     ctx: &DeriveInput,
 ) -> proc_macro2::TokenStream {
+    let len = fields.named.len();
     let struct_name = match encoding {
         EncodingType::Basic => {
             if fields.named.len() == 1 {
@@ -175,31 +170,62 @@ fn expand_serialize_struct(
         .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
-    let len = field_idents.len();
+    let field_attrs = parse_named_field_attrs(fields.named.iter());
     let declarative_macro = match encoding {
-        EncodingType::Basic | EncodingType::List => macro_rules_buffer_if_none(),
-        EncodingType::Map => macro_rules_serialize_if_some(),
+        EncodingType::Basic | EncodingType::List => {
+            let buffer_if_none = macro_rules_buffer_if_none();
+            let buffer_if_eq_default = macro_rules_buffer_if_eq_default();
+            quote!{
+                #buffer_if_none
+                #buffer_if_eq_default
+            }
+        },
+        EncodingType::Map => {
+            let serialize_if_some = macro_rules_serialize_if_some();
+            let serialize_if_neq_default = macro_rules_serialize_if_neq_default();
+            quote! {
+                #serialize_if_some
+                #serialize_if_neq_default
+            }
+        },
     };
 
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
     match encoding {
         EncodingType::Basic | EncodingType::List => {
-            for ((id, name), ty) in field_idents
+            // for ((id, name), ty) in field_idents
+            for (((id, name), ty), attr) in field_idents
                 .iter()
                 .zip(field_names.iter())
                 .zip(field_types.iter())
+                .zip(field_attrs.iter())
             {
-                let token = quote! {buffer_if_none!(state, null_count, &self.#id, #name, #ty);};
+                let token = match attr.default {
+                    true => quote! {
+                        buffer_if_eq_default!(state, null_count, &self.#id, #name, #ty);
+                    },
+                    false => quote! {
+                        buffer_if_none!(state, null_count, &self.#id, #name, #ty);
+                    }
+                };
                 field_impls.push(token);
             }
         }
         EncodingType::Map => {
-            for ((id, name), ty) in field_idents
+            for (((id, name), ty), attr) in field_idents
                 .iter()
                 .zip(field_names.iter())
                 .zip(field_types.iter())
+                .zip(field_attrs.iter())
             {
-                let token = quote! {serialize_if_some!(state, &self.#id, #name, #ty);};
+                let token = match attr.default {
+                    true => quote! {
+                        serialize_if_neq_default!(state, &self.#id, #name, #ty);
+                    },
+                    false => quote! {
+                        serialize_if_some!(state, &self.#id, #name, #ty);
+                    }
+                };
                 field_impls.push(token);
             }
         }

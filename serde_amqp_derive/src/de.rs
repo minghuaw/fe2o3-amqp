@@ -2,10 +2,7 @@ use darling::FromMeta;
 use quote::quote;
 use syn::{spanned::Spanned, DeriveInput, Fields};
 
-use crate::{DescribedStructAttr, EncodingType, FieldAttr, util::{
-        convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none,
-        parse_described_struct_attr,
-    }};
+use crate::{DescribedStructAttr, EncodingType, FieldAttr, util::{convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none, parse_described_struct_attr, parse_named_field_attrs}};
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
@@ -300,17 +297,7 @@ fn expand_deserialize_struct(
         .map(|i| convert_to_case(rename_all, i.to_string(), ctx).unwrap())
         .collect();
     let field_types: Vec<&syn::Type> = fields.named.iter().map(|f| &f.ty).collect();
-    let field_attrs: Vec<FieldAttr> = fields
-        .named
-        .iter()
-        .map(|f| {
-            f.attrs.iter().find_map(|a| {
-                let item = a.parse_meta().unwrap();
-                FieldAttr::from_meta(&item).ok()
-            })
-        })
-        .map(|o| o.unwrap_or(FieldAttr { default: false }))
-        .collect();
+    let field_attrs = parse_named_field_attrs(fields.named.iter());
 
     let deserialize_field = impl_deserialize_for_field(&field_idents, &field_names);
 

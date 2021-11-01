@@ -5,7 +5,7 @@ use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 #[derive(SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     code = 0x13, 
-    encoding = "map", 
+    encoding = "list", 
     rename_all = "kebab-case"
 )]
 struct Foo {
