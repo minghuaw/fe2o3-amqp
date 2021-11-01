@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{definitions::{Error, Fields, Handle, SequenceNo, TransferNumber}, performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}, primitives::Symbol};
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{sync::mpsc::{self, Sender}, task::JoinHandle};
 
-use crate::{connection::ConnectionHandle, control::SessionControl, endpoint, error::EngineError, link::frame::LinkFrame, transport::{amqp::Frame}};
+use crate::{connection::ConnectionHandle, control::SessionControl, endpoint, error::EngineError, link::{LinkFrame, LinkIncomingItem}, transport::{amqp::Frame}};
 
 mod frame;
 pub use frame::*;
@@ -149,7 +149,13 @@ impl endpoint::Session for Session {
         &mut self.local_state
     }
 
-        
+    fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError> {
+        todo!()
+    }
+
+    fn drop_link(&mut self, handle: Handle) {
+        todo!()
+    }
 
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
         match self.local_state {

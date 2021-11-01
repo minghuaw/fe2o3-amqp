@@ -1,4 +1,5 @@
-pub mod frame;
+mod frame;
+pub use frame::*;
 pub mod sender;
 pub mod receiver;
 
@@ -27,8 +28,6 @@ pub enum LinkState {
     /// The link is detached
     Detached,
 }
-
-pub type LinkIncomingItem = LinkFrame;
 
 pub enum LinkFrame {
 

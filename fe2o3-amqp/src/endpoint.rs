@@ -23,23 +23,22 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{definitions::{Error, Handle, Role}, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}};
 use futures_util::Sink;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{Sender};
 
-use crate::{connection::engine::SessionId, error::EngineError, session::{SessionFrame, SessionIncomingItem}, transport::{amqp::Frame}};
+use crate::{connection::engine::SessionId, error::EngineError, link::{LinkFrame, LinkIncomingItem}, session::{SessionFrame, SessionIncomingItem}, transport::{amqp::Frame}};
 
 #[async_trait]
 pub trait Connection {
     type Error: Into<EngineError> + Send;
     type State: Send;
     type Session: Session + Send;
-    type SessionItem;
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
     fn local_open(&self) -> &Open;
 
     // Allocate outgoing channel id and session id to a new session
-    fn create_session(&mut self, tx: Sender<Self::SessionItem>) -> Result<(u16, SessionId), Self::Error>;
+    fn create_session(&mut self, tx: Sender<SessionIncomingItem>) -> Result<(u16, SessionId), Self::Error>;
     // Remove outgoing id and session id association
     fn drop_session(&mut self, session_id: usize);
 
@@ -75,9 +74,9 @@ pub trait Connection {
 
     async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>>;
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionIncomingItem>>;
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>>;
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionIncomingItem>>;
 }
 
 #[async_trait]
@@ -89,7 +88,7 @@ pub trait Session {
     fn local_state_mut(&mut self) -> &mut Self::State;
 
     // Allocate new local handle for new Link
-    fn create_link(&mut self) -> Result<Handle, EngineError>;
+    fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError>;
     fn drop_link(&mut self, handle: Handle);
 
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
@@ -112,18 +111,29 @@ pub trait Session {
 
 #[async_trait]
 pub trait Link {
-    const ROLE: Role;
     type Error: Into<EngineError>;
 
-    async fn on_incoming_attach() -> Result<(), Self::Error>;
-    async fn on_incoming_flow() -> Result<(), Self::Error>;
-    async fn on_incoming_transfer() -> Result<(), Self::Error>;
-    async fn on_incoming_disposition() -> Result<(), Self::Error>;
-    async fn on_incoming_detach() -> Result<(), Self::Error>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
+    async fn on_incoming_disposition(&mut self, disposition: Disposition) -> Result<(), Self::Error>;
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
+    
+    async fn on_outgoing_attach(&mut self, writer: &mut Sender<LinkFrame>) -> Result<(), Self::Error>;
+    async fn on_outgoing_detach(&mut self, writer: &mut Sender<LinkFrame>) -> Result<(), Self::Error>;
+    
+    // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
+    // async fn on_outgoing_flow() -> Result<(), Self::Error>;
+    // async fn on_outgoing_transfer() -> Result<(), Self::Error>;
+    // async fn on_outgoing_disposition() -> Result<(), Self::Error>;
+}
 
-    async fn on_outgoing_attach() -> Result<(), Self::Error>;
-    async fn on_outgoing_flow() -> Result<(), Self::Error>;
-    async fn on_outgoing_transfer() -> Result<(), Self::Error>;
-    async fn on_outgoing_disposition() -> Result<(), Self::Error>;
-    async fn on_outgoing_detach() -> Result<(), Self::Error>;
+pub trait SenderLink: Link {
+    const ROLE: Role = Role::Sender;
+}
+
+#[async_trait]
+pub trait ReceiverLink: Link {
+    const ROLE: Role = Role::Receiver;
+
+    async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), <Self as Link>::Error>;
 }

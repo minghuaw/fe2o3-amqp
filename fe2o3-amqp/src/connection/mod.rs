@@ -133,7 +133,6 @@ impl endpoint::Connection for Connection {
     type Error = EngineError;
     type State = ConnectionState;
     type Session = Session;
-    type SessionItem = SessionIncomingItem;
 
     fn local_state(&self) -> &Self::State {
         &self.local_state
@@ -147,7 +146,7 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
-    fn create_session(&mut self, tx: Sender<Self::SessionItem>) -> Result<(u16, usize), Self::Error> {
+    fn create_session(&mut self, tx: Sender<SessionIncomingItem>) -> Result<(u16, usize), Self::Error> {
         match &self.local_state {
             ConnectionState::Start 
             | ConnectionState::HeaderSent
@@ -333,12 +332,12 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>> {
+    fn session_tx_by_incoming_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionIncomingItem>> {
         let session_id = self.session_by_incoming_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
     }
 
-    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<Self::SessionItem>> {
+    fn session_tx_by_outgoing_channel(&mut self, channel: u16) -> Option<&mut Sender<SessionIncomingItem>> {
         let session_id = self.session_by_outgoing_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
     }

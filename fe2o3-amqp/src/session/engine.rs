@@ -1,6 +1,6 @@
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{control::SessionControl, endpoint, error::EngineError, link::frame::LinkFrame, util::Running};
+use crate::{control::SessionControl, endpoint, error::EngineError, link::LinkFrame, util::Running};
 
 use super::{SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
 
