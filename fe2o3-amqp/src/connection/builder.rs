@@ -108,8 +108,8 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn idle_time_out(&mut self, idle_time_out: Option<impl Into<Milliseconds>>) -> &mut Self {
-        self.idle_time_out = idle_time_out.map(Into::into);
+    pub fn idle_time_out(&mut self, idle_time_out: impl Into<Milliseconds>) -> &mut Self {
+        self.idle_time_out = Some(idle_time_out.into());
         self
     }
 
@@ -121,8 +121,8 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_outgoing_locales(&mut self, locales: Option<Vec<IetfLanguageTag>>) -> &mut Self {
-        self.outgoing_locales = locales;
+    pub fn set_outgoing_locales(&mut self, locales: Vec<IetfLanguageTag>) -> &mut Self {
+        self.outgoing_locales = Some(locales);
         self
     }
 
@@ -134,8 +134,8 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_incoming_locales(&mut self, locales: Option<Vec<IetfLanguageTag>>) -> &mut Self {
-        self.incoming_locales = locales;
+    pub fn set_incoming_locales(&mut self, locales: Vec<IetfLanguageTag>) -> &mut Self {
+        self.incoming_locales = Some(locales);
         self
     }
 
@@ -147,8 +147,8 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_offered_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
-        self.offered_capabilities = capabilities;
+    pub fn set_offered_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+        self.offered_capabilities = Some(capabilities);
         self
     }
 
@@ -160,13 +160,13 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_desired_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
-        self.desired_capabilities = capabilities;
+    pub fn set_desired_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+        self.desired_capabilities = Some(capabilities);
         self
     }
 
-    pub fn properties(&mut self, properties: Option<Fields>) -> &mut Self {
-        self.properties = properties;
+    pub fn properties(&mut self, properties: Fields) -> &mut Self {
+        self.properties = Some(properties);
         self
     }
 

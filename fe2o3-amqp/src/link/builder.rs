@@ -116,18 +116,18 @@ impl<Role, NameState> Builder<Role, NameState> {
         self
     }
 
-    pub fn source(&mut self, source: Option<Source>) -> &mut Self {
-        self.source = source;
+    pub fn source(&mut self, source: impl Into<Source>) -> &mut Self {
+        self.source = Some(source.into());
         self
     }
 
-    pub fn target(&mut self, target: Option<Target>) -> &mut Self {
-        self.target = target;
+    pub fn target(&mut self, target: impl Into<Target>) -> &mut Self {
+        self.target = Some(target.into());
         self
     }
 
-    pub fn max_message_size(&mut self, max_size: Option<ULong>) -> &mut Self {
-        self.max_message_size = max_size;
+    pub fn max_message_size(&mut self, max_size: impl Into<ULong>) -> &mut Self {
+        self.max_message_size = Some(max_size.into());
         self
     }
 
@@ -139,8 +139,8 @@ impl<Role, NameState> Builder<Role, NameState> {
         self
     }
 
-    pub fn set_offered_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
-        self.offered_capabilities = capabilities;
+    pub fn set_offered_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+        self.offered_capabilities = Some(capabilities);
         self
     }
 
@@ -152,13 +152,13 @@ impl<Role, NameState> Builder<Role, NameState> {
         self
     }
 
-    pub fn set_desired_capabilities(&mut self, capabilities: Option<Vec<Symbol>>) -> &mut Self {
-        self.desired_capabilities = capabilities;
+    pub fn set_desired_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+        self.desired_capabilities = Some(capabilities);
         self
     }
 
-    pub fn properties(&mut self, properties: Option<Fields>) -> &mut Self {
-        self.properties = properties;
+    pub fn properties(&mut self, properties: Fields) -> &mut Self {
+        self.properties = Some(properties);
         self
     }
 }
