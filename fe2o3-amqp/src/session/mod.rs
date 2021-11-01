@@ -5,10 +5,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };
-use tokio::{
-    sync::mpsc::{self, Sender},
-    task::JoinHandle,
-};
+use tokio::{sync::{mpsc::{self, Sender}, oneshot}, task::JoinHandle};
 
 use crate::{
     connection::ConnectionHandle,
@@ -16,7 +13,6 @@ use crate::{
     endpoint,
     error::EngineError,
     link::{LinkFrame, LinkIncomingItem},
-    transport::amqp::Frame,
 };
 
 mod frame;
@@ -62,11 +58,27 @@ impl SessionHandle {
             Err(_) => Err(EngineError::Message("JoinError")),
         }
     }
+
+    pub(crate) async fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError> {
+        let (responder, resp_rx) = oneshot::channel();
+        self.control
+            .send(SessionControl::CreateLink {tx, responder})
+            .await?;
+        resp_rx.await
+            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))
+    }
+
+    pub(crate) async fn drop_link(&mut self, handle: Handle) -> Result<(), EngineError> {
+        self.control
+            .send(SessionControl::DropLink(handle))
+            .await?;
+        Ok(())
+    }
 }
 
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
-    session_id: usize,
+    // session_id: usize,
     outgoing_channel: u16,
 
     // local amqp states

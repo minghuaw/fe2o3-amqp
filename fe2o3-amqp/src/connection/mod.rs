@@ -9,10 +9,7 @@ use fe2o3_amqp_types::{
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
-use tokio::{
-    sync::mpsc::{self, Receiver, Sender},
-    task::JoinHandle,
-};
+use tokio::{sync::{mpsc::{self, Receiver, Sender}, oneshot}, task::JoinHandle};
 use url::Url;
 
 use crate::{
@@ -24,7 +21,7 @@ use crate::{
     transport::amqp::{Frame, FrameBody},
 };
 
-use self::builder::WithoutContainerId;
+use self::{builder::WithoutContainerId, engine::SessionId};
 
 pub mod builder;
 pub mod engine;
@@ -77,6 +74,17 @@ impl ConnectionHandle {
             Ok(res) => res,
             Err(_) => Err(EngineError::Message("JoinError")),
         }
+    }
+
+    pub(crate) async fn create_session(&mut self, tx: Sender<SessionIncomingItem>) -> Result<(u16, SessionId), EngineError> {
+        let (responder, resp_rx) = oneshot::channel::<(u16, usize)>();
+        self.control.send(ConnectionControl::CreateSession{tx, responder}).await?;
+        resp_rx.await.map_err(|_| EngineError::Message("Oneshot sender is dropped"))
+    }
+
+    pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), EngineError> {
+        self.control.send(ConnectionControl::DropSession(session_id)).await?;
+        Ok(())
     }
 }
 

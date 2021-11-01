@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
-    control::{ConnectionControl, SessionControl},
+    control::{SessionControl},
     error::EngineError,
     session::{engine::SessionEngine, SessionState},
 };
@@ -102,29 +102,19 @@ impl Builder {
         conn: &mut ConnectionHandle,
     ) -> Result<SessionHandle, EngineError> {
         use super::Session;
-        use tokio::sync::oneshot;
 
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
-        let (oneshot_tx, oneshot_rx) = oneshot::channel::<(u16, usize)>();
         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(DEFAULT_OUTGOING_BUFFER_SIZE);
 
         // create session in connection::Engine
-        conn.control
-            .send(ConnectionControl::CreateSession {
-                tx: incoming_tx,
-                responder: oneshot_tx,
-            })
-            .await?;
-        let (outgoing_channel, session_id) = oneshot_rx
-            .await
-            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
+        let (outgoing_channel, session_id) = conn.create_session(incoming_tx).await?;
 
         let session = Session {
             control: session_control_tx.clone(),
-            session_id,
+            // session_id,
             outgoing_channel,
             local_state,
             next_outgoing_id: self.next_outgoing_id,
@@ -140,7 +130,9 @@ impl Builder {
             properties: self.properties.clone(),
         };
         let engine = SessionEngine::begin(
+            conn.control.clone(),
             session,
+            session_id,
             session_control_rx,
             incoming_rx,
             conn.outgoing.clone(),

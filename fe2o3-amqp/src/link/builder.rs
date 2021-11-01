@@ -1,10 +1,12 @@
 use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, primitives::{Symbol, ULong}};
+use futures_util::SinkExt;
+use tokio::sync::mpsc;
 
-use crate::connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE;
+use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkIncomingItem, LinkState}, session::SessionHandle};
 
-use super::role;
+use super::{ReceiverLink, SenderLink, role};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -12,7 +14,10 @@ pub struct WithoutName;
 /// Type state for link::builder::Builder;
 pub struct WithName;
 
-pub struct Builder<Role, NameState> {
+pub struct WithoutTarget;
+pub struct WithTarget;
+
+pub struct Builder<Role, NameState, Addr> {
     pub name: String,
     pub snd_settle_mode: SenderSettleMode,
     pub rcv_settle_mode: ReceiverSettleMode,
@@ -34,9 +39,10 @@ pub struct Builder<Role, NameState> {
     // Type state markers
     role: PhantomData<Role>,
     name_state: PhantomData<NameState>,
+    addr_state: PhantomData<Addr>,
 }
 
-impl<Role> Builder<Role, WithoutName> {
+impl<Role, Addr> Builder<Role, WithoutName, Addr> {
     pub fn new() -> Self {
         Self {
             name: Default::default(),
@@ -53,22 +59,40 @@ impl<Role> Builder<Role, WithoutName> {
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             role: PhantomData,
             name_state: PhantomData,
+            addr_state: PhantomData,
         }
     }
 
-    pub fn name(self, name: impl Into<String>) -> Builder<Role, WithName> {
-        todo!()
+    pub fn name(self, name: impl Into<String>) -> Builder<Role, WithName, Addr> {
+        Builder {
+            name: name.into(),
+            snd_settle_mode: self.snd_settle_mode,
+            rcv_settle_mode: self.rcv_settle_mode,
+            source: self.source,
+            target: self.target,
+            initial_delivery_count: self.initial_delivery_count,
+            max_message_size: self.max_message_size,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            buffer_size: self.buffer_size,
+            properties: Default::default(),
+
+            role: self.role,
+            name_state: PhantomData,
+            addr_state: self.addr_state,
+        }
     }
 }
 
-impl<Role> Builder<Role, WithName> {
+impl<Role, Addr> Builder<Role, WithName, Addr> {
     pub fn name(&mut self, name: impl Into<String>) -> &mut Self {
-        todo!()
+        self.name = name.into();
+        self
     }
 }
 
-impl<Role, NameState> Builder<Role, NameState> {
-    pub fn sender(self) -> Builder<role::Sender, NameState> {
+impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
+    pub fn sender(self) -> Builder<role::Sender, NameState, Addr> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -84,10 +108,11 @@ impl<Role, NameState> Builder<Role, NameState> {
 
             role: PhantomData,
             name_state: self.name_state,
+            addr_state: self.addr_state,
         }
     }
 
-    pub fn receiver(self) -> Builder<role::Receiver, NameState> {
+    pub fn receiver(self) -> Builder<role::Receiver, NameState, Addr> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -103,6 +128,7 @@ impl<Role, NameState> Builder<Role, NameState> {
 
             role: PhantomData,
             name_state: self.name_state,
+            addr_state: self.addr_state,
         }
     }
 
@@ -121,9 +147,24 @@ impl<Role, NameState> Builder<Role, NameState> {
         self
     }
 
-    pub fn target(&mut self, target: impl Into<Target>) -> &mut Self {
-        self.target = Some(target.into());
-        self
+    pub fn target(self, target: impl Into<Target>) -> Builder<Role, NameState, WithTarget> {
+        Builder {
+            name: self.name,
+            snd_settle_mode: self.snd_settle_mode,
+            rcv_settle_mode: self.rcv_settle_mode,
+            source: self.source,
+            target: Some(target.into()), // setting target
+            initial_delivery_count: self.initial_delivery_count,
+            max_message_size: self.max_message_size,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            buffer_size: self.buffer_size,
+            properties: Default::default(),
+
+            role: self.role,
+            name_state: self.name_state,
+            addr_state: PhantomData,
+        }
     }
 
     pub fn max_message_size(&mut self, max_size: impl Into<ULong>) -> &mut Self {
@@ -163,7 +204,7 @@ impl<Role, NameState> Builder<Role, NameState> {
     }
 }
 
-impl<NameState> Builder<role::Sender, NameState> {
+impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
@@ -173,14 +214,26 @@ impl<NameState> Builder<role::Sender, NameState> {
     }
 }
 
-impl<NameState> Builder<role::Receiver, NameState> {
+impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
 
 }
 
-impl Builder<role::Sender, WithName> {
+impl Builder<role::Sender, WithName, WithTarget> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<SenderLink, EngineError> {
+        let local_state = LinkState::Unattached;
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
 
+        // Create Link in Session
+        // session.control
+
+
+        todo!()
+    }
 }
 
-impl Builder<role::Receiver, WithName> {
-
+impl Builder<role::Receiver, WithName, WithTarget> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<ReceiverLink, EngineError> {
+        todo!()
+    }
 }

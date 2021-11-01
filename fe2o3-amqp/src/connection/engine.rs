@@ -244,6 +244,7 @@ where
 
     #[inline]
     async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, EngineError> {
+        println!(">>> Debug: ConectionEnginer::on_control");
         match control {
             ConnectionControl::Open => {
                 // let open = self.connection.local_open().clone();

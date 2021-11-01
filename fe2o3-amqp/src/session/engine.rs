@@ -1,13 +1,14 @@
+use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{
-    control::SessionControl, endpoint, error::EngineError, link::LinkFrame, util::Running,
-};
+use crate::{connection::engine::SessionId, control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, link::LinkFrame, util::Running};
 
 use super::{SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
 
 pub struct SessionEngine<S> {
+    conn: mpsc::Sender<ConnectionControl>,
     session: S,
+    session_id: SessionId,
     control: mpsc::Receiver<SessionControl>,
     incoming: mpsc::Receiver<SessionIncomingItem>,
     outgoing: mpsc::Sender<SessionFrame>,
@@ -20,14 +21,18 @@ where
     S: endpoint::Session<State = SessionState> + Send + 'static,
 {
     pub async fn begin(
+        conn: mpsc::Sender<ConnectionControl>,
         session: S,
+        session_id: SessionId,        
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
     ) -> Result<Self, EngineError> {
         let mut engine = Self {
+            conn,
             session,
+            session_id,
             control,
             incoming,
             outgoing,
@@ -135,10 +140,10 @@ where
                     .await
                     .map_err(Into::into)?;
             }
-            SessionControl::CreateLink => {
+            SessionControl::CreateLink{tx, responder} => {
                 todo!()
             }
-            SessionControl::DropLink => {
+            SessionControl::DropLink(handle) => {
                 todo!()
             }
         }
@@ -192,7 +197,7 @@ where
         }
 
         println!(">>> Debug: SessionEngine exiting event_loop");
-
+        self.conn.send(ConnectionControl::DropSession(self.session_id)).await?;
         Ok(())
     }
 }

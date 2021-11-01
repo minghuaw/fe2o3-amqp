@@ -44,6 +44,15 @@ pub struct Target {
     capabilities: Option<Vec<Symbol>>,
 }
 
+impl<T: Into<Address>> From<T> for Target {
+    fn from(val: T) -> Self {
+        Self {
+            address: Some(val.into()),
+            ..Default::default()
+        }
+    }
+}
+
 pub struct Builder {
     pub target: Target
 }

@@ -4,15 +4,12 @@ use fe2o3_amqp_types::{messaging::Message, performatives::Disposition};
 
 use crate::{error::EngineError, session::SessionHandle};
 
-use super::{
-    builder::{self, WithoutName},
-    role,
-};
+use super::{builder::{self, WithoutName, WithoutTarget}, role};
 
 pub struct SenderLink {}
 
 impl SenderLink {
-    pub fn builder() -> builder::Builder<role::Sender, WithoutName> {
+    pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
         todo!()
     }
 
