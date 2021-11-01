@@ -6,12 +6,9 @@ use serde_amqp::{
     value::Value,
 };
 
-use crate::{
-    definitions::{
+use crate::{definitions::{
         DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
-    },
-    messaging::{Source, Target},
-};
+    }, messaging::{DeliveryState, Source, Target}};
 
 /// 2.7.3 Attach
 /// Attach a link to a session.
@@ -64,7 +61,7 @@ pub struct Attach {
     pub target: Option<Target>,
 
     /// <field name="unsettled" type="map"/>
-    pub unsettled: Option<BTreeMap<DeliveryTag, Value>>, // TODO: consider making the value `DeliveryState`
+    pub unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>>, // TODO: consider making the value `DeliveryState`
 
     /// <field name="incomplete-unsettled" type="boolean" default="false"/>
     #[amqp_contract(default)]
