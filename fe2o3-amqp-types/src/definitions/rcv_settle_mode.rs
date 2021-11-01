@@ -4,7 +4,7 @@ use serde::{de, ser};
 /// Settlement policy for a receiver.
 /// <type name="receiver-settle-mode" class="restricted" source="ubyte">
 /// </type>
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ReceiverSettleMode {
     /// <choice name="first" value="0"/>
     First,

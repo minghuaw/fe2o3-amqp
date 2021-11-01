@@ -137,6 +137,16 @@ pub(crate) fn macro_rules_serialize_if_some() -> proc_macro2::TokenStream {
     }
 }
 
+pub(crate) fn macro_rules_serialize_if_not_default() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! serialize_if_not_default() {
+            () => {
+                todo!()
+            }
+        }
+    }
+}
+
 pub(crate) fn macro_rules_unwrap_or_none() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! unwrap_or_none {

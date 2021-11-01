@@ -6,7 +6,7 @@ use serde::{de, ser};
 /// Settlement policy for a sender.
 /// <type name="sender-settle-mode" class="restricted" source="ubyte">
 /// </type>
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SenderSettleMode {
     /// <choice name="unsettled" value="0"/>
     Unsettled,

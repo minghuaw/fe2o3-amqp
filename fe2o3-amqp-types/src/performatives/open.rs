@@ -52,7 +52,7 @@ pub struct Open {
     pub properties: Option<Fields>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaxFrameSize(pub UInt);
 
 impl Default for MaxFrameSize {
@@ -79,7 +79,7 @@ impl From<MaxFrameSize> for usize {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelMax(pub UShort);
 
 impl Default for ChannelMax {

@@ -2,13 +2,10 @@ use darling::FromMeta;
 use quote::quote;
 use syn::{spanned::Spanned, DeriveInput, Fields};
 
-use crate::{
-    util::{
+use crate::{DescribedStructAttr, EncodingType, FieldAttr, util::{
         convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none,
         parse_described_struct_attr,
-    },
-    DescribedStructAttr, EncodingType,
-};
+    }};
 
 pub(crate) fn expand_deserialize(
     input: &syn::DeriveInput,
@@ -430,12 +427,6 @@ fn impl_deserialize_for_field(
     }
 }
 
-#[derive(Debug, darling::FromMeta)]
-struct FieldAttr {
-    // default: syn::Lit
-    #[darling(default)]
-    default: bool,
-}
 
 fn impl_visit_seq_for_struct(
     ident: &syn::Ident,

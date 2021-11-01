@@ -29,6 +29,14 @@ struct DescribedAttr {
     pub no_descriptor: Option<()>,
 }
 
+
+#[derive(Debug, darling::FromMeta)]
+struct FieldAttr {
+    // default: syn::Lit
+    #[darling(default)]
+    default: bool,
+}
+
 struct DescribedStructAttr {
     name: String,
     code: Option<u64>,

@@ -20,7 +20,7 @@ mod rcv_settle_mode;
 pub use rcv_settle_mode::ReceiverSettleMode;
 
 /// 2.8.4 Handle
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Handle(pub UInt);
 
 impl Default for Handle {
@@ -42,14 +42,7 @@ impl From<Handle> for UInt {
 }
 
 /// 2.8.5 Seconds
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Seconds(pub UInt);
-
-impl Default for Seconds {
-    fn default() -> Self {
-        Seconds(0)
-    }
-}
+pub type Seconds = UInt;
 
 /// 2.8.6 Milliseconds
 pub type Milliseconds = UInt;

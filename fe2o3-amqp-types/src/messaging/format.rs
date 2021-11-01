@@ -44,7 +44,7 @@ pub struct Header {
     pub delivery_count: UInt,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Priority(pub UByte);
 
 impl Default for Priority {
