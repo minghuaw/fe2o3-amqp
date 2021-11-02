@@ -135,11 +135,11 @@ pub trait Session {
         -> Result<(), Self::Error>;
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
-    async fn on_outgoing_begin(
+    async fn send_begin(
         &mut self,
         writer: &mut Sender<SessionFrame>,
     ) -> Result<(), Self::Error>;
-    async fn on_outgoing_end(
+    async fn send_end(
         &mut self,
         writer: &mut Sender<SessionFrame>,
         error: Option<Error>,

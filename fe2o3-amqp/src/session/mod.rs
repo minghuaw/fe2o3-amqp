@@ -255,7 +255,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_outgoing_begin(
+    async fn send_begin(
         &mut self,
         writer: &mut mpsc::Sender<SessionFrame>,
     ) -> Result<(), Self::Error> {
@@ -314,7 +314,7 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_outgoing_end(
+    async fn send_end(
         &mut self,
         writer: &mut mpsc::Sender<SessionFrame>,
         error: Option<Error>,

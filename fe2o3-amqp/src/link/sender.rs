@@ -6,9 +6,11 @@ use crate::{error::EngineError, session::SessionHandle};
 
 use super::{builder::{self, WithoutName, WithoutTarget}, role};
 
-pub struct SenderLink {}
+pub struct Sender {
 
-impl SenderLink {
+}
+
+impl Sender {
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
         todo!()
     }
@@ -38,4 +40,4 @@ impl SenderLink {
 }
 
 /// TODO: impl `futures_util::io::IntoSink`
-pub struct SenderLinkSink {}
+pub struct SenderSink {}

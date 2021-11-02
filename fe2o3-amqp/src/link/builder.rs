@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkIncomingItem, LinkState}, session::SessionHandle};
 
-use super::{ReceiverLink, SenderLink, role};
+use super::{Receiver, Sender, role};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -219,13 +219,16 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
 }
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<SenderLink, EngineError> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Sender, EngineError> {
         let local_state = LinkState::Unattached;
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
 
         // Create Link in Session
-        // session.control
+        let handle = session.create_link(incoming_tx).await?;
+
+        // Create a Link instance
+
 
 
         todo!()
@@ -233,7 +236,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
 }
 
 impl Builder<role::Receiver, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<ReceiverLink, EngineError> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Receiver, EngineError> {
         todo!()
     }
 }

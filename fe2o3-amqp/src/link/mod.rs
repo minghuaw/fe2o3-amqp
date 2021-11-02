@@ -4,8 +4,8 @@ pub mod builder;
 pub mod receiver;
 pub mod sender;
 
-pub use receiver::ReceiverLink;
-pub use sender::SenderLink;
+pub use receiver::Receiver;
+pub use sender::Sender;
 
 pub mod role {
 

@@ -42,7 +42,7 @@ where
         // send a begin
         engine
             .session
-            .on_outgoing_begin(&mut engine.outgoing)
+            .send_begin(&mut engine.outgoing)
             .await
             .map_err(Into::into)?;
         // wait for an incoming begin
@@ -130,13 +130,13 @@ where
         match control {
             SessionControl::Begin => {
                 self.session
-                    .on_outgoing_begin(&mut self.outgoing)
+                    .send_begin(&mut self.outgoing)
                     .await
                     .map_err(Into::into)?;
             }
             SessionControl::End(error) => {
                 self.session
-                    .on_outgoing_end(&mut self.outgoing, error)
+                    .send_end(&mut self.outgoing, error)
                     .await
                     .map_err(Into::into)?;
             }

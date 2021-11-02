@@ -4,9 +4,9 @@ use crate::{error::EngineError, session::SessionHandle};
 
 use super::{builder::{self, WithoutName, WithoutTarget}, role};
 
-pub struct ReceiverLink {}
+pub struct Receiver {}
 
-impl ReceiverLink {
+impl Receiver {
     pub fn builder() -> builder::Builder<role::Receiver, WithoutName, WithoutTarget> {
         todo!()
     }
@@ -32,4 +32,4 @@ impl ReceiverLink {
 }
 
 /// TODO: impl `futures_util::future::IntoStream`
-pub struct ReceiverLinkStream {}
+pub struct ReceiverStream {}
