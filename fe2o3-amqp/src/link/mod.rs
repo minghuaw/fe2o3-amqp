@@ -41,5 +41,3 @@ pub enum LinkState {
     /// The link is detached
     Detached,
 }
-
-pub enum LinkFrame {}

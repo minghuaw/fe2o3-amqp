@@ -47,6 +47,7 @@ pub struct SessionHandle {
     control: mpsc::Sender<SessionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
 
+    // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
 }
 

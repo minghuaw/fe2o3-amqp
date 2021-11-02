@@ -11,7 +11,7 @@ use crate::{endpoint, error::EngineError, session::SessionHandle};
 use super::{LinkFrame, builder::{self, WithoutName, WithoutTarget}, role};
 
 pub struct Sender<L> {
-    link: L
+    pub(crate) link: L
 }
 
 impl<L: endpoint::SenderLink> Sender<L> {
@@ -42,6 +42,3 @@ impl<L: endpoint::SenderLink> Sender<L> {
         todo!()
     }
 }
-
-/// TODO: impl `futures_util::io::IntoSink`
-pub struct SenderSink {}

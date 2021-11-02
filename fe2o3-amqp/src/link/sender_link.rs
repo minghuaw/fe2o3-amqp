@@ -6,9 +6,6 @@ use crate::{endpoint, error::EngineError};
 
 use super::LinkFrame;
 
-
-
-
 /// Manages the link state
 pub struct SenderLink {
 

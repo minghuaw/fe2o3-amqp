@@ -4,7 +4,7 @@ use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMod
 use futures_util::SinkExt;
 use tokio::sync::mpsc;
 
-use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkIncomingItem, LinkState}, session::SessionHandle};
+use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkFrame, LinkIncomingItem, LinkState, sender_link::SenderLink}, session::SessionHandle};
 
 use super::{Receiver, Sender, role};
 
@@ -222,19 +222,42 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
 }
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<role::Sender, EngineError> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Sender<SenderLink>, EngineError> {
+        use crate::endpoint;
+
         let local_state = LinkState::Unattached;
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
 
         // Create Link in Session
         let handle = session.create_link(incoming_tx).await?;
 
-        // Create a Link instance
+        // Get writer to session
+        let mut writer = session.outgoing.clone();
 
+        // Create a SenderLink instance
+        let mut link = SenderLink {
 
+        };
+        // Send an Attach frame
+        endpoint::Link::send_attach(&mut link, &mut writer).await?;
 
-        todo!()
+        // Wait for an Attach frame 
+        let frame = match incoming_rx.recv().await {
+            Some(frame) => frame,
+            None => todo!()
+        };
+        let remote_attach = match frame {
+            LinkFrame::Attach(attach) => attach,
+            _ => todo!()
+        };
+        endpoint::Link::on_incoming_attach(&mut link, remote_attach).await?;
+
+        // Attach completed, return Sender
+        let sender = Sender {
+            link
+        };
+        Ok(sender)
     }
 }
 
