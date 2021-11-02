@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 
 use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkIncomingItem, LinkState}, session::SessionHandle};
 
-use super::{Receiver, Sender, role, sender::SenderLink};
+use super::{Receiver, Sender, role};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -222,7 +222,7 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
 }
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Sender<SenderLink>, EngineError> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<role::Sender, EngineError> {
         let local_state = LinkState::Unattached;
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
