@@ -236,9 +236,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let mut writer = session.outgoing.clone();
 
         // Create a SenderLink instance
-        let mut link = SenderLink {
-
-        };
+        let mut link = SenderLink::new();
         // Send an Attach frame
         endpoint::Link::send_attach(&mut link, &mut writer).await?;
 
