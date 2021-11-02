@@ -327,10 +327,11 @@ impl endpoint::Connection for Connection {
     ) -> Result<Frame, Self::Error> {
         println!(">>> Debug: on_outgoing_begin");
 
-        match &self.local_state {
-            ConnectionState::Opened => {}
-            _ => return Err(EngineError::Message("Illegal local connection state")),
-        }
+        // TODO: the engine already checks that
+        // match &self.local_state {
+        //     ConnectionState::Opened => {}
+        //     _ => return Err(EngineError::Message("Illegal local connection state")),
+        // }
 
         let frame = Frame::new(channel, FrameBody::Begin(begin));
         Ok(frame)
