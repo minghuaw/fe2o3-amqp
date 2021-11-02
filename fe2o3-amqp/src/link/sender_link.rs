@@ -71,11 +71,6 @@ impl endpoint::Link for SenderLink {
         &mut self,
         writer: &mut mpsc::Sender<LinkFrame>,
     ) -> Result<(), Self::Error> {
-        match self.local_state {
-            LinkState::Unattached => {},
-            _ => return Err(EngineError::Message("Wrong LinkState"))
-        }
-        
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
@@ -112,8 +107,19 @@ impl endpoint::Link for SenderLink {
             properties: self.properties.clone(),
         };
         let frame = LinkFrame::Attach(attach);
+        
+        match self.local_state {
+            LinkState::Unattached => {
+                writer.send(frame).await?;
+                self.local_state = LinkState::AttachSent
+            },
+            LinkState::AttachReceived => {
+                writer.send(frame).await?;
+                self.local_state = LinkState::Attached
+            },
+            _ => return Err(EngineError::Message("Wrong LinkState"))
+        }
 
-        writer.send(frame).await?;
         Ok(())
     }
 

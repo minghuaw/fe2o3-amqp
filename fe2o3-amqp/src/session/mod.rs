@@ -103,49 +103,6 @@ pub struct Session {
 }
 
 impl Session {
-    // fn new(
-    //     control: Sender<SessionControl>,
-    //     session_id: usize,
-    //     outgoing_channel: u16,
-
-    //     // local amqp states
-    //     local_state: SessionState,
-    //     next_outgoing_id: TransferNumber,
-    //     incoming_window: TransferNumber,
-    //     outgoing_window: TransferNumber,
-    //     handle_max: Handle,
-
-    //     // remote amqp states
-    //     incoming_channel: Option<u16>,
-    //     // initialize with 0 first and change after receiving the remote Begin
-    //     next_incoming_id: TransferNumber,
-    //     remote_incoming_window: SequenceNo,
-    //     remote_outgoing_window: SequenceNo,
-
-    //     // capabilities
-    //     offered_capabilities: Option<Vec<Symbol>>,
-    //     desired_capabilities: Option<Vec<Symbol>>,
-    //     properties: Option<Fields>,
-    // ) -> Self {
-    //     Self {
-    //         control,
-    //         session_id,
-    //         outgoing_channel,
-    //         local_state,
-    //         next_outgoing_id,
-    //         incoming_window,
-    //         outgoing_window,
-    //         handle_max,
-    //         incoming_channel,
-    //         next_incoming_id,
-    //         remote_incoming_window,
-    //         remote_outgoing_window,
-    //         offered_capabilities,
-    //         desired_capabilities,
-    //         properties
-    //     }
-    // }
-
     /// Alias for `begin`
     pub async fn new(conn: &mut ConnectionHandle) -> Result<SessionHandle, EngineError> {
         Self::begin(conn).await
@@ -289,7 +246,12 @@ impl endpoint::Session for Session {
     }
 
     async fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        // TODO: is state checking redundant?
+
+        println!(">>> Debug: on_outgoing_attach");
+        let body = SessionFrameBody::Attach(attach);
+        let frame = SessionFrame::new(self.outgoing_channel, body);
+        Ok(frame)
     }
 
     async fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
