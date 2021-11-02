@@ -299,7 +299,7 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    async fn on_outgoing_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame, Error = EngineError> + Send + Unpin,
     {
@@ -347,7 +347,7 @@ impl endpoint::Connection for Connection {
     }
 
     // TODO: set a timeout for recving incoming Close
-    async fn on_outgoing_close<W>(
+    async fn send_close<W>(
         &mut self,
         writer: &mut W,
         error: Option<Error>,

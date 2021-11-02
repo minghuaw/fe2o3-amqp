@@ -75,11 +75,11 @@ pub trait Connection {
     /// The write is passed in is because sending an Open frame also changes the local
     /// connection state. If the sending fails outside, coming back
     /// and revert the state changes would be too complicated
-    async fn on_outgoing_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame, Error = EngineError> + Send + Unpin;
 
-    async fn on_outgoing_close<W>(
+    async fn send_close<W>(
         &mut self,
         writer: &mut W,
         error: Option<Error>,

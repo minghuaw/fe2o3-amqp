@@ -78,7 +78,7 @@ where
         // Send an Open
         engine
             .connection
-            .on_outgoing_open(&mut engine.transport)
+            .send_open(&mut engine.transport)
             .await
             .map_err(Into::into)?;
 
@@ -249,13 +249,13 @@ where
             ConnectionControl::Open => {
                 // let open = self.connection.local_open().clone();
                 self.connection
-                    .on_outgoing_open(&mut self.transport)
+                    .send_open(&mut self.transport)
                     .await
                     .map_err(Into::into)?;
             }
             ConnectionControl::Close(error) => {
                 self.connection
-                    .on_outgoing_close(&mut self.transport, error)
+                    .send_close(&mut self.transport, error)
                     .await
                     .map_err(Into::into)?;
             }
