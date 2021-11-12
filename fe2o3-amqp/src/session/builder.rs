@@ -41,27 +41,27 @@ impl Builder {
         }
     }
 
-    pub fn next_outgoing_id(&mut self, value: TransferNumber) -> &mut Self {
+    pub fn next_outgoing_id(mut self, value: TransferNumber) -> Self {
         self.next_outgoing_id = value;
         self
     }
 
-    pub fn incoming_window(&mut self, value: TransferNumber) -> &mut Self {
+    pub fn incoming_window(mut self, value: TransferNumber) -> Self {
         self.incoming_window = value;
         self
     }
 
-    pub fn outgoing_widnow(&mut self, value: TransferNumber) -> &mut Self {
+    pub fn outgoing_widnow(mut self, value: TransferNumber) -> Self {
         self.outgoing_window = value;
         self
     }
 
-    pub fn handle_max(&mut self, value: impl Into<Handle>) -> &mut Self {
+    pub fn handle_max(mut self, value: impl Into<Handle>) -> Self {
         self.handle_max = value.into();
         self
     }
 
-    pub fn add_offered_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+    pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.offered_capabilities = Some(vec![capability.into()]),
@@ -69,12 +69,12 @@ impl Builder {
         self
     }
 
-    pub fn set_offered_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.offered_capabilities = Some(capabilities);
         self
     }
 
-    pub fn add_desired_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+    pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.desired_capabilities = Some(vec![capability.into()]),
@@ -82,23 +82,23 @@ impl Builder {
         self
     }
 
-    pub fn set_desired_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.desired_capabilities = Some(capabilities);
         self
     }
 
-    pub fn properties(&mut self, properties: Fields) -> &mut Self {
+    pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
         self
     }
 
-    pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
+    pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
         self
     }
 
     pub async fn begin(
-        &mut self,
+        self,
         conn: &mut ConnectionHandle,
     ) -> Result<SessionHandle, EngineError> {
         use super::Session;
