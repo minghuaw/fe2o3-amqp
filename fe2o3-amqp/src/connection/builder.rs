@@ -91,29 +91,29 @@ impl<Mode> Builder<Mode> {
 }
 
 impl<Mode> Builder<Mode> {
-    pub fn hostname(&mut self, hostname: impl Into<String>) -> &mut Self {
+    pub fn hostname(mut self, hostname: impl Into<String>) -> Self {
         self.hostname = Some(hostname.into());
         self
     }
 
-    pub fn max_frame_size(&mut self, max_frame_size: impl Into<MaxFrameSize>) -> &mut Self {
+    pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
         let max_frame_size = max_frame_size.into();
         let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE as u32, max_frame_size.0);
         self.max_frame_size = MaxFrameSize::from(max_frame_size);
         self
     }
 
-    pub fn channel_max(&mut self, channel_max: impl Into<ChannelMax>) -> &mut Self {
+    pub fn channel_max(mut self, channel_max: impl Into<ChannelMax>) -> Self {
         self.channel_max = channel_max.into();
         self
     }
 
-    pub fn idle_time_out(&mut self, idle_time_out: impl Into<Milliseconds>) -> &mut Self {
+    pub fn idle_time_out(mut self, idle_time_out: impl Into<Milliseconds>) -> Self {
         self.idle_time_out = Some(idle_time_out.into());
         self
     }
 
-    pub fn add_outgoing_locales(&mut self, locale: impl Into<IetfLanguageTag>) -> &mut Self {
+    pub fn add_outgoing_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
         match &mut self.outgoing_locales {
             Some(locales) => locales.push(locale.into()),
             None => self.outgoing_locales = Some(vec![locale.into()]),
@@ -121,12 +121,12 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_outgoing_locales(&mut self, locales: Vec<IetfLanguageTag>) -> &mut Self {
+    pub fn set_outgoing_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
         self.outgoing_locales = Some(locales);
         self
     }
 
-    pub fn add_incoming_locales(&mut self, locale: impl Into<IetfLanguageTag>) -> &mut Self {
+    pub fn add_incoming_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
         match &mut self.incoming_locales {
             Some(locales) => locales.push(locale.into()),
             None => self.incoming_locales = Some(vec![locale.into()]),
@@ -134,12 +134,12 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_incoming_locales(&mut self, locales: Vec<IetfLanguageTag>) -> &mut Self {
+    pub fn set_incoming_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
         self.incoming_locales = Some(locales);
         self
     }
 
-    pub fn add_offered_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+    pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.offered_capabilities = Some(vec![capability.into()]),
@@ -147,12 +147,12 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_offered_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.offered_capabilities = Some(capabilities);
         self
     }
 
-    pub fn add_desired_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+    pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.desired_capabilities = Some(vec![capability.into()]),
@@ -160,17 +160,17 @@ impl<Mode> Builder<Mode> {
         self
     }
 
-    pub fn set_desired_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.desired_capabilities = Some(capabilities);
         self
     }
 
-    pub fn properties(&mut self, properties: Fields) -> &mut Self {
+    pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
         self
     }
 
-    pub fn buffer_size(&mut self, buffer_size: usize) -> &mut Self {
+    pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
         self
     }
@@ -178,7 +178,7 @@ impl<Mode> Builder<Mode> {
 
 impl Builder<WithContainerId> {
     pub async fn open_with_stream<Io>(
-        &self,
+        self,
         mut stream: Io,
     ) -> Result<ConnectionHandle, EngineError>
     where
@@ -238,7 +238,7 @@ impl Builder<WithContainerId> {
     }
 
     pub async fn open(
-        &self,
+        self,
         url: impl TryInto<Url, Error = url::ParseError>,
     ) -> Result<ConnectionHandle, EngineError> {
         let url: Url = url.try_into()?;
@@ -262,7 +262,7 @@ impl Builder<WithContainerId> {
     }
 
     pub async fn pipelined_open_with_stream<Io>(
-        &self,
+        self,
         mut _stream: Io,
     ) -> Result<ConnectionHandle, EngineError>
     where
