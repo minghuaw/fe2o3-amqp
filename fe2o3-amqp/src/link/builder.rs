@@ -46,7 +46,7 @@ pub struct Builder<Role, NameState, Addr> {
 }
 
 impl<Role, Addr> Builder<Role, WithoutName, Addr> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             name: Default::default(),
             snd_settle_mode: Default::default(),
@@ -88,7 +88,7 @@ impl<Role, Addr> Builder<Role, WithoutName, Addr> {
 }
 
 impl<Role, Addr> Builder<Role, WithName, Addr> {
-    pub fn name(&mut self, name: impl Into<String>) -> &mut Self {
+    pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
@@ -135,17 +135,17 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         }
     }
 
-    pub fn sender_settle_mode(&mut self, mode: SenderSettleMode) -> &mut Self {
+    pub fn sender_settle_mode(mut self, mode: SenderSettleMode) -> Self {
         self.snd_settle_mode = mode;
         self
     }
 
-    pub fn receiver_settle_mode(&mut self, mode: ReceiverSettleMode) -> &mut Self {
+    pub fn receiver_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
         self.rcv_settle_mode = mode;
         self
     }
 
-    pub fn source(&mut self, source: impl Into<Source>) -> &mut Self {
+    pub fn source(mut self, source: impl Into<Source>) -> Self {
         self.source = Some(source.into());
         self
     }
@@ -170,12 +170,12 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         }
     }
 
-    pub fn max_message_size(&mut self, max_size: impl Into<ULong>) -> &mut Self {
+    pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
         self.max_message_size = Some(max_size.into());
         self
     }
 
-    pub fn add_offered_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+    pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.offered_capabilities = Some(vec![capability.into()]),
@@ -183,12 +183,12 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    pub fn set_offered_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.offered_capabilities = Some(capabilities);
         self
     }
 
-    pub fn add_desired_capabilities(&mut self, capability: impl Into<Symbol>) -> &mut Self {
+    pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.desired_capabilities = Some(vec![capability.into()]),
@@ -196,12 +196,12 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    pub fn set_desired_capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.desired_capabilities = Some(capabilities);
         self
     }
 
-    pub fn properties(&mut self, properties: Fields) -> &mut Self {
+    pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
         self
     }
@@ -211,7 +211,7 @@ impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
-    pub fn initial_delivery_count(&mut self, count: SequenceNo) -> &mut Self {
+    pub fn initial_delivery_count(mut self, count: SequenceNo) -> Self {
         self.initial_delivery_count = count;
         self
     }
@@ -222,7 +222,7 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
 }
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Sender<SenderLink>, EngineError> {
+    pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender<SenderLink>, EngineError> {
         use crate::endpoint;
 
         let local_state = LinkState::Unattached;
@@ -230,12 +230,23 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let outgoing = session.outgoing.clone();
 
         // Create Link in Session
-        let handle = session.create_link(incoming_tx).await?;
+        let output_handle = session.create_link(incoming_tx).await?;
 
         // Get writer to session
         let mut writer = session.outgoing.clone();
 
         // Create a SenderLink instance
+        // let mut link = SenderLink {
+        //     local_state,
+        //     name: self.name.clone(),
+        //     output_handle: Some(output_handle),
+        //     input_handle: None,
+        //     snd_settle_mode: self.snd_settle_mode.clone(),
+        //     rcv_settle_mode: self.rcv_settle_mode.clone(),
+        //     source: self.source.clone(),
+
+        // };
+
         let mut link = SenderLink::new();
         // Send an Attach frame
         endpoint::Link::send_attach(&mut link, &mut writer).await?;

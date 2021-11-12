@@ -16,7 +16,7 @@ pub struct Sender<L> {
 
 impl<L: endpoint::SenderLink> Sender<L> {
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
-        todo!()
+        builder::Builder::new()
     }
 
     pub async fn attach(
