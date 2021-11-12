@@ -37,9 +37,9 @@ pub struct SenderLink {
 }
 
 impl SenderLink {
-    pub fn new() -> Self {
-        todo!()
-    }
+    // pub fn new() -> Self {
+    //     todo!()
+    // }
 }
 
 #[async_trait]

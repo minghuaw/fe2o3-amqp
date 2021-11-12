@@ -76,57 +76,57 @@ impl Builder {
         }
     }
 
-    pub fn address(&mut self, address: impl Into<Address>) -> &mut Self {
+    pub fn address(mut self, address: impl Into<Address>) -> Self {
         self.source.address = Some(address.into());
         self
     }
 
-    pub fn durable(&mut self, durability: TerminusDurability) -> &mut Self {
+    pub fn durable(mut self, durability: TerminusDurability) -> Self {
         self.source.durable = durability;
         self
     }
 
-    pub fn expiry_policy(&mut self, policy: TerminusExpiryPolicy) -> &mut Self {
+    pub fn expiry_policy(mut self, policy: TerminusExpiryPolicy) -> Self {
         self.source.expiry_policy = policy;
         self
     }
 
-    pub fn timeout(&mut self, timeout: impl Into<Seconds>) -> &mut Self {
+    pub fn timeout(mut self, timeout: impl Into<Seconds>) -> Self {
         self.source.timeout = timeout.into();
         self
     }
 
-    pub fn dynamic(&mut self, dynamic: bool) -> &mut Self {
+    pub fn dynamic(mut self, dynamic: bool) -> Self {
         self.source.dynamic = dynamic;
         self
     }
 
-    pub fn dynamic_node_properties(&mut self, properties: impl Into<Fields>) -> &mut Self {
+    pub fn dynamic_node_properties(mut self, properties: impl Into<Fields>) -> Self {
         self.source.dynamic_node_properties = Some(properties.into());
         self
     }
 
-    pub fn distribution_mode(&mut self, mode: DistributionMode) -> &mut Self {
+    pub fn distribution_mode(mut self, mode: DistributionMode) -> Self {
         self.source.distribution_mode = Some(mode);
         self
     }
 
-    pub fn filter(&mut self, filter_set: impl Into<FilterSet>) -> &mut Self {
+    pub fn filter(mut self, filter_set: impl Into<FilterSet>) -> Self {
         self.source.filter = Some(filter_set.into());
         self
     }
 
-    pub fn default_outcome(&mut self, outcome: Outcome) -> &mut Self {
+    pub fn default_outcome(mut self, outcome: Outcome) -> Self {
         self.source.default_outcome = Some(outcome.into());
         self
     }
 
-    pub fn outcomes(&mut self, outcomes: Vec<Symbol>) -> &mut Self {
+    pub fn outcomes(mut self, outcomes: Vec<Symbol>) -> Self {
         self.source.outcomes = Some(outcomes);
         self
     }
 
-    pub fn capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.source.capabilities = Some(capabilities);
         self
     }

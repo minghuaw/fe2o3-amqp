@@ -137,8 +137,8 @@ impl Builder {
             incoming_rx,
             conn.outgoing.clone(),
             outgoing_rx,
-        )
-        .await?;
+        ).await?;
+        
         let handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,
