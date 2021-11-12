@@ -120,14 +120,14 @@ impl Builder {
             next_outgoing_id: self.next_outgoing_id,
             incoming_window: self.incoming_window,
             outgoing_window: self.outgoing_window,
-            handle_max: self.handle_max.clone(),
+            handle_max: self.handle_max,
             incoming_channel: None,
             next_incoming_id: 0,
             remote_incoming_window: 0,
             remote_outgoing_window: 0,
-            offered_capabilities: self.offered_capabilities.clone(),
-            desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone(),
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
         };
         let engine = SessionEngine::begin(
             conn.control.clone(),

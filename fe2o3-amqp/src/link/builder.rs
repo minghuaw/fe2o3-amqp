@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{collections::BTreeMap, marker::PhantomData};
 
 use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, primitives::{Symbol, ULong}};
 use futures_util::SinkExt;
@@ -235,19 +235,30 @@ impl Builder<role::Sender, WithName, WithTarget> {
         // Get writer to session
         let mut writer = session.outgoing.clone();
 
+        let max_message_size = match self.max_message_size {
+            Some(s) => s as usize,
+            None => 0
+        };
+
         // Create a SenderLink instance
-        // let mut link = SenderLink {
-        //     local_state,
-        //     name: self.name.clone(),
-        //     output_handle: Some(output_handle),
-        //     input_handle: None,
-        //     snd_settle_mode: self.snd_settle_mode.clone(),
-        //     rcv_settle_mode: self.rcv_settle_mode.clone(),
-        //     source: self.source.clone(),
+        let mut link = SenderLink {
+            local_state,
+            name: self.name,
+            output_handle: Some(output_handle),
+            input_handle: None,
+            snd_settle_mode: self.snd_settle_mode,
+            rcv_settle_mode: self.rcv_settle_mode,
+            source: self.source, // TODO: how should this field be set?
+            target: self.target, 
+            unsettled: BTreeMap::new(),
+            delivery_count: self.initial_delivery_count,
+            max_message_size,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties
+        };
 
-        // };
-
-        let mut link = SenderLink::new();
+        // let mut link = SenderLink::new();
         // Send an Attach frame
         endpoint::Link::send_attach(&mut link, &mut writer).await?;
 

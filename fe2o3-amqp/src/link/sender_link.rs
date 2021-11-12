@@ -10,30 +10,30 @@ use super::{LinkFrame, LinkState};
 
 /// Manages the link state
 pub struct SenderLink {
-    local_state: LinkState,
+    pub(crate) local_state: LinkState,
 
-    name: String,
+    pub(crate) name: String,
 
-    output_handle: Option<Handle>, // local handle
-    input_handle: Option<Handle>, // remote handle
+    pub(crate) output_handle: Option<Handle>, // local handle
+    pub(crate) input_handle: Option<Handle>, // remote handle
 
-    snd_settle_mode: SenderSettleMode,
-    rcv_settle_mode: ReceiverSettleMode,
-    source: Option<Source>, // TODO: Option?
-    target: Option<Target>, // TODO: Option?
+    pub(crate) snd_settle_mode: SenderSettleMode,
+    pub(crate) rcv_settle_mode: ReceiverSettleMode,
+    pub(crate) source: Option<Source>, // TODO: Option?
+    pub(crate) target: Option<Target>, // TODO: Option?
 
-    unsettled: BTreeMap<DeliveryTag, DeliveryState>,
+    pub(crate) unsettled: BTreeMap<DeliveryTag, DeliveryState>,
     
-    delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
+    pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
     
     /// If zero, the max size is not set. 
     /// If zero, the attach frame should treated is None
-    max_message_size: usize, 
+    pub(crate) max_message_size: usize, 
 
     // capabilities
-    offered_capabilities: Option<Vec<Symbol>>,
-    desired_capabilities: Option<Vec<Symbol>>,
-    properties: Option<Fields>,
+    pub(crate) offered_capabilities: Option<Vec<Symbol>>,
+    pub(crate) desired_capabilities: Option<Vec<Symbol>>,
+    pub(crate) properties: Option<Fields>,
 }
 
 impl SenderLink {

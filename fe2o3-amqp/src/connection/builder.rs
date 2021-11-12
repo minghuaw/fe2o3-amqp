@@ -198,17 +198,17 @@ impl Builder<WithContainerId> {
 
         // spawn Connection Mux
         let local_open = Open {
-            container_id: self.container_id.clone(),
-            hostname: self.hostname.clone(),
-            max_frame_size: self.max_frame_size.clone(),
-            channel_max: self.channel_max.clone(),
+            container_id: self.container_id,
+            hostname: self.hostname,
+            max_frame_size: self.max_frame_size,
+            channel_max: self.channel_max,
             // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
-            idle_time_out: self.idle_time_out.clone().map(|v| v / 2),
-            outgoing_locales: self.outgoing_locales.clone(),
-            incoming_locales: self.incoming_locales.clone(),
-            offered_capabilities: self.offered_capabilities.clone(),
-            desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone(),
+            idle_time_out: self.idle_time_out.map(|v| v / 2),
+            outgoing_locales: self.outgoing_locales,
+            incoming_locales: self.incoming_locales,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
         };
 
         // create channels
