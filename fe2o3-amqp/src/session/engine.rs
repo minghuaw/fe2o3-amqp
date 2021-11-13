@@ -230,7 +230,7 @@ where
                     Running::Stop => break,
                 },
                 Err(err) => {
-                    todo!()
+                    panic!("{:?}", err)
                 }
             }
         }

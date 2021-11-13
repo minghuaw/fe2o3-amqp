@@ -321,6 +321,7 @@ where
             let result = tokio::select! {
                 _ = self.heartbeat.next() => self.on_heartbeat().await,
                 incoming = self.transport.next() => {
+                    println!(">>> Debug: connection incoming frames");
                     match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
@@ -331,6 +332,7 @@ where
                     }
                 },
                 control = self.control.recv() => {
+                    println!(">>> Debug: connection control");
                     match control {
                         Some(control) => self.on_control(control).await,
                         None => {
@@ -340,6 +342,7 @@ where
                     }
                 },
                 frame = self.outgoing_session_frames.recv() => {
+                    println!(">>> Debug: connection outgoing session frames");
                     match frame {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
                         None => {
@@ -356,7 +359,7 @@ where
                     Running::Stop => break,
                 },
                 Err(err) => {
-                    todo!()
+                    panic!("{:?}", err)
                 }
             }
         }

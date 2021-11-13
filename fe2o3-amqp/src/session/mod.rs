@@ -278,7 +278,12 @@ impl endpoint::Session for Session {
     }
 
     fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        // TODO: what else do we need to do here?
+
+        println!(">>> Debug: on_outgoing_flow");
+        let body = SessionFrameBody::Flow(flow);
+        let frame = SessionFrame::new(self.outgoing_channel, body);
+        Ok(frame)
     }
 
     fn on_outgoing_transfer(
@@ -286,18 +291,36 @@ impl endpoint::Session for Session {
         transfer: Transfer,
         payload: Option<BytesMut>,
     ) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        // TODO: what else do we need to do here
+
+        println!(">>> Debug: on_outgoing_transfer");
+        let body = SessionFrameBody::Transfer {
+            performative: transfer,
+            payload
+        };
+        let frame = SessionFrame::new(self.outgoing_channel, body);
+        Ok(frame)
     }
 
     fn on_outgoing_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        // TODO: what else do we need to do here?
+
+        println!(">>> Debug: on_outgoing_disposition");
+        let body = SessionFrameBody::Disposition(disposition);
+        let frame = SessionFrame::new(self.outgoing_channel, body);
+        Ok(frame)
     }
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        // TODO: what else do we need to do here?
+
+        println!(">>> Debug: on_outgoing_detach");
+        let body = SessionFrameBody::Detach(detach);
+        let frame = SessionFrame::new(self.outgoing_channel, body);
+        Ok(frame)
     }
 
     async fn send_end(
