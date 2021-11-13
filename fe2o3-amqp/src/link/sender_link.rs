@@ -19,7 +19,7 @@ pub struct SenderLink {
 
     pub(crate) snd_settle_mode: SenderSettleMode,
     pub(crate) rcv_settle_mode: ReceiverSettleMode,
-    pub(crate) source: Option<Source>, // TODO: Option?
+    pub(crate) source: Source, // TODO: Option?
     pub(crate) target: Option<Target>, // TODO: Option?
 
     pub(crate) unsettled: BTreeMap<DeliveryTag, DeliveryState>,
@@ -91,7 +91,7 @@ impl endpoint::Link for SenderLink {
             role: Role::Sender,
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
-            source: self.source.clone(),
+            source: Some(self.source.clone()),
             target: self.target.clone(),
             unsettled,
             incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?

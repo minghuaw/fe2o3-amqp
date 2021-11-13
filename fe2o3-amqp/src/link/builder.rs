@@ -24,7 +24,7 @@ pub struct Builder<Role, NameState, Addr> {
     pub name: String,
     pub snd_settle_mode: SenderSettleMode,
     pub rcv_settle_mode: ReceiverSettleMode,
-    pub source: Option<Source>,
+    pub source: Source,
     pub target: Option<Target>,
 
     /// This MUST NOT be null if role is sender,
@@ -146,7 +146,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
     }
 
     pub fn source(mut self, source: impl Into<Source>) -> Self {
-        self.source = Some(source.into());
+        self.source = source.into();
         self
     }
 
