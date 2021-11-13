@@ -163,14 +163,39 @@ where
             _ => return Err(EngineError::Message("Illegal local session state"))
         }
 
-        // let session_frame = match frame {
-        //     LinkFrame::Attach(attach) => {
-        //         self.session
-        //             .on_outgoing_attach(attach)
-        //     }
-        // };
+        let session_frame = match frame {
+            LinkFrame::Attach(attach) => {
+                self.session
+                    .on_outgoing_attach(attach)
+                    .map_err(Into::into)?
+            },
+            LinkFrame::Flow(flow) => {
+                self.session
+                    .on_outgoing_flow(flow)
+                    .map_err(Into::into)?
+            },
+            LinkFrame::Transfer{performative, payload} => {
+                self.session
+                    .on_outgoing_transfer(performative, payload)
+                    .map_err(Into::into)?
+            },
+            LinkFrame::Disposition(disposition) => {
+                self.session
+                    .on_outgoing_disposition(disposition)
+                    .map_err(Into::into)?
+            },
+            LinkFrame::Detach(detach) => {
+                self.session
+                    .on_outgoing_detach(detach)
+                    .map_err(Into::into)?
+            }
+        };
         
-        todo!()
+        self.outgoing.send(session_frame).await?;
+
+        // Handling LinkFrame should not have any effect on
+        // SessionState
+        Ok(Running::Continue)
     }
 
     async fn event_loop(mut self) -> Result<(), EngineError> {

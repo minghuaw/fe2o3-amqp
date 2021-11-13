@@ -322,7 +322,7 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    async fn on_outgoing_begin(
+    fn on_outgoing_begin(
         &mut self,
         channel: u16,
         begin: Begin,
@@ -339,7 +339,7 @@ impl endpoint::Connection for Connection {
         Ok(frame)
     }
 
-    async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error> {
+    fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error> {
         println!(">>> Debug: on_outgoing_end");
 
         self.session_by_outgoing_channel

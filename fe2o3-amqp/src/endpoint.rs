@@ -87,11 +87,11 @@ pub trait Connection {
     where
         W: Sink<Frame, Error = EngineError> + Send + Unpin;
 
-    /// Intercepting and outgoing Begin frame
-    async fn on_outgoing_begin(&mut self, channel: u16, begin: Begin)
+    /// Intercepting session frames
+    fn on_outgoing_begin(&mut self, channel: u16, begin: Begin)
         -> Result<Frame, Self::Error>;
 
-    async fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
+    fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
 
     fn session_tx_by_incoming_channel(
         &mut self,
@@ -135,6 +135,7 @@ pub trait Session {
         -> Result<(), Self::Error>;
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
+    // Handling SessionFrames
     async fn send_begin(
         &mut self,
         writer: &mut mpsc::Sender<SessionFrame>,
@@ -145,18 +146,19 @@ pub trait Session {
         error: Option<Error>,
     ) -> Result<(), Self::Error>;
 
-    async fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
-    async fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error>;
-    async fn on_outgoing_transfer(
+    // Intercepting LinkFrames
+    fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
+    fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error>;
+    fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
         payload: Option<BytesMut>,
     ) -> Result<SessionFrame, Self::Error>;
-    async fn on_outgoing_disposition(
+    fn on_outgoing_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error>;
-    async fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
+    fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
 }
 
 #[async_trait]

@@ -268,7 +268,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
+    fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
         // TODO: is state checking redundant?
 
         println!(">>> Debug: on_outgoing_attach");
@@ -277,11 +277,11 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    async fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
+    fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_transfer(
+    fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
         payload: Option<BytesMut>,
@@ -289,14 +289,14 @@ impl endpoint::Session for Session {
         todo!()
     }
 
-    async fn on_outgoing_disposition(
+    fn on_outgoing_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 
-    async fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
+    fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
 

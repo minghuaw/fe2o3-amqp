@@ -276,7 +276,6 @@ where
             SessionFrameBody::Begin(begin) => self
                 .connection
                 .on_outgoing_begin(channel, begin)
-                .await
                 .map_err(Into::into)?,
             SessionFrameBody::Attach(attach) => Frame::new(channel, FrameBody::Attach(attach)),
             SessionFrameBody::Flow(flow) => Frame::new(channel, FrameBody::Flow(flow)),
@@ -297,7 +296,6 @@ where
             SessionFrameBody::End(end) => self
                 .connection
                 .on_outgoing_end(channel, end)
-                .await
                 .map_err(Into::into)?,
         };
 
