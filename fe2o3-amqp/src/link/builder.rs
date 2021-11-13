@@ -25,7 +25,7 @@ pub struct Builder<Role, NameState, Addr> {
     pub snd_settle_mode: SenderSettleMode,
     pub rcv_settle_mode: ReceiverSettleMode,
     pub source: Source,
-    pub target: Option<Target>,
+    pub target: Target,
 
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
@@ -156,7 +156,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
             source: self.source,
-            target: Some(target.into()), // setting target
+            target: target.into(), // setting target
             initial_delivery_count: self.initial_delivery_count,
             max_message_size: self.max_message_size,
             offered_capabilities: self.offered_capabilities,
