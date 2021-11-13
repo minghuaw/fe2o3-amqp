@@ -39,23 +39,6 @@ where
     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     C: endpoint::Connection<State = ConnectionState> + Send + 'static,
 {
-    // pub fn new(
-    //     transport: Transport<Io>,
-    //     connection: C,
-    //     control: Receiver<ConnectionControl>,
-    //     outgoing_session_frames: Receiver<SessionFrame>,
-    //     // session_control: Receiver<SessionControl>,
-    // ) -> Self {
-    //     Self {
-    //         transport,
-    //         connection,
-    //         control,
-    //         // session_control,
-    //         outgoing_session_frames,
-    //         heartbeat: HeartBeat::never(),
-    //     }
-    // }
-
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
         transport: Transport<Io>,
@@ -260,10 +243,10 @@ where
                     .map_err(Into::into)?;
             }
             ConnectionControl::CreateSession { tx, responder } => {
-                let (channel, session_id) =
-                    self.connection.create_session(tx).map_err(Into::into)?;
+                let result =
+                    self.connection.create_session(tx).map_err(Into::into);
                 responder
-                    .send((channel, session_id))
+                    .send(result)
                     .map_err(|_| EngineError::Message("Oneshot channel dropped"))?;
             }
             ConnectionControl::DropSession(session_id) => self.connection.drop_session(session_id),

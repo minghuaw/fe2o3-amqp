@@ -1,5 +1,6 @@
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::{Symbol, UInt};
+use slab::Slab;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -128,6 +129,8 @@ impl Builder {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
+
+            local_links: Slab::new(),
         };
         let engine = SessionEngine::begin(
             conn.control.clone(),

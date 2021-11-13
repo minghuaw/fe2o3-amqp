@@ -135,3 +135,11 @@ impl Builder {
         self.source
     }
 }
+
+impl<T: Into<Address>> From<T> for Source {
+    fn from(val: T) -> Self {
+        Self::builder()
+            .address(val.into())
+            .build()
+    }
+}

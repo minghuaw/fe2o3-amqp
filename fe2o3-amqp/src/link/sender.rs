@@ -4,17 +4,22 @@ use tokio::sync::mpsc;
 
 use async_trait::async_trait;
 
-use fe2o3_amqp_types::{messaging::Message, performatives::{Attach, Detach, Disposition, Flow}};
+use fe2o3_amqp_types::{messaging::{Address, Message}, performatives::{Attach, Detach, Disposition, Flow}};
 
 use crate::{endpoint, error::EngineError, session::SessionHandle};
 
-use super::{LinkFrame, builder::{self, WithoutName, WithoutTarget}, role};
+use super::{LinkFrame, builder::{self, WithoutName, WithoutTarget}, role, sender_link::SenderLink};
 
-pub struct Sender<L> {
-    pub(crate) link: L
+pub struct Sender {
+    // The SenderLink manages the state
+    pub(crate) link: SenderLink,
+
+    // Outgoing mpsc channel to send the Link frames
+    pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 }
 
-impl<L: endpoint::SenderLink> Sender<L> {
+impl Sender {
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
         builder::Builder::new()
     }
@@ -22,8 +27,12 @@ impl<L: endpoint::SenderLink> Sender<L> {
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
+        addr: impl Into<Address>,
     ) -> Result<Self, EngineError> {
-        todo!()
+        Self::builder()
+            .name(name)
+            .target(addr)
+            .attach(session).await
     }
 
     pub async fn send(&mut self, message: Message) -> Result<Disposition, EngineError> {

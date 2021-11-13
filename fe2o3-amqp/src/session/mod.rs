@@ -5,6 +5,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };
+use slab::Slab;
 use tokio::{sync::{mpsc::{self, Sender}, oneshot}, task::JoinHandle};
 
 use crate::{
@@ -65,8 +66,9 @@ impl SessionHandle {
         self.control
             .send(SessionControl::CreateLink {tx, responder})
             .await?;
-        resp_rx.await
-            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))
+        let result = resp_rx.await
+            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
+        result
     }
 
     pub(crate) async fn drop_link(&mut self, handle: Handle) -> Result<(), EngineError> {
@@ -100,6 +102,9 @@ pub struct Session {
     offered_capabilities: Option<Vec<Symbol>>,
     desired_capabilities: Option<Vec<Symbol>>,
     properties: Option<Fields>,
+
+    // local links
+    local_links: Slab<Sender<LinkIncomingItem>>,
 }
 
 impl Session {
@@ -131,7 +136,25 @@ impl endpoint::Session for Session {
     }
 
     fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError> {
-        todo!()
+        match &self.local_state {
+            SessionState::Mapped => {},
+            _ => return Err(EngineError::Message("Illegal session local state"))
+        };
+
+        // get a new entry index
+        let entry = self.local_links.vacant_entry();
+        let handle = Handle(entry.key() as u32);
+
+        // check if handle max is exceeded
+        if handle.0 > self.handle_max.0 {
+            Err(EngineError::Message(
+                "Handle max exceeded"
+            ))
+        } else {
+            entry.insert(tx);
+            // TODO: how to know which link to send the Flow frames to?
+            Ok(handle)
+        }
     }
 
     fn drop_link(&mut self, handle: Handle) {

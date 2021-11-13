@@ -141,7 +141,9 @@ where
                     .map_err(Into::into)?;
             }
             SessionControl::CreateLink{tx, responder} => {
-                todo!()
+                let result = self.session.create_link(tx);
+                responder.send(result)
+                    .map_err(|_| EngineError::Message("Oneshot channel dropped"))?;
             }
             SessionControl::DropLink(handle) => {
                 todo!()
@@ -156,6 +158,18 @@ where
 
     #[inline]
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, EngineError> {
+        match self.session.local_state() {
+            SessionState::Mapped => {},
+            _ => return Err(EngineError::Message("Illegal local session state"))
+        }
+
+        // let session_frame = match frame {
+        //     LinkFrame::Attach(attach) => {
+        //         self.session
+        //             .on_outgoing_attach(attach)
+        //     }
+        // };
+        
         todo!()
     }
 

@@ -222,7 +222,7 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
 }
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender<SenderLink>, EngineError> {
+    pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender, EngineError> {
         use crate::endpoint;
 
         let local_state = LinkState::Unattached;
@@ -265,17 +265,19 @@ impl Builder<role::Sender, WithName, WithTarget> {
         // Wait for an Attach frame 
         let frame = match incoming_rx.recv().await {
             Some(frame) => frame,
-            None => todo!()
+            None => return Err(EngineError::Message("Expecting remote link frame")) // TODO: how to handle this?
         };
         let remote_attach = match frame {
             LinkFrame::Attach(attach) => attach,
-            _ => todo!()
+            _ => return Err(EngineError::Message("Expecting remote attach frame")) // TODO: how to handle this?
         };
         endpoint::Link::on_incoming_attach(&mut link, remote_attach).await?;
 
         // Attach completed, return Sender
         let sender = Sender {
-            link
+            link,
+            outgoing,
+            incoming: incoming_rx,
         };
         Ok(sender)
     }

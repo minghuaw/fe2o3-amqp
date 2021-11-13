@@ -44,12 +44,21 @@ pub struct Target {
     capabilities: Option<Vec<Symbol>>,
 }
 
+impl Target {
+    pub fn builder() -> Builder {
+        Builder::new()
+    }
+}
+
 impl<T: Into<Address>> From<T> for Target {
     fn from(val: T) -> Self {
-        Self {
-            address: Some(val.into()),
-            ..Default::default()
-        }
+        // Self {
+        //     address: Some(val.into()),
+        //     ..Default::default()
+        // }
+        Self::builder()
+            .address(val.into())
+            .build()
     }
 }
 
@@ -64,37 +73,37 @@ impl Builder {
         }
     }
 
-    pub fn address(&mut self, address: impl Into<Address>) -> &mut Self {
+    pub fn address(mut self, address: impl Into<Address>) -> Self {
         self.target.address = Some(address.into());
         self
     }
 
-    pub fn durable(&mut self, durability: TerminusDurability) -> &mut Self {
+    pub fn durable(mut self, durability: TerminusDurability) -> Self {
         self.target.durable = durability;
         self
     }
 
-    pub fn expiry_policy(&mut self, policy: TerminusExpiryPolicy) -> &mut Self {
+    pub fn expiry_policy(mut self, policy: TerminusExpiryPolicy) -> Self {
         self.target.expiry_policy = policy;
         self
     }
 
-    pub fn timeout(&mut self, timeout: impl Into<Seconds>) -> &mut Self {
+    pub fn timeout(mut self, timeout: impl Into<Seconds>) -> Self {
         self.target.timeout = timeout.into();
         self
     }
 
-    pub fn dynamic(&mut self, dynamic: bool) -> &mut Self {
+    pub fn dynamic(mut self, dynamic: bool) -> Self {
         self.target.dynamic = dynamic;
         self
     }
 
-    pub fn dynamic_node_properties(&mut self, properties: impl Into<Fields>) -> &mut Self {
+    pub fn dynamic_node_properties(mut self, properties: impl Into<Fields>) -> Self {
         self.target.dynamic_node_properties = Some(properties.into());
         self
     }
 
-    pub fn capabilities(&mut self, capabilities: Vec<Symbol>) -> &mut Self {
+    pub fn capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.target.capabilities = Some(capabilities);
         self
     }

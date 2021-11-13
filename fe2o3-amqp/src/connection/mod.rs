@@ -77,9 +77,11 @@ impl ConnectionHandle {
     }
 
     pub(crate) async fn create_session(&mut self, tx: Sender<SessionIncomingItem>) -> Result<(u16, SessionId), EngineError> {
-        let (responder, resp_rx) = oneshot::channel::<(u16, usize)>();
+        let (responder, resp_rx) = oneshot::channel();
         self.control.send(ConnectionControl::CreateSession{tx, responder}).await?;
-        resp_rx.await.map_err(|_| EngineError::Message("Oneshot sender is dropped"))
+        let result = resp_rx.await
+            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
+        result
     }
 
     pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), EngineError> {
