@@ -143,3 +143,19 @@ impl<T: Into<Address>> From<T> for Source {
             .build()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_amqp::to_vec;
+
+    use super::Source;
+
+    #[test]
+    fn test_serialize_source() {
+        let source = Source::builder()
+            .address("q1")
+            .build();
+        let buf = to_vec(&source).unwrap();
+        println!("{:#01x?}", buf);
+    }
+}

@@ -106,3 +106,8 @@ pub struct Attach {
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,
 }
+
+#[cfg(test)]
+mod tests {
+    
+}
