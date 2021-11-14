@@ -614,6 +614,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         if name == DESCRIPTOR
         // || name == VALUE || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR
         {
+            let code = [EncodingCodes::DescribedType as u8];
+            self.writer.write_all(&code)?;
             value.serialize(self)
         } else {
             let mut state = self.serialize_seq(Some(2))?;
@@ -659,13 +661,13 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         // Simply serialize the content as seq
         if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
-            let code = [EncodingCodes::DescribedType as u8];
-            self.writer.write_all(&code)?;
+            // let code = [EncodingCodes::DescribedType as u8];
+            // self.writer.write_all(&code)?;
             Ok(TupleStructSerializer::descriptor(self))
         } else if name == DESCRIBED_LIST {
             self.struct_encoding = StructEncoding::DescribedList;
-            let code = [EncodingCodes::DescribedType as u8];
-            self.writer.write_all(&code)?;
+            // let code = [EncodingCodes::DescribedType as u8];
+            // self.writer.write_all(&code)?;
             Ok(TupleStructSerializer::descriptor(self))
         } else {
             Ok(TupleStructSerializer::fields(self))
@@ -698,24 +700,24 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 if name == DESCRIBED_LIST {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
-                        let code = [EncodingCodes::DescribedType as u8];
-                        self.writer.write_all(&code)?;
+                        // let code = [EncodingCodes::DescribedType as u8];
+                        // self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedList;
                     Ok(StructSerializer::list_value(self))
                 } else if name == DESCRIBED_MAP {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
-                        let code = [EncodingCodes::DescribedType as u8];
-                        self.writer.write_all(&code)?;
+                        // let code = [EncodingCodes::DescribedType as u8];
+                        // self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedMap;
                     Ok(StructSerializer::map_value(self))
                 } else if name == DESCRIBED_BASIC {
                     if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
                     {
-                        let code = [EncodingCodes::DescribedType as u8];
-                        self.writer.write_all(&code)?;
+                        // let code = [EncodingCodes::DescribedType as u8];
+                        // self.writer.write_all(&code)?;
                     }
                     self.struct_encoding = StructEncoding::DescribedBasic;
                     Ok(StructSerializer::basic_value(self))
@@ -1227,6 +1229,8 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
         T: Serialize,
     {
         if key == DESCRIPTOR {
+            // let code = [EncodingCodes::DescribedType as u8];
+            // self.se.writer.write_all(&code)?;
             value.serialize(self.as_mut())
         } else {
             self.count += 1;
@@ -1780,14 +1784,14 @@ mod test {
     fn test_serialize_descriptor_name() {
         // The descriptor name should just be serialized as a symbol
         let descriptor = Descriptor::name("amqp");
-        let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
+        let expected = vec![0x00, 0xa3, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
 
     #[test]
     fn test_serialize_descriptor_code() {
         let descriptor = Descriptor::code(0xf2);
-        let expected = vec![0x53, 0xf2];
+        let expected = vec![0x00, 0x53, 0xf2];
         assert_eq_on_serialized_vs_expected(descriptor, expected);
     }
 
@@ -1833,8 +1837,10 @@ mod test {
             is_fool: true,
             a: 9,
         };
-        let buf = to_vec(&foo).unwrap();
-        println!("{:x?}", buf);
+        // let buf = to_vec(&foo).unwrap();
+        let expected = vec![0x00, 0x53, 0x13, 0xc0, 0x04, 0x02, 0x41, 0x54, 0x09];
+        // println!("{:x?}", buf);
+        assert_eq_on_serialized_vs_expected(foo, expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -1844,12 +1850,14 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list")]
+        #[amqp_contract(code = 0x13, encoding = "list")]
         struct Foo(bool, i32);
 
         let foo = Foo(true, 9);
-        let buf = to_vec(&foo).unwrap();
-        println!("{:x?}", buf);
+        // let buf = to_vec(&foo).unwrap();
+        // println!("{:x?}", buf);
+        let expected = vec![0x00, 0x53, 0x13, 0xc0, 0x04, 0x02, 0x41, 0x54, 0x09];
+        assert_eq_on_serialized_vs_expected(foo, expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
