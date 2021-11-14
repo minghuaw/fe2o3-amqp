@@ -12,7 +12,7 @@ async fn main() {
     println!("Starting connection");
 
     let mut connection = Connection::builder()
-        .container_id("1234")
+        .container_id("fe2o3-amqp")
         .hostname("127.0.0.1")
         .max_frame_size(1000)
         .channel_max(9)
@@ -23,7 +23,7 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
     
-    // let sender = Sender::attach(&mut session, "sender-link-1", "q1").await.unwrap();
+    let sender = Sender::attach(&mut session, "sender-link-1", "q1").await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(500)).await;
 

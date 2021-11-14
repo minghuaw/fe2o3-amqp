@@ -204,7 +204,10 @@ where
                 incoming = self.incoming.recv() => {
                     match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
-                        None => todo!()
+                        None => {
+                            // TODO: incoming connection dropped
+                            Ok(Running::Stop)
+                        }
                     }
                 },
                 control = self.control.recv() => {

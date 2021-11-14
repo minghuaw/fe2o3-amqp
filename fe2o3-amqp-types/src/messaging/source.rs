@@ -153,9 +153,10 @@ mod tests {
     #[test]
     fn test_serialize_source() {
         let source = Source::builder()
-            .address("q1")
+            // .address("q1")
             .build();
         let buf = to_vec(&source).unwrap();
         println!("{:#01x?}", buf);
+        // println!("{:#01?}", buf);
     }
 }

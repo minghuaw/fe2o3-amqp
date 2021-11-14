@@ -109,5 +109,32 @@ pub struct Attach {
 
 #[cfg(test)]
 mod tests {
-    
+    use serde_amqp::to_vec;
+
+    use crate::{definitions::{ReceiverSettleMode, Role, SenderSettleMode}, messaging::Source};
+
+    use super::Attach;
+
+    #[test]
+    fn test_serialize_attach() {
+        let attach = Attach {
+            name: "sender-link-1".into(),
+            handle: 0.into(),
+            role: Role::Sender,
+            snd_settle_mode: SenderSettleMode::Unsettled,
+            rcv_settle_mode: ReceiverSettleMode::First,
+            source: Some(Source::default()),
+            target: Some("q1".into()),
+            unsettled: None,
+            incomplete_unsettled: false,
+            initial_delivery_count: Some(0),
+            max_message_size: Some(0),
+            offered_capabilities: None,
+            desired_capabilities: None,
+            properties: None,
+        };
+        let buf = to_vec(&attach).unwrap();
+        println!("buf len: {:?}", buf.len());
+        println!("{:#x?}", buf);
+    }
 }
