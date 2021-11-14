@@ -229,7 +229,10 @@ where
                 match next {
                     Some(item) => {
                         let mut src = match item {
-                            Ok(b) => b,
+                            Ok(b) => {
+                                println!(">>> Debug: frame {:x?}", &b[..]);
+                                b
+                            },
                             Err(err) => {
                                 use std::any::Any;
                                 let any = &err as &dyn Any;

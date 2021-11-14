@@ -510,6 +510,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_bool");
         visitor.visit_bool(self.parse_bool()?)
     }
 
@@ -518,6 +519,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i8");
         visitor.visit_i8(self.parse_i8()?)
     }
 
@@ -526,6 +528,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i16");
         visitor.visit_i16(self.parse_i16()?)
     }
 
@@ -534,6 +537,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i32");
         visitor.visit_i32(self.parse_i32()?)
     }
 
@@ -542,6 +546,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_i64");
         match self.new_type {
             NewType::None => visitor.visit_i64(self.parse_i64()?),
             NewType::Timestamp => {
@@ -557,6 +562,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u8");
         visitor.visit_u8(self.parse_u8()?)
     }
 
@@ -565,6 +571,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u16");
         visitor.visit_u16(self.parse_u16()?)
     }
 
@@ -573,6 +580,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_u32");
         visitor.visit_u32(self.parse_u32()?)
     }
 
@@ -590,6 +598,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_f32");
         visitor.visit_f32(self.parse_f32()?)
     }
 
@@ -598,6 +607,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_f64");
         visitor.visit_f64(self.parse_f64()?)
     }
 
@@ -606,6 +616,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_char");
         visitor.visit_char(self.parse_char()?)
     }
 
@@ -714,6 +725,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_unit");
         self.parse_unit().and_then(|_| visitor.visit_unit())
     }
 
@@ -725,6 +737,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_unit_struct");
         self.deserialize_unit(visitor)
     }
 
@@ -889,6 +902,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_map");
         let code = self.get_elem_code_or_read_format_code()?;
         let (size, count) = match code {
             EncodingCodes::Map8 => {
@@ -929,6 +943,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_tuple_struct");
         if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
             self.parse_described_basic(visitor)
@@ -952,6 +967,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_struct");
         match self.struct_encoding {
             StructEncoding::None => {
                 if name == DESCRIBED_BASIC {
@@ -1045,6 +1061,7 @@ where
     where
         V: de::Visitor<'de>,
     {
+        println!(">>> Debug: deserialize_identifier");
         match self.enum_type {
             EnumType::Value => {
                 let code = self.get_elem_code_or_peek_byte()?;
@@ -1088,6 +1105,7 @@ where
         V: de::Visitor<'de>,
     {
         // The deserializer will only peek the next u8
+        println!(">>> Debug: deserialize_ignored_any");
         let code = self.reader.peek()?;
         match code.try_into()? {
             EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
@@ -1139,6 +1157,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
             _ => {
                 self.count = self.count - 1;
                 seed.deserialize(self.as_mut()).map(Some)
+                // let code = self.de.reader.peek()?;
+                // match code.try_into()? {
+                //     EncodingCodes::Null => {
+                //         let _ = self.de.reader.next(); // consume the Null byte
+                //         Ok(None)
+                //     },
+                //     _ => seed.deserialize(self.as_mut()).map(Some)
+                // }
             }
         }
     }
@@ -1179,6 +1205,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
             _ => {
                 self.count = self.count - 1;
                 seed.deserialize(self.as_mut()).map(Some)
+                // let code = self.de.reader.peek()?;
+                // match code.try_into()? {
+                //     EncodingCodes::Null => {
+                //         let _ = self.de.reader.next(); // consume the Null byte
+                //         Ok(None)
+                //     },
+                //     _ => seed.deserialize(self.as_mut()).map(Some)
+                // }
             }
         }
     }
@@ -1422,7 +1456,15 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                     return Ok(None);
                 }
                 self.field_count -= 1;
-                seed.deserialize(self.as_mut()).map(Some)
+                // seed.deserialize(self.as_mut()).map(Some)
+                let code = self.de.reader.peek()?;
+                match code.try_into()? {
+                    EncodingCodes::Null => {
+                        let _ = self.de.reader.next(); // consume the Null byte
+                        Ok(None)
+                    },
+                    _ => seed.deserialize(self.as_mut()).map(Some)
+                }
             }
         }
     }
