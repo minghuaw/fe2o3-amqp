@@ -84,10 +84,10 @@ impl SessionHandle {
         result
     }
 
-    pub(crate) async fn drop_link(&mut self, handle: Handle) -> Result<(), EngineError> {
-        self.control.send(SessionControl::DropLink(handle)).await?;
-        Ok(())
-    }
+    // pub(crate) async fn drop_link(&mut self, handle: Handle) -> Result<(), EngineError> {
+    //     self.control.send(SessionControl::DropLink(handle)).await?;
+    //     Ok(())
+    // }
 }
 
 pub struct Session {
