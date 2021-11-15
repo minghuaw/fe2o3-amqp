@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
@@ -105,6 +107,7 @@ pub struct Session {
 
     // local links
     local_links: Slab<Sender<LinkIncomingItem>>,
+    link_by_name: BTreeMap<String, Handle>,
 }
 
 impl Session {

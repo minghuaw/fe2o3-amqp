@@ -4,21 +4,18 @@
 use std::cmp::min;
 use std::time::Duration;
 
-use fe2o3_amqp_types::definitions::ConnectionError;
-use fe2o3_amqp_types::performatives::{Attach, Close};
-use futures_util::{Sink, SinkExt, Stream, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 
-use crate::connection::Connection;
-use crate::control::{ConnectionControl, SessionControl};
+use crate::control::{ConnectionControl};
 use crate::error::EngineError;
 use crate::session::{SessionFrame, SessionFrameBody};
 use crate::transport::amqp::Frame;
 use crate::transport::Transport;
 use crate::util::Running;
-use crate::{connection, endpoint};
+use crate::{endpoint};
 
 use super::heartbeat::HeartBeat;
 use super::ConnectionState;

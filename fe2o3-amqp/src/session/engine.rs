@@ -193,9 +193,10 @@ where
         
         self.outgoing.send(session_frame).await?;
 
-        // Handling LinkFrame should not have any effect on
-        // SessionState
-        Ok(Running::Continue)
+        match self.session.local_state() {
+            SessionState::Unmapped => Ok(Running::Stop),
+            _ => Ok(Running::Continue),
+        }
     }
 
     async fn event_loop(mut self) -> Result<(), EngineError> {

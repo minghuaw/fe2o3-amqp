@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::{Symbol, UInt};
 use slab::Slab;
@@ -131,6 +133,7 @@ impl Builder {
             properties: self.properties,
 
             local_links: Slab::new(),
+            link_by_name: BTreeMap::new(),
         };
         let engine = SessionEngine::begin(
             conn.control.clone(),

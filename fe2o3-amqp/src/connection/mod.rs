@@ -3,17 +3,16 @@ use std::{cmp::min, collections::BTreeMap, convert::TryInto};
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
-    definitions::{Error, Fields, IetfLanguageTag, Milliseconds},
+    definitions::{Error},
     performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open},
-    primitives::Symbol,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
-use tokio::{sync::{mpsc::{self, Receiver, Sender}, oneshot}, task::JoinHandle};
+use tokio::{sync::{mpsc::{Sender}, oneshot}, task::JoinHandle};
 use url::Url;
 
 use crate::{
-    control::{ConnectionControl, SessionControl},
+    control::{ConnectionControl},
     endpoint,
     error::EngineError,
     session::SessionFrame,
@@ -84,10 +83,10 @@ impl ConnectionHandle {
         result
     }
 
-    pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), EngineError> {
-        self.control.send(ConnectionControl::DropSession(session_id)).await?;
-        Ok(())
-    }
+    // pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), EngineError> {
+    //     self.control.send(ConnectionControl::DropSession(session_id)).await?;
+    //     Ok(())
+    // }
 }
 
 pub struct Connection {
@@ -206,7 +205,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Open frame
-    async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error> {
+    async fn on_incoming_open(&mut self, _channel: u16, open: Open) -> Result<(), Self::Error> {
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
