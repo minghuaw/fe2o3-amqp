@@ -78,7 +78,7 @@ pub trait Connection {
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<EngineError>;
+        W::Error: Into<Self::Error>;
 
     async fn send_close<W>(
         &mut self,
@@ -86,7 +86,8 @@ pub trait Connection {
         error: Option<Error>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<Frame, Error = EngineError> + Send + Unpin;
+        W: Sink<Frame> + Send + Unpin,
+        W::Error: Into<Self::Error>;
 
     /// Intercepting session frames
     fn on_outgoing_begin(&mut self, channel: u16, begin: Begin)
@@ -107,9 +108,10 @@ pub trait Connection {
 
 #[async_trait]
 pub trait HandleConnectionError {
+    type Error;
     type Outcome;
 
-    fn handle_err<W>(&mut self, writer: &mut W, err: EngineError) -> Self::Outcome
+    fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
     where 
         W: Sink<Frame> + Send + Unpin,
         W::Error: Into<EngineError>;
@@ -147,15 +149,22 @@ pub trait Session {
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
     // Handling SessionFrames
-    async fn send_begin(
+    async fn send_begin<W>(
         &mut self,
-        writer: &mut mpsc::Sender<SessionFrame>,
-    ) -> Result<(), Self::Error>;
-    async fn send_end(
+        writer: &mut W,
+    ) -> Result<(), Self::Error>
+    where 
+        W: Sink<SessionFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>;
+    
+    async fn send_end<W>(
         &mut self,
-        writer: &mut mpsc::Sender<SessionFrame>,
+        writer: &mut W,
         error: Option<Error>,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::Error>
+    where 
+        W: Sink<SessionFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>;
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
@@ -174,9 +183,10 @@ pub trait Session {
 
 #[async_trait]
 pub trait HandleSessionError {
+    type Error;
     type Outcome;
 
-    fn handle_err<W>(&mut self, writer: &mut W, err: EngineError) -> Self::Outcome
+    fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
     where 
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<EngineError>;
@@ -198,25 +208,41 @@ pub trait Link {
     ) -> Result<(), Self::Error>;
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
 
-    async fn send_attach(
+    async fn send_attach<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>,
-    ) -> Result<(), Self::Error>;
+        writer: &mut W,
+    ) -> Result<(), Self::Error>
+    where 
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    ;
 
-    async fn send_flow(
+    async fn send_flow<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>
-    ) -> Result<(), Self::Error>;
+        writer: &mut W
+    ) -> Result<(), Self::Error>
+    where 
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    ;
 
-    async fn send_disposition(
+    async fn send_disposition<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>
-    ) -> Result<(), Self::Error>;
+        writer: &mut W,
+    ) -> Result<(), Self::Error>
+    where   
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    ;
 
-    async fn send_detach(
+    async fn send_detach<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>,
-    ) -> Result<(), Self::Error>;
+        writer: &mut W,
+    ) -> Result<(), Self::Error>
+    where   
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    ;
 
     // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
     // async fn on_outgoing_flow() -> Result<(), Self::Error>;
@@ -226,9 +252,10 @@ pub trait Link {
 
 #[async_trait]
 pub trait HandleLinkError {
+    type Error;
     type Outcome;
 
-    fn handle_err<W>(&mut self, writer: &mut W, err: EngineError) -> Self::Outcome
+    fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
     where 
         W: Sink<LinkFrame> + Send + Unpin,
         W::Error: Into<EngineError>;

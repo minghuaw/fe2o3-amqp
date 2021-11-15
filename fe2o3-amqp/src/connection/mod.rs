@@ -359,10 +359,12 @@ impl endpoint::Connection for Connection {
         error: Option<Error>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<Frame, Error = EngineError> + Send + Unpin,
+        W: Sink<Frame> + Send + Unpin,
+        W::Error: Into<EngineError>,
     {
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
-        writer.send(frame).await?;
+        writer.send(frame).await
+            .map_err(Into::into)?;
 
         match &self.local_state {
             ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,

@@ -34,7 +34,7 @@ pub struct ConnectionEngine<Io, C> {
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    C: endpoint::Connection<State = ConnectionState> + Send + 'static,
+    C: endpoint::Connection<State = ConnectionState, Error = EngineError> + Send + 'static,
 {
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
@@ -59,8 +59,7 @@ where
         engine
             .connection
             .send_open(&mut engine.transport)
-            .await
-            .map_err(Into::into)?;
+            .await?;
 
         // Wait for an Open
         let frame = match engine.transport.next().await {
@@ -79,8 +78,7 @@ where
         engine
             .connection
             .on_incoming_open(channel, remote_open)
-            .await
-            .map_err(Into::into)?;
+            .await?;
 
         // update transport setting
         let max_frame_size = min(
@@ -110,7 +108,7 @@ where
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + Send + Unpin,
-    C: endpoint::Connection<State = ConnectionState> + Send + 'static,
+    C: endpoint::Connection<State = ConnectionState, Error = EngineError> + Send + 'static,
 {
     async fn forward_to_session(
         &mut self,
@@ -145,8 +143,7 @@ where
                 let remote_idle_timeout = open.idle_time_out;
                 self.connection
                     .on_incoming_open(channel, open)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
 
                 // update transport setting
                 let max_frame_size = min(
@@ -168,8 +165,7 @@ where
             FrameBody::Begin(begin) => {
                 self.connection
                     .on_incoming_begin(channel, begin)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             FrameBody::Attach(attach) => {
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Attach(attach));
@@ -203,14 +199,12 @@ where
             FrameBody::End(end) => {
                 self.connection
                     .on_incoming_end(channel, end)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             FrameBody::Close(close) => self
                 .connection
                 .on_incoming_close(channel, close)
-                .await
-                .map_err(Into::into)?,
+                .await?,
             FrameBody::Empty => {
                 // do nothing, IdleTimeout is tracked by Transport
             }
@@ -230,14 +224,12 @@ where
                 // let open = self.connection.local_open().clone();
                 self.connection
                     .send_open(&mut self.transport)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             ConnectionControl::Close(error) => {
                 self.connection
                     .send_close(&mut self.transport, error)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             ConnectionControl::CreateSession { tx, responder } => {
                 let result =
@@ -272,8 +264,7 @@ where
         let frame = match body {
             SessionFrameBody::Begin(begin) => self
                 .connection
-                .on_outgoing_begin(channel, begin)
-                .map_err(Into::into)?,
+                .on_outgoing_begin(channel, begin)?,
             SessionFrameBody::Attach(attach) => Frame::new(channel, FrameBody::Attach(attach)),
             SessionFrameBody::Flow(flow) => Frame::new(channel, FrameBody::Flow(flow)),
             SessionFrameBody::Transfer {
@@ -292,8 +283,7 @@ where
             SessionFrameBody::Detach(detach) => Frame::new(channel, FrameBody::Detach(detach)),
             SessionFrameBody::End(end) => self
                 .connection
-                .on_outgoing_end(channel, end)
-                .map_err(Into::into)?,
+                .on_outgoing_end(channel, end)?,
         };
 
         self.transport.send(frame).await?;

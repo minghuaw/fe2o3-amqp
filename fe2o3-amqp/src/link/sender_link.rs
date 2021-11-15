@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{definitions::{DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo}, messaging::{DeliveryState, Source, Target}, performatives::{Attach, Detach, Disposition, Flow}, primitives::Symbol};
+use futures_util::{Sink, SinkExt};
 use tokio::sync::mpsc;
 
 use crate::{endpoint, error::EngineError};
@@ -67,10 +68,14 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn send_attach(
+    async fn send_attach<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>,
-    ) -> Result<(), Self::Error> {
+        writer: &mut W,
+    ) -> Result<(), Self::Error> 
+    where 
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    {
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
@@ -110,11 +115,13 @@ impl endpoint::Link for SenderLink {
         
         match self.local_state {
             LinkState::Unattached => {
-                writer.send(frame).await?;
+                writer.send(frame).await
+                    .map_err(Into::into)?;
                 self.local_state = LinkState::AttachSent
             },
             LinkState::AttachReceived => {
-                writer.send(frame).await?;
+                writer.send(frame).await
+                    .map_err(Into::into)?;
                 self.local_state = LinkState::Attached
             },
             _ => return Err(EngineError::Message("Wrong LinkState"))
@@ -123,24 +130,36 @@ impl endpoint::Link for SenderLink {
         Ok(())
     }
 
-    async fn send_flow(
+    async fn send_flow<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>
-    ) -> Result<(), Self::Error> {
+        writer: &mut W
+    ) -> Result<(), Self::Error> 
+    where   
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    {
         todo!()
     }
 
-    async fn send_disposition(
+    async fn send_disposition<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>
-    ) -> Result<(), Self::Error> {
+        writer: &mut W,
+    ) -> Result<(), Self::Error> 
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    {
         todo!()
     }
 
-    async fn send_detach(
+    async fn send_detach<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>,
-    ) -> Result<(), Self::Error> {
+        writer: &mut W,
+    ) -> Result<(), Self::Error> 
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    {
         todo!()
     }
 }

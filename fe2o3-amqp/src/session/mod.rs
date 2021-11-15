@@ -7,6 +7,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };
+use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{sync::{mpsc::{self, Sender}, oneshot}, task::JoinHandle};
 
@@ -256,10 +257,14 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn send_begin(
+    async fn send_begin<W>(
         &mut self,
-        writer: &mut mpsc::Sender<SessionFrame>,
-    ) -> Result<(), Self::Error> {
+        writer: &mut W,
+    ) -> Result<(), Self::Error> 
+    where
+        W: Sink<SessionFrame> + Send + Unpin,
+        W::Error: Into<EngineError>,
+    {
         let begin = Begin {
             remote_channel: self.incoming_channel,
             next_outgoing_id: self.next_outgoing_id,
@@ -275,11 +280,13 @@ impl endpoint::Session for Session {
         // check local states
         match &self.local_state {
             SessionState::Unmapped => {
-                writer.send(frame).await?;
+                writer.send(frame).await
+                    .map_err(Into::into)?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await?;
+                writer.send(frame).await
+                    .map_err(Into::into)?;
                 self.local_state = SessionState::Mapped;
             }
             _ => return Err(EngineError::Message("Illegal local state")),
@@ -350,11 +357,15 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    async fn send_end(
+    async fn send_end<W>(
         &mut self,
-        writer: &mut mpsc::Sender<SessionFrame>,
+        writer: &mut W,
         error: Option<Error>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::Error> 
+    where
+        W: Sink<SessionFrame> + Send + Unpin,
+        W::Error: Into<EngineError>,
+    {
         match self.local_state {
             SessionState::Mapped => match error.is_some() {
                 true => self.local_state = SessionState::Discarding,
@@ -365,7 +376,8 @@ impl endpoint::Session for Session {
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer.send(frame).await?;
+        writer.send(frame).await
+            .map_err(Into::into)?;
         Ok(())
     }
 }

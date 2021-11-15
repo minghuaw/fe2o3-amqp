@@ -4,6 +4,7 @@ use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::{Symbol, UInt};
 use slab::Slab;
 use tokio::sync::mpsc;
+use tokio_util::sync::PollSender;
 
 use crate::{
     connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
@@ -141,7 +142,7 @@ impl Builder {
             session_id,
             session_control_rx,
             incoming_rx,
-            conn.outgoing.clone(),
+            PollSender::new(conn.outgoing.clone()),
             outgoing_rx,
         ).await?;
         

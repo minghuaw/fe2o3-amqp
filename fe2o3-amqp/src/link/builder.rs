@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, marker::PhantomData};
 use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, primitives::{Symbol, ULong}};
 use futures_util::SinkExt;
 use tokio::sync::mpsc;
+use tokio_util::sync::PollSender;
 
 use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkFrame, LinkIncomingItem, LinkState, sender_link::SenderLink}, session::SessionHandle};
 
@@ -233,7 +234,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let output_handle = session.create_link(incoming_tx).await?;
 
         // Get writer to session
-        let mut writer = session.outgoing.clone();
+        let writer = session.outgoing.clone();
 
         let max_message_size = match self.max_message_size {
             Some(s) => s as usize,
@@ -260,6 +261,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
         // let mut link = SenderLink::new();
         // Send an Attach frame
+        let mut writer = PollSender::new(writer);
         endpoint::Link::send_attach(&mut link, &mut writer).await?;
 
         // Wait for an Attach frame 

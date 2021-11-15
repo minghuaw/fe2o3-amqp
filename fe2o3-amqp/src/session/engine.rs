@@ -1,5 +1,6 @@
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
+use tokio_util::sync::PollSender;
 
 use crate::{connection::engine::SessionId, control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, link::LinkFrame, util::Running};
 
@@ -11,14 +12,14 @@ pub struct SessionEngine<S> {
     session_id: SessionId,
     control: mpsc::Receiver<SessionControl>,
     incoming: mpsc::Receiver<SessionIncomingItem>,
-    outgoing: mpsc::Sender<SessionFrame>,
+    outgoing: PollSender<SessionFrame>,
 
     outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState> + Send + 'static,
+    S: endpoint::Session<State = SessionState, Error = EngineError> + Send + 'static,
 {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
@@ -26,7 +27,7 @@ where
         session_id: SessionId,        
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
-        outgoing: mpsc::Sender<SessionFrame>,
+        outgoing: PollSender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
     ) -> Result<Self, EngineError> {
         let mut engine = Self {
@@ -43,8 +44,7 @@ where
         engine
             .session
             .send_begin(&mut engine.outgoing)
-            .await
-            .map_err(Into::into)?;
+            .await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame?,
@@ -58,8 +58,7 @@ where
         engine
             .session
             .on_incoming_begin(channel, remote_begin)
-            .await
-            .map_err(Into::into)?;
+            .await?;
         Ok(engine)
     }
 
@@ -75,20 +74,17 @@ where
             SessionFrameBody::Begin(begin) => {
                 self.session
                     .on_incoming_begin(channel, begin)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionFrameBody::Attach(attach) => {
                 self.session
                     .on_incoming_attach(channel, attach)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionFrameBody::Flow(flow) => {
                 self.session
                     .on_incoming_flow(channel, flow)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionFrameBody::Transfer {
                 performative,
@@ -96,26 +92,22 @@ where
             } => {
                 self.session
                     .on_incoming_transfer(channel, performative, payload)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionFrameBody::Disposition(disposition) => {
                 self.session
                     .on_incoming_disposition(channel, disposition)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionFrameBody::Detach(detach) => {
                 self.session
                     .on_incoming_detach(channel, detach)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionFrameBody::End(end) => {
                 self.session
                     .on_incoming_end(channel, end)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
         }
 
@@ -131,14 +123,12 @@ where
             SessionControl::Begin => {
                 self.session
                     .send_begin(&mut self.outgoing)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionControl::End(error) => {
                 self.session
                     .send_end(&mut self.outgoing, error)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             SessionControl::CreateLink{tx, responder} => {
                 let result = self.session.create_link(tx);
@@ -166,28 +156,23 @@ where
         let session_frame = match frame {
             LinkFrame::Attach(attach) => {
                 self.session
-                    .on_outgoing_attach(attach)
-                    .map_err(Into::into)?
+                    .on_outgoing_attach(attach)?
             },
             LinkFrame::Flow(flow) => {
                 self.session
-                    .on_outgoing_flow(flow)
-                    .map_err(Into::into)?
+                    .on_outgoing_flow(flow)?
             },
             LinkFrame::Transfer{performative, payload} => {
                 self.session
-                    .on_outgoing_transfer(performative, payload)
-                    .map_err(Into::into)?
+                    .on_outgoing_transfer(performative, payload)?
             },
             LinkFrame::Disposition(disposition) => {
                 self.session
-                    .on_outgoing_disposition(disposition)
-                    .map_err(Into::into)?
+                    .on_outgoing_disposition(disposition)?
             },
             LinkFrame::Detach(detach) => {
                 self.session
-                    .on_outgoing_detach(detach)
-                    .map_err(Into::into)?
+                    .on_outgoing_detach(detach)?
             }
         };
         
