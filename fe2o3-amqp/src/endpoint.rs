@@ -77,7 +77,8 @@ pub trait Connection {
     /// and revert the state changes would be too complicated
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<Frame, Error = EngineError> + Send + Unpin;
+        W: Sink<Frame> + Send + Unpin,
+        W::Error: Into<EngineError>;
 
     async fn send_close<W>(
         &mut self,
@@ -102,6 +103,16 @@ pub trait Connection {
         &mut self,
         channel: u16,
     ) -> Option<&mut mpsc::Sender<SessionIncomingItem>>;
+}
+
+#[async_trait]
+pub trait HandleConnectionError {
+    type Outcome;
+
+    fn handle_err<W>(&mut self, writer: &mut W, err: EngineError) -> Self::Outcome
+    where 
+        W: Sink<Frame> + Send + Unpin,
+        W::Error: Into<EngineError>;
 }
 
 #[async_trait]
@@ -162,6 +173,16 @@ pub trait Session {
 }
 
 #[async_trait]
+pub trait HandleSessionError {
+    type Outcome;
+
+    fn handle_err<W>(&mut self, writer: &mut W, err: EngineError) -> Self::Outcome
+    where 
+        W: Sink<SessionFrame> + Send + Unpin,
+        W::Error: Into<EngineError>;
+}
+
+#[async_trait]
 pub trait Link {
     type Error: Into<EngineError>;
 
@@ -201,6 +222,16 @@ pub trait Link {
     // async fn on_outgoing_flow() -> Result<(), Self::Error>;
     // async fn on_outgoing_transfer() -> Result<(), Self::Error>;
     // async fn on_outgoing_disposition() -> Result<(), Self::Error>;
+}
+
+#[async_trait]
+pub trait HandleLinkError {
+    type Outcome;
+
+    fn handle_err<W>(&mut self, writer: &mut W, err: EngineError) -> Self::Outcome
+    where 
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<EngineError>;
 }
 
 #[async_trait]

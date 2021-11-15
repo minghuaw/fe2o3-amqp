@@ -250,7 +250,9 @@ impl endpoint::Connection for Connection {
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
                 tx.send(Ok(sframe)).await?;
             }
-            None => todo!(),
+            None => {
+                todo!()
+            },
         }
 
         Ok(())
@@ -302,13 +304,15 @@ impl endpoint::Connection for Connection {
 
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<Frame, Error = EngineError> + Send + Unpin,
+        W: Sink<Frame> + Send + Unpin,
+        W::Error: Into<EngineError>,
     {
         println!(">>> Debug: on_outgoing_open");
 
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
-        writer.send(frame).await?;
+        writer.send(frame).await
+            .map_err(Into::into)?;
 
         // change local state after successfully sending the frame
         match &self.local_state {

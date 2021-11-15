@@ -181,10 +181,27 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_attach(
         &mut self,
-        channel: u16,
+        _channel: u16,
         attach: Attach,
     ) -> Result<(), Self::Error> {
-        todo!()
+        // look up link Handle by link name
+        match self.link_by_name.get(&attach.name) {
+            Some(handle) => {
+                match self.local_links.get_mut(handle.0 as usize) {
+                    Some(link) => {
+                        link.send(LinkFrame::Attach(attach)).await?;
+                    },
+                    None => {
+                        todo!()
+                    }
+                }
+            },
+            None => {
+                todo!()
+            }
+        }
+
+        Ok(())
     }
 
     async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {
@@ -275,6 +292,13 @@ impl endpoint::Session for Session {
         // TODO: is state checking redundant?
 
         println!(">>> Debug: on_outgoing_attach");
+        let name = attach.name.clone();
+        let handle = attach.handle.clone();
+        match self.link_by_name.contains_key(&name) {
+            true => return Err(EngineError::Message("Link name must be unique")),
+            false => self.link_by_name.insert(name, handle),
+        };
+
         let body = SessionFrameBody::Attach(attach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
