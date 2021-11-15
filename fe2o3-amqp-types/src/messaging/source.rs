@@ -66,13 +66,13 @@ impl Source {
 }
 
 pub struct Builder {
-    source: Source
+    source: Source,
 }
 
 impl Builder {
     pub fn new() -> Self {
         Self {
-            source: Default::default()
+            source: Default::default(),
         }
     }
 
@@ -138,9 +138,7 @@ impl Builder {
 
 impl<T: Into<Address>> From<T> for Source {
     fn from(val: T) -> Self {
-        Self::builder()
-            .address(val.into())
-            .build()
+        Self::builder().address(val.into()).build()
     }
 }
 

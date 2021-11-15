@@ -3,7 +3,10 @@
 use fe2o3_amqp_types::definitions::{Error, Handle};
 use tokio::sync::{mpsc::Sender, oneshot};
 
-use crate::{connection::engine::SessionId, error::EngineError, link::LinkIncomingItem, session::SessionIncomingItem};
+use crate::{
+    connection::engine::SessionId, error::EngineError, link::LinkIncomingItem,
+    session::SessionIncomingItem,
+};
 
 pub enum ConnectionControl {
     Open,
@@ -18,7 +21,7 @@ pub enum ConnectionControl {
 pub enum SessionControl {
     Begin,
     End(Option<Error>),
-    CreateLink{
+    CreateLink {
         tx: Sender<LinkIncomingItem>,
         responder: oneshot::Sender<Result<Handle, EngineError>>,
     },

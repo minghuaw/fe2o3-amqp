@@ -8,7 +8,13 @@ use crate::primitives::Symbol;
 /// 2. go-amqp: Symbol?
 /// 3. qpid-proton-j2: Symbol
 #[derive(
-    Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, 
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
     // serde::Serialize, serde::Deserialize,
 )]
 // #[serde(untagged)]

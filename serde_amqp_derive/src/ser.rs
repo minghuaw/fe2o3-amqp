@@ -1,7 +1,14 @@
 use quote::quote;
 use syn::{DeriveInput, Fields};
 
-use crate::{DescribedStructAttr, EncodingType, util::{convert_to_case, macro_rules_buffer_if_eq_default, macro_rules_buffer_if_none, macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default, macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs}};
+use crate::{
+    util::{
+        convert_to_case, macro_rules_buffer_if_eq_default, macro_rules_buffer_if_none,
+        macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default,
+        macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs,
+    },
+    DescribedStructAttr, EncodingType,
+};
 
 pub(crate) fn expand_serialize(
     input: &syn::DeriveInput,
@@ -175,11 +182,11 @@ fn expand_serialize_struct(
         EncodingType::Basic | EncodingType::List => {
             let buffer_if_none = macro_rules_buffer_if_none();
             let buffer_if_eq_default = macro_rules_buffer_if_eq_default();
-            quote!{
+            quote! {
                 #buffer_if_none
                 #buffer_if_eq_default
             }
-        },
+        }
         EncodingType::Map => {
             let serialize_if_some = macro_rules_serialize_if_some();
             let serialize_if_neq_default = macro_rules_serialize_if_neq_default();
@@ -187,7 +194,7 @@ fn expand_serialize_struct(
                 #serialize_if_some
                 #serialize_if_neq_default
             }
-        },
+        }
     };
 
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
@@ -206,7 +213,7 @@ fn expand_serialize_struct(
                     },
                     false => quote! {
                         buffer_if_none!(state, nulls, &self.#id, #name, #ty);
-                    }
+                    },
                 };
                 field_impls.push(token);
             }
@@ -224,7 +231,7 @@ fn expand_serialize_struct(
                     },
                     false => quote! {
                         serialize_if_some!(state, &self.#id, #name, #ty);
-                    }
+                    },
                 };
                 field_impls.push(token);
             }

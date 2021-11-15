@@ -3,16 +3,19 @@ use std::{cmp::min, collections::BTreeMap, convert::TryInto};
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
-    definitions::{Error},
+    definitions::Error,
     performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open},
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
-use tokio::{sync::{mpsc::{Sender}, oneshot}, task::JoinHandle};
+use tokio::{
+    sync::{mpsc::Sender, oneshot},
+    task::JoinHandle,
+};
 use url::Url;
 
 use crate::{
-    control::{ConnectionControl},
+    control::ConnectionControl,
     endpoint,
     error::EngineError,
     session::SessionFrame,
@@ -75,10 +78,16 @@ impl ConnectionHandle {
         }
     }
 
-    pub(crate) async fn create_session(&mut self, tx: Sender<SessionIncomingItem>) -> Result<(u16, SessionId), EngineError> {
+    pub(crate) async fn create_session(
+        &mut self,
+        tx: Sender<SessionIncomingItem>,
+    ) -> Result<(u16, SessionId), EngineError> {
         let (responder, resp_rx) = oneshot::channel();
-        self.control.send(ConnectionControl::CreateSession{tx, responder}).await?;
-        let result = resp_rx.await
+        self.control
+            .send(ConnectionControl::CreateSession { tx, responder })
+            .await?;
+        let result = resp_rx
+            .await
             .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
         result
     }
@@ -252,7 +261,7 @@ impl endpoint::Connection for Connection {
             }
             None => {
                 todo!()
-            },
+            }
         }
 
         Ok(())
@@ -311,8 +320,7 @@ impl endpoint::Connection for Connection {
 
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
-        writer.send(frame).await
-            .map_err(Into::into)?;
+        writer.send(frame).await.map_err(Into::into)?;
 
         // change local state after successfully sending the frame
         match &self.local_state {
@@ -325,11 +333,7 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn on_outgoing_begin(
-        &mut self,
-        channel: u16,
-        begin: Begin,
-    ) -> Result<Frame, Self::Error> {
+    fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error> {
         println!(">>> Debug: on_outgoing_begin");
 
         // TODO: the engine already checks that
@@ -363,8 +367,7 @@ impl endpoint::Connection for Connection {
         W::Error: Into<EngineError>,
     {
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
-        writer.send(frame).await
-            .map_err(Into::into)?;
+        writer.send(frame).await.map_err(Into::into)?;
 
         match &self.local_state {
             ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,

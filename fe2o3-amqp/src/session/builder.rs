@@ -8,7 +8,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
-    control::{SessionControl},
+    control::SessionControl,
     error::EngineError,
     session::{engine::SessionEngine, SessionState},
 };
@@ -101,10 +101,7 @@ impl Builder {
         self
     }
 
-    pub async fn begin(
-        self,
-        conn: &mut ConnectionHandle,
-    ) -> Result<SessionHandle, EngineError> {
+    pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, EngineError> {
         use super::Session;
 
         let local_state = SessionState::Unmapped;
@@ -144,8 +141,9 @@ impl Builder {
             incoming_rx,
             PollSender::new(conn.outgoing.clone()),
             outgoing_rx,
-        ).await?;
-        
+        )
+        .await?;
+
         let handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,

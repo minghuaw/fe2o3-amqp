@@ -177,10 +177,7 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    pub async fn open_with_stream<Io>(
-        self,
-        mut stream: Io,
-    ) -> Result<ConnectionHandle, EngineError>
+    pub async fn open_with_stream<Io>(self, mut stream: Io) -> Result<ConnectionHandle, EngineError>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {

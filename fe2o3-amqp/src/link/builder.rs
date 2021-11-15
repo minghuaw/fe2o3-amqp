@@ -1,13 +1,22 @@
 use std::{collections::BTreeMap, marker::PhantomData};
 
-use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, primitives::{Symbol, ULong}};
+use fe2o3_amqp_types::{
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    messaging::{Source, Target},
+    primitives::{Symbol, ULong},
+};
 use futures_util::SinkExt;
 use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 
-use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkFrame, LinkIncomingItem, LinkState, sender_link::SenderLink}, session::SessionHandle};
+use crate::{
+    connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
+    error::EngineError,
+    link::{sender_link::SenderLink, LinkFrame, LinkIncomingItem, LinkState},
+    session::SessionHandle,
+};
 
-use super::{Receiver, Sender, role};
+use super::{role, Receiver, Sender};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -59,7 +68,7 @@ impl<Role, Addr> Builder<Role, WithoutName, Addr> {
             offered_capabilities: Default::default(),
             desired_capabilities: Default::default(),
             properties: Default::default(),
-            
+
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             role: PhantomData,
             name_state: PhantomData,
@@ -218,9 +227,7 @@ impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
     }
 }
 
-impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {
-
-}
+impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
 
 impl Builder<role::Sender, WithName, WithTarget> {
     pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender, EngineError> {
@@ -238,7 +245,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
         let max_message_size = match self.max_message_size {
             Some(s) => s as usize,
-            None => 0
+            None => 0,
         };
 
         // Create a SenderLink instance
@@ -250,13 +257,13 @@ impl Builder<role::Sender, WithName, WithTarget> {
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
             source: self.source, // TODO: how should this field be set?
-            target: self.target, 
+            target: self.target,
             unsettled: BTreeMap::new(),
             delivery_count: self.initial_delivery_count,
             max_message_size,
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
-            properties: self.properties
+            properties: self.properties,
         };
 
         // let mut link = SenderLink::new();
@@ -264,14 +271,14 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let mut writer = PollSender::new(writer);
         endpoint::Link::send_attach(&mut link, &mut writer).await?;
 
-        // Wait for an Attach frame 
+        // Wait for an Attach frame
         let frame = match incoming_rx.recv().await {
             Some(frame) => frame,
-            None => return Err(EngineError::Message("Expecting remote link frame")) // TODO: how to handle this?
+            None => return Err(EngineError::Message("Expecting remote link frame")), // TODO: how to handle this?
         };
         let remote_attach = match frame {
             LinkFrame::Attach(attach) => attach,
-            _ => return Err(EngineError::Message("Expecting remote attach frame")) // TODO: how to handle this?
+            _ => return Err(EngineError::Message("Expecting remote attach frame")), // TODO: how to handle this?
         };
         endpoint::Link::on_incoming_attach(&mut link, remote_attach).await?;
 

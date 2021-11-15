@@ -2,7 +2,10 @@ use fe2o3_amqp_types::messaging::Message;
 
 use crate::{error::EngineError, session::SessionHandle};
 
-use super::{builder::{self, WithoutName, WithoutTarget}, role};
+use super::{
+    builder::{self, WithoutName, WithoutTarget},
+    role,
+};
 
 pub struct Receiver {}
 

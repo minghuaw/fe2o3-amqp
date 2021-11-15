@@ -4,11 +4,19 @@ use tokio::sync::mpsc;
 
 use async_trait::async_trait;
 
-use fe2o3_amqp_types::{messaging::{Address, Message}, performatives::{Attach, Detach, Disposition, Flow}};
+use fe2o3_amqp_types::{
+    messaging::{Address, Message},
+    performatives::{Attach, Detach, Disposition, Flow},
+};
 
 use crate::{endpoint, error::EngineError, session::SessionHandle};
 
-use super::{LinkFrame, builder::{self, WithoutName, WithoutTarget}, role, sender_link::SenderLink};
+use super::{
+    builder::{self, WithoutName, WithoutTarget},
+    role,
+    sender_link::SenderLink,
+    LinkFrame,
+};
 
 pub struct Sender {
     // The SenderLink manages the state
@@ -32,7 +40,8 @@ impl Sender {
         Self::builder()
             .name(name)
             .target(addr)
-            .attach(session).await
+            .attach(session)
+            .await
     }
 
     pub async fn send(&mut self, message: Message) -> Result<Disposition, EngineError> {

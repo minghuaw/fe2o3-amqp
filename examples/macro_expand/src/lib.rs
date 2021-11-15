@@ -3,11 +3,7 @@
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 #[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    code = 0x13, 
-    encoding = "list", 
-    rename_all = "kebab-case"
-)]
+#[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
 struct Foo {
     b: u64,
     is_fool: Option<bool>,
@@ -78,7 +74,7 @@ struct Foo {
 // pub struct Received {
 //     /// <field name="section-number" type="uint" mandatory="true"/>
 //     pub section_number: UInt,
-    
+
 //     /// <field name="section-offset" type="ulong" mandatory="true"/>
 //     pub section_offset: ULong,
 // }
@@ -145,10 +141,10 @@ struct Foo {
 // pub struct Modified {
 //     /// <field name="delivery-failed" type="boolean"/>
 //     pub delivery_failed: Option<Boolean>,
-    
+
 //     /// <field name="undeliverable-here" type="boolean"/>
 //     pub undeliverable_here: Option<Boolean>,
-    
+
 //     /// <field name="message-annotations" type="fields"/>
 //     pub message_annotations: Option<BTreeMap<String, String>>,
 // }

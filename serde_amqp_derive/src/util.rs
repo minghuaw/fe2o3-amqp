@@ -57,15 +57,18 @@ pub(crate) fn convert_to_case(
     Ok(s)
 }
 
-pub(crate) fn parse_named_field_attrs<'a>(fields: impl Iterator<Item = &'a Field>) -> Vec<FieldAttr> {
-    fields.map(|f| {
-        f.attrs.iter().find_map(|a| {
-            let item = a.parse_meta().unwrap();
-            FieldAttr::from_meta(&item).ok()
+pub(crate) fn parse_named_field_attrs<'a>(
+    fields: impl Iterator<Item = &'a Field>,
+) -> Vec<FieldAttr> {
+    fields
+        .map(|f| {
+            f.attrs.iter().find_map(|a| {
+                let item = a.parse_meta().unwrap();
+                FieldAttr::from_meta(&item).ok()
+            })
         })
-    })
-    .map(|o| o.unwrap_or_else(|| FieldAttr { default: false }))
-    .collect()
+        .map(|o| o.unwrap_or_else(|| FieldAttr { default: false }))
+        .collect()
 }
 
 pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {

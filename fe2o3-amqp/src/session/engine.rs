@@ -2,7 +2,14 @@ use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
 
-use crate::{connection::engine::SessionId, control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, link::LinkFrame, util::Running};
+use crate::{
+    connection::engine::SessionId,
+    control::{ConnectionControl, SessionControl},
+    endpoint,
+    error::EngineError,
+    link::LinkFrame,
+    util::Running,
+};
 
 use super::{SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
 
@@ -24,7 +31,7 @@ where
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
         session: S,
-        session_id: SessionId,        
+        session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
@@ -41,10 +48,7 @@ where
         };
 
         // send a begin
-        engine
-            .session
-            .send_begin(&mut engine.outgoing)
-            .await?;
+        engine.session.send_begin(&mut engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame?,
@@ -72,19 +76,13 @@ where
 
         match body {
             SessionFrameBody::Begin(begin) => {
-                self.session
-                    .on_incoming_begin(channel, begin)
-                    .await?;
+                self.session.on_incoming_begin(channel, begin).await?;
             }
             SessionFrameBody::Attach(attach) => {
-                self.session
-                    .on_incoming_attach(channel, attach)
-                    .await?;
+                self.session.on_incoming_attach(channel, attach).await?;
             }
             SessionFrameBody::Flow(flow) => {
-                self.session
-                    .on_incoming_flow(channel, flow)
-                    .await?;
+                self.session.on_incoming_flow(channel, flow).await?;
             }
             SessionFrameBody::Transfer {
                 performative,
@@ -100,14 +98,10 @@ where
                     .await?;
             }
             SessionFrameBody::Detach(detach) => {
-                self.session
-                    .on_incoming_detach(channel, detach)
-                    .await?;
+                self.session.on_incoming_detach(channel, detach).await?;
             }
             SessionFrameBody::End(end) => {
-                self.session
-                    .on_incoming_end(channel, end)
-                    .await?;
+                self.session.on_incoming_end(channel, end).await?;
             }
         }
 
@@ -121,18 +115,15 @@ where
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, EngineError> {
         match control {
             SessionControl::Begin => {
-                self.session
-                    .send_begin(&mut self.outgoing)
-                    .await?;
+                self.session.send_begin(&mut self.outgoing).await?;
             }
             SessionControl::End(error) => {
-                self.session
-                    .send_end(&mut self.outgoing, error)
-                    .await?;
+                self.session.send_end(&mut self.outgoing, error).await?;
             }
-            SessionControl::CreateLink{tx, responder} => {
+            SessionControl::CreateLink { tx, responder } => {
                 let result = self.session.create_link(tx);
-                responder.send(result)
+                responder
+                    .send(result)
                     .map_err(|_| EngineError::Message("Oneshot channel dropped"))?;
             }
             SessionControl::DropLink(handle) => {
@@ -149,33 +140,23 @@ where
     #[inline]
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, EngineError> {
         match self.session.local_state() {
-            SessionState::Mapped => {},
-            _ => return Err(EngineError::Message("Illegal local session state"))
+            SessionState::Mapped => {}
+            _ => return Err(EngineError::Message("Illegal local session state")),
         }
 
         let session_frame = match frame {
-            LinkFrame::Attach(attach) => {
-                self.session
-                    .on_outgoing_attach(attach)?
-            },
-            LinkFrame::Flow(flow) => {
-                self.session
-                    .on_outgoing_flow(flow)?
-            },
-            LinkFrame::Transfer{performative, payload} => {
-                self.session
-                    .on_outgoing_transfer(performative, payload)?
-            },
+            LinkFrame::Attach(attach) => self.session.on_outgoing_attach(attach)?,
+            LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow)?,
+            LinkFrame::Transfer {
+                performative,
+                payload,
+            } => self.session.on_outgoing_transfer(performative, payload)?,
             LinkFrame::Disposition(disposition) => {
-                self.session
-                    .on_outgoing_disposition(disposition)?
-            },
-            LinkFrame::Detach(detach) => {
-                self.session
-                    .on_outgoing_detach(detach)?
+                self.session.on_outgoing_disposition(disposition)?
             }
+            LinkFrame::Detach(detach) => self.session.on_outgoing_detach(detach)?,
         };
-        
+
         self.outgoing.send(session_frame).await?;
 
         match self.session.local_state() {
@@ -225,7 +206,9 @@ where
         }
 
         println!(">>> Debug: SessionEngine exiting event_loop");
-        self.conn.send(ConnectionControl::DropSession(self.session_id)).await?;
+        self.conn
+            .send(ConnectionControl::DropSession(self.session_id))
+            .await?;
         Ok(())
     }
 }

@@ -104,37 +104,37 @@ pub struct MessageAnnotations(pub Annotations);
 pub struct Properties {
     /// <field name="message-id" type="*" requires="message-id"/>
     message_id: Option<MessageId>,
-    
+
     /// <field name="user-id" type="binary"/>
     user_id: Option<Binary>,
-    
+
     /// <field name="to" type="*" requires="address"/>
     to: Option<Address>,
-    
+
     /// <field name="subject" type="string"/>
     subject: Option<String>,
-    
+
     /// <field name="reply-to" type="*" requires="address"/>
     reply_to: Option<Address>,
-    
+
     /// <field name="correlation-id" type="*" requires="message-id"/>
     correlation_id: Option<MessageId>,
-    
+
     /// <field name="content-type" type="symbol"/>
     content_type: Option<Symbol>,
-    
+
     /// <field name="content-encoding" type="symbol"/>
     content_encoding: Option<Symbol>,
-    
+
     /// <field name="absolute-expiry-time" type="timestamp"/>
     absolute_expiry_time: Option<Timestamp>,
-    
+
     /// <field name="creation-time" type="timestamp"/>
     creation_time: Option<Timestamp>,
-    
+
     /// <field name="group-id" type="string"/>
     group_id: Option<String>,
-    
+
     /// <field name="group-sequence" type="sequence-no"/>
     group_sequence: Option<SequenceNo>,
 

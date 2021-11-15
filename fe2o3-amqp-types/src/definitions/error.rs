@@ -15,10 +15,10 @@ use super::{ErrorCondition, Fields};
 pub struct Error {
     /// <field name="condition" type="symbol" requires="error-condition" mandatory="true"/>
     condition: ErrorCondition,
-    
+
     /// <field name="description" type="string"/>
     description: Option<String>,
-    
+
     /// <field name="info" type="fields"/>
     info: Option<Fields>,
 }

@@ -40,7 +40,7 @@ mod outcome_impl;
 pub struct Received {
     /// <field name="section-number" type="uint" mandatory="true"/>
     pub section_number: UInt,
-    
+
     /// <field name="section-offset" type="ulong" mandatory="true"/>
     pub section_offset: ULong,
 }
@@ -107,10 +107,10 @@ pub struct Released {}
 pub struct Modified {
     /// <field name="delivery-failed" type="boolean"/>
     pub delivery_failed: Option<Boolean>,
-    
+
     /// <field name="undeliverable-here" type="boolean"/>
     pub undeliverable_here: Option<Boolean>,
-    
+
     /// <field name="message-annotations" type="fields"/>
     pub message_annotations: Option<Fields>,
 }

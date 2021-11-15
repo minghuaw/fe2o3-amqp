@@ -232,7 +232,7 @@ where
                             Ok(b) => {
                                 println!(">>> Debug: frame {:x?}", &b[..]);
                                 b
-                            },
+                            }
                             Err(err) => {
                                 use std::any::Any;
                                 let any = &err as &dyn Any;

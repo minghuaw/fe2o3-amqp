@@ -9,7 +9,13 @@ use fe2o3_amqp_types::{
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
-use tokio::{sync::{mpsc::{self, Sender}, oneshot}, task::JoinHandle};
+use tokio::{
+    sync::{
+        mpsc::{self, Sender},
+        oneshot,
+    },
+    task::JoinHandle,
+};
 
 use crate::{
     connection::ConnectionHandle,
@@ -64,20 +70,22 @@ impl SessionHandle {
         }
     }
 
-    pub(crate) async fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError> {
+    pub(crate) async fn create_link(
+        &mut self,
+        tx: Sender<LinkIncomingItem>,
+    ) -> Result<Handle, EngineError> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
-            .send(SessionControl::CreateLink {tx, responder})
+            .send(SessionControl::CreateLink { tx, responder })
             .await?;
-        let result = resp_rx.await
+        let result = resp_rx
+            .await
             .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
         result
     }
 
     pub(crate) async fn drop_link(&mut self, handle: Handle) -> Result<(), EngineError> {
-        self.control
-            .send(SessionControl::DropLink(handle))
-            .await?;
+        self.control.send(SessionControl::DropLink(handle)).await?;
         Ok(())
     }
 }
@@ -141,8 +149,8 @@ impl endpoint::Session for Session {
 
     fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError> {
         match &self.local_state {
-            SessionState::Mapped => {},
-            _ => return Err(EngineError::Message("Illegal session local state"))
+            SessionState::Mapped => {}
+            _ => return Err(EngineError::Message("Illegal session local state")),
         };
 
         // get a new entry index
@@ -151,9 +159,7 @@ impl endpoint::Session for Session {
 
         // check if handle max is exceeded
         if handle.0 > self.handle_max.0 {
-            Err(EngineError::Message(
-                "Handle max exceeded"
-            ))
+            Err(EngineError::Message("Handle max exceeded"))
         } else {
             entry.insert(tx);
             // TODO: how to know which link to send the Flow frames to?
@@ -187,14 +193,12 @@ impl endpoint::Session for Session {
     ) -> Result<(), Self::Error> {
         // look up link Handle by link name
         match self.link_by_name.get(&attach.name) {
-            Some(handle) => {
-                match self.local_links.get_mut(handle.0 as usize) {
-                    Some(link) => {
-                        link.send(LinkFrame::Attach(attach)).await?;
-                    },
-                    None => {
-                        todo!()
-                    }
+            Some(handle) => match self.local_links.get_mut(handle.0 as usize) {
+                Some(link) => {
+                    link.send(LinkFrame::Attach(attach)).await?;
+                }
+                None => {
+                    todo!()
                 }
             },
             None => {
@@ -257,10 +261,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn send_begin<W>(
-        &mut self,
-        writer: &mut W,
-    ) -> Result<(), Self::Error> 
+    async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<EngineError>,
@@ -280,13 +281,11 @@ impl endpoint::Session for Session {
         // check local states
         match &self.local_state {
             SessionState::Unmapped => {
-                writer.send(frame).await
-                    .map_err(Into::into)?;
+                writer.send(frame).await.map_err(Into::into)?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await
-                    .map_err(Into::into)?;
+                writer.send(frame).await.map_err(Into::into)?;
                 self.local_state = SessionState::Mapped;
             }
             _ => return Err(EngineError::Message("Illegal local state")),
@@ -330,7 +329,7 @@ impl endpoint::Session for Session {
         println!(">>> Debug: on_outgoing_transfer");
         let body = SessionFrameBody::Transfer {
             performative: transfer,
-            payload
+            payload,
         };
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
@@ -357,11 +356,7 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    async fn send_end<W>(
-        &mut self,
-        writer: &mut W,
-        error: Option<Error>,
-    ) -> Result<(), Self::Error> 
+    async fn send_end<W>(&mut self, writer: &mut W, error: Option<Error>) -> Result<(), Self::Error>
     where
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<EngineError>,
@@ -376,8 +371,7 @@ impl endpoint::Session for Session {
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer.send(frame).await
-            .map_err(Into::into)?;
+        writer.send(frame).await.map_err(Into::into)?;
         Ok(())
     }
 }

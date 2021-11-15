@@ -56,20 +56,18 @@ impl<T: Into<Address>> From<T> for Target {
         //     address: Some(val.into()),
         //     ..Default::default()
         // }
-        Self::builder()
-            .address(val.into())
-            .build()
+        Self::builder().address(val.into()).build()
     }
 }
 
 pub struct Builder {
-    pub target: Target
+    pub target: Target,
 }
 
 impl Builder {
     pub fn new() -> Self {
         Self {
-            target: Default::default()
+            target: Default::default(),
         }
     }
 

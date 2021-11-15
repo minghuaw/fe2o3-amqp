@@ -1462,8 +1462,8 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                     EncodingCodes::Null => {
                         let _ = self.de.reader.next(); // consume the Null byte
                         Ok(None)
-                    },
-                    _ => seed.deserialize(self.as_mut()).map(Some)
+                    }
+                    _ => seed.deserialize(self.as_mut()).map(Some),
                 }
             }
         }

@@ -49,34 +49,34 @@ pub struct Attach {
     pub role: Role,
 
     /// <field name="snd-settle-mode" type="sender-settle-mode" default="mixed"/>
-    /// 
-    /// The delivery settlement policy for the sender. When set at the receiver this 
-    /// indicates the desired value for the settlement mode at the sender. When set at 
-    /// the sender this indicates the actual settlement mode in use. The sender SHOULD 
-    /// respect the receiver’s desired settlement mode if the receiver initiates the 
+    ///
+    /// The delivery settlement policy for the sender. When set at the receiver this
+    /// indicates the desired value for the settlement mode at the sender. When set at
+    /// the sender this indicates the actual settlement mode in use. The sender SHOULD
+    /// respect the receiver’s desired settlement mode if the receiver initiates the
     /// attach exchange and the sender supports the desired mode.
     #[amqp_contract(default)]
     pub snd_settle_mode: SenderSettleMode,
 
     /// <field name="rcv-settle-mode" type="receiver-settle-mode" default="first"/>
-    /// 
-    /// The delivery settlement policy for the receiver. When set at the sender this 
-    /// indicates the desired value for the settlement mode at the receiver. When set 
-    /// at the receiver this indicates the actual settlement mode in use. The receiver 
-    /// SHOULD respect the sender’s desired settlement mode if the sender initiates the 
+    ///
+    /// The delivery settlement policy for the receiver. When set at the sender this
+    /// indicates the desired value for the settlement mode at the receiver. When set
+    /// at the receiver this indicates the actual settlement mode in use. The receiver
+    /// SHOULD respect the sender’s desired settlement mode if the sender initiates the
     /// attach exchange and the receiver supports the desired mode.
     #[amqp_contract(default)]
     pub rcv_settle_mode: ReceiverSettleMode,
 
     /// <field name="source" type="*" requires="source"/>
-    /// 
-    /// If no source is specified on an outgoing link, then there is no source currently 
+    ///
+    /// If no source is specified on an outgoing link, then there is no source currently
     /// attached to the link. A link with no source will never produce outgoing messages
     pub source: Option<Source>,
 
     /// <field name="target" type="*" requires="target"/>
-    /// 
-    /// If no target is specified on an incoming link, then there is no target currently 
+    ///
+    /// If no target is specified on an incoming link, then there is no target currently
     /// attached to the link. A link with no target will never permit incoming messages.
     pub target: Option<Target>,
 
@@ -111,7 +111,10 @@ pub struct Attach {
 mod tests {
     use serde_amqp::to_vec;
 
-    use crate::{definitions::{ReceiverSettleMode, Role, SenderSettleMode}, messaging::Source};
+    use crate::{
+        definitions::{ReceiverSettleMode, Role, SenderSettleMode},
+        messaging::Source,
+    };
 
     use super::Attach;
 

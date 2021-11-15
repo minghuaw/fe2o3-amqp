@@ -90,8 +90,7 @@ pub trait Connection {
         W::Error: Into<Self::Error>;
 
     /// Intercepting session frames
-    fn on_outgoing_begin(&mut self, channel: u16, begin: Begin)
-        -> Result<Frame, Self::Error>;
+    fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>;
 
     fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
 
@@ -112,7 +111,7 @@ pub trait HandleConnectionError {
     type Outcome;
 
     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
-    where 
+    where
         W: Sink<Frame> + Send + Unpin,
         W::Error: Into<EngineError>;
 }
@@ -149,20 +148,17 @@ pub trait Session {
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
     // Handling SessionFrames
-    async fn send_begin<W>(
-        &mut self,
-        writer: &mut W,
-    ) -> Result<(), Self::Error>
-    where 
+    async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<Self::Error>;
-    
+
     async fn send_end<W>(
         &mut self,
         writer: &mut W,
         error: Option<Error>,
     ) -> Result<(), Self::Error>
-    where 
+    where
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
@@ -187,7 +183,7 @@ pub trait HandleSessionError {
     type Outcome;
 
     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
-    where 
+    where
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<EngineError>;
 }
@@ -208,41 +204,25 @@ pub trait Link {
     ) -> Result<(), Self::Error>;
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
 
-    async fn send_attach<W>(
-        &mut self,
-        writer: &mut W,
-    ) -> Result<(), Self::Error>
-    where 
+    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
-    ;
+        W::Error: Into<Self::Error>;
 
-    async fn send_flow<W>(
-        &mut self,
-        writer: &mut W
-    ) -> Result<(), Self::Error>
-    where 
+    async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
-    ;
+        W::Error: Into<Self::Error>;
 
-    async fn send_disposition<W>(
-        &mut self,
-        writer: &mut W,
-    ) -> Result<(), Self::Error>
-    where   
+    async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
-    ;
+        W::Error: Into<Self::Error>;
 
-    async fn send_detach<W>(
-        &mut self,
-        writer: &mut W,
-    ) -> Result<(), Self::Error>
-    where   
+    async fn send_detach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
-    ;
+        W::Error: Into<Self::Error>;
 
     // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
     // async fn on_outgoing_flow() -> Result<(), Self::Error>;
@@ -256,7 +236,7 @@ pub trait HandleLinkError {
     type Outcome;
 
     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
-    where 
+    where
         W: Sink<LinkFrame> + Send + Unpin,
         W::Error: Into<EngineError>;
 }
@@ -265,7 +245,10 @@ pub trait HandleLinkError {
 pub trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
-    async fn send_transfer(&mut self, writer: &mut mpsc::Sender<LinkFrame>) -> Result<(), <Self as Link>::Error>;
+    async fn send_transfer<W>(&mut self, writer: &mut W) -> Result<(), <Self as Link>::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<<Self as Link>::Error>;
 }
 
 #[async_trait]
