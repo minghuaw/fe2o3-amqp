@@ -159,10 +159,14 @@ impl endpoint::Link for SenderLink {
 
 #[async_trait]
 impl endpoint::SenderLink for SenderLink {
-    async fn send_transfer(
+    async fn send_transfer<W>(
         &mut self,
-        writer: &mut mpsc::Sender<LinkFrame>,
-    ) -> Result<(), <Self as endpoint::Link>::Error> {
+        writer: &mut W,
+    ) -> Result<(), <Self as endpoint::Link>::Error> 
+    where   
+        W: Sink<LinkFrame> + Send + Unpin,
+        W::Error: Into<Self::Error>,
+    {
         todo!()
     }
 }

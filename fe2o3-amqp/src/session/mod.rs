@@ -191,6 +191,7 @@ impl endpoint::Session for Session {
         _channel: u16,
         attach: Attach,
     ) -> Result<(), Self::Error> {
+        println!(">>> Debug: Session::on_incoming_attach");
         // look up link Handle by link name
         match self.link_by_name.get(&attach.name) {
             Some(handle) => match self.local_links.get_mut(handle.0 as usize) {
