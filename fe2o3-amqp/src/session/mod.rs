@@ -211,6 +211,7 @@ impl endpoint::Session for Session {
     }
 
     async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {
+        println!(">>> Debug: Session::on_incoming_flow");
         todo!()
     }
 
@@ -220,6 +221,7 @@ impl endpoint::Session for Session {
         transfer: Transfer,
         payload: Option<BytesMut>,
     ) -> Result<(), Self::Error> {
+        println!(">>> Debug: Session::on_incoming_transfer");
         todo!()
     }
 
@@ -228,6 +230,7 @@ impl endpoint::Session for Session {
         channel: u16,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
+        println!(">>> Debug: Session::on_incoming_disposition");
         todo!()
     }
 
@@ -236,10 +239,12 @@ impl endpoint::Session for Session {
         channel: u16,
         detach: Detach,
     ) -> Result<(), Self::Error> {
+        println!(">>> Debug: Session::on_incoming_detach");
         todo!()
     }
 
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
+        println!(">>> Debug: Session::on_incoming_end");
         if Some(channel) != self.incoming_channel {
             return Err(EngineError::Message("Incoming channel mismatch"));
         }
@@ -267,6 +272,7 @@ impl endpoint::Session for Session {
         W: Sink<SessionFrame> + Send + Unpin,
         W::Error: Into<EngineError>,
     {
+        println!(">>> Debug: Session::send_begin");
         let begin = Begin {
             remote_channel: self.incoming_channel,
             next_outgoing_id: self.next_outgoing_id,
@@ -298,7 +304,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
         // TODO: is state checking redundant?
 
-        println!(">>> Debug: on_outgoing_attach");
+        println!(">>> Debug: Session::on_outgoing_attach");
         let name = attach.name.clone();
         let handle = attach.handle.clone();
         match self.link_by_name.contains_key(&name) {
@@ -314,7 +320,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
 
-        println!(">>> Debug: on_outgoing_flow");
+        println!(">>> Debug: Session::on_outgoing_flow");
         let body = SessionFrameBody::Flow(flow);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
@@ -327,7 +333,7 @@ impl endpoint::Session for Session {
     ) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here
 
-        println!(">>> Debug: on_outgoing_transfer");
+        println!(">>> Debug: Session::on_outgoing_transfer");
         let body = SessionFrameBody::Transfer {
             performative: transfer,
             payload,
@@ -342,7 +348,7 @@ impl endpoint::Session for Session {
     ) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
 
-        println!(">>> Debug: on_outgoing_disposition");
+        println!(">>> Debug: Session::on_outgoing_disposition");
         let body = SessionFrameBody::Disposition(disposition);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
@@ -351,7 +357,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
 
-        println!(">>> Debug: on_outgoing_detach");
+        println!(">>> Debug: Session::on_outgoing_detach");
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
