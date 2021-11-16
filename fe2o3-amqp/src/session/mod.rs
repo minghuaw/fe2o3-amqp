@@ -196,6 +196,7 @@ impl endpoint::Session for Session {
         match self.link_by_name.get(&attach.name) {
             Some(handle) => match self.local_links.get_mut(handle.0 as usize) {
                 Some(link) => {
+                    println!(">>> Debug: found local link");
                     link.send(LinkFrame::Attach(attach)).await?;
                 }
                 None => {

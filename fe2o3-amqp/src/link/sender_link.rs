@@ -32,7 +32,9 @@ pub struct SenderLink {
 
     pub(crate) unsettled: BTreeMap<DeliveryTag, DeliveryState>,
 
+    // See Section 2.6.7 Flow Control
     pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
+    
 
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
