@@ -132,6 +132,7 @@ impl Builder {
 
             local_links: Slab::new(),
             link_by_name: BTreeMap::new(),
+            link_by_input_handle: BTreeMap::new(),
         };
         let engine = SessionEngine::begin(
             conn.control.clone(),

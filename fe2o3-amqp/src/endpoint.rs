@@ -194,7 +194,8 @@ pub trait Link {
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
+    /// Reacting to incoming flow should be entirely handled by session
+    // async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
 
     // Only the receiver is supposed to receive incoming Transfer frame
 
@@ -229,6 +230,16 @@ pub trait Link {
     // async fn on_outgoing_transfer() -> Result<(), Self::Error>;
     // async fn on_outgoing_disposition() -> Result<(), Self::Error>;
 }
+
+// #[async_trait]
+// pub trait LinkFlowControl {
+//     type Error;
+
+//     /// TODO: redundant?
+//     fn on_outgoing_flow(&mut self, flow: &Flow) -> Result<(), Self::Error>;
+    
+//     fn on_incoming_flow(&mut self, flow: &Flow) -> Result<Option<Flow>, Self::Error>;
+// }
 
 #[async_trait]
 pub trait HandleLinkError {

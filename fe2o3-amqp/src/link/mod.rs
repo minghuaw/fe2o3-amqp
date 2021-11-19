@@ -1,4 +1,5 @@
 mod frame;
+use fe2o3_amqp_types::{definitions::{Fields, SequenceNo}, performatives::Flow};
 pub use frame::*;
 pub mod builder;
 pub mod receiver;
@@ -8,6 +9,8 @@ pub mod sender_link;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
+
+use crate::error::EngineError;
 
 pub mod role {
 
@@ -39,4 +42,18 @@ pub enum LinkState {
 
     /// The link is detached
     Detached,
+}
+
+pub(crate) struct LinkFlowState {
+    delivery_count: SequenceNo,
+    link_credit: u32,
+    avaiable: u32,
+    drain: bool,
+    properties: Option<Fields>,
+}
+
+impl LinkFlowState {
+    pub(crate) fn on_incoming_flow(&mut self, flow: &Flow) -> Result<Option<Flow>, EngineError> {
+        todo!()
+    }
 }

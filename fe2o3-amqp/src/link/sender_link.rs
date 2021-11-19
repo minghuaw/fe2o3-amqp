@@ -60,9 +60,9 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
-        todo!()
-    }
+    // async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    //     todo!()
+    // }
 
     // Only the receiver is supposed to receive incoming Transfer frame
 

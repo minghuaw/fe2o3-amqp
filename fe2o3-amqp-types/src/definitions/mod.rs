@@ -20,7 +20,7 @@ mod rcv_settle_mode;
 pub use rcv_settle_mode::ReceiverSettleMode;
 
 /// 2.8.4 Handle
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct Handle(pub UInt);
 
 impl Default for Handle {

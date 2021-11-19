@@ -53,6 +53,15 @@ pub enum SessionState {
     Discarding,
 }
 
+/// This is not necessary as these will just stay in the SessionEngine
+/// and not shared with other tasks/threads
+// pub struct SessionFlowState {
+//     next_incoming_id: TransferNumber,
+//     incoming_window: u32,
+//     next_outgoing_id: TransferNumber,
+//     outgoing_window: u32,
+// }
+
 pub struct SessionHandle {
     control: mpsc::Sender<SessionControl>,
     handle: JoinHandle<Result<(), EngineError>>,
@@ -114,9 +123,10 @@ pub struct Session {
     desired_capabilities: Option<Vec<Symbol>>,
     properties: Option<Fields>,
 
-    // local links
+    // local links by output handle
     local_links: Slab<Sender<LinkIncomingItem>>,
     link_by_name: BTreeMap<String, Handle>,
+    link_by_input_handle: BTreeMap<Handle, Handle>,
 }
 
 impl Session {
@@ -194,9 +204,11 @@ impl endpoint::Session for Session {
         println!(">>> Debug: Session::on_incoming_attach");
         // look up link Handle by link name
         match self.link_by_name.get(&attach.name) {
-            Some(handle) => match self.local_links.get_mut(handle.0 as usize) {
+            Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link) => {
                     println!(">>> Debug: found local link");
+                    let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
+                    self.link_by_input_handle.insert(input_handle, output_handle.clone());
                     link.send(LinkFrame::Attach(attach)).await?;
                 }
                 None => {
@@ -213,6 +225,14 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_flow");
+
+        // TODO: handle session flow control
+
+        // TODO: handle link flow control
+        if let Some(handle) = flow.handle {
+
+        }
+
         todo!()
     }
 
