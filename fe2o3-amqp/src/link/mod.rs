@@ -47,7 +47,7 @@ pub enum LinkState {
     Detached,
 }
 
-pub(crate) struct LinkFlowState {
+pub(crate) struct LinkFlowStateInner {
     delivery_count: AtomicU32, // SequenceNo = u32
     link_credit: AtomicU32,
     avaiable: AtomicU32,
@@ -55,7 +55,17 @@ pub(crate) struct LinkFlowState {
     properties: RwLock<Option<Fields>>,
 }
 
+/// The Sender and Receiver handle link flow control differently
+pub(crate) enum LinkFlowState {
+    Sender(LinkFlowStateInner),
+    Receiver(LinkFlowStateInner),
+}
+
 impl LinkFlowState {
+    /// Handles incoming Flow frame
+    /// 
+    /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
+    /// otherwise, return a `Ok(None)`
     pub(crate) fn on_incoming_flow(&mut self, flow: &Flow) -> Result<Option<Flow>, EngineError> {
         todo!()
     }
