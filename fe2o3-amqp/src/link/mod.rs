@@ -82,6 +82,8 @@ impl LinkFlowState {
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`
     pub(crate) fn on_incoming_flow(&self, flow: LinkFlow) -> Result<Option<LinkFlow>, EngineError> {
+        println!(">>> Debug: LinkFlowState::on_incoming_flow");
+
         use std::sync::atomic::Ordering;
         match self {
             LinkFlowState::Sender(state) => {
