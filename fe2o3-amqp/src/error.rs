@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError, SessionError};
 use thiserror::Error;
 
 use crate::connection::ConnectionState;
@@ -38,6 +38,9 @@ pub enum EngineError {
     #[error("Connection Error {0:?}")]
     ConnectionError(#[from] ConnectionError),
 
+    #[error("Session Error: {0:?}")]
+    SessionError(#[from] SessionError),
+
     #[error("Connection error idle timeout")]
     IdleTimeout,
 
@@ -67,5 +70,9 @@ impl EngineError {
 
     pub fn not_allowed() -> Self {
         Self::AmqpError(AmqpError::NotAllowed)
+    }
+
+    pub fn unattached_handle() -> Self {
+        Self::SessionError(SessionError::UnattachedHandle)
     }
 }

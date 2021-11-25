@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::{AtomicBool, AtomicU32}}};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -6,15 +6,10 @@ use fe2o3_amqp_types::{
     primitives::{Symbol, ULong},
 };
 use futures_util::SinkExt;
-use tokio::sync::mpsc;
+use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::PollSender;
 
-use crate::{
-    connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
-    error::EngineError,
-    link::{sender_link::SenderLink, LinkFrame, LinkIncomingItem, LinkState},
-    session::SessionHandle,
-};
+use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle, LinkIncomingItem, LinkState, sender_link::SenderLink}, session::SessionHandle, util::Constant};
 
 use super::{role, Receiver, Sender};
 
@@ -237,8 +232,25 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
 
+        // Create shared link flow state
+        let flow_state_inner = LinkFlowStateInner {
+            intial_delivery_count: Constant::new(self.initial_delivery_count),
+            delivery_count: AtomicU32::new(self.initial_delivery_count),
+            // The link-credit and available variables are initialized to zero.
+            link_credit: AtomicU32::new(0),
+            avaiable: AtomicU32::new(0),
+            // The drain flag is initialized to false.
+            drain: AtomicBool::new(false),
+            properties: RwLock::new(self.properties)
+        };
+        let flow_state = Arc::new(LinkFlowState::Sender(flow_state_inner));
+        let link_handle = LinkHandle {
+            tx: incoming_tx,
+            state: flow_state.clone()
+        };
+
         // Create Link in Session
-        let output_handle = session.create_link(incoming_tx).await?;
+        let output_handle = session.create_link(link_handle).await?;
 
         // Get writer to session
         let writer = session.outgoing.clone();
@@ -259,14 +271,15 @@ impl Builder<role::Sender, WithName, WithTarget> {
             source: self.source, // TODO: how should this field be set?
             target: self.target,
             unsettled: BTreeMap::new(),
-            delivery_count: self.initial_delivery_count,
             max_message_size,
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
-            properties: self.properties,
+
+            // delivery_count: self.initial_delivery_count,
+            // properties: self.properties,
+            flow_state
         };
 
-        // let mut link = SenderLink::new();
         // Send an Attach frame
         let mut writer = PollSender::new(writer);
         endpoint::Link::send_attach(&mut link, &mut writer).await?;

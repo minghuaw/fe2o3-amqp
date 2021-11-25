@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use fe2o3_amqp_types::performatives::{Attach, Detach, Disposition, Flow, Transfer};
+use fe2o3_amqp_types::{definitions::SequenceNo, performatives::{Attach, Detach, Disposition, Flow, Transfer}, primitives::{Boolean, UInt}};
 
 pub type LinkIncomingItem = LinkFrame;
 
@@ -13,3 +13,4 @@ pub enum LinkFrame {
     Disposition(Disposition),
     Detach(Detach),
 }
+

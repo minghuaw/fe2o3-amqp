@@ -1,4 +1,4 @@
-use std::convert::{TryFrom, TryInto};
+use std::{convert::{TryFrom, TryInto}, fmt::{Debug, Display}};
 
 use serde::{de, ser};
 
@@ -13,6 +13,14 @@ pub enum SessionError {
     HandleInUse,
     UnattachedHandle,
 }
+
+impl Display for SessionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self, f)
+    }
+}
+
+impl std::error::Error for SessionError {}
 
 impl From<SessionError> for ErrorCondition {
     fn from(err: SessionError) -> Self {

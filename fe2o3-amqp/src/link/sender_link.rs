@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -12,9 +12,9 @@ use fe2o3_amqp_types::{
 use futures_util::{Sink, SinkExt};
 use tokio::sync::mpsc;
 
-use crate::{endpoint, error::EngineError};
+use crate::{endpoint, error::EngineError, util::Constant};
 
-use super::{LinkFrame, LinkState};
+use super::{LinkFlowState, LinkFrame, LinkState};
 
 /// Manages the link state
 pub struct SenderLink {
@@ -32,18 +32,18 @@ pub struct SenderLink {
 
     pub(crate) unsettled: BTreeMap<DeliveryTag, DeliveryState>,
 
-    // See Section 2.6.7 Flow Control
-    pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
-    
-
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
     pub(crate) max_message_size: usize,
-
+    
     // capabilities
     pub(crate) offered_capabilities: Option<Vec<Symbol>>,
     pub(crate) desired_capabilities: Option<Vec<Symbol>>,
-    pub(crate) properties: Option<Fields>,
+    
+    // See Section 2.6.7 Flow Control
+    // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
+    // pub(crate) properties: Option<Fields>,
+    pub(crate) flow_state: Arc<LinkFlowState>,
 }
 
 impl SenderLink {
@@ -110,12 +110,12 @@ impl endpoint::Link for SenderLink {
             /// This MUST NOT be null if role is sender,
             /// and it is ignored if the role is receiver.
             /// See subsection 2.6.7.
-            initial_delivery_count: Some(self.delivery_count.clone()),
+            initial_delivery_count: Some(*self.flow_state.initial_delivery_count()),
 
             max_message_size,
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.properties.clone(),
+            properties: self.flow_state.properties().await,
         };
         let frame = LinkFrame::Attach(attach);
 

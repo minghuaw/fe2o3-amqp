@@ -21,10 +21,7 @@
 
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::{
-    definitions::{Error, Handle, Role},
-    performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
-};
+use fe2o3_amqp_types::{definitions::{Error, Handle, Role, SequenceNo}, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}, primitives::{Boolean, UInt}};
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
@@ -120,12 +117,13 @@ pub trait HandleConnectionError {
 pub trait Session {
     type Error: Into<EngineError>;
     type State;
+    type LinkHandle;
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
 
     // Allocate new local handle for new Link
-    fn create_link(&mut self, tx: mpsc::Sender<LinkIncomingItem>) -> Result<Handle, EngineError>;
+    fn create_link(&mut self, link_handle: Self::LinkHandle) -> Result<Handle, EngineError>;
     fn drop_link(&mut self, handle: Handle);
 
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
@@ -240,6 +238,29 @@ pub trait Link {
     
 //     fn on_incoming_flow(&mut self, flow: &Flow) -> Result<Option<Flow>, Self::Error>;
 // }
+
+
+/// A subset of the fields in the Flow performative
+pub struct LinkFlow {
+    pub delivery_count: Option<SequenceNo>,
+    pub link_credit: UInt,
+    pub available: UInt,
+    pub drain: Boolean,
+    pub echo: Boolean,
+}
+
+impl LinkFlow {
+    pub fn try_from_flow(flow: &Flow) -> Option<Self> {
+        let link_flow = Self {
+            delivery_count: flow.delivery_count,
+            link_credit: flow.link_credit?,
+            available: flow.available?,
+            drain: flow.drain,
+            echo: flow.echo
+        };
+        Some(link_flow)
+    }
+}
 
 #[async_trait]
 pub trait HandleLinkError {

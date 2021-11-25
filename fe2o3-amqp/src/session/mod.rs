@@ -17,13 +17,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{
-    connection::ConnectionHandle,
-    control::SessionControl,
-    endpoint,
-    error::EngineError,
-    link::{LinkFrame, LinkIncomingItem},
-};
+use crate::{connection::ConnectionHandle, control::SessionControl, endpoint::{self, LinkFlow}, error::EngineError, link::{LinkFrame, LinkHandle, LinkIncomingItem}, util::Constant};
 
 mod frame;
 pub use frame::*;
@@ -81,11 +75,11 @@ impl SessionHandle {
 
     pub(crate) async fn create_link(
         &mut self,
-        tx: Sender<LinkIncomingItem>,
+        link_handle: LinkHandle,
     ) -> Result<Handle, EngineError> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
-            .send(SessionControl::CreateLink { tx, responder })
+            .send(SessionControl::CreateLink { link_handle, responder })
             .await?;
         let result = resp_rx
             .await
@@ -106,6 +100,7 @@ pub struct Session {
 
     // local amqp states
     local_state: SessionState,
+    initial_outgoing_id: Constant<TransferNumber>,
     next_outgoing_id: TransferNumber,
     incoming_window: TransferNumber,
     outgoing_window: TransferNumber,
@@ -123,8 +118,8 @@ pub struct Session {
     desired_capabilities: Option<Vec<Symbol>>,
     properties: Option<Fields>,
 
-    // local links by output handle
-    local_links: Slab<Sender<LinkIncomingItem>>,
+    /// local links by output handle
+    local_links: Slab<LinkHandle>,
     link_by_name: BTreeMap<String, Handle>,
     link_by_input_handle: BTreeMap<Handle, Handle>,
 }
@@ -148,6 +143,7 @@ impl Session {
 impl endpoint::Session for Session {
     type Error = EngineError;
     type State = SessionState;
+    type LinkHandle = LinkHandle;
 
     fn local_state(&self) -> &Self::State {
         &self.local_state
@@ -157,7 +153,7 @@ impl endpoint::Session for Session {
         &mut self.local_state
     }
 
-    fn create_link(&mut self, tx: Sender<LinkIncomingItem>) -> Result<Handle, EngineError> {
+    fn create_link(&mut self, link_handle: LinkHandle) -> Result<Handle, EngineError> {
         match &self.local_state {
             SessionState::Mapped => {}
             _ => return Err(EngineError::Message("Illegal session local state")),
@@ -171,7 +167,7 @@ impl endpoint::Session for Session {
         if handle.0 > self.handle_max.0 {
             Err(EngineError::Message("Handle max exceeded"))
         } else {
-            entry.insert(tx);
+            entry.insert(link_handle);
             // TODO: how to know which link to send the Flow frames to?
             Ok(handle)
         }
@@ -209,7 +205,7 @@ impl endpoint::Session for Session {
                     println!(">>> Debug: found local link");
                     let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
                     self.link_by_input_handle.insert(input_handle, output_handle.clone());
-                    link.send(LinkFrame::Attach(attach)).await?;
+                    link.tx.send(LinkFrame::Attach(attach)).await?;
                 }
                 None => {
                     todo!()
@@ -227,13 +223,46 @@ impl endpoint::Session for Session {
         println!(">>> Debug: Session::on_incoming_flow");
 
         // TODO: handle session flow control
+        // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id 
+        // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing- 
+        // window directly from the outgoing-window of the frame.
+        self.next_incoming_id = flow.next_outgoing_id;
+        self.remote_outgoing_window = flow.outgoing_window;
 
-        // TODO: handle link flow control
-        if let Some(handle) = flow.handle {
-
+        match &flow.next_incoming_id {
+            Some(flow_next_incoming_id) => {
+                // The remote-incoming-window is computed as follows: 
+                // next-incoming-id_flow + incoming-window_flow - next-outgoing-id_endpoint
+                self.remote_incoming_window = flow_next_incoming_id + flow.incoming_window - self.next_outgoing_id;
+            },
+            None => {
+                // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
+                // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
+                self.remote_incoming_window = *(self.initial_outgoing_id.value()) + flow.incoming_window - self.next_outgoing_id;
+            }
         }
 
-        todo!()
+        // TODO: handle link flow control
+        if let Some(input_handle) = &flow.handle { 
+            match self.link_by_input_handle.get(input_handle) {
+                Some(output_handle) => {
+                    match self.local_links.get_mut(output_handle.0 as usize) {
+                        Some(link_handle) => {
+                            let link_flow = LinkFlow::try_from_flow(&flow)
+                                .ok_or_else(|| EngineError::Message("Expecting link flow found empty field"))?;
+                            let echo = link_handle.state.on_incoming_flow(link_flow)?;
+                            if let Some(echo_flow) = echo {
+                                todo!()
+                            }
+                        },
+                        None => return Err(EngineError::unattached_handle())
+                    }
+                },
+                None => return Err(EngineError::unattached_handle())
+            }
+        }
+
+        Ok(())
     }
 
     async fn on_incoming_transfer(
