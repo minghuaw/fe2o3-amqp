@@ -252,7 +252,7 @@ impl endpoint::Session for Session {
                                 .ok_or_else(|| EngineError::Message("Expecting link flow found empty field"))?;
                             let echo = link_handle.state.on_incoming_flow(link_flow)?;
                             if let Some(echo_flow) = echo {
-                                todo!()
+                                self.control.send(SessionControl::LinkFlow(echo_flow)).await?;
                             }
                         },
                         None => return Err(EngineError::unattached_handle())
