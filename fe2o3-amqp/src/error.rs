@@ -41,6 +41,9 @@ pub enum EngineError {
     #[error("Session Error: {0:?}")]
     SessionError(#[from] SessionError),
 
+    #[error("Link attach refused")]
+    LinkAttachRefused,
+
     #[error("Connection error idle timeout")]
     IdleTimeout,
 

@@ -248,8 +248,8 @@ impl endpoint::Session for Session {
                 Some(output_handle) => {
                     match self.local_links.get_mut(output_handle.0 as usize) {
                         Some(link_handle) => {
-                            let link_flow = LinkFlow::try_from_flow(&flow)
-                                .ok_or_else(|| EngineError::Message("Expecting link flow found empty field"))?;
+                            let link_flow = LinkFlow::from(&flow);
+                                // .ok_or_else(|| EngineError::Message("Expecting link flow found empty field"))?;
                             let echo = link_handle.state.on_incoming_flow(link_flow)?;
                             if let Some(echo_flow) = echo {
                                 self.control.send(SessionControl::LinkFlow(echo_flow)).await?;

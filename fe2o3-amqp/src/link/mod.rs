@@ -62,8 +62,8 @@ impl From<&LinkFlowStateInner> for LinkFlow {
 
         LinkFlow {
             delivery_count: Some(state.delivery_count.load(Ordering::Relaxed)),
-            link_credit: state.link_credit.load(Ordering::Relaxed),
-            available: state.avaiable.load(Ordering::Relaxed),
+            link_credit: Some(state.link_credit.load(Ordering::Relaxed)),
+            available: Some(state.avaiable.load(Ordering::Relaxed)),
             drain: state.drain.load(Ordering::Relaxed),
             echo: false,
         }
@@ -99,7 +99,7 @@ impl LinkFlowState {
                 // MUST be set according to this formula when flow information is given by the 
                 // receiver:
                 // link-credit_snd := delivery-count_rcv + link-credit_rcv - delivery-count_snd.
-                let delivery_count = flow.delivery_count.unwrap_or_else(|| {
+                let delivery_count_rcv = flow.delivery_count.unwrap_or_else(|| {
                     // In the event that the receiver does not yet know the delivery-count, 
                     // i.e., delivery-count_rcv is unspecified, the sender MUST assume that 
                     // the delivery-count_rcv is the first delivery-count_snd sent from sender 
@@ -107,8 +107,11 @@ impl LinkFlowState {
                     // carried by the initial attach frame from the sender to the receiver.
                     *state.intial_delivery_count.value()
                 });
-                let link_credit = delivery_count + flow.link_credit - state.delivery_count.load(Ordering::Relaxed);
-                state.link_credit.swap(link_credit, Ordering::Relaxed);
+                
+                if let Some(link_credit_rcv) = flow.link_credit {
+                    let link_credit = delivery_count_rcv + link_credit_rcv - state.delivery_count.load(Ordering::Relaxed);
+                    state.link_credit.swap(link_credit, Ordering::Relaxed);
+                }
 
                 // available
                 // 
@@ -152,10 +155,12 @@ impl LinkFlowState {
                 // 
                 // The receiver’s value is calculated 
                 // based on the last known value from the sender and any subsequent incoming 
-                // messages received. The sender MAY trans- fer messages even if the available variable 
+                // messages received. The sender MAY transfer messages even if the available variable 
                 // is zero. If this happens, the receiver MUST maintain a floor of zero in its 
                 // calculation of the value of available.
-                state.avaiable.swap(flow.available, Ordering::Relaxed);
+                if let Some(available) = flow.available {
+                    state.avaiable.swap(available, Ordering::Relaxed);
+                }
 
                 // drain
                 // 

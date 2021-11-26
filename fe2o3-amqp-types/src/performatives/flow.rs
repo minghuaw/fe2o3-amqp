@@ -43,7 +43,7 @@ pub struct Flow {
     /// 
     /// Defines the maximum number of outgoing transfer frames that the endpoint 
     /// could potentially currently send, if it was not constrained by restrictions 
-    /// imposed by its peer’s incoming-window. See subsection 2.5.6 for more details.
+    /// imposed by the incoming-window from its peer. See subsection 2.5.6 for more details.
     pub outgoing_window: UInt,
 
     /// <field name="handle" type="handle"/>

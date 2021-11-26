@@ -243,22 +243,34 @@ pub trait Link {
 /// A subset of the fields in the Flow performative
 pub struct LinkFlow {
     pub delivery_count: Option<SequenceNo>,
-    pub link_credit: UInt,
-    pub available: UInt,
+    pub link_credit: Option<UInt>,
+    pub available: Option<UInt>,
     pub drain: Boolean,
     pub echo: Boolean,
 }
 
-impl LinkFlow {
-    pub fn try_from_flow(flow: &Flow) -> Option<Self> {
-        let link_flow = Self {
-            delivery_count: flow.delivery_count,
-            link_credit: flow.link_credit?,
-            available: flow.available?,
-            drain: flow.drain,
-            echo: flow.echo
-        };
-        Some(link_flow)
+// impl LinkFlow {
+//     pub fn try_from_flow(flow: &Flow) -> Option<Self> {
+//         let link_flow = Self {
+//             delivery_count: flow.delivery_count,
+//             link_credit: flow.link_credit?,
+//             available: flow.available?,
+//             drain: flow.drain,
+//             echo: flow.echo
+//         };
+//         Some(link_flow)
+//     }
+// }
+
+impl From<&Flow> for LinkFlow {
+    fn from(flow: &Flow) -> Self {
+        LinkFlow { 
+            delivery_count: flow.delivery_count, 
+            link_credit: flow.link_credit, 
+            available: flow.available, 
+            drain: flow.drain, 
+            echo: flow.echo 
+        }
     }
 }
 

@@ -27,14 +27,14 @@ pub struct SenderLink {
 
     pub(crate) snd_settle_mode: SenderSettleMode,
     pub(crate) rcv_settle_mode: ReceiverSettleMode,
-    pub(crate) source: Source, // TODO: Option?
-    pub(crate) target: Target, // TODO: Option?
+    pub(crate) source: Option<Source>, // TODO: Option?
+    pub(crate) target: Option<Target>, // TODO: Option?
 
     pub(crate) unsettled: BTreeMap<DeliveryTag, DeliveryState>,
 
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
-    pub(crate) max_message_size: usize,
+    pub(crate) max_message_size: u64,
     
     // capabilities
     pub(crate) offered_capabilities: Option<Vec<Symbol>>,
@@ -57,7 +57,30 @@ impl endpoint::Link for SenderLink {
     type Error = EngineError;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
-        todo!()
+        println!(">>> Debug: SenderLink::on_incoming_attach");
+
+        // Note that if the application chooses not to create a terminus, 
+        // the session endpoint will still create a link endpoint and issue
+        // an attach indicating that the link endpoint has no associated 
+        // local terminus. In this case, the session endpoint MUST immediately 
+        // detach the newly created link endpoint.
+        if attach.target.is_none() || attach.source.is_none() {
+            return Err(EngineError::LinkAttachRefused) // TODO: this should then be handled outside
+        }
+
+        self.input_handle = Some(attach.handle);
+
+        if self.target.is_none() {
+            self.target = attach.target; // TODO: ???
+        }
+
+        // set max message size
+        let remote_max_msg_size = attach.max_message_size.unwrap_or_else(|| 0);
+        if remote_max_msg_size < self.max_message_size {
+            self.max_message_size = remote_max_msg_size;
+        }
+
+        Ok(())
     }
 
     // async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
@@ -102,8 +125,8 @@ impl endpoint::Link for SenderLink {
             role: Role::Sender,
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
-            source: Some(self.source.clone()),
-            target: Some(self.target.clone()),
+            source: self.source.clone(),
+            target: self.target.clone(),
             unsettled,
             incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?
 
