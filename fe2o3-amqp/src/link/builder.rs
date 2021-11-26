@@ -1,10 +1,6 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::{AtomicBool, AtomicU32}}};
 
-use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{Source, Target},
-    primitives::{Symbol, ULong},
-};
+use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, performatives::Detach, primitives::{Symbol, ULong}};
 use futures_util::SinkExt;
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::PollSender;
@@ -264,7 +260,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let mut link = SenderLink {
             local_state,
             name: self.name,
-            output_handle: Some(output_handle),
+            output_handle: Some(output_handle.clone()),
             input_handle: None,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
@@ -285,15 +281,31 @@ impl Builder<role::Sender, WithName, WithTarget> {
         endpoint::Link::send_attach(&mut link, &mut writer).await?;
 
         // Wait for an Attach frame
-        let frame = match incoming_rx.recv().await {
-            Some(frame) => frame,
-            None => return Err(EngineError::Message("Expecting remote link frame")), // TODO: how to handle this?
-        };
+        let frame = incoming_rx.recv().await
+            .ok_or_else(|| EngineError::Message("Expecting remote link frame"))?;
         let remote_attach = match frame {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(EngineError::Message("Expecting remote attach frame")), // TODO: how to handle this?
         };
-        endpoint::Link::on_incoming_attach(&mut link, remote_attach).await?;
+        if let Err(e) = endpoint::Link::on_incoming_attach(&mut link, remote_attach).await {
+            if let EngineError::LinkAttachRefused = e {
+                // Should expect a detach and then send back a detach
+                let frame = incoming_rx.recv().await
+                    .ok_or_else(|| EngineError::Message("Expecting remote detach frame"))?;
+                let _remote_detach = match frame {
+                    LinkFrame::Detach(detach) => detach,
+                    _ => return Err(EngineError::Message("Expecting remote detach frame"))
+                };
+
+                let detach = Detach {
+                    handle: output_handle,
+                    closed: true,
+                    error: None
+                };
+                let frame = LinkFrame::Detach(detach);
+                outgoing.send(frame).await?;
+            }
+        }
 
         // Attach completed, return Sender
         let sender = Sender {
