@@ -30,6 +30,16 @@ pub enum Error {
     InvalidLength,
 }
 
+impl Error {
+    pub fn too_long() -> Self {
+        let io_err = std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Too long"
+        );
+        Self::Io(io_err)
+    }
+}
+
 impl ser::Error for Error {
     fn custom<T>(msg: T) -> Self
     where

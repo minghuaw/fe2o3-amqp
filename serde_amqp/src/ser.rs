@@ -402,7 +402,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())), // TODO: 
+                            _ => return Err(Error::too_long())
                         }
                         self.new_type = NewType::None;
                     }
@@ -425,7 +425,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())), // TODO
+                            _ => return Err(Error::too_long())
                         }
                     }
                     _ => unreachable!(),
@@ -506,7 +506,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())), // TODO
+                            _ => return Err(Error::too_long())
                         }
                     }
                     IsArrayElement::FirstElement => {
@@ -708,10 +708,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
     #[inline]
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        // match len {
-        //     Some(num) => Ok(MapSerializer::new(self, num * 2)),
-        //     None => Err(Error::Message("Length must be known".into())), // TODO
-        // }
         Ok(MapSerializer::new(self))
     }
 
@@ -899,7 +895,7 @@ fn write_array<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())), // TODO
+        _ => return Err(Error::too_long())
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -981,7 +977,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())), // TODO
+        _ => return Err(Error::too_long())
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -1088,7 +1084,7 @@ fn write_map<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())), // TODO
+        _ => return Err(Error::too_long())
     }
     writer.write_all(&buf)?;
     Ok(())
