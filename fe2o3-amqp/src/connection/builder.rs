@@ -212,7 +212,6 @@ impl Builder<WithContainerId> {
         let (connection_control_tx, connection_control_rx) =
             mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-        // let (session_control_tx, session_control_rx) = mpsc::unbounded_channel();
 
         let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
         let engine = ConnectionEngine::open(
@@ -240,22 +239,15 @@ impl Builder<WithContainerId> {
     ) -> Result<ConnectionHandle, EngineError> {
         let url: Url = url.try_into()?;
 
-        // check scheme
-        match url.scheme() {
-            "amqp" => {
-                // connect TcpStream
-                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
-                let stream = TcpStream::connect(&*addr).await?;
-                println!("TcpStream connected");
-
-                self.open_with_stream(stream).await
-            }
-            // TLS
-            "amqps" => {
-                todo!()
-            }
-            _ => return Err(EngineError::Message("Invalid Url Scheme")),
-        }
+        let addr = url.socket_addrs(|| match url.scheme() {
+            // check scheme
+            "amqp" => Some(fe2o3_amqp_types::definitions::PORT),
+            "amqps" => todo!(),
+            _ => None,
+        })?;
+        let stream = TcpStream::connect(&*addr).await?;
+        println!("TcpStream connected");
+        self.open_with_stream(stream).await
     }
 
     pub async fn pipelined_open_with_stream<Io>(
