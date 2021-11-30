@@ -30,8 +30,6 @@ use crate::{connection::ConnectionState, error::EngineError, util::IdleTimeout};
 use amqp::{Frame, FrameCodec};
 use protocol_header::ProtocolHeader;
 
-// use self::connection::ConnectionState;
-
 pin_project! {
     pub struct Transport<Io> {
         #[pin]
@@ -67,56 +65,14 @@ where
             idle_timeout,
         }
     }
-    pub async fn send_proto_header(
-        io: &mut Io,
-        local_state: &mut ConnectionState,
-        proto_header: ProtocolHeader,
-    ) -> Result<(), EngineError> {
-        let buf: [u8; 8] = proto_header.into();
-        match local_state {
-            ConnectionState::Start => {
-                io.write_all(&buf).await?;
-                *local_state = ConnectionState::HeaderSent;
-            }
-            ConnectionState::HeaderReceived => {
-                io.write_all(&buf).await?;
-                *local_state = ConnectionState::HeaderExchange
-            }
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
-        }
-        Ok(())
-    }
-
-    pub async fn recv_proto_header(
-        io: &mut Io,
-        local_state: &mut ConnectionState,
-        proto_header: ProtocolHeader,
-    ) -> Result<ProtocolHeader, EngineError> {
-        // wait for incoming header
-        match local_state {
-            ConnectionState::Start => {
-                let incoming_header =
-                    read_and_compare_proto_header(io, local_state, &proto_header).await?;
-                *local_state = ConnectionState::HeaderReceived;
-                Ok(incoming_header)
-            }
-            ConnectionState::HeaderSent => {
-                let incoming_header =
-                    read_and_compare_proto_header(io, local_state, &proto_header).await?;
-                *local_state = ConnectionState::HeaderExchange;
-                Ok(incoming_header)
-            }
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
-        }
-    }
 
     pub async fn negotiate(
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, EngineError> {
-        Self::send_proto_header(io, local_state, proto_header.clone()).await?;
-        let incoming_header = Self::recv_proto_header(io, local_state, proto_header).await?;
+        send_proto_header(io, local_state, proto_header.clone()).await?;
+        let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
 
         Ok(incoming_header)
     }
@@ -142,6 +98,55 @@ where
 
         self.idle_timeout = idle_timeout;
         self
+    }
+}
+
+async fn send_proto_header<Io>(
+    io: &mut Io,
+    local_state: &mut ConnectionState,
+    proto_header: ProtocolHeader,
+) -> Result<(), EngineError> 
+where
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
+    let buf: [u8; 8] = proto_header.into();
+    match local_state {
+        ConnectionState::Start => {
+            io.write_all(&buf).await?;
+            *local_state = ConnectionState::HeaderSent;
+        }
+        ConnectionState::HeaderReceived => {
+            io.write_all(&buf).await?;
+            *local_state = ConnectionState::HeaderExchange
+        }
+        s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
+    }
+    Ok(())
+}
+
+async fn recv_proto_header<Io>(
+    io: &mut Io,
+    local_state: &mut ConnectionState,
+    proto_header: ProtocolHeader,
+) -> Result<ProtocolHeader, EngineError> 
+where
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
+    // wait for incoming header
+    match local_state {
+        ConnectionState::Start => {
+            let incoming_header =
+                read_and_compare_proto_header(io, local_state, &proto_header).await?;
+            *local_state = ConnectionState::HeaderReceived;
+            Ok(incoming_header)
+        }
+        ConnectionState::HeaderSent => {
+            let incoming_header =
+                read_and_compare_proto_header(io, local_state, &proto_header).await?;
+            *local_state = ConnectionState::HeaderExchange;
+            Ok(incoming_header)
+        }
+        s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
     }
 }
 
@@ -175,7 +180,8 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_ready(cx).map_err(Into::into)
+        this.framed.poll_ready(cx) // Result<_, std::io::Error>
+            .map_err(Into::into)
     }
 
     fn start_send(self: std::pin::Pin<&mut Self>, item: Frame) -> Result<(), Self::Error> {
@@ -185,7 +191,7 @@ where
 
         let this = self.project();
         this.framed
-            .start_send(Bytes::from(bytesmut))
+            .start_send(Bytes::from(bytesmut)) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
 
@@ -194,7 +200,8 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_flush(cx).map_err(Into::into)
+        this.framed.poll_flush(cx) // Result<_, std::io::Error>
+            .map_err(Into::into)
     }
 
     fn poll_close(
@@ -202,7 +209,8 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_close(cx).map_err(Into::into)
+        this.framed.poll_close(cx) // Result<_, std::io::Error>
+            .map_err(Into::into)
     }
 }
 
