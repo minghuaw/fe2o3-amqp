@@ -51,7 +51,6 @@ where
             connection,
             control,
             outgoing_session_frames,
-            // session_control,
             heartbeat: HeartBeat::never(),
         };
 
@@ -327,6 +326,7 @@ where
                     Running::Stop => break,
                 },
                 Err(err) => {
+                    // TODO: error handling
                     panic!("{:?}", err)
                 }
             }

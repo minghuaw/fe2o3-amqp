@@ -24,14 +24,6 @@ impl HeartBeat {
         let interval = Some(IntervalStream::new(tokio::time::interval(period)));
         Self { interval }
     }
-
-    // pub fn set_period(&mut self, period: Duration) -> &mut Self {
-    //     let interval = Some(
-    //         IntervalStream::new(tokio::time::interval(period))
-    //     );
-    //     self.interval = interval;
-    //     self
-    // }
 }
 
 impl Stream for HeartBeat {

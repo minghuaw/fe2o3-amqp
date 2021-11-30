@@ -244,8 +244,8 @@ impl Builder<WithContainerId> {
             "amqp" => Some(fe2o3_amqp_types::definitions::PORT),
             "amqps" => todo!(),
             _ => None,
-        })?;
-        let stream = TcpStream::connect(&*addr).await?;
+        })?; // std::io::Error
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
         println!("TcpStream connected");
         self.open_with_stream(stream).await
     }
