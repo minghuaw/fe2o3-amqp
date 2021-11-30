@@ -84,6 +84,8 @@ pub enum LinkFlowState {
 
 impl LinkFlowState {
     /// Handles incoming Flow frame
+    /// 
+    /// TODO: Is a result necessary?
     ///
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`

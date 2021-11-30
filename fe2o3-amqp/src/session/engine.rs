@@ -53,7 +53,7 @@ where
         engine.session.send_begin(&mut engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
-            Some(frame) => frame?,
+            Some(frame) => frame?, // Receiver<Result<SessionFrame, EngineError>>
             None => todo!(),
         };
         let SessionFrame { channel, body } = frame;
@@ -208,6 +208,8 @@ where
                     Running::Stop => break,
                 },
                 Err(err) => {
+                    // TODO: handle errors
+                    
                     panic!("{:?}", err)
                 }
             }
