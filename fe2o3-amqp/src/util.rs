@@ -48,10 +48,10 @@ impl Future for IdleTimeout {
     }
 }
 
-/// An custom type to make a field immutable to 
+/// An custom type to make a field immutable to
 /// prevent accidental mutations
 pub struct Constant<T> {
-    value: T
+    value: T,
 }
 
 impl<T> Constant<T> {

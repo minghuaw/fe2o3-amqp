@@ -105,7 +105,7 @@ async fn send_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
-) -> Result<(), EngineError> 
+) -> Result<(), EngineError>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -128,7 +128,7 @@ async fn recv_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
-) -> Result<ProtocolHeader, EngineError> 
+) -> Result<ProtocolHeader, EngineError>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -180,7 +180,8 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_ready(cx) // Result<_, std::io::Error>
+        this.framed
+            .poll_ready(cx) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
 
@@ -200,7 +201,8 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_flush(cx) // Result<_, std::io::Error>
+        this.framed
+            .poll_flush(cx) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
 
@@ -209,7 +211,8 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_close(cx) // Result<_, std::io::Error>
+        this.framed
+            .poll_close(cx) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
 }

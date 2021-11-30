@@ -1,4 +1,7 @@
-use std::{convert::{TryFrom, TryInto}, fmt::{Debug, Display}};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::{Debug, Display},
+};
 
 use serde::{de, ser};
 

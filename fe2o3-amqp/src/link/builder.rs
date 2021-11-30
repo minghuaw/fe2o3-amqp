@@ -1,11 +1,32 @@
-use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::{AtomicBool, AtomicU32}}};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicBool, AtomicU32},
+        Arc,
+    },
+};
 
-use fe2o3_amqp_types::{definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo}, messaging::{Source, Target}, performatives::Detach, primitives::{Symbol, ULong}};
+use fe2o3_amqp_types::{
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    messaging::{Source, Target},
+    performatives::Detach,
+    primitives::{Symbol, ULong},
+};
 use futures_util::SinkExt;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::PollSender;
 
-use crate::{connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE, error::EngineError, link::{LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle, LinkIncomingItem, LinkState, sender_link::SenderLink}, session::SessionHandle, util::Constant};
+use crate::{
+    connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
+    error::EngineError,
+    link::{
+        sender_link::SenderLink, LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle,
+        LinkIncomingItem, LinkState,
+    },
+    session::SessionHandle,
+    util::Constant,
+};
 
 use super::{role, Receiver, Sender};
 
@@ -237,12 +258,12 @@ impl Builder<role::Sender, WithName, WithTarget> {
             avaiable: AtomicU32::new(0),
             // The drain flag is initialized to false.
             drain: AtomicBool::new(false),
-            properties: RwLock::new(self.properties)
+            properties: RwLock::new(self.properties),
         };
         let flow_state = Arc::new(LinkFlowState::Sender(flow_state_inner));
         let link_handle = LinkHandle {
             tx: incoming_tx,
-            state: flow_state.clone()
+            state: flow_state.clone(),
         };
 
         // Create Link in Session
@@ -273,7 +294,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
             // delivery_count: self.initial_delivery_count,
             // properties: self.properties,
-            flow_state
+            flow_state,
         };
 
         // Send an Attach frame
@@ -281,7 +302,9 @@ impl Builder<role::Sender, WithName, WithTarget> {
         endpoint::Link::send_attach(&mut link, &mut writer).await?;
 
         // Wait for an Attach frame
-        let frame = incoming_rx.recv().await
+        let frame = incoming_rx
+            .recv()
+            .await
             .ok_or_else(|| EngineError::Message("Expecting remote link frame"))?;
         let remote_attach = match frame {
             LinkFrame::Attach(attach) => attach,
@@ -290,17 +313,19 @@ impl Builder<role::Sender, WithName, WithTarget> {
         if let Err(e) = endpoint::Link::on_incoming_attach(&mut link, remote_attach).await {
             if let EngineError::LinkAttachRefused = e {
                 // Should expect a detach and then send back a detach
-                let frame = incoming_rx.recv().await
+                let frame = incoming_rx
+                    .recv()
+                    .await
                     .ok_or_else(|| EngineError::Message("Expecting remote detach frame"))?;
                 let _remote_detach = match frame {
                     LinkFrame::Detach(detach) => detach,
-                    _ => return Err(EngineError::Message("Expecting remote detach frame"))
+                    _ => return Err(EngineError::Message("Expecting remote detach frame")),
                 };
 
                 let detach = Detach {
                     handle: output_handle,
                     closed: true,
-                    error: None
+                    error: None,
                 };
                 let frame = LinkFrame::Detach(detach);
                 outgoing.send(frame).await?;

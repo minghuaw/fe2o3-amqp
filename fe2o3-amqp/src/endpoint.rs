@@ -21,7 +21,11 @@
 
 use async_trait::async_trait;
 use bytes::BytesMut;
-use fe2o3_amqp_types::{definitions::{Error, Handle, Role, SequenceNo}, performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer}, primitives::{Boolean, UInt}};
+use fe2o3_amqp_types::{
+    definitions::{Error, Handle, Role, SequenceNo},
+    performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
+    primitives::{Boolean, UInt},
+};
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
@@ -235,10 +239,9 @@ pub trait Link {
 
 //     /// TODO: redundant?
 //     fn on_outgoing_flow(&mut self, flow: &Flow) -> Result<(), Self::Error>;
-    
+
 //     fn on_incoming_flow(&mut self, flow: &Flow) -> Result<Option<Flow>, Self::Error>;
 // }
-
 
 /// A subset of the fields in the Flow performative
 pub struct LinkFlow {
@@ -264,12 +267,12 @@ pub struct LinkFlow {
 
 impl From<&Flow> for LinkFlow {
     fn from(flow: &Flow) -> Self {
-        LinkFlow { 
-            delivery_count: flow.delivery_count, 
-            link_credit: flow.link_credit, 
-            available: flow.available, 
-            drain: flow.drain, 
-            echo: flow.echo 
+        LinkFlow {
+            delivery_count: flow.delivery_count,
+            link_credit: flow.link_credit,
+            available: flow.available,
+            drain: flow.drain,
+            echo: flow.echo,
         }
     }
 }

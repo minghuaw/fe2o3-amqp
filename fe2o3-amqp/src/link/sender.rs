@@ -4,7 +4,10 @@ use tokio::sync::mpsc;
 
 use async_trait::async_trait;
 
-use fe2o3_amqp_types::{messaging::{Address, Message, Source}, performatives::{Attach, Detach, Disposition, Flow}};
+use fe2o3_amqp_types::{
+    messaging::{Address, Message, Source},
+    performatives::{Attach, Detach, Disposition, Flow},
+};
 
 use crate::{endpoint, error::EngineError, session::SessionHandle};
 
@@ -26,8 +29,7 @@ pub struct Sender {
 
 impl Sender {
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
-        builder::Builder::new()
-            .source(Source::builder().build()) // TODO: where should 
+        builder::Builder::new().source(Source::builder().build()) // TODO: where should
     }
 
     pub async fn attach(

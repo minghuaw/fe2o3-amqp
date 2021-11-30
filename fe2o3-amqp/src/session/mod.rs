@@ -17,7 +17,14 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{connection::ConnectionHandle, control::SessionControl, endpoint::{self, LinkFlow}, error::EngineError, link::{LinkFrame, LinkHandle, LinkIncomingItem}, util::Constant};
+use crate::{
+    connection::ConnectionHandle,
+    control::SessionControl,
+    endpoint::{self, LinkFlow},
+    error::EngineError,
+    link::{LinkFrame, LinkHandle, LinkIncomingItem},
+    util::Constant,
+};
 
 mod frame;
 pub use frame::*;
@@ -79,7 +86,10 @@ impl SessionHandle {
     ) -> Result<Handle, EngineError> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
-            .send(SessionControl::CreateLink { link_handle, responder })
+            .send(SessionControl::CreateLink {
+                link_handle,
+                responder,
+            })
             .await?;
         let result = resp_rx
             .await
@@ -204,7 +214,8 @@ impl endpoint::Session for Session {
                 Some(link) => {
                     println!(">>> Debug: found local link");
                     let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
-                    self.link_by_input_handle.insert(input_handle, output_handle.clone());
+                    self.link_by_input_handle
+                        .insert(input_handle, output_handle.clone());
                     link.tx.send(LinkFrame::Attach(attach)).await?;
                 }
                 None => {
@@ -223,42 +234,47 @@ impl endpoint::Session for Session {
         println!(">>> Debug: Session::on_incoming_flow");
 
         // TODO: handle session flow control
-        // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id 
-        // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing- 
+        // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
+        // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
         // window directly from the outgoing-window of the frame.
         self.next_incoming_id = flow.next_outgoing_id;
         self.remote_outgoing_window = flow.outgoing_window;
 
         match &flow.next_incoming_id {
             Some(flow_next_incoming_id) => {
-                // The remote-incoming-window is computed as follows: 
+                // The remote-incoming-window is computed as follows:
                 // next-incoming-id_flow + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window = flow_next_incoming_id + flow.incoming_window - self.next_outgoing_id;
-            },
+                self.remote_incoming_window =
+                    flow_next_incoming_id + flow.incoming_window - self.next_outgoing_id;
+            }
             None => {
                 // If the next-incoming-id field of the flow frame is not set, then remote-incoming-window is computed as follows:
                 // initial-outgoing-id_endpoint + incoming-window_flow - next-outgoing-id_endpoint
-                self.remote_incoming_window = *(self.initial_outgoing_id.value()) + flow.incoming_window - self.next_outgoing_id;
+                self.remote_incoming_window = *(self.initial_outgoing_id.value())
+                    + flow.incoming_window
+                    - self.next_outgoing_id;
             }
         }
 
         // TODO: handle link flow control
-        if let Some(input_handle) = &flow.handle { 
+        if let Some(input_handle) = &flow.handle {
             match self.link_by_input_handle.get(input_handle) {
                 Some(output_handle) => {
                     match self.local_links.get_mut(output_handle.0 as usize) {
                         Some(link_handle) => {
                             let link_flow = LinkFlow::from(&flow);
-                                // .ok_or_else(|| EngineError::Message("Expecting link flow found empty field"))?;
+                            // .ok_or_else(|| EngineError::Message("Expecting link flow found empty field"))?;
                             let echo = link_handle.state.on_incoming_flow(link_flow)?;
                             if let Some(echo_flow) = echo {
-                                self.control.send(SessionControl::LinkFlow(echo_flow)).await?;
+                                self.control
+                                    .send(SessionControl::LinkFlow(echo_flow))
+                                    .await?;
                             }
-                        },
-                        None => return Err(EngineError::unattached_handle())
+                        }
+                        None => return Err(EngineError::unattached_handle()),
                     }
-                },
-                None => return Err(EngineError::unattached_handle())
+                }
+                None => return Err(EngineError::unattached_handle()),
             }
         }
 

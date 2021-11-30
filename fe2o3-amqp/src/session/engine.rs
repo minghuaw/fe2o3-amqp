@@ -2,7 +2,14 @@ use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
 
-use crate::{connection::engine::SessionId, control::{ConnectionControl, SessionControl}, endpoint, error::EngineError, link::{LinkFrame, LinkHandle}, util::Running};
+use crate::{
+    connection::engine::SessionId,
+    control::{ConnectionControl, SessionControl},
+    endpoint,
+    error::EngineError,
+    link::{LinkFrame, LinkHandle},
+    util::Running,
+};
 
 use super::{SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
 
@@ -19,7 +26,9 @@ pub struct SessionEngine<S> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState, Error = EngineError, LinkHandle = LinkHandle> + Send + 'static,
+    S: endpoint::Session<State = SessionState, Error = EngineError, LinkHandle = LinkHandle>
+        + Send
+        + 'static,
 {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
@@ -113,7 +122,10 @@ where
             SessionControl::End(error) => {
                 self.session.send_end(&mut self.outgoing, error).await?;
             }
-            SessionControl::CreateLink { link_handle, responder } => {
+            SessionControl::CreateLink {
+                link_handle,
+                responder,
+            } => {
                 let result = self.session.create_link(link_handle);
                 responder
                     .send(result)

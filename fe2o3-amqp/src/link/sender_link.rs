@@ -35,11 +35,11 @@ pub struct SenderLink {
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
     pub(crate) max_message_size: u64,
-    
+
     // capabilities
     pub(crate) offered_capabilities: Option<Vec<Symbol>>,
     pub(crate) desired_capabilities: Option<Vec<Symbol>>,
-    
+
     // See Section 2.6.7 Flow Control
     // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
     // pub(crate) properties: Option<Fields>,
@@ -59,13 +59,13 @@ impl endpoint::Link for SenderLink {
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         println!(">>> Debug: SenderLink::on_incoming_attach");
 
-        // Note that if the application chooses not to create a terminus, 
+        // Note that if the application chooses not to create a terminus,
         // the session endpoint will still create a link endpoint and issue
-        // an attach indicating that the link endpoint has no associated 
-        // local terminus. In this case, the session endpoint MUST immediately 
+        // an attach indicating that the link endpoint has no associated
+        // local terminus. In this case, the session endpoint MUST immediately
         // detach the newly created link endpoint.
         if attach.target.is_none() || attach.source.is_none() {
-            return Err(EngineError::LinkAttachRefused) // TODO: this should then be handled outside
+            return Err(EngineError::LinkAttachRefused); // TODO: this should then be handled outside
         }
 
         self.input_handle = Some(attach.handle);
@@ -187,8 +187,8 @@ impl endpoint::SenderLink for SenderLink {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-    ) -> Result<(), <Self as endpoint::Link>::Error> 
-    where   
+    ) -> Result<(), <Self as endpoint::Link>::Error>
+    where
         W: Sink<LinkFrame> + Send + Unpin,
         W::Error: Into<Self::Error>,
     {

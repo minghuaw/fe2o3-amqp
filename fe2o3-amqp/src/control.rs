@@ -3,7 +3,10 @@
 use fe2o3_amqp_types::definitions::{Error, Handle};
 use tokio::sync::{mpsc::Sender, oneshot};
 
-use crate::{connection::engine::SessionId, endpoint::LinkFlow, error::EngineError, link::{LinkHandle}, session::SessionIncomingItem};
+use crate::{
+    connection::engine::SessionId, endpoint::LinkFlow, error::EngineError, link::LinkHandle,
+    session::SessionIncomingItem,
+};
 
 pub enum ConnectionControl {
     Open,

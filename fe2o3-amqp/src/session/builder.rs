@@ -6,7 +6,13 @@ use slab::Slab;
 use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 
-use crate::{connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle}, control::SessionControl, error::EngineError, session::{engine::SessionEngine, SessionState}, util::Constant};
+use crate::{
+    connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
+    control::SessionControl,
+    error::EngineError,
+    session::{engine::SessionEngine, SessionState},
+    util::Constant,
+};
 
 use super::SessionHandle;
 
