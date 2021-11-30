@@ -402,7 +402,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())),
+                            _ => return Err(Error::Message("Too long".into())), // TODO: 
                         }
                         self.new_type = NewType::None;
                     }
@@ -425,7 +425,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())),
+                            _ => return Err(Error::Message("Too long".into())), // TODO
                         }
                     }
                     _ => unreachable!(),
@@ -506,7 +506,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())),
+                            _ => return Err(Error::Message("Too long".into())), // TODO
                         }
                     }
                     IsArrayElement::FirstElement => {
@@ -707,11 +707,12 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     #[inline]
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        match len {
-            Some(num) => Ok(MapSerializer::new(self, num * 2)),
-            None => Err(Error::Message("Length must be known".into())),
-        }
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        // match len {
+        //     Some(num) => Ok(MapSerializer::new(self, num * 2)),
+        //     None => Err(Error::Message("Length must be known".into())), // TODO
+        // }
+        Ok(MapSerializer::new(self))
     }
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
@@ -898,7 +899,7 @@ fn write_array<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())),
+        _ => return Err(Error::Message("Too long".into())), // TODO
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -980,7 +981,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())),
+        _ => return Err(Error::Message("Too long".into())), // TODO
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -993,10 +994,10 @@ pub struct MapSerializer<'a, W: 'a> {
 }
 
 impl<'a, W: 'a> MapSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>, num: usize) -> Self {
+    fn new(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
-            num,
+            num: 0,
             buf: Vec::new(),
         }
     }
@@ -1021,6 +1022,7 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
         key.serialize(&mut serializer)?;
         value.serialize(&mut serializer)?;
+        self.num += 2;
         Ok(())
     }
 
@@ -1030,7 +1032,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         T: Serialize,
     {
         let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
-        key.serialize(&mut serializer)
+        key.serialize(&mut serializer)?;
+        self.num += 1;
+        Ok(())
     }
 
     #[inline]
@@ -1039,7 +1043,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         T: Serialize,
     {
         let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
-        value.serialize(&mut serializer)
+        value.serialize(&mut serializer)?;
+        self.num += 1;
+        Ok(())
     }
 
     #[inline]
@@ -1082,7 +1088,7 @@ fn write_map<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())),
+        _ => return Err(Error::Message("Too long".into())), // TODO
     }
     writer.write_all(&buf)?;
     Ok(())
