@@ -375,14 +375,21 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     // String slices are always valid utf-8
-    // `String` isd utf-8 encoded
+    // `String` is utf-8 encoded
     #[inline]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        let l = v.len();
+
         match self.is_array_elem {
             IsArrayElement::False => {
                 match self.new_type {
                     NewType::Symbol => {
+                        // Symbols are encoded as ASCII characters [ASCII].
+                        //
+                        // Returns the length of this String, in bytes, 
+                        // not chars or graphemes. In other words, it might 
+                        // not be what a human considers the length of the string.
+                        let l = v.len();  
+
                         match l {
                             // sym8
                             0..=U8_MAX_MINUS_1 => {
@@ -400,6 +407,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.new_type = NewType::None;
                     }
                     NewType::None => {
+                        // A string represents a sequence of Unicode characters 
+                        // as defined by the Unicode V6.0.0 standard [UNICODE6].
+                        let l = v.chars().count();
                         match l {
                             // str8-utf8
                             0..=U8_MAX_MINUS_1 => {
@@ -423,12 +433,23 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             }
             IsArrayElement::FirstElement => match self.new_type {
                 NewType::Symbol => {
+                    // Symbols are encoded as ASCII characters [ASCII].
+                    //
+                    // Returns the length of this String, in bytes, 
+                    // not chars or graphemes. In other words, it might 
+                    // not be what a human considers the length of the string.
+                    let l = v.len();  
+
                     let code = [EncodingCodes::Sym32 as u8];
                     let width = (l as u32).to_be_bytes();
                     self.writer.write_all(&code)?;
                     self.writer.write_all(&width)?;
                 }
                 NewType::None => {
+                    // A string represents a sequence of Unicode characters 
+                    // as defined by the Unicode V6.0.0 standard [UNICODE6].
+                    let l = v.chars().count();
+
                     let code = [EncodingCodes::Str32 as u8];
                     let width: [u8; 4] = (l as u32).to_be_bytes();
                     self.writer.write_all(&code)?;
@@ -438,10 +459,21 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             },
             IsArrayElement::OtherElement => match self.new_type {
                 NewType::Symbol => {
+                    // Symbols are encoded as ASCII characters [ASCII].
+                    //
+                    // Returns the length of this String, in bytes, 
+                    // not chars or graphemes. In other words, it might 
+                    // not be what a human considers the length of the string.
+                    let l = v.len(); 
+
                     let width = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
                 NewType::None => {
+                    // A string represents a sequence of Unicode characters 
+                    // as defined by the Unicode V6.0.0 standard [UNICODE6].
+                    let l = v.chars().count();
+
                     let width: [u8; 4] = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
