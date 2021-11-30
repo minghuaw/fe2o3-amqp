@@ -13,7 +13,6 @@ use fe2o3_amqp_types::{
     performatives::Detach,
     primitives::{Symbol, ULong},
 };
-use futures_util::SinkExt;
 use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::PollSender;
 
