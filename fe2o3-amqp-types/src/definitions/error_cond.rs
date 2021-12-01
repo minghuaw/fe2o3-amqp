@@ -15,28 +15,6 @@ pub enum ErrorCondition {
     Custom(Symbol),
 }
 
-impl ErrorCondition {
-    pub fn amqp_error(err: AmqpError) -> Self {
-        err.into()
-    }
-
-    pub fn connection_error(err: ConnectionError) -> Self {
-        err.into()
-    }
-
-    pub fn session_error(err: SessionError) -> Self {
-        err.into()
-    }
-
-    pub fn link_error(err: LinkError) -> Self {
-        err.into()
-    }
-
-    pub fn custom(err: impl Into<Symbol>) -> Self {
-        ErrorCondition::Custom(err.into())
-    }
-}
-
 impl ser::Serialize for ErrorCondition {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

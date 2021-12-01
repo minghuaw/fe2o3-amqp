@@ -375,14 +375,21 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     // String slices are always valid utf-8
-    // `String` isd utf-8 encoded
+    // `String` is utf-8 encoded
     #[inline]
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        let l = v.len();
+
         match self.is_array_elem {
             IsArrayElement::False => {
                 match self.new_type {
                     NewType::Symbol => {
+                        // Symbols are encoded as ASCII characters [ASCII].
+                        //
+                        // Returns the length of this String, in bytes, 
+                        // not chars or graphemes. In other words, it might 
+                        // not be what a human considers the length of the string.
+                        let l = v.len();  
+
                         match l {
                             // sym8
                             0..=U8_MAX_MINUS_1 => {
@@ -395,11 +402,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())),
+                            _ => return Err(Error::too_long())
                         }
                         self.new_type = NewType::None;
                     }
                     NewType::None => {
+                        // A string represents a sequence of Unicode characters 
+                        // as defined by the Unicode V6.0.0 standard [UNICODE6].
+                        let l = v.chars().count();
                         match l {
                             // str8-utf8
                             0..=U8_MAX_MINUS_1 => {
@@ -415,7 +425,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())),
+                            _ => return Err(Error::too_long())
                         }
                     }
                     _ => unreachable!(),
@@ -423,12 +433,23 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             }
             IsArrayElement::FirstElement => match self.new_type {
                 NewType::Symbol => {
+                    // Symbols are encoded as ASCII characters [ASCII].
+                    //
+                    // Returns the length of this String, in bytes, 
+                    // not chars or graphemes. In other words, it might 
+                    // not be what a human considers the length of the string.
+                    let l = v.len();  
+
                     let code = [EncodingCodes::Sym32 as u8];
                     let width = (l as u32).to_be_bytes();
                     self.writer.write_all(&code)?;
                     self.writer.write_all(&width)?;
                 }
                 NewType::None => {
+                    // A string represents a sequence of Unicode characters 
+                    // as defined by the Unicode V6.0.0 standard [UNICODE6].
+                    let l = v.chars().count();
+
                     let code = [EncodingCodes::Str32 as u8];
                     let width: [u8; 4] = (l as u32).to_be_bytes();
                     self.writer.write_all(&code)?;
@@ -438,10 +459,21 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             },
             IsArrayElement::OtherElement => match self.new_type {
                 NewType::Symbol => {
+                    // Symbols are encoded as ASCII characters [ASCII].
+                    //
+                    // Returns the length of this String, in bytes, 
+                    // not chars or graphemes. In other words, it might 
+                    // not be what a human considers the length of the string.
+                    let l = v.len(); 
+
                     let width = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
                 NewType::None => {
+                    // A string represents a sequence of Unicode characters 
+                    // as defined by the Unicode V6.0.0 standard [UNICODE6].
+                    let l = v.chars().count();
+
                     let width: [u8; 4] = (l as u32).to_be_bytes();
                     self.writer.write_all(&width)?;
                 }
@@ -474,7 +506,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
-                            _ => return Err(Error::Message("Too long".into())),
+                            _ => return Err(Error::too_long())
                         }
                     }
                     IsArrayElement::FirstElement => {
@@ -675,11 +707,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 
     #[inline]
-    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        match len {
-            Some(num) => Ok(MapSerializer::new(self, num * 2)),
-            None => Err(Error::Message("Length must be known".into())),
-        }
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Ok(MapSerializer::new(self))
     }
 
     // The serde data model treats struct as "A statically sized heterogeneous key-value pairing"
@@ -866,7 +895,7 @@ fn write_array<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())),
+        _ => return Err(Error::too_long())
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -948,7 +977,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())),
+        _ => return Err(Error::too_long())
     }
     writer.write_all(&buf)?;
     Ok(())
@@ -961,10 +990,10 @@ pub struct MapSerializer<'a, W: 'a> {
 }
 
 impl<'a, W: 'a> MapSerializer<'a, W> {
-    fn new(se: &'a mut Serializer<W>, num: usize) -> Self {
+    fn new(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
-            num,
+            num: 0,
             buf: Vec::new(),
         }
     }
@@ -989,6 +1018,7 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
         key.serialize(&mut serializer)?;
         value.serialize(&mut serializer)?;
+        self.num += 2;
         Ok(())
     }
 
@@ -998,7 +1028,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         T: Serialize,
     {
         let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
-        key.serialize(&mut serializer)
+        key.serialize(&mut serializer)?;
+        self.num += 1;
+        Ok(())
     }
 
     #[inline]
@@ -1007,7 +1039,9 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         T: Serialize,
     {
         let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
-        value.serialize(&mut serializer)
+        value.serialize(&mut serializer)?;
+        self.num += 1;
+        Ok(())
     }
 
     #[inline]
@@ -1050,7 +1084,7 @@ fn write_map<'a, W: Write + 'a>(
             writer.write_all(&len)?;
             writer.write_all(&num)?;
         }
-        _ => return Err(Error::Message("Too long".into())),
+        _ => return Err(Error::too_long())
     }
     writer.write_all(&buf)?;
     Ok(())
