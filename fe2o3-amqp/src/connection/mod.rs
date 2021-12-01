@@ -246,7 +246,7 @@ impl endpoint::Connection for Connection {
                     .ok_or_else(|| EngineError::not_found())?;
 
                 if self.session_by_incoming_channel.contains_key(&channel) {
-                    return Err(EngineError::not_allowed());
+                    return Err(EngineError::not_allowed()); // TODO: this is probably not how not allowed should be used?
                 }
                 self.session_by_incoming_channel
                     .insert(channel, *session_id);
