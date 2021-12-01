@@ -12,6 +12,8 @@ pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
 pub mod protocol_header;
+mod error;
+pub use error::Error;
 
 /* -------------------------------- Transport ------------------------------- */
 
