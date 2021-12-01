@@ -290,7 +290,7 @@ where
                 incoming = self.transport.next() => {
                     println!(">>> Debug: connection incoming frames");
                     match incoming {
-                        Some(incoming) => self.on_incoming(incoming).await,
+                        Some(incoming) => self.on_incoming(incoming.map_err(Into::into)).await,
                         None => {
                             // Incoming stream is closed
                             println!(">>> Debug: Incoming connection is dropped");

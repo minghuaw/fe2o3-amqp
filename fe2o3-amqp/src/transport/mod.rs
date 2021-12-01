@@ -14,6 +14,7 @@ pub mod amqp;
 pub mod protocol_header;
 mod error;
 pub use error::Error;
+use fe2o3_amqp_types::definitions::AmqpError;
 
 /* -------------------------------- Transport ------------------------------- */
 
@@ -27,7 +28,7 @@ use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
 };
 
-use crate::{connection::ConnectionState, error::EngineError, util::IdleTimeout};
+use crate::{connection::ConnectionState, util::IdleTimeout};
 
 use amqp::{Frame, FrameCodec};
 use protocol_header::ProtocolHeader;
@@ -72,7 +73,7 @@ where
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
-    ) -> Result<ProtocolHeader, EngineError> {
+    ) -> Result<ProtocolHeader, Error> {
         send_proto_header(io, local_state, proto_header.clone()).await?;
         let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
 
@@ -107,7 +108,7 @@ async fn send_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
-) -> Result<(), EngineError>
+) -> Result<(), Error>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -121,7 +122,7 @@ where
             io.write_all(&buf).await?;
             *local_state = ConnectionState::HeaderExchange
         }
-        s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
+        s @ _ => return Err(AmqpError::IllegalState.into()), // TODO: is this necessary?
     }
     Ok(())
 }
@@ -130,7 +131,7 @@ async fn recv_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
-) -> Result<ProtocolHeader, EngineError>
+) -> Result<ProtocolHeader, Error>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -148,7 +149,7 @@ where
             *local_state = ConnectionState::HeaderExchange;
             Ok(incoming_header)
         }
-        s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
+        s @ _ => return Err(AmqpError::IllegalState.into()),
     }
 }
 
@@ -156,17 +157,18 @@ async fn read_and_compare_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: &ProtocolHeader,
-) -> Result<ProtocolHeader, EngineError>
+) -> Result<ProtocolHeader, Error>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     let mut inbound_buf = [0u8; 8];
     io.read_exact(&mut inbound_buf).await?;
     // check header
-    let incoming_header = ProtocolHeader::try_from(inbound_buf)?;
+    let incoming_header = ProtocolHeader::try_from(inbound_buf)
+        .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, None))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
-        return Err(EngineError::UnexpectedProtocolHeader(inbound_buf));
+        return Err(Error::amqp_error(AmqpError::NotImplemented, None));
     }
     Ok(incoming_header)
 }
@@ -175,7 +177,7 @@ impl<Io> Sink<Frame> for Transport<Io>
 where
     Io: AsyncWrite + Unpin,
 {
-    type Error = EngineError;
+    type Error = Error;
 
     fn poll_ready(
         self: std::pin::Pin<&mut Self>,
@@ -223,7 +225,7 @@ impl<Io> Stream for Transport<Io>
 where
     Io: AsyncRead + Unpin,
 {
-    type Item = Result<Frame, EngineError>;
+    type Item = Result<Frame, Error>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
@@ -252,7 +254,7 @@ where
                                 if any.is::<LengthDelimitedCodecError>() {
                                     // This should be the only error type
                                     return Poll::Ready(Some(Err(
-                                        EngineError::MaxFrameSizeExceeded,
+                                        Error::amqp_error(AmqpError::FrameSizeTooSmall, None),
                                     )));
                                 } else {
                                     return Poll::Ready(Some(Err(err.into())));
@@ -269,7 +271,7 @@ where
                 // check if idle timeout has exceeded
                 if let Some(delay) = this.idle_timeout.as_pin_mut() {
                     match delay.poll(cx) {
-                        Poll::Ready(()) => return Poll::Ready(Some(Err(EngineError::IdleTimeout))),
+                        Poll::Ready(()) => return Poll::Ready(Some(Err(Error::IdleTimeout))),
                         Poll::Pending => return Poll::Pending,
                     }
                 }

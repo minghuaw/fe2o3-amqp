@@ -1,7 +1,5 @@
 use std::convert::{TryFrom, TryInto};
 
-use crate::error::EngineError;
-
 const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,14 +69,18 @@ impl From<ProtocolHeader> for [u8; 8] {
 }
 
 impl TryFrom<[u8; 8]> for ProtocolHeader {
-    type Error = EngineError;
+    type Error = [u8; 8];
 
     fn try_from(v: [u8; 8]) -> Result<Self, Self::Error> {
         if &v[..4] != b"AMQP" {
-            return Err(EngineError::UnexpectedProtocolHeader(v));
+            return Err(v);
         }
+        let id = match v[4].try_into() {
+            Ok(_id) => _id,
+            Err(_) => return Err(v)
+        };
 
-        Ok(Self::new(v[4].try_into()?, v[5], v[6], v[7]))
+        Ok(Self::new(id, v[5], v[6], v[7]))
     }
 }
 
@@ -90,14 +92,14 @@ pub enum ProtocolId {
 }
 
 impl TryFrom<u8> for ProtocolId {
-    type Error = EngineError;
+    type Error = u8;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         let val = match value {
             0x0 => Self::Amqp,
             0x2 => Self::Tls,
             0x3 => Self::Sasl,
-            v @ _ => return Err(EngineError::UnexpectedProtocolId(v)),
+            v @ _ => return Err(value),
         };
         Ok(val)
     }

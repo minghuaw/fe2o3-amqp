@@ -6,9 +6,7 @@ use serde::{ser::Serialize, Deserialize};
 use serde_amqp::{de::Deserializer, read::IoReader};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::error::EngineError;
-
-use super::FRAME_TYPE_AMQP;
+use super::{FRAME_TYPE_AMQP, Error};
 
 #[derive(Debug)]
 pub struct Frame {
@@ -47,7 +45,7 @@ impl Frame {
 pub struct FrameCodec {}
 
 impl Encoder<Frame> for FrameCodec {
-    type Error = EngineError;
+    type Error = Error;
 
     fn encode(&mut self, item: Frame, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // AMQP frame ignores extended header, thus doff should always be 2
@@ -63,24 +61,24 @@ impl Encoder<Frame> for FrameCodec {
 
 impl Decoder for FrameCodec {
     type Item = Frame;
-    type Error = EngineError;
+    type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+
         let doff = src.get_u8();
         let ftype = src.get_u8();
         let channel = src.get_u16();
 
         // check type byte
         if ftype != FRAME_TYPE_AMQP {
-            return Err(EngineError::Message(
-                "Only AMQP frame is implemented for now",
-            ));
+            return Err(Error::amqp_error(AmqpError::NotImplemented, None));
         }
 
         match doff {
             2 => {}
             // 0..=1 => return Err(EngineError::MalformedFrame),
-            _ => return Err(EngineError::MalformedFrame),
+            _ => return Err(Error::connection_error(ConnectionError::FramingError, None)),
         }
 
         // decode body
@@ -139,7 +137,7 @@ impl FrameBody {
 pub struct FrameBodyCodec {}
 
 impl Encoder<FrameBody> for FrameBodyCodec {
-    type Error = EngineError;
+    type Error = Error;
 
     fn encode(&mut self, item: FrameBody, dst: &mut BytesMut) -> Result<(), Self::Error> {
         use serde_amqp::ser::Serializer;
@@ -172,7 +170,7 @@ impl Encoder<FrameBody> for FrameBodyCodec {
 
 impl Decoder for FrameBodyCodec {
     type Item = FrameBody;
-    type Error = EngineError;
+    type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if src.len() == 0 {

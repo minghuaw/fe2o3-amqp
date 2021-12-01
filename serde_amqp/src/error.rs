@@ -60,11 +60,6 @@ impl de::Error for Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        // match err.kind() {
-        //     std::io::ErrorKind::UnexpectedEof => Self::Eof,
-        //     _ => Self::Io(err)
-        // }
-
         Self::Io(err)
     }
 }
