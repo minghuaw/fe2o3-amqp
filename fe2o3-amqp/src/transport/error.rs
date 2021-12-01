@@ -24,17 +24,17 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn amqp_error(condition: impl Into<AmqpError>, description: Option<String>) -> Self {
+    pub fn amqp_error(condition: impl Into<AmqpError>, description: impl Into<Option<String>>) -> Self {
         Self::AmqpError {
             condition: condition.into(),
-            description: description
+            description: description.into()
         }
     }
 
-    pub fn connection_error(condition: impl Into<ConnectionError>, description: Option<String>) -> Self {
+    pub fn connection_error(condition: impl Into<ConnectionError>, description: impl Into<Option<String>>) -> Self {
         Self::ConnectionError {
             condition: condition.into(),
-            description: description
+            description: description.into()
         }
     }
 }
