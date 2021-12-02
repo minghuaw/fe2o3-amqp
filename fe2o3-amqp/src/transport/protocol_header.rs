@@ -77,7 +77,7 @@ impl TryFrom<[u8; 8]> for ProtocolHeader {
         }
         let id = match v[4].try_into() {
             Ok(_id) => _id,
-            Err(_) => return Err(v)
+            Err(_) => return Err(v),
         };
 
         Ok(Self::new(id, v[5], v[6], v[7]))

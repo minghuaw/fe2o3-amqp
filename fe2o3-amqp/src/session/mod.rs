@@ -191,7 +191,7 @@ impl endpoint::Session for Session {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
-            _ => return Err(EngineError::illegal_state()), 
+            _ => return Err(EngineError::illegal_state()),
         }
 
         self.incoming_channel = Some(channel);
@@ -259,20 +259,18 @@ impl endpoint::Session for Session {
         // TODO: handle link flow control
         if let Some(input_handle) = &flow.handle {
             match self.link_by_input_handle.get(input_handle) {
-                Some(output_handle) => {
-                    match self.local_links.get_mut(output_handle.0 as usize) {
-                        Some(link_handle) => {
-                            let link_flow = LinkFlow::from(&flow);
-                            let echo = link_handle.state.on_incoming_flow(link_flow)?;
-                            if let Some(echo_flow) = echo {
-                                self.control
-                                    .send(SessionControl::LinkFlow(echo_flow))
-                                    .await?;
-                            }
+                Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
+                    Some(link_handle) => {
+                        let link_flow = LinkFlow::from(&flow);
+                        let echo = link_handle.state.on_incoming_flow(link_flow)?;
+                        if let Some(echo_flow) = echo {
+                            self.control
+                                .send(SessionControl::LinkFlow(echo_flow))
+                                .await?;
                         }
-                        None => return Err(EngineError::unattached_handle()),
                     }
-                }
+                    None => return Err(EngineError::unattached_handle()),
+                },
                 None => return Err(EngineError::unattached_handle()),
             }
         }

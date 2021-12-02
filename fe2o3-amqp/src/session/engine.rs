@@ -209,7 +209,7 @@ where
                 },
                 Err(err) => {
                     // TODO: handle errors
-                    
+
                     panic!("{:?}", err)
                 }
             }

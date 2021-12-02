@@ -11,7 +11,7 @@ pub enum Error {
     IdleTimeout,
 
     #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    AmqpError{
+    AmqpError {
         condition: AmqpError,
         description: Option<String>,
     },
@@ -19,22 +19,28 @@ pub enum Error {
     #[error("Connection error {:?}, {:?}", .condition, .description)]
     ConnectionError {
         condition: ConnectionError,
-        description: Option<String>
-    }
+        description: Option<String>,
+    },
 }
 
 impl Error {
-    pub fn amqp_error(condition: impl Into<AmqpError>, description: impl Into<Option<String>>) -> Self {
+    pub fn amqp_error(
+        condition: impl Into<AmqpError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
         Self::AmqpError {
             condition: condition.into(),
-            description: description.into()
+            description: description.into(),
         }
     }
 
-    pub fn connection_error(condition: impl Into<ConnectionError>, description: impl Into<Option<String>>) -> Self {
+    pub fn connection_error(
+        condition: impl Into<ConnectionError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
         Self::ConnectionError {
             condition: condition.into(),
-            description: description.into()
+            description: description.into(),
         }
     }
 }
@@ -47,7 +53,7 @@ impl From<serde_amqp::Error> for Error {
                 let description = e.to_string();
                 Self::AmqpError {
                     condition: AmqpError::DecodeError,
-                    description: Some(description)
+                    description: Some(description),
                 }
             }
         }
@@ -58,7 +64,7 @@ impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
         Self::AmqpError {
             condition: err,
-            description: None
+            description: None,
         }
     }
 }
@@ -67,7 +73,7 @@ impl From<ConnectionError> for Error {
     fn from(err: ConnectionError) -> Self {
         Self::ConnectionError {
             condition: err,
-            description: None
+            description: None,
         }
     }
 }
@@ -79,8 +85,14 @@ impl From<Error> for crate::error::EngineError {
         match err {
             Error::Io(err) => EngineError::Io(err),
             Error::IdleTimeout => EngineError::IdleTimeout,
-            Error::AmqpError{condition, description} => EngineError::AmqpError(condition),
-            Error::ConnectionError{condition, description} => EngineError::ConnectionError(condition)
+            Error::AmqpError {
+                condition,
+                description,
+            } => EngineError::AmqpError(condition),
+            Error::ConnectionError {
+                condition,
+                description,
+            } => EngineError::ConnectionError(condition),
         }
     }
 }

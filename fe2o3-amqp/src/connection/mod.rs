@@ -3,7 +3,7 @@ use std::{cmp::min, collections::BTreeMap, convert::TryInto};
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
-    definitions::Error,
+    definitions,
     performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open},
 };
 use futures_util::{Sink, SinkExt};
@@ -27,7 +27,9 @@ use self::{builder::WithoutContainerId, engine::SessionId};
 
 pub mod builder;
 pub mod engine;
+mod error;
 pub mod heartbeat;
+pub use error::Error;
 
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
@@ -360,7 +362,7 @@ impl endpoint::Connection for Connection {
     async fn send_close<W>(
         &mut self,
         writer: &mut W,
-        error: Option<Error>,
+        error: Option<definitions::Error>,
     ) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,

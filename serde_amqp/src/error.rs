@@ -32,10 +32,7 @@ pub enum Error {
 
 impl Error {
     pub fn too_long() -> Self {
-        let io_err = std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Too long"
-        );
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "Too long");
         Self::Io(io_err)
     }
 }

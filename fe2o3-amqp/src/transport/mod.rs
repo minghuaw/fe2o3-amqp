@@ -11,8 +11,8 @@ pub const FRAME_TYPE_AMQP: u8 = 0x00;
 pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
-pub mod protocol_header;
 mod error;
+pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::definitions::AmqpError;
 
@@ -253,9 +253,10 @@ where
                                 let any = &err as &dyn Any;
                                 if any.is::<LengthDelimitedCodecError>() {
                                     // This should be the only error type
-                                    return Poll::Ready(Some(Err(
-                                        Error::amqp_error(AmqpError::FrameSizeTooSmall, None),
-                                    )));
+                                    return Poll::Ready(Some(Err(Error::amqp_error(
+                                        AmqpError::FrameSizeTooSmall,
+                                        None,
+                                    ))));
                                 } else {
                                     return Poll::Ready(Some(Err(err.into())));
                                 }
