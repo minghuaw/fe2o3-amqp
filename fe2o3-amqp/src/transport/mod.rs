@@ -74,7 +74,7 @@ where
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, Error> {
-        send_proto_header(io, local_state, proto_header.clone()).await?;
+        send_proto_header(io, local_state, proto_header.clone()).await?; 
         let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
 
         Ok(incoming_header)

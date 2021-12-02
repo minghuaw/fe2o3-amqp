@@ -2,8 +2,10 @@
 //! transferring frames/messages over channels
 
 use std::cmp::min;
+use std::io;
 use std::time::Duration;
 
+use fe2o3_amqp_types::definitions::AmqpError;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
@@ -11,14 +13,12 @@ use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
 use crate::endpoint;
-use crate::error::EngineError;
 use crate::session::{SessionFrame, SessionFrameBody};
 use crate::transport::amqp::Frame;
 use crate::transport::Transport;
 use crate::util::Running;
 
-use super::heartbeat::HeartBeat;
-use super::ConnectionState;
+use super::{ConnectionState, heartbeat::HeartBeat, Error};
 
 pub(crate) type SessionId = usize;
 
@@ -34,7 +34,7 @@ pub struct ConnectionEngine<Io, C> {
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    C: endpoint::Connection<State = ConnectionState, Error = EngineError> + Send + 'static,
+    C: endpoint::Connection<State = ConnectionState, Error = Error> + Send + 'static,
 {
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
@@ -43,7 +43,7 @@ where
         control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
         // session_control: Receiver<SessionControl>,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, Error> {
         use crate::transport::amqp::FrameBody;
 
         let mut engine = Self {
@@ -65,7 +65,7 @@ where
         let Frame { channel, body } = frame;
         let remote_open = match body {
             FrameBody::Open(open) => open,
-            _ => return Err(EngineError::illegal_state()),
+            _ => return Err(AmqpError::IllegalState.into()),
         };
 
         // Handle incoming remote_open
@@ -96,7 +96,7 @@ where
         Ok(engine)
     }
 
-    pub fn spawn(self) -> JoinHandle<Result<(), EngineError>> {
+    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
 }
@@ -104,29 +104,29 @@ where
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + Send + Unpin,
-    C: endpoint::Connection<State = ConnectionState, Error = EngineError> + Send + 'static,
+    C: endpoint::Connection<State = ConnectionState, Error = Error> + Send + 'static,
 {
     async fn forward_to_session(
         &mut self,
         channel: u16,
         frame: SessionFrame,
-    ) -> Result<(), EngineError> {
+    ) -> Result<(), Error> {
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(EngineError::illegal_state()),
+            _ => return Err(AmqpError::IllegalState.into()),
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
             Some(tx) => tx.send(Ok(frame)).await?,
-            None => return Err(EngineError::not_found()),
+            None => return Err(AmqpError::NotFound.into()),
         };
         Ok(())
     }
 
     async fn on_incoming(
         &mut self,
-        incoming: Result<Frame, EngineError>,
-    ) -> Result<Running, EngineError> {
+        incoming: Result<Frame, Error>,
+    ) -> Result<Running, Error> {
         use crate::transport::amqp::FrameBody;
 
         let frame = incoming?;
@@ -204,7 +204,7 @@ where
     }
 
     #[inline]
-    async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, EngineError> {
+    async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
         println!(">>> Debug: ConectionEnginer::on_control");
         match control {
             ConnectionControl::Open => {
@@ -220,7 +220,12 @@ where
                 let result = self.connection.create_session(tx).map_err(Into::into);
                 responder
                     .send(result)
-                    .map_err(|_| EngineError::Message("Oneshot channel dropped"))?;
+                    .map_err(|_| Error::Io(
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            "ConnectionHandle is dropped"
+                        )
+                    ))?;
             }
             ConnectionControl::DropSession(session_id) => self.connection.drop_session(session_id),
         }
@@ -235,12 +240,12 @@ where
     async fn on_outgoing_session_frames(
         &mut self,
         frame: SessionFrame,
-    ) -> Result<Running, EngineError> {
+    ) -> Result<Running, Error> {
         use crate::transport::amqp::FrameBody;
 
         match self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(EngineError::Message("Illegal local connection state")),
+            _ => return Err(AmqpError::IllegalState.into()),
         }
 
         let SessionFrame { channel, body } = frame;
@@ -271,7 +276,7 @@ where
     }
 
     #[inline]
-    async fn on_heartbeat(&mut self) -> Result<Running, EngineError> {
+    async fn on_heartbeat(&mut self) -> Result<Running, Error> {
         match &self.connection.local_state() {
             ConnectionState::Start | ConnectionState::CloseSent => return Ok(Running::Continue),
             ConnectionState::End => return Ok(Running::Stop),
@@ -283,7 +288,7 @@ where
         Ok(Running::Continue)
     }
 
-    async fn event_loop(mut self) -> Result<(), EngineError> {
+    async fn event_loop(mut self) -> Result<(), Error> {
         loop {
             let result = tokio::select! {
                 _ = self.heartbeat.next() => self.on_heartbeat().await,

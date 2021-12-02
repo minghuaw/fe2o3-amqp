@@ -39,7 +39,7 @@ use crate::{
 
 #[async_trait]
 pub trait Connection {
-    type Error: Into<EngineError> + Send;
+    type Error: Send;
     type State: Send;
     type Session: Session + Send;
 

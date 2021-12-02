@@ -1,23 +1,22 @@
-use std::{cmp::min, collections::BTreeMap, convert::TryInto};
+use std::{cmp::min, collections::BTreeMap, convert::TryInto, io};
 
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
-    definitions,
+    definitions::{self, AmqpError},
     performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open},
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{
     sync::{mpsc::Sender, oneshot},
-    task::JoinHandle,
+    task::{JoinHandle},
 };
 use url::Url;
 
 use crate::{
     control::ConnectionControl,
     endpoint,
-    error::EngineError,
     session::SessionFrame,
     session::{Session, SessionFrameBody, SessionIncomingItem},
     transport::amqp::{Frame, FrameBody},
@@ -64,7 +63,7 @@ pub enum ConnectionState {
 
 pub struct ConnectionHandle {
     pub(crate) control: Sender<ConnectionControl>,
-    handle: JoinHandle<Result<(), EngineError>>,
+    handle: JoinHandle<Result<(), Error>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -72,29 +71,36 @@ pub struct ConnectionHandle {
 }
 
 impl ConnectionHandle {
-    pub async fn close(&mut self) -> Result<(), EngineError> {
-        self.control.send(ConnectionControl::Close(None)).await?;
+    pub async fn close(&mut self) -> Result<(), Error> {
+        // If sending is unsuccessful, the `ConnectionEngine` event loop is 
+        // already dropped, this should be reflected by `JoinError` then.
+        let _ = self.control.send(ConnectionControl::Close(None)).await;
         match (&mut self.handle).await {
             Ok(res) => res,
-            Err(_) => Err(EngineError::Message("JoinError")),
+            Err(e) => Err(Error::JoinError(e)),
         }
     }
 
     pub(crate) async fn create_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
-    ) -> Result<(u16, SessionId), EngineError> {
+    ) -> Result<(u16, SessionId), Error> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
             .send(ConnectionControl::CreateSession { tx, responder })
             .await?;
         let result = resp_rx
             .await
-            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
+            .map_err(|_| Error::Io( // The sending half is already dropped
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    "ConnectionEngine event_loop is dropped"
+                )
+            ))?;
         result
     }
 
-    // pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), EngineError> {
+    // pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), Error> {
     //     self.control.send(ConnectionControl::DropSession(session_id)).await?;
     //     Ok(())
     // }
@@ -128,7 +134,7 @@ impl Connection {
         max_frame_size: impl Into<MaxFrameSize>,
         channel_max: impl Into<ChannelMax>,
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, EngineError> {
+    ) -> Result<ConnectionHandle, Error> {
         Connection::builder()
             .container_id(container_id)
             .max_frame_size(max_frame_size)
@@ -162,7 +168,7 @@ impl Connection {
 
 #[async_trait]
 impl endpoint::Connection for Connection {
-    type Error = EngineError;
+    type Error = Error;
     type State = ConnectionState;
     type Session = Session;
 
@@ -189,7 +195,7 @@ impl endpoint::Connection for Connection {
             | ConnectionState::HeaderExchange
             | ConnectionState::CloseSent
             | ConnectionState::Discarding
-            | ConnectionState::End => return Err(EngineError::Message("Illegal local state")),
+            | ConnectionState::End => return Err(AmqpError::IllegalState.into()),
             // TODO: what about pipelined open?
             _ => {}
         };
@@ -200,9 +206,7 @@ impl endpoint::Connection for Connection {
 
         // check if there is enough
         if session_id > self.agreed_channel_max as usize {
-            return Err(EngineError::Message(
-                "Exceeding max number of channel is not allowed",
-            ));
+            return Err(Error::ChannelMaxExceeded);
         } else {
             entry.insert(tx);
             let channel = session_id as u16; // TODO: a different way of allocating session id?
@@ -221,7 +225,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
             ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-            _ => return Err(EngineError::illegal_state()),
+            _ => return Err(AmqpError::IllegalState.into()),
         }
 
         // set channel_max to mutually acceptable
@@ -237,7 +241,7 @@ impl endpoint::Connection for Connection {
         match &self.local_state {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
-            _ => return Err(EngineError::illegal_state()),
+            _ => return Err(AmqpError::IllegalState.into()), // TODO: what to do?
         }
 
         match begin.remote_channel {
@@ -245,10 +249,10 @@ impl endpoint::Connection for Connection {
                 let session_id = self
                     .session_by_outgoing_channel
                     .get(&outgoing_channel)
-                    .ok_or_else(|| EngineError::not_found())?;
+                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
 
                 if self.session_by_incoming_channel.contains_key(&channel) {
-                    return Err(EngineError::not_allowed()); // TODO: this is probably not how not allowed should be used?
+                    return Err(AmqpError::NotAllowed.into()); // TODO: this is probably not how not allowed should be used?
                 }
                 self.session_by_incoming_channel
                     .insert(channel, *session_id);
@@ -257,7 +261,7 @@ impl endpoint::Connection for Connection {
                 let tx = self
                     .local_sessions
                     .get_mut(*session_id)
-                    .ok_or_else(|| EngineError::not_found())?;
+                    .ok_or_else(|| AmqpError::NotFound)?;
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
                 tx.send(Ok(sframe)).await?;
             }
@@ -275,7 +279,7 @@ impl endpoint::Connection for Connection {
 
         match &self.local_state {
             ConnectionState::Opened => {}
-            _ => return Err(EngineError::illegal_state()),
+            _ => return Err(AmqpError::IllegalState.into()),
         }
 
         // Forward to session
@@ -284,10 +288,10 @@ impl endpoint::Connection for Connection {
         let session_id = self
             .session_by_incoming_channel
             .remove(&channel)
-            .ok_or_else(|| EngineError::not_found())?;
+            .ok_or_else(|| AmqpError::NotFound)?;
         self.local_sessions
             .get_mut(session_id)
-            .ok_or_else(|| EngineError::not_found())?
+            .ok_or_else(|| AmqpError::NotFound)?
             .send(Ok(sframe))
             .await?;
 
@@ -303,7 +307,7 @@ impl endpoint::Connection for Connection {
                 self.control.send(ConnectionControl::Close(None)).await?;
             }
             ConnectionState::CloseSent => self.local_state = ConnectionState::End,
-            _ => return Err(EngineError::illegal_state()),
+            _ => return Err(AmqpError::IllegalState.into()),
         };
 
         if let Some(err) = close.error {
@@ -316,7 +320,7 @@ impl endpoint::Connection for Connection {
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<EngineError>,
+        W::Error: Into<Error>,
     {
         println!(">>> Debug: on_outgoing_open");
 
@@ -329,7 +333,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
+            _ => return Err(AmqpError::IllegalState.into()),
         }
 
         Ok(())
@@ -341,7 +345,7 @@ impl endpoint::Connection for Connection {
         // TODO: the engine already checks that
         // match &self.local_state {
         //     ConnectionState::Opened => {}
-        //     _ => return Err(EngineError::Message("Illegal local connection state")),
+        //     _ => return Err(Error::Message("Illegal local connection state")),
         // }
 
         let frame = Frame::new(channel, FrameBody::Begin(begin));
@@ -353,7 +357,7 @@ impl endpoint::Connection for Connection {
 
         self.session_by_outgoing_channel
             .remove(&channel)
-            .ok_or_else(|| EngineError::Message("Local session id is not found"))?;
+            .ok_or_else(|| AmqpError::NotFound)?;
         let frame = Frame::new(channel, FrameBody::End(end));
         Ok(frame)
     }
@@ -366,7 +370,7 @@ impl endpoint::Connection for Connection {
     ) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<EngineError>,
+        W::Error: Into<Error>,
     {
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
         writer.send(frame).await.map_err(Into::into)?;
@@ -376,7 +380,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
             ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
             ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
-            s @ _ => return Err(EngineError::UnexpectedConnectionState(s.clone())),
+            s @ _ => return Err(AmqpError::IllegalState.into()),
         }
         Ok(())
     }

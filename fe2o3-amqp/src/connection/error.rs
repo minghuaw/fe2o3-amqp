@@ -1,6 +1,7 @@
 use std::io;
 
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+use tokio::{sync::mpsc, task::JoinError};
 
 use crate::transport;
 
@@ -13,7 +14,10 @@ pub enum Error {
     IdleTimeout,
 
     #[error(transparent)]
-    UrlError(url::ParseError),
+    UrlError(#[from] url::ParseError),
+
+    #[error(transparent)]
+    JoinError(JoinError),
 
     #[error("Exceeding channel-max")]
     ChannelMaxExceeded,
@@ -29,6 +33,48 @@ pub enum Error {
         condition: ConnectionError,
         description: Option<String>,
     },
+}
+
+impl<T> From<mpsc::error::SendError<T>> for Error 
+where T: std::fmt::Debug 
+{
+    fn from(err: mpsc::error::SendError<T>) -> Self {
+        Self::Io(io::Error::new(
+            io::ErrorKind::Other,
+            err.to_string()
+        ))
+    }
+}
+
+impl From<AmqpError> for Error {
+    fn from(err: AmqpError) -> Self {
+        Self::AmqpError {
+            condition: err,
+            description: None,
+        }
+    }
+}
+
+impl Error {
+    pub fn amqp_error(
+        condition: impl Into<AmqpError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
+        Self::AmqpError {
+            condition: condition.into(),
+            description: description.into(),
+        }
+    }
+
+    pub fn connection_error(
+        condition: impl Into<ConnectionError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
+        Self::ConnectionError {
+            condition: condition.into(),
+            description: description.into(),
+        }
+    }
 }
 
 impl From<transport::Error> for Error {

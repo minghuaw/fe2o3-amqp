@@ -13,13 +13,11 @@ use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
-    error::EngineError,
     transport::protocol_header::ProtocolHeader,
     transport::Transport,
 };
 
-use super::engine::ConnectionEngine;
-use super::ConnectionHandle;
+use super::{engine::ConnectionEngine, ConnectionHandle, Error};
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -177,7 +175,7 @@ impl<Mode> Builder<Mode> {
 }
 
 impl Builder<WithContainerId> {
-    pub async fn open_with_stream<Io>(self, mut stream: Io) -> Result<ConnectionHandle, EngineError>
+    pub async fn open_with_stream<Io>(self, mut stream: Io) -> Result<ConnectionHandle, Error>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -236,7 +234,7 @@ impl Builder<WithContainerId> {
     pub async fn open(
         self,
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, EngineError> {
+    ) -> Result<ConnectionHandle, Error> {
         let url: Url = url.try_into()?;
 
         let addr = url.socket_addrs(|| match url.scheme() {
@@ -253,7 +251,7 @@ impl Builder<WithContainerId> {
     pub async fn pipelined_open_with_stream<Io>(
         self,
         mut _stream: Io,
-    ) -> Result<ConnectionHandle, EngineError>
+    ) -> Result<ConnectionHandle, Error>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -263,7 +261,7 @@ impl Builder<WithContainerId> {
     pub async fn pipelined_open(
         &self,
         _url: impl TryInto<Url>,
-    ) -> Result<ConnectionHandle, EngineError> {
+    ) -> Result<ConnectionHandle, Error> {
         todo!()
     }
 }
