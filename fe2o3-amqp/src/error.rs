@@ -1,5 +1,6 @@
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError, SessionError};
 use thiserror::Error;
+use tokio::task::JoinError;
 
 use crate::connection::ConnectionState;
 
@@ -10,6 +11,9 @@ pub enum EngineError {
 
     #[error("Url Error: {0}")]
     UrlError(#[from] url::ParseError),
+
+    #[error(transparent)]
+    JoinError(JoinError),
 
     #[error("Connection/transport is not connected")]
     IsClosed,

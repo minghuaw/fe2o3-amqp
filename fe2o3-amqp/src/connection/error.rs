@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::transport;
+use crate::{transport, error::EngineError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -96,6 +96,24 @@ impl From<transport::Error> for Error {
                 condition,
                 description,
             },
+        }
+    }
+}
+
+impl From<Error> for EngineError {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::Io(e) => EngineError::Io(e),
+            Error::IdleTimeout => EngineError::IdleTimeout,
+            Error::UrlError(e) => EngineError::UrlError(e),
+            Error::JoinError(e) => EngineError::JoinError(e),
+            Error::AmqpError{condition, description: _} => {
+                EngineError::AmqpError(condition)
+            },
+            Error::ConnectionError{condition, description: _} => {
+                EngineError::ConnectionError(condition)
+            },
+            Error::ChannelMaxExceeded => EngineError::Message("Channel max exceeded")
         }
     }
 }
