@@ -88,7 +88,7 @@ impl ConnectionHandle {
         let (responder, resp_rx) = oneshot::channel();
         self.control
             .send(ConnectionControl::CreateSession { tx, responder })
-            .await?;
+            .await?; // std::io::Error
         let result = resp_rx
             .await
             .map_err(|_| Error::Io( // The sending half is already dropped
@@ -380,7 +380,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
             ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
             ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
-            s @ _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(AmqpError::IllegalState.into()),
         }
         Ok(())
     }
