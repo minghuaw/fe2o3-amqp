@@ -308,9 +308,9 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_end");
-        if Some(channel) != self.incoming_channel {
-            return Err(EngineError::Message("Incoming channel mismatch"));
-        }
+        // if Some(channel) != self.incoming_channel {
+        //     return Err(EngineError::Message("Incoming channel mismatch"));
+        // }
 
         match self.local_state {
             SessionState::Mapped => {

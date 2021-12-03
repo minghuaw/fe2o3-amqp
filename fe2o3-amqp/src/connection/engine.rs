@@ -5,7 +5,7 @@ use std::cmp::min;
 use std::io;
 use std::time::Duration;
 
-use fe2o3_amqp_types::definitions::AmqpError;
+use fe2o3_amqp_types::definitions::{AmqpError, self};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
@@ -30,6 +30,7 @@ pub struct ConnectionEngine<Io, C> {
     outgoing_session_frames: Receiver<SessionFrame>,
     // session_control: Receiver<SessionControl>,
     heartbeat: HeartBeat,
+    remote_err: Option<definitions::Error>, // TODO: how to present this back to the user?
 }
 
 impl<Io, C> ConnectionEngine<Io, C>
@@ -55,6 +56,7 @@ where
             control,
             outgoing_session_frames,
             heartbeat: HeartBeat::never(),
+            remote_err: None,
         };
 
         // Send an Open
@@ -201,8 +203,10 @@ where
                 self.connection.on_incoming_end(channel, end).await
                     .map_err(Into::into)?;
             }
-            FrameBody::Close(close) => self.connection.on_incoming_close(channel, close).await
-                .map_err(Into::into)?,
+            FrameBody::Close(close) => {
+                self.remote_err = self.connection.on_incoming_close(channel, close).await
+                    .map_err(Into::into)?;
+            },
             FrameBody::Empty => {
                 // do nothing, IdleTimeout is tracked by Transport
             }

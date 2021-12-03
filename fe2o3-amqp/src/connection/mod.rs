@@ -300,7 +300,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(&mut self, _channel: u16, close: Close) -> Result<(), Self::Error> {
+    async fn on_incoming_close(&mut self, _channel: u16, close: Close) -> Result<Option<definitions::Error>, Self::Error> {
         println!(">>> Debug: on_incoming_close");
         match &self.local_state {
             ConnectionState::Opened => {
@@ -311,11 +311,7 @@ impl endpoint::Connection for Connection {
             _ => return Err(AmqpError::IllegalState.into()),
         };
 
-        if let Some(err) = close.error {
-            println!("Remote error {:?}", err);
-            todo!()
-        }
-        Ok(())
+        Ok(close.error)
     }
 
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>

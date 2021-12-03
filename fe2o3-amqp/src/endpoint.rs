@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{Error, Handle, Role, SequenceNo},
+    definitions::{Error, Handle, Role, SequenceNo, self},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
@@ -70,7 +70,7 @@ pub trait Connection {
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error>;
+    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<Option<definitions::Error>, Self::Error>;
 
     /// Sending out an Open frame
     ///
