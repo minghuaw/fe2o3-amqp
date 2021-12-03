@@ -30,6 +30,8 @@ mod frame;
 pub use frame::*;
 pub mod builder;
 pub mod engine;
+mod error;
+pub use self::error::*;
 
 // 2.5.5 Session States
 // UNMAPPED
