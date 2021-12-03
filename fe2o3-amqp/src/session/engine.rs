@@ -53,7 +53,7 @@ where
         engine.session.send_begin(&mut engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
-            Some(frame) => frame?, // Receiver<Result<SessionFrame, EngineError>>
+            Some(frame) => frame, // Receiver<Result<SessionFrame, EngineError>>
             None => todo!(),
         };
         let SessionFrame { channel, body } = frame;
@@ -74,7 +74,7 @@ where
 
     #[inline]
     async fn on_incoming(&mut self, incoming: SessionIncomingItem) -> Result<Running, EngineError> {
-        let SessionFrame { channel, body } = incoming?;
+        let SessionFrame { channel, body } = incoming;
 
         match body {
             SessionFrameBody::Begin(begin) => {

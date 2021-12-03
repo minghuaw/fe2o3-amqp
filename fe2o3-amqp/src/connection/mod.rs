@@ -264,7 +264,7 @@ impl endpoint::Connection for Connection {
                     .get_mut(*session_id)
                     .ok_or_else(|| AmqpError::NotFound)?;
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
-                tx.send(Ok(sframe)).await?;
+                tx.send(sframe).await?;
             }
             None => {
                 todo!()
@@ -293,7 +293,7 @@ impl endpoint::Connection for Connection {
         self.local_sessions
             .get_mut(session_id)
             .ok_or_else(|| AmqpError::NotFound)?
-            .send(Ok(sframe))
+            .send(sframe)
             .await?;
 
         Ok(())

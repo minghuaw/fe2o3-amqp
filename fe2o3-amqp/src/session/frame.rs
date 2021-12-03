@@ -3,7 +3,8 @@ use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, F
 
 use crate::{connection};
 
-pub type SessionIncomingItem = Result<SessionFrame, connection::Error>;
+// pub type SessionIncomingItem = Result<SessionFrame, connection::Error>;
+pub type SessionIncomingItem = SessionFrame;
 
 /// A subset of AMQP frames that should be handled or intercepted by
 /// a Session endpoint.

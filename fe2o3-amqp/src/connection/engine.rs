@@ -124,7 +124,7 @@ where
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
-            Some(tx) => tx.send(Ok(frame)).await?,
+            Some(tx) => tx.send(frame).await?,
             None => return Err(AmqpError::NotFound.into()),
         };
         Ok(())
