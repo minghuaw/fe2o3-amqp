@@ -101,8 +101,10 @@ impl SessionHandle {
             .map_err(|_| AllocLinkError::IllegalState)?; 
         let result = resp_rx
             .await
-            // 
-            .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
+            // The error could only occur when the sending half is dropped,
+            // indicating the `SessionEngine::even_loop` has stopped or 
+            // unmapped. Thus it could be considered as illegal state
+            .map_err(|_| AllocLinkError::IllegalState)?;
         result
     }
 
