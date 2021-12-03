@@ -333,7 +333,7 @@ impl endpoint::Session for Session {
 
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame> + Send + Unpin,
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
         W::Error: Into<EngineError>,
     {
         println!(">>> Debug: Session::send_begin");
@@ -352,11 +352,11 @@ impl endpoint::Session for Session {
         // check local states
         match &self.local_state {
             SessionState::Unmapped => {
-                writer.send(frame).await.map_err(Into::into)?;
+                writer.send(frame).await.map_err(|e| Self::Error::from(e))?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await.map_err(Into::into)?;
+                writer.send(frame).await.map_err(|e| Self::Error::from(e))?;
                 self.local_state = SessionState::Mapped;
             }
             _ => return Err(EngineError::Message("Illegal local state")),
@@ -429,7 +429,7 @@ impl endpoint::Session for Session {
 
     async fn send_end<W>(&mut self, writer: &mut W, error: Option<Error>) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame> + Send + Unpin,
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
         W::Error: Into<EngineError>,
     {
         match self.local_state {
@@ -442,7 +442,7 @@ impl endpoint::Session for Session {
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer.send(frame).await.map_err(Into::into)?;
+        writer.send(frame).await.map_err(|e| Self::Error::from(e))?;
         Ok(())
     }
 }

@@ -153,7 +153,7 @@ pub trait Session {
     // Handling SessionFrames
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame> + Send + Unpin,
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
     async fn send_end<W>(
@@ -162,7 +162,7 @@ pub trait Session {
         error: Option<Error>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame> + Send + Unpin,
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
     // Intercepting LinkFrames
@@ -187,7 +187,7 @@ pub trait HandleSessionError {
 
     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
     where
-        W: Sink<SessionFrame> + Send + Unpin,
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
         W::Error: Into<EngineError>;
 }
 
@@ -210,22 +210,22 @@ pub trait Link {
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
     async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
     async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
     async fn send_detach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         W::Error: Into<Self::Error>;
 
     // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
@@ -272,7 +272,7 @@ pub trait HandleLinkError {
 
     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         W::Error: Into<EngineError>;
 }
 
@@ -282,7 +282,7 @@ pub trait SenderLink: Link {
 
     async fn send_transfer<W>(&mut self, writer: &mut W) -> Result<(), <Self as Link>::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         W::Error: Into<<Self as Link>::Error>;
 }
 
