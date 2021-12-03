@@ -122,7 +122,7 @@ where
             io.write_all(&buf).await?;
             *local_state = ConnectionState::HeaderExchange
         }
-        s @ _ => return Err(AmqpError::IllegalState.into()), // TODO: is this necessary?
+        _ => return Err(AmqpError::IllegalState.into()), // TODO: is this necessary?
     }
     Ok(())
 }
@@ -149,7 +149,7 @@ where
             *local_state = ConnectionState::HeaderExchange;
             Ok(incoming_header)
         }
-        s @ _ => return Err(AmqpError::IllegalState.into()),
+        _ => return Err(AmqpError::IllegalState.into()),
     }
 }
 
