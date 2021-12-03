@@ -6,7 +6,6 @@ use crate::{
     connection::engine::SessionId,
     control::{ConnectionControl, SessionControl},
     endpoint,
-    error::EngineError,
     link::{LinkFrame, LinkHandle},
     util::Running,
 };

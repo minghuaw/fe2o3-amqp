@@ -38,7 +38,7 @@ use crate::{
 };
 
 #[async_trait]
-pub trait Connection {
+pub(crate) trait Connection {
     type AllocError: Send;
     type Error: Send;
     type State: Send;

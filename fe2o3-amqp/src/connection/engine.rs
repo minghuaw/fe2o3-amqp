@@ -23,7 +23,7 @@ use super::{ConnectionState, heartbeat::HeartBeat, Error};
 
 pub(crate) type SessionId = usize;
 
-pub struct ConnectionEngine<Io, C> {
+pub(crate) struct ConnectionEngine<Io, C> {
     transport: Transport<Io>,
     connection: C,
     control: Receiver<ConnectionControl>,

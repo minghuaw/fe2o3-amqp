@@ -9,7 +9,6 @@ use tokio_util::sync::PollSender;
 use crate::{
     connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
     control::SessionControl,
-    error::EngineError,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
 };

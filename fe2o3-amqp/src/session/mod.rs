@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{Error, Fields, Handle, SequenceNo, TransferNumber},
+    definitions::{self, Fields, Handle, SequenceNo, TransferNumber},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };
@@ -21,7 +21,6 @@ use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
     endpoint::{self, LinkFlow},
-    error::EngineError,
     link::{LinkFrame, LinkHandle},
     util::Constant,
 };
