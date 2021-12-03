@@ -12,12 +12,13 @@ use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
-use crate::endpoint;
+use crate::{endpoint, transport};
 use crate::session::{SessionFrame, SessionFrameBody};
 use crate::transport::amqp::Frame;
 use crate::transport::Transport;
 use crate::util::Running;
 
+use super::AllocSessionError;
 use super::{ConnectionState, heartbeat::HeartBeat, Error};
 
 pub(crate) type SessionId = usize;
@@ -34,7 +35,9 @@ pub struct ConnectionEngine<Io, C> {
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    C: endpoint::Connection<State = ConnectionState, Error = Error> + Send + 'static,
+    C: endpoint::Connection<State = ConnectionState> + Send + 'static,
+    C::Error: Into<Error> + From<transport::Error>,
+    C::AllocError: Into<AllocSessionError>,
 {
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
@@ -55,7 +58,8 @@ where
         };
 
         // Send an Open
-        engine.connection.send_open(&mut engine.transport).await?;
+        engine.connection.send_open(&mut engine.transport).await
+            .map_err(Into::into)?;
 
         // Wait for an Open
         let frame = match engine.transport.next().await {
@@ -74,7 +78,8 @@ where
         engine
             .connection
             .on_incoming_open(channel, remote_open)
-            .await?;
+            .await
+            .map_err(Into::into)?;
 
         // update transport setting
         let max_frame_size = min(
@@ -104,7 +109,9 @@ where
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + Send + Unpin,
-    C: endpoint::Connection<State = ConnectionState, Error = Error> + Send + 'static,
+    C: endpoint::Connection<State = ConnectionState> + Send + 'static,
+    C::Error: Into<Error> + From<transport::Error>,
+    C::AllocError: Into<AllocSessionError>,
 {
     async fn forward_to_session(
         &mut self,
@@ -137,7 +144,8 @@ where
             FrameBody::Open(open) => {
                 let remote_max_frame_size = open.max_frame_size.0;
                 let remote_idle_timeout = open.idle_time_out;
-                self.connection.on_incoming_open(channel, open).await?;
+                self.connection.on_incoming_open(channel, open).await
+                    .map_err(Into::into)?;
 
                 // update transport setting
                 let max_frame_size = min(
@@ -157,7 +165,8 @@ where
                 };
             }
             FrameBody::Begin(begin) => {
-                self.connection.on_incoming_begin(channel, begin).await?;
+                self.connection.on_incoming_begin(channel, begin).await
+                    .map_err(Into::into)?;
             }
             FrameBody::Attach(attach) => {
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Attach(attach));
@@ -189,9 +198,11 @@ where
                 self.forward_to_session(channel, sframe).await?;
             }
             FrameBody::End(end) => {
-                self.connection.on_incoming_end(channel, end).await?;
+                self.connection.on_incoming_end(channel, end).await
+                    .map_err(Into::into)?;
             }
-            FrameBody::Close(close) => self.connection.on_incoming_close(channel, close).await?,
+            FrameBody::Close(close) => self.connection.on_incoming_close(channel, close).await
+                .map_err(Into::into)?,
             FrameBody::Empty => {
                 // do nothing, IdleTimeout is tracked by Transport
             }
@@ -209,15 +220,16 @@ where
         match control {
             ConnectionControl::Open => {
                 // let open = self.connection.local_open().clone();
-                self.connection.send_open(&mut self.transport).await?;
+                self.connection.send_open(&mut self.transport).await
+                    .map_err(Into::into)?;
             }
             ConnectionControl::Close(error) => {
                 self.connection
-                    .send_close(&mut self.transport, error)
-                    .await?;
+                    .send_close(&mut self.transport, error).await
+                    .map_err(Into::into)?;
             }
             ConnectionControl::CreateSession { tx, responder } => {
-                let result = self.connection.create_session(tx).map_err(Into::into);
+                let result = self.connection.allocate_session(tx).map_err(Into::into);
                 responder
                     .send(result)
                     .map_err(|_| Error::Io(
@@ -227,7 +239,7 @@ where
                         )
                     ))?;
             }
-            ConnectionControl::DropSession(session_id) => self.connection.drop_session(session_id),
+            ConnectionControl::DropSession(session_id) => self.connection.deallocate_session(session_id),
         }
 
         match self.connection.local_state() {
@@ -251,7 +263,7 @@ where
         let SessionFrame { channel, body } = frame;
 
         let frame = match body {
-            SessionFrameBody::Begin(begin) => self.connection.on_outgoing_begin(channel, begin)?,
+            SessionFrameBody::Begin(begin) => self.connection.on_outgoing_begin(channel, begin).map_err(Into::into)?,
             SessionFrameBody::Attach(attach) => Frame::new(channel, FrameBody::Attach(attach)),
             SessionFrameBody::Flow(flow) => Frame::new(channel, FrameBody::Flow(flow)),
             SessionFrameBody::Transfer {
@@ -268,7 +280,8 @@ where
                 Frame::new(channel, FrameBody::Disposition(disposition))
             }
             SessionFrameBody::Detach(detach) => Frame::new(channel, FrameBody::Detach(detach)),
-            SessionFrameBody::End(end) => self.connection.on_outgoing_end(channel, end)?,
+            SessionFrameBody::End(end) => self.connection.on_outgoing_end(channel, end)
+                .map_err(Into::into)?,
         };
 
         self.transport.send(frame).await?;

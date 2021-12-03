@@ -14,7 +14,7 @@ pub enum ConnectionControl {
     Close(Option<definitions::Error>),
     CreateSession {
         tx: Sender<SessionIncomingItem>,
-        responder: oneshot::Sender<Result<(u16, SessionId), connection::Error>>,
+        responder: oneshot::Sender<Result<(u16, SessionId), connection::AllocSessionError>>,
     },
     DropSession(SessionId),
 }

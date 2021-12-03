@@ -39,6 +39,7 @@ use crate::{
 
 #[async_trait]
 pub trait Connection {
+    type AllocError: Send;
     type Error: Send;
     type State: Send;
     type Session: Session + Send;
@@ -48,12 +49,12 @@ pub trait Connection {
     fn local_open(&self) -> &Open;
 
     // Allocate outgoing channel id and session id to a new session
-    fn create_session(
+    fn allocate_session(
         &mut self,
         tx: mpsc::Sender<SessionIncomingItem>,
-    ) -> Result<(u16, SessionId), Self::Error>;
+    ) -> Result<(u16, SessionId), Self::AllocError>;
     // Remove outgoing id and session id association
-    fn drop_session(&mut self, session_id: usize);
+    fn deallocate_session(&mut self, session_id: usize);
 
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
 

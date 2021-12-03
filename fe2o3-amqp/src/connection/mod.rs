@@ -28,7 +28,7 @@ pub mod builder;
 pub mod engine;
 mod error;
 pub mod heartbeat;
-pub use error::Error;
+pub use error::*;
 
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
@@ -81,17 +81,17 @@ impl ConnectionHandle {
         }
     }
 
-    pub(crate) async fn create_session(
+    pub(crate) async fn allocate_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
-    ) -> Result<(u16, SessionId), Error> {
+    ) -> Result<(u16, SessionId), AllocSessionError> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
             .send(ConnectionControl::CreateSession { tx, responder })
             .await?; // std::io::Error
         let result = resp_rx
             .await
-            .map_err(|_| Error::Io( // The sending half is already dropped
+            .map_err(|_| AllocSessionError::Io( // The sending half is already dropped
                 io::Error::new(
                     io::ErrorKind::Other,
                     "ConnectionEngine event_loop is dropped"
@@ -168,6 +168,7 @@ impl Connection {
 
 #[async_trait]
 impl endpoint::Connection for Connection {
+    type AllocError = AllocSessionError;
     type Error = Error;
     type State = ConnectionState;
     type Session = Session;
@@ -184,10 +185,10 @@ impl endpoint::Connection for Connection {
         &self.local_open
     }
 
-    fn create_session(
+    fn allocate_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
-    ) -> Result<(u16, usize), Self::Error> {
+    ) -> Result<(u16, usize), Self::AllocError> {
         match &self.local_state {
             ConnectionState::Start
             | ConnectionState::HeaderSent
@@ -195,7 +196,7 @@ impl endpoint::Connection for Connection {
             | ConnectionState::HeaderExchange
             | ConnectionState::CloseSent
             | ConnectionState::Discarding
-            | ConnectionState::End => return Err(AmqpError::IllegalState.into()),
+            | ConnectionState::End => return Err(AllocSessionError::IllegalState),
             // TODO: what about pipelined open?
             _ => {}
         };
@@ -206,7 +207,7 @@ impl endpoint::Connection for Connection {
 
         // check if there is enough
         if session_id > self.agreed_channel_max as usize {
-            return Err(Error::ChannelMaxExceeded);
+            return Err(AllocSessionError::ChannelMaxExceeded);
         } else {
             entry.insert(tx);
             let channel = session_id as u16; // TODO: a different way of allocating session id?
@@ -215,7 +216,7 @@ impl endpoint::Connection for Connection {
         }
     }
 
-    fn drop_session(&mut self, session_id: usize) {
+    fn deallocate_session(&mut self, session_id: usize) {
         self.local_sessions.remove(session_id);
     }
 

@@ -117,3 +117,37 @@ impl From<Error> for EngineError {
         }
     }
 }
+
+/// Error associated with allocation of new session
+#[derive(Debug, thiserror::Error)]
+pub enum AllocSessionError {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    #[error("Illegal local state")]
+    IllegalState,
+
+    #[error("All channels have been allocated")]
+    ChannelMaxExceeded,
+}
+
+impl<T> From<mpsc::error::SendError<T>> for AllocSessionError 
+where T: std::fmt::Debug 
+{
+    fn from(err: mpsc::error::SendError<T>) -> Self {
+        Self::Io(io::Error::new(
+            io::ErrorKind::Other,
+            err.to_string()
+        ))
+    }
+}
+
+impl From<AllocSessionError> for EngineError {
+    fn from(err: AllocSessionError) -> Self {
+        match err {
+            AllocSessionError::Io(e) => EngineError::Io(e),
+            AllocSessionError::ChannelMaxExceeded => EngineError::Message("Channel max exceeded"),
+            AllocSessionError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
+        }
+    }
+}
