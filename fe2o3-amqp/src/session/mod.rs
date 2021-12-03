@@ -74,27 +74,34 @@ pub struct SessionHandle {
 
 impl SessionHandle {
     pub async fn end(&mut self) -> Result<(), Error> {
-        self.control.send(SessionControl::End(None)).await?;
+        // If sending is unsuccessful, the `SessionEngine` event loop is 
+        // already dropped, this should be reflected by `JoinError` then.
+        let _ = self.control.send(SessionControl::End(None)).await;
         match (&mut self.handle).await {
             Ok(res) => res,
             Err(e) => Err(Error::JoinError(e)),
         }
     }
 
-    pub(crate) async fn create_link(
+    pub(crate) async fn allocate_link(
         &mut self,
         link_handle: LinkHandle,
     ) -> Result<Handle, AllocLinkError> {
         let (responder, resp_rx) = oneshot::channel();
-        // 
+        
         self.control
             .send(SessionControl::CreateLink {
                 link_handle,
                 responder,
-            })
-            .await?;
+            }).await
+            // The `SendError` could only happen when the receiving half is 
+            // dropped, meaning the `SessionEngine::event_loop` has stopped.
+            // This would also mean the `Session` is Unmapped, and thus it 
+            // may be treated as illegal state
+            .map_err(|_| AllocLinkError::IllegalState)?; 
         let result = resp_rx
             .await
+            // 
             .map_err(|_| EngineError::Message("Oneshot sender is dropped"))?;
         result
     }
