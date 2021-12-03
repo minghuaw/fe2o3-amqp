@@ -32,7 +32,7 @@ use tokio::sync::mpsc;
 use crate::{
     connection::engine::SessionId,
     error::EngineError,
-    link::{LinkFrame, LinkIncomingItem},
+    link::{LinkFrame},
     session::{SessionFrame, SessionIncomingItem},
     transport::amqp::Frame,
 };
@@ -252,19 +252,6 @@ pub struct LinkFlow {
     pub drain: Boolean,
     pub echo: Boolean,
 }
-
-// impl LinkFlow {
-//     pub fn try_from_flow(flow: &Flow) -> Option<Self> {
-//         let link_flow = Self {
-//             delivery_count: flow.delivery_count,
-//             link_credit: flow.link_credit?,
-//             available: flow.available?,
-//             drain: flow.drain,
-//             echo: flow.echo
-//         };
-//         Some(link_flow)
-//     }
-// }
 
 impl From<&Flow> for LinkFlow {
     fn from(flow: &Flow) -> Self {
