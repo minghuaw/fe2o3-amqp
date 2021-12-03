@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{AmqpError, SessionError};
 use tokio::task::JoinError;
 
-use crate::connection::AllocSessionError;
+use crate::{connection::AllocSessionError, error::EngineError};
 
 
 #[derive(Debug, thiserror::Error)]
@@ -12,7 +12,7 @@ pub enum Error {
     Io(#[from] io::Error),
 
     #[error("All channels have been allocated")]
-    ChannelMaxExceeded,
+    ChannelMaxReached,
 
     #[error(transparent)]
     JoinError(#[from] JoinError),
@@ -34,7 +34,7 @@ impl From<AllocSessionError> for Error {
     fn from(err: AllocSessionError) -> Self {
         match err {
             AllocSessionError::Io(e) => Self::Io(e),
-            AllocSessionError::ChannelMaxExceeded => Self::ChannelMaxExceeded,
+            AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
             AllocSessionError::IllegalState => Self::AmqpError {
                 condition: AmqpError::IllegalState,
                 description: None
@@ -59,4 +59,25 @@ impl From<SessionError> for Error {
             description: None,
         }
     }
+}
+
+impl From<Error> for EngineError {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::Io(e) => EngineError::Io(e),
+            Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
+            Error::JoinError(e) => EngineError::JoinError(e),
+            Error::AmqpError {condition, description} => EngineError::AmqpError(condition),
+            Error::SessionError {condition, description} => EngineError::SessionError(condition)
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AllocLinkError {
+    #[error("Illegal local state")]
+    IllegalState,
+
+    #[error("Reached session handle max")]
+    HandleMaxReached,
 }

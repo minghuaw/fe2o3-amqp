@@ -20,7 +20,7 @@ pub enum Error {
     JoinError(JoinError),
 
     #[error("Exceeding channel-max")]
-    ChannelMaxExceeded,
+    ChannelMaxReached,
 
     #[error("AMQP error {:?}, {:?}", .condition, .description)]
     AmqpError {
@@ -113,7 +113,7 @@ impl From<Error> for EngineError {
             Error::ConnectionError{condition, description: _} => {
                 EngineError::ConnectionError(condition)
             },
-            Error::ChannelMaxExceeded => EngineError::Message("Channel max exceeded")
+            Error::ChannelMaxReached => EngineError::Message("Channel max reached")
         }
     }
 }
@@ -127,8 +127,8 @@ pub enum AllocSessionError {
     #[error("Illegal local state")]
     IllegalState,
 
-    #[error("All channels have been allocated")]
-    ChannelMaxExceeded,
+    #[error("Reached connection channel max")]
+    ChannelMaxReached,
 }
 
 impl<T> From<mpsc::error::SendError<T>> for AllocSessionError 
@@ -146,7 +146,7 @@ impl From<AllocSessionError> for EngineError {
     fn from(err: AllocSessionError) -> Self {
         match err {
             AllocSessionError::Io(e) => EngineError::Io(e),
-            AllocSessionError::ChannelMaxExceeded => EngineError::Message("Channel max exceeded"),
+            AllocSessionError::ChannelMaxReached => EngineError::Message("Channel max reached"),
             AllocSessionError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
         }
     }

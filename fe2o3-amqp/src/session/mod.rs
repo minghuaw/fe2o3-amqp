@@ -30,7 +30,7 @@ pub use frame::*;
 pub mod builder;
 pub mod engine;
 mod error;
-pub use self::error::*;
+pub use self::error::{Error, AllocLinkError};
 
 // 2.5.5 Session States
 // UNMAPPED
@@ -66,26 +66,27 @@ pub enum SessionState {
 
 pub struct SessionHandle {
     control: mpsc::Sender<SessionControl>,
-    handle: JoinHandle<Result<(), EngineError>>,
+    handle: JoinHandle<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
 }
 
 impl SessionHandle {
-    pub async fn end(&mut self) -> Result<(), EngineError> {
+    pub async fn end(&mut self) -> Result<(), Error> {
         self.control.send(SessionControl::End(None)).await?;
         match (&mut self.handle).await {
             Ok(res) => res,
-            Err(_) => Err(EngineError::Message("JoinError")),
+            Err(e) => Err(Error::JoinError(e)),
         }
     }
 
     pub(crate) async fn create_link(
         &mut self,
         link_handle: LinkHandle,
-    ) -> Result<Handle, EngineError> {
+    ) -> Result<Handle, AllocLinkError> {
         let (responder, resp_rx) = oneshot::channel();
+        // 
         self.control
             .send(SessionControl::CreateLink {
                 link_handle,
@@ -152,6 +153,7 @@ impl Session {
 
 #[async_trait]
 impl endpoint::Session for Session {
+    type AllocError = AllocLinkError;
     type Error = EngineError;
     type State = SessionState;
     type LinkHandle = LinkHandle;
@@ -164,7 +166,7 @@ impl endpoint::Session for Session {
         &mut self.local_state
     }
 
-    fn create_link(&mut self, link_handle: LinkHandle) -> Result<Handle, EngineError> {
+    fn allocate_link(&mut self, link_handle: LinkHandle) -> Result<Handle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
             _ => return Err(EngineError::Message("Illegal session local state")),
@@ -184,7 +186,7 @@ impl endpoint::Session for Session {
         }
     }
 
-    fn drop_link(&mut self, handle: Handle) {
+    fn deallocate_link(&mut self, handle: Handle) {
         todo!()
     }
 
