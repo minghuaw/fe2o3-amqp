@@ -240,7 +240,7 @@ where
                     .await
                     .map_err(Into::into)?;
             }
-            ConnectionControl::CreateSession { tx, responder } => {
+            ConnectionControl::AllocateSession { tx, responder } => {
                 let result = self.connection.allocate_session(tx).map_err(Into::into);
                 responder.send(result).map_err(|_| {
                     Error::Io(io::Error::new(
@@ -249,7 +249,7 @@ where
                     ))
                 })?;
             }
-            ConnectionControl::DropSession(session_id) => {
+            ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
             }
         }

@@ -272,7 +272,7 @@ where
         // ignore this error
         let _ = self
             .conn
-            .send(ConnectionControl::DropSession(self.session_id))
+            .send(ConnectionControl::DeallocateSession(self.session_id))
             .await;
         Ok(())
     }

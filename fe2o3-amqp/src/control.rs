@@ -14,11 +14,11 @@ use crate::{
 pub enum ConnectionControl {
     Open,
     Close(Option<definitions::Error>),
-    CreateSession {
+    AllocateSession {
         tx: Sender<SessionIncomingItem>,
         responder: oneshot::Sender<Result<(u16, SessionId), AllocSessionError>>,
     },
-    DropSession(SessionId),
+    DeallocateSession(SessionId),
 }
 
 pub enum SessionControl {

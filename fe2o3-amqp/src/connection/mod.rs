@@ -87,7 +87,7 @@ impl ConnectionHandle {
     ) -> Result<(u16, SessionId), AllocSessionError> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
-            .send(ConnectionControl::CreateSession { tx, responder })
+            .send(ConnectionControl::AllocateSession { tx, responder })
             .await?; // std::io::Error
         let result = resp_rx.await.map_err(|_| {
             AllocSessionError::Io(
