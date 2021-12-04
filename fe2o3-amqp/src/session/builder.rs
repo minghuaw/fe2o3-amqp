@@ -13,7 +13,7 @@ use crate::{
     util::Constant,
 };
 
-use super::SessionHandle;
+use super::{SessionHandle, Error};
 
 pub const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -101,7 +101,7 @@ impl Builder {
         self
     }
 
-    pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, EngineError> {
+    pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         use super::Session;
 
         let local_state = SessionState::Unmapped;

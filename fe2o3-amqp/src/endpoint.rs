@@ -80,7 +80,7 @@ pub(crate) trait Connection {
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Self::Error>;
+        W::Error: Into<Self::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     async fn send_close<W>(
         &mut self,
@@ -89,7 +89,7 @@ pub(crate) trait Connection {
     ) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Self::Error>;
+        W::Error: Into<Self::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     /// Intercepting session frames
     fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>;
@@ -154,8 +154,7 @@ pub trait Session {
     // Handling SessionFrames
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
-        W::Error: Into<Self::Error>;
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin;
 
     async fn send_end<W>(
         &mut self,
@@ -163,8 +162,7 @@ pub trait Session {
         error: Option<Error>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
-        W::Error: Into<Self::Error>;
+        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin;
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;

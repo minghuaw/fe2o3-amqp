@@ -30,19 +30,6 @@ pub enum Error {
     }
 }
 
-impl From<AllocSessionError> for Error {
-    fn from(err: AllocSessionError) -> Self {
-        match err {
-            AllocSessionError::Io(e) => Self::Io(e),
-            AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
-            AllocSessionError::IllegalState => Self::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: None
-            },
-        }
-    }
-}
-
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
         Self::AmqpError {
@@ -80,4 +67,26 @@ pub enum AllocLinkError {
 
     #[error("Reached session handle max")]
     HandleMaxReached,
+}
+
+impl From<AllocSessionError> for Error {
+    fn from(err: AllocSessionError) -> Self {
+        match err {
+            AllocSessionError::Io(e) => Self::Io(e),
+            AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
+            AllocSessionError::IllegalState => Self::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: None
+            },
+        }
+    }
+}
+
+impl From<AllocLinkError> for EngineError {
+    fn from(err: AllocLinkError) -> Self {
+        match err {
+            AllocLinkError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
+            AllocLinkError::HandleMaxReached => EngineError::Message("Handle max reached"),
+        }
+    }
 }

@@ -89,7 +89,7 @@ impl LinkFlowState {
     ///
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`
-    pub(crate) fn on_incoming_flow(&self, flow: LinkFlow) -> Result<Option<LinkFlow>, EngineError> {
+    pub(crate) fn on_incoming_flow(&self, flow: LinkFlow) -> Option<LinkFlow> {
         println!(">>> Debug: LinkFlowState::on_incoming_flow");
 
         use std::sync::atomic::Ordering;
@@ -139,8 +139,8 @@ impl LinkFlowState {
                 state.drain.swap(flow.drain, Ordering::Relaxed);
 
                 match flow.echo {
-                    true => Ok(Some(LinkFlow::from(state))),
-                    false => Ok(None),
+                    true => Some(LinkFlow::from(state)),
+                    false => None,
                 }
             }
             LinkFlowState::Receiver(state) => {
@@ -181,8 +181,8 @@ impl LinkFlowState {
                 // last known value indicated by the receiver.
 
                 match flow.echo {
-                    true => Ok(Some(LinkFlow::from(state))),
-                    false => Ok(None),
+                    true => Some(LinkFlow::from(state)),
+                    false => None,
                 }
             }
         }
