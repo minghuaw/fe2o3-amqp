@@ -72,6 +72,9 @@ pub enum AllocLinkError {
 
     #[error("Reached session handle max")]
     HandleMaxReached,
+
+    #[error("Link name must be unique")]
+    DuplicatedLinkName,
 }
 
 impl From<AllocSessionError> for Error {
@@ -92,6 +95,7 @@ impl From<AllocLinkError> for EngineError {
         match err {
             AllocLinkError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
             AllocLinkError::HandleMaxReached => EngineError::Message("Handle max reached"),
+            AllocLinkError::DuplicatedLinkName => EngineError::Message("Link name must be unique"),
         }
     }
 }

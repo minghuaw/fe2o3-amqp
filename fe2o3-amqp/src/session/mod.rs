@@ -85,12 +85,14 @@ impl SessionHandle {
 
     pub(crate) async fn allocate_link(
         &mut self,
+        link_name: String,
         link_handle: LinkHandle,
     ) -> Result<Handle, AllocLinkError> {
         let (responder, resp_rx) = oneshot::channel();
 
         self.control
             .send(SessionControl::AllocateLink {
+                link_name,
                 link_handle,
                 responder,
             })
@@ -176,11 +178,20 @@ impl endpoint::Session for Session {
         &mut self.local_state
     }
 
-    fn allocate_link(&mut self, link_handle: LinkHandle) -> Result<Handle, Self::AllocError> {
+    fn allocate_link(
+        &mut self,
+        link_name: String,
+        link_handle: LinkHandle,
+    ) -> Result<Handle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
             _ => return Err(AllocLinkError::IllegalState),
         };
+
+        // check whether link name is duplciated
+        if self.link_by_name.contains_key(&link_name) {
+            return Err(AllocLinkError::DuplicatedLinkName);
+        }
 
         // get a new entry index
         let entry = self.local_links.vacant_entry();
@@ -191,6 +202,7 @@ impl endpoint::Session for Session {
             Err(AllocLinkError::HandleMaxReached)
         } else {
             entry.insert(link_handle);
+            self.link_by_name.insert(link_name, handle.clone());
             // TODO: how to know which link to send the Flow frames to?
             Ok(handle)
         }
@@ -406,12 +418,6 @@ impl endpoint::Session for Session {
         // TODO: is state checking redundant?
 
         println!(">>> Debug: Session::on_outgoing_attach");
-        let name = attach.name.clone();
-        let handle = attach.handle.clone();
-        match self.link_by_name.contains_key(&name) {
-            true => todo!(), // TODO: move this to allocate_link
-            false => self.link_by_name.insert(name, handle),
-        };
 
         let body = SessionFrameBody::Attach(attach);
         let frame = SessionFrame::new(self.outgoing_channel, body);

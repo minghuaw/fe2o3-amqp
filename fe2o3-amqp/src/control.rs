@@ -25,6 +25,7 @@ pub enum SessionControl {
     Begin,
     End(Option<definitions::Error>),
     AllocateLink {
+        link_name: String,
         link_handle: LinkHandle,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },

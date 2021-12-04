@@ -266,7 +266,9 @@ impl Builder<role::Sender, WithName, WithTarget> {
         };
 
         // Create Link in Session
-        let output_handle = session.allocate_link(link_handle).await?;
+        let output_handle = session
+            .allocate_link(self.name.clone(), link_handle)
+            .await?;
 
         // Get writer to session
         let writer = session.outgoing.clone();

@@ -155,10 +155,11 @@ where
                     .map_err(Into::into)?;
             }
             SessionControl::AllocateLink {
+                link_name,
                 link_handle,
                 responder,
             } => {
-                let result = self.session.allocate_link(link_handle);
+                let result = self.session.allocate_link(link_name, link_handle);
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
