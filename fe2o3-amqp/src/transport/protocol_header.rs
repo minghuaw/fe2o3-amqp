@@ -99,7 +99,7 @@ impl TryFrom<u8> for ProtocolId {
             0x0 => Self::Amqp,
             0x2 => Self::Tls,
             0x3 => Self::Sasl,
-            v @ _ => return Err(value),
+            _ => return Err(value),
         };
         Ok(val)
     }

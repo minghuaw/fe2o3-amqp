@@ -87,11 +87,11 @@ impl From<Error> for crate::error::EngineError {
             Error::IdleTimeout => EngineError::IdleTimeout,
             Error::AmqpError {
                 condition,
-                description,
+                description: _,
             } => EngineError::AmqpError(condition),
             Error::ConnectionError {
                 condition,
-                description,
+                description: _,
             } => EngineError::ConnectionError(condition),
         }
     }

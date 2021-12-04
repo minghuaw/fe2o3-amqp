@@ -4,7 +4,7 @@ use fe2o3_amqp_types::definitions::{self, Handle};
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
-    connection::{engine::SessionId, AllocSessionError}, endpoint::LinkFlow, error::EngineError, link::LinkHandle,
+    connection::{engine::SessionId, AllocSessionError}, endpoint::LinkFlow, link::LinkHandle,
     session::{SessionIncomingItem, AllocLinkError},
 };
 
