@@ -90,7 +90,7 @@ impl SessionHandle {
         let (responder, resp_rx) = oneshot::channel();
 
         self.control
-            .send(SessionControl::CreateLink {
+            .send(SessionControl::AllocateLink {
                 link_handle,
                 responder,
             })

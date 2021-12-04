@@ -154,7 +154,7 @@ where
                     .await
                     .map_err(Into::into)?;
             }
-            SessionControl::CreateLink {
+            SessionControl::AllocateLink {
                 link_handle,
                 responder,
             } => {
@@ -166,7 +166,7 @@ where
                     ))
                 })?;
             }
-            SessionControl::DropLink(handle) => {
+            SessionControl::DeallocateLink(handle) => {
                 todo!()
             }
             SessionControl::LinkFlow(_) => {

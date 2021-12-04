@@ -24,11 +24,11 @@ pub enum ConnectionControl {
 pub enum SessionControl {
     Begin,
     End(Option<definitions::Error>),
-    CreateLink {
+    AllocateLink {
         link_handle: LinkHandle,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },
-    DropLink(Handle),
+    DeallocateLink(Handle),
     LinkFlow(LinkFlow),
 }
 
