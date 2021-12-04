@@ -13,7 +13,7 @@ use crate::{
     util::Constant,
 };
 
-use super::{SessionHandle, Error};
+use super::{Error, SessionHandle};
 
 pub const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;

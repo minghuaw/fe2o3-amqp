@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::{transport, error::EngineError};
+use crate::{error::EngineError, transport};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -35,14 +35,12 @@ pub enum Error {
     },
 }
 
-impl<T> From<mpsc::error::SendError<T>> for Error 
-where T: std::fmt::Debug 
+impl<T> From<mpsc::error::SendError<T>> for Error
+where
+    T: std::fmt::Debug,
 {
     fn from(err: mpsc::error::SendError<T>) -> Self {
-        Self::Io(io::Error::new(
-            io::ErrorKind::Other,
-            err.to_string()
-        ))
+        Self::Io(io::Error::new(io::ErrorKind::Other, err.to_string()))
     }
 }
 
@@ -107,13 +105,15 @@ impl From<Error> for EngineError {
             Error::IdleTimeout => EngineError::IdleTimeout,
             Error::UrlError(e) => EngineError::UrlError(e),
             Error::JoinError(e) => EngineError::JoinError(e),
-            Error::AmqpError{condition, description: _} => {
-                EngineError::AmqpError(condition)
-            },
-            Error::ConnectionError{condition, description: _} => {
-                EngineError::ConnectionError(condition)
-            },
-            Error::ChannelMaxReached => EngineError::Message("Channel max reached")
+            Error::AmqpError {
+                condition,
+                description: _,
+            } => EngineError::AmqpError(condition),
+            Error::ConnectionError {
+                condition,
+                description: _,
+            } => EngineError::ConnectionError(condition),
+            Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
         }
     }
 }
@@ -131,14 +131,12 @@ pub enum AllocSessionError {
     ChannelMaxReached,
 }
 
-impl<T> From<mpsc::error::SendError<T>> for AllocSessionError 
-where T: std::fmt::Debug 
+impl<T> From<mpsc::error::SendError<T>> for AllocSessionError
+where
+    T: std::fmt::Debug,
 {
     fn from(err: mpsc::error::SendError<T>) -> Self {
-        Self::Io(io::Error::new(
-            io::ErrorKind::Other,
-            err.to_string()
-        ))
+        Self::Io(io::Error::new(io::ErrorKind::Other, err.to_string()))
     }
 }
 

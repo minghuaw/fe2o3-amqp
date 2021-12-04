@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, io};
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, Fields, Handle, SequenceNo, TransferNumber, AmqpError, SessionError},
+    definitions::{self, AmqpError, Fields, Handle, SequenceNo, SessionError, TransferNumber},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };
@@ -30,7 +30,7 @@ pub use frame::*;
 pub mod builder;
 pub mod engine;
 mod error;
-pub use self::error::{Error, AllocLinkError};
+pub use self::error::{AllocLinkError, Error};
 
 // 2.5.5 Session States
 // UNMAPPED
@@ -74,7 +74,7 @@ pub struct SessionHandle {
 
 impl SessionHandle {
     pub async fn end(&mut self) -> Result<(), Error> {
-        // If sending is unsuccessful, the `SessionEngine` event loop is 
+        // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(SessionControl::End(None)).await;
         match (&mut self.handle).await {
@@ -88,21 +88,22 @@ impl SessionHandle {
         link_handle: LinkHandle,
     ) -> Result<Handle, AllocLinkError> {
         let (responder, resp_rx) = oneshot::channel();
-        
+
         self.control
             .send(SessionControl::CreateLink {
                 link_handle,
                 responder,
-            }).await
-            // The `SendError` could only happen when the receiving half is 
+            })
+            .await
+            // The `SendError` could only happen when the receiving half is
             // dropped, meaning the `SessionEngine::event_loop` has stopped.
-            // This would also mean the `Session` is Unmapped, and thus it 
+            // This would also mean the `Session` is Unmapped, and thus it
             // may be treated as illegal state
-            .map_err(|_| AllocLinkError::IllegalState)?; 
+            .map_err(|_| AllocLinkError::IllegalState)?;
         let result = resp_rx
             .await
             // The error could only occur when the sending half is dropped,
-            // indicating the `SessionEngine::even_loop` has stopped or 
+            // indicating the `SessionEngine::even_loop` has stopped or
             // unmapped. Thus it could be considered as illegal state
             .map_err(|_| AllocLinkError::IllegalState)?;
         result
@@ -229,12 +230,12 @@ impl endpoint::Session for Session {
                     self.link_by_input_handle
                         .insert(input_handle, output_handle.clone());
                     match link.tx.send(LinkFrame::Attach(attach)).await {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(e) => {
                             // TODO: how should this error be handled?
                             todo!()
                         }
-                    } 
+                    }
                 }
                 None => {
                     todo!()
@@ -283,7 +284,8 @@ impl endpoint::Session for Session {
                         let echo = link_handle.state.on_incoming_flow(link_flow);
                         if let Some(echo_flow) = echo {
                             self.control
-                                .send(SessionControl::LinkFlow(echo_flow)).await
+                                .send(SessionControl::LinkFlow(echo_flow))
+                                .await
                                 // Sending control to self. This will only give an error if the receiving
                                 // half is dropped. An error would thus indicate that the event loop
                                 // has stopped, so it could be considered illegal state.
@@ -336,7 +338,9 @@ impl endpoint::Session for Session {
         match self.local_state {
             SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
-                self.control.send(SessionControl::End(None)).await
+                self.control
+                    .send(SessionControl::End(None))
+                    .await
                     // The `SendError` occurs when the receiving half is dropped,
                     // indicating that the `SessionEngine::event_loop` has stopped.
                     // and thus should yield an illegal state error
@@ -376,20 +380,20 @@ impl endpoint::Session for Session {
         // check local states
         match &self.local_state {
             SessionState::Unmapped => {
-                writer.send(frame).await
+                writer
+                    .send(frame)
+                    .await
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
-                    .map_err(|e| Self::Error::Io(io::Error::new(
-                        io::ErrorKind::Other,
-                        e.to_string()
-                    )))?;
+                    .map_err(|e| {
+                        Self::Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
+                    })?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await.map_err(|e| Self::Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    e.to_string()
-                )))?;
+                writer.send(frame).await.map_err(|e| {
+                    Self::Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
+                })?;
                 self.local_state = SessionState::Mapped;
             }
             _ => return Err(AmqpError::IllegalState.into()),
@@ -460,7 +464,11 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    async fn send_end<W>(&mut self, writer: &mut W, error: Option<definitions::Error>) -> Result<(), Self::Error>
+    async fn send_end<W>(
+        &mut self,
+        writer: &mut W,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::Error>
     where
         W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
     {
@@ -474,13 +482,12 @@ impl endpoint::Session for Session {
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer.send(frame).await
+        writer
+            .send(frame)
+            .await
             // The receiving half must have dropped, and thus the `Connection`
             // event loop has stopped. It should be treated as an io error
-            .map_err(|e| Self::Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                e.to_string()
-            )))?;
+            .map_err(|e| Self::Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
         Ok(())
     }
 }

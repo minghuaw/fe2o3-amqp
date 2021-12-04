@@ -10,7 +10,7 @@ use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{
     sync::{mpsc::Sender, oneshot},
-    task::{JoinHandle},
+    task::JoinHandle,
 };
 use url::Url;
 
@@ -72,7 +72,7 @@ pub struct ConnectionHandle {
 
 impl ConnectionHandle {
     pub async fn close(&mut self) -> Result<(), Error> {
-        // If sending is unsuccessful, the `ConnectionEngine` event loop is 
+        // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(ConnectionControl::Close(None)).await;
         match (&mut self.handle).await {
@@ -89,14 +89,15 @@ impl ConnectionHandle {
         self.control
             .send(ConnectionControl::CreateSession { tx, responder })
             .await?; // std::io::Error
-        let result = resp_rx
-            .await
-            .map_err(|_| AllocSessionError::Io( // The sending half is already dropped
+        let result = resp_rx.await.map_err(|_| {
+            AllocSessionError::Io(
+                // The sending half is already dropped
                 io::Error::new(
                     io::ErrorKind::Other,
-                    "ConnectionEngine event_loop is dropped"
-                )
-            ))?;
+                    "ConnectionEngine event_loop is dropped",
+                ),
+            )
+        })?;
         result
     }
 
@@ -300,7 +301,11 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(&mut self, _channel: u16, close: Close) -> Result<Option<definitions::Error>, Self::Error> {
+    async fn on_incoming_close(
+        &mut self,
+        _channel: u16,
+        close: Close,
+    ) -> Result<Option<definitions::Error>, Self::Error> {
         println!(">>> Debug: on_incoming_close");
         match &self.local_state {
             ConnectionState::Opened => {

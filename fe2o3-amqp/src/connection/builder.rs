@@ -258,10 +258,7 @@ impl Builder<WithContainerId> {
         todo!()
     }
 
-    pub async fn pipelined_open(
-        &self,
-        _url: impl TryInto<Url>,
-    ) -> Result<ConnectionHandle, Error> {
+    pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
         todo!()
     }
 }

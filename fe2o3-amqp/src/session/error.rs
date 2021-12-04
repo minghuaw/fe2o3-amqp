@@ -5,7 +5,6 @@ use tokio::task::JoinError;
 
 use crate::{connection::AllocSessionError, error::EngineError};
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -27,7 +26,7 @@ pub enum Error {
     SessionError {
         condition: SessionError,
         description: Option<String>,
-    }
+    },
 }
 
 impl From<AmqpError> for Error {
@@ -54,8 +53,14 @@ impl From<Error> for EngineError {
             Error::Io(e) => EngineError::Io(e),
             Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
             Error::JoinError(e) => EngineError::JoinError(e),
-            Error::AmqpError {condition, description} => EngineError::AmqpError(condition),
-            Error::SessionError {condition, description} => EngineError::SessionError(condition)
+            Error::AmqpError {
+                condition,
+                description,
+            } => EngineError::AmqpError(condition),
+            Error::SessionError {
+                condition,
+                description,
+            } => EngineError::SessionError(condition),
         }
     }
 }
@@ -76,7 +81,7 @@ impl From<AllocSessionError> for Error {
             AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
             AllocSessionError::IllegalState => Self::AmqpError {
                 condition: AmqpError::IllegalState,
-                description: None
+                description: None,
             },
         }
     }
