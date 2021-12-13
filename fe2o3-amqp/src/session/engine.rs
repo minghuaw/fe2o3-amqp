@@ -61,7 +61,7 @@ where
             .map_err(|e| e.into())?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
-            Some(frame) => frame, // Receiver<Result<SessionFrame, EngineError>>
+            Some(frame) => frame,
             None => todo!(),
         };
         let SessionFrame { channel, body } = frame;

@@ -77,7 +77,6 @@ impl Decoder for FrameCodec {
 
         match doff {
             2 => {}
-            // 0..=1 => return Err(EngineError::MalformedFrame),
             _ => return Err(Error::connection_error(ConnectionError::FramingError, None)),
         }
 

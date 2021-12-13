@@ -77,22 +77,3 @@ impl From<ConnectionError> for Error {
         }
     }
 }
-
-// impl From<Error> for crate::error::EngineError {
-//     fn from(err: Error) -> Self {
-//         use crate::error::EngineError;
-
-//         match err {
-//             Error::Io(err) => EngineError::Io(err),
-//             Error::IdleTimeout => EngineError::IdleTimeout,
-//             Error::AmqpError {
-//                 condition,
-//                 description: _,
-//             } => EngineError::AmqpError(condition),
-//             Error::ConnectionError {
-//                 condition,
-//                 description: _,
-//             } => EngineError::ConnectionError(condition),
-//         }
-//     }
-// }

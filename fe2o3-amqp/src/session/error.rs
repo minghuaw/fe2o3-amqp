@@ -47,24 +47,6 @@ impl From<SessionError> for Error {
     }
 }
 
-// impl From<Error> for EngineError {
-//     fn from(err: Error) -> Self {
-//         match err {
-//             Error::Io(e) => EngineError::Io(e),
-//             Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
-//             Error::JoinError(e) => EngineError::JoinError(e),
-//             Error::AmqpError {
-//                 condition,
-//                 description,
-//             } => EngineError::AmqpError(condition),
-//             Error::SessionError {
-//                 condition,
-//                 description,
-//             } => EngineError::SessionError(condition),
-//         }
-//     }
-// }
-
 #[derive(Debug, thiserror::Error)]
 pub enum AllocLinkError {
     #[error("Illegal session state")]
@@ -89,13 +71,3 @@ impl From<AllocSessionError> for Error {
         }
     }
 }
-
-// impl From<AllocLinkError> for EngineError {
-//     fn from(err: AllocLinkError) -> Self {
-//         match err {
-//             AllocLinkError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
-//             AllocLinkError::HandleMaxReached => EngineError::Message("Handle max reached"),
-//             AllocLinkError::DuplicatedLinkName => EngineError::Message("Link name must be unique"),
-//         }
-//     }
-// }

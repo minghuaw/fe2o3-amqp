@@ -31,7 +31,6 @@ use tokio::sync::mpsc;
 
 use crate::{
     connection::engine::SessionId,
-    // error::EngineError,
     link::LinkFrame,
     session::{SessionFrame, SessionIncomingItem},
     transport::amqp::Frame,
@@ -111,17 +110,6 @@ pub(crate) trait Connection {
     ) -> Option<&mut mpsc::Sender<SessionIncomingItem>>;
 }
 
-// #[async_trait]
-// pub trait HandleConnectionError {
-//     type Error;
-//     type Outcome;
-
-//     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
-//     where
-//         W: Sink<Frame> + Send + Unpin,
-//         W::Error: Into<EngineError>;
-// }
-
 #[async_trait]
 pub trait Session {
     type AllocError: Send;
@@ -186,17 +174,6 @@ pub trait Session {
     ) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
 }
-
-// #[async_trait]
-// pub trait HandleSessionError {
-//     type Error;
-//     type Outcome;
-
-//     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
-//     where
-//         W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
-//         W::Error: Into<EngineError>;
-// }
 
 #[async_trait]
 pub trait Link {
@@ -267,17 +244,6 @@ impl From<&Flow> for LinkFlow {
         }
     }
 }
-
-// #[async_trait]
-// pub trait HandleLinkError {
-//     type Error;
-//     type Outcome;
-
-//     fn handle_err<W>(&mut self, writer: &mut W, err: Self::Error) -> Self::Outcome
-//     where
-//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
-//         W::Error: Into<EngineError>;
-// }
 
 #[async_trait]
 pub trait SenderLink: Link {
