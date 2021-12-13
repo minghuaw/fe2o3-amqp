@@ -10,12 +10,12 @@ use fe2o3_amqp_types::{
 };
 pub use frame::*;
 pub mod builder;
+mod error;
 pub mod receiver;
 pub mod receiver_link;
 pub mod sender;
 pub mod sender_link;
-mod error;
-pub use error::{Error};
+pub use error::Error;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
