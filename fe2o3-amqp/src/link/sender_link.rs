@@ -65,7 +65,7 @@ impl endpoint::Link for SenderLink {
         // local terminus. In this case, the session endpoint MUST immediately
         // detach the newly created link endpoint.
         if attach.target.is_none() || attach.source.is_none() {
-            return Err(EngineError::LinkAttachRefused); // TODO: this should then be handled outside
+            return Err(EngineError::LinkAttachRefused); // TODO: maybe this should then be handled outside?
         }
 
         self.input_handle = Some(attach.handle);

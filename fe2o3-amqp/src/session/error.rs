@@ -67,7 +67,7 @@ impl From<Error> for EngineError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AllocLinkError {
-    #[error("Illegal local state")]
+    #[error("Illegal session state")]
     IllegalState,
 
     #[error("Reached session handle max")]

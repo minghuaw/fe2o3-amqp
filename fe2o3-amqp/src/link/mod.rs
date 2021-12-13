@@ -14,6 +14,8 @@ pub mod receiver;
 pub mod receiver_link;
 pub mod sender;
 pub mod sender_link;
+mod error;
+pub use error::{Error};
 
 pub use receiver::Receiver;
 pub use sender::Sender;

@@ -111,7 +111,7 @@ impl Builder {
         let (outgoing_tx, outgoing_rx) = mpsc::channel(DEFAULT_OUTGOING_BUFFER_SIZE);
 
         // create session in connection::Engine
-        let (outgoing_channel, session_id) = conn.allocate_session(incoming_tx).await?;
+        let (outgoing_channel, session_id) = conn.allocate_session(incoming_tx).await?; // AllocSessionError
 
         let session = Session {
             control: session_control_tx.clone(),
