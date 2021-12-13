@@ -3,18 +3,19 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
+        DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, AmqpError,
     },
     messaging::{DeliveryState, Source, Target},
-    performatives::{Attach, Detach, Disposition, Flow},
+    performatives::{Attach, Detach, Disposition},
     primitives::Symbol,
 };
 use futures_util::{Sink, SinkExt};
 use tokio::sync::mpsc;
 
-use crate::{endpoint, error::EngineError, util::Constant};
+use crate::{endpoint};
 
 use super::{LinkFlowState, LinkFrame, LinkState};
+use crate::link;
 
 /// Manages the link state
 pub struct SenderLink {
@@ -54,25 +55,18 @@ impl SenderLink {
 
 #[async_trait]
 impl endpoint::Link for SenderLink {
-    type Error = EngineError;
+    type Error = link::Error;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         println!(">>> Debug: SenderLink::on_incoming_attach");
 
-        // Note that if the application chooses not to create a terminus,
-        // the session endpoint will still create a link endpoint and issue
-        // an attach indicating that the link endpoint has no associated
-        // local terminus. In this case, the session endpoint MUST immediately
-        // detach the newly created link endpoint.
-        if attach.target.is_none() || attach.source.is_none() {
-            return Err(EngineError::LinkAttachRefused); // TODO: maybe this should then be handled outside?
-        }
-
         self.input_handle = Some(attach.handle);
 
-        if self.target.is_none() {
-            self.target = attach.target; // TODO: ???
-        }
+        // When resuming a link, it is possible that the properties of the source and target have changed while the link
+        // was suspended. When this happens, the termini properties communicated in the source and target fields of the
+        // attach frames could be in conflict. In this case, the sender is considered to hold the authoritative version of the
+        // **the receiver is considered to hold the authoritative version of the target properties**.
+        self.target = attach.target; 
 
         // set max message size
         let remote_max_msg_size = attach.max_message_size.unwrap_or_else(|| 0);
@@ -102,13 +96,15 @@ impl endpoint::Link for SenderLink {
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
-            None => return Err(EngineError::Message("Output handle is not assigned")),
+            None => return Err(link::Error::AmqpError {
+                condition: AmqpError::InvalidField,
+                description: Some("Output handle is None".into())
+            }),
         };
         let unsettled = match self.unsettled.len() {
             0 => None,
@@ -144,14 +140,16 @@ impl endpoint::Link for SenderLink {
 
         match self.local_state {
             LinkState::Unattached => {
-                writer.send(frame).await.map_err(Into::into)?;
+                writer.send(frame).await
+                    .map_err(|e| Self::Error::from(e))?;
                 self.local_state = LinkState::AttachSent
             }
             LinkState::AttachReceived => {
-                writer.send(frame).await.map_err(Into::into)?;
+                writer.send(frame).await
+                    .map_err(|e| Self::Error::from(e))?;
                 self.local_state = LinkState::Attached
             }
-            _ => return Err(EngineError::Message("Wrong LinkState")),
+            _ => return Err(AmqpError::IllegalState.into()),
         }
 
         Ok(())
@@ -160,7 +158,6 @@ impl endpoint::Link for SenderLink {
     async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
     {
         todo!()
     }
@@ -168,7 +165,6 @@ impl endpoint::Link for SenderLink {
     async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
     {
         todo!()
     }
@@ -176,7 +172,6 @@ impl endpoint::Link for SenderLink {
     async fn send_detach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
     {
         todo!()
     }
@@ -190,7 +185,6 @@ impl endpoint::SenderLink for SenderLink {
     ) -> Result<(), <Self as endpoint::Link>::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
     {
         todo!()
     }

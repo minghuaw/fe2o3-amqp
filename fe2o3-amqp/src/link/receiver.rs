@@ -1,10 +1,10 @@
 use fe2o3_amqp_types::messaging::Message;
 
-use crate::{error::EngineError, session::SessionHandle};
+use crate::{session::SessionHandle};
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
-    role,
+    role, Error
 };
 
 pub struct Receiver {}
@@ -17,19 +17,19 @@ impl Receiver {
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, Error> {
         todo!()
     }
 
-    pub async fn recv(&mut self) -> Result<Message, EngineError> {
+    pub async fn recv(&mut self) -> Result<Message, Error> {
         todo!()
     }
 
-    pub async fn recv_with_timeout(&mut self) -> Result<Message, EngineError> {
+    pub async fn recv_with_timeout(&mut self) -> Result<Message, Error> {
         todo!()
     }
 
-    pub async fn detach(&mut self) -> Result<(), EngineError> {
+    pub async fn detach(&mut self) -> Result<(), Error> {
         todo!()
     }
 }

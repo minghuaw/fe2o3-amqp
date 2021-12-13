@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{AmqpError, SessionError};
 use tokio::task::JoinError;
 
-use crate::{connection::AllocSessionError, error::EngineError};
+use crate::{connection::AllocSessionError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -47,23 +47,23 @@ impl From<SessionError> for Error {
     }
 }
 
-impl From<Error> for EngineError {
-    fn from(err: Error) -> Self {
-        match err {
-            Error::Io(e) => EngineError::Io(e),
-            Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
-            Error::JoinError(e) => EngineError::JoinError(e),
-            Error::AmqpError {
-                condition,
-                description,
-            } => EngineError::AmqpError(condition),
-            Error::SessionError {
-                condition,
-                description,
-            } => EngineError::SessionError(condition),
-        }
-    }
-}
+// impl From<Error> for EngineError {
+//     fn from(err: Error) -> Self {
+//         match err {
+//             Error::Io(e) => EngineError::Io(e),
+//             Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
+//             Error::JoinError(e) => EngineError::JoinError(e),
+//             Error::AmqpError {
+//                 condition,
+//                 description,
+//             } => EngineError::AmqpError(condition),
+//             Error::SessionError {
+//                 condition,
+//                 description,
+//             } => EngineError::SessionError(condition),
+//         }
+//     }
+// }
 
 #[derive(Debug, thiserror::Error)]
 pub enum AllocLinkError {
@@ -90,12 +90,12 @@ impl From<AllocSessionError> for Error {
     }
 }
 
-impl From<AllocLinkError> for EngineError {
-    fn from(err: AllocLinkError) -> Self {
-        match err {
-            AllocLinkError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
-            AllocLinkError::HandleMaxReached => EngineError::Message("Handle max reached"),
-            AllocLinkError::DuplicatedLinkName => EngineError::Message("Link name must be unique"),
-        }
-    }
-}
+// impl From<AllocLinkError> for EngineError {
+//     fn from(err: AllocLinkError) -> Self {
+//         match err {
+//             AllocLinkError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
+//             AllocLinkError::HandleMaxReached => EngineError::Message("Handle max reached"),
+//             AllocLinkError::DuplicatedLinkName => EngineError::Message("Link name must be unique"),
+//         }
+//     }
+// }

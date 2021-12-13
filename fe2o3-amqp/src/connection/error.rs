@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::{error::EngineError, transport};
+use crate::{transport};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -98,25 +98,25 @@ impl From<transport::Error> for Error {
     }
 }
 
-impl From<Error> for EngineError {
-    fn from(err: Error) -> Self {
-        match err {
-            Error::Io(e) => EngineError::Io(e),
-            Error::IdleTimeout => EngineError::IdleTimeout,
-            Error::UrlError(e) => EngineError::UrlError(e),
-            Error::JoinError(e) => EngineError::JoinError(e),
-            Error::AmqpError {
-                condition,
-                description: _,
-            } => EngineError::AmqpError(condition),
-            Error::ConnectionError {
-                condition,
-                description: _,
-            } => EngineError::ConnectionError(condition),
-            Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
-        }
-    }
-}
+// impl From<Error> for EngineError {
+//     fn from(err: Error) -> Self {
+//         match err {
+//             Error::Io(e) => EngineError::Io(e),
+//             Error::IdleTimeout => EngineError::IdleTimeout,
+//             Error::UrlError(e) => EngineError::UrlError(e),
+//             Error::JoinError(e) => EngineError::JoinError(e),
+//             Error::AmqpError {
+//                 condition,
+//                 description: _,
+//             } => EngineError::AmqpError(condition),
+//             Error::ConnectionError {
+//                 condition,
+//                 description: _,
+//             } => EngineError::ConnectionError(condition),
+//             Error::ChannelMaxReached => EngineError::Message("Channel max reached"),
+//         }
+//     }
+// }
 
 /// Error associated with allocation of new session
 #[derive(Debug, thiserror::Error)]
@@ -140,12 +140,12 @@ where
     }
 }
 
-impl From<AllocSessionError> for EngineError {
-    fn from(err: AllocSessionError) -> Self {
-        match err {
-            AllocSessionError::Io(e) => EngineError::Io(e),
-            AllocSessionError::ChannelMaxReached => EngineError::Message("Channel max reached"),
-            AllocSessionError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
-        }
-    }
-}
+// impl From<AllocSessionError> for EngineError {
+//     fn from(err: AllocSessionError) -> Self {
+//         match err {
+//             AllocSessionError::Io(e) => EngineError::Io(e),
+//             AllocSessionError::ChannelMaxReached => EngineError::Message("Channel max reached"),
+//             AllocSessionError::IllegalState => EngineError::AmqpError(AmqpError::IllegalState),
+//         }
+//     }
+// }

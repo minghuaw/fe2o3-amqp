@@ -1,4 +1,5 @@
 use fe2o3_amqp_types::definitions::{AmqpError, LinkError};
+use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
 
@@ -22,6 +23,33 @@ pub enum Error {
         condition: LinkError,
         description: Option<String>,
     },
+}
+
+impl From<AmqpError> for Error {
+    fn from(err: AmqpError) -> Self {
+        Self::AmqpError {
+            condition: err,
+            description: None,
+        }
+    }
+}
+
+impl From<LinkError> for Error {
+    fn from(err: LinkError) -> Self {
+        Self::LinkError {
+            condition: err,
+            description: None
+        }
+    }
+}
+
+impl<T> From<mpsc::error::SendError<T>> for Error {
+    fn from(err: mpsc::error::SendError<T>) -> Self {
+        Self::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Failed to send to sesssion".to_string())
+        }
+    }
 }
 
 impl From<AllocLinkError> for Error {

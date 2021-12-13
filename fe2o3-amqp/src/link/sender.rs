@@ -2,20 +2,19 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use async_trait::async_trait;
-
 use fe2o3_amqp_types::{
     messaging::{Address, Message, Source},
-    performatives::{Attach, Detach, Disposition, Flow},
+    performatives::{Disposition},
 };
 
-use crate::{endpoint, error::EngineError, session::SessionHandle};
+use crate::{session::SessionHandle};
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
     role,
     sender_link::SenderLink,
     LinkFrame,
+    Error,
 };
 
 pub struct Sender {
@@ -36,7 +35,7 @@ impl Sender {
         session: &mut SessionHandle,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Self, EngineError> {
+    ) -> Result<Self, Error> {
         Self::builder()
             .name(name)
             .target(addr)
@@ -44,7 +43,7 @@ impl Sender {
             .await
     }
 
-    pub async fn send(&mut self, message: Message) -> Result<Disposition, EngineError> {
+    pub async fn send(&mut self, message: Message) -> Result<Disposition, Error> {
         todo!()
     }
 
@@ -52,11 +51,11 @@ impl Sender {
         &mut self,
         message: Message,
         timeout: Duration,
-    ) -> Result<Disposition, EngineError> {
+    ) -> Result<Disposition, Error> {
         todo!()
     }
 
-    pub async fn detach(&mut self) -> Result<(), EngineError> {
+    pub async fn detach(&mut self) -> Result<(), Error> {
         todo!()
     }
 }

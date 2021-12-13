@@ -21,7 +21,7 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::{endpoint::LinkFlow, error::EngineError, util::Constant};
+use crate::{endpoint::LinkFlow, util::Constant};
 
 pub mod role {
 

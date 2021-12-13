@@ -8,20 +8,21 @@ use std::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo, AmqpError, Handle},
     messaging::{Source, Target},
     performatives::Detach,
     primitives::{Symbol, ULong},
 };
+use futures_util::{Sink, SinkExt};
 use tokio::sync::{mpsc, RwLock};
 use tokio_util::sync::PollSender;
 
 use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
-    error::EngineError,
+    // error::EngineError,
     link::{
         sender_link::SenderLink, LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle,
-        LinkIncomingItem, LinkState,
+        LinkIncomingItem, LinkState, Error
     },
     session::SessionHandle,
     util::Constant,
@@ -241,7 +242,7 @@ impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
 impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender, EngineError> {
+    pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender, Error> {
         use crate::endpoint;
 
         let local_state = LinkState::Unattached;
@@ -300,36 +301,42 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
         // Send an Attach frame
         let mut writer = PollSender::new(writer);
-        endpoint::Link::send_attach(&mut link, &mut writer).await?;
+        endpoint::Link::send_attach(&mut link, &mut writer).await
+            .map_err(|e| Error::from(e))?;
 
         // Wait for an Attach frame
         let frame = incoming_rx
             .recv()
             .await
-            .ok_or_else(|| EngineError::Message("Expecting remote link frame"))?;
+            .ok_or_else(|| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Expecting remote attach frame".to_string())
+            })?;
         let remote_attach = match frame {
             LinkFrame::Attach(attach) => attach,
-            _ => return Err(EngineError::Message("Expecting remote attach frame")), // TODO: how to handle this?
+            // TODO: how to handle this?
+            _ => return Err(Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Expecting remote attach frame".to_string())
+            })
         };
-        if let Err(e) = endpoint::Link::on_incoming_attach(&mut link, remote_attach).await {
-            if let EngineError::LinkAttachRefused = e {
-                // Should expect a detach and then send back a detach
-                let frame = incoming_rx
-                    .recv()
-                    .await
-                    .ok_or_else(|| EngineError::Message("Expecting remote detach frame"))?;
-                let _remote_detach = match frame {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(EngineError::Message("Expecting remote detach frame")),
-                };
 
-                let detach = Detach {
-                    handle: output_handle,
-                    closed: true,
-                    error: None,
-                };
-                let frame = LinkFrame::Detach(detach);
-                outgoing.send(frame).await?;
+        // Note that if the application chooses not to create a terminus,
+        // the session endpoint will still create a link endpoint and issue
+        // an attach indicating that the link endpoint has no associated
+        // local terminus. In this case, the session endpoint MUST immediately
+        // detach the newly created link endpoint.
+        match remote_attach.target.is_some() {
+            true => {
+                if let Err(_) = endpoint::Link::on_incoming_attach(&mut link, remote_attach).await {
+                    // Should any error happen handling remote 
+                    todo!()
+                }
+            },
+            false => {
+                // If no target is supplied with the remote attach frame,
+                // an immediate detach should be expected
+                expect_detach_then_detach(&mut incoming_rx, &mut writer, output_handle).await?;
             }
         }
 
@@ -344,7 +351,40 @@ impl Builder<role::Sender, WithName, WithTarget> {
 }
 
 impl Builder<role::Receiver, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Receiver, EngineError> {
+    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Receiver, Error> {
         todo!()
     }
+}
+
+async fn expect_detach_then_detach<W>(
+    reader: &mut mpsc::Receiver<LinkFrame>, 
+    writer: &mut W,
+    output_handle: Handle,
+) -> Result<(), Error> 
+where 
+    W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Unpin,
+{
+    let frame = reader
+        .recv()
+        .await
+        .ok_or_else(|| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Expecting remote detach frame".to_string())
+        })?;
+    let _remote_detach = match frame {
+        LinkFrame::Detach(detach) => detach,
+        _ => return Err(Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Expecting remote detach frame".to_string())
+        }),
+    };
+
+    let detach = Detach {
+        handle: output_handle,
+        closed: true,
+        error: None,
+    };
+    let frame = LinkFrame::Detach(detach);
+    writer.send(frame).await?;
+    Ok(())
 }
