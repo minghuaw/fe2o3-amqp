@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, AmqpError,
+        DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, AmqpError, self,
     },
     messaging::{DeliveryState, Source, Target},
     performatives::{Attach, Detach, Disposition},
@@ -169,11 +169,34 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn send_detach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<definitions::Error>) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
-        todo!()
+        // Take the handle as it will be detached
+        match self.output_handle.take() {
+            Some(handle) => {
+                match self.local_state {
+                    LinkState::Attached => self.local_state = LinkState::DetachSent,
+                    LinkState::DetachReceived => self.local_state = LinkState::Detached,
+                    _ => return Err(AmqpError::IllegalState.into())
+                };
+
+                let detach = Detach {
+                    handle,
+                    closed,
+                    error
+                };
+                writer.send(LinkFrame::Detach(detach)).await
+                    .map_err(|e| Self::Error::from(e))?;
+            },
+            None => return Err(link::Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is already detached".to_string())
+            })
+        }
+
+        Ok(())
     }
 }
 

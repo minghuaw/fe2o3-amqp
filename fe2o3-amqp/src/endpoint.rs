@@ -204,7 +204,7 @@ pub trait Link {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
-    async fn send_detach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<Error>) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
