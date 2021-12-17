@@ -58,4 +58,8 @@ impl Sender {
     pub async fn detach(&mut self) -> Result<(), Error> {
         todo!()
     }
+
+    pub async fn close(&mut self) -> Result<(), Error> {
+        todo!()
+    }
 }
