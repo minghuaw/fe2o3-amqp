@@ -50,16 +50,25 @@ impl Sender {
     pub async fn send_with_timeout(
         &mut self,
         message: Message,
-        timeout: Duration,
+        timeout: impl Into<Duration>,
     ) -> Result<Disposition, Error> {
         todo!()
     }
 
     pub async fn detach(&mut self) -> Result<(), Error> {
+        // detach will send detach with closed=false and wait for remote detach
+        // The sender may reattach after fully detached
+
         todo!()
     }
 
-    pub async fn close(&mut self) -> Result<(), Error> {
+    pub async fn detach_with_timeout(&mut self, timeout: impl Into<Duration>) -> Result<(), Error> {
+        todo!()
+    }
+
+    pub async fn close(self) -> Result<(), Error> {
+        // Send detach with closed=true and wait for remote closing detach
+        // The sender will be dropped after close
         todo!()
     }
 }

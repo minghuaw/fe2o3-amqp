@@ -262,7 +262,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let flow_state = Arc::new(LinkFlowState::Sender(flow_state_inner));
         let link_handle = LinkHandle {
             tx: incoming_tx,
-            state: flow_state.clone(),
+            flow_state: flow_state.clone(),
         };
 
         // Create Link in Session

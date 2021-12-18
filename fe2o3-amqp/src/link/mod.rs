@@ -45,14 +45,21 @@ pub enum LinkState {
     /// The link is attached
     Attached,
 
-    /// A detach frame has been sent
+    /// A non-closing detach frame has been sent
     DetachSent,
 
-    /// A detach frame has been received
+    /// A non-closing detach frame has been received
     DetachReceived,
 
     /// The link is detached
     Detached,
+
+    /// A closing detach frame has been sent
+    CloseSent,
+
+    CloseReceived,
+
+    Closed,
 }
 
 pub struct LinkFlowStateInner {
@@ -208,5 +215,5 @@ impl LinkFlowState {
 
 pub struct LinkHandle {
     pub tx: mpsc::Sender<LinkIncomingItem>,
-    pub state: Arc<LinkFlowState>,
+    pub flow_state: Arc<LinkFlowState>,
 }
