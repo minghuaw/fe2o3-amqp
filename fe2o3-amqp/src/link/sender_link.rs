@@ -55,6 +55,7 @@ impl SenderLink {
 
 #[async_trait]
 impl endpoint::Link for SenderLink {
+    type DetachError = definitions::Error;
     type Error = link::Error;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
@@ -90,8 +91,22 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
-        todo!()
+    /// Closing or not isn't taken care of here but outside
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        match self.local_state {
+            LinkState::Attached => self.local_state = LinkState::DetachReceived,
+            LinkState::DetachSent => self.local_state = LinkState::Detached,
+            _ => return Err(Self::DetachError::new(
+                AmqpError::IllegalState,
+                Some("Illegal local state".into()),
+                None
+            ))
+        };
+
+        if let Some(err) = detach.error {
+            return Err(err)
+        }
+        Ok(())
     }
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
@@ -169,7 +184,7 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<definitions::Error>) -> Result<(), Self::Error>
+    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<definitions::Error>) -> Result<(), Self::DetachError>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
@@ -188,12 +203,17 @@ impl endpoint::Link for SenderLink {
                     error
                 };
                 writer.send(LinkFrame::Detach(detach)).await
-                    .map_err(|e| Self::Error::from(e))?;
+                    .map_err(|_| Self::DetachError::new(
+                        AmqpError::IllegalState,
+                        Some("Failed to send to session".to_string()),
+                        None
+                    ))?;
             },
-            None => return Err(link::Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is already detached".to_string())
-            })
+            None => return Err(Self::DetachError::new(
+                AmqpError::IllegalState,
+                Some("Link is already detached".to_string()),
+                None
+            ))
         }
 
         Ok(())

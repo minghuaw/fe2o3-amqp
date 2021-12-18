@@ -4,17 +4,18 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     messaging::{Address, Message, Source},
-    performatives::{Disposition},
+    performatives::{Disposition}, definitions::{AmqpError, self},
 };
+use tokio_util::sync::PollSender;
 
-use crate::{session::SessionHandle};
+use crate::{session::SessionHandle, endpoint::Link};
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
     role,
     sender_link::SenderLink,
     LinkFrame,
-    Error,
+    Error, error::DetachError,
 };
 
 pub struct Sender {
@@ -22,7 +23,7 @@ pub struct Sender {
     pub(crate) link: SenderLink,
 
     // Outgoing mpsc channel to send the Link frames
-    pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 }
 
@@ -55,20 +56,62 @@ impl Sender {
         todo!()
     }
 
-    pub async fn detach(&mut self) -> Result<(), Error> {
+    pub async fn detach(&mut self) -> Result<(), DetachError> {
+        // TODO: how should disposition be handled?
+
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
+        self.link.send_detach(&mut self.outgoing, false, None).await?;
 
-        todo!()
+        // Wait for remote detach
+        let frame = self.incoming.recv().await
+            .ok_or_else(|| detach_error_expecting_frame())?;
+        let remote_detach = match frame {
+            LinkFrame::Detach(detach) => detach,
+            _ => return Err(detach_error_expecting_frame())
+        };
+
+        if remote_detach.closed {
+            // Remote peer is closing while we sent a non-closing detach
+            // uamqp implements re-attaching and then send closing detach
+            todo!()
+        } else {
+            self.link.on_incoming_detach(remote_detach).await?;
+        }
+        Ok(())
     }
 
     pub async fn detach_with_timeout(&mut self, timeout: impl Into<Duration>) -> Result<(), Error> {
         todo!()
     }
 
-    pub async fn close(self) -> Result<(), Error> {
+    pub async fn close(mut self) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        todo!()
+        self.link.send_detach(&mut self.outgoing, true, None).await?;
+
+        // Wait for remote detach
+        let frame = self.incoming.recv().await
+            .ok_or_else(|| detach_error_expecting_frame())?;
+        let remote_detach = match frame {
+            LinkFrame::Detach(detach) => detach,
+            _ => return Err(detach_error_expecting_frame())
+        };
+
+        if remote_detach.closed {
+            self.link.on_incoming_detach(remote_detach).await?;
+        } else {
+            todo!()
+        }
+
+        Ok(())
     }
+}
+
+fn detach_error_expecting_frame() -> DetachError {
+    DetachError::new (
+        AmqpError::IllegalState,
+        Some("Expecting remote detach frame".to_string()),
+        None
+    )
 }

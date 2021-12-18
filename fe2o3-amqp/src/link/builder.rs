@@ -246,7 +246,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
         let local_state = LinkState::Unattached;
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = session.outgoing.clone();
+        let outgoing = PollSender::new(session.outgoing.clone());
 
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {

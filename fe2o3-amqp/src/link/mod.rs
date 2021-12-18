@@ -54,12 +54,12 @@ pub enum LinkState {
     /// The link is detached
     Detached,
 
-    /// A closing detach frame has been sent
-    CloseSent,
+    // /// A closing detach frame has been sent
+    // CloseSent,
 
-    CloseReceived,
+    // CloseReceived,
 
-    Closed,
+    // Closed,
 }
 
 pub struct LinkFlowStateInner {

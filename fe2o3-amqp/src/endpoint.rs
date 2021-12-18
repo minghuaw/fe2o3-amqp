@@ -177,6 +177,7 @@ pub trait Session {
 
 #[async_trait]
 pub trait Link {
+    type DetachError: Send;
     type Error: Send;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
@@ -190,7 +191,7 @@ pub trait Link {
         &mut self,
         disposition: Disposition,
     ) -> Result<(), Self::Error>;
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
@@ -204,7 +205,7 @@ pub trait Link {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
-    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<Error>) -> Result<(), Self::Error>
+    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<Error>) -> Result<(), Self::DetachError>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 

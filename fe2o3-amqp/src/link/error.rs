@@ -1,7 +1,9 @@
-use fe2o3_amqp_types::definitions::{AmqpError, LinkError};
+use fe2o3_amqp_types::definitions::{AmqpError, LinkError, self};
 use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
+
+pub type DetachError = definitions::Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

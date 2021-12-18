@@ -26,13 +26,13 @@ pub struct Error {
 impl Error {
     pub fn new(
         condition: impl Into<ErrorCondition>,
-        description: Option<String>,
-        info: Option<Fields>,
+        description: impl Into<Option<String>>,
+        info: impl Into<Option<Fields>>,
     ) -> Self {
         Self {
             condition: condition.into(),
-            description: description.map(Into::into),
-            info: info.map(Into::into),
+            description: description.into(),
+            info: info.into(),
         }
     }
 }
