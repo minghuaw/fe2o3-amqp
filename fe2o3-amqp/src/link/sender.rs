@@ -57,6 +57,7 @@ impl Sender {
     }
 
     pub async fn detach(&mut self) -> Result<(), DetachError> {
+        println!(">>> Debug: Sender::detach");
         // TODO: how should disposition be handled?
 
         // detach will send detach with closed=false and wait for remote detach
@@ -66,6 +67,7 @@ impl Sender {
         // Wait for remote detach
         let frame = self.incoming.recv().await
             .ok_or_else(|| detach_error_expecting_frame())?;
+        println!(">>> Debug: incoming link frame: {:?}", &frame);
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
             _ => return Err(detach_error_expecting_frame())

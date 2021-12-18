@@ -32,6 +32,7 @@ pub mod role {
     pub struct Receiver {}
 }
 
+#[derive(Debug)]
 pub enum LinkState {
     /// The initial state after initialization
     Unattached,

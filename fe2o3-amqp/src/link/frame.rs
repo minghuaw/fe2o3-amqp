@@ -7,6 +7,7 @@ use fe2o3_amqp_types::{
 
 pub type LinkIncomingItem = LinkFrame;
 
+#[derive(Debug)]
 pub enum LinkFrame {
     Attach(Attach),
     Flow(Flow),

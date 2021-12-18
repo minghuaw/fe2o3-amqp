@@ -247,7 +247,7 @@ where
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
                             // all Links and SessionHandle are dropped
-                            todo!()
+                            Ok(Running::Stop)
                         }
                     }
                 }

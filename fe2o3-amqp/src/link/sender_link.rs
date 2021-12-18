@@ -60,6 +60,15 @@ impl endpoint::Link for SenderLink {
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         println!(">>> Debug: SenderLink::on_incoming_attach");
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => {
+                // remote peer is attempting to re-attach
+                self.local_state = LinkState::AttachReceived
+            },
+            _ => return Err(AmqpError::IllegalState.into())
+        };
 
         self.input_handle = Some(attach.handle);
 
@@ -93,6 +102,8 @@ impl endpoint::Link for SenderLink {
 
     /// Closing or not isn't taken care of here but outside
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        println!(">>> Debug: SenderLink::on_incoming_detach");
+
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => self.local_state = LinkState::Detached,
@@ -188,6 +199,9 @@ impl endpoint::Link for SenderLink {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
+        println!(">>> Debug: SenderLink::send_detach");
+        println!(">>> Debug: SenderLink local_state: {:?}", &self.local_state);
+
         // Take the handle as it will be detached
         match self.output_handle.take() {
             Some(handle) => {

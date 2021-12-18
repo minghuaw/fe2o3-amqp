@@ -23,11 +23,19 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let sender = Sender::attach(&mut session, "sender-link-1", "q1")
+    let mut sender = Sender::attach(&mut session, "sender-link-1", "q1")
         .await
         .unwrap();
 
+    sender.detach().await.unwrap();
+
     tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
+        .await
+        .unwrap();
+
+    sender.detach().await.unwrap();
 
     session.end().await.unwrap();
     connection.close().await.unwrap();
