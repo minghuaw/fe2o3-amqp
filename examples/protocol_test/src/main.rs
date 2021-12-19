@@ -23,7 +23,7 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let mut sender = Sender::attach(&mut session, "sender-link-1", "q1")
+    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await
         .unwrap();
 
