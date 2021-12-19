@@ -348,7 +348,7 @@ impl endpoint::Session for Session {
             None => todo!() // End session with unattached handle?
         }
 
-        todo!()
+        Ok(())
     }
 
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {

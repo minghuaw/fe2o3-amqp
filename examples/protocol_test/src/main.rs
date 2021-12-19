@@ -27,15 +27,15 @@ async fn main() {
         .await
         .unwrap();
 
-    sender.detach().await.unwrap();
+    sender.close().await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
+    let sender = Sender::attach(&mut session, "sender-link-2", "q1")
         .await
         .unwrap();
 
-    sender.detach().await.unwrap();
+    sender.close().await.unwrap();
 
     session.end().await.unwrap();
     connection.close().await.unwrap();
