@@ -74,8 +74,10 @@ impl Sender {
         };
 
         if remote_detach.closed {
-            // Remote peer is closing while we sent a non-closing detach
-            // uamqp implements re-attaching and then send closing detach
+            // Note that one peer MAY send a closing detach while its partner is 
+            // sending a non-closing detach. In this case, the partner MUST 
+            // signal that it has closed the link by reattaching and then sending 
+            // a closing detach.
             todo!()
         } else {
             self.link.on_incoming_detach(remote_detach).await?;
@@ -103,6 +105,10 @@ impl Sender {
         if remote_detach.closed {
             self.link.on_incoming_detach(remote_detach).await?;
         } else {
+            // Note that one peer MAY send a closing detach while its partner is 
+            // sending a non-closing detach. In this case, the partner MUST 
+            // signal that it has closed the link by reattaching and then sending 
+            // a closing detach.
             todo!()
         }
 
