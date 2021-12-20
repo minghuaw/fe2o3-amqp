@@ -29,7 +29,7 @@ pub enum SessionControl {
         link_handle: LinkHandle,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },
-    DeallocateLink(Handle),
+    DeallocateLink(String),
     LinkFlow(LinkFlow),
 }
 

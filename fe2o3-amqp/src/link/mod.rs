@@ -276,7 +276,6 @@ where
     Ok(())
 }
 
-
 pub(crate) async fn expect_detach_then_detach<L, W, R>(
     link: &mut L,
     writer: &mut W,
@@ -304,13 +303,6 @@ where
         }),
     };
 
-    // let detach = Detach {
-    //     handle: output_handle,
-    //     closed: true,
-    //     error: None,
-    // };
-    // let frame = LinkFrame::Detach(detach);
-    // writer.send(frame).await?;
     link.send_detach(writer, false, None).await?;
     Ok(())
 }

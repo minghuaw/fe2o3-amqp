@@ -24,7 +24,7 @@ use crate::{
         sender_link::SenderLink, LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle,
         LinkIncomingItem, LinkState, Error
     },
-    session::SessionHandle,
+    session::{SessionHandle, self},
     util::Constant, endpoint,
 };
 
@@ -267,8 +267,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         };
 
         // Create Link in Session
-        let output_handle = session
-            .allocate_link(self.name.clone(), link_handle)
+        let output_handle = session::allocate_link(&mut session.control, self.name.clone(), link_handle)
             .await?;
 
         // Get writer to session
@@ -304,28 +303,11 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let mut reader = ReceiverStream::new(incoming_rx);
         super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
-        // // Note that if the application chooses not to create a terminus,
-        // // the session endpoint will still create a link endpoint and issue
-        // // an attach indicating that the link endpoint has no associated
-        // // local terminus. In this case, the session endpoint MUST immediately
-        // // detach the newly created link endpoint.
-        // match remote_attach.target.is_some() {
-        //     true => {
-        //         if let Err(_) = endpoint::Link::on_incoming_attach(&mut link, remote_attach).await {
-        //             // Should any error happen handling remote 
-        //             todo!()
-        //         }
-        //     },
-        //     false => {
-        //         // If no target is supplied with the remote attach frame,
-        //         // an immediate detach should be expected
-        //         expect_detach_then_detach(&mut writer, &mut reader, output_handle).await?;
-        //     }
-        // }
-
         // Attach completed, return Sender
         let sender = Sender::<Attached> {
             link,
+            buffer_size: self.buffer_size,
+            session: session.control.clone(),
             outgoing,
             incoming: reader,
             marker: PhantomData,

@@ -114,6 +114,9 @@ impl endpoint::Link for SenderLink {
             ).into())
         };
 
+        // Receiving detach forwarded by session means it's ready to drop the output handle
+        let _ = self.output_handle.take();
+
         if let Some(err) = detach.error {
             return Err(err.into())
         }
@@ -124,6 +127,9 @@ impl endpoint::Link for SenderLink {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
+        println!(">>> Debug: SenderLink::send_attach");
+        println!(">>> Debug: SenderLink.local_state: {:?}", &self.local_state);
+
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
@@ -165,7 +171,9 @@ impl endpoint::Link for SenderLink {
         let frame = LinkFrame::Attach(attach);
 
         match self.local_state {
-            LinkState::Unattached => {
+            LinkState::Unattached 
+            | LinkState::Detached // May attempt to re-attach
+            | LinkState::DetachSent => {
                 writer.send(frame).await
                     .map_err(|e| Self::Error::from(e))?;
                 self.local_state = LinkState::AttachSent
@@ -202,8 +210,11 @@ impl endpoint::Link for SenderLink {
         println!(">>> Debug: SenderLink::send_detach");
         println!(">>> Debug: SenderLink local_state: {:?}", &self.local_state);
 
-        // Take the handle as it will be detached
-        match self.output_handle.take() {
+        // Detach may fail and may try re-attach
+        // The local output handle is not removed from the session
+        // until `deallocate_link`. The outgoing detach will not remove
+        // local handle from session
+        match &self.output_handle {
             Some(handle) => {
                 match self.local_state {
                     LinkState::Attached => self.local_state = LinkState::DetachSent,
@@ -212,7 +223,7 @@ impl endpoint::Link for SenderLink {
                 };
 
                 let detach = Detach {
-                    handle,
+                    handle: handle.clone(), 
                     closed,
                     error
                 };

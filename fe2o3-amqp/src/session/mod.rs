@@ -65,8 +65,8 @@ pub enum SessionState {
 // }
 
 pub struct SessionHandle {
-    control: mpsc::Sender<SessionControl>,
-    handle: JoinHandle<Result<(), Error>>,
+    pub(crate) control: mpsc::Sender<SessionControl>,
+    engine_handle: JoinHandle<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
@@ -77,39 +77,39 @@ impl SessionHandle {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(SessionControl::End(None)).await;
-        match (&mut self.handle).await {
+        match (&mut self.engine_handle).await {
             Ok(res) => res,
             Err(e) => Err(Error::JoinError(e)),
         }
     }
+}
 
-    pub(crate) async fn allocate_link(
-        &mut self,
-        link_name: String,
-        link_handle: LinkHandle,
-    ) -> Result<Handle, AllocLinkError> {
-        let (responder, resp_rx) = oneshot::channel();
+pub(crate) async fn allocate_link(
+    control: &mut mpsc::Sender<SessionControl>,
+    link_name: String,
+    link_handle: LinkHandle,
+) -> Result<Handle, AllocLinkError> {
+    let (responder, resp_rx) = oneshot::channel();
 
-        self.control
-            .send(SessionControl::AllocateLink {
-                link_name,
-                link_handle,
-                responder,
-            })
-            .await
-            // The `SendError` could only happen when the receiving half is
-            // dropped, meaning the `SessionEngine::event_loop` has stopped.
-            // This would also mean the `Session` is Unmapped, and thus it
-            // may be treated as illegal state
-            .map_err(|_| AllocLinkError::IllegalState)?;
-        let result = resp_rx
-            .await
-            // The error could only occur when the sending half is dropped,
-            // indicating the `SessionEngine::even_loop` has stopped or
-            // unmapped. Thus it could be considered as illegal state
-            .map_err(|_| AllocLinkError::IllegalState)?;
-        result
-    }
+    control
+        .send(SessionControl::AllocateLink {
+            link_name,
+            link_handle,
+            responder,
+        })
+        .await
+        // The `SendError` could only happen when the receiving half is
+        // dropped, meaning the `SessionEngine::event_loop` has stopped.
+        // This would also mean the `Session` is Unmapped, and thus it
+        // may be treated as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    let result = resp_rx
+        .await
+        // The error could only occur when the sending half is dropped,
+        // indicating the `SessionEngine::even_loop` has stopped or
+        // unmapped. Thus it could be considered as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    result
 }
 
 pub struct Session {
@@ -203,8 +203,10 @@ impl endpoint::Session for Session {
         }
     }
 
-    fn deallocate_link(&mut self, handle: Handle) {
-        todo!()
+    fn deallocate_link(&mut self, link_name: String) {
+        if let Some(handle) = self.link_by_name.remove(&link_name) {
+            self.local_links.remove(handle.0 as usize);
+        }
     }
 
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {

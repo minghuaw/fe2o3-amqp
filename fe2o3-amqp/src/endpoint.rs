@@ -126,7 +126,7 @@ pub trait Session {
         link_name: String,
         link_handle: Self::LinkHandle,
     ) -> Result<Handle, Self::AllocError>;
-    fn deallocate_link(&mut self, handle: Handle);
+    fn deallocate_link(&mut self, link_name: String);
 
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
     async fn on_incoming_attach(&mut self, channel: u16, attach: Attach)

@@ -167,8 +167,8 @@ where
                     ))
                 })?;
             }
-            SessionControl::DeallocateLink(handle) => {
-                todo!()
+            SessionControl::DeallocateLink(link_name) => {
+                self.session.deallocate_link(link_name);
             }
             SessionControl::LinkFlow(_) => {
                 todo!()

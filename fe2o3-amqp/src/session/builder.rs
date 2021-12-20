@@ -146,10 +146,10 @@ impl Builder {
         )
         .await?;
 
-        let handle = engine.spawn();
+        let engine_handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,
-            handle,
+            engine_handle,
             outgoing: outgoing_tx,
         };
         Ok(handle)
