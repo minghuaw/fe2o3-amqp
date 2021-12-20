@@ -29,7 +29,7 @@ async fn main() {
 
     // sender.close().await.unwrap();
     if let Err(err) = sender.detach().await {
-        println!("{:?}", err)
+        println!("+++++++++ {:?}", err)
     }
 
     tokio::time::sleep(Duration::from_millis(500)).await;
