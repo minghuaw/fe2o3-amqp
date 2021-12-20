@@ -1,9 +1,42 @@
-use fe2o3_amqp_types::definitions::{AmqpError, LinkError, self};
+use fe2o3_amqp_types::definitions::{AmqpError, LinkError, self, ErrorCondition};
 use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
 
-pub type DetachError = definitions::Error;
+#[derive(Debug)]
+pub struct DetachError {
+    is_closed_by_remote: bool,
+    error: Option<definitions::Error>
+}
+
+impl DetachError {
+    pub fn is_closed_by_remote(&self) -> bool {
+        self.is_closed_by_remote
+    }
+
+    pub fn error_condition(&self) -> Option<&ErrorCondition> {
+        match &self.error {
+            Some(e) => Some(&e.condition),
+            None => None
+        }
+    }
+
+    pub fn into_error(self) -> Option<definitions::Error> {
+        self.error
+    }
+}
+
+impl<T> From<T> for DetachError 
+where 
+    T: Into<definitions::Error>,
+{
+    fn from(err: T) -> Self {
+        Self {
+            is_closed_by_remote: false,
+            error: Some(err.into())
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -46,7 +79,7 @@ impl From<LinkError> for Error {
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error {
-    fn from(err: mpsc::error::SendError<T>) -> Self {
+    fn from(_: mpsc::error::SendError<T>) -> Self {
         Self::AmqpError {
             condition: AmqpError::IllegalState,
             description: Some("Failed to send to sesssion".to_string())

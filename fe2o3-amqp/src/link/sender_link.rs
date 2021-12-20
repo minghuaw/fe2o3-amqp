@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 
 use crate::{endpoint};
 
-use super::{LinkFlowState, LinkFrame, LinkState};
+use super::{LinkFlowState, LinkFrame, LinkState, error::DetachError};
 use crate::link;
 
 /// Manages the link state
@@ -55,7 +55,7 @@ impl SenderLink {
 
 #[async_trait]
 impl endpoint::Link for SenderLink {
-    type DetachError = definitions::Error;
+    type DetachError = DetachError;
     type Error = link::Error;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
@@ -107,15 +107,15 @@ impl endpoint::Link for SenderLink {
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => self.local_state = LinkState::Detached,
-            _ => return Err(Self::DetachError::new(
+            _ => return Err(definitions::Error::new(
                 AmqpError::IllegalState,
                 Some("Illegal local state".into()),
                 None
-            ))
+            ).into())
         };
 
         if let Some(err) = detach.error {
-            return Err(err)
+            return Err(err.into())
         }
         Ok(())
     }
@@ -217,17 +217,17 @@ impl endpoint::Link for SenderLink {
                     error
                 };
                 writer.send(LinkFrame::Detach(detach)).await
-                    .map_err(|_| Self::DetachError::new(
+                    .map_err(|_| definitions::Error::new(
                         AmqpError::IllegalState,
                         Some("Failed to send to session".to_string()),
                         None
                     ))?;
             },
-            None => return Err(Self::DetachError::new(
+            None => return Err(definitions::Error::new(
                 AmqpError::IllegalState,
                 Some("Link is already detached".to_string()),
                 None
-            ))
+            ).into())
         }
 
         Ok(())

@@ -14,13 +14,13 @@ use super::{ErrorCondition, Fields};
 )]
 pub struct Error {
     /// <field name="condition" type="symbol" requires="error-condition" mandatory="true"/>
-    condition: ErrorCondition,
+    pub condition: ErrorCondition,
 
     /// <field name="description" type="string"/>
-    description: Option<String>,
+    pub description: Option<String>,
 
     /// <field name="info" type="fields"/>
-    info: Option<Fields>,
+    pub info: Option<Fields>,
 }
 
 impl Error {

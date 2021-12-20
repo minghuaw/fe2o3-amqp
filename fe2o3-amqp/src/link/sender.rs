@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{time::Duration, marker::PhantomData};
 
 use tokio::sync::mpsc;
 
@@ -6,38 +6,55 @@ use fe2o3_amqp_types::{
     messaging::{Address, Message, Source},
     performatives::{Disposition}, definitions::{AmqpError, self},
 };
+use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{session::SessionHandle, endpoint::Link};
 
 use super::{
-    builder::{self, WithoutName, WithoutTarget},
+    builder::{self, WithoutName, WithoutTarget, WithName, WithTarget},
     role,
     sender_link::SenderLink,
     LinkFrame,
-    Error, error::DetachError,
+    Error, error::DetachError, type_state::{Detached, Attached},
 };
 
-pub struct Sender {
+pub struct Sender<S> {
     // The SenderLink manages the state
     pub(crate) link: SenderLink,
 
     // Outgoing mpsc channel to send the Link frames
     pub(crate) outgoing: PollSender<LinkFrame>,
-    pub(crate) incoming: mpsc::Receiver<LinkFrame>,
+    pub(crate) incoming: ReceiverStream<LinkFrame>,
+
+    pub(crate) marker: PhantomData<S>,
 }
 
-impl Sender {
+impl Sender<Detached> {
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
         builder::Builder::new().source(Source::builder().build()) // TODO: where should
     }
 
+    pub fn modify(self) -> builder::Builder<role::Sender, WithName, WithTarget> {
+        todo!()
+    }
+
+    // Re-attach the link
+    pub async fn reattach(&mut self) -> Result<Sender<Attached>, Error> {
+        self.link.send_attach(&mut self.outgoing).await?;
+
+
+        todo!()
+    }
+}
+
+impl Sender<Attached> {
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
         addr: impl Into<Address>,
     ) -> Result<Self, Error> {
-        Self::builder()
+        Sender::<Detached>::builder()
             .name(name)
             .target(addr)
             .attach(session)
@@ -56,7 +73,18 @@ impl Sender {
         todo!()
     }
 
-    pub async fn detach(&mut self) -> Result<(), DetachError> {
+    /// Detach the link
+    /// 
+    /// The Sender will send a detach frame with closed field set to false,
+    /// and wait for a detach with closed field set to false from the remote peer.
+    /// 
+    /// # Error
+    /// 
+    /// If the remote peer sends a detach frame with closed field set to true,
+    /// the Sender will re-attach and send a closing detach
+    pub async fn detach(mut self) -> Result<Sender<Detached>, DetachError> {
+        use futures_util::StreamExt;
+
         println!(">>> Debug: Sender::detach");
         // TODO: how should disposition be handled?
 
@@ -65,7 +93,7 @@ impl Sender {
         self.link.send_detach(&mut self.outgoing, false, None).await?;
 
         // Wait for remote detach
-        let frame = self.incoming.recv().await
+        let frame = self.incoming.next().await
             .ok_or_else(|| detach_error_expecting_frame())?;
         println!(">>> Debug: incoming link frame: {:?}", &frame);
         let remote_detach = match frame {
@@ -82,7 +110,13 @@ impl Sender {
         } else {
             self.link.on_incoming_detach(remote_detach).await?;
         }
-        Ok(())
+
+        Ok(Sender::<Detached> {
+            link: self.link,
+            outgoing: self.outgoing,
+            incoming: self.incoming,
+            marker: PhantomData,
+        })
     }
 
     pub async fn detach_with_timeout(&mut self, timeout: impl Into<Duration>) -> Result<(), Error> {
@@ -90,12 +124,14 @@ impl Sender {
     }
 
     pub async fn close(mut self) -> Result<(), DetachError> {
+        use futures_util::StreamExt;
+
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
         self.link.send_detach(&mut self.outgoing, true, None).await?;
 
         // Wait for remote detach
-        let frame = self.incoming.recv().await
+        let frame = self.incoming.next().await
             .ok_or_else(|| detach_error_expecting_frame())?;
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
@@ -117,9 +153,11 @@ impl Sender {
 }
 
 fn detach_error_expecting_frame() -> DetachError {
-    DetachError::new (
-        AmqpError::IllegalState,
-        Some("Expecting remote detach frame".to_string()),
-        None
+    DetachError::from (
+        definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Expecting remote detach frame".to_string()),
+            None
+        )
     )
 }

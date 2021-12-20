@@ -5,8 +5,8 @@ use std::sync::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, SequenceNo},
-    performatives::Flow,
+    definitions::{Fields, SequenceNo, AmqpError},
+    performatives::{Attach},
 };
 pub use frame::*;
 pub mod builder;
@@ -17,11 +17,18 @@ pub mod sender;
 pub mod sender_link;
 pub use error::Error;
 
+use futures_util::{Sink, Stream};
 pub use receiver::Receiver;
 pub use sender::Sender;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::{endpoint::LinkFlow, util::Constant};
+use crate::{endpoint::{LinkFlow, self}, util::Constant};
+
+pub mod type_state {
+    pub struct Attached { }
+
+    pub struct Detached { }
+}
 
 pub mod role {
 
@@ -217,4 +224,34 @@ impl LinkFlowState {
 pub struct LinkHandle {
     pub tx: mpsc::Sender<LinkIncomingItem>,
     pub flow_state: Arc<LinkFlowState>,
+}
+
+pub(crate) async fn do_attach<L, W, R>(link: &mut L, writer: &mut W, reader: &mut R) -> Result<Attach, Error>
+where 
+    L: endpoint::Link<Error = Error>,
+    W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    R: Stream<Item = LinkFrame> + Send + Unpin,
+{
+    use futures_util::StreamExt;
+
+    // Send an Attach frame
+    endpoint::Link::send_attach(link, writer).await?;
+
+    // Wait for an Attach frame
+    let frame = reader
+        .next()
+        .await
+        .ok_or_else(|| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Expecting remote attach frame".to_string())
+        })?;
+    let remote_attach = match frame {
+        LinkFrame::Attach(attach) => attach,
+        // TODO: how to handle this?
+        _ => return Err(Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Expecting remote attach frame".to_string())
+        })
+    };
+    Ok(remote_attach)
 }
