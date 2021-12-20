@@ -5,8 +5,8 @@ use crate::session::AllocLinkError;
 
 #[derive(Debug)]
 pub struct DetachError {
-    is_closed_by_remote: bool,
-    error: Option<definitions::Error>
+    pub(crate) is_closed_by_remote: bool,
+    pub(crate) error: Option<definitions::Error>
 }
 
 impl DetachError {

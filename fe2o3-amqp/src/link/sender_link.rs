@@ -55,7 +55,7 @@ impl SenderLink {
 
 #[async_trait]
 impl endpoint::Link for SenderLink {
-    type DetachError = DetachError;
+    type DetachError = definitions::Error;
     type Error = link::Error;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
@@ -195,7 +195,7 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<definitions::Error>) -> Result<(), Self::DetachError>
+    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<definitions::Error>) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
@@ -217,17 +217,15 @@ impl endpoint::Link for SenderLink {
                     error
                 };
                 writer.send(LinkFrame::Detach(detach)).await
-                    .map_err(|_| definitions::Error::new(
-                        AmqpError::IllegalState,
-                        Some("Failed to send to session".to_string()),
-                        None
-                    ))?;
+                    .map_err(|_| link::Error::AmqpError{
+                        condition: AmqpError::IllegalState,
+                        description: Some("Failed to send to session".to_string()),
+                    })?;
             },
-            None => return Err(definitions::Error::new(
-                AmqpError::IllegalState,
-                Some("Link is already detached".to_string()),
-                None
-            ).into())
+            None => return Err(link::Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is already detached".to_string()),
+            })
         }
 
         Ok(())

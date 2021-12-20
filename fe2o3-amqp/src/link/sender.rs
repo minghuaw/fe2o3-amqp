@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     messaging::{Address, Message, Source},
-    performatives::{Disposition}, definitions::{AmqpError, self},
+    performatives::{Disposition}, definitions::{AmqpError, self, ErrorCondition},
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -27,6 +27,7 @@ pub struct Sender<S> {
     pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: ReceiverStream<LinkFrame>,
 
+    // Type state marker
     pub(crate) marker: PhantomData<S>,
 }
 
@@ -41,8 +42,8 @@ impl Sender<Detached> {
 
     // Re-attach the link
     pub async fn reattach(&mut self) -> Result<Sender<Attached>, Error> {
-        self.link.send_attach(&mut self.outgoing).await?;
-
+        super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await?;
+        // self.link.on_incoming_attach(remote_attach).await?;
 
         todo!()
     }
@@ -90,7 +91,8 @@ impl Sender<Attached> {
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        self.link.send_detach(&mut self.outgoing, false, None).await?;
+        self.link.send_detach(&mut self.outgoing, false, None).await
+            .map_err(map_send_detach_error)?;
 
         // Wait for remote detach
         let frame = self.incoming.next().await
@@ -128,7 +130,8 @@ impl Sender<Attached> {
 
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        self.link.send_detach(&mut self.outgoing, true, None).await?;
+        self.link.send_detach(&mut self.outgoing, true, None).await
+            .map_err(map_send_detach_error)?;
 
         // Wait for remote detach
         let frame = self.incoming.next().await
@@ -160,4 +163,17 @@ fn detach_error_expecting_frame() -> DetachError {
             None
         )
     )
+}
+
+fn map_send_detach_error(err: Error) -> DetachError {
+    let (condition, description): (ErrorCondition, _) = match err {
+        Error::HandleMaxReached => unreachable!(),
+        Error::DuplicatedLinkName => unreachable!(),
+        Error::AmqpError{ condition, description} => (condition.into(), description),
+        Error::LinkError{ condition, description} => (condition.into(), description)
+    };
+    DetachError {
+        is_closed_by_remote: false,
+        error: Some(definitions::Error::new(condition, description, None))
+    }
 }

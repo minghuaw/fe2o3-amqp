@@ -5,8 +5,8 @@ use std::sync::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, SequenceNo, AmqpError},
-    performatives::{Attach},
+    definitions::{Fields, SequenceNo, AmqpError, Handle, self},
+    performatives::{Attach, Detach},
 };
 pub use frame::*;
 pub mod builder;
@@ -226,7 +226,7 @@ pub struct LinkHandle {
     pub flow_state: Arc<LinkFlowState>,
 }
 
-pub(crate) async fn do_attach<L, W, R>(link: &mut L, writer: &mut W, reader: &mut R) -> Result<Attach, Error>
+pub(crate) async fn do_attach<L, W, R>(link: &mut L, writer: &mut W, reader: &mut R) -> Result<(), Error>
 where 
     L: endpoint::Link<Error = Error>,
     W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
@@ -253,5 +253,64 @@ where
             description: Some("Expecting remote attach frame".to_string())
         })
     };
-    Ok(remote_attach)
+
+    // Note that if the application chooses not to create a terminus,
+    // the session endpoint will still create a link endpoint and issue
+    // an attach indicating that the link endpoint has no associated
+    // local terminus. In this case, the session endpoint MUST immediately
+    // detach the newly created link endpoint.
+    match remote_attach.target.is_some() {
+        true => {
+            if let Err(_) = link.on_incoming_attach(remote_attach).await {
+                // Should any error happen handling remote 
+                todo!()
+            }
+        },
+        false => {
+            // If no target is supplied with the remote attach frame,
+            // an immediate detach should be expected
+            expect_detach_then_detach(link, writer, reader).await?;
+        }
+    }
+
+    Ok(())
+}
+
+
+pub(crate) async fn expect_detach_then_detach<L, W, R>(
+    link: &mut L,
+    writer: &mut W,
+    reader: &mut R, 
+) -> Result<(), Error> 
+where 
+    L: endpoint::Link<Error = Error>,
+    W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    R: Stream<Item = LinkFrame> + Send + Unpin,
+{
+    use futures_util::{StreamExt};
+
+    let frame = reader
+        .next()
+        .await
+        .ok_or_else(|| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Expecting remote detach frame".to_string())
+        })?;
+    let _remote_detach = match frame {
+        LinkFrame::Detach(detach) => detach,
+        _ => return Err(Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Expecting remote detach frame".to_string())
+        }),
+    };
+
+    // let detach = Detach {
+    //     handle: output_handle,
+    //     closed: true,
+    //     error: None,
+    // };
+    // let frame = LinkFrame::Detach(detach);
+    // writer.send(frame).await?;
+    link.send_detach(writer, false, None).await?;
+    Ok(())
 }
