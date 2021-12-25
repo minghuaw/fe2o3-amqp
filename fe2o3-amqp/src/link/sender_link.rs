@@ -146,8 +146,7 @@ impl endpoint::Link for SenderLink {
             0 => None,
             val @ _ => Some(val as u64),
         };
-        let properties = self.flow_state.properties().await
-            .map(|arc| (*arc).clone());
+        let properties = self.flow_state.properties().await;
 
         let attach = Attach {
             name: self.name.clone(),

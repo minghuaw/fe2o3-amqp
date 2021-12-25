@@ -76,7 +76,7 @@ pub struct LinkFlowStateInner {
     pub link_credit: u32,
     pub avaiable: u32,
     pub drain: bool,
-    pub properties: Option<Arc<Fields>>,
+    pub properties: Option<Fields>,
 }
 
 impl From<&LinkFlowStateInner> for LinkFlow {
@@ -221,7 +221,7 @@ impl LinkFlowState {
     }
 
     /// This is async because it is protected behind an async RwLock
-    pub async fn properties(&self) -> Option<Arc<Fields>> {
+    pub async fn properties(&self) -> Option<Fields> {
         match self {
             LinkFlowState::Sender(lock) => lock.read().await.properties.clone(),
             LinkFlowState::Receiver(lock) => lock.read().await.properties.clone(),

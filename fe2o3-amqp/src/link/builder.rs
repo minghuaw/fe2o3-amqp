@@ -243,10 +243,8 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
 
 impl Builder<role::Sender, WithName, WithTarget> {
     pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender<Attached>, Error> {
-        use crate::endpoint;
-
         let local_state = LinkState::Unattached;
-        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
 
         // Create shared link flow state
@@ -258,7 +256,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             avaiable: 0,
             // The drain flag is initialized to false.
             drain: false,
-            properties: self.properties.map(|field| Arc::new(field)),
+            properties: self.properties,
         };
         let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
         let link_handle = LinkHandle {
