@@ -88,8 +88,10 @@ impl Sender<Attached> {
             .await
     }
 
-    pub async fn send(&mut self, message: Message) -> Result<(), Error> {
+    pub async fn send(&mut self, message: Message) -> Result<(), Error> {        
+        // send a transfer, checking state will be implemented in SenderLink
 
+        // depending on 
 
         todo!()
     }

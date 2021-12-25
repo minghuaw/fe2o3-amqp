@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     definitions::{
         DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, AmqpError, self,
     },
-    messaging::{DeliveryState, Source, Target},
+    messaging::{DeliveryState, Source, Target, Message},
     performatives::{Attach, Detach, Disposition},
     primitives::Symbol,
 };
@@ -247,13 +247,28 @@ impl endpoint::Link for SenderLink {
 
 #[async_trait]
 impl endpoint::SenderLink for SenderLink {
-    async fn send_transfer<W>(
+    async fn send_transfer<W, M>(
         &mut self,
         writer: &mut W,
+        message: M,
     ) -> Result<(), <Self as endpoint::Link>::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
+        M: Into<Message> + Send,
     {
+        use crate::util::Consume;
+
+        println!(">>> Debug: SenderLink::send_transfer");
+
+        // Whether drain flag is set
+        if self.flow_state.state().drain().await {
+            println!(">>> Debug: SenderLink::send_transfer drain");
+            return Ok(())
+        }
+
+        // Consume link credit
+        self.flow_state.consume(1).await;
+
         todo!()
     }
 }

@@ -24,7 +24,7 @@ use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, Error, Handle, Role, SequenceNo},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
-    primitives::{Boolean, UInt},
+    primitives::{Boolean, UInt}, messaging::Message,
 };
 use futures_util::Sink;
 use tokio::sync::mpsc;
@@ -251,9 +251,10 @@ impl From<&Flow> for LinkFlow {
 pub trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
-    async fn send_transfer<W>(&mut self, writer: &mut W) -> Result<(), <Self as Link>::Error>
+    async fn send_transfer<W, M>(&mut self, writer: &mut W, message: M) -> Result<(), <Self as Link>::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        M: Into<Message> + Send;
 }
 
 #[async_trait]

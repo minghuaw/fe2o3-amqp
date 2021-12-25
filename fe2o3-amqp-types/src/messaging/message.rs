@@ -7,11 +7,17 @@ use super::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    header: Header,
-    delivery_annotations: DeliveryAnnotations,
-    message_annotations: MessageAnnotations,
-    properties: Properties,
-    application_properties: ApplicationProperties,
-    data: Data,
-    footer: Footer,
+    pub header: Header,
+    pub delivery_annotations: DeliveryAnnotations,
+    pub message_annotations: MessageAnnotations,
+    pub properties: Properties,
+    pub application_properties: ApplicationProperties,
+    pub data: Data,
+    pub footer: Footer,
 }
+
+
+pub enum MessageBody {
+
+}
+

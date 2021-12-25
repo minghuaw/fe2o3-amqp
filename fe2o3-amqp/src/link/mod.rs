@@ -206,6 +206,17 @@ impl LinkFlowState {
         }
     }
 
+    pub async fn drain(&self) -> bool {
+        match self {
+            LinkFlowState::Sender(lock) => {
+                lock.read().await.drain
+            },
+            LinkFlowState::Receiver(lock) => {
+                lock.read().await.drain
+            }
+        }
+    }
+
     pub async fn initial_delivery_count(&self) -> SequenceNo {
         match self {
             LinkFlowState::Sender(lock) => {
