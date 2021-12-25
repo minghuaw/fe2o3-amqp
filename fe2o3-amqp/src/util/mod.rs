@@ -1,8 +1,3 @@
-// pub enum Running {
-//     Stop,
-//     Continue,
-// }
-
 use futures_util::Future;
 use std::ops::Deref;
 use std::{pin::Pin, task::Poll, time::Duration};
@@ -10,7 +5,10 @@ use tokio::time::Instant;
 
 use tokio::time::Sleep;
 
-// pub struct IdleTimeoutElapsed {}
+mod producer;
+mod consumer;
+pub use producer::*;
+pub use consumer::*;
 
 pub enum Running {
     Continue,

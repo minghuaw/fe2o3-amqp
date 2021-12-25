@@ -290,7 +290,7 @@ impl endpoint::Session for Session {
                 Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                     Some(link_handle) => {
                         let link_flow = LinkFlow::from(&flow);
-                        let echo = link_handle.flow_state.on_incoming_flow(link_flow);
+                        let echo = link_handle.flow_state.on_incoming_flow(link_flow).await;
                         if let Some(echo_flow) = echo {
                             self.control
                                 .send(SessionControl::LinkFlow(echo_flow))

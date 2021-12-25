@@ -146,6 +146,8 @@ impl endpoint::Link for SenderLink {
             0 => None,
             val @ _ => Some(val as u64),
         };
+        let properties = self.flow_state.properties().await
+            .map(|arc| (*arc).clone());
 
         let attach = Attach {
             name: self.name.clone(),
@@ -161,12 +163,12 @@ impl endpoint::Link for SenderLink {
             /// This MUST NOT be null if role is sender,
             /// and it is ignored if the role is receiver.
             /// See subsection 2.6.7.
-            initial_delivery_count: Some(*self.flow_state.initial_delivery_count()),
+            initial_delivery_count: Some(self.flow_state.initial_delivery_count().await),
 
             max_message_size,
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
-            properties: self.flow_state.properties().await,
+            properties,
         };
         let frame = LinkFrame::Attach(attach);
 

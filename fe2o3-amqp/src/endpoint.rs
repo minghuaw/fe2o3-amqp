@@ -226,6 +226,7 @@ pub trait Link {
 // }
 
 /// A subset of the fields in the Flow performative
+#[derive(Debug, Default)]
 pub struct LinkFlow {
     pub delivery_count: Option<SequenceNo>,
     pub link_credit: Option<UInt>,

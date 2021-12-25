@@ -251,16 +251,16 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
-            intial_delivery_count: Constant::new(self.initial_delivery_count),
-            delivery_count: AtomicU32::new(self.initial_delivery_count),
+            initial_delivery_count: Constant::new(self.initial_delivery_count),
+            delivery_count: self.initial_delivery_count,
             // The link-credit and available variables are initialized to zero.
-            link_credit: AtomicU32::new(0),
-            avaiable: AtomicU32::new(0),
+            link_credit: 0,
+            avaiable: 0,
             // The drain flag is initialized to false.
-            drain: AtomicBool::new(false),
-            properties: RwLock::new(self.properties),
+            drain: false,
+            properties: self.properties.map(|field| Arc::new(field)),
         };
-        let flow_state = Arc::new(LinkFlowState::Sender(flow_state_inner));
+        let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
         let link_handle = LinkHandle {
             tx: incoming_tx,
             flow_state: flow_state.clone(),

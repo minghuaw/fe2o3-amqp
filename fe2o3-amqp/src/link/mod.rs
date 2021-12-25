@@ -4,9 +4,9 @@ use std::sync::{
     Arc,
 };
 
+use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{Fields, SequenceNo, AmqpError, Handle, self},
-    performatives::{Attach, Detach},
+    definitions::{Fields, SequenceNo, AmqpError},
 };
 pub use frame::*;
 pub mod builder;
@@ -22,7 +22,7 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::{endpoint::{LinkFlow, self}, util::Constant};
+use crate::{endpoint::{LinkFlow, self}, util::{Constant, ProducerState, Consume, Consumer}};
 
 pub mod type_state {
     pub struct Attached { }
@@ -71,23 +71,21 @@ pub enum LinkState {
 }
 
 pub struct LinkFlowStateInner {
-    pub intial_delivery_count: Constant<SequenceNo>,
-    pub delivery_count: AtomicU32, // SequenceNo = u32
-    pub link_credit: AtomicU32,
-    pub avaiable: AtomicU32,
-    pub drain: AtomicBool,
-    pub properties: RwLock<Option<Fields>>,
+    pub initial_delivery_count: Constant<SequenceNo>,
+    pub delivery_count: SequenceNo, // SequenceNo = u32
+    pub link_credit: u32,
+    pub avaiable: u32,
+    pub drain: bool,
+    pub properties: Option<Arc<Fields>>,
 }
 
 impl From<&LinkFlowStateInner> for LinkFlow {
     fn from(state: &LinkFlowStateInner) -> Self {
-        use std::sync::atomic::Ordering;
-
         LinkFlow {
-            delivery_count: Some(state.delivery_count.load(Ordering::Relaxed)),
-            link_credit: Some(state.link_credit.load(Ordering::Relaxed)),
-            available: Some(state.avaiable.load(Ordering::Relaxed)),
-            drain: state.drain.load(Ordering::Relaxed),
+            delivery_count: Some(state.delivery_count),
+            link_credit: Some(state.link_credit),
+            available: Some(state.avaiable),
+            drain: state.drain,
             echo: false,
         }
     }
@@ -95,8 +93,8 @@ impl From<&LinkFlowStateInner> for LinkFlow {
 
 /// The Sender and Receiver handle link flow control differently
 pub enum LinkFlowState {
-    Sender(LinkFlowStateInner),
-    Receiver(LinkFlowStateInner),
+    Sender(RwLock<LinkFlowStateInner>),
+    Receiver(RwLock<LinkFlowStateInner>),
 }
 
 impl LinkFlowState {
@@ -106,12 +104,14 @@ impl LinkFlowState {
     ///
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`
-    pub(crate) fn on_incoming_flow(&self, flow: LinkFlow) -> Option<LinkFlow> {
+    pub(crate) async fn on_incoming_flow(&self, flow: LinkFlow) -> Option<LinkFlow> {
         println!(">>> Debug: LinkFlowState::on_incoming_flow");
 
         use std::sync::atomic::Ordering;
         match self {
-            LinkFlowState::Sender(state) => {
+            LinkFlowState::Sender(lock) => {
+                let mut state = lock.write().await;
+
                 // delivery count
                 //
                 // ...
@@ -130,13 +130,13 @@ impl LinkFlowState {
                     // the delivery-count_rcv is the first delivery-count_snd sent from sender
                     // to receiver, i.e., the delivery-count_snd specified in the flow state
                     // carried by the initial attach frame from the sender to the receiver.
-                    *state.intial_delivery_count.value()
+                    *state.initial_delivery_count.value()
                 });
 
                 if let Some(link_credit_rcv) = flow.link_credit {
                     let link_credit = delivery_count_rcv + link_credit_rcv
-                        - state.delivery_count.load(Ordering::Relaxed);
-                    state.link_credit.swap(link_credit, Ordering::Relaxed);
+                        - state.delivery_count;
+                    state.link_credit = link_credit;
                 }
 
                 // available
@@ -153,14 +153,16 @@ impl LinkFlowState {
                 // consuming all link-credit, and send the flow state to the receiver. Only the
                 // receiver can independently modify this field. The sender’s value is always the
                 // last known value indicated by the receiver.
-                state.drain.swap(flow.drain, Ordering::Relaxed);
+                state.drain = flow.drain;
 
                 match flow.echo {
-                    true => Some(LinkFlow::from(state)),
+                    true => Some(LinkFlow::from(&*state)),
                     false => None,
                 }
             }
-            LinkFlowState::Receiver(state) => {
+            LinkFlowState::Receiver(lock) => {
+                let mut state = lock.write().await;
+
                 // delivery count
                 //
                 // The receiver’s value is calculated based on the last known
@@ -168,7 +170,7 @@ impl LinkFlowState {
                 // despite its name, the delivery-count is not a count but a sequence number
                 // initialized at an arbitrary point by the sender.
                 if let Some(delivery_count) = flow.delivery_count {
-                    state.delivery_count.swap(delivery_count, Ordering::Relaxed);
+                    state.delivery_count = delivery_count;
                 }
 
                 // link credit
@@ -185,7 +187,7 @@ impl LinkFlowState {
                 // is zero. If this happens, the receiver MUST maintain a floor of zero in its
                 // calculation of the value of available.
                 if let Some(available) = flow.available {
-                    state.avaiable.swap(available, Ordering::Relaxed);
+                    state.avaiable = available;
                 }
 
                 // drain
@@ -198,25 +200,31 @@ impl LinkFlowState {
                 // last known value indicated by the receiver.
 
                 match flow.echo {
-                    true => Some(LinkFlow::from(state)),
+                    true => Some(LinkFlow::from(&*state)),
                     false => None,
                 }
             }
         }
     }
 
-    pub fn initial_delivery_count(&self) -> &SequenceNo {
+    pub async fn initial_delivery_count(&self) -> SequenceNo {
         match self {
-            LinkFlowState::Sender(state) => state.intial_delivery_count.value(),
-            LinkFlowState::Receiver(state) => state.intial_delivery_count.value(),
+            LinkFlowState::Sender(lock) => {
+                *lock.read().await
+                    .initial_delivery_count.value()
+            },
+            LinkFlowState::Receiver(lock) => {
+                *lock.read().await
+                    .initial_delivery_count.value()
+            },
         }
     }
 
     /// This is async because it is protected behind an async RwLock
-    pub async fn properties(&self) -> Option<Fields> {
+    pub async fn properties(&self) -> Option<Arc<Fields>> {
         match self {
-            LinkFlowState::Sender(state) => state.properties.read().await.clone(),
-            LinkFlowState::Receiver(state) => state.properties.read().await.clone(),
+            LinkFlowState::Sender(lock) => lock.read().await.properties.clone(),
+            LinkFlowState::Receiver(lock) => lock.read().await.properties.clone(),
         }
     }
 }
@@ -305,4 +313,86 @@ where
 
     link.send_detach(writer, false, None).await?;
     Ok(())
+}
+
+#[async_trait]
+impl ProducerState for Arc<LinkFlowState> {
+    type Item = LinkFlow;
+    // If echo is requested, a Some(LinkFlow) will be returned
+    type Outcome = Option<LinkFlow>; 
+
+    async fn update_state(&mut self, item: Self::Item) -> Self::Outcome {
+        self.on_incoming_flow(item).await
+    }
+}
+
+#[async_trait]
+impl Consume for Consumer<Arc<LinkFlowState>> {
+    type Item = u32;
+    type Outcome = ();
+
+    async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
+        use std::sync::atomic::Ordering;
+
+        // check whether there is anough credit
+        match self.state().as_ref() {
+            LinkFlowState::Sender(inner) => {
+                // // increment delivery count and decrement link_credit
+                // let curr = inner.link_credit.load(Ordering::Relaxed);
+                // if curr < item {
+                //     // wait for flow state to change
+                //     self.notifier.notified().await;
+                // } else {
+                //     loop {
+
+                //     }
+                // }
+                todo!()
+            },
+            LinkFlowState::Receiver(inner) => {
+                todo!()
+            }
+        };
+
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn test_producer_notify() {
+        use std::sync::Arc;
+        use tokio::sync::Notify;
+        use tokio::sync::RwLock;
+
+        use crate::util::{Producer, Produce};
+        use super::*;
+
+        let notifier = Arc::new(Notify::new());
+        let state = LinkFlowState::Sender(
+            RwLock::new(
+                LinkFlowStateInner {
+                    initial_delivery_count: Constant::new(0),
+                    delivery_count: 0,
+                    link_credit: 0,
+                    avaiable: 0,
+                    drain: false,
+                    properties: None
+                }
+            )
+        );        
+        let mut producer = Producer::new(notifier.clone(), Arc::new(state));
+        let notified = notifier.notified();
+
+        let handle = tokio::spawn(async move {            
+            let item = LinkFlow::default();
+            producer.produce(item).await;
+        });
+
+        notified.await;
+        println!("wait passed");
+
+        handle.await.unwrap();
+    }
 }
