@@ -5,7 +5,7 @@ use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, Fields, Handle, SequenceNo, SessionError, TransferNumber},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol,
+    primitives::Symbol, messaging::{message, Message},
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -314,7 +314,7 @@ impl endpoint::Session for Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        payload: Option<BytesMut>,
+        message: Message,
     ) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_transfer");
         todo!()
@@ -445,14 +445,14 @@ impl endpoint::Session for Session {
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
-        payload: Option<BytesMut>,
+        message: Message,
     ) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here
 
         println!(">>> Debug: Session::on_outgoing_transfer");
         let body = SessionFrameBody::Transfer {
             performative: transfer,
-            payload,
+            message,
         };
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)

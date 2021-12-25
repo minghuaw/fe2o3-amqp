@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut, BytesMut};
-use fe2o3_amqp_types::performatives::{
+use fe2o3_amqp_types::{performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
-};
+}, messaging::Message};
 use serde::{ser::Serialize, Deserialize};
 use serde_amqp::{de::Deserializer, read::IoReader};
 use tokio_util::codec::{Decoder, Encoder};
@@ -97,7 +97,7 @@ pub enum FrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: Option<BytesMut>,
+        message: Message,
     },
     Disposition(Disposition),
     Detach(Detach),
@@ -113,25 +113,25 @@ pub enum FrameBody {
     Empty,
 }
 
-impl FrameBody {
-    /// The payload will be ignored unless the performative is Transfer
-    pub fn from_parts(performative: Performative, payload: Option<BytesMut>) -> Self {
-        match performative {
-            Performative::Open(performative) => FrameBody::Open(performative),
-            Performative::Begin(performative) => FrameBody::Begin(performative),
-            Performative::Attach(performative) => FrameBody::Attach(performative),
-            Performative::Flow(performative) => FrameBody::Flow(performative),
-            Performative::Transfer(performative) => FrameBody::Transfer {
-                performative,
-                payload,
-            },
-            Performative::Disposition(performative) => FrameBody::Disposition(performative),
-            Performative::Detach(performative) => FrameBody::Detach(performative),
-            Performative::End(performative) => FrameBody::End(performative),
-            Performative::Close(performative) => FrameBody::Close(performative),
-        }
-    }
-}
+// impl FrameBody {
+//     /// The payload will be ignored unless the performative is Transfer
+//     pub fn from_parts(performative: Performative, message: impl Into<Message>) -> Self {
+//         match performative {
+//             Performative::Open(performative) => FrameBody::Open(performative),
+//             Performative::Begin(performative) => FrameBody::Begin(performative),
+//             Performative::Attach(performative) => FrameBody::Attach(performative),
+//             Performative::Flow(performative) => FrameBody::Flow(performative),
+//             Performative::Transfer(performative) => FrameBody::Transfer {
+//                 performative,
+//                 message: message.into(),
+//             },
+//             Performative::Disposition(performative) => FrameBody::Disposition(performative),
+//             Performative::Detach(performative) => FrameBody::Detach(performative),
+//             Performative::End(performative) => FrameBody::End(performative),
+//             Performative::Close(performative) => FrameBody::Close(performative),
+//         }
+//     }
+// }
 
 pub struct FrameBodyCodec {}
 
@@ -149,12 +149,13 @@ impl Encoder<FrameBody> for FrameBodyCodec {
             FrameBody::Flow(performative) => performative.serialize(&mut serializer),
             FrameBody::Transfer {
                 performative,
-                payload,
+                message,
             } => {
                 performative.serialize(&mut serializer)?;
-                if let Some(payload) = payload {
-                    dst.put(payload);
-                }
+                message.serialize(&mut serializer)?;
+                // if let Some(payload) = payload {
+                //     dst.put(payload);
+                // }
                 Ok(())
             }
             FrameBody::Disposition(performative) => performative.serialize(&mut serializer),
@@ -180,18 +181,21 @@ impl Decoder for FrameBodyCodec {
         let performative: Performative = Deserialize::deserialize(&mut deserializer)?;
 
         let frame_body = match performative {
+            Performative::Open(performative) => FrameBody::Open(performative),
+            Performative::Begin(performative) => FrameBody::Begin(performative),
+            Performative::Attach(performative) => FrameBody::Attach(performative),
             Performative::Transfer(performative) => {
-                let payload = if src.has_remaining() {
-                    Some(src.split())
-                } else {
-                    None
-                };
+                let message = Message::deserialize(&mut deserializer)?;
                 FrameBody::Transfer {
                     performative,
-                    payload,
+                    message,
                 }
-            }
-            p @ _ => FrameBody::from_parts(p, None),
+            },
+            Performative::Flow(performative) => FrameBody::Flow(performative),
+            Performative::Disposition(performative) => FrameBody::Disposition(performative),
+            Performative::Detach(performative) => FrameBody::Detach(performative),
+            Performative::End(performative) => FrameBody::End(performative),
+            Performative::Close(performative) => FrameBody::Close(performative),
         };
 
         Ok(Some(frame_body))

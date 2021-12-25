@@ -106,10 +106,10 @@ where
             }
             SessionFrameBody::Transfer {
                 performative,
-                payload,
+                message,
             } => {
                 self.session
-                    .on_incoming_transfer(channel, performative, payload)
+                    .on_incoming_transfer(channel, performative, message)
                     .await
                     .map_err(Into::into)?;
             }
@@ -196,10 +196,10 @@ where
             LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow).map_err(Into::into)?,
             LinkFrame::Transfer {
                 performative,
-                payload,
+                message,
             } => self
                 .session
-                .on_outgoing_transfer(performative, payload)
+                .on_outgoing_transfer(performative, message)
                 .map_err(Into::into)?,
             LinkFrame::Disposition(disposition) => self
                 .session

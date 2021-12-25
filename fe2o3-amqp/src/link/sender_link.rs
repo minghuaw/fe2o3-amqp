@@ -260,14 +260,13 @@ impl endpoint::Link for SenderLink {
 
 #[async_trait]
 impl endpoint::SenderLink for SenderLink {
-    async fn send_transfer<W, M>(
+    async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        message: M,
+        message: Message,
     ) -> Result<(), <Self as endpoint::Link>::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
-        M: Into<Message> + Send,
     {
         use crate::util::Consume;
 

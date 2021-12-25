@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::SequenceNo,
     performatives::{Attach, Detach, Disposition, Flow, Transfer},
-    primitives::{Boolean, UInt},
+    primitives::{Boolean, UInt}, messaging::Message,
 };
 
 pub type LinkIncomingItem = LinkFrame;
@@ -13,7 +13,7 @@ pub enum LinkFrame {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: Option<BytesMut>,
+        message: Message,
     },
     Disposition(Disposition),
     Detach(Detach),

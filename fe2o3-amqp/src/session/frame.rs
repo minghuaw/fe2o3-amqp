@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
+use fe2o3_amqp_types::{performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}, messaging::Message};
 
 use crate::connection;
 
@@ -30,7 +30,7 @@ pub enum SessionFrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: Option<BytesMut>,
+        message: Message,
     },
     Disposition(Disposition),
     Detach(Detach),
