@@ -55,7 +55,7 @@ impl Sender<Detached> {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
             let link_handle = LinkHandle {
                 tx,
-                flow_state: self.link.flow_state.clone(),
+                flow_state: self.link.flow_state.producer(),
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle = session::allocate_link(&mut session_control, self.link.name.clone(), link_handle).await?;

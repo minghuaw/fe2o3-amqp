@@ -12,9 +12,9 @@ use fe2o3_amqp_types::{
 use futures_util::{Sink, SinkExt};
 use tokio::sync::mpsc;
 
-use crate::{endpoint};
+use crate::{endpoint, util::Consumer};
 
-use super::{LinkFlowState, LinkFrame, LinkState, error::DetachError};
+use super::{LinkFlowState, LinkFrame, LinkState};
 use crate::link;
 
 /// Manages the link state
@@ -44,7 +44,7 @@ pub struct SenderLink {
     // See Section 2.6.7 Flow Control
     // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
     // pub(crate) properties: Option<Fields>,
-    pub(crate) flow_state: Arc<LinkFlowState>,
+    pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
 }
 
 impl SenderLink {
@@ -146,7 +146,8 @@ impl endpoint::Link for SenderLink {
             0 => None,
             val @ _ => Some(val as u64),
         };
-        let properties = self.flow_state.properties().await;
+        let initial_delivery_count = Some(self.flow_state.state().initial_delivery_count().await);
+        let properties = self.flow_state.state().properties().await;
 
         let attach = Attach {
             name: self.name.clone(),
@@ -162,7 +163,7 @@ impl endpoint::Link for SenderLink {
             /// This MUST NOT be null if role is sender,
             /// and it is ignored if the role is receiver.
             /// See subsection 2.6.7.
-            initial_delivery_count: Some(self.flow_state.initial_delivery_count().await),
+            initial_delivery_count,
 
             max_message_size,
             offered_capabilities: self.offered_capabilities.clone(),

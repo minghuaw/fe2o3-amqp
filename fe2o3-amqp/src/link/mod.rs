@@ -1,6 +1,5 @@
 mod frame;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU32},
     Arc,
 };
 
@@ -22,7 +21,7 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::{endpoint::{LinkFlow, self}, util::{Constant, ProducerState, Consume, Consumer}};
+use crate::{endpoint::{LinkFlow, self}, util::{Constant, ProducerState, Consume, Consumer, Producer, Produce}};
 
 pub mod type_state {
     pub struct Attached { }
@@ -104,10 +103,10 @@ impl LinkFlowState {
     ///
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`
+    #[inline]
     pub(crate) async fn on_incoming_flow(&self, flow: LinkFlow) -> Option<LinkFlow> {
         println!(">>> Debug: LinkFlowState::on_incoming_flow");
 
-        use std::sync::atomic::Ordering;
         match self {
             LinkFlowState::Sender(lock) => {
                 let mut state = lock.write().await;
@@ -231,7 +230,7 @@ impl LinkFlowState {
 
 pub struct LinkHandle {
     pub tx: mpsc::Sender<LinkIncomingItem>,
-    pub flow_state: Arc<LinkFlowState>,
+    pub flow_state: Producer<Arc<LinkFlowState>>,
 }
 
 pub(crate) async fn do_attach<L, W, R>(link: &mut L, writer: &mut W, reader: &mut R) -> Result<(), Error>
@@ -321,8 +320,15 @@ impl ProducerState for Arc<LinkFlowState> {
     // If echo is requested, a Some(LinkFlow) will be returned
     type Outcome = Option<LinkFlow>; 
 
+    #[inline]
     async fn update_state(&mut self, item: Self::Item) -> Self::Outcome {
         self.on_incoming_flow(item).await
+    }
+}
+
+impl Producer<Arc<LinkFlowState>> {
+    pub async fn on_incoming_flow(&mut self, flow: LinkFlow) -> Option<LinkFlow> {
+        self.produce(flow).await
     }
 }
 
@@ -332,29 +338,32 @@ impl Consume for Consumer<Arc<LinkFlowState>> {
     type Outcome = ();
 
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
-        use std::sync::atomic::Ordering;
-
         // check whether there is anough credit
         match self.state().as_ref() {
-            LinkFlowState::Sender(inner) => {
-                // // increment delivery count and decrement link_credit
-                // let curr = inner.link_credit.load(Ordering::Relaxed);
-                // if curr < item {
-                //     // wait for flow state to change
-                //     self.notifier.notified().await;
-                // } else {
-                //     loop {
-
-                //     }
-                // }
-                todo!()
+            LinkFlowState::Sender(lock) => {
+                // increment delivery count and decrement link_credit
+                loop {
+                    match consume_link_credit(&lock, item).await {
+                        Ok(_) => return (),
+                        Err(_) => self.notifier.notified().await
+                    }
+                }
             },
-            LinkFlowState::Receiver(inner) => {
+            LinkFlowState::Receiver(lock) => {
                 todo!()
             }
-        };
+        }
+    }
+}
 
-        todo!()
+async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
+    let mut state = lock.write().await;
+    if state.link_credit < count {
+        return Err(())
+    } else {
+        state.delivery_count += count;
+        state.link_credit -= count;
+        Ok(())
     }
 }
 

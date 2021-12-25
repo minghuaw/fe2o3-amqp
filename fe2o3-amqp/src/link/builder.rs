@@ -14,7 +14,7 @@ use fe2o3_amqp_types::{
     primitives::{Symbol, ULong},
 };
 use futures_util::{Sink, SinkExt, Stream};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, Notify};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
@@ -25,7 +25,7 @@ use crate::{
         LinkIncomingItem, LinkState, Error
     },
     session::{SessionHandle, self},
-    util::Constant, endpoint,
+    util::{Constant, Producer, Consumer}, endpoint,
 };
 
 use super::{role, Receiver, Sender, type_state::Attached};
@@ -259,9 +259,10 @@ impl Builder<role::Sender, WithName, WithTarget> {
             properties: self.properties,
         };
         let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
+        let notifier = Arc::new(Notify::new());
         let link_handle = LinkHandle {
             tx: incoming_tx,
-            flow_state: flow_state.clone(),
+            flow_state: Producer::new(notifier.clone(), flow_state.clone()),
         };
 
         // Create Link in Session
@@ -293,7 +294,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
             // delivery_count: self.initial_delivery_count,
             // properties: self.properties,
-            flow_state,
+            flow_state: Consumer::new(notifier, flow_state),
         };
 
         // Send an Attach frame
