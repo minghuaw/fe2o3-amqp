@@ -13,26 +13,26 @@ pub struct Message {
     pub message_annotations: MessageAnnotations,
     pub properties: Properties,
     pub application_properties: ApplicationProperties,
-    pub data: Data,
+    pub body_section: BodySection,
     pub footer: Footer,
 }
 
 #[derive(Debug, Clone)]
-pub enum Body {
+pub enum BodySection {
     Data(Vec<Data>),
     Sequence(Vec<AmqpSequence>),
     Value(AmqpValue)
 }
 
-impl Serialize for Body {
+impl Serialize for BodySection {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer 
     {
         match self {
-            Body::Data(data) => data.serialize(serializer),
-            Body::Sequence(seq) => seq.serialize(serializer),
-            Body::Value(val) => val.serialize(serializer)
+            BodySection::Data(data) => data.serialize(serializer),
+            BodySection::Sequence(seq) => seq.serialize(serializer),
+            BodySection::Value(val) => val.serialize(serializer)
         }
     }
 }
@@ -49,7 +49,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("Body variant. One of Vec<Data>, Vec<AmqpSequence>, AmqpValue")
+        formatter.write_str("BodySection variant. One of Vec<Data>, Vec<AmqpSequence>, AmqpValue")
     }
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
@@ -91,10 +91,10 @@ impl<'de> de::Deserialize<'de> for Field {
 struct Visitor { }
 
 impl<'de> de::Visitor<'de> for Visitor {
-    type Value = Body;
+    type Value = BodySection;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("enum Body")
+        formatter.write_str("enum BodySection")
     }
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
@@ -105,7 +105,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
         if let Field::Value = val {
             let value = variant.newtype_variant()?;
-            Ok(Body::Value(value))
+            Ok(BodySection::Value(value))
         } else {
             let values: Vec<Described<Value>> = variant.newtype_variant()?;
 
@@ -123,7 +123,7 @@ impl<'de> de::Visitor<'de> for Visitor {
                                 .map(|d| Data::try_from(*d.value))
                                 .collect();
                             data
-                                .map(|v| Body::Data(v))
+                                .map(|v| BodySection::Data(v))
                                 .map_err(|_| de::Error::custom("Expecting Data"))
                         },
                         // Value
@@ -132,7 +132,7 @@ impl<'de> de::Visitor<'de> for Visitor {
                                 .map(|d| AmqpSequence::try_from(*d.value))
                                 .collect();
                             seq
-                                .map(|v| Body::Sequence(v))
+                                .map(|v| BodySection::Sequence(v))
                                 .map_err(|_| de::Error::custom("Expecting AmqpSequence"))
                         },
                         _ => return Err(de::Error::custom("Expecting either Data or AmqpSequence"))
@@ -145,7 +145,7 @@ impl<'de> de::Visitor<'de> for Visitor {
                                 .map(|d| Data::try_from(*d.value))
                                 .collect();
                             data
-                                .map(|v| Body::Data(v))
+                                .map(|v| BodySection::Data(v))
                                 .map_err(|_| de::Error::custom("Expecting Data"))
                         },
                         "amqp:amqp-sequence:list" => {
@@ -153,7 +153,7 @@ impl<'de> de::Visitor<'de> for Visitor {
                                 .map(|d| AmqpSequence::try_from(*d.value))
                                 .collect();
                             seq
-                                .map(|v| Body::Sequence(v))
+                                .map(|v| BodySection::Sequence(v))
                                 .map_err(|_| de::Error::custom("Expecting AmqpSequence"))
                         },
                         _ => return Err(de::Error::custom("Expecting either Data or AmqpSequence"))
@@ -164,7 +164,7 @@ impl<'de> de::Visitor<'de> for Visitor {
     }
 }
 
-impl<'de> de::Deserialize<'de> for Body {
+impl<'de> de::Deserialize<'de> for BodySection {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de> 
@@ -188,16 +188,16 @@ mod tests {
     use serde_amqp::{to_vec, from_slice, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::messaging::{Data, message::Body, AmqpSequence};
+    use crate::messaging::{Data, message::BodySection, AmqpSequence};
 
     #[test]
     fn test_serialize_deserialize_body() {
         let data = b"amqp".to_vec();
         let data = vec![Data(ByteBuf::from(data))];
-        let body = Body::Data(data);
+        let body = BodySection::Data(data);
         let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let deserialized: Body = from_slice(&serialized).unwrap();
+        let deserialized: BodySection = from_slice(&serialized).unwrap();
         println!("{:?}", deserialized);
     }
 
@@ -205,19 +205,19 @@ mod tests {
     fn test_field_deserializer() {
         // let data = b"amqp".to_vec();
         // let data = vec![Data(ByteBuf::from(data))];
-        // let body = Body::Data(data);
+        // let body = BodySection::Data(data);
 
-        let body = Body::Sequence(
+        let body = BodySection::Sequence(
             vec![
                 AmqpSequence(vec![Value::Bool(true)])
             ]
         );
 
-        // let body = Body::Value(AmqpValue(Value::Bool(true)));
+        // let body = BodySection::Value(AmqpValue(Value::Bool(true)));
 
         let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Body = from_slice(&serialized).unwrap();
+        let field: BodySection = from_slice(&serialized).unwrap();
         println!("{:?}", field);
     }
 }
