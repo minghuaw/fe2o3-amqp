@@ -178,7 +178,7 @@ impl endpoint::Link for SenderLink {
         let frame = LinkFrame::Attach(attach);
 
         match self.local_state {
-            LinkState::Unattached 
+            LinkState::Unattached
             | LinkState::Detached // May attempt to re-attach
             | LinkState::DetachSent => {
                 writer.send(frame).await

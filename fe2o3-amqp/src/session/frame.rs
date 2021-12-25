@@ -1,5 +1,8 @@
 use bytes::BytesMut;
-use fe2o3_amqp_types::{performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer}, messaging::Message};
+use fe2o3_amqp_types::{
+    messaging::Message,
+    performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
+};
 
 use crate::connection;
 

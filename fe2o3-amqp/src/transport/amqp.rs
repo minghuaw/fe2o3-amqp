@@ -1,7 +1,10 @@
 use bytes::{Buf, BufMut, BytesMut};
-use fe2o3_amqp_types::{performatives::{
-    Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
-}, messaging::Message};
+use fe2o3_amqp_types::{
+    messaging::Message,
+    performatives::{
+        Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
+    },
+};
 use serde::{ser::Serialize, Deserialize};
 use serde_amqp::{de::Deserializer, read::IoReader};
 use tokio_util::codec::{Decoder, Encoder};
@@ -190,7 +193,7 @@ impl Decoder for FrameBodyCodec {
                     performative,
                     message,
                 }
-            },
+            }
             Performative::Flow(performative) => FrameBody::Flow(performative),
             Performative::Disposition(performative) => FrameBody::Disposition(performative),
             Performative::Detach(performative) => FrameBody::Detach(performative),
