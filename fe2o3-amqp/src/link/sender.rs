@@ -88,7 +88,9 @@ impl Sender<Attached> {
             .await
     }
 
-    pub async fn send(&mut self, message: Message) -> Result<Disposition, Error> {
+    pub async fn send(&mut self, message: Message) -> Result<(), Error> {
+
+
         todo!()
     }
 
@@ -238,4 +240,8 @@ fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
         is_closed_by_remote: false,
         error: Some(definitions::Error::new(condition, description, None))
     }
+}
+
+pub struct SendFut {
+
 }
