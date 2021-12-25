@@ -166,6 +166,18 @@ pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
 )]
 pub struct Data(pub Binary);
 
+impl TryFrom<Value> for Data {
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if let Value::Binary(buf) = value {
+            Ok(Data(buf))
+        } else {
+            Err(value)
+        }
+    }
+}
+
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
@@ -177,6 +189,18 @@ pub struct Data(pub Binary);
     encoding = "basic"
 )]
 pub struct AmqpSequence(pub Vec<Value>);
+
+impl TryFrom<Value> for AmqpSequence {
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        if let Value::List(vals) = value {
+            Ok(AmqpSequence(vals))
+        } else {
+            Err(value)
+        }
+    }
+}
 
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
@@ -234,3 +258,8 @@ pub type Address = String;
 
 /// 3.2.16 CONSTANTS
 pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
+
+#[cfg(test)]
+mod tests {
+    
+}

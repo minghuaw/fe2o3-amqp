@@ -13,8 +13,8 @@ use crate::{
 /// Two pointers are used to reduce the memory size of the Value type.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Described<T> {
-    descriptor: Box<Descriptor>,
-    value: Box<T>,
+    pub descriptor: Box<Descriptor>,
+    pub value: Box<T>,
 }
 
 impl<T: ser::Serialize> ser::Serialize for Described<T> {

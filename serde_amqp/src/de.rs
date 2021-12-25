@@ -1005,6 +1005,8 @@ where
     where
         V: de::Visitor<'de>,
     {
+        use crate::__constants::UNTAGGED_ENUM;
+
         println!(">>> Debug: deserialize_enum");
         if name == VALUE {
             self.enum_type = EnumType::Value;
@@ -1012,6 +1014,9 @@ where
         } else if name == DESCRIPTOR {
             println!(">>> Debug: EnumType::Descriptor");
             self.enum_type = EnumType::Descriptor;
+            visitor.visit_enum(VariantAccess::new(self))
+        } else if name == UNTAGGED_ENUM {
+            println!(">>> Debug: untagged enum");
             visitor.visit_enum(VariantAccess::new(self))
         } else {
             // Considering the following enum serialization format
@@ -1075,7 +1080,8 @@ where
             EnumType::None => {
                 println!(">>> Debug: deserialize_identifier EnumType::None");
                 // The following are the possible identifiers
-                match self.get_elem_code_or_peek_byte()?.try_into()? {
+                let code = self.get_elem_code_or_peek_byte()?;
+                match code.try_into()? {
                     // If a struct is serialized as a map, then the fields are serialized as str
                     EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
                     // FIXME: Enum variant currently are serialzied as list of with variant index and a list
@@ -1093,7 +1099,8 @@ where
                     }
                     // Other types should not be used to serialize identifiers
                     EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
-                    _ => Err(Error::InvalidFormatCode),
+                    // _ => Err(Error::InvalidFormatCode),
+                    _ => visitor.visit_u8(code)
                 }
             }
         }

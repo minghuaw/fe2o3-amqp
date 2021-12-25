@@ -8,6 +8,9 @@ pub const DESCRIBED_MAP: &str = "AMQP1.0_DESCRIBED_MAP";
 #[doc(hidden)]
 pub const DESCRIPTOR: &str = "AMQP1.0_DESCRIPTOR";
 
+#[doc(hidden)]
+pub const UNTAGGED_ENUM: &str = "FE2O3_AMQP_UNTAGGED";
+
 // These constants should only be public on the crate level
 // to avoid accidental misuse
 pub(crate) const VALUE: &str = "AMQP1.0_VALUE";
