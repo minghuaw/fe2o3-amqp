@@ -260,6 +260,4 @@ pub type Address = String;
 pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
 
 #[cfg(test)]
-mod tests {
-    
-}
+mod tests {}

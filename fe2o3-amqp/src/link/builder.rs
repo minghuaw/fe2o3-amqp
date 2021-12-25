@@ -8,27 +8,28 @@ use std::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo, AmqpError, Handle},
+    definitions::{AmqpError, Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target},
-    performatives::{Detach, Attach},
+    performatives::{Attach, Detach},
     primitives::{Symbol, ULong},
 };
 use futures_util::{Sink, SinkExt, Stream};
-use tokio::sync::{mpsc, RwLock, Notify};
+use tokio::sync::{mpsc, Notify, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
+    endpoint,
     link::{
-        sender_link::SenderLink, LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle,
-        LinkIncomingItem, LinkState, Error
+        sender_link::SenderLink, Error, LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle,
+        LinkIncomingItem, LinkState,
     },
-    session::{SessionHandle, self},
-    util::{Constant, Producer, Consumer}, endpoint,
+    session::{self, SessionHandle},
+    util::{Constant, Consumer, Producer},
 };
 
-use super::{role, Receiver, Sender, type_state::Attached};
+use super::{role, type_state::Attached, Receiver, Sender};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -266,8 +267,8 @@ impl Builder<role::Sender, WithName, WithTarget> {
         };
 
         // Create Link in Session
-        let output_handle = session::allocate_link(&mut session.control, self.name.clone(), link_handle)
-            .await?;
+        let output_handle =
+            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         // Get writer to session
         let writer = session.outgoing.clone();
@@ -320,4 +321,3 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         todo!()
     }
 }
-

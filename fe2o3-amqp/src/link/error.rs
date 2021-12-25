@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::definitions::{AmqpError, LinkError, self, ErrorCondition};
+use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, LinkError};
 use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
@@ -6,7 +6,7 @@ use crate::session::AllocLinkError;
 #[derive(Debug)]
 pub struct DetachError {
     pub(crate) is_closed_by_remote: bool,
-    pub(crate) error: Option<definitions::Error>
+    pub(crate) error: Option<definitions::Error>,
 }
 
 impl DetachError {
@@ -17,7 +17,7 @@ impl DetachError {
     pub fn error_condition(&self) -> Option<&ErrorCondition> {
         match &self.error {
             Some(e) => Some(&e.condition),
-            None => None
+            None => None,
         }
     }
 
@@ -26,14 +26,14 @@ impl DetachError {
     }
 }
 
-impl<T> From<T> for DetachError 
-where 
+impl<T> From<T> for DetachError
+where
     T: Into<definitions::Error>,
 {
     fn from(err: T) -> Self {
         Self {
             is_closed_by_remote: false,
-            error: Some(err.into())
+            error: Some(err.into()),
         }
     }
 }
@@ -73,7 +73,7 @@ impl From<LinkError> for Error {
     fn from(err: LinkError) -> Self {
         Self::LinkError {
             condition: err,
-            description: None
+            description: None,
         }
     }
 }
@@ -82,7 +82,7 @@ impl<T> From<mpsc::error::SendError<T>> for Error {
     fn from(_: mpsc::error::SendError<T>) -> Self {
         Self::AmqpError {
             condition: AmqpError::IllegalState,
-            description: Some("Failed to send to sesssion".to_string())
+            description: Some("Failed to send to sesssion".to_string()),
         }
     }
 }

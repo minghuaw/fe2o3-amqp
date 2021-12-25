@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, AmqpError, self,
+        self, AmqpError, DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode,
     },
-    messaging::{DeliveryState, Source, Target, Message},
+    messaging::{DeliveryState, Message, Source, Target},
     performatives::{Attach, Detach, Disposition},
     primitives::Symbol,
 };
@@ -66,8 +66,8 @@ impl endpoint::Link for SenderLink {
             LinkState::Detached => {
                 // remote peer is attempting to re-attach
                 self.local_state = LinkState::AttachReceived
-            },
-            _ => return Err(AmqpError::IllegalState.into())
+            }
+            _ => return Err(AmqpError::IllegalState.into()),
         };
 
         self.input_handle = Some(attach.handle);
@@ -76,7 +76,7 @@ impl endpoint::Link for SenderLink {
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
         // attach frames could be in conflict. In this case, the sender is considered to hold the authoritative version of the
         // **the receiver is considered to hold the authoritative version of the target properties**.
-        self.target = attach.target; 
+        self.target = attach.target;
 
         // set max message size
         let remote_max_msg_size = attach.max_message_size.unwrap_or_else(|| 0);
@@ -107,18 +107,21 @@ impl endpoint::Link for SenderLink {
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => self.local_state = LinkState::Detached,
-            _ => return Err(definitions::Error::new(
-                AmqpError::IllegalState,
-                Some("Illegal local state".into()),
-                None
-            ).into())
+            _ => {
+                return Err(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    Some("Illegal local state".into()),
+                    None,
+                )
+                .into())
+            }
         };
 
         // Receiving detach forwarded by session means it's ready to drop the output handle
         let _ = self.output_handle.take();
 
         if let Some(err) = detach.error {
-            return Err(err.into())
+            return Err(err.into());
         }
         Ok(())
     }
@@ -133,10 +136,12 @@ impl endpoint::Link for SenderLink {
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
-            None => return Err(link::Error::AmqpError {
-                condition: AmqpError::InvalidField,
-                description: Some("Output handle is None".into())
-            }),
+            None => {
+                return Err(link::Error::AmqpError {
+                    condition: AmqpError::InvalidField,
+                    description: Some("Output handle is None".into()),
+                })
+            }
         };
         let unsettled = match self.unsettled.len() {
             0 => None,
@@ -205,7 +210,12 @@ impl endpoint::Link for SenderLink {
         todo!()
     }
 
-    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<definitions::Error>) -> Result<(), Self::Error>
+    async fn send_detach<W>(
+        &mut self,
+        writer: &mut W,
+        closed: bool,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
@@ -221,24 +231,27 @@ impl endpoint::Link for SenderLink {
                 match self.local_state {
                     LinkState::Attached => self.local_state = LinkState::DetachSent,
                     LinkState::DetachReceived => self.local_state = LinkState::Detached,
-                    _ => return Err(AmqpError::IllegalState.into())
+                    _ => return Err(AmqpError::IllegalState.into()),
                 };
 
                 let detach = Detach {
-                    handle: handle.clone(), 
+                    handle: handle.clone(),
                     closed,
-                    error
+                    error,
                 };
-                writer.send(LinkFrame::Detach(detach)).await
-                    .map_err(|_| link::Error::AmqpError{
+                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
+                    link::Error::AmqpError {
                         condition: AmqpError::IllegalState,
                         description: Some("Failed to send to session".to_string()),
-                    })?;
-            },
-            None => return Err(link::Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is already detached".to_string()),
-            })
+                    }
+                })?;
+            }
+            None => {
+                return Err(link::Error::AmqpError {
+                    condition: AmqpError::IllegalState,
+                    description: Some("Link is already detached".to_string()),
+                })
+            }
         }
 
         Ok(())
@@ -263,7 +276,7 @@ impl endpoint::SenderLink for SenderLink {
         // Whether drain flag is set
         if self.flow_state.state().drain().await {
             println!(">>> Debug: SenderLink::send_transfer drain");
-            return Ok(())
+            return Ok(());
         }
 
         // Consume link credit

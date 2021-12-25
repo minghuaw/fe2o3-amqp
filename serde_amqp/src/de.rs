@@ -1100,7 +1100,7 @@ where
                     // Other types should not be used to serialize identifiers
                     EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
                     // _ => Err(Error::InvalidFormatCode),
-                    _ => visitor.visit_u8(code)
+                    _ => visitor.visit_u8(code),
                 }
             }
         }

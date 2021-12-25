@@ -11,10 +11,7 @@ pub struct Producer<State> {
 
 impl<State> Producer<State> {
     pub fn new(notifier: Arc<Notify>, state: State) -> Self {
-        Self {
-            notifier,
-            state,
-        }
+        Self { notifier, state }
     }
 
     pub fn state(&self) -> &State {
@@ -43,8 +40,8 @@ pub trait ProducerState {
 }
 
 #[async_trait]
-impl<T> Produce for Producer<T> 
-where 
+impl<T> Produce for Producer<T>
+where
     T: ProducerState + Send,
 {
     type Item = T::Item;

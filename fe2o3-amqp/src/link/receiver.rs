@@ -1,10 +1,10 @@
 use fe2o3_amqp_types::messaging::Message;
 
-use crate::{session::SessionHandle};
+use crate::session::SessionHandle;
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
-    role, Error
+    role, Error,
 };
 
 pub struct Receiver {}

@@ -1,12 +1,8 @@
 mod frame;
-use std::sync::{
-    Arc,
-};
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::{
-    definitions::{Fields, SequenceNo, AmqpError},
-};
+use fe2o3_amqp_types::definitions::{AmqpError, Fields, SequenceNo};
 pub use frame::*;
 pub mod builder;
 mod error;
@@ -21,12 +17,15 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::{endpoint::{LinkFlow, self}, util::{Constant, ProducerState, Consume, Consumer, Producer, Produce}};
+use crate::{
+    endpoint::{self, LinkFlow},
+    util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
+};
 
 pub mod type_state {
-    pub struct Attached { }
+    pub struct Attached {}
 
-    pub struct Detached { }
+    pub struct Detached {}
 }
 
 pub mod role {
@@ -60,7 +59,6 @@ pub enum LinkState {
 
     /// The link is detached
     Detached,
-
     // /// A closing detach frame has been sent
     // CloseSent,
 
@@ -133,8 +131,7 @@ impl LinkFlowState {
                 });
 
                 if let Some(link_credit_rcv) = flow.link_credit {
-                    let link_credit = delivery_count_rcv + link_credit_rcv
-                        - state.delivery_count;
+                    let link_credit = delivery_count_rcv + link_credit_rcv - state.delivery_count;
                     state.link_credit = link_credit;
                 }
 
@@ -208,25 +205,15 @@ impl LinkFlowState {
 
     pub async fn drain(&self) -> bool {
         match self {
-            LinkFlowState::Sender(lock) => {
-                lock.read().await.drain
-            },
-            LinkFlowState::Receiver(lock) => {
-                lock.read().await.drain
-            }
+            LinkFlowState::Sender(lock) => lock.read().await.drain,
+            LinkFlowState::Receiver(lock) => lock.read().await.drain,
         }
     }
 
     pub async fn initial_delivery_count(&self) -> SequenceNo {
         match self {
-            LinkFlowState::Sender(lock) => {
-                *lock.read().await
-                    .initial_delivery_count.value()
-            },
-            LinkFlowState::Receiver(lock) => {
-                *lock.read().await
-                    .initial_delivery_count.value()
-            },
+            LinkFlowState::Sender(lock) => *lock.read().await.initial_delivery_count.value(),
+            LinkFlowState::Receiver(lock) => *lock.read().await.initial_delivery_count.value(),
         }
     }
 
@@ -244,8 +231,12 @@ pub struct LinkHandle {
     pub flow_state: Producer<Arc<LinkFlowState>>,
 }
 
-pub(crate) async fn do_attach<L, W, R>(link: &mut L, writer: &mut W, reader: &mut R) -> Result<(), Error>
-where 
+pub(crate) async fn do_attach<L, W, R>(
+    link: &mut L,
+    writer: &mut W,
+    reader: &mut R,
+) -> Result<(), Error>
+where
     L: endpoint::Link<Error = Error>,
     W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
@@ -256,20 +247,19 @@ where
     endpoint::Link::send_attach(link, writer).await?;
 
     // Wait for an Attach frame
-    let frame = reader
-        .next()
-        .await
-        .ok_or_else(|| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Expecting remote attach frame".to_string())
-        })?;
+    let frame = reader.next().await.ok_or_else(|| Error::AmqpError {
+        condition: AmqpError::IllegalState,
+        description: Some("Expecting remote attach frame".to_string()),
+    })?;
     let remote_attach = match frame {
         LinkFrame::Attach(attach) => attach,
         // TODO: how to handle this?
-        _ => return Err(Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Expecting remote attach frame".to_string())
-        })
+        _ => {
+            return Err(Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Expecting remote attach frame".to_string()),
+            })
+        }
     };
 
     // Note that if the application chooses not to create a terminus,
@@ -280,10 +270,10 @@ where
     match remote_attach.target.is_some() {
         true => {
             if let Err(_) = link.on_incoming_attach(remote_attach).await {
-                // Should any error happen handling remote 
+                // Should any error happen handling remote
                 todo!()
             }
-        },
+        }
         false => {
             // If no target is supplied with the remote attach frame,
             // an immediate detach should be expected
@@ -297,28 +287,27 @@ where
 pub(crate) async fn expect_detach_then_detach<L, W, R>(
     link: &mut L,
     writer: &mut W,
-    reader: &mut R, 
-) -> Result<(), Error> 
-where 
+    reader: &mut R,
+) -> Result<(), Error>
+where
     L: endpoint::Link<Error = Error>,
     W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
-    use futures_util::{StreamExt};
+    use futures_util::StreamExt;
 
-    let frame = reader
-        .next()
-        .await
-        .ok_or_else(|| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Expecting remote detach frame".to_string())
-        })?;
+    let frame = reader.next().await.ok_or_else(|| Error::AmqpError {
+        condition: AmqpError::IllegalState,
+        description: Some("Expecting remote detach frame".to_string()),
+    })?;
     let _remote_detach = match frame {
         LinkFrame::Detach(detach) => detach,
-        _ => return Err(Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Expecting remote detach frame".to_string())
-        }),
+        _ => {
+            return Err(Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Expecting remote detach frame".to_string()),
+            })
+        }
     };
 
     link.send_detach(writer, false, None).await?;
@@ -329,7 +318,7 @@ where
 impl ProducerState for Arc<LinkFlowState> {
     type Item = LinkFlow;
     // If echo is requested, a Some(LinkFlow) will be returned
-    type Outcome = Option<LinkFlow>; 
+    type Outcome = Option<LinkFlow>;
 
     #[inline]
     async fn update_state(&mut self, item: Self::Item) -> Self::Outcome {
@@ -356,10 +345,10 @@ impl Consume for Consumer<Arc<LinkFlowState>> {
                 loop {
                     match consume_link_credit(&lock, item).await {
                         Ok(_) => return (),
-                        Err(_) => self.notifier.notified().await
+                        Err(_) => self.notifier.notified().await,
                     }
                 }
-            },
+            }
             LinkFlowState::Receiver(lock) => {
                 todo!()
             }
@@ -370,7 +359,7 @@ impl Consume for Consumer<Arc<LinkFlowState>> {
 async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
     let mut state = lock.write().await;
     if state.link_credit < count {
-        return Err(())
+        return Err(());
     } else {
         state.delivery_count += count;
         state.link_credit -= count;
@@ -386,26 +375,22 @@ mod tests {
         use tokio::sync::Notify;
         use tokio::sync::RwLock;
 
-        use crate::util::{Producer, Produce};
         use super::*;
+        use crate::util::{Produce, Producer};
 
         let notifier = Arc::new(Notify::new());
-        let state = LinkFlowState::Sender(
-            RwLock::new(
-                LinkFlowStateInner {
-                    initial_delivery_count: Constant::new(0),
-                    delivery_count: 0,
-                    link_credit: 0,
-                    avaiable: 0,
-                    drain: false,
-                    properties: None
-                }
-            )
-        );        
+        let state = LinkFlowState::Sender(RwLock::new(LinkFlowStateInner {
+            initial_delivery_count: Constant::new(0),
+            delivery_count: 0,
+            link_credit: 0,
+            avaiable: 0,
+            drain: false,
+            properties: None,
+        }));
         let mut producer = Producer::new(notifier.clone(), Arc::new(state));
         let notified = notifier.notified();
 
-        let handle = tokio::spawn(async move {            
+        let handle = tokio::spawn(async move {
             let item = LinkFlow::default();
             producer.produce(item).await;
         });

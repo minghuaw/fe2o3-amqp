@@ -12,10 +12,7 @@ pub struct Consumer<State> {
 
 impl<State> Consumer<State> {
     pub fn new(notifier: Arc<Notify>, state: State) -> Self {
-        Self {
-            notifier,
-            state
-        }
+        Self { notifier, state }
     }
 
     pub fn state(&self) -> &State {

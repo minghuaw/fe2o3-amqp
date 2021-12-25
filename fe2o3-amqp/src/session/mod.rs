@@ -338,16 +338,16 @@ impl endpoint::Session for Session {
         // Remove the link by input handle
         let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
             Some(handle) => handle,
-            None => todo!() // End session with unattached handle?
+            None => todo!(), // End session with unattached handle?
         };
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
                 match link.tx.send(LinkFrame::Detach(detach)).await {
-                    Ok(_) => {},
-                    Err(e) => todo!() // End session with unattached handle?
+                    Ok(_) => {}
+                    Err(e) => todo!(), // End session with unattached handle?
                 }
-            },
-            None => todo!() // End session with unattached handle?
+            }
+            None => todo!(), // End session with unattached handle?
         }
 
         Ok(())

@@ -1,9 +1,14 @@
-use serde::{Deserialize, Serialize, de::{self, VariantAccess}};
-use serde_amqp::{value::Value, format_code::EncodingCodes, descriptor::Descriptor, described::Described};
+use serde::{
+    de::{self, VariantAccess},
+    Deserialize, Serialize,
+};
+use serde_amqp::{
+    described::Described, descriptor::Descriptor, format_code::EncodingCodes, value::Value,
+};
 
 use super::{
-    ApplicationProperties, Data, DeliveryAnnotations, Footer, Header, MessageAnnotations,
-    Properties, AmqpSequence, AmqpValue,
+    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
+    MessageAnnotations, Properties,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,23 +26,23 @@ pub struct Message {
 pub enum BodySection {
     Data(Vec<Data>),
     Sequence(Vec<AmqpSequence>),
-    Value(AmqpValue)
+    Value(AmqpValue),
 }
 
 impl Serialize for BodySection {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         match self {
             BodySection::Data(data) => data.serialize(serializer),
             BodySection::Sequence(seq) => seq.serialize(serializer),
-            BodySection::Value(val) => val.serialize(serializer)
+            BodySection::Value(val) => val.serialize(serializer),
         }
     }
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 #[derive(Debug)]
 enum Field {
@@ -54,27 +59,28 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
-        let val = match v.try_into()
-            .map_err(|_| de::Error::custom("Invalid format code for message body"))? 
+        let val = match v
+            .try_into()
+            .map_err(|_| de::Error::custom("Invalid format code for message body"))?
         {
             EncodingCodes::DescribedType => Field::Value,
-            EncodingCodes::List0 
-            | EncodingCodes::List8 
-            | EncodingCodes::List32 => Field::DataOrSequence,
-            _ => return Err(de::Error::custom("Invalid format code for message body"))
+            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
+                Field::DataOrSequence
+            }
+            _ => return Err(de::Error::custom("Invalid format code for message body")),
         };
         Ok(val)
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         match v {
             0x0000_0000_0000_0077 => Ok(Field::Value),
-            _ => return Err(de::Error::custom("Invalid descriptor code"))
+            _ => return Err(de::Error::custom("Invalid descriptor code")),
         }
     }
 }
@@ -82,13 +88,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_ignored_any(FieldVisitor{})
+        deserializer.deserialize_ignored_any(FieldVisitor {})
     }
 }
 
-struct Visitor { }
+struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
     type Value = BodySection;
@@ -99,7 +105,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-        A: de::EnumAccess<'de>, 
+        A: de::EnumAccess<'de>,
     {
         let (val, variant) = data.variant()?;
 
@@ -109,7 +115,8 @@ impl<'de> de::Visitor<'de> for Visitor {
         } else {
             let values: Vec<Described<Value>> = variant.newtype_variant()?;
 
-            let descriptor = values.first()
+            let descriptor = values
+                .first()
                 .ok_or_else(|| de::Error::custom("Expecting either Data or AmqpSequence"))?
                 .descriptor
                 .as_ref();
@@ -119,46 +126,46 @@ impl<'de> de::Visitor<'de> for Visitor {
                     match code {
                         // Data
                         0x0000_0000_0000_0075 => {
-                            let data: Result<Vec<Data>, _> = values.into_iter()
+                            let data: Result<Vec<Data>, _> = values
+                                .into_iter()
                                 .map(|d| Data::try_from(*d.value))
                                 .collect();
-                            data
-                                .map(|v| BodySection::Data(v))
+                            data.map(|v| BodySection::Data(v))
                                 .map_err(|_| de::Error::custom("Expecting Data"))
-                        },
+                        }
                         // Value
                         0x0000_0000_0000_0076 => {
-                            let seq: Result<Vec<AmqpSequence>, _> = values.into_iter()
+                            let seq: Result<Vec<AmqpSequence>, _> = values
+                                .into_iter()
                                 .map(|d| AmqpSequence::try_from(*d.value))
                                 .collect();
-                            seq
-                                .map(|v| BodySection::Sequence(v))
+                            seq.map(|v| BodySection::Sequence(v))
                                 .map_err(|_| de::Error::custom("Expecting AmqpSequence"))
-                        },
-                        _ => return Err(de::Error::custom("Expecting either Data or AmqpSequence"))
-                    }
-                },
-                Descriptor::Name(name) => {
-                    match name.as_str() {
-                        "amqp:data:binary" => {
-                            let data: Result<Vec<Data>, _> = values.into_iter()
-                                .map(|d| Data::try_from(*d.value))
-                                .collect();
-                            data
-                                .map(|v| BodySection::Data(v))
-                                .map_err(|_| de::Error::custom("Expecting Data"))
-                        },
-                        "amqp:amqp-sequence:list" => {
-                            let seq: Result<Vec<AmqpSequence>, _> = values.into_iter()
-                                .map(|d| AmqpSequence::try_from(*d.value))
-                                .collect();
-                            seq
-                                .map(|v| BodySection::Sequence(v))
-                                .map_err(|_| de::Error::custom("Expecting AmqpSequence"))
-                        },
-                        _ => return Err(de::Error::custom("Expecting either Data or AmqpSequence"))
+                        }
+                        _ => {
+                            return Err(de::Error::custom("Expecting either Data or AmqpSequence"))
+                        }
                     }
                 }
+                Descriptor::Name(name) => match name.as_str() {
+                    "amqp:data:binary" => {
+                        let data: Result<Vec<Data>, _> = values
+                            .into_iter()
+                            .map(|d| Data::try_from(*d.value))
+                            .collect();
+                        data.map(|v| BodySection::Data(v))
+                            .map_err(|_| de::Error::custom("Expecting Data"))
+                    }
+                    "amqp:amqp-sequence:list" => {
+                        let seq: Result<Vec<AmqpSequence>, _> = values
+                            .into_iter()
+                            .map(|d| AmqpSequence::try_from(*d.value))
+                            .collect();
+                        seq.map(|v| BodySection::Sequence(v))
+                            .map_err(|_| de::Error::custom("Expecting AmqpSequence"))
+                    }
+                    _ => return Err(de::Error::custom("Expecting either Data or AmqpSequence")),
+                },
             }
         }
     }
@@ -167,28 +174,24 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for BodySection {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_enum(
-            serde_amqp::__constants::UNTAGGED_ENUM, 
-            &["Data", "Sequence", "Value"], 
-            Visitor {}
+            serde_amqp::__constants::UNTAGGED_ENUM,
+            &["Data", "Sequence", "Value"],
+            Visitor {},
         )
     }
 }
-
-
-
-
 
 #[cfg(test)]
 mod tests {
     use std::vec;
 
-    use serde_amqp::{to_vec, from_slice, value::Value};
+    use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::messaging::{Data, message::BodySection, AmqpSequence};
+    use crate::messaging::{message::BodySection, AmqpSequence, Data};
 
     #[test]
     fn test_serialize_deserialize_body() {
@@ -207,11 +210,7 @@ mod tests {
         // let data = vec![Data(ByteBuf::from(data))];
         // let body = BodySection::Data(data);
 
-        let body = BodySection::Sequence(
-            vec![
-                AmqpSequence(vec![Value::Bool(true)])
-            ]
-        );
+        let body = BodySection::Sequence(vec![AmqpSequence(vec![Value::Bool(true)])]);
 
         // let body = BodySection::Value(AmqpValue(Value::Bool(true)));
 

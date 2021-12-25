@@ -2,8 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Serialize, Deserialize};
-use serde_amqp::{macros::{DeserializeComposite, SerializeComposite}, primitives::{UInt, ULong, Boolean}};
+use serde::{Deserialize, Serialize};
+use serde_amqp::{
+    macros::{DeserializeComposite, SerializeComposite},
+    primitives::{Boolean, UInt, ULong},
+};
 
 #[derive(SerializeComposite, DeserializeComposite)]
 #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]

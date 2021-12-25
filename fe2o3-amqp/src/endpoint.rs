@@ -23,8 +23,9 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, Error, Handle, Role, SequenceNo},
+    messaging::Message,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
-    primitives::{Boolean, UInt}, messaging::Message,
+    primitives::{Boolean, UInt},
 };
 use futures_util::Sink;
 use tokio::sync::mpsc;
@@ -205,7 +206,12 @@ pub trait Link {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
-    async fn send_detach<W>(&mut self, writer: &mut W, closed: bool, error: Option<Error>) -> Result<(), Self::Error>
+    async fn send_detach<W>(
+        &mut self,
+        writer: &mut W,
+        closed: bool,
+        error: Option<Error>,
+    ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
@@ -251,7 +257,11 @@ impl From<&Flow> for LinkFlow {
 pub trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
-    async fn send_transfer<W, M>(&mut self, writer: &mut W, message: M) -> Result<(), <Self as Link>::Error>
+    async fn send_transfer<W, M>(
+        &mut self,
+        writer: &mut W,
+        message: M,
+    ) -> Result<(), <Self as Link>::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
         M: Into<Message> + Send;

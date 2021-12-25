@@ -5,10 +5,10 @@ use tokio::time::Instant;
 
 use tokio::time::Sleep;
 
-mod producer;
 mod consumer;
-pub use producer::*;
+mod producer;
 pub use consumer::*;
+pub use producer::*;
 
 pub enum Running {
     Continue,

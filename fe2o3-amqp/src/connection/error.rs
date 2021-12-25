@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::{transport};
+use crate::transport;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
