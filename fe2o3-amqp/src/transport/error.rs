@@ -45,6 +45,7 @@ impl Error {
     }
 }
 
+/// TODO: What about encode error?
 impl From<serde_amqp::Error> for Error {
     fn from(err: serde_amqp::Error) -> Self {
         match err {

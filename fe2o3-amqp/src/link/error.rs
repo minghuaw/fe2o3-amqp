@@ -46,6 +46,9 @@ pub enum Error {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
+    #[error("Parse error")]
+    ParseError,
+
     #[error("AMQP Error {:?}, {:?}", .condition, .description)]
     AmqpError {
         condition: AmqpError,
@@ -97,5 +100,11 @@ impl From<AllocLinkError> for Error {
             AllocLinkError::HandleMaxReached => Self::HandleMaxReached,
             AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
         }
+    }
+}
+
+impl From<serde_amqp::Error> for Error {
+    fn from(_: serde_amqp::Error) -> Self {
+        Self::ParseError
     }
 }

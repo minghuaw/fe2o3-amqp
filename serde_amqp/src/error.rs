@@ -26,7 +26,7 @@ pub enum Error {
     #[error("Sequence length mismatch")]
     SequenceLengthMismatch,
 
-    #[error("Invalid length for decimal float point number")]
+    #[error("Invalid length")]
     InvalidLength,
 }
 

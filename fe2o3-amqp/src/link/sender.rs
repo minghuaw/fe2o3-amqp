@@ -1,5 +1,6 @@
 use std::{marker::PhantomData, time::Duration};
 
+use bytes::BytesMut;
 use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
@@ -12,7 +13,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::Link,
+    endpoint::{Link},
     session::{self, SessionHandle},
 };
 
@@ -100,7 +101,19 @@ impl Sender<Attached> {
     }
 
     pub async fn send(&mut self, message: Message) -> Result<(), Error> {
+        use serde::Serialize;
+        use serde_amqp::ser::Serializer;
+        use bytes::BufMut;
+
+        use crate::endpoint::SenderLink;
+
+        // serialize message
+        let mut payload = BytesMut::new();
+        let mut serializer = Serializer::from((&mut payload).writer());
+        message.serialize(&mut serializer)?;
+
         // send a transfer, checking state will be implemented in SenderLink
+        self.link.send_transfer(&mut self.outgoing, payload).await?;
 
         // depending on
 
@@ -260,6 +273,7 @@ fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
     let (condition, description): (ErrorCondition, _) = match err.into() {
         Error::HandleMaxReached => unreachable!(),
         Error::DuplicatedLinkName => unreachable!(),
+        Error::ParseError => unreachable!(),
         Error::AmqpError {
             condition,
             description,
