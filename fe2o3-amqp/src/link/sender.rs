@@ -13,8 +13,9 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
+    delivery::Delivery,
     endpoint::Link,
-    session::{self, SessionHandle}, delivery::Delivery,
+    session::{self, SessionHandle},
 };
 
 use super::{
@@ -111,7 +112,7 @@ impl Sender<Attached> {
             message,
             message_format,
             settled,
-            batchable
+            batchable,
         } = delivery.into();
 
         // serialize message
@@ -120,13 +121,15 @@ impl Sender<Attached> {
         message.serialize(&mut serializer)?;
 
         // send a transfer, checking state will be implemented in SenderLink
-        self.link.send_transfer(
-            &mut self.outgoing, 
-            payload, 
-            message_format, 
-            settled, 
-            batchable
-        ).await?;
+        self.link
+            .send_transfer(
+                &mut self.outgoing,
+                payload,
+                message_format,
+                settled,
+                batchable,
+            )
+            .await?;
 
         // depending on
 

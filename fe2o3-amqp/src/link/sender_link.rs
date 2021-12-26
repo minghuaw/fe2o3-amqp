@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, MessageFormat,
+        self, AmqpError, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode, Role,
+        SenderSettleMode,
     },
     messaging::{DeliveryState, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -316,25 +317,25 @@ impl endpoint::SenderLink for SenderLink {
                 message_format: Some(message_format),
                 settled,
                 more: false,
-                // If not set, this value is defaulted to the value negotiated 
+                // If not set, this value is defaulted to the value negotiated
                 // on link attach.
                 rcv_settle_mode: None,
                 state,
                 resume,
                 aborted: false,
-                batchable
+                batchable,
             };
 
             let frame = LinkFrame::Transfer {
                 performative: transfer,
-                payload
+                payload,
             };
-            writer.send(frame).await
-                .map_err(|_| {
-                    link::Error::AmqpError {
-                        condition: AmqpError::IllegalState,
-                        description: Some("Session is already dropped".to_string()),
-                    }
+            writer
+                .send(frame)
+                .await
+                .map_err(|_| link::Error::AmqpError {
+                    condition: AmqpError::IllegalState,
+                    description: Some("Session is already dropped".to_string()),
                 })?;
         } else {
             // Need multiple transfers

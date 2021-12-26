@@ -81,7 +81,7 @@ impl Builder<Message> {
             message: self.message,
             message_format: self.message_format,
             settled: self.settled,
-            batchable: self.batchable
+            batchable: self.batchable,
         }
     }
 }

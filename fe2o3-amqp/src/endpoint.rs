@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, Error, Handle, Role, SequenceNo, MessageFormat},
+    definitions::{self, Error, Handle, MessageFormat, Role, SequenceNo},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
