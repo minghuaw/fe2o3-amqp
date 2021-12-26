@@ -100,7 +100,7 @@ pub enum FrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        message: Message,
+        payload: BytesMut,
     },
     Disposition(Disposition),
     Detach(Detach),
@@ -152,13 +152,10 @@ impl Encoder<FrameBody> for FrameBodyCodec {
             FrameBody::Flow(performative) => performative.serialize(&mut serializer),
             FrameBody::Transfer {
                 performative,
-                message,
+                payload,
             } => {
                 performative.serialize(&mut serializer)?;
-                message.serialize(&mut serializer)?;
-                // if let Some(payload) = payload {
-                //     dst.put(payload);
-                // }
+                dst.put(payload);
                 Ok(())
             }
             FrameBody::Disposition(performative) => performative.serialize(&mut serializer),
@@ -188,10 +185,10 @@ impl Decoder for FrameBodyCodec {
             Performative::Begin(performative) => FrameBody::Begin(performative),
             Performative::Attach(performative) => FrameBody::Attach(performative),
             Performative::Transfer(performative) => {
-                let message = Message::deserialize(&mut deserializer)?;
+                let payload = src.split();
                 FrameBody::Transfer {
                     performative,
-                    message,
+                    payload,
                 }
             }
             Performative::Flow(performative) => FrameBody::Flow(performative),

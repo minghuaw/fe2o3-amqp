@@ -1,5 +1,6 @@
 use std::io;
 
+use bytes::BytesMut;
 use fe2o3_amqp_types::definitions::AmqpError;
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -106,10 +107,10 @@ where
             }
             SessionFrameBody::Transfer {
                 performative,
-                message,
+                payload,
             } => {
                 self.session
-                    .on_incoming_transfer(channel, performative, message)
+                    .on_incoming_transfer(channel, performative, payload)
                     .await
                     .map_err(Into::into)?;
             }
@@ -196,10 +197,10 @@ where
             LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow).map_err(Into::into)?,
             LinkFrame::Transfer {
                 performative,
-                message,
+                payload,
             } => self
                 .session
-                .on_outgoing_transfer(performative, message)
+                .on_outgoing_transfer(performative, payload)
                 .map_err(Into::into)?,
             LinkFrame::Disposition(disposition) => self
                 .session

@@ -14,7 +14,7 @@ pub enum LinkFrame {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        message: Message,
+        payload: BytesMut,
     },
     Disposition(Disposition),
     Detach(Detach),

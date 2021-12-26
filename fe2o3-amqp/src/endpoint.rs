@@ -137,7 +137,7 @@ pub trait Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<(), Self::Error>;
     async fn on_incoming_disposition(
         &mut self,
@@ -167,7 +167,7 @@ pub trait Session {
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_disposition(
         &mut self,
@@ -260,7 +260,7 @@ pub trait SenderLink: Link {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<(), <Self as Link>::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
@@ -273,6 +273,6 @@ pub trait ReceiverLink: Link {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<(), <Self as Link>::Error>;
 }

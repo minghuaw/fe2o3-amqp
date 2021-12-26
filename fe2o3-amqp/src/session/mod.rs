@@ -315,7 +315,7 @@ impl endpoint::Session for Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_transfer");
         todo!()
@@ -446,14 +446,14 @@ impl endpoint::Session for Session {
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here
 
         println!(">>> Debug: Session::on_outgoing_transfer");
         let body = SessionFrameBody::Transfer {
             performative: transfer,
-            message,
+            payload,
         };
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)

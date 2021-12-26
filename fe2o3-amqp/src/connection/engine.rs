@@ -180,13 +180,13 @@ where
             }
             FrameBody::Transfer {
                 performative,
-                message,
+                payload,
             } => {
                 let sframe = SessionFrame::new(
                     channel,
                     SessionFrameBody::Transfer {
                         performative,
-                        message,
+                        payload,
                     },
                 );
                 self.forward_to_session(channel, sframe).await?;
@@ -280,12 +280,12 @@ where
             SessionFrameBody::Flow(flow) => Frame::new(channel, FrameBody::Flow(flow)),
             SessionFrameBody::Transfer {
                 performative,
-                message,
+                payload,
             } => Frame::new(
                 channel,
                 FrameBody::Transfer {
                     performative,
-                    message,
+                    payload,
                 },
             ),
             SessionFrameBody::Disposition(disposition) => {
