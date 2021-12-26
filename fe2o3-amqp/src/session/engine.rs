@@ -1,6 +1,5 @@
 use std::io;
 
-use bytes::BytesMut;
 use fe2o3_amqp_types::definitions::AmqpError;
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};

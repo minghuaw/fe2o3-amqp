@@ -1,10 +1,7 @@
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    messaging::Message,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
 };
-
-use crate::connection;
 
 // pub type SessionIncomingItem = Result<SessionFrame, connection::Error>;
 pub type SessionIncomingItem = SessionFrame;

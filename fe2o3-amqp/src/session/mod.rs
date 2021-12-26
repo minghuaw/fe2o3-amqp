@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, Fields, Handle, SequenceNo, SessionError, TransferNumber},
-    messaging::{message, Message},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };

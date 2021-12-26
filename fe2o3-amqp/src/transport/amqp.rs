@@ -1,6 +1,5 @@
 use bytes::{Buf, BufMut, BytesMut};
 use fe2o3_amqp_types::{
-    messaging::Message,
     performatives::{
         Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
     },

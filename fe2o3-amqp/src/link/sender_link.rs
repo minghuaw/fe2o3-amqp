@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode,
     },
-    messaging::{DeliveryState, Message, Source, Target},
+    messaging::{DeliveryState, Source, Target},
     performatives::{Attach, Detach, Disposition},
     primitives::Symbol,
 };
