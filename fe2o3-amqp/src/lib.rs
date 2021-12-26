@@ -1,5 +1,6 @@
 pub mod connection;
 pub mod control;
+pub mod delivery;
 pub mod endpoint;
 pub mod link;
 pub mod session;

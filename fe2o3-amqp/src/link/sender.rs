@@ -13,8 +13,8 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{Link},
-    session::{self, SessionHandle},
+    endpoint::Link,
+    session::{self, SessionHandle}, delivery::Delivery,
 };
 
 use super::{
@@ -100,12 +100,19 @@ impl Sender<Attached> {
             .await
     }
 
-    pub async fn send(&mut self, message: Message) -> Result<(), Error> {
+    pub async fn send(&mut self, delivery: impl Into<Delivery>) -> Result<(), Error> {
+        use bytes::BufMut;
         use serde::Serialize;
         use serde_amqp::ser::Serializer;
-        use bytes::BufMut;
 
         use crate::endpoint::SenderLink;
+
+        let Delivery {
+            message,
+            message_format,
+            settled,
+            batchable
+        } = delivery.into();
 
         // serialize message
         let mut payload = BytesMut::new();
@@ -113,7 +120,13 @@ impl Sender<Attached> {
         message.serialize(&mut serializer)?;
 
         // send a transfer, checking state will be implemented in SenderLink
-        self.link.send_transfer(&mut self.outgoing, payload).await?;
+        self.link.send_transfer(
+            &mut self.outgoing, 
+            payload, 
+            message_format, 
+            settled, 
+            batchable
+        ).await?;
 
         // depending on
 

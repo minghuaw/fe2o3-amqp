@@ -217,6 +217,13 @@ impl LinkFlowState {
         }
     }
 
+    pub async fn delivery_count(&self) -> SequenceNo {
+        match self {
+            LinkFlowState::Sender(lock) => lock.read().await.delivery_count,
+            LinkFlowState::Receiver(lock) => lock.read().await.delivery_count,
+        }
+    }
+
     /// This is async because it is protected behind an async RwLock
     pub async fn properties(&self) -> Option<Fields> {
         match self {

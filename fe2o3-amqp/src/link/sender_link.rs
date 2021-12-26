@@ -4,10 +4,10 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode,
+        self, AmqpError, DeliveryTag, Handle, ReceiverSettleMode, Role, SenderSettleMode, MessageFormat,
     },
     messaging::{DeliveryState, Source, Target},
-    performatives::{Attach, Detach, Disposition},
+    performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
 use futures_util::{Sink, SinkExt};
@@ -27,8 +27,10 @@ pub struct SenderLink {
     pub(crate) output_handle: Option<Handle>, // local handle
     pub(crate) input_handle: Option<Handle>,  // remote handle
 
+    /// The `Sender` will manage whether to wait for incoming disposition
     pub(crate) snd_settle_mode: SenderSettleMode,
     pub(crate) rcv_settle_mode: ReceiverSettleMode,
+
     pub(crate) source: Option<Source>, // TODO: Option?
     pub(crate) target: Option<Target>, // TODO: Option?
 
@@ -243,7 +245,7 @@ impl endpoint::Link for SenderLink {
                 writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
                     link::Error::AmqpError {
                         condition: AmqpError::IllegalState,
-                        description: Some("Failed to send to session".to_string()),
+                        description: Some("Session is already dropped".to_string()),
                     }
                 })?;
             }
@@ -265,6 +267,9 @@ impl endpoint::SenderLink for SenderLink {
         &mut self,
         writer: &mut W,
         payload: BytesMut,
+        message_format: MessageFormat,
+        settled: Option<bool>,
+        batchable: bool,
     ) -> Result<(), <Self as endpoint::Link>::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
@@ -282,6 +287,60 @@ impl endpoint::SenderLink for SenderLink {
         // Consume link credit
         self.flow_state.consume(1).await;
 
-        todo!()
+        // Check message size
+        if (self.max_message_size == 0) || (payload.len() as u64 <= self.max_message_size) {
+            let handle = self
+                .output_handle
+                .clone()
+                .ok_or_else(|| AmqpError::IllegalState)?;
+            let delivery_tag: [u8; 4] = {
+                let delivery_count = self.flow_state.state().delivery_count().await;
+                delivery_count.to_be_bytes()
+            };
+
+            // TODO: Expose API to allow user to set this when the mode is MIXED?
+            let settled = match self.snd_settle_mode {
+                SenderSettleMode::Settled => Some(true),
+                SenderSettleMode::Unsettled => Some(false),
+                SenderSettleMode::Mixed => settled,
+            };
+
+            // TODO: Expose API for resuming link?
+            let state: Option<DeliveryState> = None;
+            let resume = false;
+
+            let transfer = Transfer {
+                handle,
+                delivery_id: None, // This will be set by the session
+                delivery_tag: Some(DeliveryTag::from(delivery_tag)),
+                message_format: Some(message_format),
+                settled,
+                more: false,
+                // If not set, this value is defaulted to the value negotiated 
+                // on link attach.
+                rcv_settle_mode: None,
+                state,
+                resume,
+                aborted: false,
+                batchable
+            };
+
+            let frame = LinkFrame::Transfer {
+                performative: transfer,
+                payload
+            };
+            writer.send(frame).await
+                .map_err(|_| {
+                    link::Error::AmqpError {
+                        condition: AmqpError::IllegalState,
+                        description: Some("Session is already dropped".to_string()),
+                    }
+                })?;
+        } else {
+            // Need multiple transfers
+            todo!()
+        }
+
+        Ok(())
     }
 }

@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, Error, Handle, Role, SequenceNo},
+    definitions::{self, Error, Handle, Role, SequenceNo, MessageFormat},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
@@ -260,6 +260,9 @@ pub trait SenderLink: Link {
         &mut self,
         writer: &mut W,
         payload: BytesMut,
+        message_format: MessageFormat,
+        settled: Option<bool>,
+        batchable: bool,
     ) -> Result<(), <Self as Link>::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
