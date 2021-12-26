@@ -48,6 +48,7 @@ pub type Seconds = UInt;
 pub type Milliseconds = UInt;
 
 /// 2.8.7 Delivery Tag
+/// A delivery-tag can be up to 32 octets of binary data
 pub type DeliveryTag = ByteBuf;
 
 /// 2.8.8 Delivery Number
