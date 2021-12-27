@@ -69,3 +69,8 @@ impl<T> Deref for Constant<T> {
         &self.value
     }
 }
+
+/// Shared type state for builder
+pub struct Uninitialized {}
+
+// pub struct Initialized {}

@@ -1,5 +1,7 @@
 use fe2o3_amqp_types::{definitions::MessageFormat, messaging::Message};
 
+use crate::util::Uninitialized;
+
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]
 pub struct Delivery {
@@ -28,8 +30,6 @@ where
         }
     }
 }
-
-pub struct Uninitialized {}
 
 pub struct Builder<T> {
     pub message: T,

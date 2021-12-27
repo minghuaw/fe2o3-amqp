@@ -13,13 +13,117 @@ use super::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    pub header: Header,
-    pub delivery_annotations: DeliveryAnnotations,
-    pub message_annotations: MessageAnnotations,
-    pub properties: Properties,
-    pub application_properties: ApplicationProperties,
+    pub header: Option<Header>,
+    pub delivery_annotations: Option<DeliveryAnnotations>,
+    pub message_annotations: Option<MessageAnnotations>,
+    pub properties: Option<Properties>,
+    pub application_properties: Option<ApplicationProperties>,
     pub body_section: BodySection,
-    pub footer: Footer,
+    pub footer: Option<Footer>,
+}
+
+impl<T> From<T> for Message
+where
+    T: Into<BodySection>,
+{
+    fn from(value: T) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body_section: value.into(),
+            footer: None,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct EmptyBody {}
+
+#[derive(Debug, Default)]
+pub struct Builder<T> {
+    pub header: Option<Header>,
+    pub delivery_annotations: Option<DeliveryAnnotations>,
+    pub message_annotations: Option<MessageAnnotations>,
+    pub properties: Option<Properties>,
+    pub application_properties: Option<ApplicationProperties>,
+    pub body_section: T,
+    pub footer: Option<Footer>,
+}
+
+impl Builder<EmptyBody> {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl<T> Builder<T> {
+    pub fn body_section(self, body_section: impl Into<BodySection>) -> Builder<BodySection> {
+        Builder::<BodySection> {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body_section: body_section.into(),
+            footer: self.footer,
+        }
+    }
+
+    pub fn header(mut self, header: impl Into<Option<Header>>) -> Self {
+        self.header = header.into();
+        self
+    }
+
+    pub fn delivery_annotations(
+        mut self,
+        delivery_annotations: impl Into<Option<DeliveryAnnotations>>,
+    ) -> Self {
+        self.delivery_annotations = delivery_annotations.into();
+        self
+    }
+
+    pub fn message_annotations(
+        mut self,
+        message_annotations: impl Into<Option<MessageAnnotations>>,
+    ) -> Self {
+        self.message_annotations = message_annotations.into();
+        self
+    }
+
+    pub fn properties(mut self, properties: impl Into<Option<Properties>>) -> Self {
+        self.properties = properties.into();
+        self
+    }
+
+    pub fn application_properties(
+        mut self,
+        appplication_properties: impl Into<Option<ApplicationProperties>>,
+    ) -> Self {
+        self.application_properties = appplication_properties.into();
+        self
+    }
+
+    pub fn footer(mut self, footer: impl Into<Option<Footer>>) -> Self {
+        self.footer = footer.into();
+        self
+    }
+}
+
+impl Builder<BodySection> {
+    pub fn build(self) -> Message {
+        Message {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body_section: self.body_section,
+            footer: self.footer,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +131,12 @@ pub enum BodySection {
     Data(Vec<Data>),
     Sequence(Vec<AmqpSequence>),
     Value(AmqpValue),
+}
+
+impl From<Value> for BodySection {
+    fn from(value: Value) -> Self {
+        BodySection::Value(AmqpValue(value))
+    }
 }
 
 impl Serialize for BodySection {
