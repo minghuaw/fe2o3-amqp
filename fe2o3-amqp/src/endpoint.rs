@@ -252,10 +252,16 @@ impl From<&Flow> for LinkFlow {
     }
 }
 
+pub enum Settlement {
+    Settled,
+    Unsettled,
+}
+
 #[async_trait]
 pub trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
+    /// Send message via transfer frame and return whether the message is already settled
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
@@ -263,7 +269,7 @@ pub trait SenderLink: Link {
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
-    ) -> Result<(), <Self as Link>::Error>
+    ) -> Result<Settlement, <Self as Link>::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 }

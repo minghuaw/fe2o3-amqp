@@ -14,7 +14,7 @@ use fe2o3_amqp_types::{
 use futures_util::{Sink, SinkExt};
 use tokio::sync::mpsc;
 
-use crate::{endpoint, util::Consumer};
+use crate::{endpoint::{self, Settlement}, util::Consumer};
 
 use super::{LinkFlowState, LinkFrame, LinkState};
 use crate::link;
@@ -271,7 +271,7 @@ impl endpoint::SenderLink for SenderLink {
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
-    ) -> Result<(), <Self as endpoint::Link>::Error>
+    ) -> Result<Settlement, <Self as endpoint::Link>::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
@@ -281,8 +281,9 @@ impl endpoint::SenderLink for SenderLink {
 
         // Whether drain flag is set
         if self.flow_state.state().drain().await {
-            println!(">>> Debug: SenderLink::send_transfer drain");
-            return Ok(());
+            // println!(">>> Debug: SenderLink::send_transfer drain");
+            // return Ok(Settlement::Settled);
+            todo!()
         }
 
         // Consume link credit
@@ -302,8 +303,16 @@ impl endpoint::SenderLink for SenderLink {
             // TODO: Expose API to allow user to set this when the mode is MIXED?
             let settled = match self.snd_settle_mode {
                 SenderSettleMode::Settled => Some(true),
-                SenderSettleMode::Unsettled => Some(false),
-                SenderSettleMode::Mixed => settled,
+                SenderSettleMode::Unsettled => {
+                    // TODO: add to unsettled map
+                    todo!()
+                    // Some(false)
+                },
+                SenderSettleMode::Mixed => {
+                    // TODO: conditionally add to the unsettled map
+                    todo!()
+                    // settled
+                },
             };
 
             // TODO: Expose API for resuming link?
@@ -337,11 +346,19 @@ impl endpoint::SenderLink for SenderLink {
                     condition: AmqpError::IllegalState,
                     description: Some("Session is already dropped".to_string()),
                 })?;
+            
+            match settled {
+                Some(value) => match value {
+                    true => Ok(Settlement::Settled),
+                    false => Ok(Settlement::Unsettled),
+                },
+                // If not set on the first (or only) transfer for a (multi-transfer)
+                // delivery, then the settled flag MUST be interpreted as being false.
+                None => Ok(Settlement::Unsettled)
+            }
         } else {
             // Need multiple transfers
             todo!()
         }
-
-        Ok(())
     }
 }
