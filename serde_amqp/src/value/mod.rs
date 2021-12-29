@@ -1,11 +1,12 @@
 use ordered_float::OrderedFloat;
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
 use crate::{
     described::Described,
     format_code::EncodingCodes,
-    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}, to_value, Error,
 };
 
 pub mod de;
@@ -299,6 +300,62 @@ impl Value {
             Value::Array(_) => EncodingCodes::Array32,
         };
         code as u8
+    }
+}
+
+macro_rules! impl_from_for_value {
+    ($variant:ident, $variant_ty:ty) => {
+        impl From<$variant_ty> for Value {
+            fn from(val: $variant_ty) -> Self {
+                Self::$variant(val)
+            }
+        }
+    };
+
+    ($($variant:ident, $variant_ty:ty),*) => {
+        $(impl_from_for_value!($variant, $variant_ty);)*
+    }
+}
+
+impl_from_for_value! {
+    Described, Described<Value>,
+    Bool, bool,
+    UByte, u8,
+    UShort, u16,
+    UInt, u32,
+    ULong, u64,
+    Byte, i8,
+    Short, i16,
+    Int, i32,
+    Long, i64,
+    Float, OrderedFloat<f32>,
+    Double, OrderedFloat<f64>,
+    Decimal32, Dec32,
+    Decimal64, Dec64,
+    Decimal128, Dec128,
+    Char, char,
+    Timestamp, Timestamp,
+    Uuid, Uuid,
+    Binary, ByteBuf,
+    String, String,
+    Symbol, Symbol
+}
+
+impl From<f32> for Value {
+    fn from(val: f32) -> Self {
+        Self::Float(OrderedFloat::from(val))
+    }
+}
+
+impl From<f64> for Value {
+    fn from(val: f64) -> Self {
+        Self::Double(OrderedFloat::from(val))
+    }
+}
+
+impl From<&str> for Value {
+    fn from(val: &str) -> Self {
+        Self::String(val.to_string())
     }
 }
 
