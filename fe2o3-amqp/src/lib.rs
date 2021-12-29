@@ -7,4 +7,6 @@ pub mod session;
 pub mod transport;
 pub mod util;
 
-// pub mod engine;
+pub mod types {
+    pub use fe2o3_amqp_types::*;
+}

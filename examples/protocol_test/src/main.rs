@@ -6,6 +6,9 @@ use std::time::Duration;
 use fe2o3_amqp::connection::Connection;
 use fe2o3_amqp::link::Sender;
 use fe2o3_amqp::session::Session;
+use fe2o3_amqp::types::definitions::SenderSettleMode;
+use fe2o3_amqp::types::primitives::Value;
+
 
 #[tokio::main]
 async fn main() {
@@ -23,9 +26,19 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
+    // let sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
+    //     .await
+    //     .unwrap();
+
+    let mut sender = Sender::builder()
+        .name("rust-sender-link-1")
+        .target("q1")
+        .sender_settle_mode(SenderSettleMode::Settled)
+        .attach(&mut session)
         .await
         .unwrap();
+
+    sender.send(Value::String("hello amqp".to_string())).await.unwrap();
 
     // sender.close().await.unwrap();
     if let Err(err) = sender.detach().await {
