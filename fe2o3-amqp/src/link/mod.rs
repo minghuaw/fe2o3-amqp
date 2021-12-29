@@ -10,6 +10,8 @@ pub mod receiver;
 pub mod receiver_link;
 pub mod sender;
 pub mod sender_link;
+pub mod delivery;
+
 pub use error::Error;
 
 use futures_util::{Sink, Stream};

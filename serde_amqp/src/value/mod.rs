@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use crate::{
     described::Described,
     format_code::EncodingCodes,
-    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}, to_value, Error,
+    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid}, to_value, Error, util::TryFromSerializable,
 };
 
 pub mod de;
@@ -356,6 +356,15 @@ impl From<f64> for Value {
 impl From<&str> for Value {
     fn from(val: &str) -> Self {
         Self::String(val.to_string())
+    }
+}
+
+impl<T: Serialize> TryFromSerializable<T> for Value {
+    type Error = Error;
+
+    fn try_from(value: T) -> Result<Self, Self::Error> {
+        use crate::value::ser::Serializer;
+        value.serialize(&mut Serializer::new())
     }
 }
 

@@ -2,6 +2,8 @@ use fe2o3_amqp_types::{definitions::MessageFormat, messaging::Message};
 
 use crate::util::Uninitialized;
 
+use super::Error;
+
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]
 pub struct Delivery {

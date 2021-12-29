@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 pub(crate) enum NewType {
     None,
     Array,
@@ -53,4 +55,10 @@ impl Default for StructEncoding {
     fn default() -> Self {
         Self::None
     }
+}
+
+pub trait TryFromSerializable<T: serde::ser::Serialize>: Sized {
+    type Error: std::error::Error;
+
+    fn try_from(value: T) -> Result<Self, Self::Error>;
 }

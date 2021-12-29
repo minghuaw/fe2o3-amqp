@@ -13,13 +13,13 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    delivery::Delivery,
     endpoint::{Link, Settlement},
     session::{self, SessionHandle},
 };
 
 use super::{
     builder::{self, WithName, WithTarget, WithoutName, WithoutTarget},
+    delivery::Delivery,
     error::DetachError,
     role,
     sender_link::SenderLink,
@@ -101,7 +101,12 @@ impl Sender<Attached> {
             .await
     }
 
-    pub async fn send(&mut self, delivery: impl Into<Delivery>) -> Result<(), Error> {
+    pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error> 
+    where 
+        D: Into<Delivery>,
+        // D: TryInto<Delivery>,
+        // D::Error: Into<Error>,
+    {
         use bytes::BufMut;
         use serde::Serialize;
         use serde_amqp::ser::Serializer;
@@ -112,7 +117,9 @@ impl Sender<Attached> {
             message,
             message_format,
             settled,
-        } = delivery.into();
+        } = delivery
+            .into();
+            // .try_into().map_err(Into::into)?;
 
         // serialize message
         let mut payload = BytesMut::new();

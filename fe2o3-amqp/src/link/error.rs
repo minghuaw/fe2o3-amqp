@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, LinkError};
 use tokio::sync::mpsc;
 
@@ -106,5 +108,14 @@ impl From<AllocLinkError> for Error {
 impl From<serde_amqp::Error> for Error {
     fn from(_: serde_amqp::Error) -> Self {
         Self::ParseError
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(_: Infallible) -> Self {
+        Self::AmqpError {
+            condition: AmqpError::InternalError,
+            description: Some("Infallible".to_string())
+        }
     }
 }
