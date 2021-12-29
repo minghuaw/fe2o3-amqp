@@ -121,7 +121,7 @@ impl Sender<Attached> {
         message.serialize(&mut serializer)?;
 
         // send a transfer, checking state will be implemented in SenderLink
-        self.link
+        let settled = self.link
             .send_transfer(
                 &mut self.outgoing,
                 payload,
@@ -132,6 +132,7 @@ impl Sender<Attached> {
             .await?;
 
         // depending on
+        // match 
 
         todo!()
     }
