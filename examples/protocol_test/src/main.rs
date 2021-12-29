@@ -7,8 +7,6 @@ use fe2o3_amqp::connection::Connection;
 use fe2o3_amqp::link::Sender;
 use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
-use fe2o3_amqp::types::primitives::Value;
-
 
 #[tokio::main]
 async fn main() {
@@ -38,7 +36,7 @@ async fn main() {
         .await
         .unwrap();
 
-    sender.send(Value::String("hello amqp".to_string())).await.unwrap();
+    sender.send("hello amqp").await.unwrap();
 
     // sender.close().await.unwrap();
     if let Err(err) = sender.detach().await {

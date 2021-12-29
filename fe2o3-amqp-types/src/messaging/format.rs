@@ -214,6 +214,12 @@ impl TryFrom<Value> for AmqpSequence {
 )]
 pub struct AmqpValue(pub Value);
 
+impl<T: Into<Value>> From<T> for AmqpValue {
+    fn from(val: T) -> Self {
+        Self(val.into())
+    }
+}
+
 /// 3.2.9 Footer
 /// Transport footers for a message.
 /// <type name="footer" class="restricted" source="annotations" provides="section">

@@ -133,11 +133,23 @@ pub enum BodySection {
     Value(AmqpValue),
 }
 
-impl From<Value> for BodySection {
-    fn from(value: Value) -> Self {
-        BodySection::Value(AmqpValue(value))
+impl<T: Into<AmqpValue>> From<T> for BodySection {
+    fn from(value: T) -> Self {
+        BodySection::Value(value.into())
     }
 }
+
+// impl From<Vec<AmqpSequence>> for BodySection {
+//     fn from(val: Vec<AmqpSequence>) -> Self {
+//         Self::Sequence(val)
+//     }
+// }
+
+// impl From<Vec<Data>> for BodySection {
+//     fn from(val: Vec<Data>) -> Self {
+//         Self::Data(val)
+//     }
+// }
 
 impl Serialize for BodySection {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
