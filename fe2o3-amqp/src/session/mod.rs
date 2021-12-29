@@ -316,7 +316,13 @@ impl endpoint::Session for Session {
         transfer: Transfer,
         payload: BytesMut,
     ) -> Result<(), Self::Error> {
+        // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
+        // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
+        // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
+        
         println!(">>> Debug: Session::on_incoming_transfer");
+
+
         todo!()
     }
 
@@ -444,10 +450,24 @@ impl endpoint::Session for Session {
 
     fn on_outgoing_transfer(
         &mut self,
-        transfer: Transfer,
+        mut transfer: Transfer,
         payload: BytesMut,
     ) -> Result<SessionFrame, Self::Error> {
-        // TODO: what else do we need to do here
+        // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
+        // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-
+        // window.
+
+        // TODO: What policy would result in a decrement in outgoing-window?
+
+        // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
+        transfer.delivery_id = Some(self.next_outgoing_id);
+        self.next_outgoing_id += 1;
+
+        // The remote-incoming-window reflects the maximum number of outgoing transfers that can
+        // be sent without exceeding the remote endpoint’s incoming-window. This value MUST be
+        // decremented after every transfer frame is sent, and recomputed when informed of the
+        // remote session endpoint state.
+        self.remote_incoming_window -= 1;
 
         println!(">>> Debug: Session::on_outgoing_transfer");
         let body = SessionFrameBody::Transfer {

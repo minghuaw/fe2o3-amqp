@@ -14,7 +14,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     control::SessionControl,
     delivery::Delivery,
-    endpoint::Link,
+    endpoint::{Link, Settlement},
     session::{self, SessionHandle},
 };
 
@@ -112,7 +112,6 @@ impl Sender<Attached> {
             message,
             message_format,
             settled,
-            batchable,
         } = delivery.into();
 
         // serialize message
@@ -121,20 +120,21 @@ impl Sender<Attached> {
         message.serialize(&mut serializer)?;
 
         // send a transfer, checking state will be implemented in SenderLink
-        let settled = self.link
+        let settlement = self.link
             .send_transfer(
                 &mut self.outgoing,
                 payload,
                 message_format,
                 settled,
-                batchable,
+                false
             )
             .await?;
 
         // depending on
-        // match 
-
-        todo!()
+        match settlement {
+            Settlement::Settled => Ok(()),
+            Settlement::Unsettled => todo!()
+        }
     }
 
     pub async fn send_with_timeout(
@@ -142,6 +142,14 @@ impl Sender<Attached> {
         message: Message,
         timeout: impl Into<Duration>,
     ) -> Result<Disposition, Error> {
+        todo!()
+    }
+
+    pub async fn send_batchable(&mut self, delivery: impl Into<Delivery>) -> Result<DeliveryFut, Error> {
+        todo!()
+    }
+
+    pub async fn send_batchable_with_timeout(&mut self, delivery: impl Into<Delivery>, timeout: impl Into<Duration>) -> Result<DeliveryFut, Error> {
         todo!()
     }
 
@@ -306,4 +314,4 @@ fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
     }
 }
 
-pub struct SendFut {}
+pub struct DeliveryFut {}

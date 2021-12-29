@@ -8,7 +8,7 @@ pub struct Delivery {
     pub(crate) message: Message,
     pub(crate) message_format: MessageFormat,
     pub(crate) settled: Option<bool>,
-    pub(crate) batchable: bool,
+    // pub(crate) batchable: bool,
 }
 
 impl Delivery {
@@ -26,7 +26,7 @@ where
             message: value.into(),
             message_format: 0,
             settled: None,
-            batchable: false,
+            // batchable: false,
         }
     }
 }
@@ -69,10 +69,10 @@ impl<T> Builder<T> {
         self
     }
 
-    pub fn batchable(mut self, batchable: impl Into<bool>) -> Self {
-        self.batchable = batchable.into();
-        self
-    }
+    // pub fn batchable(mut self, batchable: impl Into<bool>) -> Self {
+    //     self.batchable = batchable.into();
+    //     self
+    // }
 }
 
 impl Builder<Message> {
@@ -81,7 +81,7 @@ impl Builder<Message> {
             message: self.message,
             message_format: self.message_format,
             settled: self.settled,
-            batchable: self.batchable,
+            // batchable: self.batchable,
         }
     }
 }
