@@ -79,15 +79,14 @@ impl Sender<Detached> {
 
         super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await?;
 
-        todo!()
-        // Ok(Sender::<Attached> {
-        //     link: self.link,
-        //     buffer_size: self.buffer_size,
-        //     session: self.session,
-        //     outgoing: self.outgoing,
-        //     incoming: self.incoming,
-        //     marker: PhantomData,
-        // })
+        Ok(Sender::<Attached> {
+            link: self.link,
+            buffer_size: self.buffer_size,
+            session: self.session,
+            outgoing: self.outgoing,
+            incoming: self.incoming,
+            marker: PhantomData,
+        })
     }
 }
 
@@ -320,12 +319,6 @@ fn detach_error_expecting_frame() -> DetachError {
 
 fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
     let (condition, description): (ErrorCondition, _) = match err.into() {
-        Error::HandleMaxReached 
-        | Error::DuplicatedLinkName 
-        | Error::ParseError 
-        | Error::Rejected(_)
-        | Error::Released(_)
-        | Error::Modified(_) => unreachable!(),
         Error::AmqpError {
             condition,
             description,
@@ -334,6 +327,12 @@ fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
             condition,
             description,
         } => (condition.into(), description),
+        Error::HandleMaxReached 
+        | Error::DuplicatedLinkName 
+        | Error::ParseError 
+        | Error::Rejected(_)
+        | Error::Released(_)
+        | Error::Modified(_) => unreachable!(),
     };
     DetachError {
         is_closed_by_remote: false,

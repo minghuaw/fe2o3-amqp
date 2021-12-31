@@ -319,16 +319,8 @@ impl endpoint::SenderLink for SenderLink {
             // TODO: Expose API to allow user to set this when the mode is MIXED?
             let settled = match self.snd_settle_mode {
                 SenderSettleMode::Settled => Some(true),
-                SenderSettleMode::Unsettled => {
-                    // TODO: add to unsettled map
-                    todo!()
-                    // Some(false)
-                }
-                SenderSettleMode::Mixed => {
-                    // TODO: conditionally add to the unsettled map
-                    todo!()
-                    // settled
-                }
+                SenderSettleMode::Unsettled => Some(false),
+                SenderSettleMode::Mixed => settled,
             };
 
             // TODO: Expose API for resuming link?
