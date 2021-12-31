@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Fields, SequenceNo},
+    definitions::{AmqpError, Fields, SequenceNo, Role},
     messaging::DeliveryState,
     performatives::Disposition,
 };
@@ -241,7 +241,7 @@ impl LinkFlowState {
     }
 }
 
-pub type UnsettledMap = BTreeMap<u32, UnsettledDelivery>;
+pub type UnsettledMap = BTreeMap<[u8;4], UnsettledDelivery>;
 
 pub struct LinkHandle {
     tx: mpsc::Sender<LinkIncomingItem>,
@@ -280,7 +280,19 @@ impl LinkHandle {
     pub(crate) async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
+        // Disposition only contains the delivery ids, which are assigned by the 
+        // sessions
+        unsettled_key: impl Iterator<Item = SequenceNo>,
     ) -> Option<Disposition> {
+        match disposition.role {
+            Role::Sender => {
+                todo!()
+            },
+            Role::Receiver => {
+
+            }
+        }
+
         todo!()
     }
 }

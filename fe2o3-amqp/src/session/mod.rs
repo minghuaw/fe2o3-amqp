@@ -141,6 +141,8 @@ pub struct Session {
     local_links: Slab<LinkHandle>,
     link_by_name: BTreeMap<String, Handle>,
     link_by_input_handle: BTreeMap<Handle, Handle>,
+    // Maps from DeliveryId to link.DeliveryCount
+    delivery_tag_by_id: BTreeMap<TransferNumber, [u8;4]>,
 }
 
 impl Session {
@@ -458,8 +460,20 @@ impl endpoint::Session for Session {
 
         // TODO: What policy would result in a decrement in outgoing-window?
 
-        // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
-        transfer.delivery_id = Some(self.next_outgoing_id);
+        // Only the first transfer is required to have delivery_tag and delivery_id
+        if let Some(tag) = &transfer.delivery_tag {
+            // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
+            let delivery_id = self.next_outgoing_id;
+            transfer.delivery_id = Some(delivery_id);
+
+            let mut delivery_tag  = [0u8; 4];
+            // TODO: Is bound check necessary
+            (&mut delivery_tag).copy_from_slice(tag); 
+
+            // Disposition doesn't carry delivery tag
+            self.delivery_tag_by_id.insert(delivery_id, delivery_tag);
+        }
+        
         self.next_outgoing_id += 1;
 
         // The remote-incoming-window reflects the maximum number of outgoing transfers that can

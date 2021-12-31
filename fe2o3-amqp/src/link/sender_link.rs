@@ -157,7 +157,7 @@ impl endpoint::Link for SenderLink {
                     guard
                         .iter()
                         .map(|(key, val)| {
-                            (DeliveryTag::from(key.to_be_bytes()), val.state().clone())
+                            (DeliveryTag::from(*key), val.state().clone())
                         })
                         .collect(),
                 ),
@@ -312,8 +312,9 @@ impl endpoint::SenderLink for SenderLink {
                 .clone()
                 .ok_or_else(|| AmqpError::IllegalState)?;
 
-            let delivery_count = self.flow_state.state().delivery_count().await;
-            let delivery_tag: [u8; 4] = delivery_count.to_be_bytes();
+            let delivery_tag = self.flow_state.state()
+                .delivery_count().await
+                .to_be_bytes();
 
             // TODO: Expose API to allow user to set this when the mode is MIXED?
             let settled = match self.snd_settle_mode {
@@ -371,7 +372,7 @@ impl endpoint::SenderLink for SenderLink {
                     let unsettled = UnsettledDelivery::new(tx);
                     {
                         let mut guard = self.unsettled.write().await;
-                        guard.insert(delivery_count, unsettled);
+                        guard.insert(delivery_tag, unsettled);
                     }
 
                     Ok(Settlement::Unsettled(rx))
