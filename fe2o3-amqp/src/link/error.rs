@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, LinkError};
+use fe2o3_amqp_types::{definitions::{self, AmqpError, ErrorCondition, LinkError}, messaging::{Rejected, Released, Modified}};
 use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
@@ -50,6 +50,15 @@ pub enum Error {
 
     #[error("Parse error")]
     ParseError,
+
+    #[error("Outcome Rejected: {:?}", .0)]
+    Rejected(Rejected),
+
+    #[error("Outsome Released: {:?}", .0)]
+    Released(Released),
+
+    #[error("Outcome Modified: {:?}", .0)]
+    Modified(Modified),
 
     #[error("AMQP Error {:?}, {:?}", .condition, .description)]
     AmqpError {

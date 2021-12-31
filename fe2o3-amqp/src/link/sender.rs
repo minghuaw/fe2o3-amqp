@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition},
-    messaging::{Address, Message, Source},
+    messaging::{Address, Message, Source, DeliveryState},
     performatives::Disposition,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -134,10 +134,23 @@ impl Sender<Attached> {
             .send_transfer(&mut self.outgoing, payload, message_format, settled, false)
             .await?;
 
-        // depending on
+        // If not settled, must wait for outcome
         match settlement {
             Settlement::Settled => Ok(()),
-            Settlement::Unsettled(outcome) => todo!(),
+            Settlement::Unsettled(outcome) => {
+                let state = outcome.await
+                    .map_err(|_| Error::AmqpError {
+                        condition: AmqpError::IllegalState,
+                        description: Some("Outcome sender is dropped".into())
+                    })?;
+                match state {
+                    DeliveryState::Accepted(_) 
+                    | DeliveryState::Received(_) => Ok(()),
+                    DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
+                    DeliveryState::Released(released) => Err(Error::Released(released)),
+                    DeliveryState::Modified(modified) => Err(Error::Modified(modified))
+                }
+            },
         }
     }
 
@@ -307,9 +320,12 @@ fn detach_error_expecting_frame() -> DetachError {
 
 fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
     let (condition, description): (ErrorCondition, _) = match err.into() {
-        Error::HandleMaxReached => unreachable!(),
-        Error::DuplicatedLinkName => unreachable!(),
-        Error::ParseError => unreachable!(),
+        Error::HandleMaxReached 
+        | Error::DuplicatedLinkName 
+        | Error::ParseError 
+        | Error::Rejected(_)
+        | Error::Released(_)
+        | Error::Modified(_) => unreachable!(),
         Error::AmqpError {
             condition,
             description,
