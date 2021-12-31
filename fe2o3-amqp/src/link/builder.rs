@@ -260,10 +260,12 @@ impl Builder<role::Sender, WithName, WithTarget> {
             properties: self.properties,
         };
         let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let notifier = Arc::new(Notify::new());
         let link_handle = LinkHandle {
             tx: incoming_tx,
             flow_state: Producer::new(notifier.clone(), flow_state.clone()),
+            unsettled: unsettled.clone(),
         };
 
         // Create Link in Session
@@ -288,7 +290,6 @@ impl Builder<role::Sender, WithName, WithTarget> {
             rcv_settle_mode: self.rcv_settle_mode,
             source: self.source, // TODO: how should this field be set?
             target: self.target,
-            unsettled: BTreeMap::new(),
             max_message_size,
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
@@ -296,6 +297,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             // delivery_count: self.initial_delivery_count,
             // properties: self.properties,
             flow_state: Consumer::new(notifier, flow_state),
+            unsettled,
         };
 
         // Send an Attach frame

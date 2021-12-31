@@ -238,7 +238,7 @@ impl endpoint::Session for Session {
                     let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
                     self.link_by_input_handle
                         .insert(input_handle, output_handle.clone());
-                    match link.tx.send(LinkFrame::Attach(attach)).await {
+                    match link.send(LinkFrame::Attach(attach)).await {
                         Ok(_) => {}
                         Err(e) => {
                             // TODO: how should this error be handled?
@@ -290,7 +290,7 @@ impl endpoint::Session for Session {
                 Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                     Some(link_handle) => {
                         let link_flow = LinkFlow::from(&flow);
-                        let echo = link_handle.flow_state.on_incoming_flow(link_flow).await;
+                        let echo = link_handle.on_incoming_flow(link_flow).await;
                         if let Some(echo_flow) = echo {
                             self.control
                                 .send(SessionControl::LinkFlow(echo_flow))
@@ -319,9 +319,8 @@ impl endpoint::Session for Session {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
-        
-        println!(">>> Debug: Session::on_incoming_transfer");
 
+        println!(">>> Debug: Session::on_incoming_transfer");
 
         todo!()
     }
@@ -348,7 +347,7 @@ impl endpoint::Session for Session {
         };
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
-                match link.tx.send(LinkFrame::Detach(detach)).await {
+                match link.send(LinkFrame::Detach(detach)).await {
                     Ok(_) => {}
                     Err(e) => todo!(), // End session with unattached handle?
                 }

@@ -115,7 +115,7 @@ impl From<Infallible> for Error {
     fn from(_: Infallible) -> Self {
         Self::AmqpError {
             condition: AmqpError::InternalError,
-            description: Some("Infallible".to_string())
+            description: Some("Infallible".to_string()),
         }
     }
 }

@@ -1,4 +1,8 @@
-use fe2o3_amqp_types::{definitions::MessageFormat, messaging::Message};
+use fe2o3_amqp_types::{
+    definitions::MessageFormat,
+    messaging::{DeliveryState, Message, Received},
+};
+use tokio::sync::oneshot;
 
 use crate::util::Uninitialized;
 
@@ -92,4 +96,44 @@ impl From<Builder<Message>> for Delivery {
     fn from(builder: Builder<Message>) -> Self {
         builder.build()
     }
+}
+
+pub struct UnsettledDelivery {
+    state: DeliveryState,
+    sender: oneshot::Sender<DeliveryState>,
+}
+
+impl UnsettledDelivery {
+    pub fn new(sender: oneshot::Sender<DeliveryState>) -> Self {
+        // Assume needing to resend from the beginning unless there is further 
+        // update from the remote peer
+        let received = Received {
+            section_number: 0,
+            section_offset: 0
+        };
+
+        Self {
+            state: DeliveryState::Received(received),
+            sender,
+        }
+    }
+
+    pub fn state(&self) -> &DeliveryState {
+        &self.state
+    }
+
+    pub fn state_mut(&mut self) -> &mut DeliveryState {
+        &mut self.state
+    }
+
+    pub fn settle(self) -> Result<(), DeliveryState> {
+        self.sender.send(self.state)
+    }
+}
+
+/// A future for delivery that can be `await`ed for the settlement
+/// from receiver
+pub struct DeliveryFut {
+    message: Message,
+    outcome: oneshot::Receiver<DeliveryState>,
 }

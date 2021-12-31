@@ -1,28 +1,34 @@
 mod frame;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{AmqpError, Fields, SequenceNo};
+use fe2o3_amqp_types::{
+    definitions::{AmqpError, Fields, SequenceNo},
+    messaging::DeliveryState,
+    performatives::Disposition,
+};
 pub use frame::*;
 pub mod builder;
+pub mod delivery;
 mod error;
 pub mod receiver;
 pub mod receiver_link;
 pub mod sender;
 pub mod sender_link;
-pub mod delivery;
 
 pub use error::Error;
 
 use futures_util::{Sink, Stream};
 pub use receiver::Receiver;
 pub use sender::Sender;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
     endpoint::{self, LinkFlow},
     util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
 };
+
+use self::delivery::UnsettledDelivery;
 
 pub mod type_state {
     pub struct Attached {}
@@ -235,9 +241,48 @@ impl LinkFlowState {
     }
 }
 
+pub type UnsettledMap = BTreeMap<u32, UnsettledDelivery>;
+
 pub struct LinkHandle {
-    pub tx: mpsc::Sender<LinkIncomingItem>,
-    pub flow_state: Producer<Arc<LinkFlowState>>,
+    tx: mpsc::Sender<LinkIncomingItem>,
+    flow_state: Producer<Arc<LinkFlowState>>,
+    unsettled: Arc<RwLock<UnsettledMap>>,
+}
+
+// /// TODO: How would this be changed when switched to ReceiverLink
+// pub enum LinkHandleRole {
+//     Sender {
+//         // This should be wrapped inside a Producer because the SenderLink
+//         // needs to consume link credit from LinkFlowState
+//         flow_state: Producer<Arc<LinkFlowState>>,
+
+//         // SequenceNo is an alias for u32
+//         // unsettled: Arc<RwLock<BTreeMap<SequenceNo, oneshot::Sender<DeliveryState>>>>
+//     },
+//     Receiver {
+//         flow_state: Arc<LinkFlowState>,
+//         unsettled: (),
+//     }
+// }
+
+impl LinkHandle {
+    pub(crate) async fn send(
+        &mut self,
+        frame: LinkFrame,
+    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+        self.tx.send(frame).await
+    }
+
+    pub(crate) async fn on_incoming_flow(&mut self, flow: LinkFlow) -> Option<LinkFlow> {
+        self.flow_state.on_incoming_flow(flow).await
+    }
+
+    pub(crate) async fn on_incoming_disposition(
+        &mut self,
+        disposition: Disposition,
+    ) -> Option<Disposition> {
+        todo!()
+    }
 }
 
 pub(crate) async fn do_attach<L, W, R>(

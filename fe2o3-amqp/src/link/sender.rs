@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     builder::{self, WithName, WithTarget, WithoutName, WithoutTarget},
-    delivery::Delivery,
+    delivery::{Delivery, DeliveryFut},
     error::DetachError,
     role,
     sender_link::SenderLink,
@@ -67,6 +67,8 @@ impl Sender<Detached> {
             let link_handle = LinkHandle {
                 tx,
                 flow_state: self.link.flow_state.producer(),
+                // TODO: what else to do during re-attaching
+                unsettled: self.link.unsettled.clone(),
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle =
@@ -77,14 +79,15 @@ impl Sender<Detached> {
 
         super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await?;
 
-        Ok(Sender::<Attached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-        })
+        todo!()
+        // Ok(Sender::<Attached> {
+        //     link: self.link,
+        //     buffer_size: self.buffer_size,
+        //     session: self.session,
+        //     outgoing: self.outgoing,
+        //     incoming: self.incoming,
+        //     marker: PhantomData,
+        // })
     }
 }
 
@@ -101,8 +104,8 @@ impl Sender<Attached> {
             .await
     }
 
-    pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error> 
-    where 
+    pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error>
+    where
         D: Into<Delivery>,
         // D: TryInto<Delivery>,
         // D::Error: Into<Error>,
@@ -117,9 +120,8 @@ impl Sender<Attached> {
             message,
             message_format,
             settled,
-        } = delivery
-            .into();
-            // .try_into().map_err(Into::into)?;
+        } = delivery.into();
+        // .try_into().map_err(Into::into)?;
 
         // serialize message
         let mut payload = BytesMut::new();
@@ -127,20 +129,15 @@ impl Sender<Attached> {
         message.serialize(&mut serializer)?;
 
         // send a transfer, checking state will be implemented in SenderLink
-        let settlement = self.link
-            .send_transfer(
-                &mut self.outgoing,
-                payload,
-                message_format,
-                settled,
-                false
-            )
+        let settlement = self
+            .link
+            .send_transfer(&mut self.outgoing, payload, message_format, settled, false)
             .await?;
 
         // depending on
         match settlement {
             Settlement::Settled => Ok(()),
-            Settlement::Unsettled => todo!()
+            Settlement::Unsettled(outcome) => todo!(),
         }
     }
 
@@ -152,11 +149,18 @@ impl Sender<Attached> {
         todo!()
     }
 
-    pub async fn send_batchable(&mut self, delivery: impl Into<Delivery>) -> Result<DeliveryFut, Error> {
+    pub async fn send_batchable(
+        &mut self,
+        delivery: impl Into<Delivery>,
+    ) -> Result<DeliveryFut, Error> {
         todo!()
     }
 
-    pub async fn send_batchable_with_timeout(&mut self, delivery: impl Into<Delivery>, timeout: impl Into<Duration>) -> Result<DeliveryFut, Error> {
+    pub async fn send_batchable_with_timeout(
+        &mut self,
+        delivery: impl Into<Delivery>,
+        timeout: impl Into<Duration>,
+    ) -> Result<DeliveryFut, Error> {
         todo!()
     }
 
@@ -320,5 +324,3 @@ fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
         error: Some(definitions::Error::new(condition, description, None)),
     }
 }
-
-pub struct DeliveryFut {}

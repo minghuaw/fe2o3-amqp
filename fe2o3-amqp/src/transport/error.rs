@@ -1,4 +1,4 @@
-use std::{io, convert::Infallible};
+use std::{convert::Infallible, io};
 
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 

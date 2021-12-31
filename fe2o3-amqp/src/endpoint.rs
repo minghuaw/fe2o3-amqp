@@ -23,11 +23,12 @@ use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, Error, Handle, MessageFormat, Role, SequenceNo},
+    messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
 use futures_util::Sink;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     connection::engine::SessionId,
@@ -254,7 +255,7 @@ impl From<&Flow> for LinkFlow {
 
 pub enum Settlement {
     Settled,
-    Unsettled,
+    Unsettled(oneshot::Receiver<DeliveryState>),
 }
 
 #[async_trait]

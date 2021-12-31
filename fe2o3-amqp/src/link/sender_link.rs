@@ -12,11 +12,14 @@ use fe2o3_amqp_types::{
     primitives::Symbol,
 };
 use futures_util::{Sink, SinkExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock, oneshot};
 
-use crate::{endpoint::{self, Settlement}, util::Consumer};
+use crate::{
+    endpoint::{self, Settlement},
+    util::Consumer,
+};
 
-use super::{LinkFlowState, LinkFrame, LinkState};
+use super::{LinkFlowState, LinkFrame, LinkState, UnsettledMap, delivery::UnsettledDelivery};
 use crate::link;
 
 /// Manages the link state
@@ -35,8 +38,6 @@ pub struct SenderLink {
     pub(crate) source: Option<Source>, // TODO: Option?
     pub(crate) target: Option<Target>, // TODO: Option?
 
-    pub(crate) unsettled: BTreeMap<DeliveryTag, DeliveryState>,
-
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
     pub(crate) max_message_size: u64,
@@ -49,6 +50,7 @@ pub struct SenderLink {
     // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
     // pub(crate) properties: Option<Fields>,
     pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
+    pub(crate) unsettled: Arc<RwLock<UnsettledMap>>,
 }
 
 impl SenderLink {
@@ -147,10 +149,24 @@ impl endpoint::Link for SenderLink {
                 })
             }
         };
-        let unsettled = match self.unsettled.len() {
-            0 => None,
-            _ => Some(self.unsettled.clone()),
+        let unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>> = {
+            let guard = self.unsettled.read().await;
+            match guard.len() {
+                0 => None,
+                _ => Some(
+                    guard
+                        .iter()
+                        .map(|(key, val)| {
+                            (DeliveryTag::from(key.to_be_bytes()), val.state().clone())
+                        })
+                        .collect(),
+                ),
+            }
         };
+        // let unsettled: Option<UnsettledMap> = match self.unsettled.read().await.len() {
+        //     0 => None,
+        //     _ => Some(self.unsettled.clone()),
+        // };
         let max_message_size = match self.max_message_size {
             0 => None,
             val @ _ => Some(val as u64),
@@ -295,10 +311,9 @@ impl endpoint::SenderLink for SenderLink {
                 .output_handle
                 .clone()
                 .ok_or_else(|| AmqpError::IllegalState)?;
-            let delivery_tag: [u8; 4] = {
-                let delivery_count = self.flow_state.state().delivery_count().await;
-                delivery_count.to_be_bytes()
-            };
+
+            let delivery_count = self.flow_state.state().delivery_count().await;
+            let delivery_tag: [u8; 4] = delivery_count.to_be_bytes();
 
             // TODO: Expose API to allow user to set this when the mode is MIXED?
             let settled = match self.snd_settle_mode {
@@ -307,12 +322,12 @@ impl endpoint::SenderLink for SenderLink {
                     // TODO: add to unsettled map
                     todo!()
                     // Some(false)
-                },
+                }
                 SenderSettleMode::Mixed => {
                     // TODO: conditionally add to the unsettled map
                     todo!()
                     // settled
-                },
+                }
             };
 
             // TODO: Expose API for resuming link?
@@ -346,15 +361,21 @@ impl endpoint::SenderLink for SenderLink {
                     condition: AmqpError::IllegalState,
                     description: Some("Session is already dropped".to_string()),
                 })?;
-            
+
             match settled {
-                Some(value) => match value {
-                    true => Ok(Settlement::Settled),
-                    false => Ok(Settlement::Unsettled),
-                },
+                Some(true) => Ok(Settlement::Settled),
                 // If not set on the first (or only) transfer for a (multi-transfer)
                 // delivery, then the settled flag MUST be interpreted as being false.
-                None => Ok(Settlement::Unsettled)
+                Some(false) | None => {
+                    let (tx, rx) = oneshot::channel();
+                    let unsettled = UnsettledDelivery::new(tx);
+                    {
+                        let mut guard = self.unsettled.write().await;
+                        guard.insert(delivery_count, unsettled);
+                    }
+
+                    Ok(Settlement::Unsettled(rx))
+                }
             }
         } else {
             // Need multiple transfers
