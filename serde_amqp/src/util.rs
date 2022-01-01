@@ -1,5 +1,3 @@
-use serde::Serialize;
-
 pub(crate) enum NewType {
     None,
     Array,

@@ -384,6 +384,7 @@ mod tests {
     }
     const _: () = {
         #[automatically_derived]
+        #[allow(unused_mut)]
         impl serde_amqp::serde::ser::Serialize for Test {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where

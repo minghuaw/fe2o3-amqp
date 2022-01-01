@@ -1,6 +1,4 @@
-use std::convert::TryInto;
-
-use crate::{error::Error, format::EncodedWidth, format_code::EncodingCodes};
+use crate::{error::Error};
 
 mod ioread;
 pub use ioread::*;
