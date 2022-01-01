@@ -1395,25 +1395,19 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
             },
             EncodingCodes::DescribedType => {
                 self.de.enum_type = EnumType::Descriptor;
-                seed.deserialize(self.as_mut()).map(Some)
+                let result = seed.deserialize(self.as_mut()).map(Some);
+                // The list header should only be consume once for each list
+                // The sublist will create new DescribedAccess and thus take care of their own
+                // list headers
+                if self.counter == 0 {
+                    if let StructEncoding::DescribedList = self.de.struct_encoding {
+                        self.field_count += self.consume_list_header()? as u32;
+                    }
+                }
+                result
             },
             _ => seed.deserialize(self.as_mut()).map(Some),
         };
-
-        // A list will follow the descriptor
-        if let EncodingCodes::DescribedType = code {
-            match self.de.struct_encoding {
-                StructEncoding::None => {}
-                StructEncoding::DescribedBasic => {}
-                StructEncoding::DescribedList => {
-                    self.field_count += self.consume_list_header()? as u32;
-                }
-                StructEncoding::DescribedMap => {
-                    // This shouldn't happen though
-                    self.field_count += self.consume_map_header()?;
-                }
-            }
-        }
 
         self.counter += 1;
 
@@ -1443,24 +1437,16 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
             },
             EncodingCodes::DescribedType => {
                 self.de.enum_type = EnumType::Descriptor;
-                seed.deserialize(self.as_mut()).map(Some)
+                let result = seed.deserialize(self.as_mut()).map(Some);
+                if self.counter == 0 {
+                    if let StructEncoding::DescribedMap  = self.de.struct_encoding{
+                        self.field_count += self.consume_map_header()?;
+                    }
+                }
+                result
             }
             _ => seed.deserialize(self.as_mut()).map(Some)
         };
-
-        if let EncodingCodes::DescribedType = code {
-            match self.de.struct_encoding {
-                StructEncoding::None => {},
-                StructEncoding::DescribedBasic => {},
-                StructEncoding::DescribedList => {
-                    // This shouldn't really happen tho
-                    self.field_count += self.consume_list_header()?;
-                },
-                StructEncoding::DescribedMap => {
-                    self.field_count += self.consume_map_header()?;
-                }
-            }
-        }
 
         self.counter += 1;
 

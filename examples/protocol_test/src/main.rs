@@ -36,19 +36,20 @@ async fn main() {
         .await
         .unwrap();
 
-    sender.send("hello amqp").await.unwrap();
+    // sender.send("hello amqp").await.unwrap();
 
-    // sender.close().await.unwrap();
-    if let Err(err) = sender.detach().await {
-        println!("+++++++++ {:?}", err)
-    }
+    // // sender.close().await.unwrap();
+    // if let Err(err) = sender.detach().await {
+    //     println!("+++++++++ {:?}", err)
+    // }
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let sender = Sender::attach(&mut session, "sender-link-2", "q1")
-        .await
-        .unwrap();
+    // let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
+    //     .await
+    //     .unwrap();
 
+    sender.send("HELLO AMQP").await.unwrap();
     sender.close().await.unwrap();
 
     session.end().await.unwrap();
