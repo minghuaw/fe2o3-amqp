@@ -8,14 +8,14 @@ use serde_amqp::{
     primitives::{Boolean, UInt, ULong},
 };
 
-#[derive(SerializeComposite, DeserializeComposite)]
-#[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
-struct Foo {
-    b: u64,
-    is_fool: Option<bool>,
-    #[amqp_contract(default)]
-    a: i32,
-}
+// #[derive(SerializeComposite, DeserializeComposite)]
+// #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
+// struct Foo {
+//     b: u64,
+//     is_fool: Option<bool>,
+//     #[amqp_contract(default)]
+//     a: i32,
+// }
 
 // #[derive(SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(encoding="list")]
@@ -24,11 +24,15 @@ struct Foo {
 // #[derive(SerializeComposite, DeserializeComposite)]
 // struct TupleStruct(Option<i32>, bool);
 
+#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[amqp_contract(code = 0x01, encoding = "basic")]
+struct Wrapper {
+    map: BTreeMap<String, i32>,
+}
+
 // #[derive(Debug, SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(code = 0x01, encoding = "basic")]
-// struct Wrapper {
-//     map: BTreeMap<String, i32>,
-// }
+// struct Wrapper(BTreeMap<String, i32>);
 
 // #[derive(Debug, SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(name = "ab", encoding = "list")]
@@ -56,101 +60,101 @@ struct Foo {
 //     Received(Received),
 // }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Outcome {
-    Accepted(Accepted),
-    Rejected(Rejected),
-    Released(Released),
-    Modified(Modified),
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// #[serde(untagged)]
+// pub enum Outcome {
+//     Accepted(Accepted),
+//     Rejected(Rejected),
+//     Released(Released),
+//     Modified(Modified),
+// }
 
-/// 3.4.1 Received
-///
-/// <type name="received" class="composite" source="list" provides="delivery-state">
-/// <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
-/// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-#[amqp_contract(
-    name = "amqp:received:list",
-    code = 0x0000_0000_0000_0023,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Received {
-    /// <field name="section-number" type="uint" mandatory="true"/>
-    pub section_number: UInt,
+// /// 3.4.1 Received
+// ///
+// /// <type name="received" class="composite" source="list" provides="delivery-state">
+// /// <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
+// /// </type>
+// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+// #[amqp_contract(
+//     name = "amqp:received:list",
+//     code = 0x0000_0000_0000_0023,
+//     encoding = "list",
+//     rename_all = "kebab-case"
+// )]
+// pub struct Received {
+//     /// <field name="section-number" type="uint" mandatory="true"/>
+//     pub section_number: UInt,
 
-    /// <field name="section-offset" type="ulong" mandatory="true"/>
-    pub section_offset: ULong,
-}
+//     /// <field name="section-offset" type="ulong" mandatory="true"/>
+//     pub section_offset: ULong,
+// }
 
-/// 3.4.2 Accepted
-/// The accepted outcome
-///
-/// <type name="accepted" class="composite" source="list" provides="delivery-state, outcome">
-///     <descriptor name="amqp:accepted:list" code="0x00000000:0x00000024"/>
-/// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-#[amqp_contract(
-    name = "amqp:accepted:list",
-    code = 0x0000_0000_0000_0024,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Accepted {}
+// /// 3.4.2 Accepted
+// /// The accepted outcome
+// ///
+// /// <type name="accepted" class="composite" source="list" provides="delivery-state, outcome">
+// ///     <descriptor name="amqp:accepted:list" code="0x00000000:0x00000024"/>
+// /// </type>
+// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+// #[amqp_contract(
+//     name = "amqp:accepted:list",
+//     code = 0x0000_0000_0000_0024,
+//     encoding = "list",
+//     rename_all = "kebab-case"
+// )]
+// pub struct Accepted {}
 
-/// 3.4.3 Rejected
-/// The rejected outcome.
-///
-/// <type name="rejected" class="composite" source="list" provides="delivery-state, outcome">
-///     <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
-/// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-#[amqp_contract(
-    name = "amqp:rejected:list",
-    code = 0x0000_0000_0000_0025,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Rejected {
-    /// <field name="error" type="error"/>
-    pub error: Option<bool>,
-}
+// /// 3.4.3 Rejected
+// /// The rejected outcome.
+// ///
+// /// <type name="rejected" class="composite" source="list" provides="delivery-state, outcome">
+// ///     <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
+// /// </type>
+// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+// #[amqp_contract(
+//     name = "amqp:rejected:list",
+//     code = 0x0000_0000_0000_0025,
+//     encoding = "list",
+//     rename_all = "kebab-case"
+// )]
+// pub struct Rejected {
+//     /// <field name="error" type="error"/>
+//     pub error: Option<bool>,
+// }
 
-/// 3.4.4 Released
-/// The released outcome.
-/// <type name="released" class="composite" source="list" provides="delivery-state, outcome">
-///     <descriptor name="amqp:released:list" code="0x00000000:0x00000026"/>
-/// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-#[amqp_contract(
-    name = "amqp:released:list",
-    code = 0x000_0000_0000_0026,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Released {}
+// /// 3.4.4 Released
+// /// The released outcome.
+// /// <type name="released" class="composite" source="list" provides="delivery-state, outcome">
+// ///     <descriptor name="amqp:released:list" code="0x00000000:0x00000026"/>
+// /// </type>
+// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+// #[amqp_contract(
+//     name = "amqp:released:list",
+//     code = 0x000_0000_0000_0026,
+//     encoding = "list",
+//     rename_all = "kebab-case"
+// )]
+// pub struct Released {}
 
-/// 3.4.5 Modified
-/// The modified outcome.
-/// <type name="modified" class="composite" source="list" provides="delivery-state, outcome">
-///     <descriptor name="amqp:modified:list" code="0x00000000:0x00000027"/>
-/// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-#[amqp_contract(
-    name = "amqp:modified:list",
-    code = 0x0000_0000_0000_0027,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Modified {
-    /// <field name="delivery-failed" type="boolean"/>
-    pub delivery_failed: Option<Boolean>,
+// /// 3.4.5 Modified
+// /// The modified outcome.
+// /// <type name="modified" class="composite" source="list" provides="delivery-state, outcome">
+// ///     <descriptor name="amqp:modified:list" code="0x00000000:0x00000027"/>
+// /// </type>
+// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+// #[amqp_contract(
+//     name = "amqp:modified:list",
+//     code = 0x0000_0000_0000_0027,
+//     encoding = "list",
+//     rename_all = "kebab-case"
+// )]
+// pub struct Modified {
+//     /// <field name="delivery-failed" type="boolean"/>
+//     pub delivery_failed: Option<Boolean>,
 
-    /// <field name="undeliverable-here" type="boolean"/>
-    pub undeliverable_here: Option<Boolean>,
+//     /// <field name="undeliverable-here" type="boolean"/>
+//     pub undeliverable_here: Option<Boolean>,
 
-    /// <field name="message-annotations" type="fields"/>
-    pub message_annotations: Option<BTreeMap<String, String>>,
-}
+//     /// <field name="message-annotations" type="fields"/>
+//     pub message_annotations: Option<BTreeMap<String, String>>,
+// }

@@ -36,38 +36,38 @@ pub trait Read<'de>: private::Sealed {
         Ok(buf)
     }
 
-    fn read_item_bytes_with_format_code(&mut self) -> Result<Vec<u8>, Error> {
-        use crate::format::Category;
-        let code_byte = self.next()?;
-        let code: EncodingCodes = code_byte.try_into()?;
-        let mut vec = match code.try_into()? {
-            Category::Fixed(w) => {
-                let mut buf = vec![0u8; 1 + w as usize];
-                self.read_exact(&mut buf[1..])?;
-                buf
-            }
-            Category::Encoded(w) => match w {
-                EncodedWidth::Zero => return Ok(vec![code_byte]),
-                EncodedWidth::One => {
-                    let len = self.next()?;
-                    let mut buf = vec![0u8; 1 + 1 + len as usize];
-                    self.read_exact(&mut buf[2..])?;
-                    buf[1] = len;
-                    buf
-                }
-                EncodedWidth::Four => {
-                    let len_bytes = self.read_const_bytes()?;
-                    let len = u32::from_be_bytes(len_bytes);
-                    let mut buf = vec![0u8; 1 + 4 + len as usize];
-                    self.read_exact(&mut buf[5..])?;
-                    (&mut buf[1..5]).copy_from_slice(&len_bytes);
-                    buf
-                }
-            },
-        };
-        vec[0] = code_byte;
-        Ok(vec)
-    }
+    // fn read_item_bytes_with_format_code(&mut self) -> Result<Vec<u8>, Error> {
+    //     use crate::format::Category;
+    //     let code_byte = self.next()?;
+    //     let code: EncodingCodes = code_byte.try_into()?;
+    //     let mut vec = match code.try_into()? {
+    //         Category::Fixed(w) => {
+    //             let mut buf = vec![0u8; 1 + w as usize];
+    //             self.read_exact(&mut buf[1..])?;
+    //             buf
+    //         }
+    //         Category::Encoded(w) => match w {
+    //             EncodedWidth::Zero => return Ok(vec![code_byte]),
+    //             EncodedWidth::One => {
+    //                 let len = self.next()?;
+    //                 let mut buf = vec![0u8; 1 + 1 + len as usize];
+    //                 self.read_exact(&mut buf[2..])?;
+    //                 buf[1] = len;
+    //                 buf
+    //             }
+    //             EncodedWidth::Four => {
+    //                 let len_bytes = self.read_const_bytes()?;
+    //                 let len = u32::from_be_bytes(len_bytes);
+    //                 let mut buf = vec![0u8; 1 + 4 + len as usize];
+    //                 self.read_exact(&mut buf[5..])?;
+    //                 (&mut buf[1..5]).copy_from_slice(&len_bytes);
+    //                 buf
+    //             }
+    //         },
+    //     };
+    //     vec[0] = code_byte;
+    //     Ok(vec)
+    // }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error>;
 

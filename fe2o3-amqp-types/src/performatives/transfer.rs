@@ -170,3 +170,32 @@ pub struct Transfer {
     #[amqp_contract(default)]
     pub batchable: Boolean,
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_amqp::to_vec;
+    use serde_bytes::ByteBuf;
+
+    use crate::definitions::{Handle, ReceiverSettleMode};
+
+    use super::Transfer;
+
+    #[test]
+    fn test_serialize_transfer() {
+        let transfer = Transfer {
+            handle: Handle(0),
+            delivery_id: Some(0),
+            delivery_tag: Some(ByteBuf::from([0, 0, 0, 1])),
+            message_format: Some(0),
+            settled: Some(true),
+            more: false,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: false,
+        };
+        let serialized = to_vec(&transfer).unwrap();
+        println!("{0:x?}", serialized);
+    }
+}

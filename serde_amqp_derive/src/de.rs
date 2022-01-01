@@ -250,7 +250,7 @@ fn expand_deserialize_tuple_struct(
                 // DESCRIPTOR is included here for compatibility with other deserializer
                 deserializer.deserialize_tuple_struct(
                     #struct_name,
-                    #len,
+                    #len + 1, // descriptor also takes one
                     Visitor{}
                 )
             }

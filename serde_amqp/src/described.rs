@@ -105,6 +105,7 @@ mod tests {
         let value = Box::new(vec![1i32, 2]);
         let described = Described { descriptor, value };
         let buf = to_vec(&described).unwrap();
+        println!("{:?}", &buf);
         let recovered: Described<Vec<i32>> = from_slice(&buf).unwrap();
         println!("{:?}", recovered);
     }

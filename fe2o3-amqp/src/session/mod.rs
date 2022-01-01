@@ -142,7 +142,7 @@ pub struct Session {
     link_by_name: BTreeMap<String, Handle>,
     link_by_input_handle: BTreeMap<Handle, Handle>,
     // Maps from DeliveryId to link.DeliveryCount
-    delivery_tag_by_id: BTreeMap<TransferNumber, [u8;4]>,
+    delivery_tag_by_id: BTreeMap<TransferNumber, [u8; 4]>,
 }
 
 impl Session {
@@ -466,14 +466,14 @@ impl endpoint::Session for Session {
             let delivery_id = self.next_outgoing_id;
             transfer.delivery_id = Some(delivery_id);
 
-            let mut delivery_tag  = [0u8; 4];
+            let mut delivery_tag = [0u8; 4];
             // TODO: Is bound check necessary
-            (&mut delivery_tag).copy_from_slice(tag); 
+            (&mut delivery_tag).copy_from_slice(tag);
 
             // Disposition doesn't carry delivery tag
             self.delivery_tag_by_id.insert(delivery_id, delivery_tag);
         }
-        
+
         self.next_outgoing_id += 1;
 
         // The remote-incoming-window reflects the maximum number of outgoing transfers that can

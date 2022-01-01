@@ -16,7 +16,7 @@ use crate::{
 /// <type name="header" class="composite" source="list" provides="section">
 ///     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:header:list",
     code = 0x0000_0000_0000_0070,
@@ -103,43 +103,43 @@ pub struct MessageAnnotations(pub Annotations);
 )]
 pub struct Properties {
     /// <field name="message-id" type="*" requires="message-id"/>
-    message_id: Option<MessageId>,
+    pub message_id: Option<MessageId>,
 
     /// <field name="user-id" type="binary"/>
-    user_id: Option<Binary>,
+    pub user_id: Option<Binary>,
 
     /// <field name="to" type="*" requires="address"/>
-    to: Option<Address>,
+    pub to: Option<Address>,
 
     /// <field name="subject" type="string"/>
-    subject: Option<String>,
+    pub subject: Option<String>,
 
     /// <field name="reply-to" type="*" requires="address"/>
-    reply_to: Option<Address>,
+    pub reply_to: Option<Address>,
 
     /// <field name="correlation-id" type="*" requires="message-id"/>
-    correlation_id: Option<MessageId>,
+    pub correlation_id: Option<MessageId>,
 
     /// <field name="content-type" type="symbol"/>
-    content_type: Option<Symbol>,
+    pub content_type: Option<Symbol>,
 
     /// <field name="content-encoding" type="symbol"/>
-    content_encoding: Option<Symbol>,
+    pub content_encoding: Option<Symbol>,
 
     /// <field name="absolute-expiry-time" type="timestamp"/>
-    absolute_expiry_time: Option<Timestamp>,
+    pub absolute_expiry_time: Option<Timestamp>,
 
     /// <field name="creation-time" type="timestamp"/>
-    creation_time: Option<Timestamp>,
+    pub creation_time: Option<Timestamp>,
 
     /// <field name="group-id" type="string"/>
-    group_id: Option<String>,
+    pub group_id: Option<String>,
 
     /// <field name="group-sequence" type="sequence-no"/>
-    group_sequence: Option<SequenceNo>,
+    pub group_sequence: Option<SequenceNo>,
 
     /// <field name="reply-to-group-id" type="string"/>
-    reply_to_groud_id: Option<String>,
+    pub reply_to_groud_id: Option<String>,
 }
 
 /// 3.2.5 Application Properties

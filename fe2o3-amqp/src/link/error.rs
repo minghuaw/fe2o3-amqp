@@ -1,6 +1,9 @@
 use std::convert::Infallible;
 
-use fe2o3_amqp_types::{definitions::{self, AmqpError, ErrorCondition, LinkError}, messaging::{Rejected, Released, Modified}};
+use fe2o3_amqp_types::{
+    definitions::{self, AmqpError, ErrorCondition, LinkError},
+    messaging::{Modified, Rejected, Released},
+};
 use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;

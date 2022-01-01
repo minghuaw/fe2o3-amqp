@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition},
-    messaging::{Address, Message, Source, DeliveryState},
+    messaging::{Address, DeliveryState, Message, Source},
     performatives::Disposition,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -137,19 +137,17 @@ impl Sender<Attached> {
         match settlement {
             Settlement::Settled => Ok(()),
             Settlement::Unsettled(outcome) => {
-                let state = outcome.await
-                    .map_err(|_| Error::AmqpError {
-                        condition: AmqpError::IllegalState,
-                        description: Some("Outcome sender is dropped".into())
-                    })?;
+                let state = outcome.await.map_err(|_| Error::AmqpError {
+                    condition: AmqpError::IllegalState,
+                    description: Some("Outcome sender is dropped".into()),
+                })?;
                 match state {
-                    DeliveryState::Accepted(_) 
-                    | DeliveryState::Received(_) => Ok(()),
+                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
                     DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
                     DeliveryState::Released(released) => Err(Error::Released(released)),
-                    DeliveryState::Modified(modified) => Err(Error::Modified(modified))
+                    DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
                 }
-            },
+            }
         }
     }
 
@@ -327,9 +325,9 @@ fn map_send_detach_error(err: impl Into<Error>) -> DetachError {
             condition,
             description,
         } => (condition.into(), description),
-        Error::HandleMaxReached 
-        | Error::DuplicatedLinkName 
-        | Error::ParseError 
+        Error::HandleMaxReached
+        | Error::DuplicatedLinkName
+        | Error::ParseError
         | Error::Rejected(_)
         | Error::Released(_)
         | Error::Modified(_) => unreachable!(),

@@ -337,13 +337,48 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     fn buffer_descriptor(&mut self) -> Result<Vec<u8>, Error> {
+        use crate::format::{Category, EncodedWidth};
+
+        let described = self.reader.next()?;
         // place descriptor in a separate buf
         let descriptor_buf = match self.get_elem_code_or_peek_byte()?.try_into()? {
             EncodingCodes::ULong
             | EncodingCodes::Ulong0
             | EncodingCodes::SmallUlong
             | EncodingCodes::Sym8
-            | EncodingCodes::Sym32 => self.reader.read_item_bytes_with_format_code()?,
+            | EncodingCodes::Sym32 => {
+                // self.reader.read_item_bytes_with_format_code()?,
+                let code_byte = self.reader.next()?;
+                let code: EncodingCodes = code_byte.try_into()?;
+                let mut vec = match code.try_into()? {
+                    Category::Fixed(w) => {
+                        let mut buf = vec![0u8; 1 + 1 + w as usize];
+                        self.reader.read_exact(&mut buf[2..])?;
+                        buf
+                    }
+                    Category::Encoded(w) => match w {
+                        EncodedWidth::Zero => return Ok(vec![described, code_byte]),
+                        EncodedWidth::One => {
+                            let len = self.reader.next()?;
+                            let mut buf = vec![0u8; 1 + 1 + 1 + len as usize];
+                            self.reader.read_exact(&mut buf[3..])?;
+                            buf[2] = len;
+                            buf
+                        }
+                        EncodedWidth::Four => {
+                            let len_bytes = self.reader.read_const_bytes()?;
+                            let len = u32::from_be_bytes(len_bytes);
+                            let mut buf = vec![0u8; 1 + 1 + 4 + len as usize];
+                            self.reader.read_exact(&mut buf[6..])?;
+                            (&mut buf[2..6]).copy_from_slice(&len_bytes);
+                            buf
+                        }
+                    },
+                };
+                vec[0] = described;
+                vec[1] = code_byte;
+                vec
+            },
             _ => return Err(Error::InvalidFormatCode),
         };
         Ok(descriptor_buf)
@@ -355,10 +390,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         V: de::Visitor<'de>,
     {
         // consume the EncodingCodes::Described byte
-        match self.reader.next()?.try_into()? {
-            EncodingCodes::DescribedType => {}
-            _ => return Err(Error::InvalidFormatCode),
-        };
+        // match self.reader.next()?.try_into()? {
+        //     EncodingCodes::DescribedType => {}
+        //     _ => return Err(Error::InvalidFormatCode),
+        // };
 
         // place descriptor in a separate buf
         let descriptor_buf = self.buffer_descriptor()?;
@@ -375,21 +410,21 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     }
 
     #[inline]
-    fn parse_described_basic<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    fn parse_described_basic<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug: parse_described_basic");
         // consume the EncodingCodes::Described byte
-        match self.reader.next()?.try_into()? {
-            EncodingCodes::DescribedType => {}
-            _ => return Err(Error::InvalidFormatCode),
-        };
+        // match self.reader.next()?.try_into()? {
+        //     EncodingCodes::DescribedType => {}
+        //     _ => return Err(Error::InvalidFormatCode),
+        // };
 
         // place descriptor in a separate buf
         let descriptor_buf = self.buffer_descriptor()?;
 
-        visitor.visit_seq(DescribedAccess::new(self, Some(descriptor_buf)))
+        visitor.visit_seq(DescribedAccess::with_field_count(self, Some(descriptor_buf), len))
     }
 
     #[inline]
@@ -946,7 +981,7 @@ where
         println!(">>> Debug: deserialize_tuple_struct");
         if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
-            self.parse_described_basic(visitor)
+            self.parse_described_basic(len, visitor)
         } else if name == DESCRIBED_LIST {
             self.struct_encoding = StructEncoding::DescribedList;
             self.parse_described(visitor)
@@ -972,7 +1007,7 @@ where
             StructEncoding::None => {
                 if name == DESCRIBED_BASIC {
                     self.struct_encoding = StructEncoding::DescribedBasic;
-                    self.parse_described_basic(visitor)
+                    self.parse_described_basic(fields.len(), visitor)
                 } else if name == DESCRIBED_LIST {
                     self.struct_encoding = StructEncoding::DescribedList;
                     self.parse_described(visitor)
@@ -990,7 +1025,7 @@ where
                     }
                 }
             }
-            StructEncoding::DescribedBasic => self.parse_described_basic(visitor),
+            StructEncoding::DescribedBasic => self.parse_described_basic(fields.len(), visitor),
             StructEncoding::DescribedList => self.parse_described(visitor),
             StructEncoding::DescribedMap => self.parse_described(visitor),
         }
@@ -1013,6 +1048,10 @@ where
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == DESCRIPTOR {
             println!(">>> Debug: EnumType::Descriptor");
+            // match self.get_elem_code_or_read_format_code()? {   
+            //     EncodingCodes::DescribedType => {},
+            //     _ => return Err(Error::InvalidFormatCode)
+            // }
             self.enum_type = EnumType::Descriptor;
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == UNTAGGED_ENUM {
@@ -1074,6 +1113,11 @@ where
                 visitor.visit_u8(code)
             }
             EnumType::Descriptor => {
+                // Consume the EncodingCodes::Described byte
+                match self.reader.next()?.try_into()? {
+                    EncodingCodes::DescribedType => {}
+                    _ => return Err(Error::InvalidFormatCode),
+                };
                 let code = self.get_elem_code_or_peek_byte()?;
                 visitor.visit_u8(code)
             }
@@ -1378,6 +1422,16 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
         }
     }
 
+    pub fn with_field_count(de: &'a mut Deserializer<R>, descriptor_buf: Option<Vec<u8>>, field_count: usize) -> Self {
+        Self {
+            de, 
+            descriptor_buf,
+            field_count,
+            // The first field should be the descriptor
+            field_role: FieldRole::Descriptor,
+        }
+    }
+
     pub fn consume_list_header(&mut self) -> Result<usize, Error> {
         // consume the list headers if
         match self.as_mut().get_elem_code_or_read_format_code()? {
@@ -1447,7 +1501,11 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 match self.de.struct_encoding {
                     StructEncoding::None => {}
                     StructEncoding::DescribedBasic => {
-                        self.field_count = 1; // There should be only one wrapped element
+                        if self.field_count == 0 {
+                            return Ok(None);
+                        }
+                        self.field_count -= 1;
+                        // self.field_count = 1; // There should be only one wrapped element
                     }
                     StructEncoding::DescribedList => {
                         self.field_count = self.consume_list_header()?;
@@ -1853,17 +1911,6 @@ mod tests {
         expected.insert("p".to_string(), 4);
 
         assert_eq_from_reader_vs_expected(&buf, expected);
-    }
-
-    #[test]
-    fn test_deserialize_descriptor() {
-        use crate::primitives::Symbol;
-        use crate::ser::to_vec;
-
-        let descriptor = Descriptor::Name(Symbol::from("amqp"));
-        // let descriptor = Descriptor::Code(113);
-        let buf = to_vec(&descriptor).unwrap();
-        assert_eq_from_slice_vs_expected(&buf, descriptor);
     }
 
     #[cfg(feature = "serde_amqp_derive")]

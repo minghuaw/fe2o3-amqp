@@ -12,14 +12,14 @@ use fe2o3_amqp_types::{
     primitives::Symbol,
 };
 use futures_util::{Sink, SinkExt};
-use tokio::sync::{mpsc, RwLock, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
     endpoint::{self, Settlement},
     util::Consumer,
 };
 
-use super::{LinkFlowState, LinkFrame, LinkState, UnsettledMap, delivery::UnsettledDelivery};
+use super::{delivery::UnsettledDelivery, LinkFlowState, LinkFrame, LinkState, UnsettledMap};
 use crate::link;
 
 /// Manages the link state
@@ -156,9 +156,7 @@ impl endpoint::Link for SenderLink {
                 _ => Some(
                     guard
                         .iter()
-                        .map(|(key, val)| {
-                            (DeliveryTag::from(*key), val.state().clone())
-                        })
+                        .map(|(key, val)| (DeliveryTag::from(*key), val.state().clone()))
                         .collect(),
                 ),
             }
@@ -312,9 +310,7 @@ impl endpoint::SenderLink for SenderLink {
                 .clone()
                 .ok_or_else(|| AmqpError::IllegalState)?;
 
-            let delivery_tag = self.flow_state.state()
-                .delivery_count().await
-                .to_be_bytes();
+            let delivery_tag = self.flow_state.state().delivery_count().await.to_be_bytes();
 
             // TODO: Expose API to allow user to set this when the mode is MIXED?
             let settled = match self.snd_settle_mode {

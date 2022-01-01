@@ -105,11 +105,11 @@ pub struct UnsettledDelivery {
 
 impl UnsettledDelivery {
     pub fn new(sender: oneshot::Sender<DeliveryState>) -> Self {
-        // Assume needing to resend from the beginning unless there is further 
+        // Assume needing to resend from the beginning unless there is further
         // update from the remote peer
         let received = Received {
             section_number: 0,
-            section_offset: 0
+            section_offset: 0,
         };
 
         Self {
