@@ -56,6 +56,73 @@ impl Serialize for Message {
     }
 }
 
+enum Field {
+    Header,
+    DeliveryAnnotations,
+    MessageAnnotations,
+    Properties,
+    ApplicationProperties,
+    BodySection,
+    Footer
+}
+
+struct FieldVisitor { }
+
+impl<'de> de::Visitor<'de> for FieldVisitor {
+    type Value = Field;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("Field")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        let val = match v {
+            "amqp:header:list" => Field::Header,
+            "amqp:delivery-annotations:map" => Field::DeliveryAnnotations,
+            "amqp:message-annotations:map" => Field::MessageAnnotations,
+            "amqp:properties:list" => Field::Properties,
+            "amqp:application-properties:map" => Field::ApplicationProperties,
+            "amqp:data:binary" 
+            | "amqp:amqp-sequence:list" 
+            | "amqp:amqp-value:*" => Field::BodySection,
+            "amqp:footer:map" => Field::Footer,
+            _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
+        };
+        Ok(val)
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error, 
+    {
+        let val = match v {
+            0x0000_0000_0000_0070 => Field::Header,
+            0x0000_0000_0000_0071 => Field::DeliveryAnnotations,
+            0x0000_0000_0000_0072 => Field::MessageAnnotations,
+            0x0000_0000_0000_0073 => Field::Properties,
+            0x0000_0000_0000_0074 => Field::ApplicationProperties,
+            0x0000_0000_0000_0075
+            | 0x0000_0000_0000_0076
+            | 0x0000_0000_0000_0077 => Field::BodySection,
+            0x0000_0000_0000_0078 => Field::Footer,
+            _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
+        };
+        Ok(val)
+    }
+}
+
+impl<'de> de::Deserialize<'de> for Field {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> 
+    {
+        deserializer.deserialize_ignored_any(FieldVisitor {})
+    }
+}
+
 struct Visitor {}
 
 impl<'de> de::Visitor<'de> for Visitor {
@@ -78,64 +145,19 @@ impl<'de> de::Visitor<'de> for Visitor {
         let mut footer = None;
 
         for _ in 0..7 {
-            let descriptor = match seq.next_element()? {
+            let field: Field = match seq.next_element()? {
                 Some(val) => val,
                 None => break
             };
 
-            println!("{:?}", &descriptor);
-
-            match descriptor {
-                Descriptor::Code(code) => match code {
-                    0x0000_0000_0000_0070 => header = deserialize_header(&mut seq)?,
-                    0x0000_0000_0000_0071 => {
-                        delivery_annotations = deserialize_delivery_annotations(&mut seq)?
-                    }
-                    0x0000_0000_0000_0072 => {
-                        message_annotations = deserialize_message_annotations(&mut seq)?
-                    }
-                    0x0000_0000_0000_0073 => properties = deserialize_properties(&mut seq)?,
-                    0x0000_0000_0000_0074 => {
-                        application_properties = deserialize_application_properties(&mut seq)?
-                    }
-                    0x0000_0000_0000_0075 => {
-                        body_section = Some(BodySection::Data(deserialize_data(&mut seq)?))
-                    }
-                    0x0000_0000_0000_0076 => {
-                        body_section =
-                            Some(BodySection::Sequence(deserialize_amqp_sequence(&mut seq)?))
-                    }
-                    0x0000_0000_0000_0077 => {
-                        body_section = Some(BodySection::Value(deserialize_amqp_value(&mut seq)?))
-                    }
-                    0x0000_0000_0000_0078 => footer = deserialize_footer(&mut seq)?,
-                    _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
-                },
-                Descriptor::Name(name) => match name.as_str() {
-                    "amqp:header:list" => header = deserialize_header(&mut seq)?,
-                    "amqp:delivery-annotations:map" => {
-                        delivery_annotations = deserialize_delivery_annotations(&mut seq)?
-                    }
-                    "amqp:message-annotations:map" => {
-                        message_annotations = deserialize_message_annotations(&mut seq)?
-                    }
-                    "amqp:properties:list" => properties = deserialize_properties(&mut seq)?,
-                    "amqp:application-properties:map" => {
-                        application_properties = deserialize_application_properties(&mut seq)?
-                    }
-                    "amqp:data:binary" => {
-                        body_section = Some(BodySection::Data(deserialize_data(&mut seq)?))
-                    }
-                    "amqp:amqp-sequence:list" => {
-                        body_section =
-                            Some(BodySection::Sequence(deserialize_amqp_sequence(&mut seq)?))
-                    }
-                    "amqp:amqp-value:*" => {
-                        body_section = Some(BodySection::Value(deserialize_amqp_value(&mut seq)?))
-                    }
-                    "amqp:footer:map" => footer = deserialize_footer(&mut seq)?,
-                    _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
-                },
+            match field {
+                Field::Header => header = seq.next_element()?,
+                Field::DeliveryAnnotations => delivery_annotations = seq.next_element()?,
+                Field::MessageAnnotations => message_annotations = seq.next_element()?,
+                Field::Properties => properties = seq.next_element()?,
+                Field::ApplicationProperties => application_properties = seq.next_element()?,
+                Field::BodySection => body_section = seq.next_element()?,
+                Field::Footer => footer = seq.next_element()?,
             }
         }
 
@@ -159,147 +181,147 @@ impl<'de> de::Visitor<'de> for Visitor {
 //     seq.next_element()?
 // }
 
-#[inline]
-fn deserialize_header<'de, A>(seq: &mut A) -> Result<Option<Header>, A::Error>
-where
-    A: de::SeqAccess<'de>,
-{
-    let durable: bool = match seq.next_element()? {
-        Some(val) => val,
-        None => Default::default(),
-    };
-    let priority: Priority = match seq.next_element()? {
-        Some(val) => val,
-        None => Default::default(),
-    };
-    let ttl: Option<Milliseconds> = seq.next_element()?;
-    let first_acquirer: bool = match seq.next_element()? {
-        Some(val) => val,
-        None => Default::default(),
-    };
-    let delivery_count: u32 = match seq.next_element()? {
-        Some(val) => val,
-        None => Default::default(),
-    };
-    Ok(Some(Header {
-        durable,
-        priority,
-        ttl,
-        first_acquirer,
-        delivery_count,
-    }))
-}
+// #[inline]
+// fn deserialize_header<'de, A>(seq: &mut A) -> Result<Option<Header>, A::Error>
+// where
+//     A: de::SeqAccess<'de>,
+// {
+//     let durable: bool = match seq.next_element()? {
+//         Some(val) => val,
+//         None => Default::default(),
+//     };
+//     let priority: Priority = match seq.next_element()? {
+//         Some(val) => val,
+//         None => Default::default(),
+//     };
+//     let ttl: Option<Milliseconds> = seq.next_element()?;
+//     let first_acquirer: bool = match seq.next_element()? {
+//         Some(val) => val,
+//         None => Default::default(),
+//     };
+//     let delivery_count: u32 = match seq.next_element()? {
+//         Some(val) => val,
+//         None => Default::default(),
+//     };
+//     Ok(Some(Header {
+//         durable,
+//         priority,
+//         ttl,
+//         first_acquirer,
+//         delivery_count,
+//     }))
+// }
 
-#[inline]
-fn deserialize_delivery_annotations<'de, A>(
-    seq: &mut A,
-) -> Result<Option<DeliveryAnnotations>, A::Error>
-where
-    A: de::SeqAccess<'de>,
-{
-    let annotations = seq.next_element()?;
-    Ok(annotations.map(|val| DeliveryAnnotations(val)))
-}
+// #[inline]
+// fn deserialize_delivery_annotations<'de, A>(
+//     seq: &mut A,
+// ) -> Result<Option<DeliveryAnnotations>, A::Error>
+// where
+//     A: de::SeqAccess<'de>,
+// {
+//     let annotations = seq.next_element()?;
+//     Ok(annotations.map(|val| DeliveryAnnotations(val)))
+// }
 
-#[inline]
-fn deserialize_message_annotations<'de, A>(
-    seq: &mut A,
-) -> Result<Option<MessageAnnotations>, A::Error>
-where
-    A: de::SeqAccess<'de>,
-{
-    let annotations = seq.next_element()?;
-    Ok(annotations.map(|val| MessageAnnotations(val)))
-}
+// #[inline]
+// fn deserialize_message_annotations<'de, A>(
+//     seq: &mut A,
+// ) -> Result<Option<MessageAnnotations>, A::Error>
+// where
+//     A: de::SeqAccess<'de>,
+// {
+//     let annotations = seq.next_element()?;
+//     Ok(annotations.map(|val| MessageAnnotations(val)))
+// }
 
-#[inline]
-fn deserialize_properties<'de, A>(seq: &mut A) -> Result<Option<Properties>, A::Error>
-where
-    A: de::SeqAccess<'de>,
-{
-    let message_id: Option<MessageId> = seq.next_element()?;
-    let user_id: Option<Binary> = seq.next_element()?;
-    let to: Option<Address> = seq.next_element()?;
-    let subject: Option<String> = seq.next_element()?;
-    let reply_to: Option<Address> = seq.next_element()?;
-    let correlation_id: Option<MessageId> = seq.next_element()?;
-    let content_type: Option<Symbol> = seq.next_element()?;
-    let content_encoding: Option<Symbol> = seq.next_element()?;
-    let absolute_expiry_time: Option<Timestamp> = seq.next_element()?;
-    let creation_time: Option<Timestamp> = seq.next_element()?;
-    let group_id: Option<String> = seq.next_element()?;
-    let group_sequence: Option<SequenceNo> = seq.next_element()?;
-    let reply_to_groud_id: Option<String> = seq.next_element()?;
+// #[inline]
+// fn deserialize_properties<'de, A>(seq: &mut A) -> Result<Option<Properties>, A::Error>
+// where
+//     A: de::SeqAccess<'de>,
+// {
+//     let message_id: Option<MessageId> = seq.next_element()?;
+//     let user_id: Option<Binary> = seq.next_element()?;
+//     let to: Option<Address> = seq.next_element()?;
+//     let subject: Option<String> = seq.next_element()?;
+//     let reply_to: Option<Address> = seq.next_element()?;
+//     let correlation_id: Option<MessageId> = seq.next_element()?;
+//     let content_type: Option<Symbol> = seq.next_element()?;
+//     let content_encoding: Option<Symbol> = seq.next_element()?;
+//     let absolute_expiry_time: Option<Timestamp> = seq.next_element()?;
+//     let creation_time: Option<Timestamp> = seq.next_element()?;
+//     let group_id: Option<String> = seq.next_element()?;
+//     let group_sequence: Option<SequenceNo> = seq.next_element()?;
+//     let reply_to_groud_id: Option<String> = seq.next_element()?;
 
-    Ok(Some(Properties {
-        message_id,
-        user_id,
-        to,
-        subject,
-        reply_to,
-        correlation_id,
-        content_type,
-        content_encoding,
-        absolute_expiry_time,
-        creation_time,
-        group_id,
-        group_sequence,
-        reply_to_groud_id,
-    }))
-}
+//     Ok(Some(Properties {
+//         message_id,
+//         user_id,
+//         to,
+//         subject,
+//         reply_to,
+//         correlation_id,
+//         content_type,
+//         content_encoding,
+//         absolute_expiry_time,
+//         creation_time,
+//         group_id,
+//         group_sequence,
+//         reply_to_groud_id,
+//     }))
+// }
 
-#[inline]
-fn deserialize_application_properties<'de, A>(
-    seq: &mut A,
-) -> Result<Option<ApplicationProperties>, A::Error>
-where
-    A: SeqAccess<'de>,
-{
-    let value = seq.next_element()?;
-    Ok(value.map(|val| ApplicationProperties(val)))
-}
+// #[inline]
+// fn deserialize_application_properties<'de, A>(
+//     seq: &mut A,
+// ) -> Result<Option<ApplicationProperties>, A::Error>
+// where
+//     A: SeqAccess<'de>,
+// {
+//     let value = seq.next_element()?;
+//     Ok(value.map(|val| ApplicationProperties(val)))
+// }
 
-#[inline]
-fn deserialize_data<'de, A>(seq: &mut A) -> Result<Data, A::Error>
-where
-    A: SeqAccess<'de>,
-{
-    match seq.next_element()? {
-        Some(val) => Ok(Data(val)),
-        None => Err(de::Error::custom("Expecting Data")),
-    }
-}
+// #[inline]
+// fn deserialize_data<'de, A>(seq: &mut A) -> Result<Data, A::Error>
+// where
+//     A: SeqAccess<'de>,
+// {
+//     match seq.next_element()? {
+//         Some(val) => Ok(Data(val)),
+//         None => Err(de::Error::custom("Expecting Data")),
+//     }
+// }
 
-#[inline]
-fn deserialize_amqp_sequence<'de, A>(seq: &mut A) -> Result<AmqpSequence, A::Error>
-where
-    A: SeqAccess<'de>,
-{
-    match seq.next_element()? {
-        Some(val) => Ok(AmqpSequence(val)),
-        None => Err(de::Error::custom("Expecting AmqpSequence")),
-    }
-}
+// #[inline]
+// fn deserialize_amqp_sequence<'de, A>(seq: &mut A) -> Result<AmqpSequence, A::Error>
+// where
+//     A: SeqAccess<'de>,
+// {
+//     match seq.next_element()? {
+//         Some(val) => Ok(AmqpSequence(val)),
+//         None => Err(de::Error::custom("Expecting AmqpSequence")),
+//     }
+// }
 
-#[inline]
-fn deserialize_amqp_value<'de, A>(seq: &mut A) -> Result<AmqpValue, A::Error>
-where
-    A: SeqAccess<'de>,
-{
-    match seq.next_element()? {
-        Some(val) => Ok(AmqpValue(val)),
-        None => Err(de::Error::custom("Expecting AmqpSequence")),
-    }
-}
+// #[inline]
+// fn deserialize_amqp_value<'de, A>(seq: &mut A) -> Result<AmqpValue, A::Error>
+// where
+//     A: SeqAccess<'de>,
+// {
+//     match seq.next_element()? {
+//         Some(val) => Ok(AmqpValue(val)),
+//         None => Err(de::Error::custom("Expecting AmqpSequence")),
+//     }
+// }
 
-#[inline]
-fn deserialize_footer<'de, A>(seq: &mut A) -> Result<Option<Footer>, A::Error>
-where
-    A: SeqAccess<'de>,
-{
-    let annotations = seq.next_element()?;
-    Ok(annotations.map(|val| Footer(val)))
-}
+// #[inline]
+// fn deserialize_footer<'de, A>(seq: &mut A) -> Result<Option<Footer>, A::Error>
+// where
+//     A: SeqAccess<'de>,
+// {
+//     let annotations = seq.next_element()?;
+//     Ok(annotations.map(|val| Footer(val)))
+// }
 
 impl<'de> de::Deserialize<'de> for Message {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -603,10 +625,11 @@ mod tests {
     #[test]
     fn test_serialize_deserialize_message() {
         let message = Message {
-            header: Some(Header {
-                durable: true,
-                ..Default::default()
-            }),
+            // header: Some(Header {
+            //     durable: true,
+            //     ..Default::default()
+            // }),
+            header: None,
             delivery_annotations: None,
             message_annotations: None,
             properties: None,

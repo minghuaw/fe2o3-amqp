@@ -1,5 +1,5 @@
 use serde::de::{self};
-use std::convert::TryInto;
+use std::{convert::TryInto, str::EncodeUtf16};
 
 use crate::{
     __constants::{
@@ -384,48 +384,48 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         Ok(descriptor_buf)
     }
 
-    #[inline]
-    fn parse_described<V>(&mut self, visitor: V) -> Result<V::Value, Error>
-    where
-        V: de::Visitor<'de>,
-    {
-        // consume the EncodingCodes::Described byte
-        // match self.reader.next()?.try_into()? {
-        //     EncodingCodes::DescribedType => {}
-        //     _ => return Err(Error::InvalidFormatCode),
-        // };
+    // #[inline]
+    // fn parse_described<V>(&mut self, visitor: V) -> Result<V::Value, Error>
+    // where
+    //     V: de::Visitor<'de>,
+    // {
+    //     // consume the EncodingCodes::Described byte
+    //     // match self.reader.next()?.try_into()? {
+    //     //     EncodingCodes::DescribedType => {}
+    //     //     _ => return Err(Error::InvalidFormatCode),
+    //     // };
 
-        // place descriptor in a separate buf
-        let descriptor_buf = self.buffer_descriptor()?;
+    //     // place descriptor in a separate buf
+    //     // let descriptor_buf = self.buffer_descriptor()?;
 
-        match self.get_elem_code_or_peek_byte()?.try_into()? {
-            EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
-                visitor.visit_seq(DescribedAccess::new(self, Some(descriptor_buf)))
-            }
-            EncodingCodes::Map8 | EncodingCodes::Map32 => {
-                visitor.visit_map(DescribedAccess::new(self, Some(descriptor_buf)))
-            }
-            _ => Err(Error::InvalidFormatCode),
-        }
-    }
+    //     match self.get_elem_code_or_peek_byte()?.try_into()? {
+    //         EncodingCodes::List0 | EncodingCodes::List8 | EncodingCodes::List32 => {
+    //             visitor.visit_seq(DescribedAccess::new(self))
+    //         }
+    //         EncodingCodes::Map8 | EncodingCodes::Map32 => {
+    //             visitor.visit_map(DescribedAccess::new(self))
+    //         }
+    //         _ => Err(Error::InvalidFormatCode),
+    //     }
+    // }
 
-    #[inline]
-    fn parse_described_basic<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
-    where
-        V: de::Visitor<'de>,
-    {
-        println!(">>> Debug: parse_described_basic");
-        // consume the EncodingCodes::Described byte
-        // match self.reader.next()?.try_into()? {
-        //     EncodingCodes::DescribedType => {}
-        //     _ => return Err(Error::InvalidFormatCode),
-        // };
+    // #[inline]
+    // fn parse_described_basic<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
+    // where
+    //     V: de::Visitor<'de>,
+    // {
+    //     println!(">>> Debug: parse_described_basic");
+    //     // consume the EncodingCodes::Described byte
+    //     // match self.reader.next()?.try_into()? {
+    //     //     EncodingCodes::DescribedType => {}
+    //     //     _ => return Err(Error::InvalidFormatCode),
+    //     // };
 
-        // place descriptor in a separate buf
-        let descriptor_buf = self.buffer_descriptor()?;
+    //     // place descriptor in a separate buf
+    //     // let descriptor_buf = self.buffer_descriptor()?;
 
-        visitor.visit_seq(DescribedAccess::with_field_count(self, Some(descriptor_buf), len))
-    }
+    //     visitor.visit_seq(DescribedAccess::with_field_count(self, len))
+    // }
 
     #[inline]
     fn parse_described_identifier<V>(&mut self, visitor: V) -> Result<V::Value, Error>
@@ -981,13 +981,13 @@ where
         println!(">>> Debug: deserialize_tuple_struct");
         if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
-            self.parse_described_basic(len, visitor)
+            visitor.visit_seq(DescribedAccess::basic(self, len))
         } else if name == DESCRIBED_LIST {
             self.struct_encoding = StructEncoding::DescribedList;
-            self.parse_described(visitor)
+            visitor.visit_seq(DescribedAccess::list(self))
         } else {
             match self.get_elem_code_or_peek_byte()?.try_into()? {
-                EncodingCodes::DescribedType => self.parse_described(visitor),
+                EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
                 _ => self.deserialize_tuple(len, visitor),
             }
         }
@@ -1007,27 +1007,29 @@ where
             StructEncoding::None => {
                 if name == DESCRIBED_BASIC {
                     self.struct_encoding = StructEncoding::DescribedBasic;
-                    self.parse_described_basic(fields.len(), visitor)
+                    // self.parse_described_basic(fields.len(), visitor)
+                    visitor.visit_seq(DescribedAccess::basic(self, fields.len()))
                 } else if name == DESCRIBED_LIST {
                     self.struct_encoding = StructEncoding::DescribedList;
-                    self.parse_described(visitor)
+                    
+                    visitor.visit_seq(DescribedAccess::list(self))
                 } else if name == DESCRIBED_MAP {
                     self.struct_encoding = StructEncoding::DescribedMap;
-                    self.parse_described(visitor)
+                    visitor.visit_map(DescribedAccess::map(self))
                 } else {
                     match self.get_elem_code_or_peek_byte()?.try_into()? {
                         EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                             self.deserialize_tuple(fields.len(), visitor)
                         }
                         EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                        EncodingCodes::DescribedType => self.parse_described(visitor),
+                        EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
                         _ => Err(Error::InvalidFormatCode),
                     }
                 }
             }
-            StructEncoding::DescribedBasic => self.parse_described_basic(fields.len(), visitor),
-            StructEncoding::DescribedList => self.parse_described(visitor),
-            StructEncoding::DescribedMap => self.parse_described(visitor),
+            StructEncoding::DescribedBasic => visitor.visit_seq(DescribedAccess::basic(self, fields.len())),
+            StructEncoding::DescribedList => visitor.visit_seq(DescribedAccess::list(self)),
+            StructEncoding::DescribedMap => visitor.visit_map(DescribedAccess::map(self)),
         }
     }
 
@@ -1406,29 +1408,45 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
 /// A special visitor access to the `Described` type
 pub struct DescribedAccess<'a, R> {
     de: &'a mut Deserializer<R>,
-    descriptor_buf: Option<Vec<u8>>,
+    // descriptor_buf: Option<Vec<u8>>,
+    counter: usize,
     field_count: usize,
-    field_role: FieldRole,
+    // field_role: FieldRole,
 }
 
 impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>, descriptor_buf: Option<Vec<u8>>) -> Self {
+    /// There will be at least one descriptor, and the length of the 
+    /// remaining items will be determined from the bytes
+    pub fn list(de: &'a mut Deserializer<R>) -> Self {
         Self {
             de,
-            descriptor_buf,
-            field_count: 0,
+            // descriptor_buf,
+            field_count: 1,
+            counter: 0,
             // The first field should be the descriptor
-            field_role: FieldRole::Descriptor,
+            // field_role: FieldRole::Descriptor,
         }
     }
 
-    pub fn with_field_count(de: &'a mut Deserializer<R>, descriptor_buf: Option<Vec<u8>>, field_count: usize) -> Self {
+    pub fn basic(de: &'a mut Deserializer<R>, field_count: usize) -> Self {
         Self {
             de, 
-            descriptor_buf,
+            // descriptor_buf,
             field_count,
+            counter: 0,
             // The first field should be the descriptor
-            field_role: FieldRole::Descriptor,
+            // field_role: FieldRole::Descriptor,
+        }
+    }
+
+    pub fn map(de: &'a mut Deserializer<R>) -> Self {
+        Self {
+            de,
+            // descriptor_buf,
+            field_count: 1,
+            counter: 0,
+            // The first field should be the descriptor
+            // field_role: FieldRole::Descriptor,
         }
     }
 
@@ -1485,53 +1503,88 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        use std::io::Cursor;
-
         println!(">>> Debug: DescribedAccess::next_element_seed");
-        match self.field_role {
-            FieldRole::Descriptor => {
-                let descriptor_buf = match self.descriptor_buf.take() {
-                    Some(b) => b,
-                    None => return Ok(None),
-                };
-                let reader = IoReader::new(Cursor::new(descriptor_buf));
-                let mut deserializer = Deserializer::new(reader);
-                let result = seed.deserialize(&mut deserializer).map(Some);
-
-                match self.de.struct_encoding {
-                    StructEncoding::None => {}
-                    StructEncoding::DescribedBasic => {
-                        if self.field_count == 0 {
-                            return Ok(None);
-                        }
-                        self.field_count -= 1;
-                        // self.field_count = 1; // There should be only one wrapped element
-                    }
-                    StructEncoding::DescribedList => {
-                        self.field_count = self.consume_list_header()?;
-                    }
-                    StructEncoding::DescribedMap => {}
-                }
-
-                self.field_role = FieldRole::Fields;
-                result
+        let code = self.de.reader.peek()?;
+        let result = match code.try_into()? {
+            EncodingCodes::Null => {
+                let _ = self.de.reader.next(); // consume the Null byte
+                Ok(None)
             }
-            FieldRole::Fields => {
-                if self.field_count == 0 {
-                    return Ok(None);
+            _ => seed.deserialize(self.as_mut()).map(Some),
+        };
+
+        // A list will follow the descriptor
+        if code == EncodingCodes::DescribedType as u8 {
+            match self.de.struct_encoding {
+                StructEncoding::None => {}
+                StructEncoding::DescribedBasic => {
+                    // if self.field_count == 0 {
+                    //     return Ok(None);
+                    // }
+                    // self.field_count -= 1;
+                    // self.field_count = 1; // There should be only one wrapped element
                 }
-                self.field_count -= 1;
-                // seed.deserialize(self.as_mut()).map(Some)
-                let code = self.de.reader.peek()?;
-                match code.try_into()? {
-                    EncodingCodes::Null => {
-                        let _ = self.de.reader.next(); // consume the Null byte
-                        Ok(None)
-                    }
-                    _ => seed.deserialize(self.as_mut()).map(Some),
+                StructEncoding::DescribedList => {
+                    self.field_count += self.consume_list_header()?;
+                }
+                StructEncoding::DescribedMap => {
+                    todo!()
                 }
             }
         }
+
+        if self.counter < self.field_count {
+            self.counter += 1;
+        } else {
+            return Ok(None)
+        }
+
+        result
+    //     match self.counter {
+    //         FieldRole => {
+    //             let descriptor_buf = match self.descriptor_buf.take() {
+    //                 Some(b) => b,
+    //                 None => return Ok(None),
+    //             };
+    //             let reader = IoReader::new(Cursor::new(descriptor_buf));
+    //             let mut deserializer = Deserializer::new(reader);
+    //             let result = seed.deserialize(&mut deserializer).map(Some);
+
+    //             match self.de.struct_encoding {
+    //                 StructEncoding::None => {}
+    //                 StructEncoding::DescribedBasic => {
+    //                     if self.field_count == 0 {
+    //                         return Ok(None);
+    //                     }
+    //                     self.field_count -= 1;
+    //                     // self.field_count = 1; // There should be only one wrapped element
+    //                 }
+    //                 StructEncoding::DescribedList => {
+    //                     self.field_count = self.consume_list_header()?;
+    //                 }
+    //                 StructEncoding::DescribedMap => {}
+    //             }
+
+    //             self.field_role = FieldRole::Fields;
+    //             result
+    //         }
+    //         FieldRole::Fields => {
+    //             if self.field_count == 0 {
+    //                 return Ok(None);
+    //             }
+    //             self.field_count -= 1;
+    //             // seed.deserialize(self.as_mut()).map(Some)
+    //             let code = self.de.reader.peek()?;
+    //             match code.try_into()? {
+    //                 EncodingCodes::Null => {
+    //                     let _ = self.de.reader.next(); // consume the Null byte
+    //                     Ok(None)
+    //                 }
+    //                 _ => seed.deserialize(self.as_mut()).map(Some),
+    //             }
+    //         }
+    //     }
+    // }
     }
 }
 
@@ -1543,54 +1596,56 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         K: de::DeserializeSeed<'de>,
     {
         use std::io::Cursor;
-        match self.field_role {
-            FieldRole::Descriptor => {
-                println!(">>> Debug: DescribedAccess::next_key_seed FieldRole::Descriptor");
-                let descriptor_buf = match self.descriptor_buf.take() {
-                    Some(b) => b,
-                    None => return Ok(None),
-                };
-                let reader = IoReader::new(Cursor::new(descriptor_buf));
-                let mut deserializer = Deserializer::new(reader);
-                let result = seed.deserialize(&mut deserializer).map(Some);
+        // match self.field_role {
+        //     FieldRole::Descriptor => {
+        //         println!(">>> Debug: DescribedAccess::next_key_seed FieldRole::Descriptor");
+        //         let descriptor_buf = match self.descriptor_buf.take() {
+        //             Some(b) => b,
+        //             None => return Ok(None),
+        //         };
+        //         let reader = IoReader::new(Cursor::new(descriptor_buf));
+        //         let mut deserializer = Deserializer::new(reader);
+        //         let result = seed.deserialize(&mut deserializer).map(Some);
 
-                // consume the map headers
-                self.field_count = self.consume_map_header()?;
+        //         // consume the map headers
+        //         self.field_count = self.consume_map_header()?;
 
-                println!(">>> Debug: {:?}", &self.field_count);
-                self.field_role = FieldRole::Fields;
-                result
-            }
-            FieldRole::Fields => {
-                println!(">>> Debug: DescribedAccess::next_key_seed FieldRole::Fields");
-                match self.field_count {
-                    0 => Ok(None),
-                    _ => {
-                        self.field_count -= 1;
-                        seed.deserialize(self.as_mut()).map(Some)
-                    }
-                }
-            }
-        }
+        //         println!(">>> Debug: {:?}", &self.field_count);
+        //         self.field_role = FieldRole::Fields;
+        //         result
+        //     }
+        //     FieldRole::Fields => {
+        //         println!(">>> Debug: DescribedAccess::next_key_seed FieldRole::Fields");
+        //         match self.field_count {
+        //             0 => Ok(None),
+        //             _ => {
+        //                 self.field_count -= 1;
+        //                 seed.deserialize(self.as_mut()).map(Some)
+        //             }
+        //         }
+        //     }
+        // }
+        todo!()
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
     where
         V: de::DeserializeSeed<'de>,
     {
-        match self.field_role {
-            FieldRole::Descriptor => unreachable!(),
-            FieldRole::Fields => {
-                println!(">>> Debug: DescribedAccess::next_value_seed FieldRole::Fields");
-                match self.field_count {
-                    0 => Err(de::Error::custom("Invalid length. Expecting value")),
-                    _ => {
-                        self.field_count -= 1;
-                        seed.deserialize(self.as_mut())
-                    }
-                }
-            }
-        }
+        // match self.field_role {
+        //     FieldRole::Descriptor => unreachable!(),
+        //     FieldRole::Fields => {
+        //         println!(">>> Debug: DescribedAccess::next_value_seed FieldRole::Fields");
+        //         match self.field_count {
+        //             0 => Err(de::Error::custom("Invalid length. Expecting value")),
+        //             _ => {
+        //                 self.field_count -= 1;
+        //                 seed.deserialize(self.as_mut())
+        //             }
+        //         }
+        //     }
+        // }
+        todo!()
     }
 
     fn next_entry_seed<K, V>(
@@ -1602,21 +1657,22 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         K: de::DeserializeSeed<'de>,
         V: de::DeserializeSeed<'de>,
     {
-        match self.field_role {
-            FieldRole::Descriptor => unreachable!(),
-            FieldRole::Fields => {
-                println!(">>> Debug: DescribedAccess::next_entry_seed FieldRole::Fields");
-                match self.field_count {
-                    0 => Ok(None),
-                    _ => {
-                        self.field_count -= 2;
-                        let key = kseed.deserialize(self.as_mut())?;
-                        let value = vseed.deserialize(self.as_mut())?;
-                        Ok(Some((key, value)))
-                    }
-                }
-            }
-        }
+        // match self.field_role {
+        //     FieldRole::Descriptor => unreachable!(),
+        //     FieldRole::Fields => {
+        //         println!(">>> Debug: DescribedAccess::next_entry_seed FieldRole::Fields");
+        //         match self.field_count {
+        //             0 => Ok(None),
+        //             _ => {
+        //                 self.field_count -= 2;
+        //                 let key = kseed.deserialize(self.as_mut())?;
+        //                 let value = vseed.deserialize(self.as_mut())?;
+        //                 Ok(Some((key, value)))
+        //             }
+        //         }
+        //     }
+        // }
+        todo!()
     }
 }
 

@@ -8,14 +8,14 @@ use serde_amqp::{
     primitives::{Boolean, UInt, ULong},
 };
 
-// #[derive(SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
-// struct Foo {
-//     b: u64,
-//     is_fool: Option<bool>,
-//     #[amqp_contract(default)]
-//     a: i32,
-// }
+#[derive(SerializeComposite, DeserializeComposite)]
+#[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
+struct Foo {
+    b: u64,
+    is_fool: Option<bool>,
+    #[amqp_contract(default)]
+    a: i32,
+}
 
 // #[derive(SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(encoding="list")]
@@ -24,11 +24,11 @@ use serde_amqp::{
 // #[derive(SerializeComposite, DeserializeComposite)]
 // struct TupleStruct(Option<i32>, bool);
 
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(code = 0x01, encoding = "basic")]
-struct Wrapper {
-    map: BTreeMap<String, i32>,
-}
+// #[derive(Debug, SerializeComposite, DeserializeComposite)]
+// #[amqp_contract(code = 0x01, encoding = "basic")]
+// struct Wrapper {
+//     map: BTreeMap<String, i32>,
+// }
 
 // #[derive(Debug, SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(code = 0x01, encoding = "basic")]
