@@ -266,4 +266,23 @@ pub type Address = String;
 pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use serde_amqp::to_vec;
+
+    use super::{Header, Priority};
+
+
+    #[test]
+    fn test_serialize_deserialize_header() {
+        let header = Header {
+            durable: true,
+            priority: Priority(0),
+            ttl: None,
+            first_acquirer: false,
+            delivery_count: 0
+        };
+        let serialized = to_vec(&header).unwrap();
+        println!("{:x?}", &serialized);
+    }
+
+}

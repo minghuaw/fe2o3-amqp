@@ -5,7 +5,7 @@ use serde::{
 };
 use serde_amqp::{
     descriptor::Descriptor,
-    __constants::DESCRIBED_BASIC,
+    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
     primitives::{Binary, Symbol, Timestamp},
 };
 
@@ -145,7 +145,12 @@ impl<'de> de::Visitor<'de> for Visitor {
         let mut footer = None;
 
         for _ in 0..7 {
-            let field: Field = match seq.next_element()? {
+            let opt = match seq.next_element() {
+                Ok(o) => o,
+                // FIXME: all errors here are just treated as end of stream
+                Err(_) => break 
+            };
+            let field: Field = match opt {
                 Some(val) => val,
                 None => break
             };
@@ -331,12 +336,19 @@ impl<'de> de::Deserialize<'de> for Message {
         deserializer.deserialize_struct(
             DESCRIBED_BASIC,
             &[
+                DESCRIPTOR,
                 "header",
+                DESCRIPTOR,
                 "delivery_annotations",
+                DESCRIPTOR,
                 "message_annotations",
+                DESCRIPTOR,
                 "properties",
+                DESCRIPTOR,
                 "application_properties",
+                DESCRIPTOR,
                 "body_section",
+                DESCRIPTOR,
                 "footer",
             ],
             Visitor {},
@@ -590,12 +602,12 @@ mod body_section {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use std::{vec, collections::BTreeMap};
 
     use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::messaging::{message::BodySection, AmqpSequence, AmqpValue, Data, Header};
+    use crate::messaging::{message::BodySection, AmqpSequence, AmqpValue, Data, Header, Annotations, DeliveryAnnotations, MessageAnnotations};
 
     use super::Message;
 
@@ -623,15 +635,36 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_deserialize_message() {
+    fn test_serialize_message() {
         let message = Message {
-            // header: Some(Header {
-            //     durable: true,
-            //     ..Default::default()
-            // }),
-            header: None,
+            header: Some(Header {
+                durable: true,
+                ..Default::default()
+            }),
+            // header: None,
             delivery_annotations: None,
             message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body_section: BodySection::Value(AmqpValue(Value::Bool(true))),
+            footer: None,
+        };
+        let serialized = to_vec(&message).unwrap();
+        println!("{:x?}", serialized);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_message() {
+        let message = Message {
+            header: Some(Header {
+                durable: true,
+                ..Default::default()
+            }),
+            // header: None,
+            delivery_annotations: Some(DeliveryAnnotations(BTreeMap::new())),
+            // delivery_annotations: None,
+            message_annotations: Some(MessageAnnotations(BTreeMap::new())),
+            // message_annotations: None,
             properties: None,
             application_properties: None,
             body_section: BodySection::Value(AmqpValue(Value::Bool(true))),

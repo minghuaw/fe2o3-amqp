@@ -41,6 +41,7 @@ pub enum FieldRole {
     Fields,
 }
 
+#[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum StructEncoding {
     None,

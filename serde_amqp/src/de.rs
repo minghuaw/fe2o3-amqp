@@ -891,34 +891,50 @@ where
         V: de::Visitor<'de>,
     {
         println!(">>> Debug: deserialize_struct");
-        match self.struct_encoding {
-            StructEncoding::None => {
-                if name == DESCRIBED_BASIC {
-                    self.struct_encoding = StructEncoding::DescribedBasic;
-                    // self.parse_described_basic(fields.len(), visitor)
-                    visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
-                } else if name == DESCRIBED_LIST {
-                    self.struct_encoding = StructEncoding::DescribedList;
-                    
-                    visitor.visit_seq(DescribedAccess::list(self))
-                } else if name == DESCRIBED_MAP {
-                    self.struct_encoding = StructEncoding::DescribedMap;
-                    visitor.visit_map(DescribedAccess::map(self))
-                } else {
-                    match self.get_elem_code_or_peek_byte()?.try_into()? {
-                        EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
-                            self.deserialize_tuple(fields.len(), visitor)
+
+        // The name should override parent struct encoding
+        let cur_encoding = self.struct_encoding.clone();
+        let result = if name == DESCRIBED_BASIC {
+            self.struct_encoding = StructEncoding::DescribedBasic;
+            visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
+        } else if name == DESCRIBED_LIST {
+            self.struct_encoding = StructEncoding::DescribedList;
+            visitor.visit_seq(DescribedAccess::list(self))
+        } else if name == DESCRIBED_MAP {
+            self.struct_encoding = StructEncoding::DescribedMap;
+            visitor.visit_map(DescribedAccess::map(self))
+        } else {
+            match self.struct_encoding {
+                StructEncoding::None => {
+                    // if name == DESCRIBED_BASIC {
+                    //     self.struct_encoding = StructEncoding::DescribedBasic;
+                    //     visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
+                    // } else if name == DESCRIBED_LIST {
+                    //     self.struct_encoding = StructEncoding::DescribedList;
+                        
+                    //     visitor.visit_seq(DescribedAccess::list(self))
+                    // } else if name == DESCRIBED_MAP {
+                    //     self.struct_encoding = StructEncoding::DescribedMap;
+                    //     visitor.visit_map(DescribedAccess::map(self))
+                    // } else {
+                        match self.get_elem_code_or_peek_byte()?.try_into()? {
+                            EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
+                                self.deserialize_tuple(fields.len(), visitor)
+                            }
+                            EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
+                            EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
+                            _ => Err(Error::InvalidFormatCode),
                         }
-                        EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                        EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
-                        _ => Err(Error::InvalidFormatCode),
-                    }
+                    // }
                 }
+                StructEncoding::DescribedBasic => visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32)),
+                StructEncoding::DescribedList => visitor.visit_seq(DescribedAccess::list(self)),
+                StructEncoding::DescribedMap => visitor.visit_map(DescribedAccess::map(self)),
             }
-            StructEncoding::DescribedBasic => visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32)),
-            StructEncoding::DescribedList => visitor.visit_seq(DescribedAccess::list(self)),
-            StructEncoding::DescribedMap => visitor.visit_map(DescribedAccess::map(self)),
-        }
+        };
+        // Restore 
+        self.struct_encoding = cur_encoding;
+        result
     }
 
     fn deserialize_enum<V>(

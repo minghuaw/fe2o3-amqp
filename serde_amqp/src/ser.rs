@@ -39,7 +39,7 @@ pub struct Serializer<W> {
     new_type: NewType,
 
     /// How a struct should be encoded
-    struct_encoding: StructEncoding,
+    struct_encoding: Vec<StructEncoding>,
 
     /// Whether we are serializing an array
     /// NOTE: This should only be changed by `SeqSerializer`
@@ -79,7 +79,7 @@ impl<W: Write> Serializer<W> {
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: StructEncoding::DescribedList,
+            struct_encoding: vec![StructEncoding::DescribedList],
             is_array_elem: IsArrayElement::False,
         }
     }
@@ -88,7 +88,7 @@ impl<W: Write> Serializer<W> {
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: StructEncoding::DescribedMap,
+            struct_encoding: vec![StructEncoding::DescribedMap],
             is_array_elem: IsArrayElement::False,
         }
     }
@@ -97,9 +97,13 @@ impl<W: Write> Serializer<W> {
         Self {
             writer,
             new_type: Default::default(),
-            struct_encoding: StructEncoding::DescribedBasic,
+            struct_encoding: vec![StructEncoding::DescribedBasic],
             is_array_elem: IsArrayElement::False,
         }
+    }
+
+    pub fn struct_encoding(&self) -> Option<&StructEncoding> {
+        self.struct_encoding.last()
     }
 }
 
@@ -691,12 +695,12 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         // a struct.
         // Simply serialize the content as seq
         if name == DESCRIBED_BASIC {
-            self.struct_encoding = StructEncoding::DescribedBasic;
+            self.struct_encoding.push(StructEncoding::DescribedBasic);
             // let code = [EncodingCodes::DescribedType as u8];
             // self.writer.write_all(&code)?;
             Ok(TupleStructSerializer::descriptor(self))
         } else if name == DESCRIBED_LIST {
-            self.struct_encoding = StructEncoding::DescribedList;
+            self.struct_encoding.push(StructEncoding::DescribedList);
             // let code = [EncodingCodes::DescribedType as u8];
             // self.writer.write_all(&code)?;
             Ok(TupleStructSerializer::descriptor(self))
@@ -722,42 +726,31 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        match self.struct_encoding {
-            // A None state indicates a freshly instantiated serializer
-            StructEncoding::None => {
-                if name == DESCRIBED_LIST {
-                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
-                    {
-                        // let code = [EncodingCodes::DescribedType as u8];
-                        // self.writer.write_all(&code)?;
-                    }
-                    self.struct_encoding = StructEncoding::DescribedList;
-                    Ok(StructSerializer::list_value(self))
-                } else if name == DESCRIBED_MAP {
-                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
-                    {
-                        // let code = [EncodingCodes::DescribedType as u8];
-                        // self.writer.write_all(&code)?;
-                    }
-                    self.struct_encoding = StructEncoding::DescribedMap;
-                    Ok(StructSerializer::map_value(self))
-                } else if name == DESCRIBED_BASIC {
-                    if let IsArrayElement::False | IsArrayElement::FirstElement = self.is_array_elem
-                    {
-                        // let code = [EncodingCodes::DescribedType as u8];
-                        // self.writer.write_all(&code)?;
-                    }
-                    self.struct_encoding = StructEncoding::DescribedBasic;
-                    Ok(StructSerializer::basic_value(self))
-                } else {
+        println!(">>> Debug: serialize_struct");
+
+        // The name should override the parent struct encoding
+        let result = if name == DESCRIBED_LIST {
+            self.struct_encoding.push(StructEncoding::DescribedList);
+            Ok(StructSerializer::list_value(self))
+        } else if name == DESCRIBED_MAP {
+            self.struct_encoding.push(StructEncoding::DescribedMap);
+            Ok(StructSerializer::map_value(self))
+        } else if name == DESCRIBED_BASIC {
+            self.struct_encoding.push(StructEncoding::DescribedBasic);
+            Ok(StructSerializer::basic_value(self))
+        } else {
+            match self.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+                // A None state indicates a freshly instantiated serializer
+                StructEncoding::None => {
                     // Only non-described struct will go to this branch
                     Ok(StructSerializer::list_value(self))
                 }
+                StructEncoding::DescribedBasic => Ok(StructSerializer::basic_value(self)),
+                StructEncoding::DescribedList => Ok(StructSerializer::list_value(self)),
+                StructEncoding::DescribedMap => Ok(StructSerializer::map_value(self)),
             }
-            StructEncoding::DescribedBasic => Ok(StructSerializer::basic_value(self)),
-            StructEncoding::DescribedList => Ok(StructSerializer::list_value(self)),
-            StructEncoding::DescribedMap => Ok(StructSerializer::map_value(self)),
-        }
+        };
+        result
     }
 
     // Treat this as if it is a tuple because this kind of enum is unique in rust
@@ -1156,7 +1149,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
             }
             FieldRole::Fields => {
                 self.count += 1;
-                match self.se.struct_encoding {
+                match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
                     StructEncoding::None => {
                         // serialize regualr tuple struct as a list like in tuple
                         let mut serializer =
@@ -1180,7 +1173,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.se.struct_encoding {
+        match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
             StructEncoding::None => {
                 // serialize regualr tuple struct as a list like in tuple
                 write_list(
@@ -1191,16 +1184,21 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                 )
             }
             StructEncoding::DescribedBasic => {
+                self.se.struct_encoding.pop();
                 // simply serialize the value without buffering
                 Ok(())
             }
-            StructEncoding::DescribedList => write_list(
-                &mut self.se.writer,
-                self.count,
-                self.buf,
-                &IsArrayElement::False,
-            ),
+            StructEncoding::DescribedList => {
+                self.se.struct_encoding.pop();
+                write_list(
+                    &mut self.se.writer,
+                    self.count,
+                    self.buf,
+                    &IsArrayElement::False,
+                )
+            }
             StructEncoding::DescribedMap => {
+                self.se.struct_encoding.pop();
                 unreachable!()
             }
         }
@@ -1262,12 +1260,10 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
         T: Serialize,
     {
         if key == DESCRIPTOR {
-            // let code = [EncodingCodes::DescribedType as u8];
-            // self.se.writer.write_all(&code)?;
             value.serialize(self.as_mut())
         } else {
             self.count += 1;
-            match self.se.struct_encoding {
+            match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
                 StructEncoding::None => {
                     // normal struct will be serialized as a list
                     let mut serializer =
@@ -1290,28 +1286,39 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.se.struct_encoding {
-            StructEncoding::None => write_list(
-                &mut self.se.writer,
-                self.count,
-                self.buf,
-                &self.se.is_array_elem,
-            ),
-            StructEncoding::DescribedBasic => Ok(()),
+        match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+            StructEncoding::None => {
+                write_list(
+                    &mut self.se.writer,
+                    self.count,
+                    self.buf,
+                    &self.se.is_array_elem,
+                )
+            },
+            StructEncoding::DescribedBasic => {
+                self.se.struct_encoding.pop();
+                Ok(())
+            },
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-            StructEncoding::DescribedList => write_list(
-                &mut self.se.writer,
-                self.count,
-                self.buf,
-                &self.se.is_array_elem,
-            ),
+            StructEncoding::DescribedList => {
+                self.se.struct_encoding.pop();
+                write_list(
+                    &mut self.se.writer,
+                    self.count,
+                    self.buf,
+                    &self.se.is_array_elem,
+                )
+            },
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
-            StructEncoding::DescribedMap => write_map(
-                &mut self.se.writer,
-                self.count * 2,
-                self.buf,
-                &self.se.is_array_elem,
-            ),
+            StructEncoding::DescribedMap => {
+                self.se.struct_encoding.pop();
+                write_map(
+                    &mut self.se.writer,
+                    self.count * 2,
+                    self.buf,
+                    &self.se.is_array_elem,
+                )
+            }
         }
     }
 }
