@@ -314,9 +314,11 @@ impl endpoint::SenderLink for SenderLink {
 
             // TODO: Expose API to allow user to set this when the mode is MIXED?
             let settled = match self.snd_settle_mode {
-                SenderSettleMode::Settled => Some(true),
-                SenderSettleMode::Unsettled => Some(false),
-                SenderSettleMode::Mixed => settled,
+                SenderSettleMode::Settled => true,
+                SenderSettleMode::Unsettled => false,
+                // If not set on the first (or only) transfer for a (multi-transfer)
+                // delivery, then the settled flag MUST be interpreted as being false.
+                SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
             };
 
             // TODO: Expose API for resuming link?
@@ -328,7 +330,7 @@ impl endpoint::SenderLink for SenderLink {
                 delivery_id: None, // This will be set by the session
                 delivery_tag: Some(DeliveryTag::from(delivery_tag)),
                 message_format: Some(message_format),
-                settled,
+                settled: Some(settled), // Having this always set in first frame helps debugging
                 more: false,
                 // If not set, this value is defaulted to the value negotiated
                 // on link attach.
@@ -352,10 +354,10 @@ impl endpoint::SenderLink for SenderLink {
                 })?;
 
             match settled {
-                Some(true) => Ok(Settlement::Settled),
+                true => Ok(Settlement::Settled),
                 // If not set on the first (or only) transfer for a (multi-transfer)
                 // delivery, then the settled flag MUST be interpreted as being false.
-                Some(false) | None => {
+                false => {
                     let (tx, rx) = oneshot::channel();
                     let unsettled = UnsettledDelivery::new(tx);
                     {
