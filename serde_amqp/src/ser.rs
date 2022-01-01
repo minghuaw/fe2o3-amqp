@@ -102,8 +102,8 @@ impl<W: Write> Serializer<W> {
         }
     }
 
-    pub fn struct_encoding(&self) -> Option<&StructEncoding> {
-        self.struct_encoding.last()
+    pub fn struct_encoding(&self) -> &StructEncoding {
+        self.struct_encoding.last().unwrap_or_else(|| &StructEncoding::None)
     }
 }
 
@@ -739,7 +739,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.struct_encoding.push(StructEncoding::DescribedBasic);
             Ok(StructSerializer::basic_value(self))
         } else {
-            match self.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+            match self.struct_encoding() {
                 // A None state indicates a freshly instantiated serializer
                 StructEncoding::None => {
                     // Only non-described struct will go to this branch
@@ -1149,7 +1149,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
             }
             FieldRole::Fields => {
                 self.count += 1;
-                match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+                match self.se.struct_encoding() {
                     StructEncoding::None => {
                         // serialize regualr tuple struct as a list like in tuple
                         let mut serializer =
@@ -1173,7 +1173,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+        match self.se.struct_encoding() {
             StructEncoding::None => {
                 // serialize regualr tuple struct as a list like in tuple
                 write_list(
@@ -1263,7 +1263,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
             value.serialize(self.as_mut())
         } else {
             self.count += 1;
-            match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+            match self.se.struct_encoding() {
                 StructEncoding::None => {
                     // normal struct will be serialized as a list
                     let mut serializer =
@@ -1286,7 +1286,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
 
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.se.struct_encoding().unwrap_or_else(|| &StructEncoding::None) {
+        match self.se.struct_encoding() {
             StructEncoding::None => {
                 write_list(
                     &mut self.se.writer,
