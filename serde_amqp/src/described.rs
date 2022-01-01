@@ -113,7 +113,7 @@ mod tests {
     // Expanded macro
     use crate as serde_amqp;
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     struct Foo {
         b: u64,
         is_fool: Option<bool>,
@@ -347,7 +347,7 @@ mod tests {
     };
 
     #[test]
-    fn test_expanded_macro() {
+    fn test_expanded_list_macro() {
         let foo = Foo {
             b: 0,
             is_fool: None,
@@ -357,5 +357,220 @@ mod tests {
         println!("{:?}", &serialized);
         let deserialized: Foo = from_slice(&serialized).unwrap();
         println!("{:?}", &deserialized);
+        assert_eq!(foo, deserialized);
+    }
+
+    #[derive(PartialEq)]
+    struct Test {
+        a: Option<i32>,
+        b: bool,
+    }
+    #[automatically_derived]
+    #[allow(unused_qualifications)]
+    impl ::core::fmt::Debug for Test {
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            match *self {
+                Test {
+                    a: ref __self_0_0,
+                    b: ref __self_0_1,
+                } => {
+                    let debug_trait_builder = &mut ::core::fmt::Formatter::debug_struct(f, "Test");
+                    let _ = ::core::fmt::DebugStruct::field(debug_trait_builder, "a", &&(*__self_0_0));
+                    let _ = ::core::fmt::DebugStruct::field(debug_trait_builder, "b", &&(*__self_0_1));
+                    ::core::fmt::DebugStruct::finish(debug_trait_builder)
+                }
+            }
+        }
+    }
+    const _: () = {
+        #[automatically_derived]
+        impl serde_amqp::serde::ser::Serialize for Test {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde_amqp::serde::ser::Serializer,
+            {
+                use serde_amqp::serde::ser::SerializeStruct;
+                let mut nulls: Vec<&str> = Vec::new();
+                let mut state =
+                    serializer.serialize_struct(serde_amqp::__constants::DESCRIBED_MAP, 2usize + 1)?;
+                state.serialize_field(
+                    serde_amqp::__constants::DESCRIPTOR,
+                    &serde_amqp::descriptor::Descriptor::Name(serde_amqp::primitives::Symbol::from(
+                        "ab",
+                    )),
+                )?;
+                if (&self.a).is_some() {
+                    state.serialize_field("a", &self.a)?;
+                };
+                if *&self.b != <bool as Default>::default() {
+                    state.serialize_field("b", &self.b)?;
+                };
+                state.end()
+            }
+        }
+    };
+    const _: () = {
+        #[automatically_derived]
+        impl<'de> serde_amqp::serde::de::Deserialize<'de> for Test {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde_amqp::serde::de::Deserializer<'de>,
+            {
+                #[allow(non_camel_case_types)]
+                enum Field {
+                    a,
+                    b,
+                }
+                struct FieldVisitor {}
+                impl<'de> serde_amqp::serde::de::Visitor<'de> for FieldVisitor {
+                    type Value = Field;
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        formatter.write_str("field identifier")
+                    }
+                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where
+                        E: serde_amqp::serde::de::Error,
+                    {
+                        match v {
+                            "a" => Ok(Self::Value::a),
+                            "b" => Ok(Self::Value::b),
+                            _ => Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
+                        }
+                    }
+                    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                    where
+                        E: serde_amqp::serde::de::Error,
+                    {
+                        match v {
+                            b if b == "a".as_bytes() => Ok(Self::Value::a),
+                            b if b == "b".as_bytes() => Ok(Self::Value::b),
+                            _ => Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
+                        }
+                    }
+                }
+                impl<'de> serde_amqp::serde::de::Deserialize<'de> for Field {
+                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                    where
+                        D: serde_amqp::serde::de::Deserializer<'de>,
+                    {
+                        deserializer.deserialize_identifier(FieldVisitor {})
+                    }
+                }
+                struct Visitor {}
+                impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
+                    type Value = Test;
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                        formatter.write_str("struct ab")
+                    }
+                    fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
+                    where
+                        A: serde_amqp::serde::de::SeqAccess<'de>,
+                    {
+                        let __descriptor: serde_amqp::descriptor::Descriptor =
+                            match __seq.next_element()? {
+                                Some(val) => val,
+                                None => {
+                                    return Err(serde_amqp::serde::de::Error::custom(
+                                        "Expecting descriptor",
+                                    ))
+                                }
+                            };
+                        match __descriptor {
+                            serde_amqp::descriptor::Descriptor::Name(__symbol) => {
+                                if __symbol.into_inner() != "ab" {
+                                    return Err(serde_amqp::serde::de::Error::custom(
+                                        "Descriptor mismatch",
+                                    ));
+                                }
+                            }
+                            serde_amqp::descriptor::Descriptor::Code(_) => {
+                                return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
+                            }
+                        }
+                        let a: Option<i32> = match __seq.next_element()? {
+                            Some(val) => val,
+                            None => None,
+                        };
+                        let b: bool = match __seq.next_element()? {
+                            Some(val) => val,
+                            None => Default::default(),
+                        };
+                        Ok(Test { a, b })
+                    }
+                    fn visit_map<A>(self, mut __map: A) -> Result<Self::Value, A::Error>
+                    where
+                        A: serde_amqp::serde::de::MapAccess<'de>,
+                    {
+                        let mut a: Option<Option<i32>> = None;
+                        let mut b: Option<bool> = None;
+                        let __descriptor: serde_amqp::descriptor::Descriptor = match __map.next_key()? {
+                            Some(val) => val,
+                            None => {
+                                return Err(serde_amqp::serde::de::Error::custom(
+                                    "Expecting__descriptor",
+                                ))
+                            }
+                        };
+                        match __descriptor {
+                            serde_amqp::descriptor::Descriptor::Name(__symbol) => {
+                                if __symbol.into_inner() != "ab" {
+                                    return Err(serde_amqp::serde::de::Error::custom(
+                                        "Descriptor mismatch",
+                                    ));
+                                }
+                            }
+                            serde_amqp::descriptor::Descriptor::Code(_) => {
+                                return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
+                            }
+                        }
+                        while let Some(key) = __map.next_key::<Field>()? {
+                            match key {
+                                Field::a => {
+                                    if a.is_some() {
+                                        return Err(serde_amqp::serde::de::Error::duplicate_field("a"));
+                                    }
+                                    a = Some(__map.next_value()?);
+                                }
+                                Field::b => {
+                                    if b.is_some() {
+                                        return Err(serde_amqp::serde::de::Error::duplicate_field("b"));
+                                    }
+                                    b = Some(__map.next_value()?);
+                                }
+                            }
+                        }
+                        let a: Option<i32> = match a {
+                            Some(val) => val,
+                            None => None,
+                        };
+                        let b: bool = match b {
+                            Some(val) => val,
+                            None => Default::default(),
+                        };
+                        Ok(Test { a, b })
+                    }
+                }
+                const FIELDS: &'static [&'static str] =
+                    &[serde_amqp::__constants::DESCRIPTOR, "a", "b"];
+                deserializer.deserialize_struct(
+                    serde_amqp::__constants::DESCRIBED_MAP,
+                    FIELDS,
+                    Visitor {},
+                )
+            }
+        }
+    };    
+
+    #[test]
+    fn test_expanded_map_macro() {
+        let test = Test {
+            a: Some(1),
+            b: true
+        };
+        let serialized = to_vec(&test).unwrap();
+        println!("{:?}", &serialized);
+        let deserialized: Test = from_slice(&serialized).unwrap();
+        println!("{:?}", &deserialized);
+        assert_eq!(test, deserialized);
     }
 }
