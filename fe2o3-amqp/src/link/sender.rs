@@ -104,12 +104,7 @@ impl Sender<Attached> {
             .await
     }
 
-    pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error>
-    where
-        D: Into<Sendable>,
-        // D: TryInto<Delivery>,
-        // D::Error: Into<Error>,
-    {
+    async fn send_inner(&mut self, delivery: Sendable) -> Result<Settlement, Error> {
         use bytes::BufMut;
         use serde::Serialize;
         use serde_amqp::ser::Serializer;
@@ -134,11 +129,21 @@ impl Sender<Attached> {
             .link
             .send_transfer(&mut self.outgoing, payload, message_format, settled, false)
             .await?;
+        Ok(settlement)
+    }
+
+    pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error>
+    where
+        D: Into<Sendable>,
+        // D: TryInto<Delivery>,
+        // D::Error: Into<Error>,
+    {
+        let settlement = self.send_inner(delivery.into()).await?;
 
         // If not settled, must wait for outcome
         match settlement {
             Settlement::Settled => Ok(()),
-            Settlement::Unsettled(outcome) => {
+            Settlement::Unsettled { delivery_tag: _, outcome} => {
                 let state = outcome.await.map_err(|_| Error::AmqpError {
                     condition: AmqpError::IllegalState,
                     description: Some("Outcome sender is dropped".into()),
@@ -165,7 +170,9 @@ impl Sender<Attached> {
         &mut self,
         delivery: impl Into<Sendable>,
     ) -> Result<DeliveryFut, Error> {
-        todo!()
+        let settlement = self.send_inner(delivery.into()).await?;
+
+        Ok(DeliveryFut::from(settlement))
     }
 
     pub async fn send_batchable_with_timeout(

@@ -49,7 +49,13 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    sender.send("HELLO AMQP").await.unwrap();
+    // sender.send("HELLO AMQP").await.unwrap();
+    
+    let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
+
+    let result = fut.await;
+    println!("fut {:?}", result);
+
     sender.close().await.unwrap();
 
     session.end().await.unwrap();

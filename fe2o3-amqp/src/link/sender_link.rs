@@ -365,7 +365,10 @@ impl endpoint::SenderLink for SenderLink {
                         guard.insert(delivery_tag, unsettled);
                     }
 
-                    Ok(Settlement::Unsettled(rx))
+                    Ok(Settlement::Unsettled {
+                        delivery_tag,
+                        outcome: rx,
+                    })
                 }
             }
         } else {

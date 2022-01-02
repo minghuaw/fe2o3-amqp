@@ -327,7 +327,8 @@ impl LinkHandle {
                     {
                         let mut guard = self.unsettled.write().await;
                         if let Some(unsettled) = guard.remove(&delivery_tag) {
-                            //
+                            // Since we are settling (ie. forgetting) this message, we don't care whether the 
+                            // receiving end is alive or not
                             let _ = unsettled.settle_with_state(state.clone());
                         }
                     }

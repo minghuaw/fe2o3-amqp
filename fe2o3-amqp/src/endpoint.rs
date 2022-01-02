@@ -275,7 +275,10 @@ impl TryFrom<Flow> for LinkFlow {
 
 pub enum Settlement {
     Settled,
-    Unsettled(oneshot::Receiver<DeliveryState>),
+    Unsettled{
+        delivery_tag: [u8;4],
+        outcome: oneshot::Receiver<DeliveryState>
+    },
 }
 
 #[async_trait]
