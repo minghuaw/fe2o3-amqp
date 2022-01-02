@@ -7,27 +7,32 @@ use tokio::sync::oneshot;
 
 use crate::util::Uninitialized;
 
+/// Reserved for receiver side
+pub struct Delivery {
+
+}
+
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]
-pub struct Delivery {
+pub struct Sendable {
     pub(crate) message: Message,
     pub(crate) message_format: MessageFormat,
     pub(crate) settled: Option<bool>,
     // pub(crate) batchable: bool,
 }
 
-impl Delivery {
+impl Sendable {
     pub fn builder() -> Builder<Uninitialized> {
         Builder::new()
     }
 }
 
-impl<T> From<T> for Delivery
+impl<T> From<T> for Sendable
 where
     T: Into<Message>,
 {
     fn from(value: T) -> Self {
-        Delivery {
+        Self {
             message: value.into(),
             message_format: 0,
             settled: None,
@@ -75,8 +80,8 @@ impl<T> Builder<T> {
 }
 
 impl Builder<Message> {
-    pub fn build(self) -> Delivery {
-        Delivery {
+    pub fn build(self) -> Sendable {
+        Sendable {
             message: self.message,
             message_format: self.message_format,
             settled: self.settled,
@@ -85,7 +90,7 @@ impl Builder<Message> {
     }
 }
 
-impl From<Builder<Message>> for Delivery {
+impl From<Builder<Message>> for Sendable {
     fn from(builder: Builder<Message>) -> Self {
         builder.build()
     }

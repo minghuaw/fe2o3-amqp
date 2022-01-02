@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     builder::{self, WithName, WithTarget, WithoutName, WithoutTarget},
-    delivery::{Delivery, DeliveryFut},
+    delivery::{Sendable, DeliveryFut},
     error::DetachError,
     role,
     sender_link::SenderLink,
@@ -105,7 +105,7 @@ impl Sender<Attached> {
 
     pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error>
     where
-        D: Into<Delivery>,
+        D: Into<Sendable>,
         // D: TryInto<Delivery>,
         // D::Error: Into<Error>,
     {
@@ -115,7 +115,7 @@ impl Sender<Attached> {
 
         use crate::endpoint::SenderLink;
 
-        let Delivery {
+        let Sendable {
             message,
             message_format,
             settled,
@@ -162,14 +162,14 @@ impl Sender<Attached> {
 
     pub async fn send_batchable(
         &mut self,
-        delivery: impl Into<Delivery>,
+        delivery: impl Into<Sendable>,
     ) -> Result<DeliveryFut, Error> {
         todo!()
     }
 
     pub async fn send_batchable_with_timeout(
         &mut self,
-        delivery: impl Into<Delivery>,
+        delivery: impl Into<Sendable>,
         timeout: impl Into<Duration>,
     ) -> Result<DeliveryFut, Error> {
         todo!()
