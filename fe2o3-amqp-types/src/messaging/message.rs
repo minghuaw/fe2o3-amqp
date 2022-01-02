@@ -1,19 +1,15 @@
 use serde::{
-    de::{self, SeqAccess, VariantAccess},
+    de::{self, VariantAccess},
     ser::SerializeStruct,
     Serialize,
 };
 use serde_amqp::{
-    descriptor::Descriptor,
     __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    primitives::{Binary, Symbol, Timestamp},
 };
 
-use crate::definitions::{Milliseconds, SequenceNo};
-
 use super::{
-    Address, AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer,
-    Header, MessageAnnotations, MessageId, Priority, Properties,
+    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer,
+    Header, MessageAnnotations, Properties,
 };
 
 #[derive(Debug, Clone)]
@@ -177,156 +173,6 @@ impl<'de> de::Visitor<'de> for Visitor {
         })
     }
 }
-
-// #[inline]
-// fn deserialize_descriptor<'de, A>(seq: &mut A) -> Result<Option<Descriptor>, A::Error>
-// where
-//     A: de::SeqAccess<'de>,
-// {
-//     seq.next_element()?
-// }
-
-// #[inline]
-// fn deserialize_header<'de, A>(seq: &mut A) -> Result<Option<Header>, A::Error>
-// where
-//     A: de::SeqAccess<'de>,
-// {
-//     let durable: bool = match seq.next_element()? {
-//         Some(val) => val,
-//         None => Default::default(),
-//     };
-//     let priority: Priority = match seq.next_element()? {
-//         Some(val) => val,
-//         None => Default::default(),
-//     };
-//     let ttl: Option<Milliseconds> = seq.next_element()?;
-//     let first_acquirer: bool = match seq.next_element()? {
-//         Some(val) => val,
-//         None => Default::default(),
-//     };
-//     let delivery_count: u32 = match seq.next_element()? {
-//         Some(val) => val,
-//         None => Default::default(),
-//     };
-//     Ok(Some(Header {
-//         durable,
-//         priority,
-//         ttl,
-//         first_acquirer,
-//         delivery_count,
-//     }))
-// }
-
-// #[inline]
-// fn deserialize_delivery_annotations<'de, A>(
-//     seq: &mut A,
-// ) -> Result<Option<DeliveryAnnotations>, A::Error>
-// where
-//     A: de::SeqAccess<'de>,
-// {
-//     let annotations = seq.next_element()?;
-//     Ok(annotations.map(|val| DeliveryAnnotations(val)))
-// }
-
-// #[inline]
-// fn deserialize_message_annotations<'de, A>(
-//     seq: &mut A,
-// ) -> Result<Option<MessageAnnotations>, A::Error>
-// where
-//     A: de::SeqAccess<'de>,
-// {
-//     let annotations = seq.next_element()?;
-//     Ok(annotations.map(|val| MessageAnnotations(val)))
-// }
-
-// #[inline]
-// fn deserialize_properties<'de, A>(seq: &mut A) -> Result<Option<Properties>, A::Error>
-// where
-//     A: de::SeqAccess<'de>,
-// {
-//     let message_id: Option<MessageId> = seq.next_element()?;
-//     let user_id: Option<Binary> = seq.next_element()?;
-//     let to: Option<Address> = seq.next_element()?;
-//     let subject: Option<String> = seq.next_element()?;
-//     let reply_to: Option<Address> = seq.next_element()?;
-//     let correlation_id: Option<MessageId> = seq.next_element()?;
-//     let content_type: Option<Symbol> = seq.next_element()?;
-//     let content_encoding: Option<Symbol> = seq.next_element()?;
-//     let absolute_expiry_time: Option<Timestamp> = seq.next_element()?;
-//     let creation_time: Option<Timestamp> = seq.next_element()?;
-//     let group_id: Option<String> = seq.next_element()?;
-//     let group_sequence: Option<SequenceNo> = seq.next_element()?;
-//     let reply_to_groud_id: Option<String> = seq.next_element()?;
-
-//     Ok(Some(Properties {
-//         message_id,
-//         user_id,
-//         to,
-//         subject,
-//         reply_to,
-//         correlation_id,
-//         content_type,
-//         content_encoding,
-//         absolute_expiry_time,
-//         creation_time,
-//         group_id,
-//         group_sequence,
-//         reply_to_groud_id,
-//     }))
-// }
-
-// #[inline]
-// fn deserialize_application_properties<'de, A>(
-//     seq: &mut A,
-// ) -> Result<Option<ApplicationProperties>, A::Error>
-// where
-//     A: SeqAccess<'de>,
-// {
-//     let value = seq.next_element()?;
-//     Ok(value.map(|val| ApplicationProperties(val)))
-// }
-
-// #[inline]
-// fn deserialize_data<'de, A>(seq: &mut A) -> Result<Data, A::Error>
-// where
-//     A: SeqAccess<'de>,
-// {
-//     match seq.next_element()? {
-//         Some(val) => Ok(Data(val)),
-//         None => Err(de::Error::custom("Expecting Data")),
-//     }
-// }
-
-// #[inline]
-// fn deserialize_amqp_sequence<'de, A>(seq: &mut A) -> Result<AmqpSequence, A::Error>
-// where
-//     A: SeqAccess<'de>,
-// {
-//     match seq.next_element()? {
-//         Some(val) => Ok(AmqpSequence(val)),
-//         None => Err(de::Error::custom("Expecting AmqpSequence")),
-//     }
-// }
-
-// #[inline]
-// fn deserialize_amqp_value<'de, A>(seq: &mut A) -> Result<AmqpValue, A::Error>
-// where
-//     A: SeqAccess<'de>,
-// {
-//     match seq.next_element()? {
-//         Some(val) => Ok(AmqpValue(val)),
-//         None => Err(de::Error::custom("Expecting AmqpSequence")),
-//     }
-// }
-
-// #[inline]
-// fn deserialize_footer<'de, A>(seq: &mut A) -> Result<Option<Footer>, A::Error>
-// where
-//     A: SeqAccess<'de>,
-// {
-//     let annotations = seq.next_element()?;
-//     Ok(annotations.map(|val| Footer(val)))
-// }
 
 impl<'de> de::Deserialize<'de> for Message {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -607,7 +453,7 @@ mod tests {
     use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::messaging::{message::BodySection, AmqpSequence, AmqpValue, Data, Header, Annotations, DeliveryAnnotations, MessageAnnotations};
+    use crate::messaging::{message::BodySection, AmqpSequence, AmqpValue, Data, Header, DeliveryAnnotations, MessageAnnotations};
 
     use super::Message;
 
