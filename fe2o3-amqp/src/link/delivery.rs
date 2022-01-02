@@ -134,8 +134,11 @@ impl UnsettledMessage {
         self.sender.send(self.state)
     }
 
-    pub fn settle_with_state(self, state: DeliveryState) -> Result<(), DeliveryState> {
-        self.sender.send(state)
+    pub fn settle_with_state(self, state: Option<DeliveryState>) -> Result<(), DeliveryState> {
+        match state {
+            Some(state) => self.sender.send(state),
+            None => self.settle()
+        } 
     }
 }
 

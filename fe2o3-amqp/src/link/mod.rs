@@ -284,13 +284,35 @@ impl LinkHandle {
         delivery_tag: [u8; 4],
     ) -> Option<Disposition> {
         match disposition.role {
+            // Remote peer is Sender
             Role::Sender => {
                 todo!()
             }
-            Role::Receiver => {}
+            // Remote peer is Receiver
+            Role::Receiver => {
+                let settled = match &disposition.state {
+                    // Some may send terminal state without settling
+                    Some(state) => disposition.settled || state.is_terminal(),
+                    None => disposition.settled
+                };
+
+                if settled {
+                    let mut guard = self.unsettled.write().await;
+                    if let Some(unsettled) = guard.remove(&delivery_tag) {
+                        unsettled.settle_with_state(disposition.state.clone());
+                    }
+                } else {
+                    let mut guard = self.unsettled.write().await;
+                    if let Some(unsettled) = guard.get_mut(&delivery_tag) {
+                        if let Some(state) = &disposition.state {
+                            *unsettled.state_mut() = state.clone();
+                        }
+                    }
+                }
+            }
         }
 
-        todo!()
+        None
     }
 }
 
