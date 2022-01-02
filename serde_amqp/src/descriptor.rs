@@ -143,7 +143,6 @@ mod tests {
 
     #[test]
     fn test_deserialize_descriptor() {
-        use crate::primitives::Symbol;
         use crate::ser::to_vec;
 
         // let descriptor = Descriptor::Name(Symbol::from("amqp"));

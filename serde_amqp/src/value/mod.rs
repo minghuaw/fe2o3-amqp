@@ -7,7 +7,6 @@ use crate::{
     described::Described,
     format_code::EncodingCodes,
     primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
-    to_value,
     util::TryFromSerializable,
     Error,
 };
