@@ -344,12 +344,11 @@ impl endpoint::Session for Session {
             for delivery_id in first..last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&delivery_id) {
                     if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
-                        if let Some(echo) = link_handle.on_incoming_disposition(&disposition, delivery_tag).await {
-                            self.control
-                                .send(SessionControl::Disposition(echo))
-                                .await
-                                .map_err(|_| AmqpError::IllegalState)?
-                        }
+                        let echo = link_handle.on_incoming_disposition(&disposition, delivery_tag).await;
+                            // self.control
+                            //     .send(SessionControl::Disposition(echo))
+                            //     .await
+                            //     .map_err(|_| AmqpError::IllegalState)?
                     }
                 }
             }
@@ -357,12 +356,11 @@ impl endpoint::Session for Session {
             for delivery_id in first..last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
                     if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
-                        if let Some(echo) = link_handle.on_incoming_disposition(&disposition, *delivery_tag).await {
-                            self.control
-                                .send(SessionControl::Disposition(echo))
-                                .await
-                                .map_err(|_| AmqpError::IllegalState)?
-                        }
+                        let echo = link_handle.on_incoming_disposition(&disposition, *delivery_tag).await;
+                            // self.control
+                            //     .send(SessionControl::Disposition(echo))
+                            //     .await
+                            //     .map_err(|_| AmqpError::IllegalState)?
                     }
                 }
             }

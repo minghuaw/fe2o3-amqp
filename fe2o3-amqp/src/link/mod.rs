@@ -282,7 +282,7 @@ impl LinkHandle {
         // Disposition only contains the delivery ids, which are assigned by the
         // sessions
         delivery_tag: [u8; 4],
-    ) -> Option<Disposition> {
+    ) -> bool {
         match disposition.role {
             // Remote peer is Sender
             Role::Sender => {
@@ -297,10 +297,15 @@ impl LinkHandle {
                 };
 
                 if settled {
+                    // TODO: Reply with disposition?
+                    // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
+                    // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
+                    // communicate this back to the sending application.
                     let mut guard = self.unsettled.write().await;
                     if let Some(unsettled) = guard.remove(&delivery_tag) {
                         unsettled.settle_with_state(disposition.state.clone());
                     }
+                    true
                 } else {
                     let mut guard = self.unsettled.write().await;
                     if let Some(unsettled) = guard.get_mut(&delivery_tag) {
@@ -308,11 +313,10 @@ impl LinkHandle {
                             *unsettled.state_mut() = state.clone();
                         }
                     }
+                    false
                 }
             }
         }
-
-        None
     }
 }
 
