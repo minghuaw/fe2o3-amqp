@@ -20,7 +20,7 @@ impl DeliveryState {
             | DeliveryState::Rejected(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_) => true,
-            DeliveryState::Received(_) => false
+            DeliveryState::Received(_) => false,
         }
     }
 }

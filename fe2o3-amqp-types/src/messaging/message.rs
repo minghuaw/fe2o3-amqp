@@ -3,13 +3,11 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::{
-    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-};
+use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use super::{
-    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer,
-    Header, MessageAnnotations, Properties,
+    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
+    MessageAnnotations, Properties,
 };
 
 #[derive(Debug, Clone)]
@@ -59,10 +57,10 @@ enum Field {
     Properties,
     ApplicationProperties,
     BodySection,
-    Footer
+    Footer,
 }
 
-struct FieldVisitor { }
+struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
     type Value = Field;
@@ -73,7 +71,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             "amqp:header:list" => Field::Header,
@@ -81,9 +79,9 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:message-annotations:map" => Field::MessageAnnotations,
             "amqp:properties:list" => Field::Properties,
             "amqp:application-properties:map" => Field::ApplicationProperties,
-            "amqp:data:binary" 
-            | "amqp:amqp-sequence:list" 
-            | "amqp:amqp-value:*" => Field::BodySection,
+            "amqp:data:binary" | "amqp:amqp-sequence:list" | "amqp:amqp-value:*" => {
+                Field::BodySection
+            }
             "amqp:footer:map" => Field::Footer,
             _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
         };
@@ -92,7 +90,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             0x0000_0000_0000_0070 => Field::Header,
@@ -100,9 +98,9 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0072 => Field::MessageAnnotations,
             0x0000_0000_0000_0073 => Field::Properties,
             0x0000_0000_0000_0074 => Field::ApplicationProperties,
-            0x0000_0000_0000_0075
-            | 0x0000_0000_0000_0076
-            | 0x0000_0000_0000_0077 => Field::BodySection,
+            0x0000_0000_0000_0075 | 0x0000_0000_0000_0076 | 0x0000_0000_0000_0077 => {
+                Field::BodySection
+            }
             0x0000_0000_0000_0078 => Field::Footer,
             _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
         };
@@ -113,7 +111,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_ignored_any(FieldVisitor {})
     }
@@ -144,11 +142,11 @@ impl<'de> de::Visitor<'de> for Visitor {
             let opt = match seq.next_element() {
                 Ok(o) => o,
                 // FIXME: all errors here are just treated as end of stream
-                Err(_) => break 
+                Err(_) => break,
             };
             let field: Field = match opt {
                 Some(val) => val,
-                None => break
+                None => break,
             };
 
             match field {
@@ -448,12 +446,15 @@ mod body_section {
 
 #[cfg(test)]
 mod tests {
-    use std::{vec, collections::BTreeMap};
+    use std::{collections::BTreeMap, vec};
 
     use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::messaging::{message::BodySection, AmqpSequence, AmqpValue, Data, Header, DeliveryAnnotations, MessageAnnotations};
+    use crate::messaging::{
+        message::BodySection, AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header,
+        MessageAnnotations,
+    };
 
     use super::Message;
 

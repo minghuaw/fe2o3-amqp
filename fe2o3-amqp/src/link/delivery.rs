@@ -8,9 +8,7 @@ use tokio::sync::oneshot;
 use crate::util::Uninitialized;
 
 /// Reserved for receiver side
-pub struct Delivery {
-
-}
+pub struct Delivery {}
 
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]
@@ -137,8 +135,8 @@ impl UnsettledMessage {
     pub fn settle_with_state(self, state: Option<DeliveryState>) -> Result<(), DeliveryState> {
         match state {
             Some(state) => self.sender.send(state),
-            None => self.settle()
-        } 
+            None => self.settle(),
+        }
     }
 }
 

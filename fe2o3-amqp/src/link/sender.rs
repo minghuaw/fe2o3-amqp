@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, time::Duration};
 
-use bytes::{BytesMut, Bytes};
+use bytes::{Bytes, BytesMut};
 use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     builder::{self, WithName, WithTarget, WithoutName, WithoutTarget},
-    delivery::{Sendable, DeliveryFut},
+    delivery::{DeliveryFut, Sendable},
     error::DetachError,
     role,
     sender_link::SenderLink,
@@ -69,6 +69,7 @@ impl Sender<Detached> {
                 flow_state: self.link.flow_state.producer(),
                 // TODO: what else to do during re-attaching
                 unsettled: self.link.unsettled.clone(),
+                receiver_settle_mode: self.link.rcv_settle_mode.clone(),
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle =

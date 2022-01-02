@@ -3,7 +3,9 @@ use std::{collections::BTreeMap, io};
 use async_trait::async_trait;
 use bytes::Bytes;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Fields, Handle, SequenceNo, SessionError, TransferNumber},
+    definitions::{
+        self, AmqpError, Fields, Handle, Role, SequenceNo, SessionError, TransferNumber,
+    },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
 };
@@ -237,6 +239,9 @@ impl endpoint::Session for Session {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link) => {
                     println!(">>> Debug: found local link");
+                    // Update the receiver settle mode
+                    link.receiver_settle_mode = attach.rcv_settle_mode.clone();
+
                     let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
                     self.link_by_input_handle
                         .insert(input_handle, output_handle.clone());
@@ -338,17 +343,61 @@ impl endpoint::Session for Session {
         // and disposition only has delivery id?
 
         let first = disposition.first;
-        let last = disposition.last.unwrap_or_else(|| first + 1);
+        let last = disposition.last.unwrap_or_else(|| first);
 
-        if disposition.settled {
-            for delivery_id in first..last {
+        let mut first_echo = first;
+        let mut last_echo = first;
+        let mut prev = false;
+
+        let is_settled = match &disposition.state {
+            Some(state) => disposition.settled || state.is_terminal(),
+            None => disposition.settled,
+        };
+
+        if is_settled {
+            for delivery_id in first..=last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&delivery_id) {
                     if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
-                        let echo = link_handle.on_incoming_disposition(&disposition, delivery_tag).await;
-                            // self.control
-                            //     .send(SessionControl::Disposition(echo))
-                            //     .await
-                            //     .map_err(|_| AmqpError::IllegalState)?
+                        let echo = link_handle
+                            .on_incoming_disposition(
+                                disposition.role.clone(),
+                                is_settled,
+                                &disposition.state,
+                                delivery_tag,
+                            )
+                            .await;
+
+                        if echo == true {
+                            if prev == false {
+                                first_echo = delivery_id;
+                            }
+                            last_echo = delivery_id
+                        } else if echo == false && prev == true {
+                            let role = match disposition.role {
+                                Role::Sender => Role::Receiver,
+                                Role::Receiver => Role::Sender,
+                            };
+                            let last = if last_echo != first_echo {
+                                Some(last_echo)
+                            } else {
+                                None
+                            };
+
+                            let disposition = Disposition {
+                                role,
+                                first: first_echo,
+                                last,
+                                settled: true,
+                                state: None,
+                                batchable: false, // No reply is really expected as this is a reply
+                            };
+                            self.control
+                                .send(SessionControl::Disposition(disposition))
+                                .await
+                                .map_err(|_| AmqpError::IllegalState)?
+                        }
+
+                        prev = echo;
                     }
                 }
             }
@@ -356,11 +405,15 @@ impl endpoint::Session for Session {
             for delivery_id in first..last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
                     if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
-                        let echo = link_handle.on_incoming_disposition(&disposition, *delivery_tag).await;
-                            // self.control
-                            //     .send(SessionControl::Disposition(echo))
-                            //     .await
-                            //     .map_err(|_| AmqpError::IllegalState)?
+                        // This is not expected to have an echo according to the spec sheet
+                        let _ = link_handle
+                            .on_incoming_disposition(
+                                disposition.role.clone(),
+                                is_settled,
+                                &disposition.state,
+                                *delivery_tag,
+                            )
+                            .await;
                     }
                 }
             }
@@ -504,7 +557,8 @@ impl endpoint::Session for Session {
             (&mut delivery_tag).copy_from_slice(tag);
 
             // Disposition doesn't carry delivery tag
-            self.delivery_tag_by_id.insert(delivery_id, (transfer.handle.clone(), delivery_tag));
+            self.delivery_tag_by_id
+                .insert(delivery_id, (transfer.handle.clone(), delivery_tag));
         }
 
         self.next_outgoing_id += 1;

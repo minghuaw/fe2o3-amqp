@@ -109,7 +109,7 @@ pub struct Attach {
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{to_vec, from_slice};
+    use serde_amqp::{from_slice, to_vec};
 
     // use crate::{
     //     definitions::{ReceiverSettleMode, Role, SenderSettleMode},
@@ -118,16 +118,14 @@ mod tests {
 
     // use super::Attach;
 
-    use std::collections::BTreeMap;
-    use serde_amqp::{
-        primitives::{Boolean, Symbol, ULong},
-    };
     use crate::{
         definitions::{
             DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
         },
         messaging::{DeliveryState, Source, Target},
     };
+    use serde_amqp::primitives::{Boolean, Symbol, ULong};
+    use std::collections::BTreeMap;
 
     // #[amqp_contract(
     //     name = "amqp:attach:list",
@@ -927,5 +925,4 @@ mod tests {
         let deserialized: Attach = from_slice(&buf).unwrap();
         println!("{:?}", deserialized);
     }
-
 }

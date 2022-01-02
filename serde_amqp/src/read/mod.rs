@@ -1,4 +1,4 @@
-use crate::{error::Error};
+use crate::error::Error;
 
 mod ioread;
 pub use ioread::*;

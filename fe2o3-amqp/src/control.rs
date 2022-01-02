@@ -1,6 +1,9 @@
 //! Controls for Connection, Session, and Link
 
-use fe2o3_amqp_types::{definitions::{self, Handle}, performatives::Disposition};
+use fe2o3_amqp_types::{
+    definitions::{self, Handle},
+    performatives::Disposition,
+};
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{

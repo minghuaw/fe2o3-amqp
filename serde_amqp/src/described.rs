@@ -128,8 +128,8 @@ mod tests {
             {
                 use serde_amqp::serde::ser::SerializeStruct;
                 let mut nulls: Vec<&str> = Vec::new();
-                let mut state =
-                    serializer.serialize_struct(serde_amqp::__constants::DESCRIBED_LIST, 3usize + 1)?;
+                let mut state = serializer
+                    .serialize_struct(serde_amqp::__constants::DESCRIBED_LIST, 3usize + 1)?;
                 state.serialize_field(
                     serde_amqp::__constants::DESCRIPTOR,
                     &serde_amqp::descriptor::Descriptor::Code(19u64),
@@ -268,14 +268,15 @@ mod tests {
                         let mut b: Option<u64> = None;
                         let mut is_fool: Option<Option<bool>> = None;
                         let mut a: Option<i32> = None;
-                        let __descriptor: serde_amqp::descriptor::Descriptor = match __map.next_key()? {
-                            Some(val) => val,
-                            None => {
-                                return Err(serde_amqp::serde::de::Error::custom(
-                                    "Expecting__descriptor",
-                                ))
-                            }
-                        };
+                        let __descriptor: serde_amqp::descriptor::Descriptor =
+                            match __map.next_key()? {
+                                Some(val) => val,
+                                None => {
+                                    return Err(serde_amqp::serde::de::Error::custom(
+                                        "Expecting__descriptor",
+                                    ))
+                                }
+                            };
                         match __descriptor {
                             serde_amqp::descriptor::Descriptor::Name(__symbol) => {
                                 if __symbol.into_inner() != "Foo" {
@@ -296,7 +297,9 @@ mod tests {
                             match key {
                                 Field::b => {
                                     if b.is_some() {
-                                        return Err(serde_amqp::serde::de::Error::duplicate_field("b"));
+                                        return Err(serde_amqp::serde::de::Error::duplicate_field(
+                                            "b",
+                                        ));
                                     }
                                     b = Some(__map.next_value()?);
                                 }
@@ -310,7 +313,9 @@ mod tests {
                                 }
                                 Field::a => {
                                     if a.is_some() {
-                                        return Err(serde_amqp::serde::de::Error::duplicate_field("a"));
+                                        return Err(serde_amqp::serde::de::Error::duplicate_field(
+                                            "a",
+                                        ));
                                     }
                                     a = Some(__map.next_value()?);
                                 }
@@ -351,7 +356,7 @@ mod tests {
         let foo = Foo {
             b: 0,
             is_fool: None,
-            a: 0
+            a: 0,
         };
         let serialized = to_vec(&foo).unwrap();
         println!("{:?}", &serialized);
@@ -375,8 +380,10 @@ mod tests {
                     b: ref __self_0_1,
                 } => {
                     let debug_trait_builder = &mut ::core::fmt::Formatter::debug_struct(f, "Test");
-                    let _ = ::core::fmt::DebugStruct::field(debug_trait_builder, "a", &&(*__self_0_0));
-                    let _ = ::core::fmt::DebugStruct::field(debug_trait_builder, "b", &&(*__self_0_1));
+                    let _ =
+                        ::core::fmt::DebugStruct::field(debug_trait_builder, "a", &&(*__self_0_0));
+                    let _ =
+                        ::core::fmt::DebugStruct::field(debug_trait_builder, "b", &&(*__self_0_1));
                     ::core::fmt::DebugStruct::finish(debug_trait_builder)
                 }
             }
@@ -392,13 +399,13 @@ mod tests {
             {
                 use serde_amqp::serde::ser::SerializeStruct;
                 let mut nulls: Vec<&str> = Vec::new();
-                let mut state =
-                    serializer.serialize_struct(serde_amqp::__constants::DESCRIBED_MAP, 2usize + 1)?;
+                let mut state = serializer
+                    .serialize_struct(serde_amqp::__constants::DESCRIBED_MAP, 2usize + 1)?;
                 state.serialize_field(
                     serde_amqp::__constants::DESCRIPTOR,
-                    &serde_amqp::descriptor::Descriptor::Name(serde_amqp::primitives::Symbol::from(
-                        "ab",
-                    )),
+                    &serde_amqp::descriptor::Descriptor::Name(
+                        serde_amqp::primitives::Symbol::from("ab"),
+                    ),
                 )?;
                 if (&self.a).is_some() {
                     state.serialize_field("a", &self.a)?;
@@ -485,7 +492,9 @@ mod tests {
                                 }
                             }
                             serde_amqp::descriptor::Descriptor::Code(_) => {
-                                return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
+                                return Err(serde_amqp::serde::de::Error::custom(
+                                    "Descriptor mismatch",
+                                ))
                             }
                         }
                         let a: Option<i32> = match __seq.next_element()? {
@@ -504,14 +513,15 @@ mod tests {
                     {
                         let mut a: Option<Option<i32>> = None;
                         let mut b: Option<bool> = None;
-                        let __descriptor: serde_amqp::descriptor::Descriptor = match __map.next_key()? {
-                            Some(val) => val,
-                            None => {
-                                return Err(serde_amqp::serde::de::Error::custom(
-                                    "Expecting__descriptor",
-                                ))
-                            }
-                        };
+                        let __descriptor: serde_amqp::descriptor::Descriptor =
+                            match __map.next_key()? {
+                                Some(val) => val,
+                                None => {
+                                    return Err(serde_amqp::serde::de::Error::custom(
+                                        "Expecting__descriptor",
+                                    ))
+                                }
+                            };
                         match __descriptor {
                             serde_amqp::descriptor::Descriptor::Name(__symbol) => {
                                 if __symbol.into_inner() != "ab" {
@@ -521,20 +531,26 @@ mod tests {
                                 }
                             }
                             serde_amqp::descriptor::Descriptor::Code(_) => {
-                                return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
+                                return Err(serde_amqp::serde::de::Error::custom(
+                                    "Descriptor mismatch",
+                                ))
                             }
                         }
                         while let Some(key) = __map.next_key::<Field>()? {
                             match key {
                                 Field::a => {
                                     if a.is_some() {
-                                        return Err(serde_amqp::serde::de::Error::duplicate_field("a"));
+                                        return Err(serde_amqp::serde::de::Error::duplicate_field(
+                                            "a",
+                                        ));
                                     }
                                     a = Some(__map.next_value()?);
                                 }
                                 Field::b => {
                                     if b.is_some() {
-                                        return Err(serde_amqp::serde::de::Error::duplicate_field("b"));
+                                        return Err(serde_amqp::serde::de::Error::duplicate_field(
+                                            "b",
+                                        ));
                                     }
                                     b = Some(__map.next_value()?);
                                 }
@@ -560,13 +576,13 @@ mod tests {
                 )
             }
         }
-    };    
+    };
 
     #[test]
     fn test_expanded_map_macro() {
         let test = Test {
             a: Some(1),
-            b: true
+            b: true,
         };
         let serialized = to_vec(&test).unwrap();
         println!("{:?}", &serialized);

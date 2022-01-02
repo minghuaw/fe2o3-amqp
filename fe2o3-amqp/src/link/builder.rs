@@ -266,6 +266,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             tx: incoming_tx,
             flow_state: Producer::new(notifier.clone(), flow_state.clone()),
             unsettled: unsettled.clone(),
+            receiver_settle_mode: Default::default(), // Update this on incoming attach
         };
 
         // Create Link in Session

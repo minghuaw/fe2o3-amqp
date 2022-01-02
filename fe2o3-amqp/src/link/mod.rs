@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Fields, Role, SequenceNo},
+    definitions::{AmqpError, Fields, ReceiverSettleMode, Role, SequenceNo},
+    messaging::DeliveryState,
     performatives::Disposition,
 };
 pub use frame::*;
@@ -246,6 +247,8 @@ pub struct LinkHandle {
     tx: mpsc::Sender<LinkIncomingItem>,
     flow_state: Producer<Arc<LinkFlowState>>,
     unsettled: Arc<RwLock<UnsettledMap>>,
+    // This is not expect to change
+    pub(crate) receiver_settle_mode: ReceiverSettleMode,
 }
 
 // /// TODO: How would this be changed when switched to ReceiverLink
@@ -278,38 +281,47 @@ impl LinkHandle {
 
     pub(crate) async fn on_incoming_disposition(
         &mut self,
-        disposition: &Disposition,
+        role: Role,
+        is_settled: bool,
+        state: &Option<DeliveryState>,
+        // disposition: &Disposition,
         // Disposition only contains the delivery ids, which are assigned by the
         // sessions
         delivery_tag: [u8; 4],
     ) -> bool {
-        match disposition.role {
+        match role {
             // Remote peer is Sender
             Role::Sender => {
                 todo!()
             }
             // Remote peer is Receiver
             Role::Receiver => {
-                let settled = match &disposition.state {
-                    // Some may send terminal state without settling
-                    Some(state) => disposition.settled || state.is_terminal(),
-                    None => disposition.settled
-                };
-
-                if settled {
+                if is_settled {
                     // TODO: Reply with disposition?
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
                     // communicate this back to the sending application.
                     let mut guard = self.unsettled.write().await;
                     if let Some(unsettled) = guard.remove(&delivery_tag) {
-                        unsettled.settle_with_state(disposition.state.clone());
+                        // 
+                        let _ = unsettled.settle_with_state(state.clone());
                     }
-                    true
+                    match self.receiver_settle_mode {
+                        ReceiverSettleMode::First => {
+                            // The receiver will spontaneously settle all incoming transfers.
+                            false
+                        },
+                        ReceiverSettleMode::Second => {
+                            // The receiver will only settle after sending the disposition to 
+                            // the sender and receiving a disposition indicating settlement of the 
+                            // delivery from the sender.
+                            true
+                        }
+                    }
                 } else {
                     let mut guard = self.unsettled.write().await;
                     if let Some(unsettled) = guard.get_mut(&delivery_tag) {
-                        if let Some(state) = &disposition.state {
+                        if let Some(state) = state {
                             *unsettled.state_mut() = state.clone();
                         }
                     }

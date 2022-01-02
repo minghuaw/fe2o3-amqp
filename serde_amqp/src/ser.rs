@@ -103,7 +103,9 @@ impl<W: Write> Serializer<W> {
     }
 
     pub fn struct_encoding(&self) -> &StructEncoding {
-        self.struct_encoding.last().unwrap_or_else(|| &StructEncoding::None)
+        self.struct_encoding
+            .last()
+            .unwrap_or_else(|| &StructEncoding::None)
     }
 }
 
@@ -1287,18 +1289,16 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         match self.se.struct_encoding() {
-            StructEncoding::None => {
-                write_list(
-                    &mut self.se.writer,
-                    self.count,
-                    self.buf,
-                    &self.se.is_array_elem,
-                )
-            },
+            StructEncoding::None => write_list(
+                &mut self.se.writer,
+                self.count,
+                self.buf,
+                &self.se.is_array_elem,
+            ),
             StructEncoding::DescribedBasic => {
                 self.se.struct_encoding.pop();
                 Ok(())
-            },
+            }
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
             StructEncoding::DescribedList => {
                 self.se.struct_encoding.pop();
@@ -1308,7 +1308,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
                     self.buf,
                     &self.se.is_array_elem,
                 )
-            },
+            }
             // The wrapper of value is always the `Described` struct. `Described` constructor is handled elsewhere
             StructEncoding::DescribedMap => {
                 self.se.struct_encoding.pop();

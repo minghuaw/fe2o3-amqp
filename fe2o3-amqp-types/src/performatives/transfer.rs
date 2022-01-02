@@ -176,7 +176,7 @@ mod tests {
     use serde_amqp::to_vec;
     use serde_bytes::ByteBuf;
 
-    use crate::definitions::{Handle};
+    use crate::definitions::Handle;
 
     use super::Transfer;
 

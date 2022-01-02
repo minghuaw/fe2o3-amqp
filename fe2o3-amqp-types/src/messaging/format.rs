@@ -271,7 +271,6 @@ mod tests {
 
     use super::{Header, Priority};
 
-
     #[test]
     fn test_serialize_deserialize_header() {
         let header = Header {
@@ -279,10 +278,9 @@ mod tests {
             priority: Priority(0),
             ttl: None,
             first_acquirer: false,
-            delivery_count: 0
+            delivery_count: 0,
         };
         let serialized = to_vec(&header).unwrap();
         println!("{:x?}", &serialized);
     }
-
 }

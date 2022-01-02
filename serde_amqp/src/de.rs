@@ -1,5 +1,5 @@
 use serde::de::{self};
-use std::{convert::TryInto};
+use std::convert::TryInto;
 
 use crate::{
     __constants::{
@@ -911,28 +911,32 @@ where
                     //     visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
                     // } else if name == DESCRIBED_LIST {
                     //     self.struct_encoding = StructEncoding::DescribedList;
-                        
+
                     //     visitor.visit_seq(DescribedAccess::list(self))
                     // } else if name == DESCRIBED_MAP {
                     //     self.struct_encoding = StructEncoding::DescribedMap;
                     //     visitor.visit_map(DescribedAccess::map(self))
                     // } else {
-                        match self.get_elem_code_or_peek_byte()?.try_into()? {
-                            EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
-                                self.deserialize_tuple(fields.len(), visitor)
-                            }
-                            EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                            EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
-                            _ => Err(Error::InvalidFormatCode),
+                    match self.get_elem_code_or_peek_byte()?.try_into()? {
+                        EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
+                            self.deserialize_tuple(fields.len(), visitor)
                         }
+                        EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
+                        EncodingCodes::DescribedType => {
+                            visitor.visit_seq(DescribedAccess::list(self))
+                        }
+                        _ => Err(Error::InvalidFormatCode),
+                    }
                     // }
                 }
-                StructEncoding::DescribedBasic => visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32)),
+                StructEncoding::DescribedBasic => {
+                    visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
+                }
                 StructEncoding::DescribedList => visitor.visit_seq(DescribedAccess::list(self)),
                 StructEncoding::DescribedMap => visitor.visit_map(DescribedAccess::map(self)),
             }
         };
-        // Restore 
+        // Restore
         self.struct_encoding = cur_encoding;
         result
     }
@@ -954,7 +958,7 @@ where
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == DESCRIPTOR {
             println!(">>> Debug: EnumType::Descriptor");
-            // match self.get_elem_code_or_read_format_code()? {   
+            // match self.get_elem_code_or_read_format_code()? {
             //     EncodingCodes::DescribedType => {},
             //     _ => return Err(Error::InvalidFormatCode)
             // }
@@ -1303,7 +1307,7 @@ pub struct DescribedAccess<'a, R> {
 }
 
 impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
-    /// There will be at least one descriptor, and the length of the 
+    /// There will be at least one descriptor, and the length of the
     /// remaining items will be determined from the bytes
     pub fn list(de: &'a mut Deserializer<R>) -> Self {
         Self {
@@ -1315,7 +1319,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
 
     pub fn basic(de: &'a mut Deserializer<R>, field_count: u32) -> Self {
         Self {
-            de, 
+            de,
             field_count,
             counter: 0,
         }
@@ -1384,15 +1388,14 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
     {
         println!(">>> Debug: DescribedAccess::next_element_seed");
         if self.counter >= self.field_count {
-            return Ok(None)
+            return Ok(None);
         }
-        let code = self.de.reader.peek()?
-            .try_into()?;
+        let code = self.de.reader.peek()?.try_into()?;
         let result = match code {
             EncodingCodes::Null => {
                 let _ = self.de.reader.next(); // consume the Null byte
                 Ok(None)
-            },
+            }
             EncodingCodes::DescribedType => {
                 self.de.enum_type = EnumType::Descriptor;
                 let result = seed.deserialize(self.as_mut()).map(Some);
@@ -1405,7 +1408,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                     }
                 }
                 result
-            },
+            }
             _ => seed.deserialize(self.as_mut()).map(Some),
         };
 
@@ -1426,26 +1429,25 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
 
         // Descriptor will only be deserialized as a key
         if self.counter >= self.field_count {
-            return Ok(None)
+            return Ok(None);
         }
-        let code = self.de.reader.peek()?
-            .try_into()?;
+        let code = self.de.reader.peek()?.try_into()?;
         let result = match code {
             EncodingCodes::Null => {
                 let _ = self.de.reader.next(); // consume the Null byte
                 Ok(None)
-            },
+            }
             EncodingCodes::DescribedType => {
                 self.de.enum_type = EnumType::Descriptor;
                 let result = seed.deserialize(self.as_mut()).map(Some);
                 if self.counter == 0 {
-                    if let StructEncoding::DescribedMap  = self.de.struct_encoding{
+                    if let StructEncoding::DescribedMap = self.de.struct_encoding {
                         self.field_count += self.consume_map_header()?;
                     }
                 }
                 result
             }
-            _ => seed.deserialize(self.as_mut()).map(Some)
+            _ => seed.deserialize(self.as_mut()).map(Some),
         };
 
         self.counter += 1;
@@ -1459,7 +1461,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
     {
         println!(">>> Debug: DescribedAccess::next_value_seed");
         if self.counter >= self.field_count {
-            return Err(de::Error::custom("Invalid length. Expecting value"))
+            return Err(de::Error::custom("Invalid length. Expecting value"));
         }
         self.counter += 1;
         seed.deserialize(self.as_mut())
@@ -1467,7 +1469,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         // match self.field_role {
         //     FieldRole::Descriptor => unreachable!(),
         //     FieldRole::Fields => {
-        //         
+        //
         //     }
         // }
     }
@@ -1483,7 +1485,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
     {
         println!(">>> Debug: DescribedAccess::next_entry_seed");
         if self.counter >= self.field_count {
-            return Ok(None)
+            return Ok(None);
         }
         let code = self.de.reader.peek()?.try_into()?;
 
@@ -1491,7 +1493,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
             EncodingCodes::Null => {
                 let _ = self.de.reader.next(); // consume the Null byte
                 Ok(None)
-            },
+            }
             _ => {
                 let key = kseed.deserialize(self.as_mut())?;
                 let value = vseed.deserialize(self.as_mut())?;
@@ -1505,7 +1507,7 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
 mod tests {
     use serde::{de::DeserializeOwned, Deserialize};
 
-    use crate::{format_code::EncodingCodes};
+    use crate::format_code::EncodingCodes;
 
     use super::{from_reader, from_slice};
 
