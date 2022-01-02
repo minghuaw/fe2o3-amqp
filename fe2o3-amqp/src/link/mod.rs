@@ -465,10 +465,15 @@ impl Producer<Arc<LinkFlowState>> {
     }
 }
 
+pub enum SenderPermit {
+    Send,
+    Drain
+}
+
 #[async_trait]
 impl Consume for Consumer<Arc<LinkFlowState>> {
     type Item = u32;
-    type Outcome = ();
+    type Outcome = SenderPermit;
 
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
         // check whether there is anough credit
@@ -477,7 +482,7 @@ impl Consume for Consumer<Arc<LinkFlowState>> {
                 // increment delivery count and decrement link_credit
                 loop {
                     match consume_link_credit(&lock, item).await {
-                        Ok(_) => return (),
+                        Ok(action) => return action,
                         Err(_) => self.notifier.notified().await,
                     }
                 }
@@ -489,14 +494,18 @@ impl Consume for Consumer<Arc<LinkFlowState>> {
     }
 }
 
-async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
+async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<SenderPermit, ()> {
     let mut state = lock.write().await;
-    if state.link_credit < count {
-        return Err(());
+    if state.drain {
+        Ok(SenderPermit::Drain)
     } else {
-        state.delivery_count += count;
-        state.link_credit -= count;
-        Ok(())
+        if state.link_credit < count {
+            Err(())
+        } else {
+            state.delivery_count += count;
+            state.link_credit -= count;
+            Ok(SenderPermit::Send)
+        }
     }
 }
 

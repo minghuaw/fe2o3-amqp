@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::messaging::Outcome;
 use tokio::sync::Notify;
 
 pub struct Producer<State> {

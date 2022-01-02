@@ -19,7 +19,7 @@ use crate::{
     util::Consumer,
 };
 
-use super::{delivery::UnsettledMessage, LinkFlowState, LinkFrame, LinkState, UnsettledMap};
+use super::{delivery::UnsettledMessage, LinkFlowState, LinkFrame, LinkState, UnsettledMap, SenderPermit};
 use crate::link;
 
 /// Manages the link state
@@ -293,15 +293,13 @@ impl endpoint::SenderLink for SenderLink {
 
         println!(">>> Debug: SenderLink::send_transfer");
 
-        // Whether drain flag is set
-        if self.flow_state.state().drain().await {
-            // println!(">>> Debug: SenderLink::send_transfer drain");
-            // return Ok(Settlement::Settled);
-            todo!()
+        match self.flow_state.consume(1).await {
+            SenderPermit::Send => { }, // There is enough credit to send
+            SenderPermit::Drain => {
+                // Drain is set
+                todo!()
+            }
         }
-
-        // Consume link credit
-        self.flow_state.consume(1).await;
 
         // Check message size
         if (self.max_message_size == 0) || (payload.len() as u64 <= self.max_message_size) {
