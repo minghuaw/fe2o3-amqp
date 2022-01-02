@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut, Bytes};
 use fe2o3_amqp_types::performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
 };
@@ -97,7 +97,7 @@ pub enum FrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     },
     Disposition(Disposition),
     Detach(Detach),
@@ -182,7 +182,7 @@ impl Decoder for FrameBodyCodec {
             Performative::Begin(performative) => FrameBody::Begin(performative),
             Performative::Attach(performative) => FrameBody::Attach(performative),
             Performative::Transfer(performative) => {
-                let payload = src.split();
+                let payload = src.split().into();
                 FrameBody::Transfer {
                     performative,
                     payload,

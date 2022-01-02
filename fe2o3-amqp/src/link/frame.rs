@@ -1,4 +1,4 @@
-use bytes::BytesMut;
+use bytes::Bytes;
 use fe2o3_amqp_types::performatives::{Attach, Detach, Disposition, Flow, Transfer};
 
 pub type LinkIncomingItem = LinkFrame;
@@ -9,7 +9,7 @@ pub enum LinkFrame {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     },
     Disposition(Disposition),
     Detach(Detach),

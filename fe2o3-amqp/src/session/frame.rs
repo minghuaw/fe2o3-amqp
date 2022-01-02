@@ -1,4 +1,4 @@
-use bytes::BytesMut;
+use bytes::Bytes;
 use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
 
 // pub type SessionIncomingItem = Result<SessionFrame, connection::Error>;
@@ -28,7 +28,7 @@ pub enum SessionFrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     },
     Disposition(Disposition),
     Detach(Detach),

@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, time::Duration};
 
-use bytes::BytesMut;
+use bytes::{BytesMut, Bytes};
 use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
@@ -126,6 +126,7 @@ impl Sender<Attached> {
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
         message.serialize(&mut serializer)?;
+        let payload = Bytes::from(payload);
 
         // send a transfer, checking state will be implemented in SenderLink
         let settlement = self

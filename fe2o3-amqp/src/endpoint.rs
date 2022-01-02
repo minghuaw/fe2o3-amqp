@@ -20,7 +20,7 @@
 //!         endpoint)
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::{self, Error, Handle, MessageFormat, Role, SequenceNo},
     messaging::DeliveryState,
@@ -137,7 +137,7 @@ pub trait Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     ) -> Result<(), Self::Error>;
     async fn on_incoming_disposition(
         &mut self,
@@ -167,7 +167,7 @@ pub trait Session {
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     ) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_disposition(
         &mut self,
@@ -215,7 +215,7 @@ pub trait Link {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
-    // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<BytesMut>) -> Result<(), Self::Error>;
+    // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<Bytes>) -> Result<(), Self::Error>;
     // async fn on_outgoing_flow() -> Result<(), Self::Error>;
     // async fn on_outgoing_transfer() -> Result<(), Self::Error>;
     // async fn on_outgoing_disposition() -> Result<(), Self::Error>;
@@ -266,7 +266,7 @@ pub trait SenderLink: Link {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        payload: BytesMut,
+        payload: Bytes,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
@@ -282,6 +282,6 @@ pub trait ReceiverLink: Link {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     ) -> Result<(), <Self as Link>::Error>;
 }

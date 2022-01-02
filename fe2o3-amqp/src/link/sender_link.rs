@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode, Role,
@@ -281,7 +281,7 @@ impl endpoint::SenderLink for SenderLink {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        payload: BytesMut,
+        payload: Bytes,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,

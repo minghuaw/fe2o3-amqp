@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, io};
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, Fields, Handle, SequenceNo, SessionError, TransferNumber},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
@@ -316,7 +316,7 @@ impl endpoint::Session for Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     ) -> Result<(), Self::Error> {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
@@ -452,7 +452,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_transfer(
         &mut self,
         mut transfer: Transfer,
-        payload: BytesMut,
+        payload: Bytes,
     ) -> Result<SessionFrame, Self::Error> {
         // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
         // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-
