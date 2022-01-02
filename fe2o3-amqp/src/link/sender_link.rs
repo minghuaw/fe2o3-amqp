@@ -343,7 +343,7 @@ impl endpoint::SenderLink for SenderLink {
 
             let frame = LinkFrame::Transfer {
                 performative: transfer,
-                payload,
+                payload: payload.clone(), // Clone should be very cheap for Bytes
             };
             writer
                 .send(frame)
@@ -359,7 +359,7 @@ impl endpoint::SenderLink for SenderLink {
                 // delivery, then the settled flag MUST be interpreted as being false.
                 false => {
                     let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledDelivery::new(tx);
+                    let unsettled = UnsettledDelivery::new(payload, tx);
                     {
                         let mut guard = self.unsettled.write().await;
                         guard.insert(delivery_tag, unsettled);

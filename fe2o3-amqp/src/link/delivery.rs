@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::MessageFormat,
     messaging::{DeliveryState, Message, Received},
@@ -5,8 +6,6 @@ use fe2o3_amqp_types::{
 use tokio::sync::oneshot;
 
 use crate::util::Uninitialized;
-
-use super::Error;
 
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]
@@ -32,7 +31,6 @@ where
             message: value.into(),
             message_format: 0,
             settled: None,
-            // batchable: false,
         }
     }
 }
@@ -74,11 +72,6 @@ impl<T> Builder<T> {
         self.settled = settled.into();
         self
     }
-
-    // pub fn batchable(mut self, batchable: impl Into<bool>) -> Self {
-    //     self.batchable = batchable.into();
-    //     self
-    // }
 }
 
 impl Builder<Message> {
@@ -99,12 +92,13 @@ impl From<Builder<Message>> for Delivery {
 }
 
 pub struct UnsettledDelivery {
+    payload: Bytes,
     state: DeliveryState,
     sender: oneshot::Sender<DeliveryState>,
 }
 
 impl UnsettledDelivery {
-    pub fn new(sender: oneshot::Sender<DeliveryState>) -> Self {
+    pub fn new(payload: Bytes, sender: oneshot::Sender<DeliveryState>) -> Self {
         // Assume needing to resend from the beginning unless there is further
         // update from the remote peer
         let received = Received {
@@ -113,6 +107,7 @@ impl UnsettledDelivery {
         };
 
         Self {
+            payload,
             state: DeliveryState::Received(received),
             sender,
         }
@@ -124,6 +119,10 @@ impl UnsettledDelivery {
 
     pub fn state_mut(&mut self) -> &mut DeliveryState {
         &mut self.state
+    }
+
+    pub fn payload(&self) -> &Bytes {
+        &self.payload
     }
 
     pub fn settle(self) -> Result<(), DeliveryState> {
