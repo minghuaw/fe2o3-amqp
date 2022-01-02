@@ -4,7 +4,6 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{AmqpError, Fields, Role, SequenceNo},
-    messaging::DeliveryState,
     performatives::Disposition,
 };
 pub use frame::*;
@@ -28,7 +27,7 @@ use crate::{
     util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
 };
 
-use self::delivery::UnsettledDelivery;
+use self::delivery::UnsettledMessage;
 
 pub mod type_state {
     pub struct Attached {}
@@ -241,7 +240,7 @@ impl LinkFlowState {
     }
 }
 
-pub type UnsettledMap = BTreeMap<[u8; 4], UnsettledDelivery>;
+pub type UnsettledMap = BTreeMap<[u8; 4], UnsettledMessage>;
 
 pub struct LinkHandle {
     tx: mpsc::Sender<LinkIncomingItem>,

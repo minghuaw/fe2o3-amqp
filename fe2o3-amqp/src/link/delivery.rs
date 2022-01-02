@@ -91,13 +91,13 @@ impl From<Builder<Message>> for Delivery {
     }
 }
 
-pub struct UnsettledDelivery {
+pub struct UnsettledMessage {
     payload: Bytes,
     state: DeliveryState,
     sender: oneshot::Sender<DeliveryState>,
 }
 
-impl UnsettledDelivery {
+impl UnsettledMessage {
     pub fn new(payload: Bytes, sender: oneshot::Sender<DeliveryState>) -> Self {
         // Assume needing to resend from the beginning unless there is further
         // update from the remote peer

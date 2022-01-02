@@ -19,7 +19,7 @@ use crate::{
     util::Consumer,
 };
 
-use super::{delivery::UnsettledDelivery, LinkFlowState, LinkFrame, LinkState, UnsettledMap};
+use super::{delivery::UnsettledMessage, LinkFlowState, LinkFrame, LinkState, UnsettledMap};
 use crate::link;
 
 /// Manages the link state
@@ -359,7 +359,7 @@ impl endpoint::SenderLink for SenderLink {
                 // delivery, then the settled flag MUST be interpreted as being false.
                 false => {
                     let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledDelivery::new(payload, tx);
+                    let unsettled = UnsettledMessage::new(payload, tx);
                     {
                         let mut guard = self.unsettled.write().await;
                         guard.insert(delivery_tag, unsettled);
