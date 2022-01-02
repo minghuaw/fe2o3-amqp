@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use fe2o3_amqp_types::{
-    definitions::{self, Error, Handle, MessageFormat, Role, SequenceNo},
+    definitions::{self, Error, Fields, Handle, MessageFormat, Role, SequenceNo},
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
@@ -163,7 +163,7 @@ pub trait Session {
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
-    fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error>;
+    fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
@@ -234,22 +234,42 @@ pub trait Link {
 /// A subset of the fields in the Flow performative
 #[derive(Debug, Default)]
 pub struct LinkFlow {
+    pub handle: Handle,
     pub delivery_count: Option<SequenceNo>,
     pub link_credit: Option<UInt>,
     pub available: Option<UInt>,
     pub drain: Boolean,
     pub echo: Boolean,
+    pub properties: Option<Fields>,
 }
 
-impl From<&Flow> for LinkFlow {
-    fn from(flow: &Flow) -> Self {
-        LinkFlow {
-            delivery_count: flow.delivery_count,
-            link_credit: flow.link_credit,
-            available: flow.available,
-            drain: flow.drain,
-            echo: flow.echo,
-        }
+// impl From<&Flow> for LinkFlow {
+//     fn from(flow: &Flow) -> Self {
+//         LinkFlow {
+
+//             delivery_count: flow.delivery_count,
+//             link_credit: flow.link_credit,
+//             available: flow.available,
+//             drain: flow.drain,
+//             echo: flow.echo,
+//         }
+//     }
+// }
+
+impl TryFrom<Flow> for LinkFlow {
+    type Error = ();
+
+    fn try_from(value: Flow) -> Result<Self, Self::Error> {
+        let flow = LinkFlow {
+            handle: value.handle.ok_or_else(|| ())?,
+            delivery_count: value.delivery_count,
+            link_credit: value.link_credit,
+            available: value.available,
+            drain: value.drain,
+            echo: value.echo,
+            properties: value.properties,
+        };
+        Ok(flow)
     }
 }
 

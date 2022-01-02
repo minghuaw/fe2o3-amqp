@@ -170,11 +170,26 @@ where
             SessionControl::DeallocateLink(link_name) => {
                 self.session.deallocate_link(link_name);
             }
-            SessionControl::LinkFlow(_) => {
-                todo!()
+            SessionControl::LinkFlow(flow) => {
+                let flow = self.session.on_outgoing_flow(flow).map_err(Into::into)?;
+                self.outgoing
+                    .send(flow)
+                    .await
+                    // The receiving half must have dropped, and thus the `Connection`
+                    // event loop has stopped. It should be treated as an io error
+                    .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
             SessionControl::Disposition(disposition) => {
-                todo!()
+                let disposition = self
+                    .session
+                    .on_outgoing_disposition(disposition)
+                    .map_err(Into::into)?;
+                self.outgoing
+                    .send(disposition)
+                    .await
+                    // The receiving half must have dropped, and thus the `Connection`
+                    // event loop has stopped. It should be treated as an io error
+                    .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
         }
 

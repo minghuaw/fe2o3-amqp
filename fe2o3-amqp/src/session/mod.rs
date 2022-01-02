@@ -292,13 +292,14 @@ impl endpoint::Session for Session {
         }
 
         // TODO: handle link flow control
-        if let Some(input_handle) = &flow.handle {
-            match self.link_by_input_handle.get(input_handle) {
+        if let Ok(link_flow) = LinkFlow::try_from(flow) {
+            match self.link_by_input_handle.get(&link_flow.handle) {
                 Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                     Some(link_handle) => {
-                        let link_flow = LinkFlow::from(&flow);
-                        let echo = link_handle.on_incoming_flow(link_flow).await;
-                        if let Some(echo_flow) = echo {
+                        if let Some(echo_flow) = link_handle
+                            .on_incoming_flow(link_flow, output_handle.clone())
+                            .await
+                        {
                             self.control
                                 .send(SessionControl::LinkFlow(echo_flow))
                                 .await
@@ -424,7 +425,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_detach(
         &mut self,
-        channel: u16,
+        _channel: u16,
         detach: Detach,
     ) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_detach");
@@ -526,10 +527,27 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    fn on_outgoing_flow(&mut self, flow: Flow) -> Result<SessionFrame, Self::Error> {
+    fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
 
         println!(">>> Debug: Session::on_outgoing_flow");
+
+        let flow = Flow {
+            // Session flow states
+            next_incoming_id: Some(self.next_incoming_id),
+            incoming_window: self.incoming_window,
+            next_outgoing_id: self.next_outgoing_id,
+            outgoing_window: self.outgoing_window,
+            // Link flow states
+            handle: Some(flow.handle),
+            delivery_count: flow.delivery_count,
+            link_credit: flow.link_credit,
+            available: flow.available,
+            drain: flow.drain,
+            echo: flow.echo,
+            properties: flow.properties,
+        };
+
         let body = SessionFrameBody::Flow(flow);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
@@ -583,6 +601,8 @@ impl endpoint::Session for Session {
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
+        // Currently the sender cannot actively dispose any message
+        // because the sender doesn't have access to the delivery_id
 
         println!(">>> Debug: Session::on_outgoing_disposition");
         let body = SessionFrameBody::Disposition(disposition);

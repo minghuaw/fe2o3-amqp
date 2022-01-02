@@ -3,9 +3,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Fields, ReceiverSettleMode, Role, SequenceNo},
+    definitions::{AmqpError, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
     messaging::DeliveryState,
-    performatives::Disposition,
 };
 pub use frame::*;
 pub mod builder;
@@ -21,7 +20,7 @@ pub use error::Error;
 use futures_util::{Sink, Stream};
 pub use receiver::Receiver;
 pub use sender::Sender;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, RwLock};
 
 use crate::{
     endpoint::{self, LinkFlow},
@@ -84,17 +83,33 @@ pub struct LinkFlowStateInner {
     pub properties: Option<Fields>,
 }
 
-impl From<&LinkFlowStateInner> for LinkFlow {
-    fn from(state: &LinkFlowStateInner) -> Self {
+impl LinkFlowStateInner {
+    pub fn as_link_flow(&self, output_handle: Handle, echo: bool) -> LinkFlow {
         LinkFlow {
-            delivery_count: Some(state.delivery_count),
-            link_credit: Some(state.link_credit),
-            available: Some(state.avaiable),
-            drain: state.drain,
-            echo: false,
+            handle: output_handle,
+            delivery_count: Some(self.delivery_count),
+            link_credit: Some(self.link_credit),
+            available: Some(self.avaiable),
+            drain: self.drain,
+            echo,
+            properties: self.properties.clone(),
         }
     }
 }
+
+// impl From<&LinkFlowStateInner> for LinkFlow {
+//     fn from(state: &LinkFlowStateInner) -> Self {
+//         LinkFlow {
+//             handle: state.handle.value().,
+//             delivery_count: Some(state.delivery_count),
+//             link_credit: Some(state.link_credit),
+//             available: Some(state.avaiable),
+//             drain: state.drain,
+//             echo: false,
+//             properties: state.properties.clone()
+//         }
+//     }
+// }
 
 /// The Sender and Receiver handle link flow control differently
 pub enum LinkFlowState {
@@ -110,7 +125,11 @@ impl LinkFlowState {
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`
     #[inline]
-    pub(crate) async fn on_incoming_flow(&self, flow: LinkFlow) -> Option<LinkFlow> {
+    pub(crate) async fn on_incoming_flow(
+        &self,
+        flow: LinkFlow,
+        output_handle: Handle,
+    ) -> Option<LinkFlow> {
         println!(">>> Debug: LinkFlowState::on_incoming_flow");
 
         match self {
@@ -160,7 +179,8 @@ impl LinkFlowState {
                 state.drain = flow.drain;
 
                 match flow.echo {
-                    true => Some(LinkFlow::from(&*state)),
+                    // Should avoid constant ping-pong
+                    true => Some(state.as_link_flow(output_handle, false)),
                     false => None,
                 }
             }
@@ -204,7 +224,7 @@ impl LinkFlowState {
                 // last known value indicated by the receiver.
 
                 match flow.echo {
-                    true => Some(LinkFlow::from(&*state)),
+                    true => Some(state.as_link_flow(output_handle, false)),
                     false => None,
                 }
             }
@@ -275,8 +295,12 @@ impl LinkHandle {
         self.tx.send(frame).await
     }
 
-    pub(crate) async fn on_incoming_flow(&mut self, flow: LinkFlow) -> Option<LinkFlow> {
-        self.flow_state.on_incoming_flow(flow).await
+    pub(crate) async fn on_incoming_flow(
+        &mut self,
+        flow: LinkFlow,
+        output_handle: Handle,
+    ) -> Option<LinkFlow> {
+        self.flow_state.on_incoming_flow(flow, output_handle).await
     }
 
     pub(crate) async fn on_incoming_disposition(
@@ -284,7 +308,6 @@ impl LinkHandle {
         role: Role,
         is_settled: bool,
         state: &Option<DeliveryState>,
-        // disposition: &Disposition,
         // Disposition only contains the delivery ids, which are assigned by the
         // sessions
         delivery_tag: [u8; 4],
@@ -301,28 +324,32 @@ impl LinkHandle {
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
                     // communicate this back to the sending application.
-                    let mut guard = self.unsettled.write().await;
-                    if let Some(unsettled) = guard.remove(&delivery_tag) {
-                        // 
-                        let _ = unsettled.settle_with_state(state.clone());
+                    {
+                        let mut guard = self.unsettled.write().await;
+                        if let Some(unsettled) = guard.remove(&delivery_tag) {
+                            //
+                            let _ = unsettled.settle_with_state(state.clone());
+                        }
                     }
                     match self.receiver_settle_mode {
                         ReceiverSettleMode::First => {
                             // The receiver will spontaneously settle all incoming transfers.
                             false
-                        },
+                        }
                         ReceiverSettleMode::Second => {
-                            // The receiver will only settle after sending the disposition to 
-                            // the sender and receiving a disposition indicating settlement of the 
+                            // The receiver will only settle after sending the disposition to
+                            // the sender and receiving a disposition indicating settlement of the
                             // delivery from the sender.
                             true
                         }
                     }
                 } else {
-                    let mut guard = self.unsettled.write().await;
-                    if let Some(unsettled) = guard.get_mut(&delivery_tag) {
-                        if let Some(state) = state {
-                            *unsettled.state_mut() = state.clone();
+                    {
+                        let mut guard = self.unsettled.write().await;
+                        if let Some(unsettled) = guard.get_mut(&delivery_tag) {
+                            if let Some(state) = state {
+                                *unsettled.state_mut() = state.clone();
+                            }
                         }
                     }
                     false
@@ -417,19 +444,23 @@ where
 
 #[async_trait]
 impl ProducerState for Arc<LinkFlowState> {
-    type Item = LinkFlow;
+    type Item = (LinkFlow, Handle);
     // If echo is requested, a Some(LinkFlow) will be returned
     type Outcome = Option<LinkFlow>;
 
     #[inline]
-    async fn update_state(&mut self, item: Self::Item) -> Self::Outcome {
-        self.on_incoming_flow(item).await
+    async fn update_state(&mut self, (flow, output_handle): Self::Item) -> Self::Outcome {
+        self.on_incoming_flow(flow, output_handle).await
     }
 }
 
 impl Producer<Arc<LinkFlowState>> {
-    pub async fn on_incoming_flow(&mut self, flow: LinkFlow) -> Option<LinkFlow> {
-        self.produce(flow).await
+    pub async fn on_incoming_flow(
+        &mut self,
+        flow: LinkFlow,
+        output_handle: Handle,
+    ) -> Option<LinkFlow> {
+        self.produce((flow, output_handle)).await
     }
 }
 
@@ -492,7 +523,7 @@ mod tests {
         let notified = notifier.notified();
 
         let handle = tokio::spawn(async move {
-            let item = LinkFlow::default();
+            let item = (LinkFlow::default(), Handle::from(0));
             producer.produce(item).await;
         });
 
