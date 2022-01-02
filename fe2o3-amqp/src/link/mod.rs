@@ -278,10 +278,10 @@ impl LinkHandle {
 
     pub(crate) async fn on_incoming_disposition(
         &mut self,
-        disposition: Disposition,
+        disposition: &Disposition,
         // Disposition only contains the delivery ids, which are assigned by the
         // sessions
-        unsettled_key: impl Iterator<Item = SequenceNo>,
+        delivery_tag: [u8; 4],
     ) -> Option<Disposition> {
         match disposition.role {
             Role::Sender => {

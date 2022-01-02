@@ -142,7 +142,7 @@ pub struct Session {
     link_by_name: BTreeMap<String, Handle>,
     link_by_input_handle: BTreeMap<Handle, Handle>,
     // Maps from DeliveryId to link.DeliveryCount
-    delivery_tag_by_id: BTreeMap<TransferNumber, [u8; 4]>,
+    delivery_tag_by_id: BTreeMap<TransferNumber, (Handle, [u8; 4])>,
 }
 
 impl Session {
@@ -333,7 +333,42 @@ impl endpoint::Session for Session {
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_disposition");
-        todo!()
+
+        // TODO: what to do when session lost delivery_tag_by_id
+        // and disposition only has delivery id?
+
+        let first = disposition.first;
+        let last = disposition.last.unwrap_or_else(|| first + 1);
+
+        if disposition.settled {
+            for delivery_id in first..last {
+                if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&delivery_id) {
+                    if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
+                        if let Some(echo) = link_handle.on_incoming_disposition(&disposition, delivery_tag).await {
+                            self.control
+                                .send(SessionControl::Disposition(echo))
+                                .await
+                                .map_err(|_| AmqpError::IllegalState)?
+                        }
+                    }
+                }
+            }
+        } else {
+            for delivery_id in first..last {
+                if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
+                    if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
+                        if let Some(echo) = link_handle.on_incoming_disposition(&disposition, *delivery_tag).await {
+                            self.control
+                                .send(SessionControl::Disposition(echo))
+                                .await
+                                .map_err(|_| AmqpError::IllegalState)?
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn on_incoming_detach(
@@ -471,7 +506,7 @@ impl endpoint::Session for Session {
             (&mut delivery_tag).copy_from_slice(tag);
 
             // Disposition doesn't carry delivery tag
-            self.delivery_tag_by_id.insert(delivery_id, delivery_tag);
+            self.delivery_tag_by_id.insert(delivery_id, (transfer.handle.clone(), delivery_tag));
         }
 
         self.next_outgoing_id += 1;

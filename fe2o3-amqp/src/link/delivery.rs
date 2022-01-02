@@ -133,6 +133,10 @@ impl UnsettledMessage {
     pub fn settle(self) -> Result<(), DeliveryState> {
         self.sender.send(self.state)
     }
+
+    pub fn settle_with_state(self, state: DeliveryState) -> Result<(), DeliveryState> {
+        self.sender.send(state)
+    }
 }
 
 /// A future for delivery that can be `await`ed for the settlement

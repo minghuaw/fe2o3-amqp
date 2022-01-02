@@ -13,6 +13,18 @@ pub enum DeliveryState {
     Received(Received),
 }
 
+impl DeliveryState {
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            DeliveryState::Accepted(_)
+            | DeliveryState::Rejected(_)
+            | DeliveryState::Released(_)
+            | DeliveryState::Modified(_) => true,
+            DeliveryState::Received(_) => false
+        }
+    }
+}
+
 mod delivery_state_impl;
 
 #[derive(Debug, Clone)]

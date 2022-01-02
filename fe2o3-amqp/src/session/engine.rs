@@ -173,6 +173,9 @@ where
             SessionControl::LinkFlow(_) => {
                 todo!()
             }
+            SessionControl::Disposition(disposition) => {
+                todo!()
+            }
         }
 
         match self.session.local_state() {
