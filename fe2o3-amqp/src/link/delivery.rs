@@ -1,9 +1,10 @@
 use bytes::Bytes;
 use fe2o3_amqp_types::{
-    definitions::{MessageFormat, AmqpError},
+    definitions::{MessageFormat, AmqpError, DeliveryTag, DeliveryNumber, Handle},
     messaging::{DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
+use tokio_util::sync::PollSender;
 use std::{future::Future, task::Poll};
 use tokio::sync::oneshot;
 use pin_project_lite::pin_project;
@@ -12,7 +13,19 @@ use crate::{util::Uninitialized, endpoint::Settlement};
 use crate::link;
 
 /// Reserved for receiver side
-pub struct Delivery {}
+pub struct Delivery {
+    /// Verify whether this message is bound to a link
+    pub(crate) link_output_handle: Handle,
+    pub(crate) delivery_id: DeliveryNumber,
+    pub(crate) delivery_tag: DeliveryTag,
+    pub(crate) message: Message,
+}
+
+impl Delivery {
+    pub fn message(&self) -> &Message {
+        &self.message
+    }
+}
 
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]

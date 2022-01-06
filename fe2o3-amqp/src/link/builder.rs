@@ -1,35 +1,29 @@
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
-    sync::{
-        atomic::{AtomicBool, AtomicU32},
-        Arc,
-    },
+    sync::{Arc},
 };
 
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target},
-    performatives::{Attach, Detach},
     primitives::{Symbol, ULong},
 };
-use futures_util::{Sink, SinkExt, Stream};
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
-    endpoint,
     link::{
-        sender_link::SenderLink, Error, LinkFlowState, LinkFlowStateInner, LinkFrame, LinkHandle,
-        LinkIncomingItem, LinkState,
+        Link, Error, LinkHandle,
+        LinkIncomingItem,
     },
     session::{self, SessionHandle},
     util::{Constant, Consumer, Producer},
 };
 
-use super::{role, type_state::Attached, Receiver, Sender};
+use super::{role, type_state::Attached, Receiver, Sender, state::{LinkState, LinkFlowStateInner, LinkFlowState}};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -282,7 +276,8 @@ impl Builder<role::Sender, WithName, WithTarget> {
         };
 
         // Create a SenderLink instance
-        let mut link = SenderLink {
+        let mut link = Link::<role::Sender> {
+            role: PhantomData,
             local_state,
             name: self.name,
             output_handle: Some(output_handle.clone()),

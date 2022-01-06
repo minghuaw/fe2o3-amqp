@@ -1,10 +1,11 @@
 mod frame;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{sync::Arc, collections::BTreeMap, marker::PhantomData};
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Fields, Handle, ReceiverSettleMode, Role, SequenceNo},
-    messaging::DeliveryState,
+    definitions::{AmqpError, Handle, ReceiverSettleMode, Role, SenderSettleMode, self, DeliveryTag, MessageFormat},
+    messaging::{DeliveryState, Source, Target}, primitives::Symbol, performatives::{Attach, Disposition, Detach, Transfer},
 };
 pub use frame::*;
 pub mod builder;
@@ -14,20 +15,22 @@ pub mod receiver;
 pub mod receiver_link;
 pub mod sender;
 pub mod sender_link;
+pub mod state;
 
 pub use error::Error;
 
-use futures_util::{Sink, Stream};
+use futures_util::{Sink, Stream, SinkExt};
 pub use receiver::Receiver;
 pub use sender::Sender;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, oneshot};
 
 use crate::{
-    endpoint::{self, LinkFlow},
-    util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
+    endpoint::{self, LinkFlow, Settlement},
+    util::{Producer, Consumer},
+    link::{self, state::SenderPermit, delivery::UnsettledMessage}
 };
 
-use self::delivery::UnsettledMessage;
+use self::state::{LinkFlowState, UnsettledMap, LinkState};
 
 pub mod type_state {
     pub struct Attached {}
@@ -44,224 +47,357 @@ pub mod role {
     pub struct Receiver {}
 }
 
-#[derive(Debug)]
-pub enum LinkState {
-    /// The initial state after initialization
-    Unattached,
 
-    /// An attach frame has been sent
-    AttachSent,
+/// Manages the link state
+pub struct Link<R> {
+    pub(crate) role: PhantomData<R>,
 
-    /// An attach frame has been received
-    AttachReceived,
+    pub(crate) local_state: LinkState,
 
-    /// The link is attached
-    Attached,
+    pub(crate) name: String,
 
-    /// A non-closing detach frame has been sent
-    DetachSent,
+    pub(crate) output_handle: Option<Handle>, // local handle
+    pub(crate) input_handle: Option<Handle>,  // remote handle
 
-    /// A non-closing detach frame has been received
-    DetachReceived,
+    /// The `Sender` will manage whether to wait for incoming disposition
+    pub(crate) snd_settle_mode: SenderSettleMode,
+    pub(crate) rcv_settle_mode: ReceiverSettleMode,
 
-    /// The link is detached
-    Detached,
-    // /// A closing detach frame has been sent
-    // CloseSent,
+    pub(crate) source: Option<Source>, // TODO: Option?
+    pub(crate) target: Option<Target>, // TODO: Option?
 
-    // CloseReceived,
+    /// If zero, the max size is not set.
+    /// If zero, the attach frame should treated is None
+    pub(crate) max_message_size: u64,
 
-    // Closed,
+    // capabilities
+    pub(crate) offered_capabilities: Option<Vec<Symbol>>,
+    pub(crate) desired_capabilities: Option<Vec<Symbol>>,
+
+    // See Section 2.6.7 Flow Control
+    // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
+    // pub(crate) properties: Option<Fields>,
+    pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
+    pub(crate) unsettled: Arc<RwLock<UnsettledMap>>,
 }
 
-pub struct LinkFlowStateInner {
-    pub initial_delivery_count: Constant<SequenceNo>,
-    pub delivery_count: SequenceNo, // SequenceNo = u32
-    pub link_credit: u32,
-    pub avaiable: u32,
-    pub drain: bool,
-    pub properties: Option<Fields>,
-}
+#[async_trait]
+impl endpoint::Link for Link<role::Sender> {
+    type DetachError = definitions::Error;
+    type Error = link::Error;
 
-impl LinkFlowStateInner {
-    pub fn as_link_flow(&self, output_handle: Handle, echo: bool) -> LinkFlow {
-        LinkFlow {
-            handle: output_handle,
-            delivery_count: Some(self.delivery_count),
-            link_credit: Some(self.link_credit),
-            available: Some(self.avaiable),
-            drain: self.drain,
-            echo,
-            properties: self.properties.clone(),
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
+        println!(">>> Debug: SenderLink::on_incoming_attach");
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => {
+                // remote peer is attempting to re-attach
+                self.local_state = LinkState::AttachReceived
+            }
+            _ => return Err(AmqpError::IllegalState.into()),
+        };
+
+        self.input_handle = Some(attach.handle);
+
+        // When resuming a link, it is possible that the properties of the source and target have changed while the link
+        // was suspended. When this happens, the termini properties communicated in the source and target fields of the
+        // attach frames could be in conflict. In this case, the sender is considered to hold the authoritative version of the
+        // **the receiver is considered to hold the authoritative version of the target properties**.
+        self.target = attach.target;
+
+        // set max message size
+        let remote_max_msg_size = attach.max_message_size.unwrap_or_else(|| 0);
+        if remote_max_msg_size < self.max_message_size {
+            self.max_message_size = remote_max_msg_size;
         }
+
+        Ok(())
+    }
+
+    // async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    //     todo!()
+    // }
+
+    // Only the receiver is supposed to receive incoming Transfer frame
+
+    async fn on_incoming_disposition(
+        &mut self,
+        disposition: Disposition,
+    ) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    /// Closing or not isn't taken care of here but outside
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        println!(">>> Debug: SenderLink::on_incoming_detach");
+
+        match self.local_state {
+            LinkState::Attached => self.local_state = LinkState::DetachReceived,
+            LinkState::DetachSent => self.local_state = LinkState::Detached,
+            _ => {
+                return Err(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    Some("Illegal local state".into()),
+                    None,
+                )
+                .into())
+            }
+        };
+
+        // Receiving detach forwarded by session means it's ready to drop the output handle
+        let _ = self.output_handle.take();
+
+        if let Some(err) = detach.error {
+            return Err(err.into());
+        }
+        Ok(())
+    }
+
+    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    {
+        println!(">>> Debug: SenderLink::send_attach");
+        println!(">>> Debug: SenderLink.local_state: {:?}", &self.local_state);
+
+        // Create Attach frame
+        let handle = match &self.output_handle {
+            Some(h) => h.clone(),
+            None => {
+                return Err(link::Error::AmqpError {
+                    condition: AmqpError::InvalidField,
+                    description: Some("Output handle is None".into()),
+                })
+            }
+        };
+        let unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>> = {
+            let guard = self.unsettled.read().await;
+            match guard.len() {
+                0 => None,
+                _ => Some(
+                    guard
+                        .iter()
+                        .map(|(key, val)| (DeliveryTag::from(*key), val.state().clone()))
+                        .collect(),
+                ),
+            }
+        };
+        // let unsettled: Option<UnsettledMap> = match self.unsettled.read().await.len() {
+        //     0 => None,
+        //     _ => Some(self.unsettled.clone()),
+        // };
+        let max_message_size = match self.max_message_size {
+            0 => None,
+            val @ _ => Some(val as u64),
+        };
+        let initial_delivery_count = Some(self.flow_state.state().initial_delivery_count().await);
+        let properties = self.flow_state.state().properties().await;
+
+        let attach = Attach {
+            name: self.name.clone(),
+            handle: handle,
+            role: Role::Sender,
+            snd_settle_mode: self.snd_settle_mode.clone(),
+            rcv_settle_mode: self.rcv_settle_mode.clone(),
+            source: self.source.clone(),
+            target: self.target.clone(),
+            unsettled,
+            incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?
+
+            /// This MUST NOT be null if role is sender,
+            /// and it is ignored if the role is receiver.
+            /// See subsection 2.6.7.
+            initial_delivery_count,
+
+            max_message_size,
+            offered_capabilities: self.offered_capabilities.clone(),
+            desired_capabilities: self.desired_capabilities.clone(),
+            properties,
+        };
+        let frame = LinkFrame::Attach(attach);
+
+        match self.local_state {
+            LinkState::Unattached
+            | LinkState::Detached // May attempt to re-attach
+            | LinkState::DetachSent => {
+                writer.send(frame).await
+                    .map_err(|e| Self::Error::from(e))?;
+                self.local_state = LinkState::AttachSent
+            }
+            LinkState::AttachReceived => {
+                writer.send(frame).await
+                    .map_err(|e| Self::Error::from(e))?;
+                self.local_state = LinkState::Attached
+            }
+            _ => return Err(AmqpError::IllegalState.into()),
+        }
+
+        Ok(())
+    }
+
+    async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+    {
+        todo!()
+    }
+
+    async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+    {
+        todo!()
+    }
+
+    async fn send_detach<W>(
+        &mut self,
+        writer: &mut W,
+        closed: bool,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    {
+        println!(">>> Debug: SenderLink::send_detach");
+        println!(">>> Debug: SenderLink local_state: {:?}", &self.local_state);
+
+        // Detach may fail and may try re-attach
+        // The local output handle is not removed from the session
+        // until `deallocate_link`. The outgoing detach will not remove
+        // local handle from session
+        match &self.output_handle {
+            Some(handle) => {
+                match self.local_state {
+                    LinkState::Attached => self.local_state = LinkState::DetachSent,
+                    LinkState::DetachReceived => self.local_state = LinkState::Detached,
+                    _ => return Err(AmqpError::IllegalState.into()),
+                };
+
+                let detach = Detach {
+                    handle: handle.clone(),
+                    closed,
+                    error,
+                };
+                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
+                    link::Error::AmqpError {
+                        condition: AmqpError::IllegalState,
+                        description: Some("Session is already dropped".to_string()),
+                    }
+                })?;
+            }
+            None => {
+                return Err(link::Error::AmqpError {
+                    condition: AmqpError::IllegalState,
+                    description: Some("Link is already detached".to_string()),
+                })
+            }
+        }
+
+        Ok(())
     }
 }
 
-// impl From<&LinkFlowStateInner> for LinkFlow {
-//     fn from(state: &LinkFlowStateInner) -> Self {
-//         LinkFlow {
-//             handle: state.handle.value().,
-//             delivery_count: Some(state.delivery_count),
-//             link_credit: Some(state.link_credit),
-//             available: Some(state.avaiable),
-//             drain: state.drain,
-//             echo: false,
-//             properties: state.properties.clone()
-//         }
-//     }
-// }
+#[async_trait]
+impl endpoint::SenderLink for Link<role::Sender> {
+    async fn send_transfer<W>(
+        &mut self,
+        writer: &mut W,
+        payload: Bytes,
+        message_format: MessageFormat,
+        settled: Option<bool>,
+        batchable: bool,
+    ) -> Result<Settlement, <Self as endpoint::Link>::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+    {
+        use crate::util::Consume;
 
-/// The Sender and Receiver handle link flow control differently
-pub enum LinkFlowState {
-    Sender(RwLock<LinkFlowStateInner>),
-    Receiver(RwLock<LinkFlowStateInner>),
-}
+        println!(">>> Debug: SenderLink::send_transfer");
 
-impl LinkFlowState {
-    /// Handles incoming Flow frame
-    ///
-    /// TODO: Is a result necessary?
-    ///
-    /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
-    /// otherwise, return a `Ok(None)`
-    #[inline]
-    pub(crate) async fn on_incoming_flow(
-        &self,
-        flow: LinkFlow,
-        output_handle: Handle,
-    ) -> Option<LinkFlow> {
-        println!(">>> Debug: LinkFlowState::on_incoming_flow");
+        match self.flow_state.consume(1).await {
+            SenderPermit::Send => { }, // There is enough credit to send
+            SenderPermit::Drain => {
+                // Drain is set
+                todo!()
+            }
+        }
 
-        match self {
-            LinkFlowState::Sender(lock) => {
-                let mut state = lock.write().await;
+        // Check message size
+        if (self.max_message_size == 0) || (payload.len() as u64 <= self.max_message_size) {
+            let handle = self
+                .output_handle
+                .clone()
+                .ok_or_else(|| AmqpError::IllegalState)?;
 
-                // delivery count
-                //
-                // ...
-                // Only the sender MAY independently modify this field.
+            let delivery_tag = self.flow_state.state().delivery_count().await.to_be_bytes();
 
-                // link credit
-                //
-                // ...
-                // This means that the sender’s link-credit variable
-                // MUST be set according to this formula when flow information is given by the
-                // receiver:
-                // link-credit_snd := delivery-count_rcv + link-credit_rcv - delivery-count_snd.
-                let delivery_count_rcv = flow.delivery_count.unwrap_or_else(|| {
-                    // In the event that the receiver does not yet know the delivery-count,
-                    // i.e., delivery-count_rcv is unspecified, the sender MUST assume that
-                    // the delivery-count_rcv is the first delivery-count_snd sent from sender
-                    // to receiver, i.e., the delivery-count_snd specified in the flow state
-                    // carried by the initial attach frame from the sender to the receiver.
-                    *state.initial_delivery_count.value()
-                });
+            // TODO: Expose API to allow user to set this when the mode is MIXED?
+            let settled = match self.snd_settle_mode {
+                SenderSettleMode::Settled => true,
+                SenderSettleMode::Unsettled => false,
+                // If not set on the first (or only) transfer for a (multi-transfer)
+                // delivery, then the settled flag MUST be interpreted as being false.
+                SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
+            };
 
-                if let Some(link_credit_rcv) = flow.link_credit {
-                    let link_credit = delivery_count_rcv + link_credit_rcv - state.delivery_count;
-                    state.link_credit = link_credit;
-                }
+            // TODO: Expose API for resuming link?
+            let state: Option<DeliveryState> = None;
+            let resume = false;
 
-                // available
-                //
-                // The available variable is controlled by the sender, and indicates to the receiver,
-                // that the sender could make use of the indicated amount of link-credit. Only the
-                // sender can indepen- dently modify this field.
+            let transfer = Transfer {
+                handle,
+                delivery_id: None, // This will be set by the session
+                delivery_tag: Some(DeliveryTag::from(delivery_tag)),
+                message_format: Some(message_format),
+                settled: Some(settled), // Having this always set in first frame helps debugging
+                more: false,
+                // If not set, this value is defaulted to the value negotiated
+                // on link attach.
+                rcv_settle_mode: None,
+                state,
+                resume,
+                aborted: false,
+                batchable,
+            };
 
-                // drain
-                //
-                // The drain flag indicates how the sender SHOULD behave when insufficient messages
-                // are available to consume the current link-credit. If set, the sender will (after
-                // sending all available messages) advance the delivery-count as much as possible,
-                // consuming all link-credit, and send the flow state to the receiver. Only the
-                // receiver can independently modify this field. The sender’s value is always the
-                // last known value indicated by the receiver.
-                state.drain = flow.drain;
+            let frame = LinkFrame::Transfer {
+                performative: transfer,
+                payload: payload.clone(), // Clone should be very cheap for Bytes
+            };
+            writer
+                .send(frame)
+                .await
+                .map_err(|_| link::Error::AmqpError {
+                    condition: AmqpError::IllegalState,
+                    description: Some("Session is already dropped".to_string()),
+                })?;
 
-                match flow.echo {
-                    // Should avoid constant ping-pong
-                    true => Some(state.as_link_flow(output_handle, false)),
-                    false => None,
+            match settled {
+                true => Ok(Settlement::Settled),
+                // If not set on the first (or only) transfer for a (multi-transfer)
+                // delivery, then the settled flag MUST be interpreted as being false.
+                false => {
+                    let (tx, rx) = oneshot::channel();
+                    let unsettled = UnsettledMessage::new(payload, tx);
+                    {
+                        let mut guard = self.unsettled.write().await;
+                        guard.insert(delivery_tag, unsettled);
+                    }
+
+                    Ok(Settlement::Unsettled {
+                        delivery_tag,
+                        outcome: rx,
+                    })
                 }
             }
-            LinkFlowState::Receiver(lock) => {
-                let mut state = lock.write().await;
-
-                // delivery count
-                //
-                // The receiver’s value is calculated based on the last known
-                // value from the sender and any subsequent messages received on the link. Note that,
-                // despite its name, the delivery-count is not a count but a sequence number
-                // initialized at an arbitrary point by the sender.
-                if let Some(delivery_count) = flow.delivery_count {
-                    state.delivery_count = delivery_count;
-                }
-
-                // link credit
-                //
-                // Only the receiver can independently choose a value for this field. The sender’s
-                // value MUST always be maintained in such a way as to match the delivery-limit
-                // identified by the receiver.
-
-                // available
-                //
-                // The receiver’s value is calculated
-                // based on the last known value from the sender and any subsequent incoming
-                // messages received. The sender MAY transfer messages even if the available variable
-                // is zero. If this happens, the receiver MUST maintain a floor of zero in its
-                // calculation of the value of available.
-                if let Some(available) = flow.available {
-                    state.avaiable = available;
-                }
-
-                // drain
-                //
-                // The drain flag indicates how the sender SHOULD behave when insufficient messages
-                // are available to consume the current link-credit. If set, the sender will (after
-                // sending all available messages) advance the delivery-count as much as possible,
-                // consuming all link-credit, and send the flow state to the receiver. Only the
-                // receiver can independently modify this field. The sender’s value is always the
-                // last known value indicated by the receiver.
-
-                match flow.echo {
-                    true => Some(state.as_link_flow(output_handle, false)),
-                    false => None,
-                }
-            }
-        }
-    }
-
-    pub async fn drain(&self) -> bool {
-        match self {
-            LinkFlowState::Sender(lock) => lock.read().await.drain,
-            LinkFlowState::Receiver(lock) => lock.read().await.drain,
-        }
-    }
-
-    pub async fn initial_delivery_count(&self) -> SequenceNo {
-        match self {
-            LinkFlowState::Sender(lock) => *lock.read().await.initial_delivery_count.value(),
-            LinkFlowState::Receiver(lock) => *lock.read().await.initial_delivery_count.value(),
-        }
-    }
-
-    pub async fn delivery_count(&self) -> SequenceNo {
-        match self {
-            LinkFlowState::Sender(lock) => lock.read().await.delivery_count,
-            LinkFlowState::Receiver(lock) => lock.read().await.delivery_count,
-        }
-    }
-
-    /// This is async because it is protected behind an async RwLock
-    pub async fn properties(&self) -> Option<Fields> {
-        match self {
-            LinkFlowState::Sender(lock) => lock.read().await.properties.clone(),
-            LinkFlowState::Receiver(lock) => lock.read().await.properties.clone(),
+        } else {
+            // Need multiple transfers
+            todo!()
         }
     }
 }
 
-pub type UnsettledMap = BTreeMap<[u8; 4], UnsettledMessage>;
 
 pub struct LinkHandle {
     tx: mpsc::Sender<LinkIncomingItem>,
@@ -443,74 +579,10 @@ where
     Ok(())
 }
 
-#[async_trait]
-impl ProducerState for Arc<LinkFlowState> {
-    type Item = (LinkFlow, Handle);
-    // If echo is requested, a Some(LinkFlow) will be returned
-    type Outcome = Option<LinkFlow>;
-
-    #[inline]
-    async fn update_state(&mut self, (flow, output_handle): Self::Item) -> Self::Outcome {
-        self.on_incoming_flow(flow, output_handle).await
-    }
-}
-
-impl Producer<Arc<LinkFlowState>> {
-    pub async fn on_incoming_flow(
-        &mut self,
-        flow: LinkFlow,
-        output_handle: Handle,
-    ) -> Option<LinkFlow> {
-        self.produce((flow, output_handle)).await
-    }
-}
-
-pub enum SenderPermit {
-    Send,
-    Drain
-}
-
-#[async_trait]
-impl Consume for Consumer<Arc<LinkFlowState>> {
-    type Item = u32;
-    type Outcome = SenderPermit;
-
-    async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
-        // check whether there is anough credit
-        match self.state().as_ref() {
-            LinkFlowState::Sender(lock) => {
-                // increment delivery count and decrement link_credit
-                loop {
-                    match consume_link_credit(&lock, item).await {
-                        Ok(action) => return action,
-                        Err(_) => self.notifier.notified().await,
-                    }
-                }
-            }
-            LinkFlowState::Receiver(lock) => {
-                todo!()
-            }
-        }
-    }
-}
-
-async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<SenderPermit, ()> {
-    let mut state = lock.write().await;
-    if state.drain {
-        Ok(SenderPermit::Drain)
-    } else {
-        if state.link_credit < count {
-            Err(())
-        } else {
-            state.delivery_count += count;
-            state.link_credit -= count;
-            Ok(SenderPermit::Send)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::{link::state::LinkFlowStateInner, util::Constant};
+
     #[tokio::test]
     async fn test_producer_notify() {
         use std::sync::Arc;

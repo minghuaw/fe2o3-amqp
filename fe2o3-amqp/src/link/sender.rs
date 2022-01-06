@@ -22,14 +22,13 @@ use super::{
     delivery::{DeliveryFut, Sendable},
     error::DetachError,
     role,
-    sender_link::SenderLink,
     type_state::{Attached, Detached},
     Error, LinkFrame, LinkHandle,
 };
 
 pub struct Sender<S> {
     // The SenderLink manages the state
-    pub(crate) link: SenderLink,
+    pub(crate) link: super::Link<role::Sender>,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session
