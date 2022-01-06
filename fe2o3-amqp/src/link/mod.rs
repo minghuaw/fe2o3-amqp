@@ -64,7 +64,13 @@ pub mod role {
 
 
 /// Manages the link state
-pub struct Link<R, C> {
+/// 
+/// # Type Parameters
+/// 
+/// R: role
+/// 
+/// F: link flow state
+pub struct Link<R, F> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
@@ -93,15 +99,15 @@ pub struct Link<R, C> {
     // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
     // pub(crate) properties: Option<Fields>,
     // pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
-    pub(crate) flow_state: C,
+    pub(crate) flow_state: F,
     pub(crate) unsettled: Arc<RwLock<UnsettledMap>>,
 }
 
 #[async_trait]
-impl<R, C> endpoint::Link for Link<R, C> 
+impl<R, F> endpoint::Link for Link<R, F> 
 where 
     R: role::IntoRole + Send,
-    C: AsRef<LinkFlowState> + Send + Sync,
+    F: AsRef<LinkFlowState> + Send + Sync,
 {
     type DetachError = definitions::Error;
     type Error = link::Error;
