@@ -12,9 +12,7 @@ pub mod builder;
 pub mod delivery;
 mod error;
 pub mod receiver;
-pub mod receiver_link;
 pub mod sender;
-pub mod sender_link;
 pub mod state;
 
 pub use error::Error;
@@ -39,12 +37,29 @@ pub mod type_state {
 }
 
 pub mod role {
+    use fe2o3_amqp_types::definitions::Role;
 
     /// Type state for link::builder::Builder
     pub struct Sender {}
 
     /// Type state for link::builder::Builder
     pub struct Receiver {}
+
+    pub trait IntoRole {
+        fn into_role() -> Role;
+    }
+
+    impl IntoRole for Sender {
+        fn into_role() -> Role {
+            Role::Sender
+        }
+    }
+
+    impl IntoRole for Receiver {
+        fn into_role() -> Role {
+            Role::Receiver
+        }
+    }
 }
 
 
@@ -82,7 +97,7 @@ pub struct Link<R> {
 }
 
 #[async_trait]
-impl endpoint::Link for Link<role::Sender> {
+impl<R: role::IntoRole + Send> endpoint::Link for Link<R> {
     type DetachError = definitions::Error;
     type Error = link::Error;
 
@@ -197,7 +212,7 @@ impl endpoint::Link for Link<role::Sender> {
         let attach = Attach {
             name: self.name.clone(),
             handle: handle,
-            role: Role::Sender,
+            role: R::into_role(),
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
             source: self.source.clone(),

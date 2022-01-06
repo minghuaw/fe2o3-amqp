@@ -23,7 +23,7 @@ use crate::{
     util::{Constant, Consumer, Producer},
 };
 
-use super::{role, type_state::Attached, Receiver, Sender, state::{LinkState, LinkFlowStateInner, LinkFlowState}};
+use super::{role, type_state::Attached, Receiver, Sender, state::{LinkState, LinkFlowStateInner, LinkFlowState}, LinkFrame};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -222,38 +222,15 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self.properties = Some(properties);
         self
     }
-}
 
-impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
-    /// This MUST NOT be null if role is sender,
-    /// and it is ignored if the role is receiver.
-    /// See subsection 2.6.7.
-    pub fn initial_delivery_count(mut self, count: SequenceNo) -> Self {
-        self.initial_delivery_count = count;
-        self
-    }
-}
-
-impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
-
-impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(self, session: &mut SessionHandle) -> Result<Sender<Attached>, Error> {
+    async fn create_link_instance(
+        self, 
+        session: &mut SessionHandle, 
+        incoming_tx: mpsc::Sender<LinkFrame>,
+        flow_state: Arc<LinkFlowState>,
+    ) -> Result<Link<Role>, Error> {
         let local_state = LinkState::Unattached;
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = PollSender::new(session.outgoing.clone());
 
-        // Create shared link flow state
-        let flow_state_inner = LinkFlowStateInner {
-            initial_delivery_count: Constant::new(self.initial_delivery_count),
-            delivery_count: self.initial_delivery_count,
-            // The link-credit and available variables are initialized to zero.
-            link_credit: 0,
-            avaiable: 0,
-            // The drain flag is initialized to false.
-            drain: false,
-            properties: self.properties,
-        };
-        let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let notifier = Arc::new(Notify::new());
         let link_handle = LinkHandle {
@@ -267,16 +244,13 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        // Get writer to session
-        let writer = session.outgoing.clone();
-
         let max_message_size = match self.max_message_size {
             Some(s) => s,
             None => 0,
         };
 
         // Create a SenderLink instance
-        let mut link = Link::<role::Sender> {
+        let link = Link::<Role> {
             role: PhantomData,
             local_state,
             name: self.name,
@@ -295,16 +269,51 @@ impl Builder<role::Sender, WithName, WithTarget> {
             flow_state: Consumer::new(notifier, flow_state),
             unsettled,
         };
+        Ok(link)
+    }
+}
 
-        // Send an Attach frame
+impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
+    /// This MUST NOT be null if role is sender,
+    /// and it is ignored if the role is receiver.
+    /// See subsection 2.6.7.
+    pub fn initial_delivery_count(mut self, count: SequenceNo) -> Self {
+        self.initial_delivery_count = count;
+        self
+    }
+}
+
+impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
+
+impl Builder<role::Sender, WithName, WithTarget> {
+    pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Sender<Attached>, Error> {
+        let buffer_size = self.buffer_size.clone();
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = PollSender::new(session.outgoing.clone());
+        
+        // Create shared link flow state
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: Constant::new(self.initial_delivery_count),
+            delivery_count: self.initial_delivery_count,
+            link_credit: 0, // The link-credit and available variables are initialized to zero.
+            avaiable: 0,
+            drain: false, // The drain flag is initialized to false.
+            properties: self.properties.take(),
+        };
+        let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
+        let mut link = self.create_link_instance(session, incoming_tx, flow_state).await?;
+        
+        // Get writer to session
+        let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
+        // Send an Attach frame
         super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
         // Attach completed, return Sender
         let sender = Sender::<Attached> {
             link,
-            buffer_size: self.buffer_size,
+            buffer_size,
             session: session.control.clone(),
             outgoing,
             incoming: reader,
@@ -314,8 +323,29 @@ impl Builder<role::Sender, WithName, WithTarget> {
     }
 }
 
-impl Builder<role::Receiver, WithName, WithTarget> {
-    pub async fn attach(&self, session: &mut SessionHandle) -> Result<Receiver, Error> {
-        todo!()
-    }
-}
+// impl Builder<role::Receiver, WithName, WithTarget> {
+//     pub async fn attach(self, session: &mut SessionHandle) -> Result<Receiver<Attached>, Error> {
+//         let buffer_size = self.buffer_size.clone();
+//         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+//         let outgoing = PollSender::new(session.outgoing.clone());
+        
+//         let mut link = self.create_link_instance(session, incoming_tx).await?;
+        
+//         // Get writer to session
+//         let writer = session.outgoing.clone();
+//         let mut writer = PollSender::new(writer);
+//         let mut reader = ReceiverStream::new(incoming_rx);
+//         // Send an Attach frame
+//         super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        
+//         let receiver = Receiver::<Attached> {
+//             link,
+//             buffer_size,
+//             session: session.control.clone(),
+//             outgoing,
+//             incoming: reader,
+//             marker: PhantomData
+//         };
+//         Ok(receiver)
+//     }
+// }
