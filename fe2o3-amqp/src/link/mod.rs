@@ -585,7 +585,7 @@ where
             }
         }
         false => {
-            // If no target is supplied with the remote attach frame,
+            // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
             expect_detach_then_detach(link, writer, reader).await?;
         }
