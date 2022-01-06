@@ -577,7 +577,7 @@ where
     // an attach indicating that the link endpoint has no associated
     // local terminus. In this case, the session endpoint MUST immediately
     // detach the newly created link endpoint.
-    match remote_attach.target.is_some() {
+    match remote_attach.target.is_some() && remote_attach.source.is_some() {
         true => {
             if let Err(_) = link.on_incoming_attach(remote_attach).await {
                 // Should any error happen handling remote
