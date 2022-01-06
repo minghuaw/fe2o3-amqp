@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::messaging::Message;
 use tokio::sync::mpsc;
@@ -9,11 +9,11 @@ use crate::{session::SessionHandle, control::SessionControl};
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
-    role, Error, LinkFrame,
+    role, Error, LinkFrame, state::LinkState,
 };
 
 pub struct Receiver<S> {
-    pub(crate) link: super::Link<role::Receiver>,
+    pub(crate) link: super::Link<role::Receiver, Arc<LinkState>>,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session

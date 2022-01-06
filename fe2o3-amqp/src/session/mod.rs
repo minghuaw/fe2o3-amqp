@@ -239,8 +239,11 @@ impl endpoint::Session for Session {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link) => {
                     println!(">>> Debug: found local link");
-                    // Update the receiver settle mode
-                    link.receiver_settle_mode = attach.rcv_settle_mode.clone();
+                    // Only Sender need to update the receiver settle mode
+                    // link.receiver_settle_mode = attach.rcv_settle_mode.clone();
+                    if let LinkHandle::Sender{receiver_settle_mode, ..} = link {
+                        *receiver_settle_mode = attach.rcv_settle_mode.clone();
+                    }
 
                     let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
                     self.link_by_input_handle

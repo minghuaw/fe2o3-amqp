@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, time::Duration};
+use std::{marker::PhantomData, time::Duration, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use tokio::sync::mpsc;
@@ -14,7 +14,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     control::SessionControl,
     endpoint::{Link, Settlement},
-    session::{self, SessionHandle},
+    session::{self, SessionHandle}, util::Consumer,
 };
 
 use super::{
@@ -23,12 +23,12 @@ use super::{
     error::DetachError,
     role,
     type_state::{Attached, Detached},
-    Error, LinkFrame, LinkHandle,
+    Error, LinkFrame, LinkHandle, state::{LinkState, LinkFlowState},
 };
 
 pub struct Sender<S> {
     // The SenderLink manages the state
-    pub(crate) link: super::Link<role::Sender>,
+    pub(crate) link: super::Link<role::Sender, Consumer<Arc<LinkFlowState>>>,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session
@@ -63,7 +63,7 @@ impl Sender<Detached> {
         // May need to re-allocate output handle
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkHandle {
+            let link_handle = LinkHandle::Sender {
                 tx,
                 flow_state: self.link.flow_state.producer(),
                 // TODO: what else to do during re-attaching

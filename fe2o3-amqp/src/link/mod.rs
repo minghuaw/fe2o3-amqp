@@ -64,7 +64,7 @@ pub mod role {
 
 
 /// Manages the link state
-pub struct Link<R> {
+pub struct Link<R, C> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
@@ -92,12 +92,17 @@ pub struct Link<R> {
     // See Section 2.6.7 Flow Control
     // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
     // pub(crate) properties: Option<Fields>,
-    pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
+    // pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
+    pub(crate) flow_state: C,
     pub(crate) unsettled: Arc<RwLock<UnsettledMap>>,
 }
 
 #[async_trait]
-impl<R: role::IntoRole + Send> endpoint::Link for Link<R> {
+impl<R, C> endpoint::Link for Link<R, C> 
+where 
+    R: role::IntoRole + Send,
+    C: AsRef<LinkFlowState> + Send + Sync,
+{
     type DetachError = definitions::Error;
     type Error = link::Error;
 
@@ -206,8 +211,8 @@ impl<R: role::IntoRole + Send> endpoint::Link for Link<R> {
             0 => None,
             val @ _ => Some(val as u64),
         };
-        let initial_delivery_count = Some(self.flow_state.state().initial_delivery_count().await);
-        let properties = self.flow_state.state().properties().await;
+        let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
+        let properties = self.flow_state.as_ref().properties().await;
 
         let attach = Attach {
             name: self.name.clone(),
@@ -314,7 +319,7 @@ impl<R: role::IntoRole + Send> endpoint::Link for Link<R> {
 }
 
 #[async_trait]
-impl endpoint::SenderLink for Link<role::Sender> {
+impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
@@ -414,36 +419,45 @@ impl endpoint::SenderLink for Link<role::Sender> {
 }
 
 
-pub struct LinkHandle {
-    tx: mpsc::Sender<LinkIncomingItem>,
-    flow_state: Producer<Arc<LinkFlowState>>,
-    unsettled: Arc<RwLock<UnsettledMap>>,
-    // This is not expect to change
-    pub(crate) receiver_settle_mode: ReceiverSettleMode,
-}
-
-// /// TODO: How would this be changed when switched to ReceiverLink
-// pub enum LinkHandleRole {
-//     Sender {
-//         // This should be wrapped inside a Producer because the SenderLink
-//         // needs to consume link credit from LinkFlowState
-//         flow_state: Producer<Arc<LinkFlowState>>,
-
-//         // SequenceNo is an alias for u32
-//         // unsettled: Arc<RwLock<BTreeMap<SequenceNo, oneshot::Sender<DeliveryState>>>>
-//     },
-//     Receiver {
-//         flow_state: Arc<LinkFlowState>,
-//         unsettled: (),
-//     }
+// pub struct LinkHandle {
+//     tx: mpsc::Sender<LinkIncomingItem>,
+//     flow_state: Producer<Arc<LinkFlowState>>,
+//     unsettled: Arc<RwLock<UnsettledMap>>,
+//     // This is not expect to change
+//     pub(crate) receiver_settle_mode: ReceiverSettleMode,
 // }
+
+/// TODO: How would this be changed when switched to ReceiverLink
+pub enum LinkHandle {
+    Sender {
+        tx: mpsc::Sender<LinkIncomingItem>,
+        // This should be wrapped inside a Producer because the SenderLink
+        // needs to consume link credit from LinkFlowState
+        flow_state: Producer<Arc<LinkFlowState>>,
+        unsettled: Arc<RwLock<UnsettledMap>>,
+        receiver_settle_mode: ReceiverSettleMode,
+    },
+    Receiver {
+        tx: mpsc::Sender<LinkIncomingItem>,
+        flow_state: Arc<LinkFlowState>,
+        unsettled: Arc<RwLock<UnsettledMap>>,
+        receiver_settle_mode: ReceiverSettleMode,
+    }
+}
 
 impl LinkHandle {
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
-        self.tx.send(frame).await
+        match self {
+            LinkHandle::Sender {tx, ..} => {
+                tx.send(frame).await
+            }
+            LinkHandle::Receiver {tx, ..} => {
+                tx.send(frame).await
+            }
+        }
     }
 
     pub(crate) async fn on_incoming_flow(
@@ -451,7 +465,15 @@ impl LinkHandle {
         flow: LinkFlow,
         output_handle: Handle,
     ) -> Option<LinkFlow> {
-        self.flow_state.on_incoming_flow(flow, output_handle).await
+        match self {
+            LinkHandle::Sender{flow_state, ..} => {
+                flow_state.on_incoming_flow(flow, output_handle).await
+            }
+            LinkHandle::Receiver{flow_state, ..} => {
+                flow_state.on_incoming_flow(flow, output_handle).await
+            }
+        }
+
     }
 
     pub(crate) async fn on_incoming_disposition(
@@ -463,27 +485,26 @@ impl LinkHandle {
         // sessions
         delivery_tag: [u8; 4],
     ) -> bool {
-        match role {
-            // Remote peer is Sender
-            Role::Sender => {
-                todo!()
-            }
-            // Remote peer is Receiver
-            Role::Receiver => {
+        match self {
+            LinkHandle::Sender {
+                unsettled, 
+                receiver_settle_mode, 
+                ..} => {
+                // TODO: verfify role?
                 if is_settled {
                     // TODO: Reply with disposition?
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
                     // communicate this back to the sending application.
                     {
-                        let mut guard = self.unsettled.write().await;
+                        let mut guard = unsettled.write().await;
                         if let Some(unsettled) = guard.remove(&delivery_tag) {
                             // Since we are settling (ie. forgetting) this message, we don't care whether the 
                             // receiving end is alive or not
                             let _ = unsettled.settle_with_state(state.clone());
                         }
                     }
-                    match self.receiver_settle_mode {
+                    match receiver_settle_mode {
                         ReceiverSettleMode::First => {
                             // The receiver will spontaneously settle all incoming transfers.
                             false
@@ -497,7 +518,7 @@ impl LinkHandle {
                     }
                 } else {
                     {
-                        let mut guard = self.unsettled.write().await;
+                        let mut guard = unsettled.write().await;
                         if let Some(unsettled) = guard.get_mut(&delivery_tag) {
                             if let Some(state) = state {
                                 *unsettled.state_mut() = state.clone();
@@ -506,6 +527,9 @@ impl LinkHandle {
                     }
                     false
                 }
+            },
+            LinkHandle::Receiver {unsettled, ..} => {
+                todo!()
             }
         }
     }

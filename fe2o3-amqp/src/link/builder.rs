@@ -5,7 +5,7 @@ use std::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo, Handle},
     messaging::{Source, Target},
     primitives::{Symbol, ULong},
 };
@@ -23,7 +23,7 @@ use crate::{
     util::{Constant, Consumer, Producer},
 };
 
-use super::{role, type_state::Attached, Receiver, Sender, state::{LinkState, LinkFlowStateInner, LinkFlowState}, LinkFrame};
+use super::{role, type_state::Attached, Receiver, Sender, state::{LinkState, LinkFlowStateInner, LinkFlowState, UnsettledMap}, LinkFrame};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -223,26 +223,14 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    async fn create_link_instance(
+    async fn create_link_instance<C>(
         self, 
         session: &mut SessionHandle, 
-        incoming_tx: mpsc::Sender<LinkFrame>,
-        flow_state: Arc<LinkFlowState>,
-    ) -> Result<Link<Role>, Error> {
+        unsettled: Arc<RwLock<UnsettledMap>>,
+        output_handle: Handle,
+        flow_state_consumer: C,
+    ) -> Result<Link<Role, C>, Error> {
         let local_state = LinkState::Unattached;
-
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let notifier = Arc::new(Notify::new());
-        let link_handle = LinkHandle {
-            tx: incoming_tx,
-            flow_state: Producer::new(notifier.clone(), flow_state.clone()),
-            unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach
-        };
-
-        // Create Link in Session
-        let output_handle =
-            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         let max_message_size = match self.max_message_size {
             Some(s) => s,
@@ -250,7 +238,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         };
 
         // Create a SenderLink instance
-        let link = Link::<Role> {
+        let link = Link::<Role, C> {
             role: PhantomData,
             local_state,
             name: self.name,
@@ -266,7 +254,8 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
 
             // delivery_count: self.initial_delivery_count,
             // properties: self.properties,
-            flow_state: Consumer::new(notifier, flow_state),
+            // flow_state: Consumer::new(notifier, flow_state),
+            flow_state: flow_state_consumer,
             unsettled,
         };
         Ok(link)
@@ -301,7 +290,23 @@ impl Builder<role::Sender, WithName, WithTarget> {
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
-        let mut link = self.create_link_instance(session, incoming_tx, flow_state).await?;
+        
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let notifier = Arc::new(Notify::new());
+        let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
+        let flow_state_consumer = Consumer::new(notifier, flow_state);
+        let link_handle = LinkHandle::Sender {
+            tx: incoming_tx,
+            flow_state: flow_state_producer,
+            unsettled: unsettled.clone(),
+            receiver_settle_mode: Default::default(), // Update this on incoming attach
+        };
+
+        // Create Link in Session
+        let output_handle =
+            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
+
+        let mut link = self.create_link_instance(session, unsettled, output_handle, flow_state_consumer).await?;
         
         // Get writer to session
         let writer = session.outgoing.clone();

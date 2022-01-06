@@ -24,6 +24,12 @@ impl<State> Consumer<State> {
     }
 }
 
+impl<State> AsRef<State> for Consumer<Arc<State>> {
+    fn as_ref(&self) -> &State {
+        &self.state
+    }
+}
+
 impl<State: Clone> Consumer<State> {
     pub fn producer(&self) -> Producer<State> {
         Producer::new(self.notifier.clone(), self.state.clone())
