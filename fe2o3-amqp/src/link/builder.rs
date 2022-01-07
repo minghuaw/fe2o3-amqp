@@ -62,7 +62,7 @@ pub struct Builder<Role, NameState, Addr> {
     addr_state: PhantomData<Addr>,
 }
 
-impl<Role, Addr> Builder<Role, WithoutName, Addr> {
+impl<Role> Builder<Role, WithoutName, WithoutTarget> {
     pub(crate) fn new() -> Self {
         Self {
             name: Default::default(),
@@ -75,14 +75,16 @@ impl<Role, Addr> Builder<Role, WithoutName, Addr> {
             offered_capabilities: Default::default(),
             desired_capabilities: Default::default(),
             properties: Default::default(),
-
+    
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             role: PhantomData,
             name_state: PhantomData,
             addr_state: PhantomData,
         }
     }
+}
 
+impl<Role, Addr> Builder<Role, WithoutName, Addr> {
     pub fn name(self, name: impl Into<String>) -> Builder<Role, WithName, Addr> {
         Builder {
             name: name.into(),
@@ -282,7 +284,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
-            initial_delivery_count: Constant::new(self.initial_delivery_count),
+            initial_delivery_count: self.initial_delivery_count,
             delivery_count: self.initial_delivery_count,
             link_credit: 0, // The link-credit and available variables are initialized to zero.
             avaiable: 0,
@@ -328,29 +330,54 @@ impl Builder<role::Sender, WithName, WithTarget> {
     }
 }
 
-// impl Builder<role::Receiver, WithName, WithTarget> {
-//     pub async fn attach(self, session: &mut SessionHandle) -> Result<Receiver<Attached>, Error> {
-//         let buffer_size = self.buffer_size.clone();
-//         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
-//         let outgoing = PollSender::new(session.outgoing.clone());
+impl Builder<role::Receiver, WithName, WithTarget> {
+    pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Receiver<Attached>, Error> {
+        let buffer_size = self.buffer_size.clone();
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = PollSender::new(session.outgoing.clone());
         
-//         let mut link = self.create_link_instance(session, incoming_tx).await?;
+        // Create shared link flow state
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: self.initial_delivery_count,
+            delivery_count: self.initial_delivery_count,
+            link_credit: 0, // The link-credit and available variables are initialized to zero.
+            avaiable: 0,
+            drain: false, // The drain flag is initialized to false.
+            properties: self.properties.take(),
+        };
+        let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
         
-//         // Get writer to session
-//         let writer = session.outgoing.clone();
-//         let mut writer = PollSender::new(writer);
-//         let mut reader = ReceiverStream::new(incoming_rx);
-//         // Send an Attach frame
-//         super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let flow_state_producer = flow_state.clone();
+        let flow_state_consumer = flow_state;
+        let link_handle = LinkHandle::Receiver {
+            tx: incoming_tx,
+            flow_state: flow_state_producer,
+            unsettled: unsettled.clone(),
+            receiver_settle_mode: Default::default(), // Update this on incoming attach
+        };
+
+        // Create Link in Session
+        let output_handle =
+            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
+
+        let mut link = self.create_link_instance(session, unsettled, output_handle, flow_state_consumer).await?;
         
-//         let receiver = Receiver::<Attached> {
-//             link,
-//             buffer_size,
-//             session: session.control.clone(),
-//             outgoing,
-//             incoming: reader,
-//             marker: PhantomData
-//         };
-//         Ok(receiver)
-//     }
-// }
+        // Get writer to session
+        let writer = session.outgoing.clone();
+        let mut writer = PollSender::new(writer);
+        let mut reader = ReceiverStream::new(incoming_rx);
+        // Send an Attach frame
+        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+
+        let receiver = Receiver::<Attached> {
+            link,
+            buffer_size,
+            session: session.control.clone(),
+            outgoing,
+            incoming: reader,
+            marker: PhantomData
+        };
+        Ok(receiver)
+    }
+}

@@ -188,10 +188,11 @@ pub trait Link {
 
     // Only the receiver is supposed to receive incoming Transfer frame
 
-    async fn on_incoming_disposition(
-        &mut self,
-        disposition: Disposition,
-    ) -> Result<(), Self::Error>;
+    // async fn on_incoming_disposition(
+    //     &mut self,
+    //     disposition: Disposition,
+    // ) -> Result<(), Self::Error>;
+
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
@@ -210,7 +211,7 @@ pub trait Link {
         &mut self,
         writer: &mut W,
         closed: bool,
-        error: Option<Error>,
+        error: Option<Self::DetachError>,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;

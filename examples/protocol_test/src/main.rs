@@ -4,7 +4,7 @@ use std::time::Duration;
 // use fe2o3_amqp::transport::session::Session;
 
 use fe2o3_amqp::connection::Connection;
-use fe2o3_amqp::link::Sender;
+use fe2o3_amqp::link::{Sender, Receiver};
 use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
 
@@ -57,6 +57,10 @@ async fn main() {
     println!("fut {:?}", result);
 
     sender.close().await.unwrap();
+
+    let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
+        .await
+        .unwrap();
 
     session.end().await.unwrap();
     connection.close().await.unwrap();

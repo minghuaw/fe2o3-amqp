@@ -104,16 +104,17 @@ pub struct Link<R, F> {
 }
 
 #[async_trait]
+// impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
 impl<R, F> endpoint::Link for Link<R, F> 
-where 
+where
     R: role::IntoRole + Send,
     F: AsRef<LinkFlowState> + Send + Sync,
 {
     type DetachError = definitions::Error;
     type Error = link::Error;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
-        println!(">>> Debug: SenderLink::on_incoming_attach");
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::Error> {
+        println!(">>> Debug: Link<{:?}>::on_incoming_attach", R::into_role());
         match self.local_state {
             LinkState::AttachSent => self.local_state = LinkState::Attached,
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
@@ -124,19 +125,50 @@ where
             _ => return Err(AmqpError::IllegalState.into()),
         };
 
-        self.input_handle = Some(attach.handle);
+        self.input_handle = Some(remote_attach.handle);
 
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
-        // attach frames could be in conflict. In this case, the sender is considered to hold the authoritative version of the
-        // **the receiver is considered to hold the authoritative version of the target properties**.
-        self.target = attach.target;
+        // attach frames could be in conflict.
+        match remote_attach.role {
+            // Remote attach is from sender
+            Role::Sender => {
+                // In this case, the sender is considered to hold the authoritative version of the
+                self.source = remote_attach.source;
+                // The receiver SHOULD respect the sender’s desired settlement mode if the sender 
+                // initiates the attach exchange and the receiver supports the desired mode.
+                self.snd_settle_mode = remote_attach.snd_settle_mode;
+
+                // The delivery-count is initialized by the sender when a link endpoint is 
+                // created, and is incre- mented whenever a message is sent
+                println!("{:?}", remote_attach.initial_delivery_count);
+                let initial_delivery_count = match remote_attach.initial_delivery_count {
+                    Some(val) => val,
+                    None => return Err(AmqpError::NotAllowed.into())
+                };
+                self.flow_state.as_ref()
+                    .initial_delivery_count_mut(|_| initial_delivery_count).await;
+                self.flow_state.as_ref()
+                    .delivery_count_mut(|_| initial_delivery_count).await;
+            },
+            // Remote attach is from receiver
+            Role::Receiver => {
+                // **the receiver is considered to hold the authoritative version of the target properties**.
+                self.target = remote_attach.target;
+                // The sender SHOULD respect the receiver’s desired settlement mode if the receiver 
+                // initiates the attach exchange and the sender supports the desired mode
+                self.rcv_settle_mode = remote_attach.rcv_settle_mode;
+            }
+        }
 
         // set max message size
-        let remote_max_msg_size = attach.max_message_size.unwrap_or_else(|| 0);
+        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
+        let remote_max_msg_size = remote_attach.max_message_size.unwrap_or_else(|| 0);
         if remote_max_msg_size < self.max_message_size {
             self.max_message_size = remote_max_msg_size;
         }
+
+        // TODO: what to do with the unattached
 
         Ok(())
     }
@@ -147,12 +179,12 @@ where
 
     // Only the receiver is supposed to receive incoming Transfer frame
 
-    async fn on_incoming_disposition(
-        &mut self,
-        disposition: Disposition,
-    ) -> Result<(), Self::Error> {
-        todo!()
-    }
+    // async fn on_incoming_disposition(
+    //     &mut self,
+    //     disposition: Disposition,
+    // ) -> Result<(), Self::Error> {
+    //     todo!()
+    // }
 
     /// Closing or not isn't taken care of here but outside
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
@@ -184,8 +216,8 @@ where
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
-        println!(">>> Debug: SenderLink::send_attach");
-        println!(">>> Debug: SenderLink.local_state: {:?}", &self.local_state);
+        println!(">>> Debug: Link::send_attach");
+        println!(">>> Debug: Link.local_state: {:?}", &self.local_state);
 
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -280,7 +312,7 @@ where
         &mut self,
         writer: &mut W,
         closed: bool,
-        error: Option<definitions::Error>,
+        error: Option<Self::DetachError>,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
@@ -350,6 +382,7 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
         }
 
         // Check message size
+        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         if (self.max_message_size == 0) || (payload.len() as u64 <= self.max_message_size) {
             let handle = self
                 .output_handle
@@ -424,6 +457,104 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
     }
 }
 
+
+// #[async_trait]
+// impl endpoint::Link for Link<role::Receiver, Arc<LinkFlowState>> {
+//     type DetachError = definitions::Error;
+//     type Error = link::Error;
+
+//     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::Error> {
+//         println!(">>> Debug: Link<Receiver>::on_incoming_attach");
+//         match self.local_state {
+//             LinkState::AttachSent => self.local_state = LinkState::Attached,
+//             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+//             LinkState::Detached => {
+//                 // remote peer is attempting to re-attach
+//                 self.local_state = LinkState::AttachReceived
+//             }
+//             _ => return Err(AmqpError::IllegalState.into()),
+//         };
+
+//         self.input_handle = Some(remote_attach.handle);
+
+//         // When resuming a link, it is possible that the properties of the source and target have changed while the link
+//         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
+//         // attach frames could be in conflict.
+//         match remote_attach.role {
+//             // Remote attach is from sender
+//             Role::Sender => {
+//                 // In this case, the sender is considered to hold the authoritative version of the
+//                 self.source = remote_attach.source;
+//                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender 
+//                 // initiates the attach exchange and the receiver supports the desired mode.
+//                 self.snd_settle_mode = remote_attach.snd_settle_mode;
+
+//                 // The delivery-count is initialized by the sender when a link endpoint is 
+//                 // created, and is incre- mented whenever a message is sent
+//                 let initial_delivery_count = match remote_attach.initial_delivery_count {
+//                     Some(val) => val,
+//                     None => return Err(AmqpError::NotAllowed.into())
+//                 };
+//                 self.flow_state.initial_delivery_count_mut(|_| initial_delivery_count).await;
+//             },
+//             // Remote attach is from receiver
+//             Role::Receiver => {
+//                 // **the receiver is considered to hold the authoritative version of the target properties**.
+//                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver 
+//                 // initiates the attach exchange and the sender supports the desired mode
+//                 todo!("Illegal role");
+//             }
+//         } 
+
+//         Ok(())
+//     }
+
+
+//     // async fn on_incoming_disposition(
+//     //     &mut self,
+//     //     disposition: Disposition,
+//     // ) -> Result<(), Self::Error>
+//     // {
+//     //     todo!()
+//     // }
+
+//     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+//         todo!()
+//     }
+
+//     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+//     where
+//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin 
+//     {
+//         todo!()
+//     }
+
+//     async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+//     where
+//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+//     {
+//         todo!()
+//     }
+
+//     async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+//     where
+//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+//     {
+//         todo!()
+//     }
+
+//     async fn send_detach<W>(
+//         &mut self,
+//         writer: &mut W,
+//         closed: bool,
+//         error: Option<Self::DetachError>,
+//     ) -> Result<(), Self::Error>
+//     where
+//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+//     {
+//         todo!()
+//     }
+// }
 
 // pub struct LinkHandle {
 //     tx: mpsc::Sender<LinkIncomingItem>,
@@ -577,11 +708,11 @@ where
     // an attach indicating that the link endpoint has no associated
     // local terminus. In this case, the session endpoint MUST immediately
     // detach the newly created link endpoint.
-    match remote_attach.target.is_some() && remote_attach.source.is_some() {
+    match remote_attach.target.is_some() || remote_attach.source.is_some() {
         true => {
-            if let Err(_) = link.on_incoming_attach(remote_attach).await {
+            if let Err(e) = link.on_incoming_attach(remote_attach).await {
                 // Should any error happen handling remote
-                todo!()
+                panic!("{:?}", e);
             }
         }
         false => {
@@ -639,7 +770,7 @@ mod tests {
 
         let notifier = Arc::new(Notify::new());
         let state = LinkFlowState::Sender(RwLock::new(LinkFlowStateInner {
-            initial_delivery_count: Constant::new(0),
+            initial_delivery_count: 0,
             delivery_count: 0,
             link_credit: 0,
             avaiable: 0,

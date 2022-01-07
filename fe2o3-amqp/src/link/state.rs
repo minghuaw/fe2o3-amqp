@@ -40,7 +40,7 @@ pub enum LinkState {
 }
 
 pub struct LinkFlowStateInner {
-    pub initial_delivery_count: Constant<SequenceNo>,
+    pub initial_delivery_count: SequenceNo,
     pub delivery_count: SequenceNo, // SequenceNo = u32
     pub link_credit: u32,
     pub avaiable: u32,
@@ -119,7 +119,7 @@ impl LinkFlowState {
                     // the delivery-count_rcv is the first delivery-count_snd sent from sender
                     // to receiver, i.e., the delivery-count_snd specified in the flow state
                     // carried by the initial attach frame from the sender to the receiver.
-                    *state.initial_delivery_count.value()
+                    state.initial_delivery_count
                 });
 
                 if let Some(link_credit_rcv) = flow.link_credit {
@@ -203,10 +203,40 @@ impl LinkFlowState {
         }
     }
 
+    pub async fn drain_mut(&self, f: impl Fn(bool) -> bool) {
+        match self {
+            LinkFlowState::Sender(lock)  => {
+                let mut guard = lock.write().await;
+                let new = f(guard.drain);
+                guard.drain = new;
+            },
+            LinkFlowState::Receiver(lock) => {
+                let mut guard = lock.write().await;
+                let new = f(guard.drain);
+                guard.drain = new;
+            }
+        }
+    }
+
     pub async fn initial_delivery_count(&self) -> SequenceNo {
         match self {
-            LinkFlowState::Sender(lock) => *lock.read().await.initial_delivery_count.value(),
-            LinkFlowState::Receiver(lock) => *lock.read().await.initial_delivery_count.value(),
+            LinkFlowState::Sender(lock) => lock.read().await.initial_delivery_count,
+            LinkFlowState::Receiver(lock) => lock.read().await.initial_delivery_count,
+        }
+    }
+
+    pub async fn initial_delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
+        match self {
+            LinkFlowState::Sender(lock) => {
+                let mut guard = lock.write().await;
+                let new = f(guard.initial_delivery_count);
+                guard.initial_delivery_count = new;
+            },
+            LinkFlowState::Receiver(lock) => {
+                let mut guard = lock.write().await;
+                let new = f(guard.initial_delivery_count);
+                guard.initial_delivery_count = new;
+            }
         }
     }
 
@@ -214,6 +244,21 @@ impl LinkFlowState {
         match self {
             LinkFlowState::Sender(lock) => lock.read().await.delivery_count,
             LinkFlowState::Receiver(lock) => lock.read().await.delivery_count,
+        }
+    }
+
+    pub async fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
+        match self {
+            LinkFlowState::Sender(lock) => {
+                let mut guard= lock.write().await;
+                let new = f(guard.delivery_count);
+                guard.delivery_count = new;
+            },
+            LinkFlowState::Receiver(lock) => {
+                let mut guard = lock.write().await;
+                let new = f(guard.delivery_count);
+                guard.delivery_count = new;
+            }
         }
     }
 

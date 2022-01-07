@@ -88,20 +88,21 @@ impl Sender<Detached> {
             marker: PhantomData,
         })
     }
-}
 
-impl Sender<Attached> {
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Self, Error> {
-        Sender::<Detached>::builder()
+    ) -> Result<Sender<Attached>, Error> {
+        Self::builder()
             .name(name)
             .target(addr)
             .attach(session)
             .await
     }
+}
+
+impl Sender<Attached> {
 
     async fn send_inner(&mut self, delivery: Sendable) -> Result<Settlement, Error> {
         use bytes::BufMut;
