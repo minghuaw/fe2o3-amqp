@@ -9,12 +9,13 @@ use tokio::sync::mpsc;
 use crate::session::AllocLinkError;
 
 #[derive(Debug)]
-pub struct DetachError {
+pub struct DetachError<L> {
+    pub(crate) link: Option<L>,
     pub(crate) is_closed_by_remote: bool,
     pub(crate) error: Option<definitions::Error>,
 }
 
-impl DetachError {
+impl<L> DetachError<L> {
     pub fn is_closed_by_remote(&self) -> bool {
         self.is_closed_by_remote
     }
@@ -31,17 +32,17 @@ impl DetachError {
     }
 }
 
-impl<T> From<T> for DetachError
-where
-    T: Into<definitions::Error>,
-{
-    fn from(err: T) -> Self {
-        Self {
-            is_closed_by_remote: false,
-            error: Some(err.into()),
-        }
-    }
-}
+// impl<T> From<T> for DetachError
+// where
+//     T: Into<definitions::Error>,
+// {
+//     fn from(err: T) -> Self {
+//         Self {
+//             is_closed_by_remote: false,
+//             error: Some(err.into()),
+//         }
+//     }
+// }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

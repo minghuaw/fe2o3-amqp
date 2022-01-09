@@ -44,6 +44,10 @@ impl Receiver<Detached> {
     }
 }
 
+// impl Receiver<Attached> {
+//     pub fn detach(self) -> Result<Receiver<>
+// }
+
 //     pub async fn recv(&mut self) -> Result<Message, Error> {
 //         todo!()
 //     }
