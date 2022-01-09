@@ -6,11 +6,11 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 use futures_util::StreamExt;
 
-use crate::{session::SessionHandle, control::SessionControl, endpoint::Link, link::error::{map_send_detach_error, detach_error_expecting_frame}};
+use crate::{session::{SessionHandle, self}, control::SessionControl, endpoint::Link, link::error::{map_send_detach_error, detach_error_expecting_frame}};
 
 use super::{
     builder::{self, WithoutName, WithoutTarget, WithTarget},
-    role, Error, LinkFrame, state::{LinkState, LinkFlowState}, type_state::{Detached, Attached}, error::DetachError,
+    role, Error, LinkFrame, state::{LinkState, LinkFlowState}, type_state::{Detached, Attached}, error::DetachError, LinkHandle,
 };
 
 #[derive(Debug)]
@@ -44,9 +44,39 @@ impl Receiver<Detached> {
             .attach(session)
             .await
     }
+
+    async fn reattach_inner(
+        mut self,
+        mut session_control: mpsc::Sender<SessionControl>,
+    ) -> Result<Receiver<Attached>, Error> {
+        if self.link.output_handle.is_none() {
+            let (tx, incoming) = mpsc::channel(self.buffer_size);
+            let link_handle = LinkHandle::Receiver {
+                tx,
+                flow_state: self.link.flow_state.clone(),
+                unsettled: self.link.unsettled.clone(),
+                receiver_settle_mode: self.link.rcv_settle_mode.clone()
+            };
+            self.incoming = ReceiverStream::new(incoming);
+            let handle = session::allocate_link(&mut session_control, self.link.name.clone(), link_handle).await?;
+            self.link.output_handle = Some(handle);
+        }
+
+        super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await?;
+
+        Ok(Receiver::<Attached> {
+            link: self.link,
+            buffer_size: self.buffer_size,
+            session: self.session,
+            outgoing: self.outgoing,
+            incoming: self.incoming,
+            marker: PhantomData,
+        })
+    }
 }
 
 impl Receiver<Attached> {
+    // TODO: reduce mostly duplicated code (Sender/Receiver::detach/close)?
     pub async fn detach(self) -> Result<Receiver<Detached>, DetachError<Receiver<Detached>>> {
         println!(">>> Debug: Receiver::detach");
         let mut detaching = Receiver::<Detached> {
@@ -76,7 +106,31 @@ impl Receiver<Attached> {
         };
 
         if remote_detach.closed {
-            todo!()
+            // Note that one peer MAY send a closing detach while its partner is
+            // sending a non-closing detach. In this case, the partner MUST
+            // signal that it has closed the link by reattaching and then sending
+            // a closing detach.
+            let session_control = detaching.session.clone();
+            let reattached = match detaching.reattach_inner(session_control).await {
+                Ok(receiver) => receiver,
+                Err(e) => {
+                    //
+                    println!("{:?}", e);
+                    todo!()
+                }
+            };
+
+            reattached.close().await?;
+
+            // A peer closes a link by sending the detach frame with the handle for the 
+            // specified link, and the closed flag set to true. The partner will destroy 
+            // the corresponding link endpoint, and reply with its own detach frame with 
+            // the closed flag set to true.
+            return Err(DetachError {
+                link: None,
+                is_closed_by_remote: true,
+                error: None,
+            });
         } else {
             match detaching.link.on_incoming_detach(remote_detach).await {
                 Ok(_) => {},

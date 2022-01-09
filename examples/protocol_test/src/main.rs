@@ -61,7 +61,8 @@ async fn main() {
     let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
         .await
         .unwrap();
-    receiver.close().await.unwrap();
+    let result = receiver.detach().await;
+    println!("{:?}", result);
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }
