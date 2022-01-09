@@ -4,7 +4,7 @@ use std::{sync::Arc, collections::BTreeMap, marker::PhantomData};
 use async_trait::async_trait;
 use bytes::Bytes;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Handle, ReceiverSettleMode, Role, SenderSettleMode, self, DeliveryTag, MessageFormat},
+    definitions::{AmqpError, Handle, ReceiverSettleMode, Role, SenderSettleMode, self, DeliveryTag, MessageFormat, ErrorCondition},
     messaging::{DeliveryState, Source, Target}, primitives::Symbol, performatives::{Attach, Disposition, Detach, Transfer},
 };
 pub use frame::*;
@@ -28,7 +28,7 @@ use crate::{
     link::{self, state::SenderPermit, delivery::UnsettledMessage}
 };
 
-use self::state::{LinkFlowState, UnsettledMap, LinkState};
+use self::{state::{LinkFlowState, UnsettledMap, LinkState}, error::DetachError};
 
 pub mod type_state {
     #[derive(Debug)]
@@ -461,7 +461,6 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
         }
     }
 }
-
 
 // #[async_trait]
 // impl endpoint::Link for Link<role::Receiver, Arc<LinkFlowState>> {

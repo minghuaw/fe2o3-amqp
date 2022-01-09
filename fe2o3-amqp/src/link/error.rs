@@ -132,3 +132,41 @@ impl From<Infallible> for Error {
         }
     }
 }
+
+pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
+    let error = definitions::Error::new(
+        AmqpError::IllegalState,
+        Some("Expecting remote detach frame".to_string()),
+        None,
+    );
+
+    DetachError {
+        link: Some(link),
+        is_closed_by_remote: false,
+        error: Some(error)
+    }
+}
+
+pub(crate) fn map_send_detach_error<L>(err: impl Into<Error>, link: L) -> DetachError<L> {
+    let (condition, description): (ErrorCondition, _) = match err.into() {
+        Error::AmqpError {
+            condition,
+            description,
+        } => (condition.into(), description),
+        Error::LinkError {
+            condition,
+            description,
+        } => (condition.into(), description),
+        Error::HandleMaxReached
+        | Error::DuplicatedLinkName
+        | Error::ParseError
+        | Error::Rejected(_)
+        | Error::Released(_)
+        | Error::Modified(_) => unreachable!(),
+    };
+    DetachError {
+        link: Some(link),
+        is_closed_by_remote: false,
+        error: Some(definitions::Error::new(condition, description, None)),
+    }
+}
