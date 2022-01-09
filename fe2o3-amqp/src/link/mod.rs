@@ -31,8 +31,10 @@ use crate::{
 use self::state::{LinkFlowState, UnsettledMap, LinkState};
 
 pub mod type_state {
+    #[derive(Debug)]
     pub struct Attached {}
 
+    #[derive(Debug)]
     pub struct Detached {}
 }
 
@@ -40,9 +42,11 @@ pub mod role {
     use fe2o3_amqp_types::definitions::Role;
 
     /// Type state for link::builder::Builder
+    #[derive(Debug)]
     pub struct Sender {}
 
     /// Type state for link::builder::Builder
+    #[derive(Debug)]
     pub struct Receiver {}
 
     pub trait IntoRole {
@@ -70,6 +74,7 @@ pub mod role {
 /// R: role
 /// 
 /// F: link flow state
+#[derive(Debug)]
 pub struct Link<R, F> {
     pub(crate) role: PhantomData<R>,
 

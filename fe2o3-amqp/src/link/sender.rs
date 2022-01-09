@@ -26,6 +26,7 @@ use super::{
     Error, LinkFrame, LinkHandle, state::{LinkState, LinkFlowState},
 };
 
+#[derive(Debug)]
 pub struct Sender<S> {
     // The SenderLink manages the state
     pub(crate) link: super::Link<role::Sender, Consumer<Arc<LinkFlowState>>>,

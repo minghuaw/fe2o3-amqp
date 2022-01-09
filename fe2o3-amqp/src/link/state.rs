@@ -39,6 +39,7 @@ pub enum LinkState {
     // Closed,
 }
 
+#[derive(Debug)]
 pub struct LinkFlowStateInner {
     pub initial_delivery_count: SequenceNo,
     pub delivery_count: SequenceNo, // SequenceNo = u32
@@ -77,6 +78,7 @@ impl LinkFlowStateInner {
 // }
 
 /// The Sender and Receiver handle link flow control differently
+#[derive(Debug)]
 pub enum LinkFlowState {
     Sender(RwLock<LinkFlowStateInner>),
     Receiver(RwLock<LinkFlowStateInner>),

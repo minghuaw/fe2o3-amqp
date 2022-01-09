@@ -5,6 +5,7 @@ use tokio::sync::Notify;
 
 use super::Producer;
 
+#[derive(Debug)]
 pub struct Consumer<State> {
     pub notifier: Arc<Notify>,
     state: State,

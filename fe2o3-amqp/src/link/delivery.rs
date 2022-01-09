@@ -111,6 +111,7 @@ impl From<Builder<Message>> for Sendable {
     }
 }
 
+#[derive(Debug)]
 pub struct UnsettledMessage {
     payload: Bytes,
     state: DeliveryState,
