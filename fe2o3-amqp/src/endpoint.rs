@@ -310,5 +310,5 @@ pub trait ReceiverLink: Link {
         &mut self,
         transfer: Transfer,
         payload: Bytes,
-    ) -> Result<Delivery, <Self as Link>::Error>;
+    ) -> Result<(Delivery, Option<Disposition>), <Self as Link>::Error>;
 }
