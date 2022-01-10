@@ -1,13 +1,15 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{SequenceNo, Fields, Handle};
+use fe2o3_amqp_types::definitions::{Fields, Handle, SequenceNo};
 use tokio::sync::RwLock;
 
-use crate::{util::{Constant, ProducerState, Producer, Consume, Consumer, Produce}, endpoint::LinkFlow};
+use crate::{
+    endpoint::LinkFlow,
+    util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
+};
 
 use super::delivery::UnsettledMessage;
-
 
 #[derive(Debug)]
 pub enum LinkState {
@@ -207,11 +209,11 @@ impl LinkFlowState {
 
     pub async fn drain_mut(&self, f: impl Fn(bool) -> bool) {
         match self {
-            LinkFlowState::Sender(lock)  => {
+            LinkFlowState::Sender(lock) => {
                 let mut guard = lock.write().await;
                 let new = f(guard.drain);
                 guard.drain = new;
-            },
+            }
             LinkFlowState::Receiver(lock) => {
                 let mut guard = lock.write().await;
                 let new = f(guard.drain);
@@ -233,7 +235,7 @@ impl LinkFlowState {
                 let mut guard = lock.write().await;
                 let new = f(guard.initial_delivery_count);
                 guard.initial_delivery_count = new;
-            },
+            }
             LinkFlowState::Receiver(lock) => {
                 let mut guard = lock.write().await;
                 let new = f(guard.initial_delivery_count);
@@ -252,10 +254,10 @@ impl LinkFlowState {
     pub async fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
         match self {
             LinkFlowState::Sender(lock) => {
-                let mut guard= lock.write().await;
+                let mut guard = lock.write().await;
                 let new = f(guard.delivery_count);
                 guard.delivery_count = new;
-            },
+            }
             LinkFlowState::Receiver(lock) => {
                 let mut guard = lock.write().await;
                 let new = f(guard.delivery_count);
@@ -274,7 +276,6 @@ impl LinkFlowState {
 }
 
 pub type UnsettledMap = BTreeMap<[u8; 4], UnsettledMessage>;
-
 
 #[async_trait]
 impl ProducerState for Arc<LinkFlowState> {
@@ -300,7 +301,7 @@ impl Producer<Arc<LinkFlowState>> {
 
 pub enum SenderPermit {
     Send,
-    Drain
+    Drain,
 }
 
 #[async_trait]
@@ -327,7 +328,10 @@ impl Consume for Consumer<Arc<LinkFlowState>> {
     }
 }
 
-async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<SenderPermit, ()> {
+async fn consume_link_credit(
+    lock: &RwLock<LinkFlowStateInner>,
+    count: u32,
+) -> Result<SenderPermit, ()> {
     let mut state = lock.write().await;
     if state.drain {
         Ok(SenderPermit::Drain)

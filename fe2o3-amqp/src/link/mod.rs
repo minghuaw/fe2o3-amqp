@@ -1,11 +1,16 @@
 mod frame;
-use std::{sync::Arc, collections::BTreeMap, marker::PhantomData};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::Bytes;
+use bytes::{Bytes, Buf};
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, Handle, ReceiverSettleMode, Role, SenderSettleMode, self, DeliveryTag, MessageFormat, ErrorCondition},
-    messaging::{DeliveryState, Source, Target}, primitives::Symbol, performatives::{Attach, Disposition, Detach, Transfer},
+    definitions::{
+        self, AmqpError, DeliveryTag, ErrorCondition, Handle, MessageFormat, ReceiverSettleMode,
+        Role, SenderSettleMode,
+    },
+    messaging::{DeliveryState, Source, Target, Message},
+    performatives::{Attach, Detach, Disposition, Transfer},
+    primitives::Symbol,
 };
 pub use frame::*;
 pub mod builder;
@@ -17,18 +22,23 @@ pub mod state;
 
 pub use error::Error;
 
-use futures_util::{Sink, Stream, SinkExt};
+use futures_util::{Sink, SinkExt, Stream};
 pub use receiver::Receiver;
 pub use sender::Sender;
-use tokio::sync::{mpsc, RwLock, oneshot};
+use serde_amqp::{from_slice, read::IoReader, from_reader};
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
-    endpoint::{self, LinkFlow, Settlement},
-    util::{Producer, Consumer},
-    link::{self, state::SenderPermit, delivery::UnsettledMessage}
+    endpoint::{self, LinkFlow, ReceiverLink, Settlement},
+    link::{self, delivery::UnsettledMessage, state::SenderPermit},
+    util::{Consumer, Producer},
 };
 
-use self::{state::{LinkFlowState, UnsettledMap, LinkState}, error::DetachError};
+use self::{
+    delivery::Delivery,
+    error::DetachError,
+    state::{LinkFlowState, LinkState, UnsettledMap},
+};
 
 pub mod type_state {
     #[derive(Debug)]
@@ -66,13 +76,12 @@ pub mod role {
     }
 }
 
-
 /// Manages the link state
-/// 
+///
 /// # Type Parameters
-/// 
+///
 /// R: role
-/// 
+///
 /// F: link flow state
 #[derive(Debug)]
 pub struct Link<R, F> {
@@ -110,7 +119,7 @@ pub struct Link<R, F> {
 
 #[async_trait]
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
-impl<R, F> endpoint::Link for Link<R, F> 
+impl<R, F> endpoint::Link for Link<R, F>
 where
     R: role::IntoRole + Send,
     F: AsRef<LinkFlowState> + Send + Sync,
@@ -140,27 +149,31 @@ where
             Role::Sender => {
                 // In this case, the sender is considered to hold the authoritative version of the
                 self.source = remote_attach.source;
-                // The receiver SHOULD respect the sender’s desired settlement mode if the sender 
+                // The receiver SHOULD respect the sender’s desired settlement mode if the sender
                 // initiates the attach exchange and the receiver supports the desired mode.
                 self.snd_settle_mode = remote_attach.snd_settle_mode;
 
-                // The delivery-count is initialized by the sender when a link endpoint is 
+                // The delivery-count is initialized by the sender when a link endpoint is
                 // created, and is incre- mented whenever a message is sent
                 println!("{:?}", remote_attach.initial_delivery_count);
                 let initial_delivery_count = match remote_attach.initial_delivery_count {
                     Some(val) => val,
-                    None => return Err(AmqpError::NotAllowed.into())
+                    None => return Err(AmqpError::NotAllowed.into()),
                 };
-                self.flow_state.as_ref()
-                    .initial_delivery_count_mut(|_| initial_delivery_count).await;
-                self.flow_state.as_ref()
-                    .delivery_count_mut(|_| initial_delivery_count).await;
-            },
+                self.flow_state
+                    .as_ref()
+                    .initial_delivery_count_mut(|_| initial_delivery_count)
+                    .await;
+                self.flow_state
+                    .as_ref()
+                    .delivery_count_mut(|_| initial_delivery_count)
+                    .await;
+            }
             // Remote attach is from receiver
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 self.target = remote_attach.target;
-                // The sender SHOULD respect the receiver’s desired settlement mode if the receiver 
+                // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
                 // initiates the attach exchange and the sender supports the desired mode
                 self.rcv_settle_mode = remote_attach.rcv_settle_mode;
             }
@@ -177,19 +190,6 @@ where
 
         Ok(())
     }
-
-    // async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
-    //     todo!()
-    // }
-
-    // Only the receiver is supposed to receive incoming Transfer frame
-
-    // async fn on_incoming_disposition(
-    //     &mut self,
-    //     disposition: Disposition,
-    // ) -> Result<(), Self::Error> {
-    //     todo!()
-    // }
 
     /// Closing or not isn't taken care of here but outside
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
@@ -246,10 +246,7 @@ where
                 ),
             }
         };
-        // let unsettled: Option<UnsettledMap> = match self.unsettled.read().await.len() {
-        //     0 => None,
-        //     _ => Some(self.unsettled.clone()),
-        // };
+        
         let max_message_size = match self.max_message_size {
             0 => None,
             val @ _ => Some(val as u64),
@@ -379,7 +376,7 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
         println!(">>> Debug: SenderLink::send_transfer");
 
         match self.flow_state.consume(1).await {
-            SenderPermit::Send => { }, // There is enough credit to send
+            SenderPermit::Send => {} // There is enough credit to send
             SenderPermit::Drain => {
                 // Drain is set
                 todo!()
@@ -462,103 +459,76 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
     }
 }
 
-// #[async_trait]
-// impl endpoint::Link for Link<role::Receiver, Arc<LinkFlowState>> {
-//     type DetachError = definitions::Error;
-//     type Error = link::Error;
+#[async_trait]
+impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState>> {
+    async fn on_incoming_transfer(
+        &mut self,
+        transfer: Transfer,
+        payload: Bytes,
+    ) -> Result<(Delivery, Option<Disposition>), Self::Error> {
+        // Upon receiving the transfer, the receiving link endpoint (receiver) 
+        // will create an entry in its own unsettled map and make the transferred 
+        // message data available to the application to process.
 
-//     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::Error> {
-//         println!(">>> Debug: Link<Receiver>::on_incoming_attach");
-//         match self.local_state {
-//             LinkState::AttachSent => self.local_state = LinkState::Attached,
-//             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
-//             LinkState::Detached => {
-//                 // remote peer is attempting to re-attach
-//                 self.local_state = LinkState::AttachReceived
-//             }
-//             _ => return Err(AmqpError::IllegalState.into()),
-//         };
+        // This only takes care of whether the message is considered
+        // sett
+        let settled_by_sender = transfer.settled.unwrap_or_else(|| false);
 
-//         self.input_handle = Some(remote_attach.handle);
+        let (message, disposition) = if settled_by_sender {
+            (from_reader(payload.reader())?, None)
+        } else {
+            match self.rcv_settle_mode {
+                // If first, this indicates that the receiver MUST settle the delivery
+                // once it has arrived without waiting for the sender to settle first.
+                ReceiverSettleMode::First => {
+                    let message: Message = from_reader(payload.reader())?;
+                    let delivery_id = transfer.delivery_id
+                        .ok_or_else(|| Error::AmqpError {
+                            condition: AmqpError::NotAllowed,
+                            description: Some("delivery-id is not found".into())
+                        })?;
+                    let disposition = Disposition {
+                        role: Role::Receiver,
+                        first: delivery_id,
+                        last: None,
+                        settled: true,
+                        state: None,
+                        batchable: false
+                    };
+                    (message, Some(disposition))
+                },
+                ReceiverSettleMode::Second => {
+                    // Add to unsettled map
+                    todo!()
+                }
+            }
+        };
 
-//         // When resuming a link, it is possible that the properties of the source and target have changed while the link
-//         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
-//         // attach frames could be in conflict.
-//         match remote_attach.role {
-//             // Remote attach is from sender
-//             Role::Sender => {
-//                 // In this case, the sender is considered to hold the authoritative version of the
-//                 self.source = remote_attach.source;
-//                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender 
-//                 // initiates the attach exchange and the receiver supports the desired mode.
-//                 self.snd_settle_mode = remote_attach.snd_settle_mode;
+        let link_output_handle = self.output_handle.clone()
+            .ok_or_else(|| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into())
+            })?;
+        let delivery_id = transfer.delivery_id.clone()
+            .ok_or_else(|| Error::AmqpError {
+                condition: AmqpError::NotAllowed,
+                description: Some("The delivery-id is not found".into())
+            })?;
+        let delivery_tag = transfer.delivery_tag.clone()
+            .ok_or_else(|| Error::AmqpError {
+                condition: AmqpError::NotAllowed,
+                description: Some("The delivery-tag is not found".into())
+            })?;
+        let delivery = Delivery {
+            link_output_handle,
+            delivery_id,
+            delivery_tag,
+            message,
+        };
 
-//                 // The delivery-count is initialized by the sender when a link endpoint is 
-//                 // created, and is incre- mented whenever a message is sent
-//                 let initial_delivery_count = match remote_attach.initial_delivery_count {
-//                     Some(val) => val,
-//                     None => return Err(AmqpError::NotAllowed.into())
-//                 };
-//                 self.flow_state.initial_delivery_count_mut(|_| initial_delivery_count).await;
-//             },
-//             // Remote attach is from receiver
-//             Role::Receiver => {
-//                 // **the receiver is considered to hold the authoritative version of the target properties**.
-//                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver 
-//                 // initiates the attach exchange and the sender supports the desired mode
-//                 todo!("Illegal role");
-//             }
-//         } 
-
-//         Ok(())
-//     }
-
-
-//     // async fn on_incoming_disposition(
-//     //     &mut self,
-//     //     disposition: Disposition,
-//     // ) -> Result<(), Self::Error>
-//     // {
-//     //     todo!()
-//     // }
-
-//     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-//         todo!()
-//     }
-
-//     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-//     where
-//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin 
-//     {
-//         todo!()
-//     }
-
-//     async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-//     where
-//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
-//     {
-//         todo!()
-//     }
-
-//     async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-//     where
-//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
-//     {
-//         todo!()
-//     }
-
-//     async fn send_detach<W>(
-//         &mut self,
-//         writer: &mut W,
-//         closed: bool,
-//         error: Option<Self::DetachError>,
-//     ) -> Result<(), Self::Error>
-//     where
-//         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
-//     {
-//         todo!()
-//     }
-// }
+        Ok((delivery, disposition))
+    }
+}
 
 // pub struct LinkHandle {
 //     tx: mpsc::Sender<LinkIncomingItem>,
@@ -583,7 +553,7 @@ pub enum LinkHandle {
         flow_state: Arc<LinkFlowState>,
         unsettled: Arc<RwLock<UnsettledMap>>,
         receiver_settle_mode: ReceiverSettleMode,
-    }
+    },
 }
 
 impl LinkHandle {
@@ -592,12 +562,8 @@ impl LinkHandle {
         frame: LinkFrame,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender {tx, ..} => {
-                tx.send(frame).await
-            }
-            LinkHandle::Receiver {tx, ..} => {
-                tx.send(frame).await
-            }
+            LinkHandle::Sender { tx, .. } => tx.send(frame).await,
+            LinkHandle::Receiver { tx, .. } => tx.send(frame).await,
         }
     }
 
@@ -607,14 +573,13 @@ impl LinkHandle {
         output_handle: Handle,
     ) -> Option<LinkFlow> {
         match self {
-            LinkHandle::Sender{flow_state, ..} => {
+            LinkHandle::Sender { flow_state, .. } => {
                 flow_state.on_incoming_flow(flow, output_handle).await
             }
-            LinkHandle::Receiver{flow_state, ..} => {
+            LinkHandle::Receiver { flow_state, .. } => {
                 flow_state.on_incoming_flow(flow, output_handle).await
             }
         }
-
     }
 
     pub(crate) async fn on_incoming_disposition(
@@ -628,9 +593,10 @@ impl LinkHandle {
     ) -> bool {
         match self {
             LinkHandle::Sender {
-                unsettled, 
-                receiver_settle_mode, 
-                ..} => {
+                unsettled,
+                receiver_settle_mode,
+                ..
+            } => {
                 // TODO: verfify role?
                 if is_settled {
                     // TODO: Reply with disposition?
@@ -640,7 +606,7 @@ impl LinkHandle {
                     {
                         let mut guard = unsettled.write().await;
                         if let Some(unsettled) = guard.remove(&delivery_tag) {
-                            // Since we are settling (ie. forgetting) this message, we don't care whether the 
+                            // Since we are settling (ie. forgetting) this message, we don't care whether the
                             // receiving end is alive or not
                             let _ = unsettled.settle_with_state(state.clone());
                         }
@@ -668,8 +634,8 @@ impl LinkHandle {
                     }
                     false
                 }
-            },
-            LinkHandle::Receiver {unsettled, ..} => {
+            }
+            LinkHandle::Receiver { unsettled, .. } => {
                 todo!()
             }
         }

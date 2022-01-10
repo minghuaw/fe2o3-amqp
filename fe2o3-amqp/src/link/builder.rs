@@ -1,11 +1,7 @@
-use std::{
-    collections::BTreeMap,
-    marker::PhantomData,
-    sync::{Arc},
-};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo, Handle},
+    definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target},
     primitives::{Symbol, ULong},
 };
@@ -15,15 +11,17 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::{
-        Link, Error, LinkHandle,
-        LinkIncomingItem,
-    },
+    link::{Error, Link, LinkHandle, LinkIncomingItem},
     session::{self, SessionHandle},
     util::{Constant, Consumer, Producer},
 };
 
-use super::{role, type_state::Attached, Receiver, Sender, state::{LinkState, LinkFlowStateInner, LinkFlowState, UnsettledMap}, LinkFrame};
+use super::{
+    role,
+    state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
+    type_state::Attached,
+    LinkFrame, Receiver, Sender,
+};
 
 /// Type state for link::builder::Builder;
 pub struct WithoutName;
@@ -75,7 +73,7 @@ impl<Role> Builder<Role, WithoutName, WithoutTarget> {
             offered_capabilities: Default::default(),
             desired_capabilities: Default::default(),
             properties: Default::default(),
-    
+
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             role: PhantomData,
             name_state: PhantomData,
@@ -226,8 +224,8 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
     }
 
     async fn create_link_instance<C>(
-        self, 
-        session: &mut SessionHandle, 
+        self,
+        session: &mut SessionHandle,
         unsettled: Arc<RwLock<UnsettledMap>>,
         output_handle: Handle,
         flow_state_consumer: C,
@@ -281,7 +279,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
-        
+
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -292,7 +290,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
-        
+
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let notifier = Arc::new(Notify::new());
         let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
@@ -308,8 +306,10 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link_instance(session, unsettled, output_handle, flow_state_consumer).await?;
-        
+        let mut link = self
+            .create_link_instance(session, unsettled, output_handle, flow_state_consumer)
+            .await?;
+
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
@@ -331,11 +331,14 @@ impl Builder<role::Sender, WithName, WithTarget> {
 }
 
 impl Builder<role::Receiver, WithName, WithTarget> {
-    pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Receiver<Attached>, Error> {
+    pub async fn attach(
+        mut self,
+        session: &mut SessionHandle,
+    ) -> Result<Receiver<Attached>, Error> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
-        
+
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -346,7 +349,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
-        
+
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let flow_state_producer = flow_state.clone();
         let flow_state_consumer = flow_state;
@@ -361,8 +364,10 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link_instance(session, unsettled, output_handle, flow_state_consumer).await?;
-        
+        let mut link = self
+            .create_link_instance(session, unsettled, output_handle, flow_state_consumer)
+            .await?;
+
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
@@ -376,7 +381,8 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             session: session.control.clone(),
             outgoing,
             incoming: reader,
-            marker: PhantomData
+            marker: PhantomData,
+            incomplete_transfer: None,
         };
         Ok(receiver)
     }

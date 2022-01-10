@@ -44,6 +44,7 @@ impl<L> DetachError<L> {
 //     }
 // }
 
+/// TODO: Simplify the error structures
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Handle max reached")]
@@ -63,6 +64,9 @@ pub enum Error {
 
     #[error("Outcome Modified: {:?}", .0)]
     Modified(Modified),
+
+    #[error("Link is detached {:?}", .0)]
+    Detached(DetachError<()>),
 
     #[error("AMQP Error {:?}, {:?}", .condition, .description)]
     AmqpError {
@@ -143,7 +147,7 @@ pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
     DetachError {
         link: Some(link),
         is_closed_by_remote: false,
-        error: Some(error)
+        error: Some(error),
     }
 }
 
@@ -157,6 +161,13 @@ pub(crate) fn map_send_detach_error<L>(err: impl Into<Error>, link: L) -> Detach
             condition,
             description,
         } => (condition.into(), description),
+        Error::Detached(e) => {
+            return DetachError {
+                link: None,
+                is_closed_by_remote: e.is_closed_by_remote,
+                error: e.error,
+            }
+        }
         Error::HandleMaxReached
         | Error::DuplicatedLinkName
         | Error::ParseError

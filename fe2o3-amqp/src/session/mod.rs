@@ -241,7 +241,11 @@ impl endpoint::Session for Session {
                     println!(">>> Debug: found local link");
                     // Only Sender need to update the receiver settle mode
                     // link.receiver_settle_mode = attach.rcv_settle_mode.clone();
-                    if let LinkHandle::Sender{receiver_settle_mode, ..} = link {
+                    if let LinkHandle::Sender {
+                        receiver_settle_mode,
+                        ..
+                    } = link
+                    {
                         *receiver_settle_mode = attach.rcv_settle_mode.clone();
                     }
 

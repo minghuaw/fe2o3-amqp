@@ -4,7 +4,7 @@ use std::time::Duration;
 // use fe2o3_amqp::transport::session::Session;
 
 use fe2o3_amqp::connection::Connection;
-use fe2o3_amqp::link::{Sender, Receiver};
+use fe2o3_amqp::link::{Receiver, Sender};
 use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
 
@@ -50,7 +50,7 @@ async fn main() {
     //     .unwrap();
 
     // sender.send("HELLO AMQP").await.unwrap();
-    
+
     let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
 
     let result = fut.await;

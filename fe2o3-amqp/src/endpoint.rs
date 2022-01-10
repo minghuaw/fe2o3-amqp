@@ -32,7 +32,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     connection::engine::SessionId,
-    link::LinkFrame,
+    link::{delivery::Delivery, LinkFrame},
     session::{SessionFrame, SessionIncomingItem},
     transport::amqp::Frame,
 };
@@ -188,6 +188,7 @@ pub trait Link {
 
     // Only the receiver is supposed to receive incoming Transfer frame
 
+    // Disposition is handled by the LinkHandles that run in the session loop
     // async fn on_incoming_disposition(
     //     &mut self,
     //     disposition: Disposition,
@@ -276,9 +277,9 @@ impl TryFrom<Flow> for LinkFlow {
 
 pub enum Settlement {
     Settled,
-    Unsettled{
-        delivery_tag: [u8;4],
-        outcome: oneshot::Receiver<DeliveryState>
+    Unsettled {
+        delivery_tag: [u8; 4],
+        outcome: oneshot::Receiver<DeliveryState>,
     },
 }
 
@@ -303,9 +304,11 @@ pub trait SenderLink: Link {
 pub trait ReceiverLink: Link {
     const ROLE: Role = Role::Receiver;
 
+    // More than one transfer frames should be hanlded by the
+    // `Receiver`
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Bytes,
-    ) -> Result<(), <Self as Link>::Error>;
+    ) -> Result<(Delivery, Option<Disposition>), <Self as Link>::Error>;
 }

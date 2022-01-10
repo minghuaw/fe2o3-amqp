@@ -1,16 +1,16 @@
 use bytes::Bytes;
 use fe2o3_amqp_types::{
-    definitions::{MessageFormat, AmqpError, DeliveryTag, DeliveryNumber, Handle},
+    definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
-use tokio_util::sync::PollSender;
+use pin_project_lite::pin_project;
 use std::{future::Future, task::Poll};
 use tokio::sync::oneshot;
-use pin_project_lite::pin_project;
+use tokio_util::sync::PollSender;
 
-use crate::{util::Uninitialized, endpoint::Settlement};
 use crate::link;
+use crate::{endpoint::Settlement, util::Uninitialized};
 
 /// Reserved for receiver side
 pub struct Delivery {
@@ -170,44 +170,54 @@ pin_project! {
 
 impl From<Settlement> for DeliveryFut {
     fn from(settlement: Settlement) -> Self {
-        Self {
-            settlement
-        }
+        Self { settlement }
     }
 }
 
 impl Future for DeliveryFut {
     type Output = Result<(), link::Error>;
 
-    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         let this = self.project();
         let mut settlement = this.settlement;
 
         match &mut *settlement {
             Settlement::Settled => Poll::Ready(Ok(())),
-            Settlement::Unsettled {delivery_tag: _, outcome } => {
+            Settlement::Unsettled {
+                delivery_tag: _,
+                outcome,
+            } => {
                 match outcome.poll_unpin(cx) {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(result) => {
                         match result {
                             Ok(state) => {
                                 let result = match state {
-                                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-                                    DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
-                                    DeliveryState::Released(released) => Err(link::Error::Released(released)),
-                                    DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
+                                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => {
+                                        Ok(())
+                                    }
+                                    DeliveryState::Rejected(rejected) => {
+                                        Err(link::Error::Rejected(rejected))
+                                    }
+                                    DeliveryState::Released(released) => {
+                                        Err(link::Error::Released(released))
+                                    }
+                                    DeliveryState::Modified(modified) => {
+                                        Err(link::Error::Modified(modified))
+                                    }
                                 };
                                 Poll::Ready(result)
-                            },
+                            }
                             Err(_) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-                                Poll::Ready(Err(
-                                    link::Error::AmqpError {
-                                        condition: AmqpError::IllegalState,
-                                        description: Some("Outcome sender is dropped".into())
-                                    }
-                                ))
+                                Poll::Ready(Err(link::Error::AmqpError {
+                                    condition: AmqpError::IllegalState,
+                                    description: Some("Outcome sender is dropped".into()),
+                                }))
                             }
                         }
                     }

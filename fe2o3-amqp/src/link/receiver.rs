@@ -1,17 +1,37 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use fe2o3_amqp_types::messaging::{Message, Target, Address};
+use bytes::{BytesMut, Bytes};
+use fe2o3_amqp_types::{
+    definitions::AmqpError,
+    messaging::{Address, Message, Target}, performatives::Transfer,
+};
+use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
-use futures_util::StreamExt;
 
-use crate::{session::{SessionHandle, self}, control::SessionControl, endpoint::Link, link::error::{map_send_detach_error, detach_error_expecting_frame}};
+use crate::{
+    control::SessionControl,
+    endpoint::Link,
+    link::error::{detach_error_expecting_frame, map_send_detach_error},
+    session::{self, SessionHandle},
+};
 
 use super::{
-    builder::{self, WithoutName, WithoutTarget, WithTarget},
-    role, Error, LinkFrame, state::{LinkState, LinkFlowState}, type_state::{Detached, Attached}, error::DetachError, LinkHandle,
+    builder::{self, WithTarget, WithoutName, WithoutTarget},
+    delivery::Delivery,
+    error::DetachError,
+    role,
+    state::{LinkFlowState, LinkState},
+    type_state::{Attached, Detached},
+    Error, LinkFrame, LinkHandle,
 };
+
+#[derive(Debug)]
+pub(crate) struct IncompleteTransfer {
+    performative: Transfer,
+    payload: BytesMut,
+}
 
 #[derive(Debug)]
 pub struct Receiver<S> {
@@ -20,12 +40,14 @@ pub struct Receiver<S> {
 
     // Control sender to the session
     pub(crate) session: mpsc::Sender<SessionControl>,
-    
+
     // Outgoing mpsc channel to send the Link Frames
     pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: ReceiverStream<LinkFrame>,
 
     pub(crate) marker: PhantomData<S>,
+
+    pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
 }
 
 impl Receiver<Detached> {
@@ -55,10 +77,12 @@ impl Receiver<Detached> {
                 tx,
                 flow_state: self.link.flow_state.clone(),
                 unsettled: self.link.unsettled.clone(),
-                receiver_settle_mode: self.link.rcv_settle_mode.clone()
+                receiver_settle_mode: self.link.rcv_settle_mode.clone(),
             };
             self.incoming = ReceiverStream::new(incoming);
-            let handle = session::allocate_link(&mut session_control, self.link.name.clone(), link_handle).await?;
+            let handle =
+                session::allocate_link(&mut session_control, self.link.name.clone(), link_handle)
+                    .await?;
             self.link.output_handle = Some(handle);
         }
 
@@ -71,11 +95,92 @@ impl Receiver<Detached> {
             outgoing: self.outgoing,
             incoming: self.incoming,
             marker: PhantomData,
+            incomplete_transfer: None,
         })
     }
 }
 
 impl Receiver<Attached> {
+    #[inline]
+    async fn recv_inner(&mut self) -> Result<Option<Delivery>, Error> {
+        let frame = self.incoming.next().await.ok_or_else(|| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Session is dropped".into()),
+        })?;
+
+        match frame {
+            LinkFrame::Detach(detach) => {
+                let err = DetachError {
+                    link: Some(()),
+                    is_closed_by_remote: detach.closed,
+                    error: detach.error,
+                };
+                return Err(Error::Detached(err));
+            }
+            LinkFrame::Transfer {
+                performative,
+                payload,
+            } => {
+                self.on_incoming_transfer(performative, payload).await
+            }
+            LinkFrame::Attach(_) => {
+                return Err(Error::AmqpError {
+                    condition: AmqpError::IllegalState,
+                    description: Some("Received Attach on an attached link".into()),
+                })
+            }
+            LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
+                // Flow and Disposition are handled by LinkHandle which runs
+                // in the session loop
+                unreachable!()
+            }
+        }
+    } 
+
+    pub async fn recv(&mut self) -> Result<Delivery, Error> {
+        loop {
+            match self.recv_inner().await? {
+                Some(delivery) => return Ok(delivery),
+                None => continue,
+            }
+        }
+    }
+
+    async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Bytes) -> Result<Option<Delivery>, Error> {
+        use futures_util::SinkExt;
+        use crate::endpoint::ReceiverLink;
+
+        // Aborted messages SHOULD be discarded by the recipient (any payload
+        // within the frame carrying the performative MUST be ignored). An aborted
+        // message is implicitly settled
+        if transfer.aborted {
+            let _ = self.incomplete_transfer.take();
+            return Ok(None)
+        }
+
+        let (delivery, disposition) = if transfer.more {
+            // if 
+            todo!()
+        } else {
+            match self.incomplete_transfer.take() {
+                Some(incomplete) => {
+                    todo!()
+                },
+                None => {
+                    self.link.on_incoming_transfer(transfer, payload).await?
+                }
+            }
+        };
+
+        // Send back disposition if needed
+        if let Some(disposition) = disposition {
+            let frame = LinkFrame::Disposition(disposition);
+            self.outgoing.send(frame).await?;
+        }
+
+        Ok(Some(delivery))
+    }
+
     // TODO: reduce mostly duplicated code (Sender/Receiver::detach/close)?
     pub async fn detach(self) -> Result<Receiver<Detached>, DetachError<Receiver<Detached>>> {
         println!(">>> Debug: Receiver::detach");
@@ -85,24 +190,29 @@ impl Receiver<Attached> {
             session: self.session,
             outgoing: self.outgoing,
             incoming: self.incoming,
-            marker: PhantomData
+            marker: PhantomData,
+            incomplete_transfer: self.incomplete_transfer,
         };
 
         // Send a non-closing detach
-        match detaching.link.send_detach(&mut detaching.outgoing, false, None).await {
-            Ok(_) => {},
-            Err(e) => return Err(map_send_detach_error(e, detaching))
+        match detaching
+            .link
+            .send_detach(&mut detaching.outgoing, false, None)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(map_send_detach_error(e, detaching)),
         };
 
         // Wait for remote detach
         let frame = match detaching.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(detaching))
+            None => return Err(detach_error_expecting_frame(detaching)),
         };
 
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(detaching))
+            _ => return Err(detach_error_expecting_frame(detaching)),
         };
 
         if remote_detach.closed {
@@ -122,9 +232,9 @@ impl Receiver<Attached> {
 
             reattached.close().await?;
 
-            // A peer closes a link by sending the detach frame with the handle for the 
-            // specified link, and the closed flag set to true. The partner will destroy 
-            // the corresponding link endpoint, and reply with its own detach frame with 
+            // A peer closes a link by sending the detach frame with the handle for the
+            // specified link, and the closed flag set to true. The partner will destroy
+            // the corresponding link endpoint, and reply with its own detach frame with
             // the closed flag set to true.
             return Err(DetachError {
                 link: None,
@@ -133,19 +243,24 @@ impl Receiver<Attached> {
             });
         } else {
             match detaching.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {},
-                Err(e) => return Err(DetachError {
-                    link: Some(detaching),
-                    is_closed_by_remote: false,
-                    error: Some(e)
-                })
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(DetachError {
+                        link: Some(detaching),
+                        is_closed_by_remote: false,
+                        error: Some(e),
+                    })
+                }
             }
         }
 
-        match detaching.session.send(SessionControl::DeallocateLink(detaching.link.name.clone()))
-            .await {
+        match detaching
+            .session
+            .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
+            .await
+        {
             Ok(_) => Ok(detaching),
-            Err(e) => return Err(map_send_detach_error(e, detaching))
+            Err(e) => return Err(map_send_detach_error(e, detaching)),
         }
     }
 
@@ -157,27 +272,25 @@ impl Receiver<Attached> {
             outgoing: self.outgoing,
             incoming: self.incoming,
             marker: PhantomData,
+            incomplete_transfer: self.incomplete_transfer
         };
 
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        match detaching.link
+        match detaching
+            .link
             .send_detach(&mut detaching.outgoing, true, None)
             .await
         {
-            Ok(_) => {},
-            Err(e) => return Err(map_send_detach_error(e, detaching))
+            Ok(_) => {}
+            Err(e) => return Err(map_send_detach_error(e, detaching)),
         }
 
-        
         // Wait for remote detach
-        let frame = match detaching
-            .incoming
-            .next()
-            .await {
-                Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame(detaching))
-            };
+        let frame = match detaching.incoming.next().await {
+            Some(frame) => frame,
+            None => return Err(detach_error_expecting_frame(detaching)),
+        };
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
             _ => return Err(detach_error_expecting_frame(detaching)),
@@ -187,12 +300,14 @@ impl Receiver<Attached> {
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
             match detaching.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {},
-                Err(e) => return Err(DetachError {
-                    link: Some(detaching),
-                    is_closed_by_remote: false,
-                    error: Some(e)
-                })
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(DetachError {
+                        link: Some(detaching),
+                        is_closed_by_remote: false,
+                        error: Some(e),
+                    })
+                }
             }
         } else {
             // Note that one peer MAY send a closing detach while its partner is
@@ -222,4 +337,3 @@ impl Receiver<Attached> {
         Ok(())
     }
 }
-
