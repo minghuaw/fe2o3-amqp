@@ -5,10 +5,10 @@ use async_trait::async_trait;
 use bytes::{Bytes, Buf};
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryTag, ErrorCondition, Handle, MessageFormat, ReceiverSettleMode,
+        self, AmqpError, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode,
     },
-    messaging::{DeliveryState, Source, Target, Message},
+    messaging::{DeliveryState, Source, Target, Message, Accepted},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -25,7 +25,7 @@ pub use error::Error;
 use futures_util::{Sink, SinkExt, Stream};
 pub use receiver::Receiver;
 pub use sender::Sender;
-use serde_amqp::{from_slice, read::IoReader, from_reader};
+use serde_amqp::{from_reader};
 use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
@@ -36,7 +36,6 @@ use crate::{
 
 use self::{
     delivery::Delivery,
-    error::DetachError,
     state::{LinkFlowState, LinkState, UnsettledMap},
 };
 
@@ -487,12 +486,13 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState>> {
                             condition: AmqpError::NotAllowed,
                             description: Some("delivery-id is not found".into())
                         })?;
+                    // Spontaneously settle the message with an Accept
                     let disposition = Disposition {
                         role: Role::Receiver,
                         first: delivery_id,
                         last: None,
                         settled: true,
-                        state: None,
+                        state: Some(DeliveryState::Accepted(Accepted {})),
                         batchable: false
                     };
                     (message, Some(disposition))
@@ -584,7 +584,7 @@ impl LinkHandle {
 
     pub(crate) async fn on_incoming_disposition(
         &mut self,
-        role: Role,
+        _role: Role, // Is a role check necessary?
         is_settled: bool,
         state: &Option<DeliveryState>,
         // Disposition only contains the delivery ids, which are assigned by the

@@ -172,7 +172,9 @@ impl Receiver<Attached> {
             }
         };
 
-        // Send back disposition if needed
+        // In `ReceiverSettleMode::First`, if the message is not pre-settled
+        // the receiver will spontaneously settle the message with an 
+        // Accept by returning a `Some(Disposition)`
         if let Some(disposition) = disposition {
             let frame = LinkFrame::Disposition(disposition);
             self.outgoing.send(frame).await?;
