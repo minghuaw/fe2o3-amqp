@@ -480,7 +480,27 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>> {
         let (message, disposition) = if settled_by_sender {
             (from_reader(payload.reader())?, None)
         } else {
-            match self.rcv_settle_mode {
+            // If the message is being sent settled by the sender, the value of this
+            // field is ignored.
+            let mode = if let Some(mode) = &transfer.rcv_settle_mode {
+                // If the negotiated link value is first, then it is illegal to set this
+                // field to second.
+                if let ReceiverSettleMode::First = &self.rcv_settle_mode {
+                    if let ReceiverSettleMode::Second = mode {
+                        return Err(Error::AmqpError {
+                            condition: AmqpError::NotAllowed,
+                            description: Some("Negotiated link value is First".into())
+                        })
+                    }
+                }
+                mode
+            } else {
+                // If not set, this value is defaulted to the value negotiated on link
+                // attach.
+                &self.rcv_settle_mode
+            };
+
+            match mode {
                 // If first, this indicates that the receiver MUST settle the delivery
                 // once it has arrived without waiting for the sender to settle first.
                 ReceiverSettleMode::First => {
@@ -501,6 +521,9 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>> {
                     };
                     (message, Some(disposition))
                 },
+                // If second, this indicates that the receiver MUST NOT settle until
+                // sending its disposition to the sender and receiving a settled
+                // disposition from the sender.
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
                     todo!()

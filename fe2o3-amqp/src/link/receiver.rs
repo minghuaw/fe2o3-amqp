@@ -27,10 +27,85 @@ use super::{
     Error, LinkFrame, LinkHandle,
 };
 
+macro_rules! or_assign {
+    ($self:ident, $other:ident, $field:ident) => {
+        match &$self.performative.$field {
+            Some(value) => {
+                if let Some(other_value) = $other.$field {
+                    if *value != other_value {
+                        return Err(Error::AmqpError {
+                            condition: AmqpError::NotAllowed,
+                            description: Some(format!("Inconsistent {:?} in multi-frame delivery", value))
+                        })
+                    }
+                }
+            },
+            None => {
+                $self.performative.$field = $other.$field;
+            }
+        }
+    };
+
+    ($self:ident, $other:ident, $($field:ident), *) => {
+        $(or_assign!($self, $other, $field);)*
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
-    performative: Transfer,
-    payload: BytesMut,
+    pub performative: Transfer,
+    pub payload: BytesMut,
+}
+
+impl IncompleteTransfer {
+    /// Like `|=` operator but works on the field level
+    pub fn or_assign(&mut self, other: Transfer) -> Result<(), Error>{
+        or_assign!{
+            self, other, 
+            delivery_id, 
+            delivery_tag,
+            message_format
+        };
+
+        // If not set on the first (or only) transfer for a (multi-transfer)
+        // delivery, then the settled flag MUST be interpreted as being false. For
+        // subsequent transfers in a multi-transfer delivery if the settled flag
+        // is left unset then it MUST be interpreted as true if and only if the
+        // value of the settled flag on any of the preceding transfers was true;
+        // if no preceding transfer was sent with settled being true then the
+        // value when unset MUST be taken as false.
+        match &self.performative.settled {
+            Some(value) => {
+                if let Some(other_value) = other.settled {
+                    if !value {
+                        self.performative.settled = Some(other_value);
+                    }
+                }
+            },
+            None => self.performative.settled = other.settled
+        }
+
+        if let Some(other_state) = other.state {
+            if let Some(state) = &self.performative.state {
+                // Note that if the transfer performative (or an earlier disposition
+                // performative referring to the delivery) indicates that the delivery has
+                // attained a terminal state, then no future transfer or disposition sent
+                // by the sender can alter that terminal state.
+                if !state.is_terminal() {
+                    self.performative.state = Some(other_state);
+                }
+            } else {
+                self.performative.state = Some(other_state);
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Append to the buffered payload
+    pub fn append(&mut self, other: Bytes) {
+        self.payload.extend(other);
+    }
 }
 
 type ReceiverFlowState = LinkFlowState<role::Receiver>;
