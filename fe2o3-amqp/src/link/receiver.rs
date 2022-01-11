@@ -33,9 +33,11 @@ pub(crate) struct IncompleteTransfer {
     payload: BytesMut,
 }
 
+type ReceiverFlowState = LinkFlowState<role::Receiver>;
+
 #[derive(Debug)]
 pub struct Receiver<S> {
-    pub(crate) link: super::Link<role::Receiver, Arc<LinkFlowState>>,
+    pub(crate) link: super::Link<role::Receiver, Arc<ReceiverFlowState>>,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session

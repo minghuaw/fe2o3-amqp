@@ -29,10 +29,12 @@ use super::{
     Error, LinkFrame, LinkHandle,
 };
 
+type SenderFlowState = LinkFlowState<role::Sender>;
+
 #[derive(Debug)]
 pub struct Sender<S> {
     // The SenderLink manages the state
-    pub(crate) link: super::Link<role::Sender, Consumer<Arc<LinkFlowState>>>,
+    pub(crate) link: super::Link<role::Sender, Consumer<Arc<SenderFlowState>>>,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session

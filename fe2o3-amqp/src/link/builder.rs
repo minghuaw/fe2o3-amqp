@@ -289,7 +289,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
         };
-        let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
+        let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let notifier = Arc::new(Notify::new());
@@ -348,7 +348,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
         };
-        let flow_state = Arc::new(LinkFlowState::Sender(RwLock::new(flow_state_inner)));
+        let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let flow_state_producer = flow_state.clone();

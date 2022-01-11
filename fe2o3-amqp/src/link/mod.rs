@@ -120,8 +120,8 @@ pub struct Link<R, F> {
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
 impl<R, F> endpoint::Link for Link<R, F>
 where
-    R: role::IntoRole + Send,
-    F: AsRef<LinkFlowState> + Send + Sync,
+    R: role::IntoRole + Send + Sync,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
 {
     type DetachError = definitions::Error;
     type Error = link::Error;
@@ -358,7 +358,7 @@ where
 }
 
 #[async_trait]
-impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
+impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState<role::Sender>>>> {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
@@ -459,7 +459,7 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
 }
 
 #[async_trait]
-impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState>> {
+impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>> {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
@@ -544,13 +544,13 @@ pub enum LinkHandle {
         tx: mpsc::Sender<LinkIncomingItem>,
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
-        flow_state: Producer<Arc<LinkFlowState>>,
+        flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
         unsettled: Arc<RwLock<UnsettledMap>>,
         receiver_settle_mode: ReceiverSettleMode,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
-        flow_state: Arc<LinkFlowState>,
+        flow_state: Arc<LinkFlowState<role::Receiver>>,
         unsettled: Arc<RwLock<UnsettledMap>>,
         receiver_settle_mode: ReceiverSettleMode,
     },
@@ -733,20 +733,19 @@ mod tests {
     async fn test_producer_notify() {
         use std::sync::Arc;
         use tokio::sync::Notify;
-        use tokio::sync::RwLock;
 
         use super::*;
         use crate::util::{Produce, Producer};
 
         let notifier = Arc::new(Notify::new());
-        let state = LinkFlowState::Sender(RwLock::new(LinkFlowStateInner {
+        let state = LinkFlowState::sender(LinkFlowStateInner {
             initial_delivery_count: 0,
             delivery_count: 0,
             link_credit: 0,
             avaiable: 0,
             drain: false,
             properties: None,
-        }));
+        });
         let mut producer = Producer::new(notifier.clone(), Arc::new(state));
         let notified = notifier.notified();
 
