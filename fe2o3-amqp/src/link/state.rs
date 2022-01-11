@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc, marker::PhantomData};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{Fields, Handle, SequenceNo};
+use fe2o3_amqp_types::definitions::{Fields, Handle, SequenceNo, LinkError};
 use tokio::sync::RwLock;
 
 use crate::{
@@ -266,6 +266,19 @@ impl<R> LinkFlowState<R> {
     }
 }
 
+impl LinkFlowState<role::Receiver> {
+    pub async fn consume(&self, count: u32) -> Result<(), super::Error> {
+        let mut state = self.lock.write().await;
+        if state.link_credit < count {
+            return Err(LinkError::TransferLimitExceeded.into())
+        } else {
+            state.delivery_count += count;
+            state.link_credit -= count;
+            Ok(())
+        }
+    }
+}
+
 pub type UnsettledMap = BTreeMap<[u8; 4], UnsettledMessage>;
 
 #[async_trait]
@@ -315,6 +328,7 @@ async fn consume_link_credit(
     lock: &RwLock<LinkFlowStateInner>,
     count: u32,
 ) -> Result<SenderPermit, ()> {
+    // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
     if state.drain {
         Ok(SenderPermit::Drain)

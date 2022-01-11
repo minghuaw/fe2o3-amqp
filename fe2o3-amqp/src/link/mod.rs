@@ -465,6 +465,10 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>> {
         transfer: Transfer,
         payload: Bytes,
     ) -> Result<(Delivery, Option<Disposition>), Self::Error> {
+
+        // TODO: The receiver should then detach with error
+        self.flow_state.consume(1).await?;
+
         // Upon receiving the transfer, the receiving link endpoint (receiver) 
         // will create an entry in its own unsettled map and make the transferred 
         // message data available to the application to process.
@@ -727,7 +731,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{link::state::LinkFlowStateInner, util::Constant};
+    use crate::{link::state::LinkFlowStateInner};
 
     #[tokio::test]
     async fn test_producer_notify() {
