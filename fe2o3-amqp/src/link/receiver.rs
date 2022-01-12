@@ -1,9 +1,10 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use bytes::{BytesMut, Bytes};
+use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::{
     definitions::AmqpError,
-    messaging::{Address, Message, Target, DeliveryState}, performatives::Transfer,
+    messaging::{Address, DeliveryState, Message, Target},
+    performatives::Transfer,
 };
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
@@ -59,10 +60,10 @@ pub(crate) struct IncompleteTransfer {
 
 impl IncompleteTransfer {
     /// Like `|=` operator but works on the field level
-    pub fn or_assign(&mut self, other: Transfer) -> Result<(), Error>{
-        or_assign!{
-            self, other, 
-            delivery_id, 
+    pub fn or_assign(&mut self, other: Transfer) -> Result<(), Error> {
+        or_assign! {
+            self, other,
+            delivery_id,
             delivery_tag,
             message_format
         };
@@ -81,8 +82,8 @@ impl IncompleteTransfer {
                         self.performative.settled = Some(other_value);
                     }
                 }
-            },
-            None => self.performative.settled = other.settled
+            }
+            None => self.performative.settled = other.settled,
         }
 
         if let Some(other_state) = other.state {
@@ -98,7 +99,7 @@ impl IncompleteTransfer {
                 self.performative.state = Some(other_state);
             }
         }
-        
+
         Ok(())
     }
 
@@ -156,6 +157,9 @@ impl Receiver<Detached> {
                 flow_state: self.link.flow_state.clone(),
                 unsettled: self.link.unsettled.clone(),
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
+                // This only controls whether a multi-transfer delivery id
+                // will be added to sessions map
+                more: false, 
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle =
@@ -198,9 +202,7 @@ impl Receiver<Attached> {
             LinkFrame::Transfer {
                 performative,
                 payload,
-            } => {
-                self.on_incoming_transfer(performative, payload).await
-            }
+            } => self.on_incoming_transfer(performative, payload).await,
             LinkFrame::Attach(_) => {
                 return Err(Error::AmqpError {
                     condition: AmqpError::IllegalState,
@@ -213,7 +215,7 @@ impl Receiver<Attached> {
                 unreachable!()
             }
         }
-    } 
+    }
 
     pub async fn recv(&mut self) -> Result<Delivery, Error> {
         loop {
@@ -224,34 +226,36 @@ impl Receiver<Attached> {
         }
     }
 
-    async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Bytes) -> Result<Option<Delivery>, Error> {
-        use futures_util::SinkExt;
+    async fn on_incoming_transfer(
+        &mut self,
+        transfer: Transfer,
+        payload: Bytes,
+    ) -> Result<Option<Delivery>, Error> {
         use crate::endpoint::ReceiverLink;
+        use futures_util::SinkExt;
 
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
         // message is implicitly settled
         if transfer.aborted {
             let _ = self.incomplete_transfer.take();
-            return Ok(None)
+            return Ok(None);
         }
 
         let (delivery, disposition) = if transfer.more {
-            // if 
+            // if
             todo!()
         } else {
             match self.incomplete_transfer.take() {
                 Some(incomplete) => {
                     todo!()
-                },
-                None => {
-                    self.link.on_incoming_transfer(transfer, payload).await?
                 }
+                None => self.link.on_incoming_transfer(transfer, payload).await?,
             }
         };
 
         // In `ReceiverSettleMode::First`, if the message is not pre-settled
-        // the receiver will spontaneously settle the message with an 
+        // the receiver will spontaneously settle the message with an
         // Accept by returning a `Some(Disposition)`
         if let Some(disposition) = disposition {
             let frame = LinkFrame::Disposition(disposition);
@@ -352,7 +356,7 @@ impl Receiver<Attached> {
             outgoing: self.outgoing,
             incoming: self.incoming,
             marker: PhantomData,
-            incomplete_transfer: self.incomplete_transfer
+            incomplete_transfer: self.incomplete_transfer,
         };
 
         // Send detach with closed=true and wait for remote closing detach

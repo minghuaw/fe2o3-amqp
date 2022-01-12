@@ -358,6 +358,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach
+            more: false,
         };
 
         // Create Link in Session
