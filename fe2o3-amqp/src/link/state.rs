@@ -279,7 +279,7 @@ impl LinkFlowState<role::Receiver> {
     }
 }
 
-pub type UnsettledMap = BTreeMap<[u8; 4], UnsettledMessage>;
+pub type UnsettledMap<M> = BTreeMap<[u8; 4], M>;
 
 #[async_trait]
 impl ProducerState for Arc<LinkFlowState<role::Sender>> {

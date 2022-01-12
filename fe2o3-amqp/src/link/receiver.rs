@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use bytes::{BytesMut, Bytes};
 use fe2o3_amqp_types::{
     definitions::AmqpError,
-    messaging::{Address, Message, Target}, performatives::Transfer,
+    messaging::{Address, Message, Target, DeliveryState}, performatives::Transfer,
 };
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
@@ -109,10 +109,11 @@ impl IncompleteTransfer {
 }
 
 type ReceiverFlowState = LinkFlowState<role::Receiver>;
+type ReceiverLink = super::Link<role::Receiver, Arc<ReceiverFlowState>, DeliveryState>;
 
 #[derive(Debug)]
 pub struct Receiver<S> {
-    pub(crate) link: super::Link<role::Receiver, Arc<ReceiverFlowState>>,
+    pub(crate) link: ReceiverLink,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session

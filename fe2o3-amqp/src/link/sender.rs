@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     builder::{self, WithName, WithTarget, WithoutName, WithoutTarget},
-    delivery::{DeliveryFut, Sendable},
+    delivery::{DeliveryFut, Sendable, UnsettledMessage},
     error::DetachError,
     role,
     state::{LinkFlowState, LinkState},
@@ -30,11 +30,12 @@ use super::{
 };
 
 type SenderFlowState = LinkFlowState<role::Sender>;
+type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, UnsettledMessage>;
 
 #[derive(Debug)]
 pub struct Sender<S> {
     // The SenderLink manages the state
-    pub(crate) link: super::Link<role::Sender, Consumer<Arc<SenderFlowState>>>,
+    pub(crate) link: SenderLink,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session

@@ -223,13 +223,13 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    async fn create_link_instance<C>(
+    async fn create_link_instance<C, M>(
         self,
         session: &mut SessionHandle,
-        unsettled: Arc<RwLock<UnsettledMap>>,
+        unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
         flow_state_consumer: C,
-    ) -> Result<Link<Role, C>, Error> {
+    ) -> Result<Link<Role, C, M>, Error> {
         let local_state = LinkState::Unattached;
 
         let max_message_size = match self.max_message_size {
@@ -238,7 +238,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         };
 
         // Create a SenderLink instance
-        let link = Link::<Role, C> {
+        let link = Link::<Role, C, M> {
             role: PhantomData,
             local_state,
             name: self.name,

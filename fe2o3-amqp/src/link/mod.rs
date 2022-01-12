@@ -83,7 +83,7 @@ pub mod role {
 ///
 /// F: link flow state
 #[derive(Debug)]
-pub struct Link<R, F> {
+pub struct Link<R, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
@@ -113,15 +113,16 @@ pub struct Link<R, F> {
     // pub(crate) properties: Option<Fields>,
     // pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
     pub(crate) flow_state: F,
-    pub(crate) unsettled: Arc<RwLock<UnsettledMap>>,
+    pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
 #[async_trait]
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
-impl<R, F> endpoint::Link for Link<R, F>
+impl<R, F, M> endpoint::Link for Link<R, F, M>
 where
     R: role::IntoRole + Send + Sync,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + Send + Sync,
 {
     type DetachError = definitions::Error;
     type Error = link::Error;
@@ -238,9 +239,8 @@ where
             match guard.len() {
                 0 => None,
                 _ => Some(
-                    guard
-                        .iter()
-                        .map(|(key, val)| (DeliveryTag::from(*key), val.state().clone()))
+                    guard.iter()
+                        .map(|(key, val)| (DeliveryTag::from(*key), val.as_ref().clone()))
                         .collect(),
                 ),
             }
@@ -358,7 +358,11 @@ where
 }
 
 #[async_trait]
-impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState<role::Sender>>>> {
+impl endpoint::SenderLink for Link<
+    role::Sender, 
+    Consumer<Arc<LinkFlowState<role::Sender>>>, 
+    UnsettledMessage
+    > {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
@@ -459,7 +463,7 @@ impl endpoint::SenderLink for Link<role::Sender, Consumer<Arc<LinkFlowState<role
 }
 
 #[async_trait]
-impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>> {
+impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, DeliveryState> {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
@@ -572,13 +576,13 @@ pub enum LinkHandle {
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
         flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
-        unsettled: Arc<RwLock<UnsettledMap>>,
+        unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
         receiver_settle_mode: ReceiverSettleMode,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
         flow_state: Arc<LinkFlowState<role::Receiver>>,
-        unsettled: Arc<RwLock<UnsettledMap>>,
+        unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
         receiver_settle_mode: ReceiverSettleMode,
     },
 }

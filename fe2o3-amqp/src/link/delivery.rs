@@ -158,6 +158,12 @@ impl UnsettledMessage {
     }
 }
 
+impl AsRef<DeliveryState> for UnsettledMessage {
+    fn as_ref(&self) -> &DeliveryState {
+        &self.state
+    }
+}
+
 pin_project! {
     /// A future for delivery that can be `await`ed for the settlement
     /// from receiver

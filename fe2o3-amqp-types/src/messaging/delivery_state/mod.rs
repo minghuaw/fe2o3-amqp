@@ -25,6 +25,12 @@ impl DeliveryState {
     }
 }
 
+impl AsRef<DeliveryState> for DeliveryState {
+    fn as_ref(&self) -> &DeliveryState {
+        self
+    }
+}
+
 mod delivery_state_impl;
 
 #[derive(Debug, Clone)]
