@@ -7,6 +7,7 @@ use fe2o3_amqp_types::{
     performatives::Transfer,
 };
 use futures_util::StreamExt;
+use serde_amqp::from_reader;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -233,6 +234,7 @@ impl Receiver<Attached> {
     ) -> Result<Option<Delivery>, Error> {
         use crate::endpoint::ReceiverLink;
         use futures_util::SinkExt;
+        use bytes::Buf;
 
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
@@ -249,8 +251,11 @@ impl Receiver<Attached> {
             match self.incomplete_transfer.take() {
                 Some(incomplete) => {
                     todo!()
-                }
-                None => self.link.on_incoming_transfer(transfer, payload).await?,
+                },
+                None => {
+                    let message: Message = from_reader(payload.reader())?;
+                    self.link.on_incoming_transfer(transfer, message).await?
+                },
             }
         };
 

@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::{self, Error, Fields, Handle, MessageFormat, Role, SequenceNo},
-    messaging::DeliveryState,
+    messaging::{DeliveryState, Message},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
@@ -309,6 +309,6 @@ pub trait ReceiverLink: Link {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: Bytes,
+        message: Message,
     ) -> Result<(Delivery, Option<Disposition>), <Self as Link>::Error>;
 }

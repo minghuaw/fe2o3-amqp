@@ -5,7 +5,8 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: Bytes,
+        // payload: Bytes,
+        message: Message,
     ) -> Result<(Delivery, Option<Disposition>), Self::Error> {
         // TODO: The receiver should then detach with error
         self.flow_state.consume(1).await?;
@@ -30,10 +31,10 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
                 description: Some("The delivery-tag is not found".into()),
             })?;
 
-        let (message, disposition) = if settled_by_sender {
+        let disposition = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            (from_reader(payload.reader())?, None)
+            None
         } else {
             // If the message is being sent settled by the sender, the value of this
             // field is ignored.
@@ -59,7 +60,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
                 // If first, this indicates that the receiver MUST settle the delivery
                 // once it has arrived without waiting for the sender to settle first.
                 ReceiverSettleMode::First => {
-                    let message: Message = from_reader(payload.reader())?;
+                    // let message: Message = from_reader(payload.reader())?;
                     // Spontaneously settle the message with an Accept
                     let disposition = Disposition {
                         role: Role::Receiver,
@@ -69,14 +70,14 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
                         state: Some(DeliveryState::Accepted(Accepted {})),
                         batchable: false,
                     };
-                    (message, Some(disposition))
+                    Some(disposition)
                 }
                 // If second, this indicates that the receiver MUST NOT settle until
                 // sending its disposition to the sender and receiving a settled
                 // disposition from the sender.
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
-                    let message: Message = from_reader(payload.reader())?;
+                    // let message: Message = from_reader(payload.reader())?;
                     let state = DeliveryState::Received(Received {
                         section_number: todo!(), // What is section number?
                         section_offset: todo!()
