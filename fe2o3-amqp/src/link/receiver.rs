@@ -421,3 +421,19 @@ impl Receiver<Attached> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::performatives::Transfer;
+
+    use super::IncompleteTransfer;
+
+    #[test]
+    fn size_of_incomplete_transfer() {
+        let size = std::mem::size_of::<Transfer>();
+        println!("Transfer {:?}", size);
+
+        let size = std::mem::size_of::<Option<IncompleteTransfer>>();
+        println!("Option<IncompleteTransfer> {:?}", size);
+    }
+}

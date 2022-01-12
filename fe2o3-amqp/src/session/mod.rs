@@ -327,7 +327,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_transfer(
         &mut self,
-        channel: u16,
+        _channel: u16,
         transfer: Transfer,
         payload: Bytes,
     ) -> Result<(), Self::Error> {
@@ -352,8 +352,9 @@ impl endpoint::Session for Session {
                     };
 
                     // If the unsettled map needs this
-                    if let Some(delivery_id) = delivery_id {
-                        todo!()
+                    if let Some((delivery_id, delivery_tag)) = delivery_id {
+                        self.delivery_tag_by_id
+                            .insert(delivery_id, (output_handle.clone(), delivery_tag));
                     }
                 },
                 None => return Err(SessionError::UnattachedHandle.into())
@@ -361,12 +362,12 @@ impl endpoint::Session for Session {
             None => return Err(SessionError::UnattachedHandle.into())
         };
 
-        todo!()
+        Ok(())
     }
 
     async fn on_incoming_disposition(
         &mut self,
-        channel: u16,
+        _channel: u16,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_disposition");
@@ -382,6 +383,7 @@ impl endpoint::Session for Session {
         let mut prev = false;
 
         let is_settled = match &disposition.state {
+            // TODO: What happens if state is not terminal but settles id true?
             Some(state) => disposition.settled || state.is_terminal(),
             None => disposition.settled,
         };

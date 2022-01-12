@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Source, Target},
+    messaging::{Accepted, DeliveryState, Message, Source, Target, Received},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -19,6 +19,8 @@ mod error;
 pub mod receiver;
 pub mod sender;
 pub mod state;
+mod sender_link;
+mod receiver_link;
 
 pub use error::Error;
 
@@ -358,211 +360,6 @@ where
     }
 }
 
-#[async_trait]
-impl endpoint::SenderLink
-    for Link<role::Sender, Consumer<Arc<LinkFlowState<role::Sender>>>, UnsettledMessage>
-{
-    async fn send_transfer<W>(
-        &mut self,
-        writer: &mut W,
-        payload: Bytes,
-        message_format: MessageFormat,
-        settled: Option<bool>,
-        batchable: bool,
-    ) -> Result<Settlement, <Self as endpoint::Link>::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
-        use crate::util::Consume;
-
-        println!(">>> Debug: SenderLink::send_transfer");
-
-        match self.flow_state.consume(1).await {
-            SenderPermit::Send => {} // There is enough credit to send
-            SenderPermit::Drain => {
-                // Drain is set
-                todo!()
-            }
-        }
-
-        // Check message size
-        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        if (self.max_message_size == 0) || (payload.len() as u64 <= self.max_message_size) {
-            let handle = self
-                .output_handle
-                .clone()
-                .ok_or_else(|| AmqpError::IllegalState)?;
-
-            let delivery_tag = self.flow_state.state().delivery_count().await.to_be_bytes();
-
-            // TODO: Expose API to allow user to set this when the mode is MIXED?
-            let settled = match self.snd_settle_mode {
-                SenderSettleMode::Settled => true,
-                SenderSettleMode::Unsettled => false,
-                // If not set on the first (or only) transfer for a (multi-transfer)
-                // delivery, then the settled flag MUST be interpreted as being false.
-                SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
-            };
-
-            // TODO: Expose API for resuming link?
-            let state: Option<DeliveryState> = None;
-            let resume = false;
-
-            let transfer = Transfer {
-                handle,
-                delivery_id: None, // This will be set by the session
-                delivery_tag: Some(DeliveryTag::from(delivery_tag)),
-                message_format: Some(message_format),
-                settled: Some(settled), // Having this always set in first frame helps debugging
-                more: false,
-                // If not set, this value is defaulted to the value negotiated
-                // on link attach.
-                rcv_settle_mode: None,
-                state,
-                resume,
-                aborted: false,
-                batchable,
-            };
-
-            let frame = LinkFrame::Transfer {
-                performative: transfer,
-                payload: payload.clone(), // Clone should be very cheap for Bytes
-            };
-            writer
-                .send(frame)
-                .await
-                .map_err(|_| link::Error::AmqpError {
-                    condition: AmqpError::IllegalState,
-                    description: Some("Session is already dropped".to_string()),
-                })?;
-
-            match settled {
-                true => Ok(Settlement::Settled),
-                // If not set on the first (or only) transfer for a (multi-transfer)
-                // delivery, then the settled flag MUST be interpreted as being false.
-                false => {
-                    let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload, tx);
-                    {
-                        let mut guard = self.unsettled.write().await;
-                        guard.insert(DeliveryTag::from(delivery_tag), unsettled);
-                    }
-
-                    Ok(Settlement::Unsettled {
-                        delivery_tag,
-                        outcome: rx,
-                    })
-                }
-            }
-        } else {
-            // Need multiple transfers
-            todo!()
-        }
-    }
-}
-
-#[async_trait]
-impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, DeliveryState> {
-    async fn on_incoming_transfer(
-        &mut self,
-        transfer: Transfer,
-        payload: Bytes,
-    ) -> Result<(Delivery, Option<Disposition>), Self::Error> {
-        // TODO: The receiver should then detach with error
-        self.flow_state.consume(1).await?;
-
-        // Upon receiving the transfer, the receiving link endpoint (receiver)
-        // will create an entry in its own unsettled map and make the transferred
-        // message data available to the application to process.
-
-        // This only takes care of whether the message is considered
-        // sett
-        let settled_by_sender = transfer.settled.unwrap_or_else(|| false);
-
-        let (message, disposition) = if settled_by_sender {
-            // If the message is pre-settled, there is no need to
-            // add to the unsettled map and no need to reply to the Sender
-            (from_reader(payload.reader())?, None)
-        } else {
-            // If the message is being sent settled by the sender, the value of this
-            // field is ignored.
-            let mode = if let Some(mode) = &transfer.rcv_settle_mode {
-                // If the negotiated link value is first, then it is illegal to set this
-                // field to second.
-                if let ReceiverSettleMode::First = &self.rcv_settle_mode {
-                    if let ReceiverSettleMode::Second = mode {
-                        return Err(Error::AmqpError {
-                            condition: AmqpError::NotAllowed,
-                            description: Some("Negotiated link value is First".into()),
-                        });
-                    }
-                }
-                mode
-            } else {
-                // If not set, this value is defaulted to the value negotiated on link
-                // attach.
-                &self.rcv_settle_mode
-            };
-
-            match mode {
-                // If first, this indicates that the receiver MUST settle the delivery
-                // once it has arrived without waiting for the sender to settle first.
-                ReceiverSettleMode::First => {
-                    let message: Message = from_reader(payload.reader())?;
-                    let delivery_id = transfer.delivery_id.ok_or_else(|| Error::AmqpError {
-                        condition: AmqpError::NotAllowed,
-                        description: Some("delivery-id is not found".into()),
-                    })?;
-                    // Spontaneously settle the message with an Accept
-                    let disposition = Disposition {
-                        role: Role::Receiver,
-                        first: delivery_id,
-                        last: None,
-                        settled: true,
-                        state: Some(DeliveryState::Accepted(Accepted {})),
-                        batchable: false,
-                    };
-                    (message, Some(disposition))
-                }
-                // If second, this indicates that the receiver MUST NOT settle until
-                // sending its disposition to the sender and receiving a settled
-                // disposition from the sender.
-                ReceiverSettleMode::Second => {
-                    // Add to unsettled map
-                    todo!()
-                }
-            }
-        };
-
-        let link_output_handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Link is not attached".into()),
-        })?;
-        let delivery_id = transfer
-            .delivery_id
-            .clone()
-            .ok_or_else(|| Error::AmqpError {
-                condition: AmqpError::NotAllowed,
-                description: Some("The delivery-id is not found".into()),
-            })?;
-        let delivery_tag = transfer
-            .delivery_tag
-            .clone()
-            .ok_or_else(|| Error::AmqpError {
-                condition: AmqpError::NotAllowed,
-                description: Some("The delivery-tag is not found".into()),
-            })?;
-        let delivery = Delivery {
-            link_output_handle,
-            delivery_id,
-            delivery_tag,
-            message,
-        };
-
-        Ok((delivery, disposition))
-    }
-}
-
 // pub struct LinkHandle {
 //     tx: mpsc::Sender<LinkIncomingItem>,
 //     flow_state: Producer<Arc<LinkFlowState>>,
@@ -679,7 +476,7 @@ impl LinkHandle {
         &mut self,
         transfer: Transfer,
         payload: Bytes,
-    ) -> Result<Option<DeliveryNumber>, session::Error> {
+    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, session::Error> {
         match self {
             LinkHandle::Sender {..} => {
                 // This should not happen, but should the link detach if this happens?
@@ -688,6 +485,7 @@ impl LinkHandle {
             LinkHandle::Receiver {tx, receiver_settle_mode, more, ..} => {
                 let settled = transfer.settled.unwrap_or_else(|| false);
                 let delivery_id = transfer.delivery_id;
+                let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
 
                 tx.send(LinkFrame::Transfer {performative: transfer, payload}).await
@@ -700,7 +498,14 @@ impl LinkHandle {
                         // And self.more should be false upon the first transfer
                         if *more == false {
                             // The same delivery ID should be used for a multi-transfer delivery
-                            return Ok(delivery_id)
+                            match (delivery_id, delivery_tag) {
+                                (Some(id), Some(tag)) => return Ok(Some((id, tag))),
+                                _ => {
+                                    // This should be an error, but it will be handled by
+                                    // the link instead of the session. So just return a None
+                                    return Ok(None)
+                                },
+                            }
                         }
                         // The last transfer of multi-transfer delivery should have
                         // `more` set to false
