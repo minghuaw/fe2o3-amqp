@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{Fields, Handle, LinkError, SequenceNo};
+use fe2o3_amqp_types::definitions::{Fields, Handle, LinkError, SequenceNo, DeliveryTag};
 use tokio::sync::RwLock;
 
 use crate::{
@@ -279,7 +279,8 @@ impl LinkFlowState<role::Receiver> {
     }
 }
 
-pub type UnsettledMap<M> = BTreeMap<[u8; 4], M>;
+// pub type UnsettledMap<M> = BTreeMap<[u8; 4], M>;
+pub type UnsettledMap<M> = BTreeMap<DeliveryTag, M>;
 
 #[async_trait]
 impl ProducerState for Arc<LinkFlowState<role::Sender>> {

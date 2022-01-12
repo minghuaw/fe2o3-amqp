@@ -6,7 +6,7 @@ use bytes::{Buf, Bytes};
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
-        Role, SenderSettleMode,
+        Role, SenderSettleMode, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -31,7 +31,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
     link::{self, delivery::UnsettledMessage, state::SenderPermit},
-    util::{Consumer, Producer},
+    util::{Consumer, Producer}, session,
 };
 
 use self::{
@@ -241,7 +241,7 @@ where
                 _ => Some(
                     guard
                         .iter()
-                        .map(|(key, val)| (DeliveryTag::from(*key), val.as_ref().clone()))
+                        .map(|(key, val)| (key.clone(), val.as_ref().clone()))
                         .collect(),
                 ),
             }
@@ -445,7 +445,7 @@ impl endpoint::SenderLink
                     let unsettled = UnsettledMessage::new(payload, tx);
                     {
                         let mut guard = self.unsettled.write().await;
-                        guard.insert(delivery_tag, unsettled);
+                        guard.insert(DeliveryTag::from(delivery_tag), unsettled);
                     }
 
                     Ok(Settlement::Unsettled {
@@ -623,7 +623,7 @@ impl LinkHandle {
         state: &Option<DeliveryState>,
         // Disposition only contains the delivery ids, which are assigned by the
         // sessions
-        delivery_tag: [u8; 4],
+        delivery_tag: DeliveryTag,
     ) -> bool {
         match self {
             LinkHandle::Sender {
@@ -679,7 +679,7 @@ impl LinkHandle {
         &mut self,
         transfer: Transfer,
         payload: Bytes,
-    ) -> Result<Option<DeliveryNumber>, mpsc::error::SendError<LinkIncomingItem>> {
+    ) -> Result<Option<DeliveryNumber>, session::Error> {
         match self {
             LinkHandle::Sender {..} => {
                 // This should not happen, but should the link detach if this happens?
@@ -690,7 +690,8 @@ impl LinkHandle {
                 let delivery_id = transfer.delivery_id;
                 let transfer_more = transfer.more;
 
-                tx.send(LinkFrame::Transfer {performative: transfer, payload}).await?;
+                tx.send(LinkFrame::Transfer {performative: transfer, payload}).await
+                    .map_err(|_| SessionError::UnattachedHandle)?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, Fields, Handle, Role, SequenceNo, SessionError, TransferNumber,
+        self, AmqpError, Fields, Handle, Role, SequenceNo, SessionError, TransferNumber, DeliveryNumber, DeliveryTag,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
@@ -144,7 +144,7 @@ pub struct Session {
     link_by_name: BTreeMap<String, Handle>,
     link_by_input_handle: BTreeMap<Handle, Handle>,
     // Maps from DeliveryId to link.DeliveryCount
-    delivery_tag_by_id: BTreeMap<TransferNumber, (Handle, [u8; 4])>,
+    delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
 }
 
 impl Session {
@@ -337,6 +337,30 @@ impl endpoint::Session for Session {
 
         println!(">>> Debug: Session::on_incoming_transfer");
 
+        self.next_incoming_id += 1;
+        self.remote_outgoing_window -= 1;
+
+        match self.link_by_input_handle.get(&transfer.handle) {
+            Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
+                Some(link_handle) => {
+                    let delivery_id = match link_handle.on_incoming_transfer(transfer, payload).await {
+                        Ok(opt) => opt,
+                        Err(_) => {
+                            // TODO: should the link handle be removed from the session?
+                            return Err(SessionError::UnattachedHandle.into())
+                        }
+                    };
+
+                    // If the unsettled map needs this
+                    if let Some(delivery_id) = delivery_id {
+                        todo!()
+                    }
+                },
+                None => return Err(SessionError::UnattachedHandle.into())
+            },
+            None => return Err(SessionError::UnattachedHandle.into())
+        };
+
         todo!()
     }
 
@@ -419,7 +443,7 @@ impl endpoint::Session for Session {
                                 disposition.role.clone(),
                                 is_settled,
                                 &disposition.state,
-                                *delivery_tag,
+                                delivery_tag.clone(),
                             )
                             .await;
                     }
@@ -572,18 +596,14 @@ impl endpoint::Session for Session {
         // TODO: What policy would result in a decrement in outgoing-window?
 
         // Only the first transfer is required to have delivery_tag and delivery_id
-        if let Some(tag) = &transfer.delivery_tag {
+        if let Some(delivery_tag) = &transfer.delivery_tag {
             // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
             let delivery_id = self.next_outgoing_id;
             transfer.delivery_id = Some(delivery_id);
 
-            let mut delivery_tag = [0u8; 4];
-            // TODO: Is bound check necessary
-            (&mut delivery_tag).copy_from_slice(tag);
-
             // Disposition doesn't carry delivery tag
             self.delivery_tag_by_id
-                .insert(delivery_id, (transfer.handle.clone(), delivery_tag));
+                .insert(delivery_id, (transfer.handle.clone(), delivery_tag.clone()));
         }
 
         self.next_outgoing_id += 1;
