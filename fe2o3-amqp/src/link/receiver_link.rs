@@ -2,6 +2,14 @@ use super::*;
 
 #[async_trait]
 impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, DeliveryState> {
+    async fn on_incomplete_transfer(
+        &mut self,
+        section_number: u32,
+        section_offset: u32
+    ) {
+        
+    }
+
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
@@ -82,7 +90,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
                         section_number: todo!(), // What is section number?
                         section_offset: todo!()
                     });
-                    todo!()
+                    todo!() 
                 }
             }
         };

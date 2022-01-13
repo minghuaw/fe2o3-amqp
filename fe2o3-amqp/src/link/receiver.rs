@@ -57,6 +57,8 @@ macro_rules! or_assign {
 pub(crate) struct IncompleteTransfer {
     pub performative: Transfer,
     pub payload: BytesMut,
+    pub section_number: u32,
+    pub section_offset: u32
 }
 
 impl IncompleteTransfer {

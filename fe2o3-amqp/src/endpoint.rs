@@ -304,6 +304,12 @@ pub trait SenderLink: Link {
 pub trait ReceiverLink: Link {
     const ROLE: Role = Role::Receiver;
 
+    async fn on_incomplete_transfer(
+        &mut self, 
+        section_number: u32,
+        section_offset: u32
+    );
+
     // More than one transfer frames should be hanlded by the
     // `Receiver`
     async fn on_incoming_transfer(
