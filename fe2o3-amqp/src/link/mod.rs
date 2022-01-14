@@ -2,13 +2,13 @@ mod frame;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::{Buf, Bytes};
+use bytes::{Buf, Bytes, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Source, Target, Received},
+    messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -17,10 +17,10 @@ pub mod builder;
 pub mod delivery;
 mod error;
 pub mod receiver;
-pub mod sender;
-pub mod state;
-mod sender_link;
 mod receiver_link;
+pub mod sender;
+mod sender_link;
+pub mod state;
 
 pub use error::Error;
 
@@ -33,7 +33,8 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
     link::{self, delivery::UnsettledMessage, state::SenderPermit},
-    util::{Consumer, Producer}, session,
+    session,
+    util::{Consumer, Producer},
 };
 
 use self::{
@@ -475,21 +476,30 @@ impl LinkHandle {
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, session::Error> {
         match self {
-            LinkHandle::Sender {..} => {
+            LinkHandle::Sender { .. } => {
                 // This should not happen, but should the link detach if this happens?
                 todo!()
-            },
-            LinkHandle::Receiver {tx, receiver_settle_mode, more, ..} => {
+            }
+            LinkHandle::Receiver {
+                tx,
+                receiver_settle_mode,
+                more,
+                ..
+            } => {
                 let settled = transfer.settled.unwrap_or_else(|| false);
                 let delivery_id = transfer.delivery_id;
                 let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
 
-                tx.send(LinkFrame::Transfer {performative: transfer, payload}).await
-                    .map_err(|_| SessionError::UnattachedHandle)?;
+                tx.send(LinkFrame::Transfer {
+                    performative: transfer,
+                    payload,
+                })
+                .await
+                .map_err(|_| SessionError::UnattachedHandle)?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {
@@ -503,8 +513,8 @@ impl LinkHandle {
                                 _ => {
                                     // This should be an error, but it will be handled by
                                     // the link instead of the session. So just return a None
-                                    return Ok(None)
-                                },
+                                    return Ok(None);
+                                }
                             }
                         }
                         // The last transfer of multi-transfer delivery should have

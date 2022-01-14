@@ -26,7 +26,7 @@ use super::{
     role,
     state::{LinkFlowState, LinkState},
     type_state::{Attached, Detached},
-    Error, LinkFrame, LinkHandle,
+    Error, LinkFrame, LinkHandle, receiver_link::section_number_and_offset,
 };
 
 macro_rules! or_assign {
@@ -56,12 +56,18 @@ macro_rules! or_assign {
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
     pub performative: Transfer,
-    pub payload: BytesMut,
+    pub buffer: BytesMut,
     pub section_number: u32,
-    pub section_offset: u32
+    pub section_offset: u64,
 }
 
 impl IncompleteTransfer {
+    pub fn new(transfer: Transfer, partial_payload: Bytes) -> Self {
+        let (number, offset) = section_number_and_offset(partial_payload.as_ref());
+        // let buffer = BytesMut::from(partial_payload);
+        todo!()
+    }
+
     /// Like `|=` operator but works on the field level
     pub fn or_assign(&mut self, other: Transfer) -> Result<(), Error> {
         or_assign! {
@@ -108,7 +114,19 @@ impl IncompleteTransfer {
 
     /// Append to the buffered payload
     pub fn append(&mut self, other: Bytes) {
-        self.payload.extend(other);
+        // TODO: append section number and re-count section-offset
+        // Count section numbers
+        let (number, offset) = section_number_and_offset(other.as_ref());
+        self.section_number += number;
+        if number == 0 {
+            // No new sections has been transmitted
+            self.section_offset += offset;
+        } else {
+            // New section(s) has been transmitted
+            self.section_offset = offset;
+        }
+
+        self.buffer.extend(other);
     }
 }
 
@@ -162,7 +180,7 @@ impl Receiver<Detached> {
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
                 // This only controls whether a multi-transfer delivery id
                 // will be added to sessions map
-                more: false, 
+                more: false,
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle =
@@ -232,11 +250,11 @@ impl Receiver<Attached> {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<Option<Delivery>, Error> {
         use crate::endpoint::ReceiverLink;
-        use futures_util::SinkExt;
         use bytes::Buf;
+        use futures_util::SinkExt;
 
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
@@ -253,11 +271,11 @@ impl Receiver<Attached> {
             match self.incomplete_transfer.take() {
                 Some(incomplete) => {
                     todo!()
-                },
+                }
                 None => {
-                    let message: Message = from_reader(payload.reader())?;
-                    self.link.on_incoming_transfer(transfer, message).await?
-                },
+                    // let message: Message = from_reader(payload.reader())?;
+                    self.link.on_incoming_transfer(transfer, payload).await?
+                }
             }
         };
 

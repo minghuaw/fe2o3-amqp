@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{Fields, Handle, LinkError, SequenceNo, DeliveryTag};
+use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, Handle, LinkError, SequenceNo};
 use tokio::sync::RwLock;
 
 use crate::{

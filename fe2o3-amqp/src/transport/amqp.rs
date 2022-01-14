@@ -97,7 +97,7 @@ pub enum FrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: Bytes,
+        payload: BytesMut, // The payload should have ownership passed around not shared
     },
     Disposition(Disposition),
     Detach(Detach),

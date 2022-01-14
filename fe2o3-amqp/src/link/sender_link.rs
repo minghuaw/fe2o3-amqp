@@ -7,7 +7,7 @@ impl endpoint::SenderLink
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        payload: Bytes,
+        payload: BytesMut,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,

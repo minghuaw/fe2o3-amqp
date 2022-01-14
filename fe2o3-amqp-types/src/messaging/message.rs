@@ -21,6 +21,34 @@ pub struct Message {
     pub footer: Option<Footer>,
 }
 
+impl Message {
+    pub fn sections(&self) -> u32 {
+        // The body section must be present
+        let mut count = 1;
+
+        if self.header.is_some() {
+            count += 1;
+        }
+        if self.delivery_annotations.is_some() {
+            count += 1;
+        }
+        if self.message_annotations.is_some() {
+            count += 1;
+        }
+        if self.properties.is_some() {
+            count += 1;
+        }
+        if self.application_properties.is_some() {
+            count += 1;
+        }
+        if self.footer.is_some() {
+            count += 1;
+        }
+
+        count
+    }
+}
+
 impl Serialize for Message {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

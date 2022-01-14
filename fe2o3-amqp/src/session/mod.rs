@@ -1,10 +1,11 @@
 use std::{collections::BTreeMap, io};
 
 use async_trait::async_trait;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, Fields, Handle, Role, SequenceNo, SessionError, TransferNumber, DeliveryNumber, DeliveryTag,
+        self, AmqpError, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo,
+        SessionError, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
@@ -329,7 +330,7 @@ impl endpoint::Session for Session {
         &mut self,
         _channel: u16,
         transfer: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<(), Self::Error> {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
@@ -343,23 +344,24 @@ impl endpoint::Session for Session {
         match self.link_by_input_handle.get(&transfer.handle) {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link_handle) => {
-                    let delivery_id = match link_handle.on_incoming_transfer(transfer, payload).await {
-                        Ok(opt) => opt,
-                        Err(_) => {
-                            // TODO: should the link handle be removed from the session?
-                            return Err(SessionError::UnattachedHandle.into())
-                        }
-                    };
+                    let delivery_id =
+                        match link_handle.on_incoming_transfer(transfer, payload).await {
+                            Ok(opt) => opt,
+                            Err(_) => {
+                                // TODO: should the link handle be removed from the session?
+                                return Err(SessionError::UnattachedHandle.into());
+                            }
+                        };
 
                     // If the unsettled map needs this
                     if let Some((delivery_id, delivery_tag)) = delivery_id {
                         self.delivery_tag_by_id
                             .insert(delivery_id, (output_handle.clone(), delivery_tag));
                     }
-                },
-                None => return Err(SessionError::UnattachedHandle.into())
+                }
+                None => return Err(SessionError::UnattachedHandle.into()),
             },
-            None => return Err(SessionError::UnattachedHandle.into())
+            None => return Err(SessionError::UnattachedHandle.into()),
         };
 
         Ok(())
@@ -589,7 +591,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_transfer(
         &mut self,
         mut transfer: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<SessionFrame, Self::Error> {
         // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
         // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-

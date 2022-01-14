@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{DeliveryState, Message, Received},
@@ -7,7 +7,6 @@ use futures_util::FutureExt;
 use pin_project_lite::pin_project;
 use std::{future::Future, task::Poll};
 use tokio::sync::oneshot;
-use tokio_util::sync::PollSender;
 
 use crate::link;
 use crate::{endpoint::Settlement, util::Uninitialized};
@@ -31,7 +30,7 @@ impl Delivery {
 #[derive(Debug)]
 pub struct Sendable {
     pub(crate) message: Message,
-    pub(crate) message_format: MessageFormat,
+    pub(crate) message_format: MessageFormat, // TODO: The message format defined in spec is 0
     pub(crate) settled: Option<bool>,
     // pub(crate) batchable: bool,
 }
@@ -113,13 +112,13 @@ impl From<Builder<Message>> for Sendable {
 
 #[derive(Debug)]
 pub struct UnsettledMessage {
-    payload: Bytes,
+    payload: BytesMut,
     state: DeliveryState,
     sender: oneshot::Sender<DeliveryState>,
 }
 
 impl UnsettledMessage {
-    pub fn new(payload: Bytes, sender: oneshot::Sender<DeliveryState>) -> Self {
+    pub fn new(payload: BytesMut, sender: oneshot::Sender<DeliveryState>) -> Self {
         // Assume needing to resend from the beginning unless there is further
         // update from the remote peer
         let received = Received {
@@ -142,7 +141,7 @@ impl UnsettledMessage {
         &mut self.state
     }
 
-    pub fn payload(&self) -> &Bytes {
+    pub fn payload(&self) -> &BytesMut {
         &self.payload
     }
 

@@ -20,9 +20,9 @@
 //!         endpoint)
 
 use async_trait::async_trait;
-use bytes::Bytes;
+use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, Error, Fields, Handle, MessageFormat, Role, SequenceNo},
+    definitions::{self, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo},
     messaging::{DeliveryState, Message},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
@@ -137,7 +137,7 @@ pub trait Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<(), Self::Error>;
     async fn on_incoming_disposition(
         &mut self,
@@ -167,7 +167,7 @@ pub trait Session {
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     ) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_disposition(
         &mut self,
@@ -291,7 +291,7 @@ pub trait SenderLink: Link {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        payload: Bytes,
+        payload: BytesMut,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
@@ -305,9 +305,10 @@ pub trait ReceiverLink: Link {
     const ROLE: Role = Role::Receiver;
 
     async fn on_incomplete_transfer(
-        &mut self, 
+        &mut self,
+        delivery_tag: DeliveryTag,
         section_number: u32,
-        section_offset: u32
+        section_offset: u64,
     );
 
     // More than one transfer frames should be hanlded by the
@@ -315,6 +316,6 @@ pub trait ReceiverLink: Link {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        message: Message,
+        payload: BytesMut,
     ) -> Result<(Delivery, Option<Disposition>), <Self as Link>::Error>;
 }

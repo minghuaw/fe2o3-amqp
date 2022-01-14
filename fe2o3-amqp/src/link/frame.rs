@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::performatives::{Attach, Detach, Disposition, Flow, Transfer};
 
 use crate::endpoint::LinkFlow;
@@ -11,7 +11,7 @@ pub enum LinkFrame {
     Flow(LinkFlow),
     Transfer {
         performative: Transfer,
-        payload: Bytes,
+        payload: BytesMut,
     },
     Disposition(Disposition),
     Detach(Detach),
