@@ -367,6 +367,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    /// TODO: sender send settled message in response to receivers disposition
     async fn on_incoming_disposition(
         &mut self,
         _channel: u16,
@@ -380,26 +381,46 @@ impl endpoint::Session for Session {
         let first = disposition.first;
         let last = disposition.last.unwrap_or_else(|| first);
 
+        // A disposition frame may refer to deliveries on multiple links, each may be running 
+        // in different mode. This counts the largest sections that can be echoed back together
         let mut first_echo = first;
         let mut last_echo = first;
         let mut prev = false;
 
-        let is_settled = match &disposition.state {
-            // TODO: What happens if state is not terminal but settles id true?
-            Some(state) => disposition.settled || state.is_terminal(),
-            None => disposition.settled,
-        };
+        // let is_settled = match &disposition.state {
+        //     // TODO: What happens if state is not terminal but settles id true?
+        //     Some(state) => disposition.settled || state.is_terminal(),
+        //     None => disposition.settled,
+        // };
 
-        if is_settled {
+        if disposition.settled {
+            // If it is alrea
             for delivery_id in first..=last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&delivery_id) {
                     if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
+                        let _echo = link_handle
+                            .on_incoming_disposition(
+                                disposition.role.clone(),
+                                disposition.settled,
+                                disposition.state.clone(),
+                                delivery_tag,
+                            )
+                            .await;
+                    }
+                }
+            }
+        } else {
+            for delivery_id in first..last {
+                if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
+                    if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
+                        // In mode Second, the receiver will first send a non-settled disposition,
+                        // and wait for sender's settled disposition
                         let echo = link_handle
                             .on_incoming_disposition(
                                 disposition.role.clone(),
-                                is_settled,
-                                &disposition.state,
-                                delivery_tag,
+                                disposition.settled,
+                                disposition.state.clone(),
+                                delivery_tag.clone(),
                             )
                             .await;
 
@@ -434,22 +455,6 @@ impl endpoint::Session for Session {
                         }
 
                         prev = echo;
-                    }
-                }
-            }
-        } else {
-            for delivery_id in first..last {
-                if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
-                    if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
-                        // This is not expected to have an echo according to the spec sheet
-                        let _ = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                is_settled,
-                                &disposition.state,
-                                delivery_tag.clone(),
-                            )
-                            .await;
                     }
                 }
             }

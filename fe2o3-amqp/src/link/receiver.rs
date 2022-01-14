@@ -258,7 +258,6 @@ impl Receiver<Attached> {
         payload: BytesMut,
     ) -> Result<Option<Delivery>, Error> {
         use crate::endpoint::ReceiverLink;
-        use futures_util::SinkExt;
 
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted

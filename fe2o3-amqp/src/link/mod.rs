@@ -369,14 +369,6 @@ where
     }
 }
 
-// pub struct LinkHandle {
-//     tx: mpsc::Sender<LinkIncomingItem>,
-//     flow_state: Producer<Arc<LinkFlowState>>,
-//     unsettled: Arc<RwLock<UnsettledMap>>,
-//     // This is not expect to change
-//     pub(crate) receiver_settle_mode: ReceiverSettleMode,
-// }
-
 /// TODO: How would this be changed when switched to ReceiverLink
 pub enum LinkHandle {
     Sender {
@@ -422,11 +414,12 @@ impl LinkHandle {
         }
     }
 
+    /// Returns whether an echo is needed
     pub(crate) async fn on_incoming_disposition(
         &mut self,
         _role: Role, // Is a role check necessary?
-        is_settled: bool,
-        state: &Option<DeliveryState>,
+        settled: bool,
+        state: Option<DeliveryState>,
         // Disposition only contains the delivery ids, which are assigned by the
         // sessions
         delivery_tag: DeliveryTag,
@@ -438,24 +431,42 @@ impl LinkHandle {
                 ..
             } => {
                 // TODO: verfify role?
-                if is_settled {
+                let echo = if settled {
                     // TODO: Reply with disposition?
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
                     // communicate this back to the sending application.
-                    let _ = remove_from_unsettled(unsettled, &delivery_tag)
+
+                    // Since we are settling (ie. forgetting) this message, we don't care whether the
+                    // receiving end is alive or not
+                    let _result = remove_from_unsettled(unsettled, &delivery_tag)
                         .await
-                        .map(|msg| msg.settle_with_state(state.clone()));
-
-                    // {
-                    //     let mut guard = unsettled.write().await;
-                    //     if let Some(unsettled) = guard.remove(&delivery_tag) {
-                    //         // Since we are settling (ie. forgetting) this message, we don't care whether the
-                    //         // receiving end is alive or not
-                    //         let _ = unsettled.settle_with_state(state.clone());
-                    //     }
-                    // }
-
+                        .map(|msg| msg.settle_with_state(state));
+                    false
+                } else {
+                    let is_terminal = match &state {
+                        Some(s) => s.is_terminal(),
+                        None => false // Probably should not assume the state is not specified
+                    };
+                    {
+                        let mut guard = unsettled.write().await;
+                        // Once the receiving application has finished processing the message, 
+                        // it indicates to the link endpoint a **terminal delivery state** that 
+                        // reflects the outcome of the application processing
+                        if is_terminal {
+                            let _result = remove_from_unsettled(unsettled, &delivery_tag)
+                                .await
+                                .map(|msg| msg.settle_with_state(state));
+                        } else {
+                            if let Some(msg) = guard.get_mut(&delivery_tag) {
+                                if let Some(state) = state {
+                                    *msg.state_mut() = state;
+                                }
+                            }
+                        }
+                    }
+                    // If the receiver is in mode Second, it will send a non-settled terminal state
+                    // to indicate end of processing
                     match receiver_settle_mode {
                         ReceiverSettleMode::First => {
                             // The receiver will spontaneously settle all incoming transfers.
@@ -465,23 +476,30 @@ impl LinkHandle {
                             // The receiver will only settle after sending the disposition to
                             // the sender and receiving a disposition indicating settlement of the
                             // delivery from the sender.
-                            true
+                            
+                            is_terminal
                         }
                     }
-                } else {
-                    {
-                        let mut guard = unsettled.write().await;
-                        if let Some(unsettled) = guard.get_mut(&delivery_tag) {
-                            if let Some(state) = state {
-                                *unsettled.state_mut() = state.clone();
-                            }
-                        }
-                    }
-                    false
-                }
+                };
+
+                echo
             }
             LinkHandle::Receiver { unsettled, .. } => {
-                todo!()
+                if settled {
+                    let _state = remove_from_unsettled(unsettled, &delivery_tag)
+                    .await;
+                } else {
+                    let mut guard = unsettled.write().await;
+                    if let Some(msg_state) = guard.get_mut(&delivery_tag) {
+                        if let Some(state) = state {
+                            *msg_state = state;
+                        }
+                    }
+                }
+                
+                // Only the sender needs to auto-reply to receiver's disposition, thus 
+                // `echo = false`
+                false
             }
         }
     }
