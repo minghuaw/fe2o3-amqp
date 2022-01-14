@@ -101,4 +101,18 @@ impl endpoint::SenderLink
             todo!()
         }
     }
+
+    async fn dispose<W>(
+        &mut self,
+        writer: &mut W,
+        delivery_id: DeliveryNumber,
+        delivery_tag: DeliveryTag,
+        settled: bool,
+        state: DeliveryState,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    {
+        todo!()
+    }
 }

@@ -163,6 +163,12 @@ impl AsRef<DeliveryState> for UnsettledMessage {
     }
 }
 
+impl AsMut<DeliveryState> for UnsettledMessage {
+    fn as_mut(&mut self) -> &mut DeliveryState {
+        &mut self.state
+    }
+}
+
 pin_project! {
     /// A future for delivery that can be `await`ed for the settlement
     /// from receiver

@@ -22,7 +22,10 @@
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo},
+    definitions::{
+        self, DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat,
+        ReceiverSettleMode, Role, SequenceNo,
+    },
     messaging::{DeliveryState, Message},
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
@@ -204,9 +207,10 @@ pub trait Link {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
-    async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+    // /// TODO: get rid of this? The disposition doesn't include delivery_tag,
+    // async fn send_disposition<W>(&mut self, writer: &mut W, disposition: Disposition) -> Result<(), Self::Error>
+    // where
+    //     W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
     async fn send_detach<W>(
         &mut self,
@@ -298,6 +302,17 @@ pub trait SenderLink: Link {
     ) -> Result<Settlement, <Self as Link>::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+
+    async fn dispose<W>(
+        &mut self,
+        writer: &mut W,
+        delivery_id: DeliveryNumber,
+        delivery_tag: DeliveryTag,
+        settled: bool,
+        state: DeliveryState,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 }
 
 #[async_trait]
@@ -317,5 +332,24 @@ pub trait ReceiverLink: Link {
         &mut self,
         transfer: Transfer,
         payload: BytesMut,
-    ) -> Result<(Delivery, Option<Disposition>), <Self as Link>::Error>;
+        // section_number: u32,
+        // section_offset: u64,
+    ) -> Result<
+        (
+            Delivery,
+            Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
+        ),
+        <Self as Link>::Error,
+    >;
+
+    async fn dispose<W>(
+        &mut self,
+        writer: &mut W,
+        delivery_id: DeliveryNumber,
+        delivery_tag: DeliveryTag,
+        // settled: bool, // TODO: This should depend on ReceiverSettleMode?
+        state: DeliveryState,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 }

@@ -2,11 +2,11 @@ use std::{marker::PhantomData, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::{
-    definitions::AmqpError,
-    messaging::{Address, DeliveryState, Message, Target},
-    performatives::Transfer,
+    definitions::{self, AmqpError, Role},
+    messaging::{Accepted, Address, DeliveryState, Message, Modified, Rejected, Released, Target},
+    performatives::{Disposition, Transfer},
 };
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use serde_amqp::from_reader;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -23,10 +23,11 @@ use super::{
     builder::{self, WithTarget, WithoutName, WithoutTarget},
     delivery::Delivery,
     error::DetachError,
-    role,
+    receiver_link::section_number_and_offset,
+    remove_from_unsettled, role,
     state::{LinkFlowState, LinkState},
     type_state::{Attached, Detached},
-    Error, LinkFrame, LinkHandle, receiver_link::section_number_and_offset,
+    Error, LinkFrame, LinkHandle,
 };
 
 macro_rules! or_assign {
@@ -62,10 +63,14 @@ pub(crate) struct IncompleteTransfer {
 }
 
 impl IncompleteTransfer {
-    pub fn new(transfer: Transfer, partial_payload: Bytes) -> Self {
+    pub fn new(transfer: Transfer, partial_payload: BytesMut) -> Self {
         let (number, offset) = section_number_and_offset(partial_payload.as_ref());
-        // let buffer = BytesMut::from(partial_payload);
-        todo!()
+        Self {
+            performative: transfer,
+            buffer: partial_payload,
+            section_number: number,
+            section_offset: offset,
+        }
     }
 
     /// Like `|=` operator but works on the field level
@@ -113,7 +118,7 @@ impl IncompleteTransfer {
     }
 
     /// Append to the buffered payload
-    pub fn append(&mut self, other: Bytes) {
+    pub fn append(&mut self, other: BytesMut) {
         // TODO: append section number and re-count section-offset
         // Count section numbers
         let (number, offset) = section_number_and_offset(other.as_ref());
@@ -204,6 +209,15 @@ impl Receiver<Detached> {
 }
 
 impl Receiver<Attached> {
+    pub async fn recv(&mut self) -> Result<Delivery, Error> {
+        loop {
+            match self.recv_inner().await? {
+                Some(delivery) => return Ok(delivery),
+                None => continue,
+            }
+        }
+    }
+
     #[inline]
     async fn recv_inner(&mut self) -> Result<Option<Delivery>, Error> {
         let frame = self.incoming.next().await.ok_or_else(|| Error::AmqpError {
@@ -238,22 +252,12 @@ impl Receiver<Attached> {
         }
     }
 
-    pub async fn recv(&mut self) -> Result<Delivery, Error> {
-        loop {
-            match self.recv_inner().await? {
-                Some(delivery) => return Ok(delivery),
-                None => continue,
-            }
-        }
-    }
-
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: BytesMut,
     ) -> Result<Option<Delivery>, Error> {
         use crate::endpoint::ReceiverLink;
-        use bytes::Buf;
         use futures_util::SinkExt;
 
         // Aborted messages SHOULD be discarded by the recipient (any payload
@@ -265,15 +269,58 @@ impl Receiver<Attached> {
         }
 
         let (delivery, disposition) = if transfer.more {
-            // if
-            todo!()
-        } else {
-            match self.incomplete_transfer.take() {
+            // Partial transfer of the delivery
+            match &mut self.incomplete_transfer {
                 Some(incomplete) => {
-                    todo!()
+                    incomplete.or_assign(transfer)?;
+                    incomplete.append(payload);
+
+                    if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
+                        // Update unsettled map in the link
+                        self.link
+                            .on_incomplete_transfer(
+                                delivery_tag,
+                                incomplete.section_number,
+                                incomplete.section_offset,
+                            )
+                            .await;
+                    }
+                }
+                None => {
+                    let incomplete = IncompleteTransfer::new(transfer, payload);
+                    if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
+                        // Update unsettled map in the link
+                        self.link
+                            .on_incomplete_transfer(
+                                delivery_tag,
+                                (&incomplete).section_number,
+                                (&incomplete).section_offset,
+                            )
+                            .await;
+                    }
+                    self.incomplete_transfer = Some(incomplete);
+                }
+            }
+
+            // Partial delivery doesn't yield a complete message
+            return Ok(None);
+        } else {
+            // Final transfer of the delivery
+            match self.incomplete_transfer.take() {
+                Some(mut incomplete) => {
+                    incomplete.or_assign(transfer)?;
+                    let IncompleteTransfer {
+                        performative,
+                        mut buffer,
+                        ..
+                    } = incomplete;
+                    buffer.extend(payload);
+                    self.link.on_incoming_transfer(performative, buffer).await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;
+                    // TODO: Is there any way to optimize this?
+                    // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
                     self.link.on_incoming_transfer(transfer, payload).await?
                 }
             }
@@ -282,9 +329,17 @@ impl Receiver<Attached> {
         // In `ReceiverSettleMode::First`, if the message is not pre-settled
         // the receiver will spontaneously settle the message with an
         // Accept by returning a `Some(Disposition)`
-        if let Some(disposition) = disposition {
-            let frame = LinkFrame::Disposition(disposition);
-            self.outgoing.send(frame).await?;
+        if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
+            // let frame = LinkFrame::Disposition(disposition);
+            // self.outgoing.send(frame).await?;
+            self.link
+                .dispose(
+                    &mut self.outgoing,
+                    delivery_id,
+                    delivery_tag,
+                    delivery_state,
+                )
+                .await?;
         }
 
         Ok(Some(delivery))
@@ -443,6 +498,91 @@ impl Receiver<Attached> {
             Err(e) => return Err(map_send_detach_error(e, detaching))
         }
 
+        Ok(())
+    }
+}
+
+impl<State> Receiver<State> {
+    // /// TODO: batch disposition
+    // async fn dispose(
+    //     &mut self,
+    //     delivery: &Delivery,
+    //     settled: bool,
+    //     state: DeliveryState,
+    // ) -> Result<(), Error> {
+
+    // }
+}
+
+/// TODO: Use type state to differentiate Mode First and Mode Second?
+impl Receiver<Attached> {
+    pub async fn accept(&mut self, delivery: &Delivery) -> Result<(), Error> {
+        use crate::endpoint::ReceiverLink;
+        // The incoming disposition is handled by session loop, so there is no need to wait for
+        // reply
+        let _ = self
+            .link
+            .dispose(
+                &mut self.outgoing,
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                DeliveryState::Accepted(Accepted {}),
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn reject(
+        &mut self,
+        delivery: &Delivery,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), Error> {
+        use crate::endpoint::ReceiverLink;
+        let state = DeliveryState::Rejected(Rejected {
+            error: error.into(),
+        });
+        self.link
+            .dispose(
+                &mut self.outgoing,
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                state,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn release(&mut self, delivery: &Delivery) -> Result<(), Error> {
+        use crate::endpoint::ReceiverLink;
+        // The incoming disposition is handled by session loop, so there is no need to wait for
+        // reply
+        let _ = self
+            .link
+            .dispose(
+                &mut self.outgoing,
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                DeliveryState::Released(Released {}),
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn modify(
+        &mut self,
+        delivery: &Delivery,
+        modified: impl Into<Modified>,
+    ) -> Result<(), Error> {
+        use crate::endpoint::ReceiverLink;
+        let state = DeliveryState::Modified(modified.into());
+        self.link
+            .dispose(
+                &mut self.outgoing,
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                state,
+            )
+            .await?;
         Ok(())
     }
 }

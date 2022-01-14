@@ -3,7 +3,10 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
+use serde_amqp::{
+    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
+    format_code::EncodingCodes,
+};
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
@@ -22,6 +25,7 @@ pub struct Message {
 }
 
 impl Message {
+    /// Count number of sections
     pub fn sections(&self) -> u32 {
         // The body section must be present
         let mut count = 1;
@@ -47,6 +51,40 @@ impl Message {
 
         count
     }
+
+    /// A complete message must have at least the body section, so we
+    /// only need to whether footer is available
+    pub fn last_section_code(&self) -> u8 {
+        if self.footer.is_some() {
+            0x78
+        } else {
+            0x77
+        }
+    }
+
+    // // This should only need to check for Footer or BodySection
+    // pub fn last_section_offset(descriptor_code: u8, bytes: &[u8]) -> Option<u64> {
+    //     const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
+    //     const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
+    //     const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
+
+    //     let len = bytes.len();
+    //     let mut iter = bytes.iter().zip(
+    //         bytes.iter().skip(1).zip(
+    //             bytes.iter().skip(2)
+    //         )
+    //     );
+
+    //     iter.rposition(|(&b0, (&b1, &b2))| {
+    //         match (b0, b1, b2) {
+    //             (DESCRIBED_TYPE, SMALL_ULONG_TYPE, code)
+    //             | (DESCRIBED_TYPE, ULONG_TYPE, code) => {
+    //                 code == descriptor_code
+    //             },
+    //             _ => false
+    //         }
+    //     }).map(|val| (len - val) as u64)
+    // }
 }
 
 impl Serialize for Message {

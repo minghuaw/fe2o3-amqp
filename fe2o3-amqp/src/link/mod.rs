@@ -125,7 +125,7 @@ impl<R, F, M> endpoint::Link for Link<R, F, M>
 where
     R: role::IntoRole + Send + Sync,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
-    M: AsRef<DeliveryState> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
     type DetachError = definitions::Error;
     type Error = link::Error;
@@ -306,12 +306,20 @@ where
         todo!()
     }
 
-    async fn send_disposition<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
-        todo!()
-    }
+    // /// This doesnt remove the delivery from the unsettled map until the outgoing disposition
+    // /// is processed by the session loop because disposition doesn't include any info on
+    // /// delivery_tag
+    // async fn send_disposition<W>(&mut self, writer: &mut W, disposition: Disposition) -> Result<(), Self::Error>
+    // where
+    //     W: Sink<LinkFrame> + Send + Unpin,
+    // {
+    //     let frame = LinkFrame::Disposition(disposition);
+    //     writer.send(frame).await
+    //         .map_err(|_| link::Error::AmqpError {
+    //             condition: AmqpError::IllegalState,
+    //             description: Some("Session is already dropped".to_string()),
+    //         })
+    // }
 
     async fn send_detach<W>(
         &mut self,
@@ -435,14 +443,19 @@ impl LinkHandle {
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
                     // communicate this back to the sending application.
-                    {
-                        let mut guard = unsettled.write().await;
-                        if let Some(unsettled) = guard.remove(&delivery_tag) {
-                            // Since we are settling (ie. forgetting) this message, we don't care whether the
-                            // receiving end is alive or not
-                            let _ = unsettled.settle_with_state(state.clone());
-                        }
-                    }
+                    let _ = remove_from_unsettled(unsettled, &delivery_tag)
+                        .await
+                        .map(|msg| msg.settle_with_state(state.clone()));
+
+                    // {
+                    //     let mut guard = unsettled.write().await;
+                    //     if let Some(unsettled) = guard.remove(&delivery_tag) {
+                    //         // Since we are settling (ie. forgetting) this message, we don't care whether the
+                    //         // receiving end is alive or not
+                    //         let _ = unsettled.settle_with_state(state.clone());
+                    //     }
+                    // }
+
                     match receiver_settle_mode {
                         ReceiverSettleMode::First => {
                             // The receiver will spontaneously settle all incoming transfers.
@@ -480,7 +493,7 @@ impl LinkHandle {
     ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, session::Error> {
         match self {
             LinkHandle::Sender { .. } => {
-                // This should not happen, but should the link detach if this happens?
+                // TODO: This should not happen, but should the link detach if this happens?
                 todo!()
             }
             LinkHandle::Receiver {
@@ -526,6 +539,32 @@ impl LinkHandle {
             }
         }
     }
+
+    // pub(crate) async fn on_outgoing_disposition(
+    //     &mut self,
+    //     delivery_tag: &DeliveryTag,
+    //     settled: bool,
+    //     state: Option<DeliveryState>,
+    // ) -> Result<Disposition, Error> {
+    //     match self {
+    //         LinkHandle::Sender { unsettled, .. } => {
+    //             todo!()
+    //         },
+    //         LinkHandle::Receiver { unsettled, .. } => {
+
+    //         }
+    //     }
+
+    //     todo!()
+    // }
+}
+
+pub(crate) async fn remove_from_unsettled<M>(
+    unsettled: &RwLock<UnsettledMap<M>>,
+    key: &DeliveryTag,
+) -> Option<M> {
+    let mut lock = unsettled.write().await;
+    lock.remove(key)
 }
 
 pub(crate) async fn do_attach<L, W, R>(

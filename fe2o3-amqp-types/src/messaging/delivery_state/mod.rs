@@ -31,6 +31,12 @@ impl AsRef<DeliveryState> for DeliveryState {
     }
 }
 
+impl AsMut<DeliveryState> for DeliveryState {
+    fn as_mut(&mut self) -> &mut DeliveryState {
+        self
+    }
+}
+
 mod delivery_state_impl;
 
 #[derive(Debug, Clone)]
