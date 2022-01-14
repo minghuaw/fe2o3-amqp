@@ -381,7 +381,7 @@ impl endpoint::Session for Session {
         let first = disposition.first;
         let last = disposition.last.unwrap_or_else(|| first);
 
-        // A disposition frame may refer to deliveries on multiple links, each may be running 
+        // A disposition frame may refer to deliveries on multiple links, each may be running
         // in different mode. This counts the largest sections that can be echoed back together
         let mut first_echo = first;
         let mut last_echo = first;

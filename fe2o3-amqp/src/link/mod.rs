@@ -446,12 +446,12 @@ impl LinkHandle {
                 } else {
                     let is_terminal = match &state {
                         Some(s) => s.is_terminal(),
-                        None => false // Probably should not assume the state is not specified
+                        None => false, // Probably should not assume the state is not specified
                     };
                     {
                         let mut guard = unsettled.write().await;
-                        // Once the receiving application has finished processing the message, 
-                        // it indicates to the link endpoint a **terminal delivery state** that 
+                        // Once the receiving application has finished processing the message,
+                        // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
                         if is_terminal {
                             let _result = remove_from_unsettled(unsettled, &delivery_tag)
@@ -476,7 +476,7 @@ impl LinkHandle {
                             // The receiver will only settle after sending the disposition to
                             // the sender and receiving a disposition indicating settlement of the
                             // delivery from the sender.
-                            
+
                             is_terminal
                         }
                     }
@@ -486,8 +486,7 @@ impl LinkHandle {
             }
             LinkHandle::Receiver { unsettled, .. } => {
                 if settled {
-                    let _state = remove_from_unsettled(unsettled, &delivery_tag)
-                    .await;
+                    let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
                 } else {
                     let mut guard = unsettled.write().await;
                     if let Some(msg_state) = guard.get_mut(&delivery_tag) {
@@ -496,8 +495,8 @@ impl LinkHandle {
                         }
                     }
                 }
-                
-                // Only the sender needs to auto-reply to receiver's disposition, thus 
+
+                // Only the sender needs to auto-reply to receiver's disposition, thus
                 // `echo = false`
                 false
             }
