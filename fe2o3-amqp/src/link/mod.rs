@@ -34,12 +34,13 @@ use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
     link::{self, delivery::UnsettledMessage, state::SenderPermit},
     session,
-    util::{Consumer, Producer}, Payload,
+    util::{Consumer, Producer},
+    Payload,
 };
 
 use self::{
     delivery::Delivery,
-    state::{LinkFlowState, LinkState, UnsettledMap, LinkFlowStateInner},
+    state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
 };
 
 type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;

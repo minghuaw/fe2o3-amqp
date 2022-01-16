@@ -16,7 +16,8 @@ use crate::{
     control::SessionControl,
     endpoint::Link,
     link::error::{detach_error_expecting_frame, map_send_detach_error},
-    session::{self, SessionHandle}, Payload,
+    session::{self, SessionHandle},
+    Payload,
 };
 
 use super::{
@@ -317,7 +318,9 @@ impl Receiver<Attached> {
                         ..
                     } = incomplete;
                     buffer.extend(payload);
-                    self.link.on_incoming_transfer(performative, buffer.freeze()).await?
+                    self.link
+                        .on_incoming_transfer(performative, buffer.freeze())
+                        .await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;

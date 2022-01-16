@@ -1,12 +1,10 @@
 use super::*;
 
 #[async_trait]
-impl endpoint::SenderLink
-    for Link<role::Sender, SenderFlowState, UnsettledMessage>
-{
+impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
     async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
         todo!()
     }
@@ -26,8 +24,8 @@ impl endpoint::SenderLink
 
         println!(">>> Debug: SenderLink::send_transfer");
 
-        // link-credit is defined as 
-        // "The current maximum number of messages that can be handled 
+        // link-credit is defined as
+        // "The current maximum number of messages that can be handled
         // at the receiver endpoint of the link"
         match self.flow_state.consume(1).await {
             SenderPermit::Send => {} // There is enough credit to send
@@ -44,7 +42,7 @@ impl endpoint::SenderLink
 
         let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);
-        
+
         // TODO: Expose API to allow user to set this when the mode is MIXED?
         let settled = match self.snd_settle_mode {
             SenderSettleMode::Settled => true,
@@ -53,17 +51,17 @@ impl endpoint::SenderLink
             // delivery, then the settled flag MUST be interpreted as being false.
             SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
         };
-        
+
         // TODO: Expose API for resuming link?
         let state: Option<DeliveryState> = None;
-        
-        // If true, the resume flag indicates that the transfer is being used to reassociate an 
+
+        // If true, the resume flag indicates that the transfer is being used to reassociate an
         // unsettled delivery from a dissociated link endpoint
         let resume = false;
 
         // Keep a copy for unsettled message
         // Clone should be very cheap on Bytes
-        let payload_copy = payload.clone(); 
+        let payload_copy = payload.clone();
 
         // Check message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
@@ -123,19 +121,19 @@ impl endpoint::SenderLink
                 delivery_tag: Some(delivery_tag.clone()),
                 message_format: Some(message_format),
                 settled: Some(settled), // Having this always set in first frame helps debugging
-                more: true, // There are more content
+                more: true,             // There are more content
                 // If not set, this value is defaulted to the value negotiated
                 // on link attach.
                 rcv_settle_mode: None,
                 state: state.clone(), // This is None for all transfers for now
                 resume,
                 aborted: false,
-                batchable
+                batchable,
             };
             send_transfer(writer, transfer, partial).await?;
 
             // Send the transfers in the middle
-            for _ in 1..n-1 {
+            for _ in 1..n - 1 {
                 let partial = payload.split_to(self.max_message_size as usize);
                 let transfer = Transfer {
                     handle: handle.clone(),
@@ -145,17 +143,17 @@ impl endpoint::SenderLink
                     settled: None,
                     more: true,
                     rcv_settle_mode: None,
-                    state: state.clone(), // This is None for all transfers for now 
+                    state: state.clone(), // This is None for all transfers for now
                     resume: false,
                     aborted: false,
-                    batchable
+                    batchable,
                 };
                 send_transfer(writer, transfer, partial).await?;
             }
 
             // Send the last transfer
-            // For messages that are too large to fit within the maximum frame size, additional 
-            // data MAY be trans- ferred in additional transfer frames by setting the more flag on 
+            // For messages that are too large to fit within the maximum frame size, additional
+            // data MAY be trans- ferred in additional transfer frames by setting the more flag on
             // all but the last transfer frame
             let transfer = Transfer {
                 handle,
@@ -163,12 +161,12 @@ impl endpoint::SenderLink
                 delivery_tag: None,
                 message_format: None,
                 settled: None,
-                more: false, // The 
+                more: false, // The
                 rcv_settle_mode: None,
-                state: state.clone(), // This is None for all transfers for now 
+                state: state.clone(), // This is None for all transfers for now
                 resume: false,
                 aborted: false,
-                batchable
+                batchable,
             };
             send_transfer(writer, transfer, payload).await?;
         }
@@ -209,9 +207,9 @@ impl endpoint::SenderLink
 }
 
 #[inline]
-async fn send_transfer<W>(writer: &mut W, transfer: Transfer, payload: Payload) -> Result<(), Error> 
+async fn send_transfer<W>(writer: &mut W, transfer: Transfer, payload: Payload) -> Result<(), Error>
 where
-        W: Sink<LinkFrame> + Send + Unpin,
+    W: Sink<LinkFrame> + Send + Unpin,
 {
     let frame = LinkFrame::Transfer {
         performative: transfer,

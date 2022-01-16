@@ -1,4 +1,4 @@
-use serde_amqp::{format_code::EncodingCodes};
+use serde_amqp::format_code::EncodingCodes;
 
 use super::*;
 
@@ -17,12 +17,12 @@ const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
 impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
-
     async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin {
-            todo!()
-        }
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    {
+        todo!()
+    }
 
     async fn on_incomplete_transfer(
         &mut self,
@@ -30,8 +30,8 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         section_number: u32,
         section_offset: u64,
     ) {
-        // link-credit is defined as 
-        // "The current maximum number of messages that can be handled 
+        // link-credit is defined as
+        // "The current maximum number of messages that can be handled
         // at the receiver endpoint of the link"
         // So there is no need to decrement the link-credit on incomplete delivery
 

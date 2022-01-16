@@ -37,7 +37,8 @@ use crate::{
     connection::engine::SessionId,
     link::{delivery::Delivery, LinkFrame},
     session::{SessionFrame, SessionIncomingItem},
-    transport::amqp::Frame, Payload,
+    transport::amqp::Frame,
+    Payload,
 };
 
 #[async_trait]

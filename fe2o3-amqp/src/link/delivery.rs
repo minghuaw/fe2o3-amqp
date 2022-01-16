@@ -8,8 +8,8 @@ use pin_project_lite::pin_project;
 use std::{future::Future, task::Poll};
 use tokio::sync::oneshot;
 
-use crate::{link, Payload};
 use crate::{endpoint::Settlement, util::Uninitialized};
+use crate::{link, Payload};
 
 /// Reserved for receiver side
 pub struct Delivery {

@@ -25,7 +25,8 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkFlow},
     link::{LinkFrame, LinkHandle},
-    util::Constant, Payload,
+    util::Constant,
+    Payload,
 };
 
 mod frame;
