@@ -22,9 +22,11 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
         delivery_tag: DeliveryTag,
         section_number: u32,
         section_offset: u64,
-    ) -> Result<(), Self::Error> {
-        // TODO: The receiver should then detach with error
-        self.flow_state.consume(1).await?;
+    ) {
+        // link-credit is defined as 
+        // "The current maximum number of messages that can be handled 
+        // at the receiver endpoint of the link"
+        // So there is no need to decrement the link-credit on incomplete delivery
 
         let state = DeliveryState::Received(Received {
             section_number,
@@ -36,8 +38,6 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
             // The same key may be writter multiple times
             let _ = lock.insert(delivery_tag, state);
         }
-
-        Ok(())
     }
 
     async fn on_incoming_transfer(

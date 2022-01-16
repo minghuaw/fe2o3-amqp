@@ -19,6 +19,9 @@ impl endpoint::SenderLink
 
         println!(">>> Debug: SenderLink::send_transfer");
 
+        // link-credit is defined as 
+        // "The current maximum number of messages that can be handled 
+        // at the receiver endpoint of the link"
         match self.flow_state.consume(1).await {
             SenderPermit::Send => {} // There is enough credit to send
             SenderPermit::Drain => {
