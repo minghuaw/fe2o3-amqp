@@ -41,9 +41,15 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 writer.drain = drain;
                 LinkFlow {
                     handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender 
+                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // sending endpoint.
                     delivery_count: Some(writer.delivery_count.clone()),
                     link_credit: Some(link_credit),
-                    available: None, // Only sender may set this field
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available), 
+                    available: None,
                     drain,
                     echo,
                     properties: writer.properties.clone()
@@ -54,9 +60,15 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 writer.link_credit = link_credit;
                 LinkFlow {
                     handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender 
+                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // sending endpoint.
                     delivery_count: Some(writer.delivery_count.clone()),
                     link_credit: Some(link_credit),
-                    available: None, // Only sender may set this field
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available), 
+                    available: None,
                     drain: writer.drain,
                     echo,
                     properties: writer.properties.clone()
@@ -67,9 +79,15 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 writer.drain = drain;
                 LinkFlow {
                     handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender 
+                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // sending endpoint.
                     delivery_count: Some(writer.delivery_count.clone()),
                     link_credit: Some(writer.link_credit),
-                    available: None, // Only sender may set this field
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available), 
+                    available: None,
                     drain,
                     echo,
                     properties: writer.properties.clone()
@@ -79,9 +97,15 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 let reader = self.flow_state.lock.read().await;
                 LinkFlow {
                     handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender 
+                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // sending endpoint.
                     delivery_count: Some(reader.delivery_count.clone()),
                     link_credit: Some(reader.link_credit),
-                    available: None, // Only sender may set this field
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available), 
+                    available: None,
                     drain: reader.drain,
                     echo,
                     properties: reader.properties.clone()

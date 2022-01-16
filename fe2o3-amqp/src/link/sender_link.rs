@@ -15,7 +15,87 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
     {
-        todo!()
+        let handle = self.output_handle.clone()
+            .ok_or_else(|| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into())
+            })?;
+
+        let flow = match (delivery_count, available) {
+            (Some(delivery_count), Some(available)) => {
+                let mut writer = self.flow_state.as_ref().lock.write().await;
+                writer.delivery_count = delivery_count;
+                writer.available = available;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(delivery_count),
+                    // TODO: "last known value"???
+                    // The sender endpoint sets this to the last known value seen from the receiver.
+                    link_credit: Some(writer.link_credit),
+                    available: Some(available),
+                    // When flow state is sent from the sender to the receiver, this field 
+                    // contains the actual drain mode of the sender
+                    drain: writer.drain,
+                    echo,
+                    properties: writer.properties.clone()
+                }
+            },
+            (Some(delivery_count), None) => {
+                let mut writer = self.flow_state.as_ref().lock.write().await;
+                writer.delivery_count = delivery_count;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(delivery_count),
+                    // TODO: "last known value"???
+                    // The sender endpoint sets this to the last known value seen from the receiver.
+                    link_credit: Some(writer.link_credit),
+                    available: Some(writer.available),
+                    // When flow state is sent from the sender to the receiver, this field 
+                    // contains the actual drain mode of the sender
+                    drain: writer.drain,
+                    echo,
+                    properties: writer.properties.clone()
+                }
+            },
+            (None, Some(available)) => {
+                let mut writer = self.flow_state.as_ref().lock.write().await;
+                writer.available = available;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(writer.delivery_count),
+                    // TODO: "last known value"???
+                    // The sender endpoint sets this to the last known value seen from the receiver.
+                    link_credit: Some(writer.link_credit),
+                    available: Some(available),
+                    // When flow state is sent from the sender to the receiver, this field 
+                    // contains the actual drain mode of the sender
+                    drain: writer.drain,
+                    echo,
+                    properties: writer.properties.clone()
+                }
+            },
+            (None, None) => {
+                let reader = self.flow_state.as_ref().lock.read().await;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(reader.delivery_count),
+                    // TODO: "last known value"???
+                    // The sender endpoint sets this to the last known value seen from the receiver.
+                    link_credit: Some(reader.link_credit),
+                    available: Some(reader.available),
+                    // When flow state is sent from the sender to the receiver, this field 
+                    // contains the actual drain mode of the sender
+                    drain: reader.drain,
+                    echo,
+                    properties: reader.properties.clone()
+                }
+            }
+        };
+        writer.send(flow).await
+            .map_err(|_| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into())
+            })
     }
 
     async fn send_transfer<W>(
