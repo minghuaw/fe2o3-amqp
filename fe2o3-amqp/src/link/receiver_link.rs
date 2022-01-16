@@ -28,7 +28,71 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
     where
         W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
     {
-        todo!()
+        let handle = self.output_handle.clone()
+            .ok_or_else(|| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into())
+            })?;
+
+        let flow = match (link_credit, drain) {
+            (Some(link_credit), Some(drain)) => {
+                let mut writer = self.flow_state.lock.write().await;
+                writer.link_credit = link_credit;
+                writer.drain = drain;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(link_credit),
+                    available: None, // Only sender may set this field
+                    drain,
+                    echo,
+                    properties: writer.properties.clone()
+                }
+            },
+            (Some(link_credit), None) => {
+                let mut writer = self.flow_state.lock.write().await;
+                writer.link_credit = link_credit;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(link_credit),
+                    available: None, // Only sender may set this field
+                    drain: writer.drain,
+                    echo,
+                    properties: writer.properties.clone()
+                }
+            },
+            (None, Some(drain)) => {
+                let mut writer = self.flow_state.lock.write().await;
+                writer.drain = drain;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(writer.link_credit),
+                    available: None, // Only sender may set this field
+                    drain,
+                    echo,
+                    properties: writer.properties.clone()
+                }
+            },
+            (None, None) => {
+                let reader = self.flow_state.lock.read().await;
+                LinkFlow {
+                    handle,
+                    delivery_count: Some(reader.delivery_count.clone()),
+                    link_credit: Some(reader.link_credit),
+                    available: None, // Only sender may set this field
+                    drain: reader.drain,
+                    echo,
+                    properties: reader.properties.clone()
+                }
+            }
+        };
+        writer.send(flow).await
+            .map_err(|_| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into())
+            })
     }
 
     async fn on_incomplete_transfer(
