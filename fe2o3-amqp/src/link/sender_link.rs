@@ -7,7 +7,7 @@ impl endpoint::SenderLink
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        payload: Payload,
+        mut payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
@@ -51,6 +51,10 @@ impl endpoint::SenderLink
         // unsettled delivery from a dissociated link endpoint
         let resume = false;
 
+        // Keep a copy for unsettled message
+        // Clone should be very cheap on Bytes
+        let payload_copy = payload.clone(); 
+
         // Check message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
@@ -75,24 +79,24 @@ impl endpoint::SenderLink
             // TODO: Clone should be very cheap on Bytes
             send_transfer(writer, transfer, payload.clone()).await?;
 
-            match settled {
-                true => Ok(Settlement::Settled),
-                // If not set on the first (or only) transfer for a (multi-transfer)
-                // delivery, then the settled flag MUST be interpreted as being false.
-                false => {
-                    let (tx, rx) = oneshot::channel();
-                    let unsettled = UnsettledMessage::new(payload, tx);
-                    {
-                        let mut guard = self.unsettled.write().await;
-                        guard.insert(delivery_tag, unsettled);
-                    }
+            // match settled {
+            //     true => Ok(Settlement::Settled),
+            //     // If not set on the first (or only) transfer for a (multi-transfer)
+            //     // delivery, then the settled flag MUST be interpreted as being false.
+            //     false => {
+            //         let (tx, rx) = oneshot::channel();
+            //         let unsettled = UnsettledMessage::new(payload, tx);
+            //         {
+            //             let mut guard = self.unsettled.write().await;
+            //             guard.insert(delivery_tag, unsettled);
+            //         }
 
-                    Ok(Settlement::Unsettled {
-                        delivery_tag: tag,
-                        outcome: rx,
-                    })
-                }
-            }
+            //         Ok(Settlement::Unsettled {
+            //             delivery_tag: tag,
+            //             outcome: rx,
+            //         })
+            //     }
+            // }
         } else {
             // Need multiple transfers
             // Number of transfers needed
@@ -102,28 +106,80 @@ impl endpoint::SenderLink
             }
 
             // Send the first frame
+            let partial = payload.split_to(self.max_message_size as usize);
             let transfer = Transfer {
-                handle,
+                handle: handle.clone(),
                 delivery_id: None, // This will be set by the session
-                delivery_tag: Some(delivery_tag),
+                delivery_tag: Some(delivery_tag.clone()),
                 message_format: Some(message_format),
                 settled: Some(settled), // Having this always set in first frame helps debugging
                 more: true, // There are more content
                 // If not set, this value is defaulted to the value negotiated
                 // on link attach.
                 rcv_settle_mode: None,
-                state,
+                state: state.clone(), // This is None for all transfers for now
                 resume,
                 aborted: false,
                 batchable
             };
+            send_transfer(writer, transfer, partial).await?;
 
-
-            for i in 0..n {
-
+            // Send the transfers in the middle
+            for _ in 1..n-1 {
+                let partial = payload.split_to(self.max_message_size as usize);
+                let transfer = Transfer {
+                    handle: handle.clone(),
+                    delivery_id: None,
+                    delivery_tag: None,
+                    message_format: None,
+                    settled: None,
+                    more: true,
+                    rcv_settle_mode: None,
+                    state: state.clone(), // This is None for all transfers for now 
+                    resume: false,
+                    aborted: false,
+                    batchable
+                };
+                send_transfer(writer, transfer, partial).await?;
             }
 
-            todo!()
+            // Send the last transfer
+            // For messages that are too large to fit within the maximum frame size, additional 
+            // data MAY be trans- ferred in additional transfer frames by setting the more flag on 
+            // all but the last transfer frame
+            let transfer = Transfer {
+                handle,
+                delivery_id: None,
+                delivery_tag: None,
+                message_format: None,
+                settled: None,
+                more: false, // The 
+                rcv_settle_mode: None,
+                state: state.clone(), // This is None for all transfers for now 
+                resume: false,
+                aborted: false,
+                batchable
+            };
+            send_transfer(writer, transfer, payload).await?;
+        }
+
+        match settled {
+            true => Ok(Settlement::Settled),
+            // If not set on the first (or only) transfer for a (multi-transfer)
+            // delivery, then the settled flag MUST be interpreted as being false.
+            false => {
+                let (tx, rx) = oneshot::channel();
+                let unsettled = UnsettledMessage::new(payload_copy, tx);
+                {
+                    let mut guard = self.unsettled.write().await;
+                    guard.insert(delivery_tag, unsettled);
+                }
+
+                Ok(Settlement::Unsettled {
+                    delivery_tag: tag,
+                    outcome: rx,
+                })
+            }
         }
     }
 
