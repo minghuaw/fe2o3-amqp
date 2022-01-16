@@ -8,7 +8,7 @@ use pin_project_lite::pin_project;
 use std::{future::Future, task::Poll};
 use tokio::sync::oneshot;
 
-use crate::link;
+use crate::{link, Payload};
 use crate::{endpoint::Settlement, util::Uninitialized};
 
 /// Reserved for receiver side
@@ -112,13 +112,13 @@ impl From<Builder<Message>> for Sendable {
 
 #[derive(Debug)]
 pub struct UnsettledMessage {
-    payload: BytesMut,
+    payload: Payload,
     state: DeliveryState,
     sender: oneshot::Sender<DeliveryState>,
 }
 
 impl UnsettledMessage {
-    pub fn new(payload: BytesMut, sender: oneshot::Sender<DeliveryState>) -> Self {
+    pub fn new(payload: Payload, sender: oneshot::Sender<DeliveryState>) -> Self {
         // Assume needing to resend from the beginning unless there is further
         // update from the remote peer
         let received = Received {
@@ -141,7 +141,7 @@ impl UnsettledMessage {
         &mut self.state
     }
 
-    pub fn payload(&self) -> &BytesMut {
+    pub fn payload(&self) -> &Payload {
         &self.payload
     }
 

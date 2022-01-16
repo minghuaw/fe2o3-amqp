@@ -6,6 +6,8 @@ use serde::{ser::Serialize, Deserialize};
 use serde_amqp::{de::Deserializer, read::IoReader};
 use tokio_util::codec::{Decoder, Encoder};
 
+use crate::Payload;
+
 use super::{Error, FRAME_TYPE_AMQP};
 
 #[derive(Debug)]
@@ -97,7 +99,7 @@ pub enum FrameBody {
     Flow(Flow),
     Transfer {
         performative: Transfer,
-        payload: BytesMut, // The payload should have ownership passed around not shared
+        payload: Payload, // The payload should have ownership passed around not shared
     },
     Disposition(Disposition),
     Detach(Detach),

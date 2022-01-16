@@ -37,7 +37,7 @@ use crate::{
     connection::engine::SessionId,
     link::{delivery::Delivery, LinkFrame},
     session::{SessionFrame, SessionIncomingItem},
-    transport::amqp::Frame,
+    transport::amqp::Frame, Payload,
 };
 
 #[async_trait]
@@ -140,7 +140,7 @@ pub trait Session {
         &mut self,
         channel: u16,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
     ) -> Result<(), Self::Error>;
     async fn on_incoming_disposition(
         &mut self,
@@ -170,7 +170,7 @@ pub trait Session {
     fn on_outgoing_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
     ) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_disposition(
         &mut self,
@@ -295,7 +295,7 @@ pub trait SenderLink: Link {
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,
-        payload: BytesMut,
+        payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
@@ -331,7 +331,7 @@ pub trait ReceiverLink: Link {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
         // section_number: u32,
         // section_offset: u64,
     ) -> Result<

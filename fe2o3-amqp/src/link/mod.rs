@@ -34,7 +34,7 @@ use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
     link::{self, delivery::UnsettledMessage, state::SenderPermit},
     session,
-    util::{Consumer, Producer},
+    util::{Consumer, Producer}, Payload,
 };
 
 use self::{
@@ -506,7 +506,7 @@ impl LinkHandle {
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
     ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, session::Error> {
         match self {
             LinkHandle::Sender { .. } => {

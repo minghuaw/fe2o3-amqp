@@ -9,3 +9,5 @@ pub mod util;
 pub mod types {
     pub use fe2o3_amqp_types::*;
 }
+
+type Payload = bytes::Bytes;

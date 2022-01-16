@@ -128,7 +128,8 @@ impl Sender<Attached> {
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
         message.serialize(&mut serializer)?;
-        let payload = BytesMut::from(payload);
+        // let payload = BytesMut::from(payload);
+        let payload = payload.freeze();
 
         // send a transfer, checking state will be implemented in SenderLink
         let settlement = self

@@ -38,7 +38,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
         // section_number: u32,
         // section_offset: u64,
     ) -> Result<
@@ -114,7 +114,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
                 // disposition from the sender.
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
-                    let section_offset = rfind_offset_of_complte_message(payload.as_ref())
+                    let section_offset = rfind_offset_of_complete_message(payload.as_ref())
                         .ok_or_else(|| AmqpError::DecodeError)?;
                     let message: Message = from_reader(payload.reader())?;
                     let section_number = message.sections();
@@ -202,7 +202,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
 }
 
 /// Finds offset of a complete message
-fn rfind_offset_of_complte_message(bytes: &[u8]) -> Option<u64> {
+fn rfind_offset_of_complete_message(bytes: &[u8]) -> Option<u64> {
     // For a complete message, the only need is to check Footer or BodySection
 
     let len = bytes.len();

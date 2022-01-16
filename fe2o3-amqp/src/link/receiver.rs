@@ -16,7 +16,7 @@ use crate::{
     control::SessionControl,
     endpoint::Link,
     link::error::{detach_error_expecting_frame, map_send_detach_error},
-    session::{self, SessionHandle},
+    session::{self, SessionHandle}, Payload,
 };
 
 use super::{
@@ -63,11 +63,14 @@ pub(crate) struct IncompleteTransfer {
 }
 
 impl IncompleteTransfer {
-    pub fn new(transfer: Transfer, partial_payload: BytesMut) -> Self {
+    pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
         let (number, offset) = section_number_and_offset(partial_payload.as_ref());
+        let mut buffer = BytesMut::new();
+        // TODO: anyway to make this not copying the bytes?
+        buffer.extend(partial_payload);
         Self {
             performative: transfer,
-            buffer: partial_payload,
+            buffer,
             section_number: number,
             section_offset: offset,
         }
@@ -118,7 +121,7 @@ impl IncompleteTransfer {
     }
 
     /// Append to the buffered payload
-    pub fn append(&mut self, other: BytesMut) {
+    pub fn append(&mut self, other: Payload) {
         // TODO: append section number and re-count section-offset
         // Count section numbers
         let (number, offset) = section_number_and_offset(other.as_ref());
@@ -255,7 +258,7 @@ impl Receiver<Attached> {
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
     ) -> Result<Option<Delivery>, Error> {
         use crate::endpoint::ReceiverLink;
 
@@ -314,7 +317,7 @@ impl Receiver<Attached> {
                         ..
                     } = incomplete;
                     buffer.extend(payload);
-                    self.link.on_incoming_transfer(performative, buffer).await?
+                    self.link.on_incoming_transfer(performative, buffer.freeze()).await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;

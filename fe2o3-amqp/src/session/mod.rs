@@ -25,7 +25,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkFlow},
     link::{LinkFrame, LinkHandle},
-    util::Constant,
+    util::Constant, Payload,
 };
 
 mod frame;
@@ -330,7 +330,7 @@ impl endpoint::Session for Session {
         &mut self,
         _channel: u16,
         transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
     ) -> Result<(), Self::Error> {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
@@ -596,7 +596,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_transfer(
         &mut self,
         mut transfer: Transfer,
-        payload: BytesMut,
+        payload: Payload,
     ) -> Result<SessionFrame, Self::Error> {
         // Upon sending a transfer, the sending endpoint will increment its next-outgoing-id, decre-
         // ment its remote-incoming-window, and MAY (depending on policy) decrement its outgoing-
