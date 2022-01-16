@@ -17,9 +17,16 @@ const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
 impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
-    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    /// Set and send flow state
+    async fn send_flow<W>(
+        &mut self, 
+        writer: &mut W, 
+        link_credit: Option<u32>,
+        drain: Option<bool>,
+        echo: bool
+    ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
     {
         todo!()
     }

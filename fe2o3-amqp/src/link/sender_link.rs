@@ -1,10 +1,19 @@
+use fe2o3_amqp_types::definitions::SequenceNo;
+
 use super::*;
 
 #[async_trait]
 impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
-    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    /// Set and send flow state
+    async fn send_flow<W>(
+        &mut self, 
+        writer: &mut W, 
+        delivery_count: Option<SequenceNo>,
+        available: Option<u32>,
+        echo: bool
+    ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
     {
         todo!()
     }

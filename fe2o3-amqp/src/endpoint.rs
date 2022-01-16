@@ -292,7 +292,14 @@ pub enum Settlement {
 pub trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
-    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    /// Set and send flow state
+    async fn send_flow<W>(
+        &mut self, 
+        writer: &mut W, 
+        delivery_count: Option<SequenceNo>,
+        available: Option<u32>,
+        echo: bool
+    ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
@@ -324,7 +331,14 @@ pub trait SenderLink: Link {
 pub trait ReceiverLink: Link {
     const ROLE: Role = Role::Receiver;
 
-    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    /// Set and send flow state
+    async fn send_flow<W>(
+        &mut self, 
+        writer: &mut W, 
+        link_credit: Option<u32>,
+        drain: Option<bool>,
+        echo: bool
+    ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
