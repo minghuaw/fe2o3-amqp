@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Role},
+    definitions::{self, AmqpError, Role, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Message, Modified, Rejected, Released, Target},
     performatives::{Disposition, Transfer},
 };
@@ -349,6 +349,15 @@ impl Receiver<Attached> {
         }
 
         Ok(Some(delivery))
+    }
+
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
+        todo!()
+    }
+
+    // TODO: how to stop draining?
+    pub async fn drain(&mut self) -> Result<(), Error> {
+        todo!()
     }
 
     // TODO: reduce mostly duplicated code (Sender/Receiver::detach/close)?

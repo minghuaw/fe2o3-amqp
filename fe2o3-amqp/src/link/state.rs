@@ -158,7 +158,7 @@ impl LinkFlowState<role::Sender> {
         // that the sender could make use of the indicated amount of link-credit. Only the
         // sender can indepen- dently modify this field.
 
-        // drain
+        // drain, TODO: advance the link-credit as much as possible
         //
         // The drain flag indicates how the sender SHOULD behave when insufficient messages
         // are available to consume the current link-credit. If set, the sender will (after
@@ -167,6 +167,12 @@ impl LinkFlowState<role::Sender> {
         // receiver can independently modify this field. The sender’s value is always the
         // last known value indicated by the receiver.
         state.drain = flow.drain;
+        if flow.drain {
+            state.delivery_count += state.link_credit;
+            state.link_credit = 0;
+
+            return Some(state.as_link_flow(output_handle, false))
+        }
 
         match flow.echo {
             // Should avoid constant ping-pong
