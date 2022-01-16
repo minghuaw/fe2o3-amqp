@@ -2,8 +2,15 @@ use super::*;
 
 #[async_trait]
 impl endpoint::SenderLink
-    for Link<role::Sender, Consumer<Arc<LinkFlowState<role::Sender>>>, UnsettledMessage>
+    for Link<role::Sender, SenderFlowState, UnsettledMessage>
 {
+    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+    {
+        todo!()
+    }
+
     async fn send_transfer<W>(
         &mut self,
         writer: &mut W,

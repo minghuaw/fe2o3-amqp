@@ -16,7 +16,14 @@ const AMQP_VAL_CODE: u8 = 0x77;
 const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
-impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, DeliveryState> {
+impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
+
+    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin {
+            todo!()
+        }
+
     async fn on_incomplete_transfer(
         &mut self,
         delivery_tag: DeliveryTag,

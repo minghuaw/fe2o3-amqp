@@ -285,7 +285,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             initial_delivery_count: self.initial_delivery_count,
             delivery_count: self.initial_delivery_count,
             link_credit: 0, // The link-credit and available variables are initialized to zero.
-            avaiable: 0,
+            available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
         };
@@ -344,7 +344,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             initial_delivery_count: self.initial_delivery_count,
             delivery_count: self.initial_delivery_count,
             link_credit: 0, // The link-credit and available variables are initialized to zero.
-            avaiable: 0,
+            available: 0,
             drain: false, // The drain flag is initialized to false.
             properties: self.properties.take(),
         };

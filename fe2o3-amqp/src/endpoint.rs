@@ -203,9 +203,9 @@ pub trait Link {
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
-    async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+    // async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    // where
+    //     W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
     // /// TODO: get rid of this? The disposition doesn't include delivery_tag,
     // async fn send_disposition<W>(&mut self, writer: &mut W, disposition: Disposition) -> Result<(), Self::Error>
@@ -291,6 +291,10 @@ pub enum Settlement {
 pub trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
+    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+
     /// Send message via transfer frame and return whether the message is already settled
     async fn send_transfer<W>(
         &mut self,
@@ -318,6 +322,10 @@ pub trait SenderLink: Link {
 #[async_trait]
 pub trait ReceiverLink: Link {
     const ROLE: Role = Role::Receiver;
+
+    async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
     async fn on_incomplete_transfer(
         &mut self,

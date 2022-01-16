@@ -9,7 +9,7 @@ use crate::{
     util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
 };
 
-use super::{delivery::UnsettledMessage, role};
+use super::{delivery::UnsettledMessage, role, SenderFlowState};
 
 #[derive(Debug)]
 pub enum LinkState {
@@ -46,7 +46,7 @@ pub struct LinkFlowStateInner {
     pub initial_delivery_count: SequenceNo,
     pub delivery_count: SequenceNo, // SequenceNo = u32
     pub link_credit: u32,
-    pub avaiable: u32,
+    pub available: u32,
     pub drain: bool,
     pub properties: Option<Fields>,
 }
@@ -57,7 +57,7 @@ impl LinkFlowStateInner {
             handle: output_handle,
             delivery_count: Some(self.delivery_count),
             link_credit: Some(self.link_credit),
-            available: Some(self.avaiable),
+            available: Some(self.available),
             drain: self.drain,
             echo,
             properties: self.properties.clone(),
@@ -84,7 +84,7 @@ impl LinkFlowStateInner {
 pub struct LinkFlowState<R> {
     // Sender(RwLock<LinkFlowStateInner>),
     // Receiver(RwLock<LinkFlowStateInner>),
-    lock: RwLock<LinkFlowStateInner>,
+    pub(crate) lock: RwLock<LinkFlowStateInner>,
     role: PhantomData<R>,
 }
 
@@ -210,7 +210,7 @@ impl LinkFlowState<role::Receiver> {
         // is zero. If this happens, the receiver MUST maintain a floor of zero in its
         // calculation of the value of available.
         if let Some(available) = flow.available {
-            state.avaiable = available;
+            state.available = available;
         }
 
         // drain
@@ -310,7 +310,7 @@ pub enum SenderPermit {
 }
 
 #[async_trait]
-impl Consume for Consumer<Arc<LinkFlowState<role::Sender>>> {
+impl Consume for SenderFlowState {
     type Item = u32;
     type Outcome = SenderPermit;
 

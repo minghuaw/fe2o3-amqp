@@ -39,8 +39,11 @@ use crate::{
 
 use self::{
     delivery::Delivery,
-    state::{LinkFlowState, LinkState, UnsettledMap},
+    state::{LinkFlowState, LinkState, UnsettledMap, LinkFlowStateInner},
 };
+
+type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
+type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 pub mod type_state {
     #[derive(Debug)]
@@ -299,12 +302,35 @@ where
         Ok(())
     }
 
-    async fn send_flow<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
-        todo!()
-    }
+    // async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
+    // where
+    //     W: Sink<LinkFlow> + Send + Unpin,
+    // {
+    //     let handle = self.output_handle.clone()
+    //         .ok_or_else(|| Error::AmqpError {
+    //             condition: AmqpError::IllegalState,
+    //             description: Some("Link is not attached".into())
+    //         })?;
+
+    //     let flow = {
+    //         let reader = self.flow_state.as_ref().lock.read().await;
+    //         LinkFlow {
+    //             handle,
+    //             delivery_count: Some(reader.delivery_count.clone()),
+    //             link_credit: Some(reader.link_credit.clone()),
+    //             available: Some(reader.available.clone()),
+    //             drain: reader.drain,
+    //             echo,
+    //             properties: reader.properties.clone()
+    //         }
+    //     };
+
+    //     writer.send(flow).await
+    //         .map_err(|_| Error::AmqpError {
+    //             condition: AmqpError::IllegalState,
+    //             description: Some("Link is not attached".into())
+    //         })
+    // }
 
     // /// This doesnt remove the delivery from the unsettled map until the outgoing disposition
     // /// is processed by the session loop because disposition doesn't include any info on
@@ -381,7 +407,7 @@ pub enum LinkHandle {
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
-        flow_state: Arc<LinkFlowState<role::Receiver>>,
+        flow_state: ReceiverFlowState,
         unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
         receiver_settle_mode: ReceiverSettleMode,
         more: bool,
@@ -684,7 +710,7 @@ mod tests {
             initial_delivery_count: 0,
             delivery_count: 0,
             link_credit: 0,
-            avaiable: 0,
+            available: 0,
             drain: false,
             properties: None,
         });
