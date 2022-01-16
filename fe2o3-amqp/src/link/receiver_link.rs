@@ -22,7 +22,10 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
         delivery_tag: DeliveryTag,
         section_number: u32,
         section_offset: u64,
-    ) {
+    ) -> Result<(), Self::Error> {
+        // TODO: The receiver should then detach with error
+        self.flow_state.consume(1).await?;
+
         let state = DeliveryState::Received(Received {
             section_number,
             section_offset,
@@ -33,6 +36,8 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
             // The same key may be writter multiple times
             let _ = lock.insert(delivery_tag, state);
         }
+
+        Ok(())
     }
 
     async fn on_incoming_transfer(

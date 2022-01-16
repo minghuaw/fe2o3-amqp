@@ -324,7 +324,7 @@ pub trait ReceiverLink: Link {
         delivery_tag: DeliveryTag,
         section_number: u32,
         section_offset: u64,
-    );
+    ) -> Result<(), Self::Error>;
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
