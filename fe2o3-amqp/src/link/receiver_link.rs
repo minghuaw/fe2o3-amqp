@@ -1,4 +1,4 @@
-use serde_amqp::{described::Described, format_code::EncodingCodes};
+use serde_amqp::{format_code::EncodingCodes};
 
 use super::*;
 
@@ -166,6 +166,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
         delivery_tag: DeliveryTag,
         // settled: bool,
         state: DeliveryState,
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
@@ -188,7 +189,7 @@ impl ReceiverLink for Link<role::Receiver, Arc<LinkFlowState<role::Receiver>>, D
             last: None,
             settled,
             state: Some(state),
-            batchable: false,
+            batchable,
         };
         let frame = LinkFrame::Disposition(disposition);
         writer.send(frame).await.map_err(|_| Error::AmqpError {
@@ -271,7 +272,6 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use bytes::Bytes;
     use fe2o3_amqp_types::{
         messaging::{
             message::BodySection, AmqpValue, DeliveryAnnotations, Header, Message,

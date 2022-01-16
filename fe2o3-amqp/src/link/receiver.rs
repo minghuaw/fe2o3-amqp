@@ -340,6 +340,7 @@ impl Receiver<Attached> {
                     delivery_id,
                     delivery_tag,
                     delivery_state,
+                    false, // This shouldn't matter as no reply is expected from the sender
                 )
                 .await?;
         }
@@ -529,6 +530,7 @@ impl Receiver<Attached> {
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
                 DeliveryState::Accepted(Accepted {}),
+                false,
             )
             .await?;
         Ok(())
@@ -549,6 +551,7 @@ impl Receiver<Attached> {
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
                 state,
+                false,
             )
             .await?;
         Ok(())
@@ -565,6 +568,7 @@ impl Receiver<Attached> {
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
                 DeliveryState::Released(Released {}),
+                false,
             )
             .await?;
         Ok(())
@@ -583,6 +587,7 @@ impl Receiver<Attached> {
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
                 state,
+                false,
             )
             .await?;
         Ok(())

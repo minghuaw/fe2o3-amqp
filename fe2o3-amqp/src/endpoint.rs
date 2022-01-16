@@ -349,6 +349,7 @@ pub trait ReceiverLink: Link {
         delivery_tag: DeliveryTag,
         // settled: bool, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
