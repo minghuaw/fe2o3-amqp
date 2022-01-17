@@ -50,6 +50,44 @@ impl<Io> Transport<Io>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
+    pub async fn connect_tls(
+        mut stream: Io,
+        domain: &str,
+        config: rustls::ClientConfig,
+    ) -> Result<TlsStream<Io>, Error> {
+        use rustls::ServerName;
+        use std::sync::Arc;
+
+        // Exchange TLS proto header
+        let proto_header = ProtocolHeader::tls();
+        let mut buf: [u8; 8] = proto_header.clone().into();
+        stream.write_all(&buf).await?;
+        stream.read_exact(&mut buf).await?;
+        let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid protocol header",
+            ))
+        })?;
+        if proto_header != incoming_header {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Protocol header mismatch",
+            )));
+        }
+
+        // TLS negotiation
+        let connector = TlsConnector::from(Arc::new(config));
+        let domain = ServerName::try_from(domain).map_err(|_| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid domain",
+            ))
+        })?;
+        let tls = connector.connect(domain, stream).await?;
+        Ok(tls)
+    }
+
     pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
@@ -105,48 +143,6 @@ where
 
         self.idle_timeout = idle_timeout;
         self
-    }
-}
-
-impl Transport<TcpStream> {
-    pub async fn connect_tls(
-        addr: impl ToSocketAddrs,
-        domain: &str,
-        config: rustls::ClientConfig,
-    ) -> Result<TlsStream<TcpStream>, Error> {
-        use rustls::ServerName;
-        use std::sync::Arc;
-
-        let mut stream = TcpStream::connect(addr).await?;
-
-        // Exchange TLS proto header
-        let proto_header = ProtocolHeader::tls();
-        let mut buf: [u8; 8] = proto_header.clone().into();
-        stream.write_all(&buf).await?;
-        stream.read_exact(&mut buf).await?;
-        let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid protocol header",
-            ))
-        })?;
-        if proto_header != incoming_header {
-            return Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Protocol header mismatch",
-            )));
-        }
-
-        // TLS negotiation
-        let connector = TlsConnector::from(Arc::new(config));
-        let domain = ServerName::try_from(domain).map_err(|_| {
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid domain",
-            ))
-        })?;
-        let tls = connector.connect(domain, stream).await?;
-        Ok(tls)
     }
 }
 

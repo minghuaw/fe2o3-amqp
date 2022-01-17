@@ -10,7 +10,6 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use tokio_rustls::client::TlsStream;
 use url::Url;
 
 use crate::{
@@ -254,6 +253,7 @@ impl Builder<WithContainerId> {
             }
             "amqps" => {
                 let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::SECURE_PORT))?;
+                let stream = TcpStream::connect(&*addr).await?;
                 let domain = url.domain().ok_or_else(|| {
                     Error::Io(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -266,7 +266,7 @@ impl Builder<WithContainerId> {
                         "ClientConfig not found",
                     ))
                 })?;
-                let tls_stream = Transport::connect_tls(&*addr, domain, config).await?;
+                let tls_stream = Transport::connect_tls(stream, domain, config).await?;
                 println!("TlsStream connected");
                 self.open_with_stream(tls_stream).await
             }
