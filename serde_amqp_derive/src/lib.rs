@@ -30,7 +30,7 @@ struct DescribedAttr {
     pub no_descriptor: Option<()>,
 }
 
-#[derive(Debug, darling::FromMeta)]
+#[derive(Debug, darling::FromMeta, PartialEq)]
 struct FieldAttr {
     // default: syn::Lit
     #[darling(default)]

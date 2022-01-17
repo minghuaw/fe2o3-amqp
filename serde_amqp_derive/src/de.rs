@@ -325,7 +325,10 @@ fn expand_deserialize_struct(
         ),
     };
 
-    let unwrap_or_default = macro_rules_unwrap_or_default();
+    let unwrap_or_default = match field_attrs.contains(&FieldAttr {default: true}) {
+        true => macro_rules_unwrap_or_default(),
+        false => quote!{}
+    };
     let unwrap_or_none = macro_rules_unwrap_or_none();
 
     let token = quote! {

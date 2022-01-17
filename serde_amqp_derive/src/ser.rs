@@ -7,7 +7,7 @@ use crate::{
         macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default,
         macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs,
     },
-    DescribedStructAttr, EncodingType,
+    DescribedStructAttr, EncodingType, FieldAttr,
 };
 
 pub(crate) fn expand_serialize(
@@ -181,7 +181,11 @@ fn expand_serialize_struct(
     let declarative_macro = match encoding {
         EncodingType::Basic | EncodingType::List => {
             let buffer_if_none = macro_rules_buffer_if_none();
-            let buffer_if_eq_default = macro_rules_buffer_if_eq_default();
+
+            let buffer_if_eq_default = match field_attrs.contains(&FieldAttr {default: true}) {
+                true => macro_rules_buffer_if_eq_default(),
+                false => quote! {}
+            };
             quote! {
                 #buffer_if_none
                 #buffer_if_eq_default
