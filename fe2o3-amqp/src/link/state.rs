@@ -6,10 +6,10 @@ use tokio::sync::RwLock;
 
 use crate::{
     endpoint::LinkFlow,
-    util::{Constant, Consume, Consumer, Produce, Producer, ProducerState},
+    util::{Consume, Produce, Producer, ProducerState},
 };
 
-use super::{delivery::UnsettledMessage, role, SenderFlowState};
+use super::{role, SenderFlowState};
 
 #[derive(Debug)]
 pub enum LinkState {
@@ -171,7 +171,7 @@ impl LinkFlowState<role::Sender> {
             state.delivery_count += state.link_credit;
             state.link_credit = 0;
 
-            return Some(state.as_link_flow(output_handle, false))
+            return Some(state.as_link_flow(output_handle, false));
         }
 
         match flow.echo {

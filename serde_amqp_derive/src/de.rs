@@ -166,8 +166,8 @@ fn impl_visit_seq_for_tuple_struct(
     evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let unwrap_or_none = match field_idents.len() {
-        0 => quote!{},
-        _ => macro_rules_unwrap_or_none()
+        0 => quote! {},
+        _ => macro_rules_unwrap_or_none(),
     };
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
@@ -339,12 +339,12 @@ fn expand_deserialize_struct(
     });
 
     let unwrap_or_default = match n_true {
-        0 => quote!{},
+        0 => quote! {},
         _ => macro_rules_unwrap_or_default(),
     };
     let unwrap_or_none = match n_false {
-        0 => quote!{},
-        _ => macro_rules_unwrap_or_none()
+        0 => quote! {},
+        _ => macro_rules_unwrap_or_none(),
     };
 
     let token = quote! {

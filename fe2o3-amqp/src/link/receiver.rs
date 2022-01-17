@@ -1,13 +1,12 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Role, SequenceNo},
-    messaging::{Accepted, Address, DeliveryState, Message, Modified, Rejected, Released, Target},
-    performatives::{Disposition, Transfer},
+    definitions::{self, AmqpError, SequenceNo},
+    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
+    performatives::Transfer,
 };
-use futures_util::{SinkExt, StreamExt};
-use serde_amqp::from_reader;
+use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -21,12 +20,12 @@ use crate::{
 };
 
 use super::{
-    builder::{self, WithTarget, WithoutName, WithoutTarget},
+    builder::{self, WithTarget, WithoutName},
     delivery::Delivery,
     error::DetachError,
     receiver_link::section_number_and_offset,
-    remove_from_unsettled, role,
-    state::{LinkFlowState, LinkState},
+    role,
+    state::LinkFlowState,
     type_state::{Attached, Detached},
     Error, LinkFrame, LinkHandle,
 };

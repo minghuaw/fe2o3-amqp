@@ -6,20 +6,19 @@ use super::*;
 impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
     /// Set and send flow state
     async fn send_flow<W>(
-        &mut self, 
-        writer: &mut W, 
+        &mut self,
+        writer: &mut W,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
-        echo: bool
+        echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
-        let handle = self.output_handle.clone()
-            .ok_or_else(|| Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is not attached".into())
-            })?;
+        let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Link is not attached".into()),
+        })?;
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -33,13 +32,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(writer.link_credit),
                     available: Some(available),
-                    // When flow state is sent from the sender to the receiver, this field 
+                    // When flow state is sent from the sender to the receiver, this field
                     // contains the actual drain mode of the sender
                     drain: writer.drain,
                     echo,
-                    properties: writer.properties.clone()
+                    properties: writer.properties.clone(),
                 }
-            },
+            }
             (Some(delivery_count), None) => {
                 let mut writer = self.flow_state.as_ref().lock.write().await;
                 writer.delivery_count = delivery_count;
@@ -50,13 +49,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(writer.link_credit),
                     available: Some(writer.available),
-                    // When flow state is sent from the sender to the receiver, this field 
+                    // When flow state is sent from the sender to the receiver, this field
                     // contains the actual drain mode of the sender
                     drain: writer.drain,
                     echo,
-                    properties: writer.properties.clone()
+                    properties: writer.properties.clone(),
                 }
-            },
+            }
             (None, Some(available)) => {
                 let mut writer = self.flow_state.as_ref().lock.write().await;
                 writer.available = available;
@@ -67,13 +66,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(writer.link_credit),
                     available: Some(available),
-                    // When flow state is sent from the sender to the receiver, this field 
+                    // When flow state is sent from the sender to the receiver, this field
                     // contains the actual drain mode of the sender
                     drain: writer.drain,
                     echo,
-                    properties: writer.properties.clone()
+                    properties: writer.properties.clone(),
                 }
-            },
+            }
             (None, None) => {
                 let reader = self.flow_state.as_ref().lock.read().await;
                 LinkFlow {
@@ -83,19 +82,18 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(reader.link_credit),
                     available: Some(reader.available),
-                    // When flow state is sent from the sender to the receiver, this field 
+                    // When flow state is sent from the sender to the receiver, this field
                     // contains the actual drain mode of the sender
                     drain: reader.drain,
                     echo,
-                    properties: reader.properties.clone()
+                    properties: reader.properties.clone(),
                 }
             }
         };
-        writer.send(flow).await
-            .map_err(|_| Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is not attached".into())
-            })
+        writer.send(flow).await.map_err(|_| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Link is not attached".into()),
+        })
     }
 
     async fn send_transfer<W>(

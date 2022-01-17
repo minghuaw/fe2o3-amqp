@@ -13,14 +13,14 @@ use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
     link::{Error, Link, LinkHandle, LinkIncomingItem},
     session::{self, SessionHandle},
-    util::{Constant, Consumer, Producer},
+    util::{Consumer, Producer},
 };
 
 use super::{
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     type_state::Attached,
-    LinkFrame, Receiver, Sender,
+    Receiver, Sender,
 };
 
 /// Type state for link::builder::Builder;
@@ -225,7 +225,6 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
 
     async fn create_link_instance<C, M>(
         self,
-        session: &mut SessionHandle,
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
         flow_state_consumer: C,
@@ -307,7 +306,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         let mut link = self
-            .create_link_instance(session, unsettled, output_handle, flow_state_consumer)
+            .create_link_instance(unsettled, output_handle, flow_state_consumer)
             .await?;
 
         // Get writer to session
@@ -366,7 +365,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         let mut link = self
-            .create_link_instance(session, unsettled, output_handle, flow_state_consumer)
+            .create_link_instance(unsettled, output_handle, flow_state_consumer)
             .await?;
 
         // Get writer to session

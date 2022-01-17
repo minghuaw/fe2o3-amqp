@@ -3,10 +3,7 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::{
-    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    format_code::EncodingCodes,
-};
+use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,

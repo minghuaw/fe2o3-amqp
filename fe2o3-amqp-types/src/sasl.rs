@@ -1,5 +1,8 @@
-use serde::{Serialize, Deserialize};
-use serde_amqp::{SerializeComposite, DeserializeComposite, primitives::{Symbol, Binary}};
+use serde::{Deserialize, Serialize};
+use serde_amqp::{
+    primitives::{Binary, Symbol},
+    DeserializeComposite, SerializeComposite,
+};
 
 /// 5.3.3.1 SASL Mechanisms
 /// Advertise available sasl mechanisms.
@@ -17,13 +20,13 @@ use serde_amqp::{SerializeComposite, DeserializeComposite, primitives::{Symbol, 
 )]
 pub struct SaslMechanisms {
     /// sasl-server-mechanisms supported sasl mechanisms
-    /// 
-    /// A list of the sasl security mechanisms supported by the sending peer. It is invalid for 
-    /// this list to be null or empty. If the sending peer does not require its partner to 
-    /// authenticate with it, then it SHOULD send a list of one element with its value as the 
-    /// SASL mechanism ANONYMOUS. The server mechanisms are ordered in decreasing level of 
+    ///
+    /// A list of the sasl security mechanisms supported by the sending peer. It is invalid for
+    /// this list to be null or empty. If the sending peer does not require its partner to
+    /// authenticate with it, then it SHOULD send a list of one element with its value as the
+    /// SASL mechanism ANONYMOUS. The server mechanisms are ordered in decreasing level of
     /// preference.
-    pub sasl_server_mechanisms: Vec<Symbol>
+    pub sasl_server_mechanisms: Vec<Symbol>,
 }
 
 /// 5.3.3.2 SASL Init
@@ -63,9 +66,8 @@ pub struct SaslInit {
     rename_all = "kebab-case"
 )]
 pub struct SaslChallenge {
-    pub challenge: Binary
+    pub challenge: Binary,
 }
-
 
 // 5.3.3.4 SASL Response
 // Security mechanism response.
@@ -82,7 +84,7 @@ pub struct SaslChallenge {
     rename_all = "kebab-case"
 )]
 pub struct SaslResponse {
-    pub response: Binary
+    pub response: Binary,
 }
 
 /// 5.3.3.5 SASL Outcome
@@ -92,8 +94,8 @@ pub struct SaslResponse {
 ///     <field name="code" type="sasl-code" mandatory="true"/>
 ///     <field name="additional-data" type="binary"/>
 /// </type>
-/// This frame indicates the outcome of the SASL dialog. Upon successful completion of the SASL 
-/// dialog the security layer has been established, and the peers MUST exchange protocol headers 
+/// This frame indicates the outcome of the SASL dialog. Upon successful completion of the SASL
+/// dialog the security layer has been established, and the peers MUST exchange protocol headers
 /// to either start a nested security layer, or to establish the AMQP connection.
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
@@ -104,7 +106,7 @@ pub struct SaslResponse {
 )]
 pub struct SaslOutcome {
     pub code: SaslCode,
-    pub additional_data: Option<Binary>
+    pub additional_data: Option<Binary>,
 }
 
 /// 5.3.3.6 SASL Code
@@ -123,7 +125,7 @@ pub enum SaslCode {
     Auth = 1,
     Sys = 2,
     SysPerm = 3,
-    SysTemp = 4
+    SysTemp = 4,
 }
 
 pub mod constant {

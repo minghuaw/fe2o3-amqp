@@ -1,10 +1,10 @@
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ErrorCondition},
+    definitions::AmqpError,
     messaging::{Address, DeliveryState, Message, Source},
     performatives::Disposition,
 };
@@ -24,7 +24,7 @@ use super::{
     delivery::{DeliveryFut, Sendable, UnsettledMessage},
     error::DetachError,
     role,
-    state::{LinkFlowState, LinkState},
+    state::LinkFlowState,
     type_state::{Attached, Detached},
     Error, LinkFrame, LinkHandle,
 };

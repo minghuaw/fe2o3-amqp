@@ -20,13 +20,11 @@
 //!         endpoint)
 
 use async_trait::async_trait;
-use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{
-        self, DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat,
-        ReceiverSettleMode, Role, SequenceNo,
+        self, DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo,
     },
-    messaging::{DeliveryState, Message},
+    messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
@@ -294,11 +292,11 @@ pub trait SenderLink: Link {
 
     /// Set and send flow state
     async fn send_flow<W>(
-        &mut self, 
-        writer: &mut W, 
+        &mut self,
+        writer: &mut W,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
-        echo: bool
+        echo: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
@@ -333,11 +331,11 @@ pub trait ReceiverLink: Link {
 
     /// Set and send flow state
     async fn send_flow<W>(
-        &mut self, 
-        writer: &mut W, 
+        &mut self,
+        writer: &mut W,
         link_credit: Option<u32>,
         drain: Option<bool>,
-        echo: bool
+        echo: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;

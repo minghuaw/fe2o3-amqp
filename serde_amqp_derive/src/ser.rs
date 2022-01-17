@@ -182,9 +182,9 @@ fn expand_serialize_struct(
         EncodingType::Basic | EncodingType::List => {
             let buffer_if_none = macro_rules_buffer_if_none();
 
-            let buffer_if_eq_default = match field_attrs.contains(&FieldAttr {default: true}) {
+            let buffer_if_eq_default = match field_attrs.contains(&FieldAttr { default: true }) {
                 true => macro_rules_buffer_if_eq_default(),
-                false => quote! {}
+                false => quote! {},
             };
             quote! {
                 #buffer_if_none

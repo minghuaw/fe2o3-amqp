@@ -19,20 +19,19 @@ const FOOTER_CODE: u8 = 0x78;
 impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
     /// Set and send flow state
     async fn send_flow<W>(
-        &mut self, 
-        writer: &mut W, 
+        &mut self,
+        writer: &mut W,
         link_credit: Option<u32>,
         drain: Option<bool>,
-        echo: bool
+        echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin
+        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
-        let handle = self.output_handle.clone()
-            .ok_or_else(|| Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is not attached".into())
-            })?;
+        let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Link is not attached".into()),
+        })?;
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
@@ -42,81 +41,80 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 LinkFlow {
                     handle,
                     // TODO: "last known value"???
-                    // When the flow state is being sent from the receiver endpoint to the sender 
-                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
                     delivery_count: Some(writer.delivery_count.clone()),
                     link_credit: Some(link_credit),
                     // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available), 
+                    // available: Some(writer.available),
                     available: None,
                     drain,
                     echo,
-                    properties: writer.properties.clone()
+                    properties: writer.properties.clone(),
                 }
-            },
+            }
             (Some(link_credit), None) => {
                 let mut writer = self.flow_state.lock.write().await;
                 writer.link_credit = link_credit;
                 LinkFlow {
                     handle,
                     // TODO: "last known value"???
-                    // When the flow state is being sent from the receiver endpoint to the sender 
-                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
                     delivery_count: Some(writer.delivery_count.clone()),
                     link_credit: Some(link_credit),
                     // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available), 
+                    // available: Some(writer.available),
                     available: None,
                     drain: writer.drain,
                     echo,
-                    properties: writer.properties.clone()
+                    properties: writer.properties.clone(),
                 }
-            },
+            }
             (None, Some(drain)) => {
                 let mut writer = self.flow_state.lock.write().await;
                 writer.drain = drain;
                 LinkFlow {
                     handle,
                     // TODO: "last known value"???
-                    // When the flow state is being sent from the receiver endpoint to the sender 
-                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
                     delivery_count: Some(writer.delivery_count.clone()),
                     link_credit: Some(writer.link_credit),
                     // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available), 
+                    // available: Some(writer.available),
                     available: None,
                     drain,
                     echo,
-                    properties: writer.properties.clone()
+                    properties: writer.properties.clone(),
                 }
-            },
+            }
             (None, None) => {
                 let reader = self.flow_state.lock.read().await;
                 LinkFlow {
                     handle,
                     // TODO: "last known value"???
-                    // When the flow state is being sent from the receiver endpoint to the sender 
-                    // endpoint this field MUST be set to the last known value of the corresponding 
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
                     delivery_count: Some(reader.delivery_count.clone()),
                     link_credit: Some(reader.link_credit),
                     // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available), 
+                    // available: Some(writer.available),
                     available: None,
                     drain: reader.drain,
                     echo,
-                    properties: reader.properties.clone()
+                    properties: reader.properties.clone(),
                 }
             }
         };
-        writer.send(flow).await
-            .map_err(|_| Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is not attached".into())
-            })
+        writer.send(flow).await.map_err(|_| Error::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Link is not attached".into()),
+        })
     }
 
     async fn on_incomplete_transfer(

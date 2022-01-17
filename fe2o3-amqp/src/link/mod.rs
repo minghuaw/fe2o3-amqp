@@ -2,7 +2,7 @@ mod frame;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
@@ -40,7 +40,7 @@ use crate::{
 
 use self::{
     delivery::Delivery,
-    state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
+    state::{LinkFlowState, LinkState, UnsettledMap},
 };
 
 type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;

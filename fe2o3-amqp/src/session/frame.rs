@@ -1,4 +1,3 @@
-use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer};
 
 use crate::Payload;

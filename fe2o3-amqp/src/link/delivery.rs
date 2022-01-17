@@ -1,4 +1,3 @@
-use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{DeliveryState, Message, Received},

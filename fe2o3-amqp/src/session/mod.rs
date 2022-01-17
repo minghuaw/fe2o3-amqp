@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, io};
 
 use async_trait::async_trait;
-use bytes::{Bytes, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo,
@@ -274,7 +273,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_flow");
 
         // TODO: handle session flow control
@@ -488,7 +487,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
         println!(">>> Debug: Session::on_incoming_end");
 
         match self.local_state {
