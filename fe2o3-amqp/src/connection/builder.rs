@@ -4,11 +4,13 @@ use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
     performatives::{ChannelMax, MaxFrameSize, Open},
 };
+use rustls::ClientConfig;
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
+use tokio_rustls::client::TlsStream;
 use url::Url;
 
 use crate::{
@@ -38,6 +40,8 @@ pub struct Builder<Mode> {
     pub desired_capabilities: Option<Vec<Symbol>>,
     pub properties: Option<Fields>,
 
+    pub client_config: Option<ClientConfig>,
+
     pub buffer_size: usize,
     // type state marker
     marker: PhantomData<Mode>,
@@ -58,6 +62,8 @@ impl Builder<WithoutContainerId> {
             desired_capabilities: None,
             properties: None,
 
+            client_config: None,
+
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             marker: PhantomData,
         }
@@ -71,16 +77,18 @@ impl<Mode> Builder<Mode> {
     pub fn container_id(self, id: impl Into<String>) -> Builder<WithContainerId> {
         Builder::<WithContainerId> {
             container_id: id.into(),
-            hostname: None,
+            hostname: self.hostname,
             // set to 512 before Open frame is sent
-            max_frame_size: MaxFrameSize(512),
-            channel_max: ChannelMax::default(),
-            idle_time_out: None,
-            outgoing_locales: None,
-            incoming_locales: None,
-            offered_capabilities: None,
-            desired_capabilities: None,
-            properties: None,
+            max_frame_size: self.max_frame_size,
+            channel_max: self.channel_max,
+            idle_time_out: self.idle_time_out,
+            outgoing_locales: self.outgoing_locales,
+            incoming_locales: self.incoming_locales,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
+
+            client_config: self.client_config,
 
             buffer_size: self.buffer_size,
             marker: PhantomData,
@@ -237,15 +245,36 @@ impl Builder<WithContainerId> {
     ) -> Result<ConnectionHandle, Error> {
         let url: Url = url.try_into()?;
 
-        let addr = url.socket_addrs(|| match url.scheme() {
-            // check scheme
-            "amqp" => Some(fe2o3_amqp_types::definitions::PORT),
-            "amqps" => todo!(),
-            _ => None,
-        })?; // std::io::Error
-        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-        println!("TcpStream connected");
-        self.open_with_stream(stream).await
+        match url.scheme() {
+            "amqp" => {
+                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+                let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+                println!("TcpStream connected");
+                self.open_with_stream(stream).await
+            }
+            "amqps" => {
+                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::SECURE_PORT))?;
+                let domain = url.domain().ok_or_else(|| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Invalid DNS name",
+                    ))
+                })?;
+                let config = self.client_config.clone().ok_or_else(|| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ClientConfig not found",
+                    ))
+                })?;
+                let tls_stream = Transport::connect_tls(&*addr, domain, config).await?;
+                println!("TlsStream connected");
+                self.open_with_stream(tls_stream).await
+            }
+            _ => Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid url scheme",
+            ))),
+        }
     }
 
     pub async fn pipelined_open_with_stream<Io>(

@@ -15,6 +15,7 @@ mod error;
 pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::definitions::AmqpError;
+use tokio_rustls::{client::TlsStream, TlsConnector};
 
 /* -------------------------------- Transport ------------------------------- */
 
@@ -23,7 +24,10 @@ use std::{convert::TryFrom, task::Poll, time::Duration};
 use bytes::{Bytes, BytesMut};
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::{TcpStream, ToSocketAddrs},
+};
 use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
 };
@@ -101,6 +105,48 @@ where
 
         self.idle_timeout = idle_timeout;
         self
+    }
+}
+
+impl Transport<TcpStream> {
+    pub async fn connect_tls(
+        addr: impl ToSocketAddrs,
+        domain: &str,
+        config: rustls::ClientConfig,
+    ) -> Result<TlsStream<TcpStream>, Error> {
+        use rustls::ServerName;
+        use std::sync::Arc;
+
+        let mut stream = TcpStream::connect(addr).await?;
+
+        // Exchange TLS proto header
+        let proto_header = ProtocolHeader::tls();
+        let mut buf: [u8; 8] = proto_header.clone().into();
+        stream.write_all(&buf).await?;
+        stream.read_exact(&mut buf).await?;
+        let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid protocol header",
+            ))
+        })?;
+        if proto_header != incoming_header {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Protocol header mismatch",
+            )));
+        }
+
+        // TLS negotiation
+        let connector = TlsConnector::from(Arc::new(config));
+        let domain = ServerName::try_from(domain).map_err(|_| {
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid domain",
+            ))
+        })?;
+        let tls = connector.connect(domain, stream).await?;
+        Ok(tls)
     }
 }
 
