@@ -11,4 +11,5 @@ serde = { version = "1.0.127", features = ["derive"] }
 serde_bytes = "0.11.5"
 ordered-float = { version = "2.7.0", features = ["serde"] }
 serde_repr = "0.1.7"
+trust-dns-resolver = "0.20.3"
 
