@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_amqp::{
     primitives::{Binary, Symbol},
     DeserializeComposite, SerializeComposite,
@@ -118,7 +118,7 @@ pub struct SaslOutcome {
 ///     <choice name="sys-perm" value="3"/>
 ///     <choice name="sys-temp" value="4"/>
 /// </type>
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, PartialEq)]
 #[repr(u8)]
 pub enum SaslCode {
     Ok = 0u8,
@@ -132,4 +132,64 @@ pub mod constant {
     pub const SASL_MAJOR: u8 = 1;
     pub const SASL_MINOR: u8 = 0; // minor protocol version
     pub const SASL_REVISION: u8 = 0; // protocol revision.
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_amqp::{to_vec, from_slice, format_code::EncodingCodes};
+
+    use super::SaslCode;
+
+    fn assert_eq_on_sasl_code_and_deserialized(code: SaslCode, buf: Vec<u8>) {
+        let deserialized: SaslCode = from_slice(&buf).unwrap();
+        assert_eq!(code, deserialized);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_sasl_code() {
+        let code = SaslCode::Ok;
+        let buf = to_vec(&code).unwrap();
+        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        assert_eq!(&buf, &expected);
+        assert_eq_on_sasl_code_and_deserialized(
+            code, 
+            expected
+        );
+
+        let code = SaslCode::Auth;
+        let buf = to_vec(&code).unwrap();
+        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        assert_eq!(&buf, &expected);
+        assert_eq_on_sasl_code_and_deserialized(
+            code, 
+            expected
+        );
+
+        let code = SaslCode::Sys;
+        let buf = to_vec(&code).unwrap();
+        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        assert_eq!(&buf, &expected);
+        assert_eq_on_sasl_code_and_deserialized(
+            code, 
+            expected
+        );
+
+        let code = SaslCode::SysPerm;
+        let buf = to_vec(&code).unwrap();
+        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        assert_eq!(&buf, &expected);
+        assert_eq_on_sasl_code_and_deserialized(
+            code, 
+            expected
+        );
+
+        let code = SaslCode::SysTemp;
+        let buf = to_vec(&code).unwrap();
+        let expected = vec![EncodingCodes::UByte as u8, code.clone() as u8];
+        assert_eq!(&buf, &expected);
+        assert_eq_on_sasl_code_and_deserialized(
+            code, 
+            expected
+        );
+    }
 }
