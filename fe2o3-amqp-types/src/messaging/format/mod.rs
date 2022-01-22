@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Binary, Boolean, Symbol, Timestamp, UByte, UInt, ULong, Uuid},
+    primitives::{Binary, Boolean, Symbol, UByte, UInt, ULong, Uuid},
     value::Value,
 };
 use std::collections::BTreeMap;
 
 use crate::{
-    definitions::{Milliseconds, SequenceNo},
+    definitions::{Milliseconds},
     primitives::SimpleValue,
 };
 
@@ -89,58 +89,8 @@ pub struct DeliveryAnnotations(pub Annotations);
 )]
 pub struct MessageAnnotations(pub Annotations);
 
-/// 3.2.4 Properties
-/// Immutable properties of the message.
-/// <type name="properties" class="composite" source="list" provides="section">
-///     <descriptor name="amqp:properties:list" code="0x00000000:0x00000073"/>
-/// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:properties:list",
-    code = 0x0000_0000_0000_0073,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Properties {
-    /// <field name="message-id" type="*" requires="message-id"/>
-    pub message_id: Option<MessageId>,
-
-    /// <field name="user-id" type="binary"/>
-    pub user_id: Option<Binary>,
-
-    /// <field name="to" type="*" requires="address"/>
-    pub to: Option<Address>,
-
-    /// <field name="subject" type="string"/>
-    pub subject: Option<String>,
-
-    /// <field name="reply-to" type="*" requires="address"/>
-    pub reply_to: Option<Address>,
-
-    /// <field name="correlation-id" type="*" requires="message-id"/>
-    pub correlation_id: Option<MessageId>,
-
-    /// <field name="content-type" type="symbol"/>
-    pub content_type: Option<Symbol>,
-
-    /// <field name="content-encoding" type="symbol"/>
-    pub content_encoding: Option<Symbol>,
-
-    /// <field name="absolute-expiry-time" type="timestamp"/>
-    pub absolute_expiry_time: Option<Timestamp>,
-
-    /// <field name="creation-time" type="timestamp"/>
-    pub creation_time: Option<Timestamp>,
-
-    /// <field name="group-id" type="string"/>
-    pub group_id: Option<String>,
-
-    /// <field name="group-sequence" type="sequence-no"/>
-    pub group_sequence: Option<SequenceNo>,
-
-    /// <field name="reply-to-group-id" type="string"/>
-    pub reply_to_groud_id: Option<String>,
-}
+pub mod properties;
+pub use properties::Properties;
 
 /// 3.2.5 Application Properties
 /// <type name="application-properties" class="restricted" source="map" provides="section">

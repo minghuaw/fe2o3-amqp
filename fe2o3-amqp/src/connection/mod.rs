@@ -131,9 +131,9 @@ impl Connection {
     }
 
     pub async fn open(
-        container_id: String,
-        max_frame_size: impl Into<MaxFrameSize>,
-        channel_max: impl Into<ChannelMax>,
+        container_id: String, // TODO: default container id? random uuid-ish
+        max_frame_size: impl Into<MaxFrameSize>, // TODO: make this use default?
+        channel_max: impl Into<ChannelMax>, // make this use default?
         url: impl TryInto<Url, Error = url::ParseError>,
     ) -> Result<ConnectionHandle, Error> {
         Connection::builder()
