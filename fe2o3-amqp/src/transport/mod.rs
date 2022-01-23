@@ -20,14 +20,13 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 /* -------------------------------- Transport ------------------------------- */
 
-use std::{convert::TryFrom, task::Poll, time::Duration};
+use std::{convert::TryFrom, task::Poll, time::Duration, marker::PhantomData};
 
 use bytes::{Bytes, BytesMut};
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::{TcpStream, ToSocketAddrs},
 };
 use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
@@ -35,19 +34,20 @@ use tokio_util::codec::{
 
 use crate::{connection::ConnectionState, util::IdleTimeout};
 
-use amqp::{Frame, FrameCodec};
 use protocol_header::ProtocolHeader;
 
 pin_project! {
-    pub struct Transport<Io> {
+    pub struct Transport<Io, Ftype> {
         #[pin]
         framed: Framed<Io, LengthDelimitedCodec>,
         #[pin]
-        idle_timeout: Option<IdleTimeout>
+        idle_timeout: Option<IdleTimeout>,
+        // frame type
+        ftype: PhantomData<Ftype>,
     }
 }
 
-impl<Io> Transport<Io>
+impl<Io> Transport<Io, amqp::Frame>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -109,6 +109,7 @@ where
         Self {
             framed,
             idle_timeout,
+            ftype: PhantomData,
         }
     }
 
@@ -216,7 +217,7 @@ where
     Ok(incoming_header)
 }
 
-impl<Io> Sink<Frame> for Transport<Io>
+impl<Io> Sink<amqp::Frame> for Transport<Io, amqp::Frame>
 where
     Io: AsyncWrite + Unpin,
 {
@@ -232,9 +233,9 @@ where
             .map_err(Into::into)
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: Frame) -> Result<(), Self::Error> {
+    fn start_send(self: std::pin::Pin<&mut Self>, item: amqp::Frame) -> Result<(), Self::Error> {
         let mut bytesmut = BytesMut::new();
-        let mut encoder = FrameCodec {};
+        let mut encoder = amqp::FrameCodec {};
         encoder.encode(item, &mut bytesmut)?;
 
         let this = self.project();
@@ -264,11 +265,11 @@ where
     }
 }
 
-impl<Io> Stream for Transport<Io>
+impl<Io> Stream for Transport<Io, amqp::Frame>
 where
     Io: AsyncRead + Unpin,
 {
-    type Item = Result<Frame, Error>;
+    type Item = Result<amqp::Frame, Error>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
@@ -305,7 +306,7 @@ where
                                 }
                             }
                         };
-                        let mut decoder = FrameCodec {};
+                        let mut decoder = amqp::FrameCodec {};
                         Poll::Ready(decoder.decode(&mut src).transpose())
                     }
                     None => Poll::Ready(None),

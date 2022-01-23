@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
 use crate::session::{SessionFrame, SessionFrameBody};
-use crate::transport::amqp::Frame;
+use crate::transport::amqp::{Frame, self};
 use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};
@@ -24,7 +24,7 @@ use super::{heartbeat::HeartBeat, ConnectionState, Error};
 pub(crate) type SessionId = usize;
 
 pub(crate) struct ConnectionEngine<Io, C> {
-    transport: Transport<Io>,
+    transport: Transport<Io, amqp::Frame>,
     connection: C,
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
@@ -42,7 +42,7 @@ where
 {
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
-        transport: Transport<Io>,
+        transport: Transport<Io, amqp::Frame>,
         connection: C,
         control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
