@@ -5,6 +5,8 @@ use serde::{
 
 use crate::__constants::SYMBOL;
 
+/// Symbol should only contain ASCII characters. The implementation, however, wraps
+/// over a String. `AmqpNetLite` also wraps around a String, which in c# is utf-16.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(String);
 
