@@ -113,7 +113,7 @@ mod performative_impl {
                 0x0000_0000_0000_0016 => Field::Detach,
                 0x0000_0000_0000_0017 => Field::End,
                 0x0000_0000_0000_0018 => Field::Close,
-                _ => return Err(de::Error::custom("Wrong code value for descriptor")),
+                _ => return Err(de::Error::custom(format!("Wrong code value for descriptor, found {:#x?}", v))),
             };
             Ok(val)
         }

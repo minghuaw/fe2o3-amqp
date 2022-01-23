@@ -315,13 +315,14 @@ mod tests {
 
     #[test]
     fn test_debug() {
-        let state = DeliveryState::Modified(Modified {
-            delivery_failed: None,
-            undeliverable_here: Some(true),
-            message_annotations: None,
-        });
+        // let state = DeliveryState::Modified(Modified {
+        //     delivery_failed: None,
+        //     undeliverable_here: Some(true),
+        //     message_annotations: None,
+        // });
+        let state = DeliveryState::Accepted(Accepted {});
         let buf = to_vec(&state).unwrap();
-        println!("{:?}", buf);
+        println!("{:#x?}", buf);
         let reader = SliceReader::new(&buf);
         let mut deserializer = Deserializer::new(reader);
         let modified = <DeliveryState as Deserialize>::deserialize(&mut deserializer).unwrap();

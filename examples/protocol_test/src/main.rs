@@ -18,7 +18,7 @@ async fn main() {
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .open("amqp://127.0.0.1:5674")
+        .open("amqp://127.0.0.1:5672")
         .await
         .unwrap();
 
@@ -36,7 +36,7 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    // sender.send("hello amqp").await.unwrap();
+    sender.send("hello amqp").await.unwrap();
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {
@@ -51,10 +51,10 @@ async fn main() {
 
     // sender.send("HELLO AMQP").await.unwrap();
 
-    let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
+    // let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
 
-    let result = fut.await;
-    println!("fut {:?}", result);
+    // let result = fut.await;
+    // println!("fut {:?}", result);
 
     sender.close().await.unwrap();
 

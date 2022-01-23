@@ -293,7 +293,7 @@ where
                     Some(item) => {
                         let mut src = match item {
                             Ok(b) => {
-                                println!(">>> Debug: frame {:x?}", &b[..]);
+                                println!(">>> Debug: frame {:#x?}", &b[..]);
                                 b
                             }
                             Err(err) => {
