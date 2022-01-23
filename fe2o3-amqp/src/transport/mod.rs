@@ -22,7 +22,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use std::{convert::TryFrom, marker::PhantomData, task::Poll, time::Duration};
 
-use bytes::{Bytes, BytesMut};
+use bytes::{BytesMut};
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -42,6 +42,12 @@ pin_project! {
         idle_timeout: Option<IdleTimeout>,
         // frame type
         ftype: PhantomData<Ftype>,
+    }
+}
+
+impl<Io, Ftype> Transport<Io, Ftype> {
+    pub fn into_inner_io(self) -> Io {
+        self.framed.into_inner()
     }
 }
 
@@ -222,7 +228,7 @@ where
     type Error = Error;
 
     fn poll_ready(
-        self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>, 
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
@@ -238,7 +244,7 @@ where
 
         let this = self.project();
         this.framed
-            .start_send(Bytes::from(bytesmut)) // Result<_, std::io::Error>
+            .start_send(bytesmut.freeze()) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
 
@@ -316,6 +322,98 @@ where
                     match delay.poll(cx) {
                         Poll::Ready(()) => return Poll::Ready(Some(Err(Error::IdleTimeout))),
                         Poll::Pending => return Poll::Pending,
+                    }
+                }
+
+                Poll::Pending
+            }
+        }
+    }
+}
+
+impl<Io> Sink<sasl::Frame> for Transport<Io, sasl::Frame>
+where 
+    Io: AsyncWrite + Unpin,
+{
+    type Error = Error;
+
+    fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.framed
+            .poll_ready(cx)
+            .map_err(Into::into)
+    }
+
+    fn start_send(self: std::pin::Pin<&mut Self>, item: sasl::Frame) -> Result<(), Self::Error> {
+        // Needs to know the length, and thus cannot write directly to the IO
+        let mut bytesmut = BytesMut::new();
+        let mut encoder = sasl::FrameCodec {};
+        encoder.encode(item, &mut bytesmut)?;
+
+        let this = self.project();
+        this.framed
+            .start_send(bytesmut.freeze())
+            .map_err(Into::into)
+    }
+
+    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.framed
+            .poll_flush(cx)
+            .map_err(Into::into)
+    }
+
+    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        this.framed
+            .poll_close(cx)
+            .map_err(Into::into)
+    }
+}
+
+impl<Io> Stream for Transport<Io, sasl::Frame>
+where
+    Io: AsyncRead + Unpin,
+{
+    type Item = Result<sasl::Frame, Error>;
+
+    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+
+        match this.framed.poll_next(cx) {
+            Poll::Ready(next) => {
+                if let Some(mut delay) = this.idle_timeout.as_pin_mut() {
+                    delay.reset();
+                }
+
+                match next {
+                    Some(item) => {
+                        let mut src = match item {
+                            Ok(b) => b,
+                            Err(err) => {
+                                use std::any::Any;
+                                let any = &err as &dyn Any;
+                                if any.is::<LengthDelimitedCodecError>() {
+                                    return Poll::Ready(Some(Err(Error::amqp_error(
+                                        AmqpError::FrameSizeTooSmall,
+                                        None
+                                    ))))
+                                } else {
+                                    return Poll::Ready(Some(Err(err.into())))
+                                }
+                            }
+                        };
+                        let mut decoder = sasl::FrameCodec {};
+                        Poll::Ready(decoder.decode(&mut src).transpose())
+                    },
+                    None => Poll::Ready(None)
+                }
+            },
+            Poll::Pending => {
+                if let Some(delay) = this.idle_timeout.as_pin_mut() {
+                    match delay.poll(cx) {
+                        Poll::Ready(()) => return Poll::Ready(Some(Err(Error::IdleTimeout))),
+                        Poll::Pending => return Poll::Pending
                     }
                 }
 

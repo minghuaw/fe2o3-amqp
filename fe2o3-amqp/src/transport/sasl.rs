@@ -1,8 +1,10 @@
 use serde::{ser, de::{self, VariantAccess}, Serialize, Deserialize};
 
-use fe2o3_amqp_types::sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse};
+use fe2o3_amqp_types::{sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse}, definitions::AmqpError};
 use serde_amqp::read::IoReader;
 use tokio_util::codec::{Encoder, Decoder};
+
+use crate::transport::FRAME_TYPE_SASL;
 
 use super::Error;
 
@@ -28,6 +30,13 @@ impl Encoder<Frame> for FrameCodec {
     fn encode(&mut self, item: Frame, dst: &mut bytes::BytesMut) -> Result<(), Self::Error> {
         use bytes::BufMut;
         use serde_amqp::ser::Serializer;
+        // The extended header is ignored.
+        // Implementations SHOULD therefore set DOFF to 0x02.
+        dst.put_u8(0x02); // doff
+        dst.put_u8(FRAME_TYPE_SASL);
+        // Bytes 6 and 7 of the header are ignored. 
+        // Implementations SHOULD set these to 0x00.
+        dst.put_u16(0x0000); // byte 6
 
         let mut serializer = Serializer::from(dst.writer());
         item.serialize(&mut serializer)?;
@@ -42,6 +51,18 @@ impl Decoder for FrameCodec {
     fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         use bytes::Buf;
         use serde_amqp::de::Deserializer;
+
+        let doff = src.get_u8();
+        let ftype = src.get_u8();
+        let _ignored = src.get_u16();
+
+        if ftype != FRAME_TYPE_SASL {
+            return Err(Error::amqp_error(AmqpError::NotImplemented, None))
+        }
+
+        if doff != 2 {
+            return Err(Error::amqp_error(AmqpError::NotAllowed, Some("doff is not equal to 2".to_string())))
+        }
 
         let reader = IoReader::new(src.reader());
         let mut deserializer = Deserializer::new(reader);
