@@ -1,8 +1,11 @@
-use serde_amqp::{SerializeComposite, DeserializeComposite, primitives::{Binary, Symbol, Timestamp}};
+use serde_amqp::{
+    primitives::{Binary, Symbol, Timestamp},
+    DeserializeComposite, SerializeComposite,
+};
 
 use crate::definitions::SequenceNo;
 
-use super::{MessageId, Address};
+use super::{Address, MessageId};
 
 /// 3.2.4 Properties
 /// Immutable properties of the message.
@@ -83,13 +86,13 @@ impl Properties {
 
 /// Builder for [`Properties`]
 pub struct Builder {
-    inner: Properties
+    inner: Properties,
 }
 
 impl Builder {
     pub fn new() -> Self {
         Self {
-            inner: Properties::new()
+            inner: Properties::new(),
         }
     }
 
@@ -102,7 +105,7 @@ impl Builder {
         self.inner.user_id = user_id.into();
         self
     }
-    
+
     pub fn to(mut self, to: impl Into<Option<Address>>) -> Self {
         self.inner.to = to.into();
         self
@@ -133,7 +136,10 @@ impl Builder {
         self
     }
 
-    pub fn absolute_expiry_time(mut self, absolute_expiry_time: impl Into<Option<Timestamp>>) -> Self {
+    pub fn absolute_expiry_time(
+        mut self,
+        absolute_expiry_time: impl Into<Option<Timestamp>>,
+    ) -> Self {
         self.inner.absolute_expiry_time = absolute_expiry_time.into();
         self
     }

@@ -11,23 +11,21 @@ pub const FRAME_TYPE_AMQP: u8 = 0x00;
 pub const FRAME_TYPE_SASL: u8 = 0x01;
 
 pub mod amqp;
-pub mod sasl;
 mod error;
 pub mod protocol_header;
+pub mod sasl;
 pub use error::Error;
 use fe2o3_amqp_types::definitions::AmqpError;
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 /* -------------------------------- Transport ------------------------------- */
 
-use std::{convert::TryFrom, task::Poll, time::Duration, marker::PhantomData};
+use std::{convert::TryFrom, marker::PhantomData, task::Poll, time::Duration};
 
 use bytes::{Bytes, BytesMut};
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
 };

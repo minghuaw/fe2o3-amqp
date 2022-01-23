@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
 use crate::session::{SessionFrame, SessionFrameBody};
-use crate::transport::amqp::{Frame, self};
+use crate::transport::amqp::{self, Frame};
 use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};

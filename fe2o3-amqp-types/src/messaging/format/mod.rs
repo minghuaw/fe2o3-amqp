@@ -6,10 +6,7 @@ use serde_amqp::{
 };
 use std::collections::BTreeMap;
 
-use crate::{
-    definitions::{Milliseconds},
-    primitives::SimpleValue,
-};
+use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
 /// 3.2.1 Header
 /// Transport headers for a message.

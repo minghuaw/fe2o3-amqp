@@ -11,8 +11,8 @@ use crate::__constants::SYMBOL;
 pub struct Symbol(String);
 
 impl Symbol {
-    pub fn new(val: String) -> Self {
-        Self(val)
+    pub fn new(val: impl Into<String>) -> Self {
+        Self(val.into())
     }
 
     pub fn into_inner(self) -> String {
