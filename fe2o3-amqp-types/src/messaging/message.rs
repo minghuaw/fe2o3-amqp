@@ -22,6 +22,10 @@ pub struct Message {
 }
 
 impl Message {
+    pub fn builder() -> Builder<EmptyBody> {
+        Builder::new()
+    }
+
     /// Count number of sections
     pub fn sections(&self) -> u32 {
         // The body section must be present
