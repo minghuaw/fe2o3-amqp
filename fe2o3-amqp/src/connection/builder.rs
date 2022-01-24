@@ -248,12 +248,14 @@ impl Builder<WithContainerId> {
 
         match url.scheme() {
             "amqp" => {
+                // `url.socket_addrs` will use standard lib's DNS support to resolve the address
                 let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
                 let stream = TcpStream::connect(&*addr).await?; // std::io::Error
                 println!("TcpStream connected");
                 self.open_with_stream(stream).await
             }
             "amqps" => {
+                // `url.socket_addrs` will use standard lib's DNS support to resolve the address
                 let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::SECURE_PORT))?;
                 let stream = TcpStream::connect(&*addr).await?;
                 let domain = url.domain().ok_or_else(|| {
