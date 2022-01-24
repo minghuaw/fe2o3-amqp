@@ -42,6 +42,7 @@ pub struct Builder<Mode> {
     pub client_config: Option<ClientConfig>,
 
     pub buffer_size: usize,
+
     // type state marker
     marker: PhantomData<Mode>,
 }
@@ -64,6 +65,7 @@ impl Builder<WithoutContainerId> {
             client_config: None,
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
+
             marker: PhantomData,
         }
     }
@@ -289,5 +291,15 @@ impl Builder<WithContainerId> {
 
     pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_url_name_resolution() {
+        let url = url::Url::parse("amqp://example.net/").unwrap();
+        let addrs = url.socket_addrs(|| Some(5671)).unwrap();
+        println!("{:?}", addrs);
     }
 }
