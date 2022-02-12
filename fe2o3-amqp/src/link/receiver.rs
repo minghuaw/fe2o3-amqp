@@ -27,7 +27,7 @@ use super::{
     role,
     state::LinkFlowState,
     type_state::{Attached, Detached},
-    Error, LinkFrame, LinkHandle,
+    Error, LinkFrame, LinkHandle, DEFAULT_CREDIT,
 };
 
 macro_rules! or_assign {
@@ -150,7 +150,7 @@ pub enum CreditMode {
 impl Default for CreditMode {
     fn default() -> Self {
         // Default credit
-        Self::Auto(200)
+        Self::Auto(DEFAULT_CREDIT)
     }
 }
 
@@ -562,7 +562,13 @@ impl Receiver<Attached> {
 }
 
 // impl<State> Receiver<State> {
-    
+//     pub fn is_credit_mode_auto(&self) -> bool {
+//         if let CreditMode::Auto(_) = self.credit_mode {
+//             true
+//         } else {
+//             false
+//         }
+//     }
 // }
 
 /// TODO: Use type state to differentiate Mode First and Mode Second?

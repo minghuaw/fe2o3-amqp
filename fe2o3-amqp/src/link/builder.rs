@@ -384,7 +384,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         // Send an Attach frame
         super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
-        let receiver = Receiver::<Attached> {
+        let mut receiver = Receiver::<Attached> {
             link,
             buffer_size,
             credit_mode,
@@ -396,6 +396,11 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             marker: PhantomData,
             incomplete_transfer: None,
         };
+
+        if let CreditMode::Auto(credit) = receiver.credit_mode {
+            receiver.set_credit(credit).await?;
+        }
+
         Ok(receiver)
     }
 }

@@ -6,7 +6,7 @@ use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
-        Role, SenderSettleMode, SessionError,
+        Role, SenderSettleMode, SessionError, SequenceNo,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -42,6 +42,8 @@ use self::{
     delivery::Delivery,
     state::{LinkFlowState, LinkState, UnsettledMap},
 };
+
+pub const DEFAULT_CREDIT: SequenceNo = 200;
 
 type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
