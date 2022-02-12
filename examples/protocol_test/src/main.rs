@@ -42,7 +42,7 @@ async fn main() {
         .settled(true)
         .message("hello world")
         .build();
-        
+
     sender.send(message).await.unwrap();
 
     // // sender.close().await.unwrap();

@@ -273,6 +273,8 @@ impl<R> LinkFlowState<R> {
 }
 
 impl LinkFlowState<role::Receiver> {
+    /// Consume one link credit if available. Returns an error if there is
+    /// not enough link credit
     pub async fn consume(&self, count: u32) -> Result<(), super::Error> {
         let mut state = self.lock.write().await;
         if state.link_credit < count {
@@ -320,8 +322,9 @@ impl Consume for SenderFlowState {
     type Item = u32;
     type Outcome = SenderPermit;
 
+    /// Increment delivery count and decrement link_credit. Wait asynchronously
+    /// if there is not enough credit
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
-        // increment delivery count and decrement link_credit
         loop {
             match consume_link_credit(&self.state().lock, item).await {
                 Ok(action) => return action,

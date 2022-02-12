@@ -1396,7 +1396,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
                 let _ = self.de.reader.next(); // consume the Null byte
                 Ok(None)
             }
-            EncodingCodes::DescribedType => {                
+            EncodingCodes::DescribedType => {
                 let result = seed.deserialize(self.as_mut()).map(Some);
                 // The list header should only be consume once for each list
                 // The sublist will create new DescribedAccess and thus take care of their own

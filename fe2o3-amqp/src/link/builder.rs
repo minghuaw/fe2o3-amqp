@@ -17,6 +17,7 @@ use crate::{
 };
 
 use super::{
+    receiver::CreditMode,
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     type_state::Attached,
@@ -53,6 +54,7 @@ pub struct Builder<Role, NameState, Addr> {
     pub properties: Option<Fields>,
 
     pub buffer_size: usize,
+    pub credit_mode: CreditMode,
 
     // Type state markers
     role: PhantomData<Role>,
@@ -75,6 +77,7 @@ impl<Role> Builder<Role, WithoutName, WithoutTarget> {
             properties: Default::default(),
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
+            credit_mode: CreditMode::default(),
             role: PhantomData,
             name_state: PhantomData,
             addr_state: PhantomData,
@@ -95,6 +98,7 @@ impl<Role, Addr> Builder<Role, WithoutName, Addr> {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
             properties: Default::default(),
 
             role: self.role,
@@ -124,6 +128,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
             properties: Default::default(),
 
             role: PhantomData,
@@ -144,6 +149,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
             properties: Default::default(),
 
             role: PhantomData,
@@ -179,6 +185,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             offered_capabilities: self.offered_capabilities,
             desired_capabilities: self.desired_capabilities,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
             properties: Default::default(),
 
             role: self.role,
@@ -334,7 +341,9 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         mut self,
         session: &mut SessionHandle,
     ) -> Result<Receiver<Attached>, Error> {
+        // TODO: how to avoid clone?
         let buffer_size = self.buffer_size.clone();
+        let credit_mode = self.credit_mode.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
 
@@ -378,6 +387,9 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let receiver = Receiver::<Attached> {
             link,
             buffer_size,
+            credit_mode,
+            flow_threshold: 0, // TODO: 0 or MAX?
+            processed: 0,
             session: session.control.clone(),
             outgoing,
             incoming: reader,

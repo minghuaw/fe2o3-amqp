@@ -299,7 +299,7 @@ pub trait SenderLink: Link {
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
     /// Send message via transfer frame and return whether the message is already settled
     async fn send_transfer<W>(
@@ -334,11 +334,11 @@ pub trait ReceiverLink: Link {
         &mut self,
         writer: &mut W,
         link_credit: Option<u32>,
-        drain: Option<bool>,
+        drain: Option<bool>, // TODO: Is Option necessary?
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
 
     async fn on_incomplete_transfer(
         &mut self,

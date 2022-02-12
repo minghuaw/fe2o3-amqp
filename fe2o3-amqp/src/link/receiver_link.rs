@@ -26,7 +26,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
         let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
             condition: AmqpError::IllegalState,
@@ -111,10 +111,13 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 }
             }
         };
-        writer.send(flow).await.map_err(|_| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Link is not attached".into()),
-        })
+        writer
+            .send(LinkFrame::Flow(flow))
+            .await
+            .map_err(|_| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into()),
+            })
     }
 
     async fn on_incomplete_transfer(
@@ -153,6 +156,8 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         ),
         Self::Error,
     > {
+        // ReceiverFlowState will not wait until link credit is available.
+        // Will return with an error if there is not enough link credit.
         // TODO: The receiver should then detach with error
         self.flow_state.consume(1).await?;
 
@@ -278,11 +283,20 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
     {
         let settled = match self.rcv_settle_mode {
             ReceiverSettleMode::First => {
+                // If first, this indicates that the receiver MUST settle
+                // the delivery once it has arrived without waiting
+                // for the sender to settle first.
+
                 // The delivery is not inserted into unsettled map if in First mode
                 true
             }
             ReceiverSettleMode::Second => {
+                // If second, this indicates that the receiver MUST NOT settle until sending
+                // its disposition to the sender and receiving a settled disposition from
+                // the sender.
                 let mut lock = self.unsettled.write().await;
+                // If the key is present in the map, the old value will be returned, which
+                // we don't really need
                 let _ = lock.insert(delivery_tag.clone(), state.clone());
                 false
             }

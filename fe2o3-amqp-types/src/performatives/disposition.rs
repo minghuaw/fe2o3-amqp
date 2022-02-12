@@ -45,9 +45,12 @@ pub struct Disposition {
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{to_vec, from_slice, primitives::Boolean};
+    use serde_amqp::{from_slice, primitives::Boolean, to_vec};
 
-    use crate::{definitions::{Role, DeliveryNumber}, messaging::{DeliveryState, Accepted}};
+    use crate::{
+        definitions::{DeliveryNumber, Role},
+        messaging::{Accepted, DeliveryState},
+    };
 
     #[test]
     fn test_serialize() {
@@ -57,25 +60,12 @@ mod tests {
             first: 0,
             last: None,
             settled: true,
-            state: Some(DeliveryState::Accepted(Accepted{})),
-            batchable: false
+            state: Some(DeliveryState::Accepted(Accepted {})),
+            batchable: false,
         };
         let buf = to_vec(&disposition).unwrap();
         let expected = &[
-            0x0u8,
-            0x53,
-            0x15,
-            0xc0,
-            0x9,
-            0x5,
-            0x41,
-            0x43,
-            0x40,
-            0x41,
-            0x0,
-            0x53,
-            0x24,
-            0x45,
+            0x0u8, 0x53, 0x15, 0xc0, 0x9, 0x5, 0x41, 0x43, 0x40, 0x41, 0x0, 0x53, 0x24, 0x45,
         ];
         assert_eq!(buf, expected);
     }
@@ -84,19 +74,19 @@ mod tests {
     pub struct Disposition {
         /// <field name="role" type="role" mandatory="true"/>
         pub role: Role,
-    
+
         /// <field name="first" type="delivery-number" mandatory="true"/>
         pub first: DeliveryNumber,
-    
+
         /// <field name="last" type="delivery-number"/>
         pub last: Option<DeliveryNumber>,
-    
+
         /// <field name="settled" type="boolean" default="false"/>
         pub settled: Boolean,
-    
+
         /// <field name="state" type="*" requires="delivery-state"/>
         pub state: Option<DeliveryState>,
-    
+
         /// <field name="batchable" type="boolean" default="false"/>
         pub batchable: Boolean,
     }
@@ -386,20 +376,7 @@ mod tests {
     #[test]
     fn test_deserialize() {
         let buf = &[
-            0x0u8,
-            0x53,
-            0x15,
-            0xc0,
-            0x9,
-            0x5,
-            0x41,
-            0x43,
-            0x40,
-            0x41,
-            0x0,
-            0x53,
-            0x24,
-            0x45,
+            0x0u8, 0x53, 0x15, 0xc0, 0x9, 0x5, 0x41, 0x43, 0x40, 0x41, 0x0, 0x53, 0x24, 0x45,
         ];
         let deserialized: Disposition = from_slice(&buf[..]).unwrap();
         println!("{:?}", deserialized);

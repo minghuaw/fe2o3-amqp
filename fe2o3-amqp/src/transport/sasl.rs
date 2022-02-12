@@ -1,8 +1,14 @@
-use serde::{ser, de::{self, VariantAccess}, Serialize, Deserialize};
+use serde::{
+    de::{self, VariantAccess},
+    ser, Deserialize, Serialize,
+};
 
-use fe2o3_amqp_types::{sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse}, definitions::AmqpError};
+use fe2o3_amqp_types::{
+    definitions::AmqpError,
+    sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
+};
 use serde_amqp::read::IoReader;
-use tokio_util::codec::{Encoder, Decoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 use crate::transport::FRAME_TYPE_SASL;
 
@@ -34,7 +40,7 @@ impl Encoder<Frame> for FrameCodec {
         // Implementations SHOULD therefore set DOFF to 0x02.
         dst.put_u8(0x02); // doff
         dst.put_u8(FRAME_TYPE_SASL);
-        // Bytes 6 and 7 of the header are ignored. 
+        // Bytes 6 and 7 of the header are ignored.
         // Implementations SHOULD set these to 0x00.
         dst.put_u16(0x0000); // byte 6
 
@@ -57,11 +63,14 @@ impl Decoder for FrameCodec {
         let _ignored = src.get_u16();
 
         if ftype != FRAME_TYPE_SASL {
-            return Err(Error::amqp_error(AmqpError::NotImplemented, None))
+            return Err(Error::amqp_error(AmqpError::NotImplemented, None));
         }
 
         if doff != 2 {
-            return Err(Error::amqp_error(AmqpError::NotAllowed, Some("doff is not equal to 2".to_string())))
+            return Err(Error::amqp_error(
+                AmqpError::NotAllowed,
+                Some("doff is not equal to 2".to_string()),
+            ));
         }
 
         let reader = IoReader::new(src.reader());
@@ -74,14 +83,14 @@ impl Decoder for FrameCodec {
 impl ser::Serialize for Frame {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         match self {
             Frame::Mechanisms(value) => value.serialize(serializer),
             Frame::Init(value) => value.serialize(serializer),
             Frame::Challenge(value) => value.serialize(serializer),
             Frame::Response(value) => value.serialize(serializer),
-            Frame::Outcome(value) => value.serialize(serializer)
+            Frame::Outcome(value) => value.serialize(serializer),
         }
     }
 }
@@ -105,7 +114,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             "amqp:sasl-mechanisms:list" => Field::Mechanisms,
@@ -113,14 +122,18 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:sasl-challenge:list" => Field::Challenge,
             "amqp:sasl-response:list" => Field::Response,
             "amqp:sasl-outcome:list" => Field::Outcome,
-            _ => return Err(de::Error::custom("Wrong symbol value for SASL frame body descriptor"))
+            _ => {
+                return Err(de::Error::custom(
+                    "Wrong symbol value for SASL frame body descriptor",
+                ))
+            }
         };
         Ok(val)
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             0x0000_0000_0000_0040 => Field::Mechanisms,
@@ -128,7 +141,11 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0042 => Field::Challenge,
             0x0000_0000_0000_0043 => Field::Response,
             0x0000_0000_0000_0044 => Field::Outcome,
-            _ => return Err(de::Error::custom("Wrong code value for SASL frame body descriptor"))
+            _ => {
+                return Err(de::Error::custom(
+                    "Wrong code value for SASL frame body descriptor",
+                ))
+            }
         };
         Ok(val)
     }
@@ -137,7 +154,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_identifier(FieldVisitor {})
     }
@@ -154,7 +171,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-        A: de::EnumAccess<'de>, 
+        A: de::EnumAccess<'de>,
     {
         let (val, variant) = data.variant()?;
 
@@ -162,19 +179,19 @@ impl<'de> de::Visitor<'de> for Visitor {
             Field::Mechanisms => {
                 let value = variant.newtype_variant()?;
                 Ok(Frame::Mechanisms(value))
-            },
+            }
             Field::Init => {
                 let value = variant.newtype_variant()?;
                 Ok(Frame::Init(value))
-            },
+            }
             Field::Challenge => {
                 let value = variant.newtype_variant()?;
                 Ok(Frame::Challenge(value))
-            },
+            }
             Field::Response => {
                 let value = variant.newtype_variant()?;
                 Ok(Frame::Response(value))
-            },
+            }
             Field::Outcome => {
                 let value = variant.newtype_variant()?;
                 Ok(Frame::Outcome(value))
@@ -186,7 +203,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for Frame {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         const VARIANTS: &'static [&'static str] = &[
             "amqp:sasl-mechanisms:list",
@@ -201,13 +218,13 @@ impl<'de> de::Deserialize<'de> for Frame {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp_types::{sasl::SaslMechanisms, primitives::Symbol};
-    use serde_amqp::{to_vec, from_slice};
+    use fe2o3_amqp_types::{primitives::Symbol, sasl::SaslMechanisms};
+    use serde_amqp::{from_slice, to_vec};
 
     #[test]
     fn test_serialize_frame_body() {
         let mechanism = SaslMechanisms {
-            sasl_server_mechanisms: vec![Symbol::from("PLAIN")]
+            sasl_server_mechanisms: vec![Symbol::from("PLAIN")],
         };
         let buf = to_vec(&mechanism).unwrap();
         println!("{:#x?}", buf);

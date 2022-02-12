@@ -22,7 +22,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use std::{convert::TryFrom, marker::PhantomData, task::Poll, time::Duration};
 
-use bytes::{BytesMut};
+use bytes::BytesMut;
 use futures_util::{Future, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -228,7 +228,7 @@ where
     type Error = Error;
 
     fn poll_ready(
-        self: std::pin::Pin<&mut Self>, 
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
@@ -332,16 +332,17 @@ where
 }
 
 impl<Io> Sink<sasl::Frame> for Transport<Io, sasl::Frame>
-where 
+where
     Io: AsyncWrite + Unpin,
 {
     type Error = Error;
 
-    fn poll_ready(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed
-            .poll_ready(cx)
-            .map_err(Into::into)
+        this.framed.poll_ready(cx).map_err(Into::into)
     }
 
     fn start_send(self: std::pin::Pin<&mut Self>, item: sasl::Frame) -> Result<(), Self::Error> {
@@ -356,18 +357,20 @@ where
             .map_err(Into::into)
     }
 
-    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed
-            .poll_flush(cx)
-            .map_err(Into::into)
+        this.framed.poll_flush(cx).map_err(Into::into)
     }
 
-    fn poll_close(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed
-            .poll_close(cx)
-            .map_err(Into::into)
+        this.framed.poll_close(cx).map_err(Into::into)
     }
 }
 
@@ -377,7 +380,10 @@ where
 {
     type Item = Result<sasl::Frame, Error>;
 
-    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
         match this.framed.poll_next(cx) {
@@ -396,24 +402,24 @@ where
                                 if any.is::<LengthDelimitedCodecError>() {
                                     return Poll::Ready(Some(Err(Error::amqp_error(
                                         AmqpError::FrameSizeTooSmall,
-                                        None
-                                    ))))
+                                        None,
+                                    ))));
                                 } else {
-                                    return Poll::Ready(Some(Err(err.into())))
+                                    return Poll::Ready(Some(Err(err.into())));
                                 }
                             }
                         };
                         let mut decoder = sasl::FrameCodec {};
                         Poll::Ready(decoder.decode(&mut src).transpose())
-                    },
-                    None => Poll::Ready(None)
+                    }
+                    None => Poll::Ready(None),
                 }
-            },
+            }
             Poll::Pending => {
                 if let Some(delay) = this.idle_timeout.as_pin_mut() {
                     match delay.poll(cx) {
                         Poll::Ready(()) => return Poll::Ready(Some(Err(Error::IdleTimeout))),
-                        Poll::Pending => return Poll::Pending
+                        Poll::Pending => return Poll::Pending,
                     }
                 }
 

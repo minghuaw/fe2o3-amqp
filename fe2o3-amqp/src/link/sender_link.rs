@@ -13,7 +13,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
     {
         let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
             condition: AmqpError::IllegalState,
@@ -90,10 +90,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 }
             }
         };
-        writer.send(flow).await.map_err(|_| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Link is not attached".into()),
-        })
+        writer
+            .send(LinkFrame::Flow(flow))
+            .await
+            .map_err(|_| Error::AmqpError {
+                condition: AmqpError::IllegalState,
+                description: Some("Link is not attached".into()),
+            })
     }
 
     async fn send_transfer<W>(
@@ -117,6 +120,11 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         match self.flow_state.consume(1).await {
             SenderPermit::Send => {} // There is enough credit to send
             SenderPermit::Drain => {
+                // If set, the sender will (after sending all available
+                // messages) advance the delivery-count as much as possible,
+                // consuming all link-credit, and send the flow state to the
+                // receiver
+
                 // Drain is set
                 todo!()
             }

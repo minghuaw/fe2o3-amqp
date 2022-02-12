@@ -59,7 +59,12 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0025 => Field::Rejected,
             0x000_0000_0000_0026 => Field::Released,
             0x0000_0000_0000_0027 => Field::Modified,
-            _ => return Err(de::Error::custom(format!("Wrong code value for descriptor, found {:#x?}", v))),
+            _ => {
+                return Err(de::Error::custom(format!(
+                    "Wrong code value for descriptor, found {:#x?}",
+                    v
+                )))
+            }
         };
         Ok(val)
     }

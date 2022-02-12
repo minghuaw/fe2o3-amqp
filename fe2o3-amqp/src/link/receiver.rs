@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SequenceNo},
+    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::Transfer,
 };
@@ -141,10 +141,26 @@ impl IncompleteTransfer {
 type ReceiverFlowState = LinkFlowState<role::Receiver>;
 type ReceiverLink = super::Link<role::Receiver, Arc<ReceiverFlowState>, DeliveryState>;
 
+#[derive(Debug, Clone)]
+pub enum CreditMode {
+    Manual,
+    Auto(SequenceNo),
+}
+
+impl Default for CreditMode {
+    fn default() -> Self {
+        // Default credit
+        Self::Auto(200)
+    }
+}
+
 #[derive(Debug)]
 pub struct Receiver<S> {
     pub(crate) link: ReceiverLink,
     pub(crate) buffer_size: usize,
+    pub(crate) credit_mode: CreditMode,
+    pub(crate) flow_threshold: SequenceNo,
+    pub(crate) processed: SequenceNo,
 
     // Control sender to the session
     pub(crate) session: mpsc::Sender<SessionControl>,
@@ -202,6 +218,9 @@ impl Receiver<Detached> {
         Ok(Receiver::<Attached> {
             link: self.link,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
+            flow_threshold: self.flow_threshold,
+            processed: self.processed,
             session: self.session,
             outgoing: self.outgoing,
             incoming: self.incoming,
@@ -336,13 +355,10 @@ impl Receiver<Attached> {
         if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
             // let frame = LinkFrame::Disposition(disposition);
             // self.outgoing.send(frame).await?;
-            self.link
-                .dispose(
-                    &mut self.outgoing,
+            self.dispose(
                     delivery_id,
                     delivery_tag,
                     delivery_state,
-                    false, // This shouldn't matter as no reply is expected from the sender
                 )
                 .await?;
         }
@@ -350,13 +366,36 @@ impl Receiver<Attached> {
         Ok(Some(delivery))
     }
 
+    /// Set the link credit. This will stop draining if the link is in a draining cycle
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
-        todo!()
+        use crate::endpoint::ReceiverLink;
+
+        self.processed = 0;
+
+        if let CreditMode::Auto(_) = self.credit_mode {
+            self.credit_mode = CreditMode::Auto(credit)
+        }
+
+        self.link
+            .send_flow(&mut self.outgoing, Some(credit), Some(false), false)
+            .await
     }
 
-    // TODO: how to stop draining?
+    // TODO: how to stop draining? `set_credit` will stop draining
     pub async fn drain(&mut self) -> Result<(), Error> {
-        todo!()
+        use crate::endpoint::ReceiverLink;
+
+        self.processed = 0;
+
+        // Return if already draining
+        if self.link.flow_state.drain().await {
+            return Ok(());
+        }
+
+        // Send a flow with Drain set to true
+        self.link
+            .send_flow(&mut self.outgoing, None, Some(true), false)
+            .await
     }
 
     // TODO: reduce mostly duplicated code (Sender/Receiver::detach/close)?
@@ -365,6 +404,9 @@ impl Receiver<Attached> {
         let mut detaching = Receiver::<Detached> {
             link: self.link,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
+            flow_threshold: self.flow_threshold,
+            processed: self.processed,
             session: self.session,
             outgoing: self.outgoing,
             incoming: self.incoming,
@@ -446,6 +488,9 @@ impl Receiver<Attached> {
         let mut detaching = Receiver::<Detached> {
             link: self.link,
             buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
+            flow_threshold: self.flow_threshold,
+            processed: self.processed,
             session: self.session,
             outgoing: self.outgoing,
             incoming: self.incoming,
@@ -516,35 +561,44 @@ impl Receiver<Attached> {
     }
 }
 
-impl<State> Receiver<State> {
-    // /// TODO: batch disposition
-    // async fn dispose(
-    //     &mut self,
-    //     delivery: &Delivery,
-    //     settled: bool,
-    //     state: DeliveryState,
-    // ) -> Result<(), Error> {
-
-    // }
-}
+// impl<State> Receiver<State> {
+    
+// }
 
 /// TODO: Use type state to differentiate Mode First and Mode Second?
 impl Receiver<Attached> {
-    pub async fn accept(&mut self, delivery: &Delivery) -> Result<(), Error> {
+    /// TODO: batch disposition
+    async fn dispose(
+        &mut self,
+        delivery_id: DeliveryNumber,
+        delivery_tag: DeliveryTag,
+        state: DeliveryState,
+    ) -> Result<(), Error> {
         use crate::endpoint::ReceiverLink;
-        // The incoming disposition is handled by session loop, so there is no need to wait for
-        // reply
+
         let _ = self
             .link
-            .dispose(
-                &mut self.outgoing,
-                delivery.delivery_id.clone(),
-                delivery.delivery_tag.clone(),
-                DeliveryState::Accepted(Accepted {}),
-                false,
-            )
+            .dispose(&mut self.outgoing, delivery_id, delivery_tag, state, false)
             .await?;
+
+        self.processed += 1;
+        if let CreditMode::Auto(max_credit) = self.credit_mode {
+            if self.processed >= self.flow_threshold {
+                // self.processed will be set to zero when setting link credit
+                self.set_credit(max_credit).await?;
+            }
+        }
         Ok(())
+    }
+
+    pub async fn accept(&mut self, delivery: &Delivery) -> Result<(), Error> {
+        let state = DeliveryState::Accepted(Accepted {});
+        self.dispose(
+            delivery.delivery_id.clone(),
+            delivery.delivery_tag.clone(),
+            state,
+        )
+        .await
     }
 
     pub async fn reject(
@@ -552,37 +606,25 @@ impl Receiver<Attached> {
         delivery: &Delivery,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), Error> {
-        use crate::endpoint::ReceiverLink;
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        self.link
-            .dispose(
-                &mut self.outgoing,
-                delivery.delivery_id.clone(),
-                delivery.delivery_tag.clone(),
-                state,
-                false,
-            )
-            .await?;
-        Ok(())
+        self.dispose(
+            delivery.delivery_id.clone(),
+            delivery.delivery_tag.clone(),
+            state,
+        )
+        .await
     }
 
     pub async fn release(&mut self, delivery: &Delivery) -> Result<(), Error> {
-        use crate::endpoint::ReceiverLink;
-        // The incoming disposition is handled by session loop, so there is no need to wait for
-        // reply
-        let _ = self
-            .link
-            .dispose(
-                &mut self.outgoing,
-                delivery.delivery_id.clone(),
-                delivery.delivery_tag.clone(),
-                DeliveryState::Released(Released {}),
-                false,
-            )
-            .await?;
-        Ok(())
+        let state = DeliveryState::Released(Released {});
+        self.dispose(
+            delivery.delivery_id.clone(),
+            delivery.delivery_tag.clone(),
+            state,
+        )
+        .await
     }
 
     pub async fn modify(
@@ -590,18 +632,13 @@ impl Receiver<Attached> {
         delivery: &Delivery,
         modified: impl Into<Modified>,
     ) -> Result<(), Error> {
-        use crate::endpoint::ReceiverLink;
         let state = DeliveryState::Modified(modified.into());
-        self.link
-            .dispose(
-                &mut self.outgoing,
-                delivery.delivery_id.clone(),
-                delivery.delivery_tag.clone(),
-                state,
-                false,
-            )
-            .await?;
-        Ok(())
+        self.dispose(
+            delivery.delivery_id.clone(),
+            delivery.delivery_tag.clone(),
+            state,
+        )
+        .await
     }
 }
 
