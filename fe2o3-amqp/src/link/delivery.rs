@@ -21,6 +21,10 @@ pub struct Delivery {
 }
 
 impl Delivery {
+    pub fn handle(&self) -> &Handle {
+        &self.link_output_handle
+    }
+
     pub fn message(&self) -> &Message {
         &self.message
     }

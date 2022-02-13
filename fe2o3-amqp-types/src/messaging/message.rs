@@ -1,5 +1,5 @@
 use serde::{
-    de::{self, VariantAccess},
+    de::{self, VariantAccess, DeserializeSeed},
     ser::SerializeStruct,
     Serialize,
 };
@@ -378,6 +378,15 @@ pub enum BodySection {
     Data(Data),
     Sequence(AmqpSequence),
     Value(AmqpValue),
+}
+
+impl BodySection {
+    pub fn unmarshal<T>(self) -> Result<T, serde_amqp::Error> 
+    where
+        T: for<'de> de::Deserialize<'de>,
+    {
+        todo!()
+    }
 }
 
 impl<T: Into<AmqpValue>> From<T> for BodySection {

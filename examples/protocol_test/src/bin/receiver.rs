@@ -1,5 +1,3 @@
-use std::{error::Error, time::Duration};
-
 use fe2o3_amqp::{connection::Connection, session::Session, link::Receiver};
 
 #[tokio::main]
