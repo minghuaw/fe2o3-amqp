@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     definitions::AmqpError,
-    messaging::{Address, DeliveryState, Message, Source},
+    messaging::{Address, DeliveryState, Message, Source, message::__private::Serializable},
     performatives::Disposition,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -130,7 +130,7 @@ impl Sender<Attached> {
         // serialize message
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
-        message.serialize(&mut serializer)?;
+        Serializable(message).serialize(&mut serializer)?;
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 

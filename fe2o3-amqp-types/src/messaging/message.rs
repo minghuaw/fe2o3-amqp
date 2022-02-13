@@ -12,6 +12,17 @@ use super::{
     MessageAnnotations, Properties,
 };
 
+#[doc(hidden)]
+pub mod __private {
+    /// 
+    #[derive(Debug)]
+    pub struct Serializable<T>(pub T);
+    
+    #[derive(Debug)]
+    pub struct Deserializable<T>(pub T);
+}
+use __private::{Serializable, Deserializable};
+
 #[derive(Debug, Clone)]
 pub struct Message<T> {
     pub header: Option<Header>,
@@ -21,6 +32,37 @@ pub struct Message<T> {
     pub application_properties: Option<ApplicationProperties>,
     pub body_section: BodySection<T>,
     pub footer: Option<Footer>,
+}
+
+impl<T: Serialize> Serialize for Serializable<Message<T>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer 
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<T: Serialize> Serialize for Serializable<&Message<T>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer 
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, T> de::Deserialize<'de> for Deserializable<Message<T>>
+where
+    T: de::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> 
+    {
+        let value = Message::<T>::deserialize(deserializer)?;
+        Ok(Deserializable(value))
+    }
 }
 
 impl<T> Message<T> {
@@ -90,23 +132,23 @@ impl<T> Message<T> {
     // }
 }
 
-impl<T> Message<T> 
-where
-    T: for<'de> de::Deserialize<'de>
-{
-    pub fn from_reader(reader: impl std::io::Read) -> Result<Self, serde_amqp::Error> {
-        let reader = serde_amqp::read::IoReader::new(reader);
-        let mut de = serde_amqp::de::Deserializer::new(reader);
-        Self::deserialize(&mut de)
-    }
-}
+// impl<T> Message<T> 
+// where
+//     T: for<'de> de::Deserialize<'de>
+// {
+//     pub fn from_reader(reader: impl std::io::Read) -> Result<Self, serde_amqp::Error> {
+//         let reader = serde_amqp::read::IoReader::new(reader);
+//         let mut de = serde_amqp::de::Deserializer::new(reader);
+//         Self::deserialize(&mut de)
+//     }
+// }
 
 // impl<T> Serialize for Message<T> 
 impl<T> Message<T> 
 where
     T: Serialize,
 {
-    pub fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -126,7 +168,7 @@ where
         if let Some(application_properties) = &self.application_properties {
             state.serialize_field("application_properties", application_properties)?
         }
-        state.serialize_field("body_section", &self.body_section)?;
+        state.serialize_field("body_section", &Serializable(&self.body_section))?;
         if let Some(footer) = &self.footer {
             state.serialize_field("footer", footer)?;
         }
@@ -224,7 +266,7 @@ where
         let mut message_annotations = None;
         let mut properties = None;
         let mut application_properties = None;
-        let mut body_section = None;
+        let mut body_section: Option<Deserializable<BodySection<T>>> = None;
         let mut footer = None;
 
         for _ in 0..7 {
@@ -255,18 +297,18 @@ where
             message_annotations,
             properties,
             application_properties,
-            body_section: body_section.ok_or_else(|| de::Error::custom("Expecting BodySection"))?,
+            body_section: body_section.ok_or_else(|| de::Error::custom("Expecting BodySection"))?.0,
             footer,
         })
     }
 }
 
 // impl<'de, T> de::Deserialize<'de> for Message<T> 
-impl<T> Message<T>
+impl<'de, T> Message<T>
 where
-    T: for<'de> de::Deserialize<'de>,
+    T: de::Deserialize<'de>,
 {
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -432,6 +474,7 @@ pub enum BodySection<T> {
     Value(AmqpValue<T>),
 }
 
+
 // impl BodySection {
 //     pub fn unmarshal<T>(self) -> Result<T, serde_amqp::Error> 
 //     where
@@ -476,7 +519,39 @@ mod body_section {
 
     use super::*;
 
-    impl<T: Serialize> Serialize for BodySection<T> {
+    
+    impl<T: Serialize> Serialize for Serializable<BodySection<T>> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer 
+        {
+            self.0.serialize(serializer)
+        }
+    }
+
+    impl<T: Serialize> Serialize for Serializable<&BodySection<T>> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer 
+        {
+            self.0.serialize(serializer)
+        }
+    }
+
+    impl<'de, T> de::Deserialize<'de> for Deserializable<BodySection<T>>
+    where
+        T: de::Deserialize<'de>,
+    {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> 
+        {
+            let value = BodySection::<T>::deserialize(deserializer)?;
+            Ok(Deserializable(value))
+        }
+    }
+
+    impl<T: Serialize> BodySection<T> {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer,
@@ -577,7 +652,7 @@ mod body_section {
         }
     }
 
-    impl<'de, T> de::Deserialize<'de> for BodySection<T> 
+    impl<'de, T> BodySection<T> 
     where
         T: de::Deserialize<'de>,
     {
@@ -604,7 +679,7 @@ mod tests {
     use serde_bytes::ByteBuf;
 
     use crate::messaging::{
-        message::BodySection, AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header,
+        message::{BodySection, __private::{Serializable, Deserializable}}, AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header,
         MessageAnnotations,
     };
 
@@ -615,21 +690,21 @@ mod tests {
         let data = b"amqp".to_vec();
         let data = Data(ByteBuf::from(data));
         let body = BodySection::<Value>::Data(data);
-        let serialized = to_vec(&body).unwrap();
+        let serialized = to_vec(&Serializable(body)).unwrap();
         println!("{:x?}", serialized);
-        let field: BodySection<Value> = from_slice(&serialized).unwrap();
+        let field: Deserializable<BodySection<Value>> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
         let body = BodySection::Sequence(AmqpSequence(vec![Value::Bool(true)]));
-        let serialized = to_vec(&body).unwrap();
+        let serialized = to_vec(&Serializable(body)).unwrap();
         println!("{:x?}", serialized);
-        let field: BodySection<Value> = from_slice(&serialized).unwrap();
+        let field: Deserializable<BodySection<Value>> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
         let body = BodySection::Value(AmqpValue(Value::Bool(true)));
-        let serialized = to_vec(&body).unwrap();
+        let serialized = to_vec(&Serializable(body)).unwrap();
         println!("{:x?}", serialized);
-        let field: BodySection<Value> = from_slice(&serialized).unwrap();
+        let field: Deserializable<BodySection<Value>> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
     }
 

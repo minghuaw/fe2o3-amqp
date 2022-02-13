@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::{
     definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{DeliveryState, Message, Received},
+    messaging::{DeliveryState, Message, Received, message::BodySection},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -64,6 +64,25 @@ where
 
 impl<T> From<Message<T>> for Sendable<T> {
     fn from(message: Message<T>) -> Self {
+        Self {
+            message,
+            message_format: 0,
+            settled: None,
+        }
+    }
+}
+
+impl<T> From<BodySection<T>> for Sendable<T> {
+    fn from(body_section: BodySection<T>) -> Self {
+        let message = Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body_section,
+            footer: None,
+        };
         Self {
             message,
             message_format: 0,
