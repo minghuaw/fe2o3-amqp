@@ -1,15 +1,15 @@
 [workspace]
 members = [
     # serde 
-    "fe2o3-amqp-macros",
-    "fe2o3-amqp",
+    "serde_amqp_derive",
+    "serde_amqp",
 
     # frame transport
-    "fe2o3-types",
-
-    "fe2o3-engine",
+    "fe2o3-amqp",
     "fe2o3-amqp-ext",
+    "fe2o3-amqp-types",
 
+    # examples
     "examples/macro_expand",
     "examples/protocol_test"
 ]

@@ -1,22 +1,36 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.0.1"
-edition = "2018"
-publish = false
+version = "0.1.0"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies.fe2o3-amqp-macros]
+[dev-dependencies]
+tokio = { version = "1.11.0", features = ["rt", "macros"] }
+tokio-test = { version = "0.4.2" }
+testcontainers = "0.12.0"
+
+[dependencies.serde_amqp]
+version = "0.0.1"
+path = "../serde_amqp"
+
+[dependencies.fe2o3-amqp-types]
 version = "0.1.0"
-path = "../fe2o3-amqp-macros"
+path = "../fe2o3-amqp-types"
 
 [dependencies]
-ordered-float = { version = "2.7.0", features = ["serde"] }
-serde = { version = "1.0.126", features = ["derive"] }
-serde_bytes = "0.11.5"
-thiserror = "1.0.26"
-
-chrono = { version = "0.4.19", features = ["serde"], optional = true }
-uuid = { version = "0.8.2", features = ["serde"], optional = true }
-
-
+bytes = "1.1.0"
+tokio = { version = "1.11.0", features = ["io-util", "net", "rt"] }
+tokio-util = { version = "0.6.8", features = ["codec"] }
+thiserror = "1.0.28"
+serde = "1.0.130"
+erased-serde = "0.3.16"
+futures-util = { version = "0.3.17", features = ["sink"] }
+pin-project-lite = "0.2.7"
+url = "2.2.2"
+slab = "0.4.4"
+tokio-stream = { version = "0.1.7", features = ["time"] }
+async-trait = "0.1.51"
+crossbeam = "0.8.1"
+tokio-rustls = "0.23.2"
+rustls = "0.20.2"
