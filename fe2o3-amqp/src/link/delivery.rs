@@ -12,46 +12,46 @@ use crate::{link, Payload};
 
 /// Reserved for receiver side
 #[derive(Debug)]
-pub struct Delivery {
+pub struct Delivery<T> {
     /// Verify whether this message is bound to a link
     pub(crate) link_output_handle: Handle,
     pub(crate) delivery_id: DeliveryNumber,
     pub(crate) delivery_tag: DeliveryTag,
-    pub(crate) message: Message,
+    pub(crate) message: Message<T>,
 }
 
-impl Delivery {
+impl<T> Delivery<T> {
     pub fn handle(&self) -> &Handle {
         &self.link_output_handle
     }
 
-    pub fn message(&self) -> &Message {
+    pub fn message(&self) -> &Message<T> {
         &self.message
     }
 
-    pub fn into_message(self) -> Message {
+    pub fn into_message(self) -> Message<T> {
         self.message
     }
 }
 
 /// TODO: Add a crate level pub field to Delivery for resuming link?
 #[derive(Debug)]
-pub struct Sendable {
-    pub(crate) message: Message,
+pub struct Sendable<T> {
+    pub(crate) message: Message<T>,
     pub(crate) message_format: MessageFormat, // TODO: The message format defined in spec is 0
     pub(crate) settled: Option<bool>,
     // pub(crate) batchable: bool,
 }
 
-impl Sendable {
+impl Sendable<Uninitialized> {
     pub fn builder() -> Builder<Uninitialized> {
         Builder::new()
     }
 }
 
-impl<T> From<T> for Sendable
+impl<T> From<T> for Sendable<T>
 where
-    T: Into<Message>,
+    T: Into<Message<T>>,
 {
     fn from(value: T) -> Self {
         Self {
@@ -80,8 +80,8 @@ impl Builder<Uninitialized> {
     }
 }
 
-impl<T> Builder<T> {
-    pub fn message(self, message: impl Into<Message>) -> Builder<Message> {
+impl<State> Builder<State> {
+    pub fn message<T>(self, message: impl Into<Message<T>>) -> Builder<Message<T>> {
         Builder {
             message: message.into(),
             message_format: self.message_format,
@@ -101,8 +101,12 @@ impl<T> Builder<T> {
     }
 }
 
-impl Builder<Message> {
-    pub fn build(self) -> Sendable {
+// impl<T> Builder<Message<T>> {
+    
+// }
+
+impl<T> Builder<Message<T>> {
+    pub fn build(self) -> Sendable<T> {
         Sendable {
             message: self.message,
             message_format: self.message_format,
@@ -112,8 +116,8 @@ impl Builder<Message> {
     }
 }
 
-impl From<Builder<Message>> for Sendable {
-    fn from(builder: Builder<Message>) -> Self {
+impl<T> From<Builder<Message<T>>> for Sendable<T> {
+    fn from(builder: Builder<Message<T>>) -> Self {
         builder.build()
     }
 }

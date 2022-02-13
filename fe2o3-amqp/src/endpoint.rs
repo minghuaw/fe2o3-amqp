@@ -349,7 +349,7 @@ pub(crate) trait ReceiverLink: Link {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_incoming_transfer(
+    async fn on_incoming_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -357,11 +357,13 @@ pub(crate) trait ReceiverLink: Link {
         // section_offset: u64,
     ) -> Result<
         (
-            Delivery,
+            Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
         <Self as Link>::Error,
-    >;
+    >
+    where
+        T: for<'de> serde::Deserialize<'de> + Send;
 
     async fn dispose<W>(
         &mut self,

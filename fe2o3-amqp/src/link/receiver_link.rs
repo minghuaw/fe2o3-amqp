@@ -1,4 +1,4 @@
-use serde_amqp::format_code::EncodingCodes;
+use serde_amqp::{format_code::EncodingCodes, de::Deserializer, read::IoReader};
 
 use super::*;
 
@@ -143,7 +143,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         }
     }
 
-    async fn on_incoming_transfer(
+    async fn on_incoming_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -151,11 +151,14 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         // section_offset: u64,
     ) -> Result<
         (
-            Delivery,
+            Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
         Self::Error,
-    > {
+    > 
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
         // TODO: The receiver should then detach with error
@@ -180,7 +183,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let message: Message = from_reader(payload.reader())?;
+            let message = Message::<T>::from_reader(payload.reader())?;
             (message, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
@@ -208,7 +211,11 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 // once it has arrived without waiting for the sender to settle first.
                 ReceiverSettleMode::First => {
                     // Spontaneously settle the message with an Accept
-                    let message: Message = from_reader(payload.reader())?;
+                    // let reader = IoReader::new(payload.reader());
+                    // let deserializer = Deserializer::new(reader);
+                    // let message: Message<T> = Message::<T>::deserialize(&mut deserializer)?;
+                    let message = Message::<T>::from_reader(payload.reader())?;
+
                     // let disposition = Disposition {
                     //     role: Role::Receiver,
                     //     first: delivery_id,
@@ -226,7 +233,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(payload.as_ref())
                         .ok_or_else(|| AmqpError::DecodeError)?;
-                    let message: Message = from_reader(payload.reader())?;
+                    let message = Message::<T>::from_reader(payload.reader())?;
                     let section_number = message.sections();
 
                     let state = DeliveryState::Received(Received {
@@ -419,8 +426,10 @@ mod tests {
             body_section: BodySection::Value(AmqpValue(Value::Bool(true))),
             footer: None,
         };
-        let serialized = to_vec(&message).unwrap();
-        let (nums, offset) = section_number_and_offset(&serialized);
+        let mut buf = Vec::new();
+        let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
+        message.serialize(&mut serializer).unwrap();
+        let (nums, offset) = section_number_and_offset(&buf);
         println!("{:?}, {:?}", nums, offset);
     }
 }

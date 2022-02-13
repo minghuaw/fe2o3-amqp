@@ -1,4 +1,4 @@
-use fe2o3_amqp::{connection::Connection, session::Session, link::Receiver};
+use fe2o3_amqp::{connection::Connection, session::Session, link::Receiver, types::primitives::Value};
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +26,11 @@ async fn main() {
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery = receiver.recv().await.unwrap();
+    let delivery = receiver.recv::<Value>().await.unwrap();
+    println!("<<< Message >>> {:?}", delivery);
+    receiver.accept(&delivery).await.unwrap();
+
+    let delivery = receiver.recv::<Value>().await.unwrap();
     println!("<<< Message >>> {:?}", delivery);
     receiver.accept(&delivery).await.unwrap();
 

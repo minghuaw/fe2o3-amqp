@@ -26,7 +26,7 @@ where
     T: Serialize,
 {
     let mut writer = Vec::new();
-    let mut serializer = Serializer::new(&mut writer, IsArrayElement::False);
+    let mut serializer = Serializer::new(&mut writer);
     value.serialize(&mut serializer)?;
     Ok(writer)
 }
@@ -48,17 +48,17 @@ pub struct Serializer<W> {
 
 impl<W: Write> From<W> for Serializer<W> {
     fn from(writer: W) -> Self {
-        Self::new(writer, IsArrayElement::False)
+        Self::new(writer)
     }
 }
 
 impl<W: Write> Serializer<W> {
-    pub fn new(writer: W, is_array_elem: IsArrayElement) -> Self {
+    pub fn new(writer: W) -> Self {
         Self {
             writer,
             new_type: Default::default(),
             struct_encoding: Default::default(),
-            is_array_elem,
+            is_array_elem: IsArrayElement::False,
         }
     }
 
@@ -830,14 +830,22 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
         let mut se = match self.se.new_type {
             NewType::None => {
                 // Element in the list always has it own constructor
-                Serializer::new(&mut self.buf, IsArrayElement::False)
+                Serializer::new(&mut self.buf)
             }
             NewType::Array => {
                 match self.num {
                     // The first element should include the contructor code
-                    0 => Serializer::new(&mut self.buf, IsArrayElement::FirstElement),
+                    0 => {
+                        let mut serializer = Serializer::new(&mut self.buf);
+                        serializer.is_array_elem = IsArrayElement::FirstElement;
+                        serializer
+                    },
                     // The remaining element should only write the value bytes
-                    _ => Serializer::new(&mut self.buf, IsArrayElement::OtherElement),
+                    _ => {
+                        let mut serializer = Serializer::new(&mut self.buf);
+                        serializer.is_array_elem = IsArrayElement::OtherElement;
+                        serializer
+                    }
                 }
             }
             _ => unreachable!(),
@@ -922,7 +930,7 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for TupleSerializer<'a, W> {
     where
         T: Serialize,
     {
-        let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
+        let mut serializer = Serializer::new(&mut self.buf);
         value.serialize(&mut serializer)
     }
 
@@ -1009,7 +1017,7 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
         K: Serialize,
         V: Serialize,
     {
-        let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
+        let mut serializer = Serializer::new(&mut self.buf);
         key.serialize(&mut serializer)?;
         value.serialize(&mut serializer)?;
         self.num += 2;
@@ -1021,7 +1029,7 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     where
         T: Serialize,
     {
-        let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
+        let mut serializer = Serializer::new(&mut self.buf);
         key.serialize(&mut serializer)?;
         self.num += 1;
         Ok(())
@@ -1032,7 +1040,7 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     where
         T: Serialize,
     {
-        let mut serializer = Serializer::new(&mut self.buf, IsArrayElement::False);
+        let mut serializer = Serializer::new(&mut self.buf);
         value.serialize(&mut serializer)?;
         self.num += 1;
         Ok(())
@@ -1155,7 +1163,8 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                     StructEncoding::None => {
                         // serialize regualr tuple struct as a list like in tuple
                         let mut serializer =
-                            Serializer::new(&mut self.buf, self.se.is_array_elem.clone());
+                            Serializer::new(&mut self.buf);
+                        serializer.is_array_elem = self.se.is_array_elem.clone();
                         value.serialize(&mut serializer)
                     }
                     StructEncoding::DescribedBasic => {
@@ -1269,7 +1278,8 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
                 StructEncoding::None => {
                     // normal struct will be serialized as a list
                     let mut serializer =
-                        Serializer::new(&mut self.buf, self.se.is_array_elem.clone());
+                        Serializer::new(&mut self.buf);
+                    serializer.is_array_elem = self.se.is_array_elem.clone();
                     value.serialize(&mut serializer)
                 }
                 StructEncoding::DescribedBasic => value.serialize(self.as_mut()),
@@ -1359,7 +1369,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
     where
         T: Serialize,
     {
-        let mut se = Serializer::new(&mut self.buf, IsArrayElement::False);
+        let mut se = Serializer::new(&mut self.buf);
         value.serialize(&mut se)
     }
 
@@ -1368,7 +1378,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
         write_list(&mut value, self.num, self.buf, &self.se.is_array_elem)?;
 
         let mut list = Vec::new();
-        let mut se = Serializer::new(&mut list, IsArrayElement::False);
+        let mut se = Serializer::new(&mut list);
         ser::Serialize::serialize(&self.variant_index, &mut se)?;
         list.append(&mut value);
         // write_map(&mut self.se.writer, 1, kv)

@@ -9,6 +9,7 @@ use fe2o3_amqp::link::{Receiver, Sender};
 use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::Message;
+use fe2o3_amqp::types::messaging::message::BodySection;
 
 #[tokio::main]
 async fn main() {
@@ -38,12 +39,17 @@ async fn main() {
         .await
         .unwrap();
 
+    // let body = BodySection::from("hello");
+    // let message = Message::from("hello");
+    // let sendable = Sendable::from("hello");
     let message = Sendable::builder()
-        .settled(true)
         .message("hello world")
+        .settled(true)
         .build();
 
     sender.send(message).await.unwrap();
+
+    sender.send("hello").await.unwrap();
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {
