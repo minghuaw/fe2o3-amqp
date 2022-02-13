@@ -62,6 +62,16 @@ where
     }
 }
 
+impl<T> From<Message<T>> for Sendable<T> {
+    fn from(message: Message<T>) -> Self {
+        Self {
+            message,
+            message_format: 0,
+            settled: None,
+        }
+    }
+}
+
 pub struct Builder<T> {
     pub message: T,
     pub message_format: MessageFormat,

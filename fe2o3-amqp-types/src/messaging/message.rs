@@ -5,7 +5,7 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::{__constants::{DESCRIBED_BASIC, DESCRIPTOR}, value::Value};
+use serde_amqp::{__constants::{DESCRIBED_BASIC, DESCRIPTOR}, value::Value, primitives::Binary};
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
@@ -333,17 +333,41 @@ impl Builder<EmptyBody> {
 }
 
 impl<T> Builder<T> {
-    // pub fn body_section(self, body_section: impl Into<BodySection>) -> Builder<BodySection> {
-    //     Builder::<BodySection> {
-    //         header: self.header,
-    //         delivery_annotations: self.delivery_annotations,
-    //         message_annotations: self.message_annotations,
-    //         properties: self.properties,
-    //         application_properties: self.application_properties,
-    //         body_section: body_section.into(),
-    //         footer: self.footer,
-    //     }
-    // }
+    pub fn value<V: Serialize>(self, value: V) -> Builder<BodySection<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body_section: BodySection::Value(AmqpValue(value)),
+            footer: self.footer,
+        }
+    }
+
+    pub fn sequence<V: Serialize>(self, values: Vec<V>) -> Builder<BodySection<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body_section: BodySection::Sequence(AmqpSequence(values)),
+            footer: self.footer,
+        }
+    }
+
+    pub fn data(self, data: impl Into<Binary> ) -> Builder<BodySection<Value>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body_section: BodySection::Data(Data(data.into())),
+            footer: self.footer,
+        }
+    }
 
     pub fn header(mut self, header: impl Into<Option<Header>>) -> Self {
         self.header = header.into();

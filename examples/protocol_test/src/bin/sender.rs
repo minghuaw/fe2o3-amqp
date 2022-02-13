@@ -39,13 +39,13 @@ async fn main() {
         .await
         .unwrap();
 
-    // let body = BodySection::from("hello");
-    // let message = Message::from("hello");
-    // let sendable = Sendable::from("hello");
-    let message = Sendable::builder()
-        .message("hello world")
-        .settled(true)
-        .build();
+    let body = BodySection::from("hello");
+    let message = Message::from("hello");
+    let message = Sendable::from(message);
+    // let message = Sendable::builder()
+    //     .message("hello world")
+    //     .settled(true)
+    //     .build();
 
     sender.send(message).await.unwrap();
 
