@@ -4,7 +4,7 @@ use syn::{spanned::Spanned, DeriveInput, Fields};
 use crate::{
     util::{
         convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none,
-        parse_described_struct_attr, parse_named_field_attrs,
+        parse_described_struct_attr, parse_named_field_attrs, generic_visitor, where_deserialize, generic_visitor_fields,
     },
     DescribedStructAttr, EncodingType, FieldAttr,
 };
@@ -14,8 +14,9 @@ pub(crate) fn expand_deserialize(
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let attr = parse_described_struct_attr(input);
     let ident = &input.ident;
+    let generics = &input.generics;
     match &input.data {
-        syn::Data::Struct(data) => expand_deserialize_on_datastruct(&attr, ident, data, input),
+        syn::Data::Struct(data) => expand_deserialize_on_datastruct(&attr, ident, generics, data, input),
         _ => unimplemented!(),
     }
 }
@@ -23,6 +24,7 @@ pub(crate) fn expand_deserialize(
 fn expand_deserialize_on_datastruct(
     attr: &DescribedStructAttr,
     ident: &syn::Ident,
+    generics: &syn::Generics,
     data: &syn::DataStruct,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
@@ -56,6 +58,7 @@ fn expand_deserialize_on_datastruct(
     match &data.fields {
         Fields::Named(fields) => Ok(expand_deserialize_struct(
             ident,
+            generics,
             &expecting,
             &evaluate_descriptor,
             &attr.encoding,
@@ -65,6 +68,7 @@ fn expand_deserialize_on_datastruct(
         )?),
         Fields::Unnamed(fields) => Ok(expand_deserialize_tuple_struct(
             ident,
+            generics,
             name,
             &evaluate_descriptor,
             &attr.encoding,
@@ -192,6 +196,7 @@ fn impl_visit_seq_for_tuple_struct(
 
 fn expand_deserialize_tuple_struct(
     ident: &syn::Ident,
+    generics: &syn::Generics,
     expecting: &str,
     evaluate_descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
@@ -232,16 +237,21 @@ fn expand_deserialize_tuple_struct(
         impl_visit_seq_for_tuple_struct(ident, &field_idents, &field_types, evaluate_descriptor);
     let len = field_idents.len();
 
+    let gen_params = &generics.params;
+    let visitor = generic_visitor(generics);
+    let where_clause = where_deserialize(generics);
+
     let token = quote! {
         #[automatically_derived]
-        impl<'de> serde_amqp::serde::de::Deserialize<'de> for #ident {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        impl<'de, #gen_params> serde_amqp::serde::de::Deserialize<'de> for #ident<#gen_params> #where_clause {
+            fn deserialize<_D>(deserializer: _D) -> Result<Self, _D::Error>
             where
-                D: serde_amqp::serde::de::Deserializer<'de>,
+                _D: serde_amqp::serde::de::Deserializer<'de>,
             {
-                struct Visitor {}
-                impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
-                    type Value = #ident;
+                // struct Visitor {}
+                #visitor
+                impl<'de, #gen_params> serde_amqp::serde::de::Visitor<'de> for Visitor<#gen_params> #where_clause {
+                    type Value = #ident<#gen_params>;
 
                     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                         formatter.write_str(#expecting)
@@ -254,7 +264,7 @@ fn expand_deserialize_tuple_struct(
                 deserializer.deserialize_tuple_struct(
                     #struct_name,
                     #len + 1, // descriptor also takes one
-                    Visitor{}
+                    Visitor::new()
                 )
             }
         }
@@ -264,6 +274,7 @@ fn expand_deserialize_tuple_struct(
 
 fn expand_deserialize_struct(
     ident: &syn::Ident,
+    generics: &syn::Generics,
     expecting: &str,
     evaluate_descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
@@ -346,23 +357,26 @@ fn expand_deserialize_struct(
         0 => quote! {},
         _ => macro_rules_unwrap_or_none(),
     };
+    let gen_params = &generics.params;
+    let visitor = generic_visitor(generics);
+    let where_clause = where_deserialize(generics);
 
     let token = quote! {
         #unwrap_or_default
         #unwrap_or_none
 
         #[automatically_derived]
-        impl<'de> serde_amqp::serde::de::Deserialize<'de> for #ident {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        impl<'de, #gen_params> serde_amqp::serde::de::Deserialize<'de> for #ident<#gen_params> #where_clause {
+            fn deserialize<_D>(deserializer: _D) -> Result<Self, _D::Error>
             where
-                D: serde_amqp::serde::de::Deserializer<'de>,
+                _D: serde_amqp::serde::de::Deserializer<'de>,
             {
 
                 #deserialize_field
 
-                struct Visitor {}
-                impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
-                    type Value = #ident;
+                #visitor
+                impl<'de, #gen_params> serde_amqp::serde::de::Visitor<'de> for Visitor<#gen_params> #where_clause {
+                    type Value = #ident<#gen_params>;
 
                     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                         formatter.write_str(#expecting)
@@ -378,7 +392,7 @@ fn expand_deserialize_struct(
                 deserializer.deserialize_struct(
                     #struct_name,
                     FIELDS,
-                    Visitor{}
+                    Visitor::new()
                 )
             }
         }
@@ -404,9 +418,9 @@ fn impl_deserialize_for_field(
                 formatter.write_str("field identifier")
             }
 
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            fn visit_str<_E>(self, v: &str) -> Result<Self::Value, _E>
             where
-                E: serde_amqp::serde::de::Error,
+                _E: serde_amqp::serde::de::Error,
             {
                 match v {
                     // #name => Ok(Self::Value::descriptor),
@@ -415,9 +429,9 @@ fn impl_deserialize_for_field(
                 }
             }
 
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            fn visit_bytes<_E>(self, v: &[u8]) -> Result<Self::Value, _E>
             where
-                E: serde_amqp::serde::de::Error,
+                _E: serde_amqp::serde::de::Error,
             {
                 match v {
                     // b if b == #name.as_bytes() => Ok(Self::Value::descriptor),
@@ -428,9 +442,9 @@ fn impl_deserialize_for_field(
 
         }
         impl<'de> serde_amqp::serde::de::Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            fn deserialize<_D>(deserializer: _D) -> Result<Self, _D::Error>
             where
-                D: serde_amqp::serde::de::Deserializer<'de>,
+                _D: serde_amqp::serde::de::Deserializer<'de>,
             {
                 deserializer.deserialize_identifier(FieldVisitor{})
             }
@@ -459,9 +473,9 @@ fn impl_visit_seq_for_struct(
     }
 
     quote! {
-        fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
+        fn visit_seq<_A>(self, mut __seq: _A) -> Result<Self::Value, _A::Error>
         where
-            A: serde_amqp::serde::de::SeqAccess<'de>,
+            _A: serde_amqp::serde::de::SeqAccess<'de>,
         {
             let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
@@ -500,8 +514,8 @@ fn impl_visit_map(
     }
 
     quote! {
-        fn visit_map<A>(self, mut __map: A)-> Result<Self::Value, A::Error>
-        where A: serde_amqp::serde::de::MapAccess<'de>
+        fn visit_map<_A>(self, mut __map: _A)-> Result<Self::Value, _A::Error>
+        where _A: serde_amqp::serde::de::MapAccess<'de>
         {
             #(let mut #field_idents: Option<#field_types> = None;)*
 

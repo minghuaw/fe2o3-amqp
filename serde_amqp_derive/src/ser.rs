@@ -5,7 +5,7 @@ use crate::{
     util::{
         convert_to_case, macro_rules_buffer_if_eq_default, macro_rules_buffer_if_none,
         macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default,
-        macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs,
+        macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs, where_serialize,
     },
     DescribedStructAttr, EncodingType, FieldAttr,
 };
@@ -15,8 +15,9 @@ pub(crate) fn expand_serialize(
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let amqp_attr = parse_described_struct_attr(input);
     let ident = &input.ident;
+    let generics = &input.generics;
     match &input.data {
-        syn::Data::Struct(data) => expand_serialize_on_datastruct(&amqp_attr, ident, data, input),
+        syn::Data::Struct(data) => expand_serialize_on_datastruct(&amqp_attr, ident, generics, data, input),
         _ => unimplemented!(),
     }
 }
@@ -24,6 +25,7 @@ pub(crate) fn expand_serialize(
 fn expand_serialize_on_datastruct(
     amqp_attr: &DescribedStructAttr,
     ident: &syn::Ident,
+    generics: &syn::Generics,
     data: &syn::DataStruct,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
@@ -41,6 +43,7 @@ fn expand_serialize_on_datastruct(
                 0 => expand_serialize_unit_struct(ident, &descriptor, &amqp_attr.encoding),
                 _ => expand_serialize_struct(
                     ident,
+                    generics,
                     &descriptor,
                     &amqp_attr.encoding,
                     &amqp_attr.rename_field,
@@ -53,7 +56,7 @@ fn expand_serialize_on_datastruct(
         Fields::Unnamed(fields) => {
             let token = match fields.unnamed.len() {
                 0 => expand_serialize_unit_struct(ident, &descriptor, &amqp_attr.encoding),
-                _ => expand_serialize_tuple_struct(ident, &descriptor, &amqp_attr.encoding, fields),
+                _ => expand_serialize_tuple_struct(ident, generics, &descriptor, &amqp_attr.encoding, fields),
             };
             Ok(token)
         }
@@ -95,6 +98,7 @@ fn expand_serialize_unit_struct(
 
 fn expand_serialize_tuple_struct(
     ident: &syn::Ident,
+    generics: &syn::Generics,
     descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     fields: &syn::FieldsUnnamed,
@@ -120,15 +124,20 @@ fn expand_serialize_tuple_struct(
     let field_types: Vec<&syn::Type> = fields.unnamed.iter().map(|f| &f.ty).collect();
     let len = field_indices.len();
     let buffer_if_none = macro_rules_buffer_if_none_for_tuple_struct();
+    let where_clause = match generics.params.len() {
+        0 => quote! {},
+        _ => where_serialize(generics)
+    };
 
     quote! {
         #buffer_if_none
 
         #[automatically_derived]
-        impl serde_amqp::serde::ser::Serialize for #ident {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        impl #generics serde_amqp::serde::ser::Serialize for #ident #generics #where_clause
+        {
+            fn serialize<_S>(&self, serializer: _S) -> Result<_S::Ok, _S::Error>
             where
-                S: serde_amqp::serde::ser::Serializer,
+                _S: serde_amqp::serde::ser::Serializer,
             {
                 use serde_amqp::serde::ser::SerializeTupleStruct;
                 let mut null_count = 0u32;
@@ -148,6 +157,7 @@ fn expand_serialize_tuple_struct(
 
 fn expand_serialize_struct(
     ident: &syn::Ident,
+    generics: &syn::Generics,
     descriptor: &proc_macro2::TokenStream,
     encoding: &EncodingType,
     rename_all: &str,
@@ -242,14 +252,20 @@ fn expand_serialize_struct(
         }
     }
 
+    let where_clause = match generics.params.len() {
+        0 => quote! {},
+        _ => where_serialize(generics)
+    };
+
     quote! {
         #declarative_macro
 
         #[automatically_derived]
-        impl serde_amqp::serde::ser::Serialize for #ident {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        impl #generics serde_amqp::serde::ser::Serialize for #ident #generics #where_clause
+        {
+            fn serialize<_S>(&self, serializer: _S) -> Result<_S::Ok, _S::Error>
             where
-                S: serde_amqp::serde::ser::Serializer,
+                _S: serde_amqp::serde::ser::Serializer,
             {
                 use serde_amqp::serde::ser::SerializeStruct;
                 // let mut null_count = 0u32;
