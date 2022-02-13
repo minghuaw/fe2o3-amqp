@@ -242,6 +242,7 @@ impl Receiver<Attached> {
 
     #[inline]
     async fn recv_inner(&mut self) -> Result<Option<Delivery>, Error> {
+        println!(">>> Debug: recv_inner");
         let frame = self.incoming.next().await.ok_or_else(|| Error::AmqpError {
             condition: AmqpError::IllegalState,
             description: Some("Session is dropped".into()),

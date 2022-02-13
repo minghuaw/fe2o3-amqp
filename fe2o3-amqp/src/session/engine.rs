@@ -17,7 +17,7 @@ use super::{
     AllocLinkError, Error, SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState,
 };
 
-pub struct SessionEngine<S> {
+pub(crate) struct SessionEngine<S> {
     conn: mpsc::Sender<ConnectionControl>,
     session: S,
     session_id: SessionId,

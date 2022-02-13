@@ -11,6 +11,7 @@ use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
 
 /// Reserved for receiver side
+#[derive(Debug)]
 pub struct Delivery {
     /// Verify whether this message is bound to a link
     pub(crate) link_output_handle: Handle,
@@ -22,6 +23,10 @@ pub struct Delivery {
 impl Delivery {
     pub fn message(&self) -> &Message {
         &self.message
+    }
+
+    pub fn into_message(self) -> Message {
+        self.message
     }
 }
 

@@ -114,7 +114,7 @@ pub(crate) trait Connection {
 }
 
 #[async_trait]
-pub trait Session {
+pub(crate) trait Session {
     type AllocError: Send;
     type Error: Send;
     type State;
@@ -179,7 +179,7 @@ pub trait Session {
 }
 
 #[async_trait]
-pub trait Link {
+pub(crate) trait Link {
     type DetachError: Send;
     type Error: Send;
 
@@ -287,7 +287,7 @@ pub enum Settlement {
 }
 
 #[async_trait]
-pub trait SenderLink: Link {
+pub(crate) trait SenderLink: Link {
     const ROLE: Role = Role::Sender;
 
     /// Set and send flow state
@@ -326,7 +326,7 @@ pub trait SenderLink: Link {
 }
 
 #[async_trait]
-pub trait ReceiverLink: Link {
+pub(crate) trait ReceiverLink: Link {
     const ROLE: Role = Role::Receiver;
 
     /// Set and send flow state
