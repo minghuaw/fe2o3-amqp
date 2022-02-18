@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
 use crate::session::{SessionFrame, SessionFrameBody};
-use crate::transport::amqp::{self, Frame};
+use crate::frames::amqp::{self, Frame};
 use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};
@@ -48,7 +48,7 @@ where
         outgoing_session_frames: Receiver<SessionFrame>,
         // session_control: Receiver<SessionControl>,
     ) -> Result<Self, Error> {
-        use crate::transport::amqp::FrameBody;
+        use crate::frames::amqp::FrameBody;
 
         let mut engine = Self {
             transport,
@@ -132,7 +132,7 @@ where
     }
 
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
-        use crate::transport::amqp::FrameBody;
+        use crate::frames::amqp::FrameBody;
 
         let frame = incoming?;
 
@@ -262,7 +262,7 @@ where
 
     #[inline]
     async fn on_outgoing_session_frames(&mut self, frame: SessionFrame) -> Result<Running, Error> {
-        use crate::transport::amqp::FrameBody;
+        use crate::frames::amqp::FrameBody;
 
         match self.connection.local_state() {
             ConnectionState::Opened => {}

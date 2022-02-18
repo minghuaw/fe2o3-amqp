@@ -19,7 +19,7 @@ use crate::{
     endpoint,
     session::SessionFrame,
     session::{Session, SessionFrameBody, SessionIncomingItem},
-    transport::amqp::{Frame, FrameBody},
+    frames::amqp::{Frame, FrameBody},
 };
 
 use self::{builder::WithoutContainerId, engine::SessionId};

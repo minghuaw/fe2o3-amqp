@@ -7,13 +7,8 @@
 //! Layer 0 should be hidden within the connection and there should be API that provide
 //! access to layer 1 for types that implement Encoder
 
-pub const FRAME_TYPE_AMQP: u8 = 0x00;
-pub const FRAME_TYPE_SASL: u8 = 0x01;
-
-pub mod amqp;
 mod error;
 pub mod protocol_header;
-pub mod sasl;
 pub use error::Error;
 use fe2o3_amqp_types::definitions::AmqpError;
 use tokio_rustls::{client::TlsStream, TlsConnector};
@@ -30,7 +25,7 @@ use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
 };
 
-use crate::{connection::ConnectionState, util::IdleTimeout};
+use crate::{connection::ConnectionState, util::IdleTimeout, frames::{amqp, sasl}};
 
 use protocol_header::ProtocolHeader;
 

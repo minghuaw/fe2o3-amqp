@@ -3,12 +3,12 @@ use fe2o3_amqp_types::performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
 };
 use serde::{ser::Serialize, Deserialize};
-use serde_amqp::{de::Deserializer, read::IoReader};
+use serde_amqp::{de::Deserializer, read::IoReader, error::Error};
 use tokio_util::codec::{Decoder, Encoder};
 
 use crate::Payload;
 
-use super::{Error, FRAME_TYPE_AMQP};
+use super::{FRAME_TYPE_AMQP};
 
 #[derive(Debug)]
 pub struct Frame {

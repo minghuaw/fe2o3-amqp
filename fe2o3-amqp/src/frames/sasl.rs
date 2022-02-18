@@ -7,12 +7,10 @@ use fe2o3_amqp_types::{
     definitions::AmqpError,
     sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
 };
-use serde_amqp::read::IoReader;
+use serde_amqp::{read::IoReader, Error};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::transport::FRAME_TYPE_SASL;
-
-use super::Error;
+use super::FRAME_TYPE_SASL;
 
 // pub struct Frame {
 //     pub body: FrameBody,
