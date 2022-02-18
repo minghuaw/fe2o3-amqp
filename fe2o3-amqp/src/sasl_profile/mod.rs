@@ -1,7 +1,9 @@
 use std::os::windows::prelude::AsRawHandle;
 
-use fe2o3_amqp_types::{primitives::Symbol, sasl::{SaslOutcome, SaslInit}, definitions::AmqpError};
+use bytes::{BytesMut, BufMut};
+use fe2o3_amqp_types::{primitives::{Symbol, Binary}, sasl::{SaslOutcome, SaslInit}, definitions::AmqpError};
 use futures_util::Sink;
+use serde_bytes::ByteBuf;
 use url::Url;
 
 pub mod error;
@@ -54,6 +56,22 @@ impl SaslProfile {
         Symbol::from(value)
     }
 
+    pub fn initial_response(&self) -> Option<Binary> {        
+        match self {
+            SaslProfile::Anonymous => None,
+            SaslProfile::Plain {username, password} => {
+                let username = username.as_bytes();
+                let password = password.as_bytes();
+                let mut buf = Vec::with_capacity(username.len() + password.len() + 2);
+                buf.put_u8(0);
+                buf.put_slice(username);
+                buf.put_u8(0);
+                buf.put_slice(password);
+                Some(ByteBuf::from(buf))
+            }
+        }
+    }
+
     pub async fn on_frame<W>(&mut self, frame: sasl::Frame, hostname: Option<String>) -> Result<Negotiation, Error> {
         use sasl::Frame;
 
@@ -63,7 +81,7 @@ impl SaslProfile {
                 if mechanisms.sasl_server_mechanisms.contains(&mechanism) {
                     let init = SaslInit {
                         mechanism,
-                        initial_response: None,
+                        initial_response: self.initial_response(),
                         hostname,
                     };
                     Ok(Negotiation::Init(init))
