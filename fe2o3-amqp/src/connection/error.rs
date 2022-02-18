@@ -1,6 +1,10 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+use fe2o3_amqp_types::{
+    definitions::{AmqpError, ConnectionError},
+    primitives::Binary,
+    sasl::SaslCode,
+};
 use tokio::{sync::mpsc, task::JoinError};
 
 use crate::transport;
@@ -32,6 +36,12 @@ pub enum Error {
     ConnectionError {
         condition: ConnectionError,
         description: Option<String>,
+    },
+
+    #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
+    SaslError {
+        code: SaslCode,
+        additional_data: Option<Binary>,
     },
 }
 
@@ -90,6 +100,9 @@ impl From<transport::Error> for Error {
             transport::Error::FramingError => Self::ConnectionError {
                 condition: ConnectionError::FramingError,
                 description: None,
+            },
+            transport::Error::SaslError {code, additional_data} => Self::SaslError {
+                code, additional_data
             }
             // transport::Error::ConnectionError {
             //     condition,

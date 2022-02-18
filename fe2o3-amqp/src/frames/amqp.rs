@@ -8,7 +8,7 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use crate::Payload;
 
-use super::{FRAME_TYPE_AMQP, Error};
+use super::{Error, FRAME_TYPE_AMQP};
 
 #[derive(Debug)]
 pub struct Frame {

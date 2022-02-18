@@ -12,8 +12,8 @@ use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 
 use crate::control::ConnectionControl;
-use crate::session::{SessionFrame, SessionFrameBody};
 use crate::frames::amqp::{self, Frame};
+use crate::session::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};

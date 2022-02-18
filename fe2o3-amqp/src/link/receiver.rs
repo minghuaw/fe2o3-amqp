@@ -231,7 +231,7 @@ impl Receiver<Detached> {
 }
 
 impl Receiver<Attached> {
-    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error> 
+    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -244,7 +244,7 @@ impl Receiver<Attached> {
     }
 
     #[inline]
-    async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error> 
+    async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -285,7 +285,7 @@ impl Receiver<Attached> {
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery<T>>, Error> 
+    ) -> Result<Option<Delivery<T>>, Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -365,11 +365,7 @@ impl Receiver<Attached> {
         if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
             // let frame = LinkFrame::Disposition(disposition);
             // self.outgoing.send(frame).await?;
-            self.dispose(
-                    delivery_id,
-                    delivery_tag,
-                    delivery_state,
-                )
+            self.dispose(delivery_id, delivery_tag, delivery_state)
                 .await?;
         }
 
@@ -381,7 +377,7 @@ impl Receiver<Attached> {
         use crate::endpoint::ReceiverLink;
 
         self.processed = 0;
-        self.flow_threshold = credit/2;
+        self.flow_threshold = credit / 2;
 
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)

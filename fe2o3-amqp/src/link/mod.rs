@@ -6,7 +6,7 @@ use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
-        Role, SenderSettleMode, SessionError, SequenceNo,
+        Role, SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},

@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     definitions::AmqpError,
-    messaging::{Address, DeliveryState, Message, Source, message::__private::Serializable},
+    messaging::{message::__private::Serializable, Address, DeliveryState, Message, Source},
     performatives::Disposition,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -110,7 +110,7 @@ impl Sender<Detached> {
 }
 
 impl Sender<Attached> {
-    async fn send_inner<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error> 
+    async fn send_inner<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
     where
         T: serde::Serialize,
     {
@@ -183,7 +183,7 @@ impl Sender<Attached> {
     pub async fn send_batchable<T>(
         &mut self,
         delivery: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut, Error> 
+    ) -> Result<DeliveryFut, Error>
     where
         T: serde::Serialize,
     {

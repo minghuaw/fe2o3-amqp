@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::{
     definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{DeliveryState, Message, Received, message::BodySection},
+    messaging::{message::BodySection, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -131,7 +131,7 @@ impl<State> Builder<State> {
 }
 
 // impl<T> Builder<Message<T>> {
-    
+
 // }
 
 impl<T> Builder<Message<T>> {

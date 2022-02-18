@@ -1,5 +1,5 @@
 use fe2o3_amqp_types::messaging::message::__private::Deserializable;
-use serde_amqp::{format_code::EncodingCodes, de::Deserializer, read::IoReader};
+use serde_amqp::{de::Deserializer, format_code::EncodingCodes, read::IoReader};
 
 use super::*;
 
@@ -156,7 +156,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
         Self::Error,
-    > 
+    >
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -402,8 +402,8 @@ mod tests {
 
     use fe2o3_amqp_types::{
         messaging::{
-            message::{BodySection, __private::Serializable}, AmqpValue, DeliveryAnnotations, Header, Message,
-            MessageAnnotations,
+            message::{BodySection, __private::Serializable},
+            AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
         },
         primitives::Value,
     };

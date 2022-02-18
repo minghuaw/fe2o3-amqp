@@ -10,22 +10,30 @@
 mod error;
 pub mod protocol_header;
 pub use error::Error;
-use fe2o3_amqp_types::definitions::AmqpError;
+use fe2o3_amqp_types::{definitions::AmqpError, sasl::SaslCode};
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 /* -------------------------------- Transport ------------------------------- */
 
-use std::{convert::TryFrom, marker::PhantomData, task::Poll, time::Duration};
+use std::{
+    convert::TryFrom, io, marker::PhantomData, os::windows::prelude::AsRawHandle, task::Poll,
+    time::Duration,
+};
 
 use bytes::BytesMut;
-use futures_util::{Future, Sink, Stream};
+use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_util::codec::{
     Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
 };
 
-use crate::{connection::ConnectionState, util::IdleTimeout, frames::{amqp, sasl}};
+use crate::{
+    connection::ConnectionState,
+    frames::{amqp, sasl},
+    sasl_profile::{Negotiation, SaslProfile},
+    util::IdleTimeout,
+};
 
 use protocol_header::ProtocolHeader;
 
@@ -40,9 +48,38 @@ pin_project! {
     }
 }
 
-impl<Io, Ftype> Transport<Io, Ftype> {
+impl<Io, Ftype> Transport<Io, Ftype>
+where
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
     pub fn into_inner_io(self) -> Io {
         self.framed.into_inner()
+    }
+
+    pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
+        println!(">>> Debug: Transport::bind");
+
+        let framed = LengthDelimitedCodec::builder()
+            .big_endian()
+            .length_field_length(4)
+            // Prior to any explicit negotiation,
+            // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
+            .max_frame_length(max_frame_size) // change max frame size later in negotiation
+            .length_adjustment(-4)
+            .new_framed(io);
+        let idle_timeout = match idle_timeout {
+            Some(duration) => match duration.is_zero() {
+                true => None,
+                false => Some(IdleTimeout::new(duration)),
+            },
+            None => None,
+        };
+
+        Self {
+            framed,
+            idle_timeout,
+            ftype: PhantomData,
+        }
     }
 }
 
@@ -64,6 +101,7 @@ where
         stream.write_all(&buf).await?;
         stream.read_exact(&mut buf).await?;
         let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
+            // TODO: other error type?
             Error::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "Invalid protocol header",
@@ -88,28 +126,56 @@ where
         Ok(tls)
     }
 
-    pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
-        let framed = LengthDelimitedCodec::builder()
-            .big_endian()
-            .length_field_length(4)
-            // Prior to any explicit negotiation,
-            // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
-            .max_frame_length(max_frame_size) // change max frame size later in negotiation
-            .length_adjustment(-4)
-            .new_framed(io);
-        let idle_timeout = match idle_timeout {
-            Some(duration) => match duration.is_zero() {
-                true => None,
-                false => Some(IdleTimeout::new(duration)),
-            },
-            None => None,
-        };
+    pub async fn connect_sasl(
+        mut stream: Io,
+        hostname: Option<&str>,
+        mut profile: SaslProfile,
+    ) -> Result<Io, Error> {
+        println!(">>> Debug: Transport::connect_sasl");
 
-        Self {
-            framed,
-            idle_timeout,
-            ftype: PhantomData,
+        let proto_header = ProtocolHeader::sasl();
+        let mut buf: [u8; 8] = proto_header.clone().into();
+        stream.write_all(&buf).await?;
+        stream.read_exact(&mut buf).await?;
+        let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
+            // TODO: other error type?
+            Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid protocol header",
+            ))
+        })?;
+        if proto_header != incoming_header {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Protocol header mismatch",
+            )));
         }
+
+        // TODO: use a different frame size?
+        let mut transport = Transport::<_, sasl::Frame>::bind(stream, 512, None);
+
+        // TODO: timeout?
+        while let Some(frame) = transport.next().await {
+            let frame = frame?;
+
+            match profile.on_frame(frame, hostname.map(Into::into)).await? {
+                Negotiation::Continue => {}
+                Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
+                Negotiation::Outcome(outcome) => match outcome.code {
+                    SaslCode::Ok => return Ok(transport.into_inner_io()),
+                    code @ _ => {
+                        return Err(Error::SaslError {
+                            code,
+                            additional_data: outcome.additional_data,
+                        })
+                    }
+                },
+            }
+        }
+        Err(Error::Io(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "Expecting SASL negotiation",
+        )))
     }
 
     pub async fn negotiate(
@@ -117,9 +183,11 @@ where
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, Error> {
+        println!(">>> Debug: Transport::negotiate");
+
         send_proto_header(io, local_state, proto_header.clone()).await?;
         let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
-
+        println!(">>> Debug: incoming_header {:?}", incoming_header);
         Ok(incoming_header)
     }
 
@@ -155,6 +223,7 @@ async fn send_proto_header<Io>(
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
+    println!(">>> Debug: send_proto_header");
     let buf: [u8; 8] = proto_header.into();
     match local_state {
         ConnectionState::Start => {
@@ -206,12 +275,18 @@ where
 {
     let mut inbound_buf = [0u8; 8];
     io.read_exact(&mut inbound_buf).await?;
+
+    println!(">>> Debug: inbound_buf {:#x?}", inbound_buf);
+
     // check header
     let incoming_header = ProtocolHeader::try_from(inbound_buf)
-        .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, None))?;
+        .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
-        return Err(Error::amqp_error(AmqpError::NotImplemented, None));
+        return Err(Error::amqp_error(
+            AmqpError::NotImplemented, 
+            Some(format!("Expecting {:?}, found {:?}", proto_header, incoming_header))
+        ));
     }
     Ok(incoming_header)
 }
@@ -306,11 +381,7 @@ where
                             }
                         };
                         let mut decoder = amqp::FrameCodec {};
-                        Poll::Ready(
-                            decoder.decode(&mut src)
-                                .map_err(Into::into)
-                                .transpose()
-                        )
+                        Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
                     }
                     None => Poll::Ready(None),
                 }
@@ -409,11 +480,7 @@ where
                             }
                         };
                         let mut decoder = sasl::FrameCodec {};
-                        Poll::Ready(
-                            decoder.decode(&mut src)
-                                .map_err(Into::into)
-                                .transpose()
-                        )
+                        Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
                     }
                     None => Poll::Ready(None),
                 }

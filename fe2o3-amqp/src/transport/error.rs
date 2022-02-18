@@ -1,8 +1,12 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+use fe2o3_amqp_types::{
+    definitions::{AmqpError, ConnectionError},
+    primitives::Binary,
+    sasl::SaslCode,
+};
 
-use crate::frames;
+use crate::{frames, sasl_profile};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -21,11 +25,11 @@ pub enum Error {
     #[error("Connection error: framing error")]
     FramingError,
 
-    // #[error("Connection error {:?}, {:?}", .condition, .description)]
-    // ConnectionError {
-    //     condition: ConnectionError,
-    //     description: Option<String>,
-    // },
+    #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
+    SaslError {
+        code: SaslCode,
+        additional_data: Option<Binary>,
+    },
 }
 
 impl Error {
@@ -94,9 +98,23 @@ impl From<frames::Error> for Error {
             },
             frames::Error::NotImplemented => Self::AmqpError {
                 condition: AmqpError::NotImplemented,
-                description: None
+                description: None,
             },
             frames::Error::FramingError => Self::FramingError,
+        }
+    }
+}
+
+impl From<sasl_profile::Error> for Error {
+    fn from(err: sasl_profile::Error) -> Self {
+        match err {
+            sasl_profile::Error::AmqpError {
+                condition,
+                description,
+            } => Self::AmqpError {
+                condition,
+                description,
+            },
         }
     }
 }
