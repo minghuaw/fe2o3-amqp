@@ -279,8 +279,22 @@ where
     println!(">>> Debug: inbound_buf {:#x?}", inbound_buf);
 
     // check header
-    let incoming_header = ProtocolHeader::try_from(inbound_buf)
-        .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
+    let incoming_header = match ProtocolHeader::try_from(inbound_buf) {
+        Ok(h) => h,
+        Err(_buf) => {
+            // println!("!!! Error");
+            // println!("buf: {:#x?}", _buf);
+
+            // loop {
+            //     let mut new_buf = [0u8; 1];
+            //     io.read_exact(&mut new_buf).await.unwrap();
+            //     println!("{:#x?}", new_buf[0]);
+            // }
+
+            return Err(Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))
+        }
+    };
+        // .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
         return Err(Error::amqp_error(
