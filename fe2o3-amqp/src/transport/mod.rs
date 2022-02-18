@@ -306,7 +306,11 @@ where
                             }
                         };
                         let mut decoder = amqp::FrameCodec {};
-                        Poll::Ready(decoder.decode(&mut src).transpose())
+                        Poll::Ready(
+                            decoder.decode(&mut src)
+                                .map_err(Into::into)
+                                .transpose()
+                        )
                     }
                     None => Poll::Ready(None),
                 }
@@ -405,7 +409,11 @@ where
                             }
                         };
                         let mut decoder = sasl::FrameCodec {};
-                        Poll::Ready(decoder.decode(&mut src).transpose())
+                        Poll::Ready(
+                            decoder.decode(&mut src)
+                                .map_err(Into::into)
+                                .transpose()
+                        )
                     }
                     None => Poll::Ready(None),
                 }

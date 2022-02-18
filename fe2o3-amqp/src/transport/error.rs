@@ -2,6 +2,8 @@ use std::io;
 
 use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 
+use crate::frames;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("IO Error {0:?}")]
@@ -16,11 +18,14 @@ pub enum Error {
         description: Option<String>,
     },
 
-    #[error("Connection error {:?}, {:?}", .condition, .description)]
-    ConnectionError {
-        condition: ConnectionError,
-        description: Option<String>,
-    },
+    #[error("Connection error: framing error")]
+    FramingError,
+
+    // #[error("Connection error {:?}, {:?}", .condition, .description)]
+    // ConnectionError {
+    //     condition: ConnectionError,
+    //     description: Option<String>,
+    // },
 }
 
 impl Error {
@@ -34,15 +39,15 @@ impl Error {
         }
     }
 
-    pub fn connection_error(
-        condition: impl Into<ConnectionError>,
-        description: impl Into<Option<String>>,
-    ) -> Self {
-        Self::ConnectionError {
-            condition: condition.into(),
-            description: description.into(),
-        }
-    }
+    // pub fn connection_error(
+    //     condition: impl Into<ConnectionError>,
+    //     description: impl Into<Option<String>>,
+    // ) -> Self {
+    //     Self::ConnectionError {
+    //         condition: condition.into(),
+    //         description: description.into(),
+    //     }
+    // }
 }
 
 /// TODO: What about encode error?
@@ -70,11 +75,28 @@ impl From<AmqpError> for Error {
     }
 }
 
-impl From<ConnectionError> for Error {
-    fn from(err: ConnectionError) -> Self {
-        Self::ConnectionError {
-            condition: err,
-            description: None,
+// impl From<ConnectionError> for Error {
+//     fn from(err: ConnectionError) -> Self {
+//         Self::ConnectionError {
+//             condition: err,
+//             description: None,
+//         }
+//     }
+// }
+
+impl From<frames::Error> for Error {
+    fn from(err: frames::Error) -> Self {
+        match err {
+            frames::Error::Io(io) => Self::Io(io),
+            frames::Error::DecodeError => Self::AmqpError {
+                condition: AmqpError::DecodeError,
+                description: None,
+            },
+            frames::Error::NotImplemented => Self::AmqpError {
+                condition: AmqpError::NotImplemented,
+                description: None
+            },
+            frames::Error::FramingError => Self::FramingError,
         }
     }
 }

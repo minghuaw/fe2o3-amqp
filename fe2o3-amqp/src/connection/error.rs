@@ -87,13 +87,17 @@ impl From<transport::Error> for Error {
                 condition,
                 description,
             },
-            transport::Error::ConnectionError {
-                condition,
-                description,
-            } => Self::ConnectionError {
-                condition,
-                description,
-            },
+            transport::Error::FramingError => Self::ConnectionError {
+                condition: ConnectionError::FramingError,
+                description: None,
+            }
+            // transport::Error::ConnectionError {
+            //     condition,
+            //     description,
+            // } => Self::ConnectionError {
+            //     condition,
+            //     description,
+            // },
         }
     }
 }
