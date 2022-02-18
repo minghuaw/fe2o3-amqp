@@ -16,7 +16,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 /* -------------------------------- Transport ------------------------------- */
 
 use std::{
-    convert::TryFrom, io, marker::PhantomData, os::windows::prelude::AsRawHandle, task::Poll,
+    convert::TryFrom, io, marker::PhantomData, task::Poll,
     time::Duration,
 };
 
@@ -465,7 +465,10 @@ where
                 match next {
                     Some(item) => {
                         let mut src = match item {
-                            Ok(b) => b,
+                            Ok(b) => {
+                                println!(">>> Debug: frame {:#x?}", &b[..]);
+                                b
+                            },
                             Err(err) => {
                                 use std::any::Any;
                                 let any = &err as &dyn Any;
