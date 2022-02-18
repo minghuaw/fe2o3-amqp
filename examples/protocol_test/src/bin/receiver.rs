@@ -9,7 +9,8 @@ async fn main() {
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .open("amqp://127.0.0.1:5672")
+        // .open("amqp://127.0.0.1:5672")
+        .open("amqp://guest:guest@localhost:5672")
         .await
         .unwrap();
 
