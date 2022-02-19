@@ -956,7 +956,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&code)?;
         }
         // FIXME: whether `len` should be below 255-1
-        1..=U8_MAX_MINUS_2 => {
+        1..=U8_MAX_MINUS_1 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::List8 as u8];
                 writer.write_all(&code)?;
@@ -967,7 +967,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&len_num)?;
         }
         // FIXME: whether `len` should be below u32::MAX - 4
-        256..=U32_MAX_MINUS_8 => {
+        256..=U32_MAX_MINUS_4 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::List32 as u8];
                 writer.write_all(&code)?;

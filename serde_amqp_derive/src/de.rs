@@ -4,7 +4,7 @@ use syn::{spanned::Spanned, DeriveInput, Fields};
 use crate::{
     util::{
         convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none,
-        parse_described_struct_attr, parse_named_field_attrs, generic_visitor, where_deserialize, generic_visitor_fields,
+        parse_described_struct_attr, parse_named_field_attrs, generic_visitor, where_deserialize,
     },
     DescribedStructAttr, EncodingType, FieldAttr,
 };
