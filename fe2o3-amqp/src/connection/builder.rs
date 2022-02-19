@@ -44,6 +44,7 @@ pub struct Builder<Mode> {
     pub client_config: Option<ClientConfig>,
 
     pub buffer_size: usize,
+    pub sasl_profile: Option<SaslProfile>,
 
     // type state marker
     marker: PhantomData<Mode>,
@@ -67,6 +68,7 @@ impl Builder<WithoutContainerId> {
             client_config: None,
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
+            sasl_profile: None,
 
             marker: PhantomData,
         }
@@ -94,6 +96,7 @@ impl<Mode> Builder<Mode> {
             client_config: self.client_config,
 
             buffer_size: self.buffer_size,
+            sasl_profile: self.sasl_profile,
             marker: PhantomData,
         }
     }
@@ -250,15 +253,18 @@ impl Builder<WithContainerId> {
     ) -> Result<ConnectionHandle, Error> {
         let url: Url = url.try_into()?;
         self.hostname = url.host_str().map(Into::into);
+        if self.sasl_profile.is_none() {
+            self.sasl_profile = SaslProfile::try_from(&url).ok();
+        }
 
-        match SaslProfile::try_from(&url) {
-            Ok(profile) => {
+        match self.sasl_profile.take() {
+            Some(profile) => {
                 println!(">>> Debug: SaslProfile");
                 let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
                 self.connect_sasl(addr, url.host_str(), url.scheme(), url.domain(), profile)
                     .await
             }
-            Err(_) => {
+            None => {
                 println!(">>> Debug: no sasl");
                 let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
                 self.connect(addr, url.scheme(), url.domain()).await
