@@ -1,12 +1,9 @@
-use std::os::windows::prelude::AsRawHandle;
-
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut};
 use fe2o3_amqp_types::{
     definitions::AmqpError,
     primitives::{Binary, Symbol},
     sasl::{SaslInit, SaslOutcome},
 };
-use futures_util::Sink;
 use serde_bytes::ByteBuf;
 use url::Url;
 
