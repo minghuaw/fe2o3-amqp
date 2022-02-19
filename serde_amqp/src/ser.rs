@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use bytes::BufMut;
 use serde::{ser, Serialize};
 
 use crate::{
@@ -859,17 +860,17 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let Self { se, num, buf } = self;
         match se.new_type {
-            NewType::None => write_list(&mut se.writer, num, buf, &se.is_array_elem),
-            NewType::Array => write_array(&mut se.writer, num, buf, &se.is_array_elem),
+            NewType::None => write_list(&mut se.writer, num, &buf, &se.is_array_elem),
+            NewType::Array => write_array(&mut se.writer, num, &buf, &se.is_array_elem),
             _ => unreachable!(),
         }
     }
 }
 
 fn write_array<'a, W: Write + 'a>(
-    writer: &'a mut W,
+    mut writer: W,
     num: usize,
-    buf: Vec<u8>,
+    buf: &'a [u8],
     ext_is_array_elem: &IsArrayElement,
 ) -> Result<(), Error> {
     let len = buf.len();
@@ -899,7 +900,7 @@ fn write_array<'a, W: Write + 'a>(
         }
         _ => return Err(Error::too_long()),
     }
-    writer.write_all(&buf)?;
+    writer.write_all(buf)?;
     Ok(())
 }
 
@@ -937,14 +938,14 @@ impl<'a, W: Write + 'a> ser::SerializeTuple for TupleSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let Self { se, num, buf } = self;
-        write_list(&mut se.writer, num, buf, &se.is_array_elem)
+        write_list(&mut se.writer, num, &buf, &se.is_array_elem)
     }
 }
 
 fn write_list<'a, W: Write + 'a>(
-    writer: &'a mut W,
+    mut writer: W,
     num: usize,
-    buf: Vec<u8>,
+    buf: &'a [u8],
     ext_is_array_elem: &IsArrayElement,
 ) -> Result<(), Error> {
     let len = buf.len();
@@ -981,7 +982,7 @@ fn write_list<'a, W: Write + 'a>(
         }
         _ => return Err(Error::too_long()),
     }
-    writer.write_all(&buf)?;
+    writer.write_all(buf)?;
     Ok(())
 }
 
@@ -1049,14 +1050,14 @@ impl<'a, W: Write + 'a> ser::SerializeMap for MapSerializer<'a, W> {
     #[inline]
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let Self { se, num, buf } = self;
-        write_map(&mut se.writer, num, buf, &se.is_array_elem)
+        write_map(&mut se.writer, num, &buf, &se.is_array_elem)
     }
 }
 
 fn write_map<'a, W: Write + 'a>(
-    writer: &'a mut W,
+    mut writer: W,
     num: usize,
-    buf: Vec<u8>,
+    buf: &'a [u8],
     ext_is_array_elem: &IsArrayElement,
 ) -> Result<(), Error> {
     let len = buf.len();
@@ -1088,7 +1089,7 @@ fn write_map<'a, W: Write + 'a>(
         }
         _ => return Err(Error::too_long()),
     }
-    writer.write_all(&buf)?;
+    writer.write_all(buf)?;
     Ok(())
 }
 
@@ -1190,7 +1191,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                 write_list(
                     &mut self.se.writer,
                     self.count,
-                    self.buf,
+                    &self.buf,
                     &IsArrayElement::False,
                 )
             }
@@ -1204,7 +1205,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                 write_list(
                     &mut self.se.writer,
                     self.count,
-                    self.buf,
+                    &self.buf,
                     &IsArrayElement::False,
                 )
             }
@@ -1302,7 +1303,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
             StructEncoding::None => write_list(
                 &mut self.se.writer,
                 self.count,
-                self.buf,
+                &self.buf,
                 &self.se.is_array_elem,
             ),
             StructEncoding::DescribedBasic => {
@@ -1315,7 +1316,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
                 write_list(
                     &mut self.se.writer,
                     self.count,
-                    self.buf,
+                    &self.buf,
                     &self.se.is_array_elem,
                 )
             }
@@ -1325,7 +1326,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
                 write_map(
                     &mut self.se.writer,
                     self.count * 2,
-                    self.buf,
+                    &self.buf,
                     &self.se.is_array_elem,
                 )
             }
@@ -1374,15 +1375,21 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        let mut value = Vec::new();
-        write_list(&mut value, self.num, self.buf, &self.se.is_array_elem)?;
+        use bytes::BytesMut;
+        let kv_buf = BytesMut::new();
+        let mut writer = kv_buf.writer();
+        
+        // Serialize key
+        let mut key_se = Serializer::new(&mut writer);
+        ser::Serialize::serialize(&self.variant_index, &mut key_se)?;
 
-        let mut list = Vec::new();
-        let mut se = Serializer::new(&mut list);
-        ser::Serialize::serialize(&self.variant_index, &mut se)?;
-        list.append(&mut value);
-        // write_map(&mut self.se.writer, 1, kv)
-        write_list(&mut self.se.writer, 2, list, &self.se.is_array_elem)
+        // Write values
+        write_list(&mut writer, self.num, &self.buf, &self.se.is_array_elem)?;
+
+        // Write entire list
+        let buf = writer.into_inner().freeze();
+        // write_list(&mut self.se.writer, 2, &buf, &self.se.is_array_elem)
+        write_map(&mut self.se.writer, 2, &buf, &self.se.is_array_elem)
     }
 }
 
@@ -2165,9 +2172,13 @@ mod test {
     fn test_serialize_tuple_variant() {
         let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
         // let output = to_vec(&val).unwrap();
-        // println!("{:x?}", output);
+        // println!("{:#x?}", output);
+        // let expected = vec![
+        //     0xc0, 0x0f, 0x02, 0x52, 0x02, 0xc0, 0x0a, 0x03, 0x41, 0x53, 0x0d, 0xa1, 0x04, 0x61,
+        //     0x6d, 0x71, 0x70,
+        // ];
         let expected = vec![
-            0xc0, 0x0f, 0x02, 0x52, 0x02, 0xc0, 0x0a, 0x03, 0x41, 0x53, 0x0d, 0xa1, 0x04, 0x61,
+            0xc1, 0x0f, 0x02, 0x52, 0x02, 0xc0, 0x0a, 0x03, 0x41, 0x53, 0x0d, 0xa1, 0x04, 0x61,
             0x6d, 0x71, 0x70,
         ];
         assert_eq_on_serialized_vs_expected(val, expected)
@@ -2181,8 +2192,11 @@ mod test {
         };
         // let output = to_vec(&val).unwrap();
         // println!("{:x?}", output);
+        // let expected = vec![
+        //     0xc0, 0x09, 0x02, 0x52, 0x03, 0xc0, 0x04, 0x02, 0x52, 0x0d, 0x41,
+        // ];
         let expected = vec![
-            0xc0, 0x09, 0x02, 0x52, 0x03, 0xc0, 0x04, 0x02, 0x52, 0x0d, 0x41,
+            0xc1, 0x09, 0x02, 0x52, 0x03, 0xc0, 0x04, 0x02, 0x52, 0x0d, 0x41,
         ];
         assert_eq_on_serialized_vs_expected(val, expected);
     }

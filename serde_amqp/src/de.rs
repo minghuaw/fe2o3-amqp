@@ -977,7 +977,7 @@ where
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 EncodingCodes::List0 => Err(Error::InvalidFormatCode),
-                EncodingCodes::List8 => {
+                EncodingCodes::List8 | EncodingCodes::Map8 => {
                     let _code = self.reader.next()?;
                     let _size = self.reader.next()? as usize;
                     let count = self.reader.next()? as usize;
@@ -986,7 +986,7 @@ where
                     }
                     visitor.visit_enum(VariantAccess::new(self))
                 }
-                EncodingCodes::List32 => {
+                EncodingCodes::List32 | EncodingCodes::Map32 => {
                     let _code = self.reader.next()?;
                     let size_bytes = self.reader.read_const_bytes()?;
                     let _size = u32::from_be_bytes(size_bytes);
@@ -997,7 +997,7 @@ where
                         return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
-                }
+                },
                 // Symbols appears in the transport errors
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                     println!(">>> Debug: EncodingCodes::Sym32 | Sym8");
