@@ -21,7 +21,7 @@ path = "../fe2o3-amqp-types"
 [dependencies]
 bytes = "1.1.0"
 tokio = { version = "1.11.0", features = ["io-util", "net", "rt"] }
-tokio-util = { version = "0.6.8", features = ["codec"] }
+tokio-util = { version = "0.7.0", features = ["codec"] }
 thiserror = "1.0.28"
 serde = "1.0.130"
 erased-serde = "0.3.16"
@@ -35,3 +35,4 @@ crossbeam = "0.8.1"
 tokio-rustls = "0.23.2"
 rustls = "0.20.2"
 serde_bytes = "0.11.5"
+tracing = "0.1.31"

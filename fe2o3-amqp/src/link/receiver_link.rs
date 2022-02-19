@@ -27,7 +27,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFrame> + Send + Unpin,
     {
         let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
             condition: AmqpError::IllegalState,
@@ -288,7 +288,7 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         batchable: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFrame> + Send + Unpin,
     {
         let settled = match self.rcv_settle_mode {
             ReceiverSettleMode::First => {
