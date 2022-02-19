@@ -112,7 +112,6 @@ impl<'de> de::Visitor<'de> for DescriptorVisitor {
     where
         A: de::EnumAccess<'de>,
     {
-        println!(">>> Debug: visit_enum");
         let (val, de) = data.variant()?;
         match val {
             Field::Name => {
