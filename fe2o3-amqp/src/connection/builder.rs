@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
-    frames::{sasl, amqp},
+    frames::{amqp},
     sasl_profile::SaslProfile,
     transport::protocol_header::ProtocolHeader,
     transport::Transport,

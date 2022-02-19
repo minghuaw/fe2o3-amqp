@@ -1,7 +1,7 @@
 use std::io;
 
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, ConnectionError},
+    definitions::{AmqpError},
     primitives::Binary,
     sasl::SaslCode,
 };
