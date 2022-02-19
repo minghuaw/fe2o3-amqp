@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use bytes::BufMut;
-use serde::{ser, Serialize};
+use serde::{ser::{self, SerializeMap}, Serialize};
 
 use crate::{
     __constants::{
@@ -648,7 +648,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     where
         T: Serialize,
     {
-        use ser::SerializeSeq;
+        // use ser::SerializeSeq;
         if name == DESCRIPTOR
         // || name == VALUE || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR
         {
@@ -656,9 +656,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.writer.write_all(&code)?;
             value.serialize(self)
         } else {
-            let mut state = self.serialize_seq(Some(2))?;
-            state.serialize_element(&variant_index)?;
-            state.serialize_element(value)?;
+            let mut state = self.serialize_map(Some(1))?;
+            state.serialize_entry(&variant_index, value)?;
+            // state.serialize_ele(value)?;
             state.end()
         }
     }
@@ -669,7 +669,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     #[inline]
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         // The most external array should be treated as IsArrayElement::False
-        println!(">>> Debug: serialize_seq");
         Ok(SeqSerializer::new(self))
     }
 
@@ -680,7 +679,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     // This will be encoded as primitive type `List`
     #[inline]
     fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        println!(">>> Debug: serialize_tuple");
         Ok(TupleSerializer::new(self, len))
     }
 
@@ -729,8 +727,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        println!(">>> Debug: serialize_struct");
-
         // The name should override the parent struct encoding
         let result = if name == DESCRIBED_LIST {
             self.struct_encoding.push(StructEncoding::DescribedList);
@@ -1423,46 +1419,46 @@ mod test {
 
     use super::*;
 
-    fn assert_eq_on_serialized_vs_expected<T: Serialize>(val: T, expected: Vec<u8>) {
+    fn assert_eq_on_serialized_vs_expected<T: Serialize>(val: T, expected: &[u8]) {
         let serialized = to_vec(&val).unwrap();
-        assert_eq!(serialized, expected);
+        assert_eq!(&serialized[..], expected);
     }
 
     #[test]
     fn test_bool() {
         let val = true;
         let expected = vec![EncodingCodes::BooleanTrue as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = false;
         let expected = vec![EncodingCodes::BooleanFalse as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_i8() {
         let val = 0i8;
         let expected = vec![EncodingCodes::Byte as u8, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = i8::MIN;
         let expected = vec![EncodingCodes::Byte as u8, 128u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = i8::MAX;
         let expected = vec![EncodingCodes::Byte as u8, 127u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_i16() {
         let val = 0i16;
         let expected = vec![EncodingCodes::Short as u8, 0, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = -1i16;
         let expected = vec![EncodingCodes::Short as u8, 255, 255];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1470,12 +1466,12 @@ mod test {
         // small int
         let val = 0i32;
         let expected = vec![EncodingCodes::SmallInt as u8, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // int
         let val = i32::MAX;
         let expected = vec![EncodingCodes::Int as u8, 127, 255, 255, 255];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1483,7 +1479,7 @@ mod test {
         // small long
         let val = 0i64;
         let expected = vec![EncodingCodes::SmallLong as u8, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // long
         let val = i64::MAX;
@@ -1498,33 +1494,33 @@ mod test {
             255,
             255,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_u8() {
         let val = u8::MIN;
         let expected = vec![EncodingCodes::UByte as u8, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = u8::MAX;
         let expected = vec![EncodingCodes::UByte as u8, 255];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_u16() {
         let val = 0u16;
         let expected = vec![EncodingCodes::UShort as u8, 0, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = 131u16;
         let expected = vec![EncodingCodes::UShort as u8, 0, 131];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = 65535u16;
         let expected = vec![EncodingCodes::UShort as u8, 255, 255];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1532,18 +1528,18 @@ mod test {
         // uint0
         let val = 0u32;
         let expected = vec![EncodingCodes::Uint0 as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // small uint
         let val = 255u32;
         let expected = vec![EncodingCodes::SmallUint as u8, 255];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // uint
         let val = u32::MAX;
         let mut expected = vec![EncodingCodes::UInt as u8];
         expected.append(&mut vec![255; 4]);
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1551,18 +1547,18 @@ mod test {
         // ulong0
         let val = 0u64;
         let expected = vec![EncodingCodes::Ulong0 as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // small ulong
         let val = 255u64;
         let expected = vec![EncodingCodes::SmallUlong as u8, 255];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // ulong
         let val = u64::MAX;
         let mut expected = vec![EncodingCodes::ULong as u8];
         expected.append(&mut vec![255u8; 8]);
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1570,27 +1566,27 @@ mod test {
         let val = f32::MIN;
         let mut expected = vec![EncodingCodes::Float as u8];
         expected.append(&mut val.to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = -123.456f32;
         let mut expected = vec![EncodingCodes::Float as u8];
         expected.append(&mut val.to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = 0.0f32;
         let mut expected = vec![EncodingCodes::Float as u8];
         expected.append(&mut val.to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = 123.456f32;
         let mut expected = vec![EncodingCodes::Float as u8];
         expected.append(&mut val.to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         let val = f32::MAX;
         let mut expected = vec![EncodingCodes::Float as u8];
         expected.append(&mut val.to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1598,7 +1594,7 @@ mod test {
         let val = 123.456f64;
         let mut expected = vec![EncodingCodes::Double as u8];
         expected.append(&mut val.to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1606,7 +1602,7 @@ mod test {
         let val = 'c';
         let mut expected = vec![EncodingCodes::Char as u8];
         expected.append(&mut (val as u32).to_be_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1627,17 +1623,15 @@ mod test {
         let len = val.len() as u8;
         let mut expected = vec![EncodingCodes::Str8 as u8, len];
         expected.append(&mut val.as_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // str32
         let val = LARGE_STRING_VALUIE;
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", output);
         let len = val.len() as u32;
         let mut expected = vec![EncodingCodes::Str32 as u8];
         expected.append(&mut len.to_be_bytes().to_vec());
         expected.append(&mut val.as_bytes().to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1652,7 +1646,7 @@ mod test {
         let len = val.len() as u8;
         let mut expected = vec![EncodingCodes::VBin8 as u8, len];
         expected.append(&mut val.to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // vbin32
         let val = ByteBuf::from(LARGE_BYTES_VALUE);
@@ -1660,28 +1654,28 @@ mod test {
         let mut expected = vec![EncodingCodes::VBin32 as u8];
         expected.append(&mut len.to_be_bytes().to_vec());
         expected.append(&mut val.to_vec());
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_none() {
         let val: Option<()> = None;
         let expected = vec![EncodingCodes::Null as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_some() {
         let val = Some(1i32);
         let expected = super::to_vec(&1i32).unwrap();
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_unit() {
         let val = ();
         let expected = vec![EncodingCodes::Null as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1709,15 +1703,13 @@ mod test {
             0,
             4, // fourth
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_serialize_slice_as_array() {
         let val = &[1, 2, 3, 4];
         let val = Array::from(val.to_vec());
-        // let output = to_vec(&val).unwrap();
-        // println!("{:?}", output);
         let expected = vec![
             EncodingCodes::Array8 as u8, // array8
             (2 + 4 * 4) as u8,           // length including `count` and element constructor
@@ -1740,7 +1732,7 @@ mod test {
             0,
             4, // fourth
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1748,7 +1740,7 @@ mod test {
         // List0
         let val: Vec<i32> = vec![];
         let expected = vec![EncodingCodes::List0 as u8];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
 
         // List8
         let val = vec![1, 2, 3, 4];
@@ -1765,7 +1757,7 @@ mod test {
             EncodingCodes::SmallInt as u8,
             4,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1785,7 +1777,7 @@ mod test {
             EncodingCodes::SmallInt as u8,
             4,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1826,7 +1818,7 @@ mod test {
             3,
         ];
 
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -1834,7 +1826,7 @@ mod test {
         use crate::primitives::Symbol;
         let symbol = Symbol::from("amqp");
         let expected = vec![0xa3 as u8, 0x04, 0x61, 0x6d, 0x71, 0x70];
-        assert_eq_on_serialized_vs_expected(symbol, expected);
+        assert_eq_on_serialized_vs_expected(symbol, &expected);
     }
 
     #[test]
@@ -1842,14 +1834,14 @@ mod test {
         // The descriptor name should just be serialized as a symbol
         let descriptor = Descriptor::name("amqp");
         let expected = vec![0x00, 0xa3, 0x04, 0x61, 0x6d, 0x71, 0x70];
-        assert_eq_on_serialized_vs_expected(descriptor, expected);
+        assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
     #[test]
     fn test_serialize_descriptor_code() {
         let descriptor = Descriptor::code(0xf2);
         let expected = vec![0x00, 0x53, 0xf2];
-        assert_eq_on_serialized_vs_expected(descriptor, expected);
+        assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
     use serde::Serialize;
@@ -1874,7 +1866,7 @@ mod test {
             13,
             EncodingCodes::BooleanTrue as u8,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -1894,10 +1886,8 @@ mod test {
             is_fool: true,
             a: 9,
         };
-        // let buf = to_vec(&foo).unwrap();
         let expected = vec![0x00, 0x53, 0x13, 0xc0, 0x04, 0x02, 0x41, 0x54, 0x09];
-        // println!("{:x?}", buf);
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -1911,10 +1901,8 @@ mod test {
         struct Foo(bool, i32);
 
         let foo = Foo(true, 9);
-        // let buf = to_vec(&foo).unwrap();
-        // println!("{:x?}", buf);
         let expected = vec![0x00, 0x53, 0x13, 0xc0, 0x04, 0x02, 0x41, 0x54, 0x09];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -1944,15 +1932,15 @@ mod test {
 
         let foo1 = Foo1;
         let buf1 = to_vec(&foo1).unwrap();
-        assert_eq!(buf1, expected);
+        assert_eq!(&buf1[..], &expected);
 
         let foo2 = Foo2();
         let buf2 = to_vec(&foo2).unwrap();
-        assert_eq!(buf2, expected);
+        assert_eq!(&buf2[..], &expected);
 
         let foo3 = Foo3 {};
         let buf3 = to_vec(&foo3).unwrap();
-        assert_eq!(buf3, expected);
+        assert_eq!(&buf3[..], &expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -1977,12 +1965,28 @@ mod test {
         map.insert(Symbol::from("a"), 1);
         map.insert(Symbol::from("b"), 2);
         let wrapper = Wrapper(map.clone());
-        let buf = to_vec(&wrapper).unwrap();
-        println!("{:x?}", &buf);
+        let expected = vec![
+            EncodingCodes::DescribedType as u8,
+            EncodingCodes::SmallUlong as u8,
+            1,
+            EncodingCodes::Map8 as u8,
+            0x0b,
+            4,
+            EncodingCodes::Sym8 as u8,
+            1,
+            0x61, // "a"
+            EncodingCodes::SmallInt as u8,
+            1,
+            EncodingCodes::Sym8 as u8,
+            1,
+            0x62, // "b"
+            EncodingCodes::SmallInt as u8,
+            2
+        ];
+        assert_eq_on_serialized_vs_expected(wrapper, &expected);
 
         let wrapper2 = Wrapper2 { map };
-        let buf = to_vec(&wrapper2).unwrap();
-        println!("{:x?}", &buf);
+        assert_eq_on_serialized_vs_expected(wrapper2, &expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -2008,7 +2012,7 @@ mod test {
             0x13,
             EncodingCodes::List0 as u8,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         let foo = Foo {
             is_fool: Some(true),
@@ -2023,7 +2027,7 @@ mod test {
             1,
             EncodingCodes::BooleanTrue as u8,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         let foo = Foo {
             is_fool: Some(true),
@@ -2040,7 +2044,7 @@ mod test {
             EncodingCodes::SmallInt as u8,
             1,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         let foo = Foo {
             is_fool: None,
@@ -2057,7 +2061,7 @@ mod test {
             EncodingCodes::SmallInt as u8,
             1,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         #[derive(Debug, SerializeComposite)]
         #[amqp_contract(code = 0x13, encoding = "list")]
@@ -2082,7 +2086,7 @@ mod test {
             EncodingCodes::SmallUint as u8,
             0x13,
         ];
-        assert_eq_on_serialized_vs_expected(bar, expected);
+        assert_eq_on_serialized_vs_expected(bar, &expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
@@ -2102,7 +2106,7 @@ mod test {
             0x13,
             EncodingCodes::List0 as u8,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         let foo = Foo(Some(true), None);
         let expected = vec![
@@ -2114,7 +2118,7 @@ mod test {
             1,
             EncodingCodes::BooleanTrue as u8,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         let foo = Foo(Some(true), Some(1));
         let expected = vec![
@@ -2128,7 +2132,7 @@ mod test {
             EncodingCodes::SmallInt as u8,
             1,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
 
         let foo = Foo(None, Some(1));
         let expected = vec![
@@ -2142,7 +2146,7 @@ mod test {
             EncodingCodes::SmallInt as u8,
             1,
         ];
-        assert_eq_on_serialized_vs_expected(foo, expected);
+        assert_eq_on_serialized_vs_expected(foo, &expected);
     }
 
     #[allow(dead_code)]
@@ -2157,31 +2161,33 @@ mod test {
     #[test]
     fn test_serialize_unit_variant() {
         let val = Enumeration::UnitVariant;
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", output);
+        let expected = vec![EncodingCodes::Uint0 as u8];
+        assert_eq_on_serialized_vs_expected(val, &expected)
     }
 
     #[test]
     fn test_serialize_newtype_variant() {
         let val = Enumeration::NewTypeVariant(13);
-        let output = to_vec(&val).unwrap();
-        println!("{:?}", output);
+        let expected = vec![
+            EncodingCodes::Map8 as u8,
+            1 + 2*2, // len
+            2, // count
+            EncodingCodes::SmallUint as u8,
+            1,
+            EncodingCodes::SmallUint as u8,
+            13
+        ];
+        assert_eq_on_serialized_vs_expected(val, &expected)
     }
 
     #[test]
     fn test_serialize_tuple_variant() {
         let val = Enumeration::TupleVariant(true, 13, String::from("amqp"));
-        // let output = to_vec(&val).unwrap();
-        // println!("{:#x?}", output);
-        // let expected = vec![
-        //     0xc0, 0x0f, 0x02, 0x52, 0x02, 0xc0, 0x0a, 0x03, 0x41, 0x53, 0x0d, 0xa1, 0x04, 0x61,
-        //     0x6d, 0x71, 0x70,
-        // ];
         let expected = vec![
             0xc1, 0x0f, 0x02, 0x52, 0x02, 0xc0, 0x0a, 0x03, 0x41, 0x53, 0x0d, 0xa1, 0x04, 0x61,
             0x6d, 0x71, 0x70,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected)
+        assert_eq_on_serialized_vs_expected(val, &expected)
     }
 
     #[test]
@@ -2190,29 +2196,24 @@ mod test {
             id: 13,
             is_true: true,
         };
-        // let output = to_vec(&val).unwrap();
-        // println!("{:x?}", output);
-        // let expected = vec![
-        //     0xc0, 0x09, 0x02, 0x52, 0x03, 0xc0, 0x04, 0x02, 0x52, 0x0d, 0x41,
-        // ];
         let expected = vec![
             0xc1, 0x09, 0x02, 0x52, 0x03, 0xc0, 0x04, 0x02, 0x52, 0x0d, 0x41,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
     fn test_serializing_dec32() {
         let d32 = Dec32::from([0; 4]);
         let expected = vec![EncodingCodes::Decimal32 as u8, 0, 0, 0, 0];
-        assert_eq_on_serialized_vs_expected(d32, expected);
+        assert_eq_on_serialized_vs_expected(d32, &expected);
     }
 
     #[test]
     fn test_serializing_dec64() {
         let d64 = Dec64::from([0; 8]);
         let expected = vec![EncodingCodes::Decimal64 as u8, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq_on_serialized_vs_expected(d64, expected);
+        assert_eq_on_serialized_vs_expected(d64, &expected);
     }
 
     #[test]
@@ -2237,14 +2238,14 @@ mod test {
             0,
             0,
         ];
-        assert_eq_on_serialized_vs_expected(d128, expected);
+        assert_eq_on_serialized_vs_expected(d128, &expected);
     }
 
     #[test]
     fn test_serialize_timestamp() {
         let val = Timestamp::from(0);
         let expected = vec![EncodingCodes::Timestamp as u8, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
     #[test]
@@ -2269,6 +2270,6 @@ mod test {
             0,
             0,
         ];
-        assert_eq_on_serialized_vs_expected(val, expected);
+        assert_eq_on_serialized_vs_expected(val, &expected);
     }
 }
