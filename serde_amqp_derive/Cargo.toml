@@ -7,7 +7,7 @@ license = "MIT/Apache-2.0"
 documentation = "https://docs.rs/serde_amqp/"
 homepage = "https://github.com/minghuaw/fe2o3-amqp"
 repository = "https://github.com/minghuaw/fe2o3-amqp"
-keywords = ["amqp", "amqp1.0", "serde"]
+keywords = ["amqp", "serde"]
 categories = ["serde"]
 readme = "Readme.md"
 
