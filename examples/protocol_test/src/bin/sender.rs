@@ -9,6 +9,7 @@ use fe2o3_amqp::link::{Receiver, Sender};
 use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::Message;
+use fe2o3_amqp::types::messaging::message::BodySection;
 
 #[tokio::main]
 async fn main() {
@@ -16,11 +17,11 @@ async fn main() {
 
     let mut connection = Connection::builder()
         .container_id("fe2o3-amqp")
-        .hostname("127.0.0.1")
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .open("amqp://127.0.0.1:5672")
+        // .open("amqp://localhost:5672")
+        .open("amqp://guest:guest@localhost:5672")
         .await
         .unwrap();
 
@@ -38,12 +39,17 @@ async fn main() {
         .await
         .unwrap();
 
-    let message = Sendable::builder()
-        .settled(true)
-        .message("hello world")
-        .build();
+    let body = BodySection::from("hello");
+    let message = Message::from("hello");
+    let message = Sendable::from(message);
+    // let message = Sendable::builder()
+    //     .message("hello world")
+    //     .settled(true)
+    //     .build();
 
     sender.send(message).await.unwrap();
+
+    sender.send("hello").await.unwrap();
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {

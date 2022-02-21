@@ -8,7 +8,7 @@ use crate::__constants::SYMBOL;
 /// Symbol should only contain ASCII characters. The implementation, however, wraps
 /// over a String. `AmqpNetLite` also wraps around a String, which in c# is utf-16.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Symbol(String);
+pub struct Symbol(pub String);
 
 impl Symbol {
     pub fn new(val: impl Into<String>) -> Self {

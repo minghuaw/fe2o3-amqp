@@ -6,7 +6,7 @@ use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
-        Role, SenderSettleMode, SessionError, SequenceNo,
+        Role, SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -228,7 +228,7 @@ where
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFrame> + Send + Unpin,
     {
         println!(">>> Debug: Link::send_attach");
         println!(">>> Debug: Link.local_state: {:?}", &self.local_state);
@@ -291,12 +291,12 @@ where
             | LinkState::Detached // May attempt to re-attach
             | LinkState::DetachSent => {
                 writer.send(frame).await
-                    .map_err(|e| Self::Error::from(e))?;
+                    .map_err(|_| Self::Error::error_sending_to_session())?;
                 self.local_state = LinkState::AttachSent
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
-                    .map_err(|e| Self::Error::from(e))?;
+                    .map_err(|_| Self::Error::error_sending_to_session())?;
                 self.local_state = LinkState::Attached
             }
             _ => return Err(AmqpError::IllegalState.into()),
@@ -357,7 +357,7 @@ where
         error: Option<Self::DetachError>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+        W: Sink<LinkFrame> + Send + Unpin,
     {
         println!(">>> Debug: SenderLink::send_detach");
         println!(">>> Debug: SenderLink local_state: {:?}", &self.local_state);
@@ -620,7 +620,7 @@ pub(crate) async fn do_attach<L, W, R>(
 ) -> Result<(), Error>
 where
     L: endpoint::Link<Error = Error>,
-    W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
     use futures_util::StreamExt;
@@ -673,7 +673,7 @@ pub(crate) async fn expect_detach_then_detach<L, W, R>(
 ) -> Result<(), Error>
 where
     L: endpoint::Link<Error = Error>,
-    W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin,
+    W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
     use futures_util::StreamExt;

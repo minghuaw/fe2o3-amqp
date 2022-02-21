@@ -82,6 +82,15 @@ pub enum Error {
     },
 }
 
+impl Error {
+    pub(crate) fn error_sending_to_session() -> Self {
+        Self::AmqpError {
+            condition: AmqpError::IllegalState,
+            description: Some("Failed to send to sesssion".to_string()),
+        }
+    }
+}
+
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
         Self::AmqpError {

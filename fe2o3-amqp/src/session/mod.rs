@@ -517,7 +517,7 @@ impl endpoint::Session for Session {
 
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
+        W: Sink<SessionFrame> + Send + Unpin,
     {
         println!(">>> Debug: Session::send_begin");
         let begin = Begin {
@@ -541,13 +541,13 @@ impl endpoint::Session for Session {
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
                     .map_err(|e| {
-                        Self::Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
+                        Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop receiver has dropped"))
                     })?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
                 writer.send(frame).await.map_err(|e| {
-                    Self::Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string()))
+                    Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop receiver has dropped"))
                 })?;
                 self.local_state = SessionState::Mapped;
             }
@@ -661,7 +661,7 @@ impl endpoint::Session for Session {
         error: Option<definitions::Error>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin,
+        W: Sink<SessionFrame> + Send + Unpin,
     {
         match self.local_state {
             SessionState::Mapped => match error.is_some() {
@@ -678,7 +678,7 @@ impl endpoint::Session for Session {
             .await
             // The receiving half must have dropped, and thus the `Connection`
             // event loop has stopped. It should be treated as an io error
-            .map_err(|e| Self::Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop has dropped")))?;
         Ok(())
     }
 }

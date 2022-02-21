@@ -33,9 +33,9 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     connection::engine::SessionId,
+    frames::amqp::Frame,
     link::{delivery::Delivery, LinkFrame},
     session::{SessionFrame, SessionIncomingItem},
-    transport::amqp::Frame,
     Payload,
 };
 
@@ -153,7 +153,7 @@ pub(crate) trait Session {
     // Handling SessionFrames
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin;
+        W: Sink<SessionFrame> + Send + Unpin;
 
     async fn send_end<W>(
         &mut self,
@@ -161,7 +161,7 @@ pub(crate) trait Session {
         error: Option<Error>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<SessionFrame, Error = mpsc::error::SendError<SessionFrame>> + Send + Unpin;
+        W: Sink<SessionFrame> + Send + Unpin;
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
@@ -185,31 +185,11 @@ pub(crate) trait Link {
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 
-    /// Reacting to incoming flow should be entirely handled by session
-    // async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
-
-    // Only the receiver is supposed to receive incoming Transfer frame
-
-    // Disposition is handled by the LinkHandles that run in the session loop
-    // async fn on_incoming_disposition(
-    //     &mut self,
-    //     disposition: Disposition,
-    // ) -> Result<(), Self::Error>;
-
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
-
-    // async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
-    // where
-    //     W: Sink<LinkFlow, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
-
-    // /// TODO: get rid of this? The disposition doesn't include delivery_tag,
-    // async fn send_disposition<W>(&mut self, writer: &mut W, disposition: Disposition) -> Result<(), Self::Error>
-    // where
-    //     W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin;
 
     async fn send_detach<W>(
         &mut self,
@@ -218,23 +198,8 @@ pub(crate) trait Link {
         error: Option<Self::DetachError>,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
-
-    // async fn on_incoming_transfer(&mut self, transfer: Transfer, payload: Option<Bytes>) -> Result<(), Self::Error>;
-    // async fn on_outgoing_flow() -> Result<(), Self::Error>;
-    // async fn on_outgoing_transfer() -> Result<(), Self::Error>;
-    // async fn on_outgoing_disposition() -> Result<(), Self::Error>;
+        W: Sink<LinkFrame> + Send + Unpin;
 }
-
-// #[async_trait]
-// pub trait LinkFlowControl {
-//     type Error;
-
-//     /// TODO: redundant?
-//     fn on_outgoing_flow(&mut self, flow: &Flow) -> Result<(), Self::Error>;
-
-//     fn on_incoming_flow(&mut self, flow: &Flow) -> Result<Option<Flow>, Self::Error>;
-// }
 
 /// A subset of the fields in the Flow performative
 #[derive(Debug, Default)]
@@ -247,19 +212,6 @@ pub struct LinkFlow {
     pub echo: Boolean,
     pub properties: Option<Fields>,
 }
-
-// impl From<&Flow> for LinkFlow {
-//     fn from(flow: &Flow) -> Self {
-//         LinkFlow {
-
-//             delivery_count: flow.delivery_count,
-//             link_credit: flow.link_credit,
-//             available: flow.available,
-//             drain: flow.drain,
-//             echo: flow.echo,
-//         }
-//     }
-// }
 
 impl TryFrom<Flow> for LinkFlow {
     type Error = ();
@@ -299,7 +251,7 @@ pub(crate) trait SenderLink: Link {
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin;
 
     /// Send message via transfer frame and return whether the message is already settled
     async fn send_transfer<W>(
@@ -311,7 +263,7 @@ pub(crate) trait SenderLink: Link {
         batchable: bool,
     ) -> Result<Settlement, <Self as Link>::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin;
 
     async fn dispose<W>(
         &mut self,
@@ -322,7 +274,7 @@ pub(crate) trait SenderLink: Link {
         state: DeliveryState,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin;
 }
 
 #[async_trait]
@@ -338,7 +290,7 @@ pub(crate) trait ReceiverLink: Link {
         echo: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin;
 
     async fn on_incomplete_transfer(
         &mut self,
@@ -349,19 +301,19 @@ pub(crate) trait ReceiverLink: Link {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_incoming_transfer(
+    async fn on_incoming_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-        // section_number: u32,
-        // section_offset: u64,
     ) -> Result<
         (
-            Delivery,
+            Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
         <Self as Link>::Error,
-    >;
+    >
+    where
+        T: for<'de> serde::Deserialize<'de> + Send;
 
     async fn dispose<W>(
         &mut self,
@@ -373,5 +325,5 @@ pub(crate) trait ReceiverLink: Link {
         batchable: bool,
     ) -> Result<(), Self::Error>
     where
-        W: Sink<LinkFrame, Error = mpsc::error::SendError<LinkFrame>> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin;
 }

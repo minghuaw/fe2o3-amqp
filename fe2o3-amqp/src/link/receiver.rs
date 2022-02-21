@@ -231,7 +231,10 @@ impl Receiver<Detached> {
 }
 
 impl Receiver<Attached> {
-    pub async fn recv(&mut self) -> Result<Delivery, Error> {
+    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
         loop {
             match self.recv_inner().await? {
                 Some(delivery) => return Ok(delivery),
@@ -241,7 +244,10 @@ impl Receiver<Attached> {
     }
 
     #[inline]
-    async fn recv_inner(&mut self) -> Result<Option<Delivery>, Error> {
+    async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
         println!(">>> Debug: recv_inner");
         let frame = self.incoming.next().await.ok_or_else(|| Error::AmqpError {
             condition: AmqpError::IllegalState,
@@ -275,11 +281,14 @@ impl Receiver<Attached> {
         }
     }
 
-    async fn on_incoming_transfer(
+    async fn on_incoming_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery>, Error> {
+    ) -> Result<Option<Delivery<T>>, Error>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
         use crate::endpoint::ReceiverLink;
 
         // Aborted messages SHOULD be discarded by the recipient (any payload
@@ -356,11 +365,7 @@ impl Receiver<Attached> {
         if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
             // let frame = LinkFrame::Disposition(disposition);
             // self.outgoing.send(frame).await?;
-            self.dispose(
-                    delivery_id,
-                    delivery_tag,
-                    delivery_state,
-                )
+            self.dispose(delivery_id, delivery_tag, delivery_state)
                 .await?;
         }
 
@@ -372,7 +377,7 @@ impl Receiver<Attached> {
         use crate::endpoint::ReceiverLink;
 
         self.processed = 0;
-        self.flow_threshold = credit/2;
+        self.flow_threshold = credit / 2;
 
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -599,7 +604,7 @@ impl Receiver<Attached> {
         Ok(())
     }
 
-    pub async fn accept(&mut self, delivery: &Delivery) -> Result<(), Error> {
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Accepted(Accepted {});
         self.dispose(
             delivery.delivery_id.clone(),
@@ -609,9 +614,9 @@ impl Receiver<Attached> {
         .await
     }
 
-    pub async fn reject(
+    pub async fn reject<T>(
         &mut self,
-        delivery: &Delivery,
+        delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), Error> {
         let state = DeliveryState::Rejected(Rejected {
@@ -625,7 +630,7 @@ impl Receiver<Attached> {
         .await
     }
 
-    pub async fn release(&mut self, delivery: &Delivery) -> Result<(), Error> {
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Released(Released {});
         self.dispose(
             delivery.delivery_id.clone(),
@@ -635,9 +640,9 @@ impl Receiver<Attached> {
         .await
     }
 
-    pub async fn modify(
+    pub async fn modify<T>(
         &mut self,
-        delivery: &Delivery,
+        delivery: &Delivery<T>,
         modified: impl Into<Modified>,
     ) -> Result<(), Error> {
         let state = DeliveryState::Modified(modified.into());

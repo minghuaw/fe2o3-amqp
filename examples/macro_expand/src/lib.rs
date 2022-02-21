@@ -8,6 +8,19 @@ use serde_amqp::{
     primitives::{Boolean, UInt, ULong},
 };
 
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[amqp_contract(
+    name = "amqp:amqp-value:*",
+    code = 0x0000_0000_0000_0077,
+    encoding = "list"
+)]
+// pub struct AmqpValue<T>(pub T);
+pub struct Foo<A, B> {
+    a: A,
+    b: B
+}
+// pub struct A(i32);
+
 // #[derive(SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
 // struct Foo {
@@ -34,13 +47,13 @@ use serde_amqp::{
 // #[amqp_contract(code = 0x01, encoding = "basic")]
 // struct Wrapper(BTreeMap<String, i32>);
 
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(name = "ab", encoding = "map")]
-struct Test {
-    a: Option<i32>,
-    #[amqp_contract(default)]
-    b: bool,
-}
+// #[derive(Debug, SerializeComposite, DeserializeComposite)]
+// #[amqp_contract(name = "ab", encoding = "map")]
+// struct Test {
+//     a: Option<i32>,
+//     #[amqp_contract(default)]
+//     b: bool,
+// }
 
 // use std::collections::BTreeMap;
 

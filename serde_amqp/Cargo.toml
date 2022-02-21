@@ -14,10 +14,10 @@ default = []
 derive = ["serde_amqp_derive"]
 
 [dev-dependencies]
-serde_amqp_derive = { version = "0.1.0", path = "../serde_amqp_derive" }
+serde_amqp_derive = { version = "0.0.1", path = "../serde_amqp_derive" }
 
 [dependencies.serde_amqp_derive]
-version = "0.1.0"
+version = "0.0.1"
 path = "../serde_amqp_derive"
 optional = true
 
@@ -26,8 +26,8 @@ ordered-float = { version = "2.7.0", features = ["serde"] }
 serde = { version = "1.0.126", features = ["derive"] }
 serde_bytes = "0.11.5"
 thiserror = "1.0.26"
+bytes = "1.1.0"
 
+# Optinal dependencies
 chrono = { version = "0.4.19", features = ["serde"], optional = true }
 uuid = { version = "0.8.2", features = ["serde"], optional = true }
-
-

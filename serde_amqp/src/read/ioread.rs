@@ -267,9 +267,6 @@ mod tests {
             let peek = io_reader.peek().expect("Should not return error");
             let next = io_reader.next().expect("Should not return error");
 
-            // println!("peek {:?}", peek);
-            // println!("next {:?}", next);
-
             assert_eq!(peek, reader[i]);
             assert_eq!(next, reader[i]);
         }

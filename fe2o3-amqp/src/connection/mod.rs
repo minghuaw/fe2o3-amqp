@@ -17,9 +17,9 @@ use url::Url;
 use crate::{
     control::ConnectionControl,
     endpoint,
+    frames::amqp::{Frame, FrameBody},
     session::SessionFrame,
     session::{Session, SessionFrameBody, SessionIncomingItem},
-    transport::amqp::{Frame, FrameBody},
 };
 
 use self::{builder::WithoutContainerId, engine::SessionId};

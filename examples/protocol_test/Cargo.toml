@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fe2o3-amqp = {version = "0.1.0", path = "../../fe2o3-amqp"}
+fe2o3-amqp = {version = "0.0.1", path = "../../fe2o3-amqp"}
 tokio = { version = "1.11.0", features = ["net", "macros", "rt-multi-thread", "time"] }

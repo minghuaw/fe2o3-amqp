@@ -10,9 +10,7 @@ use fe2o3_amqp_types::{
 use serde_amqp::read::IoReader;
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::transport::FRAME_TYPE_SASL;
-
-use super::Error;
+use super::{Error, FRAME_TYPE_SASL};
 
 // pub struct Frame {
 //     pub body: FrameBody,
@@ -63,14 +61,11 @@ impl Decoder for FrameCodec {
         let _ignored = src.get_u16();
 
         if ftype != FRAME_TYPE_SASL {
-            return Err(Error::amqp_error(AmqpError::NotImplemented, None));
+            return Err(Error::NotImplemented);
         }
 
         if doff != 2 {
-            return Err(Error::amqp_error(
-                AmqpError::NotAllowed,
-                Some("doff is not equal to 2".to_string()),
-            ));
+            return Err(Error::FramingError);
         }
 
         let reader = IoReader::new(src.reader());

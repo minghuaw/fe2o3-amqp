@@ -135,19 +135,19 @@ impl TryFrom<Value> for Data {
     code = 0x0000_0000_0000_0076,
     encoding = "basic"
 )]
-pub struct AmqpSequence(pub Vec<Value>);
+pub struct AmqpSequence<T>(pub Vec<T>);
 
-impl TryFrom<Value> for AmqpSequence {
-    type Error = Value;
+// impl TryFrom<Value> for AmqpSequence {
+//     type Error = Value;
 
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        if let Value::List(vals) = value {
-            Ok(AmqpSequence(vals))
-        } else {
-            Err(value)
-        }
-    }
-}
+//     fn try_from(value: Value) -> Result<Self, Self::Error> {
+//         if let Value::List(vals) = value {
+//             Ok(AmqpSequence(vals))
+//         } else {
+//             Err(value)
+//         }
+//     }
+// }
 
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
@@ -159,13 +159,13 @@ impl TryFrom<Value> for AmqpSequence {
     code = 0x0000_0000_0000_0077,
     encoding = "basic"
 )]
-pub struct AmqpValue(pub Value);
+pub struct AmqpValue<T>(pub T);
 
-impl<T: Into<Value>> From<T> for AmqpValue {
-    fn from(val: T) -> Self {
-        Self(val.into())
-    }
-}
+// impl<T: Into<Value>> From<T> for AmqpValue {
+//     fn from(val: T) -> Self {
+//         Self(val.into())
+//     }
+// }
 
 /// 3.2.9 Footer
 /// Transport footers for a message.

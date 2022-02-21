@@ -1,4 +1,4 @@
-use std::{convert::TryInto, marker::PhantomData, time::Duration};
+use std::{convert::TryInto, marker::PhantomData, net::SocketAddr, time::Duration};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
@@ -14,6 +14,8 @@ use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
+    frames::{amqp},
+    sasl_profile::SaslProfile,
     transport::protocol_header::ProtocolHeader,
     transport::Transport,
 };
@@ -42,6 +44,7 @@ pub struct Builder<Mode> {
     pub client_config: Option<ClientConfig>,
 
     pub buffer_size: usize,
+    pub sasl_profile: Option<SaslProfile>,
 
     // type state marker
     marker: PhantomData<Mode>,
@@ -65,6 +68,7 @@ impl Builder<WithoutContainerId> {
             client_config: None,
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
+            sasl_profile: None,
 
             marker: PhantomData,
         }
@@ -92,16 +96,17 @@ impl<Mode> Builder<Mode> {
             client_config: self.client_config,
 
             buffer_size: self.buffer_size,
+            sasl_profile: self.sasl_profile,
             marker: PhantomData,
         }
     }
 }
 
 impl<Mode> Builder<Mode> {
-    pub fn hostname(mut self, hostname: impl Into<String>) -> Self {
-        self.hostname = Some(hostname.into());
-        self
-    }
+    // pub fn hostname(mut self, hostname: impl Into<String>) -> Self {
+    //     self.hostname = Some(hostname.into());
+    //     self
+    // }
 
     pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
         let max_frame_size = max_frame_size.into();
@@ -190,6 +195,8 @@ impl Builder<WithContainerId> {
     {
         use tokio::sync::mpsc;
 
+        println!(">>> Debug: connection::Builder::open_with_stream");
+
         // exchange header
         let mut local_state = ConnectionState::Start;
         let _remote_header =
@@ -197,7 +204,7 @@ impl Builder<WithContainerId> {
         let idle_timeout = self
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
-        let transport = Transport::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
+        let transport = Transport::<_, amqp::Frame>::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
         println!(">>> Debug: Header exchanged");
 
         // spawn Connection Mux
@@ -241,24 +248,67 @@ impl Builder<WithContainerId> {
     }
 
     pub async fn open(
-        self,
+        mut self,
         url: impl TryInto<Url, Error = url::ParseError>,
     ) -> Result<ConnectionHandle, Error> {
         let url: Url = url.try_into()?;
+        self.hostname = url.host_str().map(Into::into);
+        if self.sasl_profile.is_none() {
+            self.sasl_profile = SaslProfile::try_from(&url).ok();
+        }
 
-        match url.scheme() {
-            "amqp" => {
-                // `url.socket_addrs` will use standard lib's DNS support to resolve the address
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                println!(">>> Debug: SaslProfile");
                 let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
-                let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-                println!("TcpStream connected");
-                self.open_with_stream(stream).await
+                self.connect_sasl(addr, url.host_str(), url.scheme(), url.domain(), profile)
+                    .await
             }
+            None => {
+                println!(">>> Debug: no sasl");
+                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+                self.connect(addr, url.scheme(), url.domain()).await
+            }
+        }
+    }
+
+    async fn connect(
+        self,
+        addr: Vec<SocketAddr>,
+        scheme: &str,
+        domain: Option<&str>,
+    ) -> Result<ConnectionHandle, Error> {
+        // let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        self.connect_with_stream(stream, scheme, domain).await
+    }
+
+    async fn connect_sasl(
+        self,
+        addr: Vec<SocketAddr>,
+        hostname: Option<&str>,
+        scheme: &str,
+        domain: Option<&str>,
+        profile: SaslProfile,
+    ) -> Result<ConnectionHandle, Error> {
+        // Sasl
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        let stream = Transport::connect_sasl(stream, hostname, profile).await?;
+        self.connect_with_stream(stream, scheme, domain).await
+    }
+
+    async fn connect_with_stream(
+        self,
+        stream: TcpStream,
+        scheme: &str,
+        domain: Option<&str>,
+    ) -> Result<ConnectionHandle, Error> {
+        println!(">>> Debug: connection::Builder::connect_with_stream");
+
+        match scheme {
+            "amqp" => self.open_with_stream(stream).await,
             "amqps" => {
-                // `url.socket_addrs` will use standard lib's DNS support to resolve the address
-                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::SECURE_PORT))?;
-                let stream = TcpStream::connect(&*addr).await?;
-                let domain = url.domain().ok_or_else(|| {
+                let domain = domain.ok_or_else(|| {
                     Error::Io(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "Invalid DNS name",

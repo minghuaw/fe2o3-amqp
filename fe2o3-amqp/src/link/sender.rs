@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
     definitions::AmqpError,
-    messaging::{Address, DeliveryState, Message, Source},
+    messaging::{message::__private::Serializable, Address, DeliveryState, Message, Source},
     performatives::Disposition,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -110,7 +110,10 @@ impl Sender<Detached> {
 }
 
 impl Sender<Attached> {
-    async fn send_inner(&mut self, sendable: Sendable) -> Result<Settlement, Error> {
+    async fn send_inner<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
+    where
+        T: serde::Serialize,
+    {
         use bytes::BufMut;
         use serde::Serialize;
         use serde_amqp::ser::Serializer;
@@ -127,7 +130,7 @@ impl Sender<Attached> {
         // serialize message
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
-        message.serialize(&mut serializer)?;
+        Serializable(message).serialize(&mut serializer)?;
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 
@@ -139,9 +142,10 @@ impl Sender<Attached> {
         Ok(settlement)
     }
 
-    pub async fn send<D>(&mut self, delivery: D) -> Result<(), Error>
+    pub async fn send<D, T>(&mut self, delivery: D) -> Result<(), Error>
     where
-        D: Into<Sendable>,
+        D: Into<Sendable<T>>,
+        T: serde::Serialize,
         // D: TryInto<Delivery>,
         // D::Error: Into<Error>,
     {
@@ -168,26 +172,29 @@ impl Sender<Attached> {
         }
     }
 
-    pub async fn send_with_timeout(
+    pub async fn send_with_timeout<T>(
         &mut self,
-        message: Message,
+        message: Message<T>,
         timeout: impl Into<Duration>,
     ) -> Result<Disposition, Error> {
         todo!()
     }
 
-    pub async fn send_batchable(
+    pub async fn send_batchable<T>(
         &mut self,
-        delivery: impl Into<Sendable>,
-    ) -> Result<DeliveryFut, Error> {
+        delivery: impl Into<Sendable<T>>,
+    ) -> Result<DeliveryFut, Error>
+    where
+        T: serde::Serialize,
+    {
         let settlement = self.send_inner(delivery.into()).await?;
 
         Ok(DeliveryFut::from(settlement))
     }
 
-    pub async fn send_batchable_with_timeout(
+    pub async fn send_batchable_with_timeout<T>(
         &mut self,
-        delivery: impl Into<Sendable>,
+        delivery: impl Into<Sendable<T>>,
         timeout: impl Into<Duration>,
     ) -> Result<DeliveryFut, Error> {
         todo!()

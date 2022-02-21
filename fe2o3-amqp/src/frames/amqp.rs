@@ -66,7 +66,7 @@ impl Decoder for FrameCodec {
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+        // use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 
         let doff = src.get_u8();
         let ftype = src.get_u8();
@@ -74,12 +74,12 @@ impl Decoder for FrameCodec {
 
         // check type byte
         if ftype != FRAME_TYPE_AMQP {
-            return Err(Error::amqp_error(AmqpError::NotImplemented, None));
+            return Err(Error::NotImplemented);
         }
 
         match doff {
             2 => {}
-            _ => return Err(Error::connection_error(ConnectionError::FramingError, None)),
+            _ => return Err(Error::FramingError),
         }
 
         // decode body

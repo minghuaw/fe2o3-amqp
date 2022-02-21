@@ -1,4 +1,4 @@
-use fe2o3_amqp::{connection::Connection, session::Session, link::Receiver};
+use fe2o3_amqp::{connection::Connection, session::Session, link::Receiver, types::primitives::Value};
 
 #[tokio::main]
 async fn main() {
@@ -6,11 +6,11 @@ async fn main() {
 
     let mut connection = Connection::builder()
         .container_id("fe2o3-amqp")
-        .hostname("127.0.0.1")
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .open("amqp://127.0.0.1:5672")
+        // .open("amqp://127.0.0.1:5672")
+        .open("amqp://guest:guest@localhost:5672")
         .await
         .unwrap();
 
@@ -26,7 +26,11 @@ async fn main() {
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery = receiver.recv().await.unwrap();
+    let delivery = receiver.recv::<Value>().await.unwrap();
+    println!("<<< Message >>> {:?}", delivery);
+    receiver.accept(&delivery).await.unwrap();
+
+    let delivery = receiver.recv::<Value>().await.unwrap();
     println!("<<< Message >>> {:?}", delivery);
     receiver.accept(&delivery).await.unwrap();
 

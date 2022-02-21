@@ -1,7 +1,9 @@
 pub mod connection;
 pub mod control;
 pub mod endpoint;
+pub mod frames;
 pub mod link;
+pub mod sasl_profile;
 pub mod session;
 pub mod transport;
 pub mod util;

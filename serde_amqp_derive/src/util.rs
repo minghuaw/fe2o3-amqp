@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromMeta};
 use proc_macro2::Span;
 use quote::quote;
-use syn::{DeriveInput, Field};
+use syn::{DeriveInput, Field, parse::Parser};
 
 use crate::{DescribedAttr, DescribedStructAttr, EncodingType, FieldAttr};
 
@@ -84,6 +84,93 @@ pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
             }
             None => None,
         })
+}
+
+pub(crate) fn where_serialize(generics: &syn::Generics) -> proc_macro2::TokenStream {
+    let mut wheres = Vec::new();
+    generics.params.iter()
+        .filter_map(|param| {
+            if let syn::GenericParam::Type(tparam) = param {
+                Some(&tparam.ident)
+            } else {
+                None
+            }
+        })
+        .for_each(|id| {
+            wheres.push(quote!{
+                #id: serde::ser::Serialize
+            })
+        });
+    quote! {
+        where
+            #(#wheres),*
+    }
+}
+
+pub(crate) fn where_deserialize(generics: &syn::Generics) -> proc_macro2::TokenStream {
+    let mut wheres = Vec::new();
+    generics.params.iter()
+        .filter_map(|param| {
+            if let syn::GenericParam::Type(tparam) = param {
+                Some(&tparam.ident)
+            } else {
+                None
+            }
+        })
+        .for_each(|id| {
+            wheres.push(quote!{
+                #id: serde::de::Deserialize<'de>
+            })
+        });
+    quote! {
+        where
+            #(#wheres),*
+    }
+}
+
+pub(crate) fn generic_visitor(generics: &syn::Generics) -> proc_macro2::TokenStream {
+    let (generic_types, fields) = generic_visitor_fields(generics);
+    let field_ids: Vec<syn::Ident> = fields.iter()
+        .map(|f| {
+            f.ident.clone().unwrap()
+        })
+        .collect();
+
+    quote! {
+        struct Visitor<#(#generic_types),*> {
+            #(#fields),*
+        }
+
+        impl<#(#generic_types),*> Visitor<#(#generic_types),*> {
+            fn new() -> Self {
+                Self {
+                    #(#field_ids: std::marker::PhantomData),*
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn generic_visitor_fields(generics: &syn::Generics) -> (Vec<&syn::Ident>, Vec<syn::Field>) {
+    let mut types: Vec<&syn::Ident> = Vec::new();
+    let mut fields: Vec<syn::Field> = Vec::new();
+    generics.params.iter()
+        .filter_map(|param| {
+            if let syn::GenericParam::Type(tparam) = param {
+                Some(&tparam.ident)
+            } else {
+                None
+            }
+        })
+        .enumerate()
+        .for_each(|(i, ty)| {
+            types.push(ty);
+            let field_id = syn::Ident::new(&format!("_field{}", i), ty.span());
+            let token = quote!(#field_id: std::marker::PhantomData<#ty>);
+            let field = syn::Field::parse_named.parse2(token);
+            fields.push(field.unwrap());
+        });
+    (types, fields)
 }
 
 pub(crate) fn macro_rules_buffer_if_none_for_tuple_struct() -> proc_macro2::TokenStream {

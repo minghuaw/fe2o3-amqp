@@ -1,3 +1,5 @@
-# fe2o3-amqp
+# serde_amqp
 
-A personal attempt at AMQP with rust
+A serde implementation of AMQP1.0 protocol data types.
+
+## 

@@ -445,7 +445,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_bool");
         visitor.visit_bool(self.parse_bool()?)
     }
 
@@ -454,7 +453,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_i8");
         visitor.visit_i8(self.parse_i8()?)
     }
 
@@ -463,7 +461,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_i16");
         visitor.visit_i16(self.parse_i16()?)
     }
 
@@ -472,7 +469,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_i32");
         visitor.visit_i32(self.parse_i32()?)
     }
 
@@ -481,7 +477,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_i64");
         match self.new_type {
             NewType::None => visitor.visit_i64(self.parse_i64()?),
             NewType::Timestamp => {
@@ -497,7 +492,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_u8");
         visitor.visit_u8(self.parse_u8()?)
     }
 
@@ -506,7 +500,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_u16");
         visitor.visit_u16(self.parse_u16()?)
     }
 
@@ -515,7 +508,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_u32");
         visitor.visit_u32(self.parse_u32()?)
     }
 
@@ -524,7 +516,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_u64");
         visitor.visit_u64(self.parse_u64()?)
     }
 
@@ -533,7 +524,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_f32");
         visitor.visit_f32(self.parse_f32()?)
     }
 
@@ -542,7 +532,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_f64");
         visitor.visit_f64(self.parse_f64()?)
     }
 
@@ -551,7 +540,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_char");
         visitor.visit_char(self.parse_char()?)
     }
 
@@ -560,8 +548,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_string");
-
         match self.new_type {
             NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => {
@@ -579,7 +565,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_str");
         let len = match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Str8 => self.reader.next()? as usize,
             EncodingCodes::Str32 => {
@@ -595,7 +580,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_byte_buf");
         visitor.visit_byte_buf(self.parse_byte_buf()?)
     }
 
@@ -603,7 +587,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_bytes");
         match self.new_type {
             // Use bytes to reduce number of memcpy
             NewType::Dec32 | NewType::Dec64 | NewType::Dec128 => {
@@ -633,7 +616,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_option");
         match self.get_elem_code_or_peek_byte()?.try_into()? {
             EncodingCodes::Null => {
                 // consume the Null byte
@@ -648,7 +630,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_unit");
         self.parse_unit().and_then(|_| visitor.visit_unit())
     }
 
@@ -660,7 +641,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_unit_struct");
         self.deserialize_unit(visitor)
     }
 
@@ -672,7 +652,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_newtype_struct {:?}", name);
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
             // Leave symbol as visit_string because serde(untagged)
@@ -702,13 +681,9 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_seq");
-
         let code = self.get_elem_code_or_read_format_code()?;
-
         match code {
             EncodingCodes::Array8 => {
-                println!(">>> Debug: Array8");
                 // Read "header" bytes
                 let len = self.reader.next()? as usize;
                 let count = self.reader.next()? as usize;
@@ -722,7 +697,6 @@ where
                 visitor.visit_seq(ArrayAccess::new(self, len, count))
             }
             EncodingCodes::Array32 => {
-                println!(">>> Debug: Array32");
                 // Read "header" bytes
                 let len_bytes = self.reader.read_const_bytes()?;
                 let count_bytes = self.reader.read_const_bytes()?;
@@ -776,8 +750,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_tuple");
-
         // Tuple will always be deserialized as List
         let code = self.get_elem_code_or_read_format_code()?;
 
@@ -825,7 +797,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_map");
         let code = self.get_elem_code_or_read_format_code()?;
         let (size, count) = match code {
             EncodingCodes::Map8 => {
@@ -866,7 +837,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_tuple_struct");
         if name == DESCRIBED_BASIC {
             self.struct_encoding = StructEncoding::DescribedBasic;
             visitor.visit_seq(DescribedAccess::basic(self, len as u32))
@@ -890,8 +860,6 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_struct");
-
         // The name should override parent struct encoding
         let cur_encoding = self.struct_encoding.clone();
         let result = if name == DESCRIBED_BASIC {
@@ -952,20 +920,13 @@ where
     {
         use crate::__constants::UNTAGGED_ENUM;
 
-        println!(">>> Debug: deserialize_enum");
         if name == VALUE {
             self.enum_type = EnumType::Value;
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == DESCRIPTOR {
-            println!(">>> Debug: EnumType::Descriptor");
-            // match self.get_elem_code_or_read_format_code()? {
-            //     EncodingCodes::DescribedType => {},
-            //     _ => return Err(Error::InvalidFormatCode)
-            // }
             self.enum_type = EnumType::Descriptor;
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == UNTAGGED_ENUM {
-            println!(">>> Debug: untagged enum");
             visitor.visit_enum(VariantAccess::new(self))
         } else {
             // Considering the following enum serialization format
@@ -977,7 +938,7 @@ where
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 EncodingCodes::List0 => Err(Error::InvalidFormatCode),
-                EncodingCodes::List8 => {
+                EncodingCodes::List8 | EncodingCodes::Map8 => {
                     let _code = self.reader.next()?;
                     let _size = self.reader.next()? as usize;
                     let count = self.reader.next()? as usize;
@@ -986,7 +947,7 @@ where
                     }
                     visitor.visit_enum(VariantAccess::new(self))
                 }
-                EncodingCodes::List32 => {
+                EncodingCodes::List32 | EncodingCodes::Map32 => {
                     let _code = self.reader.next()?;
                     let size_bytes = self.reader.read_const_bytes()?;
                     let _size = u32::from_be_bytes(size_bytes);
@@ -997,10 +958,9 @@ where
                         return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
-                }
+                },
                 // Symbols appears in the transport errors
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
-                    println!(">>> Debug: EncodingCodes::Sym32 | Sym8");
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 // for newtype variant of described type
@@ -1015,11 +975,9 @@ where
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: deserialize_identifier");
         match self.enum_type {
             EnumType::Value => {
                 let code = self.get_elem_code_or_peek_byte()?;
-                println!(">>> Debug: deserialize_identifier {:x?}", &code);
                 visitor.visit_u8(code)
             }
             EnumType::Descriptor => {
@@ -1034,7 +992,6 @@ where
                 visitor.visit_u8(code)
             }
             EnumType::None => {
-                println!(">>> Debug: deserialize_identifier EnumType::None");
                 // The following are the possible identifiers
                 let code = self.get_elem_code_or_peek_byte()?;
                 match code.try_into()? {
@@ -1046,7 +1003,6 @@ where
                     }
                     // Potentially using `Descriptor::Name` as identifier
                     EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
-                        println!(">>> Debug: EncodingCodes::Sym32 | Sym8");
                         self.deserialize_newtype_struct(SYMBOL, visitor)
                     }
                     // Potentially using `Descriptor::Code` as identifier
@@ -1068,7 +1024,6 @@ where
         V: de::Visitor<'de>,
     {
         // The deserializer will only peek the next u8
-        println!(">>> Debug: deserialize_ignored_any");
         let code = self.reader.peek()?;
         match code.try_into()? {
             EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
@@ -1111,7 +1066,6 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: ArrayAccess::next_element_seed");
         match self.count {
             0 => {
                 self.de.elem_format_code = None;
@@ -1154,7 +1108,6 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: ListAccess::next_element_seed");
         match self.count {
             0 => Ok(None),
             _ => {
@@ -1266,7 +1219,6 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     type Error = Error;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        println!(">>> Debug: VariantAccess::unit_variant");
         Ok(())
     }
 
@@ -1274,7 +1226,6 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: VariantAccess::newtype_variant_seed");
         seed.deserialize(self.de)
     }
 
@@ -1282,7 +1233,6 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: VariantAccess::tuple_variant");
         de::Deserializer::deserialize_tuple(self.de, len, visitor)
     }
 
@@ -1294,7 +1244,6 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
     where
         V: de::Visitor<'de>,
     {
-        println!(">>> Debug: VariantAccess::struct_variant");
         de::Deserializer::deserialize_struct(self.de, "", fields, visitor)
     }
 }
@@ -1386,7 +1335,6 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
     where
         T: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: DescribedAccess::next_element_seed");
         if self.counter >= self.field_count {
             return Ok(None);
         }
@@ -1424,8 +1372,6 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
     where
         K: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: DescribedAccess::next_key_seed");
-
         // Descriptor will only be deserialized as a key
         if self.counter >= self.field_count {
             return Ok(None);
@@ -1458,19 +1404,11 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
     where
         V: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: DescribedAccess::next_value_seed");
         if self.counter >= self.field_count {
             return Err(de::Error::custom("Invalid length. Expecting value"));
         }
         self.counter += 1;
         seed.deserialize(self.as_mut())
-
-        // match self.field_role {
-        //     FieldRole::Descriptor => unreachable!(),
-        //     FieldRole::Fields => {
-        //
-        //     }
-        // }
     }
 
     fn next_entry_seed<K, V>(
@@ -1482,7 +1420,6 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         K: de::DeserializeSeed<'de>,
         V: de::DeserializeSeed<'de>,
     {
-        println!(">>> Debug: DescribedAccess::next_entry_seed");
         if self.counter >= self.field_count {
             return Ok(None);
         }
@@ -1649,14 +1586,11 @@ mod tests {
 
     #[test]
     fn test_deserialize_bytes() {
-        use crate::ser::to_vec;
-        use serde_bytes::{ByteBuf, Bytes};
+        use serde_bytes::{ByteBuf};
 
-        let val = [1u8, 2, 3, 4];
-        let buf = to_vec(&Bytes::new(&val)).unwrap();
-        println!("{:?}", buf);
-        let recovered: ByteBuf = from_slice(&buf).unwrap();
-        println!("{:?}", &recovered);
+        let buf = [EncodingCodes::VBin8 as u8, 4, 1, 2, 3, 4];
+        let expected = ByteBuf::from(vec![1u8, 2, 3, 4]);
+        assert_eq_from_slice_vs_expected(&buf, expected);
     }
 
     #[test]
@@ -1722,7 +1656,6 @@ mod tests {
 
         let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_vec(&expected).unwrap();
-        println!("{:x?}", &buf);
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
@@ -2057,11 +1990,11 @@ mod tests {
         use crate::ser::to_vec;
         use std::collections::BTreeMap;
 
-        #[derive(Debug, SerializeComposite, DeserializeComposite)]
+        #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
         #[amqp_contract(code = 0x01, encoding = "basic")]
         struct Wrapper(BTreeMap<Symbol, i32>);
 
-        #[derive(Debug, SerializeComposite, DeserializeComposite)]
+        #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
         #[amqp_contract(code = 0x1, encoding = "basic")]
         struct Wrapper2 {
             map: BTreeMap<Symbol, i32>,
@@ -2073,12 +2006,12 @@ mod tests {
         let wrapper = Wrapper(map.clone());
         let buf = to_vec(&wrapper).unwrap();
         let wrapper1: Wrapper = from_slice(&buf).unwrap();
-        println!("{:?}", wrapper1);
+        assert_eq!(wrapper, wrapper1);
 
         let wrapper2 = Wrapper2 { map };
         let buf = to_vec(&wrapper2).unwrap();
         let wrapper3: Wrapper2 = from_slice(&buf).unwrap();
-        println!("{:?}", &wrapper3);
+        assert_eq!(wrapper2, wrapper3);
     }
 
     #[test]
@@ -2115,8 +2048,6 @@ mod tests {
 
         let foo = Foo::B;
         let buf = to_vec(&foo).unwrap();
-        // let foo2: Foo = from_slice(&buf).unwrap();
-        // println!("{:?}", &foo2);
         assert_eq_from_slice_vs_expected(&buf, foo);
     }
 
@@ -2134,7 +2065,6 @@ mod tests {
 
         let foo = Foo::B(13);
         let buf = to_vec(&foo).unwrap();
-        println!("{:x?}", &buf);
         assert_eq_from_slice_vs_expected(&buf, foo);
     }
 
@@ -2151,8 +2081,6 @@ mod tests {
         }
         let expected = Foo::B(13, "amqp".to_string());
         let buf = to_vec(&expected).unwrap();
-        // let foo: Foo = from_slice(&buf).unwrap();
-        // println!("{:?}", foo);
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 
@@ -2172,8 +2100,6 @@ mod tests {
             is_a: true,
         };
         let buf = to_vec(&expected).unwrap();
-        // let foo: Foo = from_slice(&buf).unwrap();
-        // println!("{:?}", foo);
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
 }
