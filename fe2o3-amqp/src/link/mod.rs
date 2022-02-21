@@ -552,7 +552,10 @@ impl LinkHandle {
         match self {
             LinkHandle::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
-                todo!()
+                return Err(session::Error::AmqpError {
+                    condition: AmqpError::NotAllowed,
+                    description: Some("Sender should never receive a transfer".to_string())
+                })
             }
             LinkHandle::Receiver {
                 tx,
@@ -597,24 +600,6 @@ impl LinkHandle {
             }
         }
     }
-
-    // pub(crate) async fn on_outgoing_disposition(
-    //     &mut self,
-    //     delivery_tag: &DeliveryTag,
-    //     settled: bool,
-    //     state: Option<DeliveryState>,
-    // ) -> Result<Disposition, Error> {
-    //     match self {
-    //         LinkHandle::Sender { unsettled, .. } => {
-    //             todo!()
-    //         },
-    //         LinkHandle::Receiver { unsettled, .. } => {
-
-    //         }
-    //     }
-
-    //     todo!()
-    // }
 }
 
 pub(crate) async fn remove_from_unsettled<M>(

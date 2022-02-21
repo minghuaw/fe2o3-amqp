@@ -194,7 +194,7 @@ impl Receiver<Detached> {
     async fn reattach_inner(
         mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<Receiver<Attached>, Error> {
+    ) -> Result<Receiver<Attached>, DetachError<ReceiverLink>> {
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
             let link_handle = LinkHandle::Receiver {
@@ -208,12 +208,22 @@ impl Receiver<Detached> {
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle =
-                session::allocate_link(&mut session_control, self.link.name.clone(), link_handle)
-                    .await?;
+                match session::allocate_link(&mut session_control, self.link.name.clone(), link_handle)
+                    .await 
+                {
+                    Ok(handle) => handle,
+                    Err(err) => return Err(DetachError {
+                        link: Some(self.link),
+                        is_closed_by_remote: false,
+                        error: Some(definitions::Error::from(err))
+                    })
+                };
             self.link.output_handle = Some(handle);
         }
 
-        super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await?;
+        if let Err(err) = super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await {
+            return Err(map_send_detach_error(err, self.link))
+        }
 
         Ok(Receiver::<Attached> {
             link: self.link,
