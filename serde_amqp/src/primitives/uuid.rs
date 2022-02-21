@@ -9,6 +9,11 @@ use crate::__constants::UUID;
 use crate::error::Error;
 use crate::fixed_width::UUID_WIDTH;
 
+/// A universally unique identifier as defined by RFC-4122 in section 4.1.2
+///
+/// encoding code = 0x98,
+/// category = fixed, width = 16,
+/// label="UUID as defined in section 4.1.2 of RFC-4122"
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Uuid([u8; UUID_WIDTH]);
 

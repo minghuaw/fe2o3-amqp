@@ -3,9 +3,20 @@ use serde::ser;
 
 use crate::__constants::TIMESTAMP;
 
+/// An absolute point in time
+///
+/// encoding name = "ms64", code = 0x83,
+/// category = fixed, width = 8
+/// label = "64-bit two’s-complement integer representing milliseconds since the unix epoch"
 /// 64-bit two’s-complement integer representing milliseconds since the unix epoch
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(i64);
+
+impl Timestamp {
+    pub fn into_inner(self) -> i64 {
+        self.0
+    }
+}
 
 impl From<i64> for Timestamp {
     fn from(val: i64) -> Self {

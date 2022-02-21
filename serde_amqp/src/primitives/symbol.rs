@@ -5,6 +5,22 @@ use serde::{
 
 use crate::__constants::SYMBOL;
 
+/// Symbolic values from a constrained domain.
+///
+/// encoding name = "sym8", encoding code = 0xa3,
+/// category = variable, width = 1
+/// label="up to 2^8 - 1 seven bit ASCII characters representing a symbolic value"
+///
+/// encoding name = "sym32", encoding code = 0xb3
+/// category = variable, width = 4
+/// label="up to 2^32 - 1 seven bit ASCII characters representing a symbolic value"
+///
+/// Symbols are values from a constrained domain.
+/// Although the set of possible domains is open-ended,
+/// typically the both number and size of symbols in use for any
+/// given application will be small, e.g. small enough that it is reasonable
+/// to cache all the distinct values. Symbols are encoded as ASCII characters.
+///
 /// Symbol should only contain ASCII characters. The implementation, however, wraps
 /// over a String. `AmqpNetLite` also wraps around a String, which in c# is utf-16.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

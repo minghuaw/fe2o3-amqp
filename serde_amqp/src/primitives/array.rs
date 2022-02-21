@@ -4,6 +4,15 @@ use serde::{de, ser};
 
 use crate::__constants::ARRAY;
 
+/// A sequence of values of a single type.
+///
+/// encoding name = "array8", encoding code = 0xe0
+/// category = array, width = 1,
+/// label="up to 2^8 - 1 array elements with total size less than 2^8 octets"
+///
+/// encoding name = "array32", encoding code = 0xf0,
+/// category = array, width = 4
+/// label="up to 2^32 - 1 array elements with total size less than 2^32 octets"
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Array<T>(pub Vec<T>);
 

@@ -1,7 +1,10 @@
 use std::io::Write;
 
 use bytes::BufMut;
-use serde::{ser::{self, SerializeMap}, Serialize};
+use serde::{
+    ser::{self, SerializeMap},
+    Serialize,
+};
 
 use crate::{
     __constants::{
@@ -836,7 +839,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
                         let mut serializer = Serializer::new(&mut self.buf);
                         serializer.is_array_elem = IsArrayElement::FirstElement;
                         serializer
-                    },
+                    }
                     // The remaining element should only write the value bytes
                     _ => {
                         let mut serializer = Serializer::new(&mut self.buf);
@@ -1159,8 +1162,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                 match self.se.struct_encoding() {
                     StructEncoding::None => {
                         // serialize regualr tuple struct as a list like in tuple
-                        let mut serializer =
-                            Serializer::new(&mut self.buf);
+                        let mut serializer = Serializer::new(&mut self.buf);
                         serializer.is_array_elem = self.se.is_array_elem.clone();
                         value.serialize(&mut serializer)
                     }
@@ -1274,8 +1276,7 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
             match self.se.struct_encoding() {
                 StructEncoding::None => {
                     // normal struct will be serialized as a list
-                    let mut serializer =
-                        Serializer::new(&mut self.buf);
+                    let mut serializer = Serializer::new(&mut self.buf);
                     serializer.is_array_elem = self.se.is_array_elem.clone();
                     value.serialize(&mut serializer)
                 }
@@ -1374,7 +1375,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleVariant for VariantSerializer<'a, W> 
         use bytes::BytesMut;
         let kv_buf = BytesMut::new();
         let mut writer = kv_buf.writer();
-        
+
         // Serialize key
         let mut key_se = Serializer::new(&mut writer);
         ser::Serialize::serialize(&self.variant_index, &mut key_se)?;
@@ -1981,7 +1982,7 @@ mod test {
             1,
             0x62, // "b"
             EncodingCodes::SmallInt as u8,
-            2
+            2,
         ];
         assert_eq_on_serialized_vs_expected(wrapper, &expected);
 
@@ -2170,12 +2171,12 @@ mod test {
         let val = Enumeration::NewTypeVariant(13);
         let expected = vec![
             EncodingCodes::Map8 as u8,
-            1 + 2*2, // len
-            2, // count
+            1 + 2 * 2, // len
+            2,         // count
             EncodingCodes::SmallUint as u8,
             1,
             EncodingCodes::SmallUint as u8,
-            13
+            13,
         ];
         assert_eq_on_serialized_vs_expected(val, &expected)
     }

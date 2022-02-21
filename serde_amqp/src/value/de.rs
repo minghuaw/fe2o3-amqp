@@ -784,12 +784,10 @@ impl<'de> de::SeqAccess<'de> for SeqAccess {
         T: de::DeserializeSeed<'de>,
     {
         match self.iter.next() {
-            Some(elem) => {
-                match self.seq_type {
-                    SeqType::List => seed.deserialize(Deserializer::new(elem)).map(Some),
-                    SeqType::Array => seed.deserialize(Deserializer::array(elem)).map(Some),
-                }
-            }
+            Some(elem) => match self.seq_type {
+                SeqType::List => seed.deserialize(Deserializer::new(elem)).map(Some),
+                SeqType::Array => seed.deserialize(Deserializer::array(elem)).map(Some),
+            },
             None => Ok(None),
         }
     }
@@ -907,7 +905,12 @@ mod tests {
     use serde::de;
     use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
-    use crate::{value::{ser::to_value, Value}, to_vec, from_slice, described::Described, descriptor::Descriptor};
+    use crate::{
+        described::Described,
+        descriptor::Descriptor,
+        from_slice, to_vec,
+        value::{ser::to_value, Value},
+    };
 
     use super::from_value;
 
@@ -1071,15 +1074,10 @@ mod tests {
         let foo = Foo(Some(true), Some(3));
         let buf = to_vec(&foo).unwrap();
         let value: Value = from_slice(&buf).unwrap();
-        let expected = Value::Described(
-            Described {
-                descriptor: Descriptor::Code(0x13),
-                value: Box::new(Value::List(vec![
-                    Value::Bool(true),
-                    Value::Int(3)
-                ]))
-            }
-        );
+        let expected = Value::Described(Described {
+            descriptor: Descriptor::Code(0x13),
+            value: Box::new(Value::List(vec![Value::Bool(true), Value::Int(3)])),
+        });
         assert_eq!(value, expected);
     }
 }

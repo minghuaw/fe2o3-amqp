@@ -15,6 +15,11 @@ mod dec32 {
 
     use super::*;
 
+    /// 32-bit decimal number (IEEE 754-2008 decimal32).
+    ///
+    /// encoding name = "ieee-754", encoding code = 0x74
+    /// category = fixed, width = 4
+    /// label = "IEEE 754-2008 decimal32 using the Binary Integer Decimal encoding"
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec32([u8; DECIMAL32_WIDTH]);
 
@@ -74,14 +79,6 @@ mod dec32 {
         {
             Dec32::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
         }
-
-        // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        // where
-        //     D: serde::Deserializer<'de>,
-        // {
-        //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-        //     Dec32::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
-        // }
     }
 
     impl<'de> de::Deserialize<'de> for Dec32 {
@@ -101,6 +98,11 @@ mod dec64 {
 
     use super::*;
 
+    /// 64-bit decimal number (IEEE 754-2008 decimal64).
+    ///
+    /// encoding name = "ieee-754", encoding code = 0x84
+    /// category = fixed, width = 8
+    /// label = "IEEE 754-2008 decimal64 using the Binary Integer Decimal encoding"
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec64([u8; DECIMAL64_WIDTH]);
 
@@ -154,14 +156,6 @@ mod dec64 {
         {
             Dec64::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
         }
-
-        // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        // where
-        //     D: serde::Deserializer<'de>,
-        // {
-        //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-        //     Dec64::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
-        // }
     }
 
     impl<'de> de::Deserialize<'de> for Dec64 {
@@ -181,6 +175,11 @@ mod dec128 {
 
     use super::*;
 
+    /// 128-bit decimal number (IEEE 754-2008 decimal128).
+    ///
+    /// encoding name = "ieee-754", encoding code = 0x94
+    /// category = fixed, width = 16
+    /// label = "IEEE 754-2008 decimal128 using the Binary Integer Decimal encoding"
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct Dec128([u8; DECIMAL128_WIDTH]);
 
@@ -234,14 +233,6 @@ mod dec128 {
         {
             Dec128::try_from(v).map_err(|err| de::Error::custom(err.to_string()))
         }
-
-        // fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        // where
-        //     D: serde::Deserializer<'de>,
-        // {
-        //     let val: ByteBuf = de::Deserialize::deserialize(deserializer)?;
-        //     Dec128::try_from(val.as_slice()).map_err(|err| de::Error::custom(err.to_string()))
-        // }
     }
 
     impl<'de> de::Deserialize<'de> for Dec128 {

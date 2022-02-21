@@ -958,7 +958,7 @@ where
                         return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
-                },
+                }
                 // Symbols appears in the transport errors
                 EncodingCodes::Sym32 | EncodingCodes::Sym8 => {
                     visitor.visit_enum(VariantAccess::new(self))
@@ -1586,7 +1586,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_bytes() {
-        use serde_bytes::{ByteBuf};
+        use serde_bytes::ByteBuf;
 
         let buf = [EncodingCodes::VBin8 as u8, 4, 1, 2, 3, 4];
         let expected = ByteBuf::from(vec![1u8, 2, 3, 4]);
