@@ -219,8 +219,6 @@ pub use ser::to_vec;
 pub use value::{de::from_value, ser::to_value, Value};
 
 #[cfg(feature = "derive")]
-#[cfg_attr(feature = "docs",doc(cfg(feature = "derive")))]
 pub mod macros;
 #[cfg(feature = "derive")]
-#[cfg_attr(feature = "docs",doc(cfg(feature = "derive")))]
 pub use macros::{DeserializeComposite, SerializeComposite};

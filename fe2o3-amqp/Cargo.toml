@@ -10,15 +10,18 @@ tokio = { version = "1", features = ["rt", "macros"] }
 tokio-test = { version = "0.4" }
 testcontainers = "0.12"
 
-[dependencies.serde_amqp]
-version = "0.0.1"
-path = "../serde_amqp"
+# [dependencies.serde_amqp]
+# version = "0.0.1"
+# path = "../serde_amqp"
 
-[dependencies.fe2o3-amqp-types]
-version = "0.0.1"
-path = "../fe2o3-amqp-types"
+# [dependencies.fe2o3-amqp-types]
+# version = "0.0.2"
+# path = "../fe2o3-amqp-types"
 
 [dependencies]
+serde_amqp = "0.0.1"
+fe2o3-amqp-types = "0.0.2"
+
 bytes = "1"
 tokio = { version = "1", features = ["io-util", "net", "rt"] }
 tokio-util = { version = "0.7", features = ["codec"] }
