@@ -4,7 +4,6 @@ use serde::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::AmqpError,
     sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
 };
 use serde_amqp::read::IoReader;

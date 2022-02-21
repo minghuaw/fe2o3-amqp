@@ -1,5 +1,5 @@
 use fe2o3_amqp_types::messaging::message::__private::Deserializable;
-use serde_amqp::{de::Deserializer, format_code::EncodingCodes, read::IoReader};
+use serde_amqp::{format_code::EncodingCodes};
 
 use super::*;
 

@@ -206,7 +206,11 @@ where
 
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
-            LinkState::DetachSent => self.local_state = LinkState::Detached,
+            LinkState::DetachSent => {
+                self.local_state = LinkState::Detached;
+                // Dropping output handle as it is already detached
+                let _ = self.output_handle.take();
+            },
             _ => {
                 return Err(definitions::Error::new(
                     AmqpError::IllegalState,
@@ -216,9 +220,6 @@ where
                 .into())
             }
         };
-
-        // Receiving detach forwarded by session means it's ready to drop the output handle
-        let _ = self.output_handle.take();
 
         if let Some(err) = detach.error {
             return Err(err.into());
@@ -366,11 +367,17 @@ where
         // The local output handle is not removed from the session
         // until `deallocate_link`. The outgoing detach will not remove
         // local handle from session
-        match &self.output_handle {
+        let remove_handle = match &self.output_handle {
             Some(handle) => {
-                match self.local_state {
-                    LinkState::Attached => self.local_state = LinkState::DetachSent,
-                    LinkState::DetachReceived => self.local_state = LinkState::Detached,
+                let remove_handle = match self.local_state {
+                    LinkState::Attached => {
+                        self.local_state = LinkState::DetachSent;
+                        false
+                    },
+                    LinkState::DetachReceived => {
+                        self.local_state = LinkState::Detached;
+                        true
+                    },
                     _ => return Err(AmqpError::IllegalState.into()),
                 };
 
@@ -385,6 +392,7 @@ where
                         description: Some("Session is already dropped".to_string()),
                     }
                 })?;
+                remove_handle
             }
             None => {
                 return Err(link::Error::AmqpError {
@@ -392,6 +400,10 @@ where
                     description: Some("Link is already detached".to_string()),
                 })
             }
+        };
+
+        if remove_handle {
+            let _ = self.output_handle.take();
         }
 
         Ok(())

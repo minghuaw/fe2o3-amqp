@@ -476,9 +476,10 @@ impl endpoint::Session for Session {
         };
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
+                // TODO: 
                 match link.send(LinkFrame::Detach(detach)).await {
                     Ok(_) => {}
-                    Err(e) => todo!(), // End session with unattached handle?
+                    Err(_) => todo!(), // End session with unattached handle?
                 }
             }
             None => todo!(), // End session with unattached handle?
@@ -499,7 +500,7 @@ impl endpoint::Session for Session {
                     // The `SendError` occurs when the receiving half is dropped,
                     // indicating that the `SessionEngine::event_loop` has stopped.
                     // and thus should yield an illegal state error
-                    .map_err(|e| AmqpError::IllegalState)?;
+                    .map_err(|_| AmqpError::IllegalState)?;
             }
             SessionState::Discarding | SessionState::EndSent => {
                 self.local_state = SessionState::Unmapped
@@ -540,13 +541,13 @@ impl endpoint::Session for Session {
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
-                    .map_err(|e| {
+                    .map_err(|_| {
                         Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop receiver has dropped"))
                     })?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await.map_err(|e| {
+                writer.send(frame).await.map_err(|_| {
                     Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop receiver has dropped"))
                 })?;
                 self.local_state = SessionState::Mapped;
@@ -678,7 +679,7 @@ impl endpoint::Session for Session {
             .await
             // The receiving half must have dropped, and thus the `Connection`
             // event loop has stopped. It should be treated as an io error
-            .map_err(|e| Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop has dropped")))?;
+            .map_err(|_| Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop has dropped")))?;
         Ok(())
     }
 }

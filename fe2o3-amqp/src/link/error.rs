@@ -10,7 +10,7 @@ use crate::session::AllocLinkError;
 
 #[derive(Debug)]
 pub struct DetachError<L> {
-    pub(crate) link: Option<L>,
+    pub link: Option<L>,
     pub(crate) is_closed_by_remote: bool,
     pub(crate) error: Option<definitions::Error>,
 }

@@ -1,4 +1,7 @@
 use fe2o3_amqp_types::definitions::SequenceNo;
+use futures_util::Future;
+
+use crate::link::error::DetachError;
 
 use super::*;
 
@@ -99,9 +102,10 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
             })
     }
 
-    async fn send_transfer<W>(
+    async fn send_transfer<W, Fut>(
         &mut self,
         writer: &mut W,
+        detached: Fut,
         mut payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
@@ -109,24 +113,59 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     ) -> Result<Settlement, <Self as endpoint::Link>::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
+        Fut: Future<Output = Option<LinkFrame>> + Send,
     {
         use crate::util::Consume;
+        use crate::endpoint::Link;
 
         println!(">>> Debug: SenderLink::send_transfer");
 
-        // link-credit is defined as
-        // "The current maximum number of messages that can be handled
-        // at the receiver endpoint of the link"
-        match self.flow_state.consume(1).await {
-            SenderPermit::Send => {} // There is enough credit to send
-            SenderPermit::Drain => {
-                // If set, the sender will (after sending all available
-                // messages) advance the delivery-count as much as possible,
-                // consuming all link-credit, and send the flow state to the
-                // receiver
+        tokio::select! {
+            permit = self.flow_state.consume(1) => {
+                // link-credit is defined as
+                // "The current maximum number of messages that can be handled
+                // at the receiver endpoint of the link"
+                match permit {
+                    SenderPermit::Send => {} // There is enough credit to send
+                    SenderPermit::Drain => {
+                        // If set, the sender will (after sending all available
+                        // messages) advance the delivery-count as much as possible,
+                        // consuming all link-credit, and send the flow state to the
+                        // receiver
+        
+                        // Drain is set
+                        todo!()
+                    }
+                }
+            },
+            frame = detached => {
+                match frame {
+                    // If remote has detached the link
+                    Some(LinkFrame::Detach(detach)) => {
+                        let closed = detach.closed;
+                        let result = self.on_incoming_detach(detach).await;
+                        self.send_detach(writer, closed, None).await?;
 
-                // Drain is set
-                todo!()
+                        let detach_err = match result {
+                            Ok(_) => DetachError::<()> {
+                                link: None,
+                                is_closed_by_remote: closed,
+                                error: None
+                            },
+                            Err(err) => DetachError::<()> {
+                                link: None,
+                                is_closed_by_remote: closed,
+                                error: Some(err)
+                            }
+                        };
+
+                        return Err(Error::Detached(detach_err))
+                    },
+                    _ => {
+                        // Other frames should not forwarded to the sender by the session
+                        todo!()
+                    }
+                }
             }
         }
 
@@ -181,25 +220,6 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
 
             // TODO: Clone should be very cheap on Bytes
             send_transfer(writer, transfer, payload.clone()).await?;
-
-            // match settled {
-            //     true => Ok(Settlement::Settled),
-            //     // If not set on the first (or only) transfer for a (multi-transfer)
-            //     // delivery, then the settled flag MUST be interpreted as being false.
-            //     false => {
-            //         let (tx, rx) = oneshot::channel();
-            //         let unsettled = UnsettledMessage::new(payload, tx);
-            //         {
-            //             let mut guard = self.unsettled.write().await;
-            //             guard.insert(delivery_tag, unsettled);
-            //         }
-
-            //         Ok(Settlement::Unsettled {
-            //             delivery_tag: tag,
-            //             outcome: rx,
-            //         })
-            //     }
-            // }
         } else {
             // Need multiple transfers
             // Number of transfers needed

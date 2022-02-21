@@ -1,4 +1,4 @@
-use std::{convert::TryInto, marker::PhantomData, net::SocketAddr, time::Duration};
+use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use fe2o3_amqp::connection::Connection;
 use fe2o3_amqp::link::delivery::Sendable;
-use fe2o3_amqp::link::{Receiver, Sender};
+use fe2o3_amqp::link::{Sender};
 use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::Message;

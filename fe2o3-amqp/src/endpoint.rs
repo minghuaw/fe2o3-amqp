@@ -28,7 +28,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
-use futures_util::Sink;
+use futures_util::{Sink, Future};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -254,16 +254,18 @@ pub(crate) trait SenderLink: Link {
         W: Sink<LinkFrame> + Send + Unpin;
 
     /// Send message via transfer frame and return whether the message is already settled
-    async fn send_transfer<W>(
+    async fn send_transfer<W, Fut>(
         &mut self,
         writer: &mut W,
+        detached: Fut,
         payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
     ) -> Result<Settlement, <Self as Link>::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin;
+        W: Sink<LinkFrame> + Send + Unpin,
+        Fut: Future<Output = Option<LinkFrame>> + Send;
 
     async fn dispose<W>(
         &mut self,

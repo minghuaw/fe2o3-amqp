@@ -1,6 +1,7 @@
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use bytes::BytesMut;
+use futures_util::StreamExt;
 use tokio::sync::mpsc;
 
 use fe2o3_amqp_types::{
@@ -135,9 +136,10 @@ impl Sender<Attached> {
         let payload = payload.freeze();
 
         // send a transfer, checking state will be implemented in SenderLink
+        let detached_fut = self.incoming.next();
         let settlement = self
             .link
-            .send_transfer(&mut self.outgoing, payload, message_format, settled, false)
+            .send_transfer(&mut self.outgoing, detached_fut, payload, message_format, settled, false)
             .await?;
         Ok(settlement)
     }
@@ -210,8 +212,6 @@ impl Sender<Attached> {
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
     pub async fn detach(self) -> Result<Sender<Detached>, DetachError<Sender<Detached>>> {
-        use futures_util::StreamExt;
-
         println!(">>> Debug: Sender::detach");
         let mut detaching = Sender::<Detached> {
             link: self.link,
@@ -304,8 +304,6 @@ impl Sender<Attached> {
     }
 
     pub async fn close(self) -> Result<(), DetachError<Sender<Detached>>> {
-        use futures_util::StreamExt;
-
         let mut detaching = Sender::<Detached> {
             link: self.link,
             buffer_size: self.buffer_size,
