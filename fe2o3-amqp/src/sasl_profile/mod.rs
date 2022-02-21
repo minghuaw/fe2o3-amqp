@@ -74,7 +74,7 @@ impl SaslProfile {
     pub async fn on_frame(
         &mut self,
         frame: sasl::Frame,
-        hostname: Option<String>,
+        hostname: Option<&str>,
     ) -> Result<Negotiation, Error> {
         use sasl::Frame;
 
@@ -85,7 +85,7 @@ impl SaslProfile {
                     let init = SaslInit {
                         mechanism,
                         initial_response: self.initial_response(),
-                        hostname,
+                        hostname: hostname.map(Into::into),
                     };
                     Ok(Negotiation::Init(init))
                 } else {

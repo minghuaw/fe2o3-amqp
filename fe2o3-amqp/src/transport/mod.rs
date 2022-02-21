@@ -158,7 +158,7 @@ where
         while let Some(frame) = transport.next().await {
             let frame = frame?;
 
-            match profile.on_frame(frame, hostname.map(Into::into)).await? {
+            match profile.on_frame(frame, hostname).await? {
                 Negotiation::Continue => {}
                 Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
                 Negotiation::Outcome(outcome) => match outcome.code {

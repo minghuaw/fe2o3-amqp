@@ -126,7 +126,7 @@ pub struct Connection {
 
 /* ------------------------------- Public API ------------------------------- */
 impl Connection {
-    pub fn builder() -> builder::Builder<WithoutContainerId> {
+    pub fn builder<'a>() -> builder::Builder<'a, WithoutContainerId> {
         builder::Builder::new()
     }
 

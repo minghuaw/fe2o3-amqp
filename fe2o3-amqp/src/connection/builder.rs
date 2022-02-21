@@ -29,9 +29,11 @@ pub struct WithoutContainerId {}
 pub struct WithContainerId {}
 
 /// Connection builder
-pub struct Builder<Mode> {
+pub struct Builder<'a, Mode> {
     pub container_id: String,
-    pub hostname: Option<String>,
+    pub hostname: Option<&'a str>,
+    pub scheme: &'a str,
+    pub domain: Option<&'a str>,
     pub max_frame_size: MaxFrameSize,
     pub channel_max: ChannelMax,
     pub idle_time_out: Option<Milliseconds>,
@@ -50,11 +52,13 @@ pub struct Builder<Mode> {
     marker: PhantomData<Mode>,
 }
 
-impl Builder<WithoutContainerId> {
+impl<'a> Builder<'a, WithoutContainerId> {
     pub fn new() -> Self {
         Self {
             container_id: String::new(),
             hostname: None,
+            scheme: "amqp".into(), // Assume non-TLS by default
+            domain: None,
             // set to 512 before Open frame is sent
             max_frame_size: MaxFrameSize(512),
             channel_max: ChannelMax::default(),
@@ -75,14 +79,16 @@ impl Builder<WithoutContainerId> {
     }
 }
 
-impl<Mode> Builder<Mode> {
+impl<'a, Mode> Builder<'a, Mode> {
     // In Rust, it’s more common to pass slices as arguments
     // rather than vectors when you just want to provide read access.
     // The same goes for String and &str.
-    pub fn container_id(self, id: impl Into<String>) -> Builder<WithContainerId> {
+    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, WithContainerId> {
         Builder::<WithContainerId> {
             container_id: id.into(),
             hostname: self.hostname,
+            scheme: self.scheme,
+            domain: self.domain,
             // set to 512 before Open frame is sent
             max_frame_size: self.max_frame_size,
             channel_max: self.channel_max,
@@ -102,11 +108,21 @@ impl<Mode> Builder<Mode> {
     }
 }
 
-impl<Mode> Builder<Mode> {
-    // pub fn hostname(mut self, hostname: impl Into<String>) -> Self {
-    //     self.hostname = Some(hostname.into());
-    //     self
-    // }
+impl<'a, Mode> Builder<'a, Mode> {
+    pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
+        self.hostname = hostname.into();
+        self
+    }
+
+    pub fn scheme(mut self, scheme: impl Into<&'a str>) -> Self {
+        self.scheme = scheme.into();
+        self
+    }
+
+    pub fn domain(mut self, domain: impl Into<Option<&'a str>>) -> Self {
+        self.domain = domain.into();
+        self
+    }
 
     pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
         let max_frame_size = max_frame_size.into();
@@ -188,8 +204,96 @@ impl<Mode> Builder<Mode> {
     }
 }
 
-impl Builder<WithContainerId> {
-    pub async fn open_with_stream<Io>(self, mut stream: Io) -> Result<ConnectionHandle, Error>
+impl<'a> Builder<'a, WithContainerId> {
+    pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, Error> 
+    where
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    {
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                let hostname = self.hostname;
+                let scheme = self.scheme;
+                let domain = self.domain;
+                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
+                self.connect_with_stream(stream, scheme, domain).await
+            },
+            None => {
+                let scheme = self.scheme;
+                let domain = self.domain;
+                self.connect_with_stream(stream, scheme, domain).await
+            }
+        }
+    }
+
+    pub async fn open(
+        mut self,
+        url: impl TryInto<Url, Error = url::ParseError>,
+    ) -> Result<ConnectionHandle, Error> {
+        let url: Url = url.try_into()?;
+
+        // Url info will override the builder fields
+        self.hostname = url.host_str().map(Into::into);
+        self.scheme = url.scheme().into();
+        self.domain = url.domain().map(Into::into);
+        self.sasl_profile = SaslProfile::try_from(&url).ok();
+        
+        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        self.open_with_stream(stream).await
+    }
+
+    pub async fn pipelined_open_with_stream<Io>(
+        self,
+        mut _stream: Io,
+    ) -> Result<ConnectionHandle, Error>
+    where
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
+        todo!()
+    }
+
+    pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
+        todo!()
+    }
+
+    async fn connect_with_stream<Io>(
+        self,
+        stream: Io,
+        scheme: &str,
+        domain: Option<&str>,
+    ) -> Result<ConnectionHandle, Error> 
+    where
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static
+    {
+        println!(">>> Debug: connection::Builder::connect_with_stream");
+
+        match scheme {
+            "amqp" => self.connect_with_stream_inner(stream).await,
+            "amqps" => {
+                let domain = domain.ok_or_else(|| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Invalid DNS name",
+                    ))
+                })?;
+                let config = self.client_config.clone().ok_or_else(|| {
+                    Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ClientConfig not found",
+                    ))
+                })?;
+                let tls_stream = Transport::connect_tls(stream, domain, config).await?;
+                println!("TlsStream connected");
+                self.connect_with_stream_inner(tls_stream).await
+            }
+            _ => Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid url scheme",
+            ))),
+        }
+    }
+
+    async fn connect_with_stream_inner<Io>(self, mut stream: Io) -> Result<ConnectionHandle, Error>
     where
         Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -210,7 +314,7 @@ impl Builder<WithContainerId> {
         // spawn Connection Mux
         let local_open = Open {
             container_id: self.container_id,
-            hostname: self.hostname,
+            hostname: self.hostname.map(Into::into),
             max_frame_size: self.max_frame_size,
             channel_max: self.channel_max,
             // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
@@ -245,104 +349,6 @@ impl Builder<WithContainerId> {
         };
 
         Ok(connection_handle)
-    }
-
-    pub async fn open(
-        mut self,
-        url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, Error> {
-        let url: Url = url.try_into()?;
-        self.hostname = url.host_str().map(Into::into);
-        if self.sasl_profile.is_none() {
-            self.sasl_profile = SaslProfile::try_from(&url).ok();
-        }
-
-        match self.sasl_profile.take() {
-            Some(profile) => {
-                println!(">>> Debug: SaslProfile");
-                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
-                self.connect_sasl(addr, url.host_str(), url.scheme(), url.domain(), profile)
-                    .await
-            }
-            None => {
-                println!(">>> Debug: no sasl");
-                let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
-                self.connect(addr, url.scheme(), url.domain()).await
-            }
-        }
-    }
-
-    async fn connect(
-        self,
-        addr: Vec<SocketAddr>,
-        scheme: &str,
-        domain: Option<&str>,
-    ) -> Result<ConnectionHandle, Error> {
-        // let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
-        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-        self.connect_with_stream(stream, scheme, domain).await
-    }
-
-    async fn connect_sasl(
-        self,
-        addr: Vec<SocketAddr>,
-        hostname: Option<&str>,
-        scheme: &str,
-        domain: Option<&str>,
-        profile: SaslProfile,
-    ) -> Result<ConnectionHandle, Error> {
-        // Sasl
-        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-        let stream = Transport::connect_sasl(stream, hostname, profile).await?;
-        self.connect_with_stream(stream, scheme, domain).await
-    }
-
-    async fn connect_with_stream(
-        self,
-        stream: TcpStream,
-        scheme: &str,
-        domain: Option<&str>,
-    ) -> Result<ConnectionHandle, Error> {
-        println!(">>> Debug: connection::Builder::connect_with_stream");
-
-        match scheme {
-            "amqp" => self.open_with_stream(stream).await,
-            "amqps" => {
-                let domain = domain.ok_or_else(|| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Invalid DNS name",
-                    ))
-                })?;
-                let config = self.client_config.clone().ok_or_else(|| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "ClientConfig not found",
-                    ))
-                })?;
-                let tls_stream = Transport::connect_tls(stream, domain, config).await?;
-                println!("TlsStream connected");
-                self.open_with_stream(tls_stream).await
-            }
-            _ => Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid url scheme",
-            ))),
-        }
-    }
-
-    pub async fn pipelined_open_with_stream<Io>(
-        self,
-        mut _stream: Io,
-    ) -> Result<ConnectionHandle, Error>
-    where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
-        todo!()
-    }
-
-    pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
-        todo!()
     }
 }
 
