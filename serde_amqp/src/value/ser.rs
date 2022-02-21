@@ -1,3 +1,5 @@
+//! Value serializer
+
 use std::{collections::BTreeMap, convert::TryFrom};
 
 use ordered_float::OrderedFloat;

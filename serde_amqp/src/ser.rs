@@ -1,3 +1,5 @@
+//! Serializer implementation
+
 use std::io::Write;
 
 use bytes::BufMut;

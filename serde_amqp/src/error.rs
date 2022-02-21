@@ -1,8 +1,11 @@
+//! Custom error
+
 use serde::{de, ser};
 use std::fmt::Display;
 
 // pub type Result<T> = core::result::Result<T, Error>;
 
+/// Custom serialization/deserialization errors
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Message {0}")]

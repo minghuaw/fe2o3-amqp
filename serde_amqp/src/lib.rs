@@ -218,14 +218,9 @@ pub use error::Error;
 pub use ser::to_vec;
 pub use value::{de::from_value, ser::to_value, Value};
 
-#[cfg(feature = "serde_amqp_derive")]
+#[cfg(feature = "derive")]
+#[cfg_attr(feature = "docs",doc(cfg(feature = "derive")))]
 pub mod macros;
-#[cfg(feature = "serde_amqp_derive")]
+#[cfg(feature = "derive")]
+#[cfg_attr(feature = "docs",doc(cfg(feature = "derive")))]
 pub use macros::{DeserializeComposite, SerializeComposite};
-
-pub mod prelude {
-    pub use super::{from_reader, from_slice, from_value, to_value, to_vec, Error};
-
-    #[cfg(feature = "serde_amqp_derive")]
-    pub use super::macros::{DeserializeComposite, SerializeComposite};
-}

@@ -1,3 +1,5 @@
+//! Definition of `Descriptor` type.
+
 use crate::__constants::DESCRIPTOR;
 use crate::primitives::Symbol;
 

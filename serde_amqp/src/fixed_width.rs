@@ -1,3 +1,5 @@
+//! Widths of types
+
 pub const FORMAT_CODE_WIDTH: usize = 1;
 
 pub const NULL_WIDTH: usize = 0;

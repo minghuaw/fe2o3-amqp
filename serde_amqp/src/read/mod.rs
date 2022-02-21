@@ -1,3 +1,5 @@
+//! Custom `Read` trait
+
 use crate::error::Error;
 
 mod ioread;

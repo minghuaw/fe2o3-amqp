@@ -1,3 +1,5 @@
+//! Definition of `Described<T>` type
+
 use std::marker::PhantomData;
 
 use serde::{de, ser};

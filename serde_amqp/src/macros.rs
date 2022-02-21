@@ -1,3 +1,5 @@
+//! Custom derive macros. Requires feature `"derive"`.
+
 pub use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
 #[cfg(test)]

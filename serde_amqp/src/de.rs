@@ -1,3 +1,5 @@
+//! Deserializer implementation
+
 use serde::de::{self};
 use std::convert::TryInto;
 

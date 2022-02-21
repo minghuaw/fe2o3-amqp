@@ -30,8 +30,6 @@ pub const OFFSET_ARRAY32: usize = 5;
 pub enum Category {
     Fixed(FixedWidth),
     Encoded(EncodedWidth),
-    // Compound(EncodedWidth),
-    // Array(EncodedWidth),
 }
 
 #[repr(u8)]

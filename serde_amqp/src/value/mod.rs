@@ -1,3 +1,5 @@
+//! Value type for untyped AMQP1.0 data structures.
+
 use ordered_float::OrderedFloat;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
