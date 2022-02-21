@@ -60,77 +60,92 @@ pub struct Source {
 }
 
 impl Source {
+    /// Creates a [`Source`] builder
     pub fn builder() -> Builder {
         Builder::new()
     }
 }
 
+/// [`Source`] builder
 pub struct Builder {
     source: Source,
 }
 
 impl Builder {
+    /// Creates a [`Source`] builder
     pub fn new() -> Self {
         Self {
             source: Default::default(),
         }
     }
 
+    /// Set the "address" field
     pub fn address(mut self, address: impl Into<Address>) -> Self {
         self.source.address = Some(address.into());
         self
     }
 
+    /// Set the "durability" field
     pub fn durable(mut self, durability: TerminusDurability) -> Self {
         self.source.durable = durability;
         self
     }
 
+    /// Set the "expiry-policy" field
     pub fn expiry_policy(mut self, policy: TerminusExpiryPolicy) -> Self {
         self.source.expiry_policy = policy;
         self
     }
 
+    /// Set the "timeout" field
     pub fn timeout(mut self, timeout: impl Into<Seconds>) -> Self {
         self.source.timeout = timeout.into();
         self
     }
 
+    /// Set the "dynamic" field
     pub fn dynamic(mut self, dynamic: bool) -> Self {
         self.source.dynamic = dynamic;
         self
     }
 
+    /// Set the "dynamic-node-properties" field
     pub fn dynamic_node_properties(mut self, properties: impl Into<Fields>) -> Self {
         self.source.dynamic_node_properties = Some(properties.into());
         self
     }
 
+    /// Set the "distribution-mode" field
     pub fn distribution_mode(mut self, mode: DistributionMode) -> Self {
         self.source.distribution_mode = Some(mode);
         self
     }
 
+    /// Set the "filter" field
     pub fn filter(mut self, filter_set: impl Into<FilterSet>) -> Self {
         self.source.filter = Some(filter_set.into());
         self
     }
 
+    /// Set the "default-outcome" field
     pub fn default_outcome(mut self, outcome: Outcome) -> Self {
         self.source.default_outcome = Some(outcome.into());
         self
     }
 
+    /// Set the "outcomes" field
     pub fn outcomes(mut self, outcomes: Vec<Symbol>) -> Self {
         self.source.outcomes = Some(outcomes);
         self
     }
 
+    /// Set the "capabilities" field
     pub fn capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.source.capabilities = Some(capabilities);
         self
     }
 
+    /// Build the [`Source`]
     pub fn build(self) -> Source {
         self.source
     }

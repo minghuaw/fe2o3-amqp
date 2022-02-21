@@ -7,6 +7,7 @@ use serde_amqp::primitives::Symbol;
 use super::{AmqpError, ConnectionError, LinkError, SessionError};
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(missing_docs)]
 pub enum ErrorCondition {
     AmqpError(AmqpError),
     ConnectionError(ConnectionError),

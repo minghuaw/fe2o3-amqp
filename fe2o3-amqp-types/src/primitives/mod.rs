@@ -1,3 +1,5 @@
+//! Primitive types defined in the AMQP1.0 specification Part 1.6
+
 use std::convert::{TryFrom, TryInto};
 
 use ordered_float::OrderedFloat;

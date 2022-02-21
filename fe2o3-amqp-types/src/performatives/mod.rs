@@ -1,3 +1,5 @@
+//! Performatives defined in AMQP 1.0 specification Part 2.7
+
 mod attach;
 mod begin;
 mod close;
@@ -18,16 +20,34 @@ pub use flow::*;
 pub use open::*;
 pub use transfer::*;
 
+/// AMQP 1.0 Performatives
 #[derive(Debug)]
 pub enum Performative {
+    /// Open
     Open(Open),
+    
+    /// Begin
     Begin(Begin),
+    
+    /// Attach
     Attach(Attach),
+    
+    /// Flow
     Flow(Flow),
+    
+    /// Transfer
     Transfer(Transfer),
+
+    /// Disposition
     Disposition(Disposition),
+
+    /// Detach
     Detach(Detach),
+
+    /// End
     End(End),
+
+    /// Close
     Close(Close),
 }
 

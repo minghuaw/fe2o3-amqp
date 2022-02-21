@@ -24,6 +24,7 @@ pub struct Error {
 }
 
 impl Error {
+    /// Creates a new Error
     pub fn new(
         condition: impl Into<ErrorCondition>,
         description: impl Into<Option<String>>,

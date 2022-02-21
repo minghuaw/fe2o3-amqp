@@ -8,10 +8,26 @@ use serde_amqp::primitives::Symbol;
 
 use super::ErrorCondition;
 
+/// Symbols used to indicate connection error conditions
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionError {
+    /// An operator intervened to close the connection for some reason. The client could retry at
+    /// some later date
     ConnectionForced,
+
+    /// A valid frame header cannot be formed from the incoming byte stream.
     FramingError,
+
+    /// The container is no longer available on the current connection. The peer SHOULD attempt
+    /// reconnection to the container using the details provided in the info map.
+    /// 
+    /// hostname: the hostname of the container. This is the value that SHOULD be
+    /// supplied in the hostname field of the open frame, and during the
+    /// SASL and TLS negotiation (if used).
+    /// 
+    /// network-host: the DNS hostname or IP address of the machine hosting the container.
+    /// 
+    /// port: the port number on the machine hosting the container
     Redirect,
 }
 

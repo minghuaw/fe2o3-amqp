@@ -1,3 +1,5 @@
+//! Implementation of message properties
+
 use serde_amqp::{
     primitives::{Binary, Symbol, Timestamp},
     DeserializeComposite, SerializeComposite,
@@ -61,6 +63,7 @@ pub struct Properties {
 }
 
 impl Properties {
+    /// Creates a new instance of [`Properties`]
     pub fn new() -> Self {
         Self {
             message_id: None,
@@ -79,6 +82,7 @@ impl Properties {
         }
     }
 
+    /// Creates a new builder for [`Properties`]
     pub fn builder() -> Builder {
         Builder::new()
     }
@@ -90,52 +94,62 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Creates a new builder for [`Properties`]
     pub fn new() -> Self {
         Self {
             inner: Properties::new(),
         }
     }
 
+    /// Set the "message-id" field
     pub fn message_id(mut self, message_id: impl Into<Option<MessageId>>) -> Self {
         self.inner.message_id = message_id.into();
         self
     }
 
+    /// Set the "user-id" field
     pub fn user_id(mut self, user_id: impl Into<Option<Binary>>) -> Self {
         self.inner.user_id = user_id.into();
         self
     }
 
+    /// Set the "to" field
     pub fn to(mut self, to: impl Into<Option<Address>>) -> Self {
         self.inner.to = to.into();
         self
     }
 
+    /// Set the "subject" field
     pub fn subject(mut self, subject: impl Into<Option<String>>) -> Self {
         self.inner.subject = subject.into();
         self
     }
 
+    /// Set the "reply-to" field
     pub fn reply_to(mut self, reply_to: impl Into<Option<Address>>) -> Self {
         self.inner.reply_to = reply_to.into();
         self
     }
 
+    /// Set the "correlation-id" field
     pub fn correlation_id(mut self, correlation_id: impl Into<Option<MessageId>>) -> Self {
         self.inner.correlation_id = correlation_id.into();
         self
     }
 
+    /// Set the "content-type" field
     pub fn content_type(mut self, content_type: impl Into<Option<Symbol>>) -> Self {
         self.inner.content_type = content_type.into();
         self
     }
 
+    /// Set the "content-encoding" field
     pub fn content_encoding(mut self, content_encoding: impl Into<Option<Symbol>>) -> Self {
         self.inner.content_encoding = content_encoding.into();
         self
     }
 
+    /// Set the "absolute-expiry-time" field
     pub fn absolute_expiry_time(
         mut self,
         absolute_expiry_time: impl Into<Option<Timestamp>>,
@@ -144,26 +158,31 @@ impl Builder {
         self
     }
 
+    /// Set the "creation-time" field
     pub fn creation_time(mut self, creation_time: impl Into<Option<Timestamp>>) -> Self {
         self.inner.creation_time = creation_time.into();
         self
     }
 
+    /// Set the "group-id" field
     pub fn group_id(mut self, group_id: impl Into<Option<String>>) -> Self {
         self.inner.group_id = group_id.into();
         self
     }
 
+    /// Set the "group-sequence" field
     pub fn group_sequence(mut self, group_sequence: impl Into<Option<SequenceNo>>) -> Self {
         self.inner.group_sequence = group_sequence.into();
         self
     }
 
+    /// Set the "reply-to-group-id" field
     pub fn reply_to_group_id(mut self, reply_to_group_id: impl Into<Option<String>>) -> Self {
         self.inner.reply_to_group_id = reply_to_group_id.into();
         self
     }
 
+    /// Build the [`Properties`]
     pub fn build(self) -> Properties {
         self.inner
     }

@@ -1,3 +1,5 @@
+//! Types defined in AMQP 1.0 specification Part 5.3: SASL
+
 use serde_amqp::{
     primitives::{Binary, Symbol},
     DeserializeComposite, SerializeComposite,
@@ -88,16 +90,17 @@ pub struct SaslInit {
     rename_all = "kebab-case"
 )]
 pub struct SaslChallenge {
+    /// <field name="challenge" type="binary" mandatory="true"/>
     pub challenge: Binary,
 }
 
-// 5.3.3.4 SASL Response
-// Security mechanism response.
-// <type name="sasl-response" class="composite" source="list" provides="sasl-frame">
-//     <descriptor name="amqp:sasl-response:list" code="0x00000000:0x00000043"/>
-//     <field name="response" type="binary" mandatory="true"/>
-// </type>
-// Send the SASL response data as defined by the SASL specification.
+/// 5.3.3.4 SASL Response
+/// Security mechanism response.
+/// <type name="sasl-response" class="composite" source="list" provides="sasl-frame">
+///     <descriptor name="amqp:sasl-response:list" code="0x00000000:0x00000043"/>
+///     <field name="response" type="binary" mandatory="true"/>
+/// </type>
+/// Send the SASL response data as defined by the SASL specification.
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:sasl-response:list",
@@ -106,6 +109,7 @@ pub struct SaslChallenge {
     rename_all = "kebab-case"
 )]
 pub struct SaslResponse {
+    /// <field name="response" type="binary" mandatory="true"/>
     pub response: Binary,
 }
 
@@ -127,7 +131,9 @@ pub struct SaslResponse {
     rename_all = "kebab-case"
 )]
 pub struct SaslOutcome {
+    /// <field name="code" type="sasl-code" mandatory="true"/>
     pub code: SaslCode,
+    /// <field name="additional-data" type="binary"/>
     pub additional_data: Option<Binary>,
 }
 
@@ -157,9 +163,16 @@ pub enum SaslCode {
 }
 
 pub mod constant {
+//! Constans definedin AMQP 1.0 specification Part 5.3.4
+
+    ///  major protocol version
     pub const SASL_MAJOR: u8 = 1;
-    pub const SASL_MINOR: u8 = 0; // minor protocol version
-    pub const SASL_REVISION: u8 = 0; // protocol revision.
+    
+    /// minor protocol version.
+    pub const SASL_MINOR: u8 = 0; 
+
+    /// protocol revision.
+    pub const SASL_REVISION: u8 = 0; 
 }
 
 #[cfg(test)]

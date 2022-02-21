@@ -1,3 +1,7 @@
+#![warn(missing_docs)]
+
+//! Implements AMQP1.0 data types as defined in the [specification](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-overview-v1.0-os.html).
+
 pub mod definitions;
 pub mod messaging;
 pub mod performatives;

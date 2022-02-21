@@ -1,3 +1,5 @@
+//! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
+
 use std::marker::PhantomData;
 
 use serde::{
@@ -23,14 +25,30 @@ pub mod __private {
 }
 use __private::{Serializable, Deserializable};
 
+/// AMQP 1.0 Message
 #[derive(Debug, Clone)]
 pub struct Message<T> {
+    /// Transport headers for a message.
     pub header: Option<Header>,
+
+    /// The delivery-annotations section is used for delivery-specific non-standard properties at the head of the message.
     pub delivery_annotations: Option<DeliveryAnnotations>,
+
+    /// The message-annotations section is used for properties of the message which are aimed at the infrastructure
+    /// and SHOULD be propagated across every delivery step
     pub message_annotations: Option<MessageAnnotations>,
+
+    /// Immutable properties of the message.
     pub properties: Option<Properties>,
+
+    /// The application-properties section is a part of the bare message used for structured application data. Intermediaries can use the data within this structure for the purposes of filtering or routin
     pub application_properties: Option<ApplicationProperties>,
+
+    /// The body consists of one of the following three choices: one or more data sections, one or more amqp-sequence
+    /// sections, or a single amqp-value section.
     pub body_section: BodySection<T>,
+
+    /// Transport footers for a message.
     pub footer: Option<Footer>,
 }
 
@@ -66,6 +84,7 @@ where
 }
 
 impl<T> Message<T> {
+    /// Creates a Builder for [`Message`]
     pub fn builder() -> Builder<EmptyBody> {
         Builder::new()
     }
@@ -368,27 +387,38 @@ impl<T> From<BodySection<T>> for Message<T> {
     }
 }
 
+/// A type state representing undefined body_section for Message Builder
 #[derive(Debug, Default)]
 pub struct EmptyBody {}
 
+/// [`Message`] builder
 #[derive(Debug, Default)]
 pub struct Builder<T> {
+    /// header
     pub header: Option<Header>,
+    /// delivery annotations
     pub delivery_annotations: Option<DeliveryAnnotations>,
+    /// message annotations
     pub message_annotations: Option<MessageAnnotations>,
+    /// properties
     pub properties: Option<Properties>,
+    /// application properties
     pub application_properties: Option<ApplicationProperties>,
+    /// body sections
     pub body_section: T,
+    /// footer
     pub footer: Option<Footer>,
 }
 
 impl Builder<EmptyBody> {
+    /// Creates a new [`Message`] builder
     pub fn new() -> Self {
         Default::default()
     }
 }
 
 impl<T> Builder<T> {
+    /// Set the body_section as BodySection::Value
     pub fn value<V: Serialize>(self, value: V) -> Builder<BodySection<V>> {
         Builder {
             header: self.header,
@@ -401,6 +431,7 @@ impl<T> Builder<T> {
         }
     }
 
+    /// Set the body_section as BodySection::Sequence
     pub fn sequence<V: Serialize>(self, values: Vec<V>) -> Builder<BodySection<V>> {
         Builder {
             header: self.header,
@@ -413,6 +444,7 @@ impl<T> Builder<T> {
         }
     }
 
+    /// Set the body_section as BodySection::Data
     pub fn data(self, data: impl Into<Binary> ) -> Builder<BodySection<Value>> {
         Builder {
             header: self.header,
@@ -425,11 +457,13 @@ impl<T> Builder<T> {
         }
     }
 
+    /// Set the header
     pub fn header(mut self, header: impl Into<Option<Header>>) -> Self {
         self.header = header.into();
         self
     }
 
+    /// Set the delivery annotations
     pub fn delivery_annotations(
         mut self,
         delivery_annotations: impl Into<Option<DeliveryAnnotations>>,
@@ -438,6 +472,7 @@ impl<T> Builder<T> {
         self
     }
 
+    /// Set the message annotations
     pub fn message_annotations(
         mut self,
         message_annotations: impl Into<Option<MessageAnnotations>>,
@@ -446,11 +481,13 @@ impl<T> Builder<T> {
         self
     }
 
+    /// Set properties
     pub fn properties(mut self, properties: impl Into<Option<Properties>>) -> Self {
         self.properties = properties.into();
         self
     }
 
+    /// Set application properties
     pub fn application_properties(
         mut self,
         appplication_properties: impl Into<Option<ApplicationProperties>>,
@@ -459,6 +496,7 @@ impl<T> Builder<T> {
         self
     }
 
+    /// Set footer
     pub fn footer(mut self, footer: impl Into<Option<Footer>>) -> Self {
         self.footer = footer.into();
         self
@@ -466,6 +504,7 @@ impl<T> Builder<T> {
 }
 
 impl<T> Builder<BodySection<T>> {
+    /// Build the [`Message`]
     pub fn build(self) -> Message<T> {
         Message {
             header: self.header,
@@ -483,8 +522,11 @@ impl<T> Builder<BodySection<T>> {
 /// is supported for now
 #[derive(Debug, Clone)]
 pub enum BodySection<T> {
+    /// A data section contains opaque binary data
     Data(Data),
+    /// A sequence section contains an arbitrary number of structured data elements
     Sequence(AmqpSequence<T>),
+    /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
 }
 

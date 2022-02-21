@@ -1,3 +1,5 @@
+//! Types defined in AMQP 1.0 specification Part 2.8: Definitions
+
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;

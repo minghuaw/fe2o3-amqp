@@ -41,6 +41,7 @@ pub struct Header {
     pub delivery_count: UInt,
 }
 
+/// relative message priority
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Priority(pub UByte);
 
@@ -184,6 +185,10 @@ pub struct Footer(pub Annotations);
 /// <type name="annotations" class="restricted" source="map"/>
 pub type Annotations = BTreeMap<Symbol, Value>;
 
+/// The annotations type is a map where the keys are restricted to be of type symbol or of type ulong. All ulong
+/// keys, and all symbolic keys except those beginning with “x-” are reserved. Keys beginning with “x-opt-” MUST be
+/// ignored if not understood. On receiving an annotation key which is not understood, and which does not begin with
+/// “x-opt”, the receiving AMQP container MUST detach the link with a not-implemented error.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MessageId {

@@ -19,6 +19,7 @@ pub struct Close {
 }
 
 impl Close {
+    /// Creates a new `Close` performative
     pub fn new(error: Option<Error>) -> Self {
         Self { error }
     }

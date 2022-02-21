@@ -10,7 +10,7 @@
 mod error;
 pub mod protocol_header;
 pub use error::Error;
-use fe2o3_amqp_types::{definitions::AmqpError, sasl::SaslCode};
+use fe2o3_amqp_types::{definitions::{AmqpError, MIN_MAX_FRAME_SIZE}, sasl::SaslCode};
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 /* -------------------------------- Transport ------------------------------- */
@@ -152,7 +152,7 @@ where
         }
 
         // TODO: use a different frame size?
-        let mut transport = Transport::<_, sasl::Frame>::bind(stream, 512, None);
+        let mut transport = Transport::<_, sasl::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, None);
 
         // TODO: timeout?
         while let Some(frame) = transport.next().await {

@@ -7,6 +7,7 @@ use serde_amqp::primitives::Symbol;
 use super::ErrorCondition;
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(missing_docs)]
 pub enum LinkError {
     DetachForced,
     TransferLimitExceeded,

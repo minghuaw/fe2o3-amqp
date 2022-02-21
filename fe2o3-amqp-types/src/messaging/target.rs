@@ -45,6 +45,7 @@ pub struct Target {
 }
 
 impl Target {
+    /// Creates a Builder for Target
     pub fn builder() -> Builder {
         Builder::new()
     }
@@ -60,52 +61,63 @@ impl<T: Into<Address>> From<T> for Target {
     }
 }
 
+/// [`Target`] builder
 pub struct Builder {
+    /// The [`Target`] instance being built
     pub target: Target,
 }
 
 impl Builder {
+    /// Creates a new [`Target`] builder
     pub fn new() -> Self {
         Self {
             target: Default::default(),
         }
     }
 
+    /// Set the "address" field
     pub fn address(mut self, address: impl Into<Address>) -> Self {
         self.target.address = Some(address.into());
         self
     }
 
+    /// Set the "durable" field
     pub fn durable(mut self, durability: TerminusDurability) -> Self {
         self.target.durable = durability;
         self
     }
 
+    /// Set the "expiry-policy" field
     pub fn expiry_policy(mut self, policy: TerminusExpiryPolicy) -> Self {
         self.target.expiry_policy = policy;
         self
     }
 
+    /// Set the "timeout" field
     pub fn timeout(mut self, timeout: impl Into<Seconds>) -> Self {
         self.target.timeout = timeout.into();
         self
     }
 
+    /// Set the "dynamic" field
     pub fn dynamic(mut self, dynamic: bool) -> Self {
         self.target.dynamic = dynamic;
         self
     }
 
+    /// Set the "dynamic-node-properties" field
     pub fn dynamic_node_properties(mut self, properties: impl Into<Fields>) -> Self {
         self.target.dynamic_node_properties = Some(properties.into());
         self
     }
 
+    /// Set the "capabilities" field
     pub fn capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.target.capabilities = Some(capabilities);
         self
     }
 
+    /// Build the [`Target`]
     pub fn build(self) -> Target {
         self.target
     }

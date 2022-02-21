@@ -8,20 +8,56 @@ use serde_amqp::primitives::Symbol;
 
 use super::ErrorCondition;
 
+/// Shared error conditions.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AmqpError {
+    /// An internal error occurred. Operator intervention might be necessary to resume normal
+    /// operation
     InternalError,
+
+    /// A peer attempted to work with a remote entity that does not exist.
     NotFound,
+
+    /// A peer attempted to work with a remote entity to which it has no access due to security
+    /// settings
     UnauthorizedAccess,
+
+    /// Data could not be decoded.
     DecodeError,
+
+    /// A peer exceeded its resource allocation.
     ResourceLimitExceeded,
+
+    /// The peer tried to use a frame in a manner that is inconsistent with the semantics defined in
+    /// the specification.
     NotAllowed,
+
+    /// The peer tried to use a frame in a manner that is inconsistent with the semantics defined in
+    /// the specification.
     InvalidField,
+
+    /// The peer tried to use functionality that is not implemented in its partner.
     NotImplemented,
+
+    /// The client attempted to work with a server entity to which it has no access because another
+    /// client is working with it
     ResourceLocked,
+
+    /// The client made a request that was not allowed because some precondition failed.
     PreconditionFailed,
+
+    /// A server entity the client is working with has been deleted.
     ResourceDeleted,
+
+    /// The peer sent a frame that is not permitted in the current state.
     IllegalState,
+
+    /// The peer cannot send a frame because the smallest encoding of the performative with the
+    /// currently valid values would be too large to fit within a frame of the agreed maximum frame
+    /// size. When transferring a message the message data can be sent in multiple transfer
+    /// frames thereby avoiding this error. Similarly when attaching a link with a large unsettled
+    /// map the endpoint MAY make use of the incomplete-unsettled flag to avoid the need for
+    /// overly large frames
     FrameSizeTooSmall,
 }
 

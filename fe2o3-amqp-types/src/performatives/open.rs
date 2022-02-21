@@ -52,6 +52,15 @@ pub struct Open {
     pub properties: Option<Fields>,
 }
 
+/// Proposed maximum frame size
+/// 
+/// A simple wrapper over u32 with a default value set to `u32::MAX`
+/// 
+/// The largest frame size that the sending peer is able to accept on this connection. If this field
+/// is not set it means that the peer does not impose any specific limit. A peer MUST NOT send
+/// frames larger than its partner can handle. A peer that receives an oversized frame MUST close
+/// the connection with the framing-error error-code.
+/// Both peers MUST accept frames of up to 512 (MIN-MAX-FRAME-SIZE) octets.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaxFrameSize(pub UInt);
 
@@ -79,6 +88,13 @@ impl From<MaxFrameSize> for usize {
     }
 }
 
+/// the maximum channel number that can be used on the connection
+/// 
+/// The channel-max value is the highest channel number that can be used on the connection. This
+/// value plus one is the maximum number of sessions that can be simultaneously active on the
+/// connection. A peer MUST not use channel numbers outside the range that its partner can handle.
+/// A peer that receives a channel number outside the supported range MUST close the connection
+/// with the framing-error error-code.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelMax(pub UShort);
 

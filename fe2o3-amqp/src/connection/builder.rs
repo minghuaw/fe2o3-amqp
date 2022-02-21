@@ -60,7 +60,7 @@ impl<'a> Builder<'a, WithoutContainerId> {
             scheme: "amqp".into(), // Assume non-TLS by default
             domain: None,
             // set to 512 before Open frame is sent
-            max_frame_size: MaxFrameSize(512),
+            max_frame_size: MaxFrameSize(MIN_MAX_FRAME_SIZE as u32),
             channel_max: ChannelMax::default(),
             idle_time_out: None,
             outgoing_locales: None,

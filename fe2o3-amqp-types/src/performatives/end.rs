@@ -13,7 +13,7 @@ use crate::definitions::Error;
     rename_all = "kebab-case"
 )]
 pub struct End {
-    // <field name="error" type="error"/>
+    /// <field name="error" type="error"/>
     pub error: Option<Error>,
 }
 #[cfg(test)]

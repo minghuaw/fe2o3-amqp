@@ -9,11 +9,18 @@ use serde_amqp::primitives::Symbol;
 
 use super::ErrorCondition;
 
+/// Symbols used to indicate session error conditions.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionError {
+    /// The peer violated incoming window for the session.
     WindowViolation,
+
+    /// Input was received for a link that was detached with an error.
     ErrantLink,
+    /// An attach was received using a handle that is already in use for an attached link.
     HandleInUse,
+    /// A frame (other than attach) was received referencing a handle which is not currently in use
+    /// of an attached link.
     UnattachedHandle,
 }
 

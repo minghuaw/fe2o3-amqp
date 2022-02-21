@@ -1,10 +1,12 @@
+//! Types defined in AMQP 1.0 specification Part 3: Messaging
+
 use serde_amqp::described::Described;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::{primitives::Symbol, value::Value};
 use std::collections::BTreeMap;
 
 pub mod message;
-pub use message::Message;
+pub use message::{Message, BodySection};
 
 /* -------------------------- 3.2 Messaging Format -------------------------- */
 mod format;
@@ -15,19 +17,19 @@ mod delivery_state;
 pub use delivery_state::*;
 
 /* -------------------------- 3.5 Source and Target ------------------------- */
-pub mod source;
+mod source;
 pub use source::Source;
 
-pub mod target;
+mod target;
 pub use target::Target;
 
-pub mod terminus_durability;
+mod terminus_durability;
 pub use terminus_durability::TerminusDurability;
 
-pub mod term_expiry_policy;
+mod term_expiry_policy;
 pub use term_expiry_policy::TerminusExpiryPolicy;
 
-pub mod dist_mode;
+mod dist_mode;
 pub use dist_mode::DistributionMode;
 
 /// 3.5.8 Filter Set

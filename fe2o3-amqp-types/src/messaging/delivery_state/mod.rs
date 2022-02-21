@@ -1,3 +1,5 @@
+//! Part 3.4 delivery state
+
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Boolean, UInt, ULong};
 
@@ -5,6 +7,7 @@ use crate::definitions::{Error, Fields};
 
 /// 3.4 Delivery State
 #[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub enum DeliveryState {
     Accepted(Accepted),
     Rejected(Rejected),
@@ -14,6 +17,7 @@ pub enum DeliveryState {
 }
 
 impl DeliveryState {
+    /// Whether a state is a terminal state
     pub fn is_terminal(&self) -> bool {
         match self {
             DeliveryState::Accepted(_)
@@ -40,6 +44,7 @@ impl AsMut<DeliveryState> for DeliveryState {
 mod delivery_state_impl;
 
 #[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub enum Outcome {
     Accepted(Accepted),
     Rejected(Rejected),
