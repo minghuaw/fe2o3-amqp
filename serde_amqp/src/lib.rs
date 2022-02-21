@@ -1,7 +1,5 @@
 //! A serde implementation of AMQP1.0 protocol data types.
 //! 
-//! AMQP1.0 is a self-describing binary protocol.
-//! 
 //! # Serializing and deserializing data structures
 //! 
 //! Any type that implement `serde::Serialize` and `serde::Deserialize` trait can be serialized/deserialized with 
@@ -91,7 +89,7 @@
 //! 
 //! - `"derive"`: enables custom derive macros: `SerializeComposite` and `DeserializeComposite`.
 //! 
-//! ## `SerializeComposite` and `DeserializeComposite`.
+//! ## `SerializeComposite` and `DeserializeComposite`
 //! 
 //! The macro provides three types of encodings:
 //! 
