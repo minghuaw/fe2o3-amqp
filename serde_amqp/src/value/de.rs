@@ -905,8 +905,9 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
 #[cfg(test)]
 mod tests {
     use serde::de;
+    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
-    use crate::value::{ser::to_value, Value};
+    use crate::{value::{ser::to_value, Value}, to_vec, from_slice, described::Described, descriptor::Descriptor};
 
     use super::from_value;
 
@@ -991,7 +992,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_value_unit_variant() {
+    fn test_deserialize_value_unit_variant() {
         use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -1007,7 +1008,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_value_newtype_variant() {
+    fn test_deserialize_value_newtype_variant() {
         use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -1022,7 +1023,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_value_tuple_variant() {
+    fn test_deserialize_value_tuple_variant() {
         use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -1039,7 +1040,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_value_struct_variant() {
+    fn test_deserialize_value_struct_variant() {
         use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -1057,5 +1058,28 @@ mod tests {
             Value::List(vec![Value::UInt(13), Value::Bool(true)]),
         ]);
         assert_eq_from_value_vs_expected(val, expected);
+    }
+
+    #[test]
+    fn test_deserialize_derive_macro() {
+        use crate as serde_amqp;
+
+        #[derive(Debug, SerializeComposite, DeserializeComposite)]
+        #[amqp_contract(code = 0x13, encoding = "list")]
+        struct Foo(Option<bool>, Option<i32>);
+
+        let foo = Foo(Some(true), Some(3));
+        let buf = to_vec(&foo).unwrap();
+        let value: Value = from_slice(&buf).unwrap();
+        let expected = Value::Described(
+            Described {
+                descriptor: Descriptor::Code(0x13),
+                value: Box::new(Value::List(vec![
+                    Value::Bool(true),
+                    Value::Int(3)
+                ]))
+            }
+        );
+        assert_eq!(value, expected);
     }
 }

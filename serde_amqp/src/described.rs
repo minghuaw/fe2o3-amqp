@@ -13,7 +13,7 @@ use crate::{
 /// Two pointers are used to reduce the memory size of the Value type.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Described<T> {
-    pub descriptor: Box<Descriptor>,
+    pub descriptor: Descriptor,
     pub value: Box<T>,
 }
 
@@ -61,7 +61,7 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<'de, T> {
         };
 
         Ok(Described {
-            descriptor: Box::new(descriptor),
+            descriptor: descriptor,
             value: Box::new(value),
         })
     }
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn test_serialize_described_value() {
-        let descriptor = Box::new(Descriptor::Code(0x11));
+        let descriptor = Descriptor::Code(0x11);
         let value = Box::new(vec![1i32, 2]);
         let described = Described { descriptor, value };
         let buf = to_vec(&described).unwrap();
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_deserialzie_described_value() {
-        let descriptor = Box::new(Descriptor::Code(0x11));
+        let descriptor = Descriptor::Code(0x11);
         let value = Box::new(vec![1i32, 2]);
         let described = Described { descriptor, value };
         let buf = to_vec(&described).unwrap();

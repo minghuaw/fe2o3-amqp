@@ -217,7 +217,7 @@ pub enum Value {
     /// Although the set of possible domains is open-ended,
     /// typically the both number and size of symbols in use for any
     /// given application will be small, e.g. small enough that it is reasonable
-    /// to cache all the distinct values. Symbols are encoded as ASCII characters [ASCII].
+    /// to cache all the distinct values. Symbols are encoded as ASCII characters ASCII.
     Symbol(Symbol),
 
     /// A sequence of polymorphic values.
