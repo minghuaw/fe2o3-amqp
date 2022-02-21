@@ -2,7 +2,14 @@
 name = "serde_amqp"
 version = "0.0.1"
 edition = "2021"
-publish = false
+description = "A serde implementation of AMQP1.0 protocol."
+license = "MIT/Apache-2.0"
+documentation = "https://docs.rs/serde_amqp/"
+homepage = "https://github.com/minghuaw/fe2o3-amqp"
+repository = "https://github.com/minghuaw/fe2o3-amqp"
+keywords = ["amqp", "amqp1.0", "serde"]
+categories = ["serde"]
+readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

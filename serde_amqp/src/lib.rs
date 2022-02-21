@@ -1,4 +1,4 @@
-//! A serde implementation of AMQP1.0 protocol data types.
+//! A serde implementation of AMQP1.0 protocol.
 //!
 //! # Serializing and deserializing data structures
 //!
