@@ -1,6 +1,6 @@
 # serde_amqp
 
-A serde implementation of AMQP1.0 protocol data types.
+A serde implementation of AMQP1.0 protocol.
 
 ## Serializing and deserializing data structures
 
@@ -173,8 +173,6 @@ pub struct Attach {
 }
 ```rust
 
-The basic encoding will have `ApplicationProperties` encoded as a descriptor followed by the wrapped element, which is a map.
-
 ```rust,ignore
 /// 3.2.5 Application Properties
 /// <type name="application-properties" class="restricted" source="map" provides="section">
@@ -188,3 +186,5 @@ The basic encoding will have `ApplicationProperties` encoded as a descriptor fol
 )]
 pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
 ```
+
+License: MIT/Apache-2.0

@@ -171,8 +171,6 @@
 //! }
 //! ```
 //!
-//! The basic encoding will have `ApplicationProperties` encoded as a descriptor followed by the wrapped element, which is a map.
-//!
 //! ```rust,ignore
 //! /// 3.2.5 Application Properties
 //! /// <type name="application-properties" class="restricted" source="map" provides="section">
