@@ -7,8 +7,7 @@ license = "MIT/Apache-2.0"
 documentation = "https://docs.rs/serde_amqp/"
 homepage = "https://github.com/minghuaw/fe2o3-amqp"
 repository = "https://github.com/minghuaw/fe2o3-amqp"
-keywords = ["amqp", "serde"]
-categories = ["serde"]
+keywords = ["amqp", "parsing"]
 readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
