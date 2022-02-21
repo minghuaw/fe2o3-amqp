@@ -9,11 +9,11 @@ edition = "2021"
 proc-macro = true
 
 [dev-dependencies]
-serde = { version = "1.0.127", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 
 [dependencies]
-convert_case = "0.4.0"
-darling = "0.13.0"
-proc-macro2 = "1.0.28"
-quote = "1.0.9"
-syn = { version = "1.0.74", features = ["parsing", "derive"] } 
+convert_case = "0.5"
+darling = "0.13"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "1", features = ["parsing", "derive"] } 

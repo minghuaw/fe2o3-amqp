@@ -22,12 +22,12 @@ path = "../serde_amqp_derive"
 optional = true
 
 [dependencies]
-ordered-float = { version = "2.7.0", features = ["serde"] }
-serde = { version = "1.0.126", features = ["derive"] }
-serde_bytes = "0.11.5"
-thiserror = "1.0.26"
-bytes = "1.1.0"
+ordered-float = { version = "2.7", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
+thiserror = "1"
+bytes = "1"
 
 # Optinal dependencies
-chrono = { version = "0.4.19", features = ["serde"], optional = true }
-uuid = { version = "0.8.2", features = ["serde"], optional = true }
+chrono = { version = "0.4", features = ["serde"], optional = true }
+uuid = { version = "0.8", features = ["serde"], optional = true }

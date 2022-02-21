@@ -7,9 +7,8 @@ edition = "2021"
 
 [dependencies]
 serde_amqp = { version = "0.0.1", path = "../serde_amqp", features = ["derive"] }
-serde = { version = "1.0.127", features = ["derive"] }
-serde_bytes = "0.11.5"
-ordered-float = { version = "2.7.0", features = ["serde"] }
-serde_repr = "0.1.7"
-trust-dns-resolver = "0.20.3"
-
+serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
+ordered-float = { version = "2.7", features = ["serde"] }
+serde_repr = "0.1"
+trust-dns-resolver = "0.20"
