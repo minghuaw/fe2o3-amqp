@@ -354,6 +354,20 @@ where
     }
 }
 
+impl<T> From<BodySection<T>> for Message<T> {
+    fn from(value: BodySection<T>) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body_section: value,
+            footer: None,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct EmptyBody {}
 

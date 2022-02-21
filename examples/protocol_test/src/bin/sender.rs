@@ -39,8 +39,9 @@ async fn main() {
         .await
         .unwrap();
 
-    let body = BodySection::from("hello");
-    let message = Message::from("hello");
+    let body = BodySection::from("hello body_section");
+    // let message = Message::from("hello");
+    let message = Message::from(body);
     let message = Sendable::from(message);
     // let message = Sendable::builder()
     //     .message("hello world")
