@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time::{error::Elapsed, timeout}};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
@@ -175,14 +175,9 @@ impl Sender<Attached> {
         Ok(settlement)
     }
 
-    pub async fn send<D, T>(&mut self, delivery: D) -> Result<(), Error>
-    where
-        D: Into<Sendable<T>>,
-        T: serde::Serialize,
-        // D: TryInto<Delivery>,
-        // D::Error: Into<Error>,
+    pub async fn send<T: serde::Serialize>(&mut self, sendable: impl Into<Sendable<T>>) -> Result<(), Error>
     {
-        let settlement = self.send_inner(delivery.into()).await?;
+        let settlement = self.send_inner(sendable.into()).await?;
 
         // If not settled, must wait for outcome
         match settlement {
@@ -205,32 +200,29 @@ impl Sender<Attached> {
         }
     }
 
-    pub async fn send_with_timeout<T>(
+    pub async fn send_with_timeout<T: serde::Serialize>(
         &mut self,
-        message: Message<T>,
-        timeout: impl Into<Duration>,
-    ) -> Result<Disposition, Error> {
-        todo!()
+        sendable: impl Into<Sendable<T>>,
+        duration: impl Into<Duration>,
+    ) -> Result<Result<(), Error>, Elapsed> {
+        timeout(duration.into(), self.send(sendable)).await
     }
 
-    pub async fn send_batchable<T>(
+    pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
-        delivery: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut, Error>
-    where
-        T: serde::Serialize,
-    {
-        let settlement = self.send_inner(delivery.into()).await?;
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<DeliveryFut, Error> {
+        let settlement = self.send_inner(sendable.into()).await?;
 
         Ok(DeliveryFut::from(settlement))
     }
 
-    pub async fn send_batchable_with_timeout<T>(
+    pub async fn send_batchable_with_timeout<T: serde::Serialize>(
         &mut self,
-        delivery: impl Into<Sendable<T>>,
-        timeout: impl Into<Duration>,
-    ) -> Result<DeliveryFut, Error> {
-        todo!()
+        sendable: impl Into<Sendable<T>>,
+        duration: impl Into<Duration>,
+    ) -> Result<Result<DeliveryFut, Error>, Elapsed> {
+        timeout(duration.into(), self.send_batchable(sendable)).await
     }
 
     /// Detach the link
@@ -316,8 +308,8 @@ impl Sender<Attached> {
         Ok(detaching)
     }
 
-    pub async fn detach_with_timeout(&mut self, timeout: impl Into<Duration>) -> Result<(), Error> {
-        todo!()
+    pub async fn detach_with_timeout(self, duration: impl Into<Duration>) -> Result<Result<Sender<Detached>, DetachError<Sender<Detached>>>, Elapsed> {
+        timeout(duration.into(), self.detach()).await
     }
 
     pub async fn close(self) -> Result<(), DetachError<Sender<Detached>>> {

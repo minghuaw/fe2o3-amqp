@@ -63,8 +63,11 @@ where
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
             None => {
-                //
-                todo!()
+                // Connection sender must have dropped
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Connection sender must have dropped"
+                )))
             }
         };
         let SessionFrame { channel, body } = frame;
@@ -284,8 +287,9 @@ where
                 },
                 Err(err) => {
                     // TODO: handle errors
+                    // `UnattachedHandle`: session should end with error
 
-                    panic!("{:?}", err)
+                    println!("{:?}", err);
                 }
             }
         }

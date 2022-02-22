@@ -255,18 +255,17 @@ impl endpoint::Session for Session {
                         .insert(input_handle, output_handle.clone());
                     match link.send(LinkFrame::Attach(attach)).await {
                         Ok(_) => {}
-                        Err(e) => {
+                        Err(_) => {
                             // TODO: how should this error be handled?
-                            todo!()
+                            // End with UnattachedHandle?
+                            return Err(Error::from(SessionError::UnattachedHandle))
                         }
                     }
                 }
-                None => {
-                    todo!()
-                }
+                None => return Err(Error::from(SessionError::UnattachedHandle))
             },
             None => {
-                todo!()
+                return Err(Error::from(SessionError::UnattachedHandle))
             }
         }
 
@@ -472,17 +471,17 @@ impl endpoint::Session for Session {
         // Remove the link by input handle
         let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
             Some(handle) => handle,
-            None => todo!(), // End session with unattached handle?
+            None => return Err(Error::from(SessionError::UnattachedHandle)), // End session with unattached handle?
         };
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
                 // TODO:
                 match link.send(LinkFrame::Detach(detach)).await {
                     Ok(_) => {}
-                    Err(_) => todo!(), // End session with unattached handle?
+                    Err(_) => return Err(Error::from(SessionError::UnattachedHandle)), // End session with unattached handle?
                 }
             }
-            None => todo!(), // End session with unattached handle?
+            None => return Err(Error::from(SessionError::UnattachedHandle)), // End session with unattached handle?
         }
 
         Ok(())

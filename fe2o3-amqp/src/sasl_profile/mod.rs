@@ -95,7 +95,7 @@ impl SaslProfile {
                     })
                 }
             }
-            Frame::Challenge(challenge) => {
+            Frame::Challenge(_challenge) => {
                 todo!()
             }
             Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
