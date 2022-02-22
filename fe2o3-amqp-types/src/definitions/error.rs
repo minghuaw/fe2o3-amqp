@@ -1,3 +1,5 @@
+use std::hash::Hasher;
+
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use super::{ErrorCondition, Fields};
@@ -22,6 +24,18 @@ pub struct Error {
     /// <field name="info" type="fields"/>
     pub info: Option<Fields>,
 }
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Error")
+            .field("condition", &self.condition)
+            .field("description", &self.description)
+            .field("info", &self.info)
+            .finish()
+    }
+}
+
+impl std::error::Error for Error { }
 
 impl Error {
     /// Creates a new Error

@@ -306,51 +306,6 @@ where
         Ok(())
     }
 
-    // async fn send_flow<W>(&mut self, writer: &mut W, echo: bool) -> Result<(), Self::Error>
-    // where
-    //     W: Sink<LinkFlow> + Send + Unpin,
-    // {
-    //     let handle = self.output_handle.clone()
-    //         .ok_or_else(|| Error::AmqpError {
-    //             condition: AmqpError::IllegalState,
-    //             description: Some("Link is not attached".into())
-    //         })?;
-
-    //     let flow = {
-    //         let reader = self.flow_state.as_ref().lock.read().await;
-    //         LinkFlow {
-    //             handle,
-    //             delivery_count: Some(reader.delivery_count.clone()),
-    //             link_credit: Some(reader.link_credit.clone()),
-    //             available: Some(reader.available.clone()),
-    //             drain: reader.drain,
-    //             echo,
-    //             properties: reader.properties.clone()
-    //         }
-    //     };
-
-    //     writer.send(flow).await
-    //         .map_err(|_| Error::AmqpError {
-    //             condition: AmqpError::IllegalState,
-    //             description: Some("Link is not attached".into())
-    //         })
-    // }
-
-    // /// This doesnt remove the delivery from the unsettled map until the outgoing disposition
-    // /// is processed by the session loop because disposition doesn't include any info on
-    // /// delivery_tag
-    // async fn send_disposition<W>(&mut self, writer: &mut W, disposition: Disposition) -> Result<(), Self::Error>
-    // where
-    //     W: Sink<LinkFrame> + Send + Unpin,
-    // {
-    //     let frame = LinkFrame::Disposition(disposition);
-    //     writer.send(frame).await
-    //         .map_err(|_| link::Error::AmqpError {
-    //             condition: AmqpError::IllegalState,
-    //             description: Some("Session is already dropped".to_string()),
-    //         })
-    // }
-
     async fn send_detach<W>(
         &mut self,
         writer: &mut W,
@@ -360,8 +315,7 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        println!(">>> Debug: SenderLink::send_detach");
-        println!(">>> Debug: SenderLink local_state: {:?}", &self.local_state);
+        println!(">>> Debug: Link::send_detach");
 
         // Detach may fail and may try re-attach
         // The local output handle is not removed from the session

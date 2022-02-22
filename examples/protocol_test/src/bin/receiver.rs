@@ -36,7 +36,10 @@ async fn main() {
     println!("<<< Message >>> {:?}", delivery);
     receiver.accept(&delivery).await.unwrap();
 
-    receiver.close().await.unwrap();
+    if let Err(err) = receiver.close().await {
+        println!("{}", err);
+    }
+
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

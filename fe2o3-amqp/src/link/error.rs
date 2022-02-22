@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, fmt};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ConnectionError, ErrorCondition, LinkError},
@@ -32,17 +32,21 @@ impl<L> DetachError<L> {
     }
 }
 
-// impl<T> From<T> for DetachError
-// where
-//     T: Into<definitions::Error>,
-// {
-//     fn from(err: T) -> Self {
-//         Self {
-//             is_closed_by_remote: false,
-//             error: Some(err.into()),
-//         }
-//     }
-// }
+impl<L> fmt::Display for DetachError<L> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DetachError")
+            .field("link", &"")
+            .field("is_closed_by_remote", &self.is_closed_by_remote)
+            .field("error", &self.error)
+            .finish()
+    }
+}
+
+impl<L: fmt::Debug> std::error::Error for DetachError<L> {
+    // fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    //     Some(&self.error)
+    // }
+}
 
 /// TODO: Simplify the error structures
 #[derive(Debug, thiserror::Error)]
