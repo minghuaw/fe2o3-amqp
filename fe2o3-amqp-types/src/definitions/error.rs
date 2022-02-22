@@ -1,5 +1,3 @@
-use std::hash::Hasher;
-
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 
 use super::{ErrorCondition, Fields};
