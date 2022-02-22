@@ -476,7 +476,7 @@ impl endpoint::Session for Session {
         };
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
-                // TODO: 
+                // TODO:
                 match link.send(LinkFrame::Detach(detach)).await {
                     Ok(_) => {}
                     Err(_) => todo!(), // End session with unattached handle?
@@ -542,13 +542,19 @@ impl endpoint::Session for Session {
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
                     .map_err(|_| {
-                        Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop receiver has dropped"))
+                        Self::Error::Io(io::Error::new(
+                            io::ErrorKind::Other,
+                            "Connection event loop receiver has dropped",
+                        ))
                     })?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
                 writer.send(frame).await.map_err(|_| {
-                    Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop receiver has dropped"))
+                    Self::Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Connection event loop receiver has dropped",
+                    ))
                 })?;
                 self.local_state = SessionState::Mapped;
             }
@@ -679,7 +685,12 @@ impl endpoint::Session for Session {
             .await
             // The receiving half must have dropped, and thus the `Connection`
             // event loop has stopped. It should be treated as an io error
-            .map_err(|_| Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Connection event loop has dropped")))?;
+            .map_err(|_| {
+                Self::Error::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Connection event loop has dropped",
+                ))
+            })?;
         Ok(())
     }
 }

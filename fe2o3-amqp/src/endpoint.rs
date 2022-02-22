@@ -28,7 +28,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
     primitives::{Boolean, UInt},
 };
-use futures_util::{Sink, Future};
+use futures_util::{Future, Sink};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{

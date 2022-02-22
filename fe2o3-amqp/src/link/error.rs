@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ErrorCondition, LinkError, ConnectionError},
+    definitions::{self, AmqpError, ConnectionError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
 };
 use tokio::sync::mpsc;
@@ -137,18 +137,18 @@ impl From<AllocLinkError> for definitions::Error {
             AllocLinkError::IllegalState => Self {
                 condition: AmqpError::IllegalState.into(),
                 description: None,
-                info: None
+                info: None,
             },
             AllocLinkError::HandleMaxReached => Self {
                 condition: ConnectionError::FramingError.into(),
                 description: Some("Handle max has been reached".to_string()),
-                info: None
+                info: None,
             },
             AllocLinkError::DuplicatedLinkName => Self {
                 condition: AmqpError::NotAllowed.into(),
                 description: Some("Link name is duplicated".to_string()),
-                info: None
-            }
+                info: None,
+            },
         }
     }
 }

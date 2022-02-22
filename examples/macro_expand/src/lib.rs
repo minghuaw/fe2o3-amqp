@@ -17,7 +17,7 @@ use serde_amqp::{
 // pub struct AmqpValue<T>(pub T);
 pub struct Foo<A, B> {
     a: A,
-    b: B
+    b: B,
 }
 // pub struct A(i32);
 

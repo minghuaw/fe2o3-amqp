@@ -210,7 +210,7 @@ where
                 self.local_state = LinkState::Detached;
                 // Dropping output handle as it is already detached
                 let _ = self.output_handle.take();
-            },
+            }
             _ => {
                 return Err(definitions::Error::new(
                     AmqpError::IllegalState,
@@ -373,11 +373,11 @@ where
                     LinkState::Attached => {
                         self.local_state = LinkState::DetachSent;
                         false
-                    },
+                    }
                     LinkState::DetachReceived => {
                         self.local_state = LinkState::Detached;
                         true
-                    },
+                    }
                     _ => return Err(AmqpError::IllegalState.into()),
                 };
 
@@ -554,8 +554,8 @@ impl LinkHandle {
                 // TODO: This should not happen, but should the link detach if this happens?
                 return Err(session::Error::AmqpError {
                     condition: AmqpError::NotAllowed,
-                    description: Some("Sender should never receive a transfer".to_string())
-                })
+                    description: Some("Sender should never receive a transfer".to_string()),
+                });
             }
             LinkHandle::Receiver {
                 tx,

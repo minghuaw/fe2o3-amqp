@@ -1,10 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::{
-    definitions::{AmqpError},
-    primitives::Binary,
-    sasl::SaslCode,
-};
+use fe2o3_amqp_types::{definitions::AmqpError, primitives::Binary, sasl::SaslCode};
 
 use crate::{frames, sasl_profile};
 

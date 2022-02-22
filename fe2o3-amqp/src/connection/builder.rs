@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
-    frames::{amqp},
+    frames::amqp,
     sasl_profile::SaslProfile,
     transport::protocol_header::ProtocolHeader,
     transport::Transport,
@@ -205,9 +205,9 @@ impl<'a, Mode> Builder<'a, Mode> {
 }
 
 impl<'a> Builder<'a, WithContainerId> {
-    pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, Error> 
+    pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, Error>
     where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         match self.sasl_profile.take() {
             Some(profile) => {
@@ -216,7 +216,7 @@ impl<'a> Builder<'a, WithContainerId> {
                 let domain = self.domain;
                 let stream = Transport::connect_sasl(stream, hostname, profile).await?;
                 self.connect_with_stream(stream, scheme, domain).await
-            },
+            }
             None => {
                 let scheme = self.scheme;
                 let domain = self.domain;
@@ -236,7 +236,7 @@ impl<'a> Builder<'a, WithContainerId> {
         self.scheme = url.scheme().into();
         self.domain = url.domain().map(Into::into);
         self.sasl_profile = SaslProfile::try_from(&url).ok();
-        
+
         let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
         let stream = TcpStream::connect(&*addr).await?; // std::io::Error
         self.open_with_stream(stream).await
@@ -261,9 +261,9 @@ impl<'a> Builder<'a, WithContainerId> {
         stream: Io,
         scheme: &str,
         domain: Option<&str>,
-    ) -> Result<ConnectionHandle, Error> 
+    ) -> Result<ConnectionHandle, Error>
     where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static
+        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         println!(">>> Debug: connection::Builder::connect_with_stream");
 
@@ -308,7 +308,8 @@ impl<'a> Builder<'a, WithContainerId> {
         let idle_timeout = self
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
-        let transport = Transport::<_, amqp::Frame>::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
+        let transport =
+            Transport::<_, amqp::Frame>::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
         println!(">>> Debug: Header exchanged");
 
         // spawn Connection Mux

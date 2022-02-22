@@ -1,4 +1,6 @@
-use fe2o3_amqp::{connection::Connection, session::Session, link::Receiver, types::primitives::Value};
+use fe2o3_amqp::{
+    connection::Connection, link::Receiver, session::Session, types::primitives::Value,
+};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +24,7 @@ async fn main() {
         .attach(&mut session)
         .await
         .unwrap();
-    
+
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 

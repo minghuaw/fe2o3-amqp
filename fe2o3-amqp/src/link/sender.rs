@@ -139,7 +139,14 @@ impl Sender<Attached> {
         let detached_fut = self.incoming.next();
         let settlement = self
             .link
-            .send_transfer(&mut self.outgoing, detached_fut, payload, message_format, settled, false)
+            .send_transfer(
+                &mut self.outgoing,
+                detached_fut,
+                payload,
+                message_format,
+                settled,
+                false,
+            )
             .await?;
         Ok(settlement)
     }

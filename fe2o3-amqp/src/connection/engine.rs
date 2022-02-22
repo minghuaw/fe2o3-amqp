@@ -69,12 +69,12 @@ where
         // Wait for an Open
         let frame = match engine.transport.next().await {
             Some(frame) => frame?,
-            None => return Err(Error::Io(
-                io::Error::new(
+            None => {
+                return Err(Error::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
-                    "Expecting an Open frame"
-                )
-            )),
+                    "Expecting an Open frame",
+                )))
+            }
         };
         let Frame { channel, body } = frame;
         let remote_open = match body {

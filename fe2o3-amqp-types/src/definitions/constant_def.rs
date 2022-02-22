@@ -1,4 +1,3 @@
-
 /// the IANA assigned port number for AMQP.
 /// The standard AMQP port number that has been assigned
 /// by IANA for TCP, UDP, and SCTP.

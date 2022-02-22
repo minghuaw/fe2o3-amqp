@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromMeta};
 use proc_macro2::Span;
 use quote::quote;
-use syn::{DeriveInput, Field, parse::Parser};
+use syn::{parse::Parser, DeriveInput, Field};
 
 use crate::{DescribedAttr, DescribedStructAttr, EncodingType, FieldAttr};
 
@@ -88,7 +88,9 @@ pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
 
 pub(crate) fn where_serialize(generics: &syn::Generics) -> proc_macro2::TokenStream {
     let mut wheres = Vec::new();
-    generics.params.iter()
+    generics
+        .params
+        .iter()
         .filter_map(|param| {
             if let syn::GenericParam::Type(tparam) = param {
                 Some(&tparam.ident)
@@ -97,7 +99,7 @@ pub(crate) fn where_serialize(generics: &syn::Generics) -> proc_macro2::TokenStr
             }
         })
         .for_each(|id| {
-            wheres.push(quote!{
+            wheres.push(quote! {
                 #id: serde::ser::Serialize
             })
         });
@@ -109,7 +111,9 @@ pub(crate) fn where_serialize(generics: &syn::Generics) -> proc_macro2::TokenStr
 
 pub(crate) fn where_deserialize(generics: &syn::Generics) -> proc_macro2::TokenStream {
     let mut wheres = Vec::new();
-    generics.params.iter()
+    generics
+        .params
+        .iter()
         .filter_map(|param| {
             if let syn::GenericParam::Type(tparam) = param {
                 Some(&tparam.ident)
@@ -118,7 +122,7 @@ pub(crate) fn where_deserialize(generics: &syn::Generics) -> proc_macro2::TokenS
             }
         })
         .for_each(|id| {
-            wheres.push(quote!{
+            wheres.push(quote! {
                 #id: serde::de::Deserialize<'de>
             })
         });
@@ -130,11 +134,7 @@ pub(crate) fn where_deserialize(generics: &syn::Generics) -> proc_macro2::TokenS
 
 pub(crate) fn generic_visitor(generics: &syn::Generics) -> proc_macro2::TokenStream {
     let (generic_types, fields) = generic_visitor_fields(generics);
-    let field_ids: Vec<syn::Ident> = fields.iter()
-        .map(|f| {
-            f.ident.clone().unwrap()
-        })
-        .collect();
+    let field_ids: Vec<syn::Ident> = fields.iter().map(|f| f.ident.clone().unwrap()).collect();
 
     quote! {
         struct Visitor<#(#generic_types),*> {
@@ -151,10 +151,14 @@ pub(crate) fn generic_visitor(generics: &syn::Generics) -> proc_macro2::TokenStr
     }
 }
 
-pub(crate) fn generic_visitor_fields(generics: &syn::Generics) -> (Vec<&syn::Ident>, Vec<syn::Field>) {
+pub(crate) fn generic_visitor_fields(
+    generics: &syn::Generics,
+) -> (Vec<&syn::Ident>, Vec<syn::Field>) {
     let mut types: Vec<&syn::Ident> = Vec::new();
     let mut fields: Vec<syn::Field> = Vec::new();
-    generics.params.iter()
+    generics
+        .params
+        .iter()
         .filter_map(|param| {
             if let syn::GenericParam::Type(tparam) = param {
                 Some(&tparam.ident)

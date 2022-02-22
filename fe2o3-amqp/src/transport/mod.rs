@@ -10,15 +10,15 @@
 mod error;
 pub mod protocol_header;
 pub use error::Error;
-use fe2o3_amqp_types::{definitions::{AmqpError, MIN_MAX_FRAME_SIZE}, sasl::SaslCode};
+use fe2o3_amqp_types::{
+    definitions::{AmqpError, MIN_MAX_FRAME_SIZE},
+    sasl::SaslCode,
+};
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 /* -------------------------------- Transport ------------------------------- */
 
-use std::{
-    convert::TryFrom, io, marker::PhantomData, task::Poll,
-    time::Duration,
-};
+use std::{convert::TryFrom, io, marker::PhantomData, task::Poll, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
@@ -291,15 +291,21 @@ where
             //     println!("{:#x?}", new_buf[0]);
             // }
 
-            return Err(Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))
+            return Err(Error::amqp_error(
+                AmqpError::NotImplemented,
+                Some(format!("Found: {:?}", inbound_buf)),
+            ));
         }
     };
-        // .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
+    // .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
         return Err(Error::amqp_error(
-            AmqpError::NotImplemented, 
-            Some(format!("Expecting {:?}, found {:?}", proto_header, incoming_header))
+            AmqpError::NotImplemented,
+            Some(format!(
+                "Expecting {:?}, found {:?}",
+                proto_header, incoming_header
+            )),
         ));
     }
     Ok(incoming_header)
@@ -482,7 +488,7 @@ where
                             Ok(b) => {
                                 println!(">>> Debug: frame {:#x?}", &b[..]);
                                 b
-                            },
+                            }
                             Err(err) => {
                                 use std::any::Any;
                                 let any = &err as &dyn Any;

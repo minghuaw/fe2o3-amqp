@@ -273,8 +273,8 @@ impl endpoint::Connection for Connection {
                 // remote session sent the begin.
                 return Err(Error::AmqpError {
                     condition: AmqpError::NotAllowed,
-                    description: Some("remote-channel is not set".to_string())
-                })
+                    description: Some("remote-channel is not set".to_string()),
+                });
             }
         }
 

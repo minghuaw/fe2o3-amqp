@@ -5,7 +5,8 @@ use crate::{
     util::{
         convert_to_case, macro_rules_buffer_if_eq_default, macro_rules_buffer_if_none,
         macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default,
-        macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs, where_serialize,
+        macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs,
+        where_serialize,
     },
     DescribedStructAttr, EncodingType, FieldAttr,
 };
@@ -17,7 +18,9 @@ pub(crate) fn expand_serialize(
     let ident = &input.ident;
     let generics = &input.generics;
     match &input.data {
-        syn::Data::Struct(data) => expand_serialize_on_datastruct(&amqp_attr, ident, generics, data, input),
+        syn::Data::Struct(data) => {
+            expand_serialize_on_datastruct(&amqp_attr, ident, generics, data, input)
+        }
         _ => unimplemented!(),
     }
 }
@@ -56,7 +59,13 @@ fn expand_serialize_on_datastruct(
         Fields::Unnamed(fields) => {
             let token = match fields.unnamed.len() {
                 0 => expand_serialize_unit_struct(ident, &descriptor, &amqp_attr.encoding),
-                _ => expand_serialize_tuple_struct(ident, generics, &descriptor, &amqp_attr.encoding, fields),
+                _ => expand_serialize_tuple_struct(
+                    ident,
+                    generics,
+                    &descriptor,
+                    &amqp_attr.encoding,
+                    fields,
+                ),
             };
             Ok(token)
         }
@@ -126,7 +135,7 @@ fn expand_serialize_tuple_struct(
     let buffer_if_none = macro_rules_buffer_if_none_for_tuple_struct();
     let where_clause = match generics.params.len() {
         0 => quote! {},
-        _ => where_serialize(generics)
+        _ => where_serialize(generics),
     };
 
     quote! {
@@ -254,7 +263,7 @@ fn expand_serialize_struct(
 
     let where_clause = match generics.params.len() {
         0 => quote! {},
-        _ => where_serialize(generics)
+        _ => where_serialize(generics),
     };
 
     quote! {

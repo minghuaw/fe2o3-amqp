@@ -3,9 +3,7 @@ use serde::{
     ser, Deserialize, Serialize,
 };
 
-use fe2o3_amqp_types::{
-    sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
-};
+use fe2o3_amqp_types::sasl::{SaslChallenge, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse};
 use serde_amqp::read::IoReader;
 use tokio_util::codec::{Decoder, Encoder};
 

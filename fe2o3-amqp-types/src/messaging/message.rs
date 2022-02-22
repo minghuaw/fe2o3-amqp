@@ -7,7 +7,11 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::{__constants::{DESCRIBED_BASIC, DESCRIPTOR}, value::Value, primitives::Binary};
+use serde_amqp::{
+    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
+    primitives::Binary,
+    value::Value,
+};
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
@@ -16,14 +20,14 @@ use super::{
 
 #[doc(hidden)]
 pub mod __private {
-    /// 
+    ///
     #[derive(Debug)]
     pub struct Serializable<T>(pub T);
-    
+
     #[derive(Debug)]
     pub struct Deserializable<T>(pub T);
 }
-use __private::{Serializable, Deserializable};
+use __private::{Deserializable, Serializable};
 
 /// AMQP 1.0 Message
 #[derive(Debug, Clone)]
@@ -55,7 +59,7 @@ pub struct Message<T> {
 impl<T: Serialize> Serialize for Serializable<Message<T>> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         self.0.serialize(serializer)
     }
@@ -64,7 +68,7 @@ impl<T: Serialize> Serialize for Serializable<Message<T>> {
 impl<T: Serialize> Serialize for Serializable<&Message<T>> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer 
+        S: serde::Serializer,
     {
         self.0.serialize(serializer)
     }
@@ -76,7 +80,7 @@ where
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         let value = Message::<T>::deserialize(deserializer)?;
         Ok(Deserializable(value))
@@ -151,7 +155,7 @@ impl<T> Message<T> {
     // }
 }
 
-// impl<T> Message<T> 
+// impl<T> Message<T>
 // where
 //     T: for<'de> de::Deserialize<'de>
 // {
@@ -162,8 +166,8 @@ impl<T> Message<T> {
 //     }
 // }
 
-// impl<T> Serialize for Message<T> 
-impl<T> Message<T> 
+// impl<T> Serialize for Message<T>
+impl<T> Message<T>
 where
     T: Serialize,
 {
@@ -266,7 +270,7 @@ struct Visitor<T> {
     marker: PhantomData<T>,
 }
 
-impl<'de, T> de::Visitor<'de> for Visitor<T> 
+impl<'de, T> de::Visitor<'de> for Visitor<T>
 where
     T: de::Deserialize<'de>,
 {
@@ -316,13 +320,15 @@ where
             message_annotations,
             properties,
             application_properties,
-            body_section: body_section.ok_or_else(|| de::Error::custom("Expecting BodySection"))?.0,
+            body_section: body_section
+                .ok_or_else(|| de::Error::custom("Expecting BodySection"))?
+                .0,
             footer,
         })
     }
 }
 
-// impl<'de, T> de::Deserialize<'de> for Message<T> 
+// impl<'de, T> de::Deserialize<'de> for Message<T>
 impl<'de, T> Message<T>
 where
     T: de::Deserialize<'de>,
@@ -445,7 +451,7 @@ impl<T> Builder<T> {
     }
 
     /// Set the body_section as BodySection::Data
-    pub fn data(self, data: impl Into<Binary> ) -> Builder<BodySection<Value>> {
+    pub fn data(self, data: impl Into<Binary>) -> Builder<BodySection<Value>> {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
@@ -530,9 +536,8 @@ pub enum BodySection<T> {
     Value(AmqpValue<T>),
 }
 
-
 // impl BodySection {
-//     pub fn unmarshal<T>(self) -> Result<T, serde_amqp::Error> 
+//     pub fn unmarshal<T>(self) -> Result<T, serde_amqp::Error>
 //     where
 //         T: for<'de> de::Deserialize<'de>,
 //     {
@@ -575,11 +580,10 @@ mod body_section {
 
     use super::*;
 
-    
     impl<T: Serialize> Serialize for Serializable<BodySection<T>> {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
-            S: serde::Serializer 
+            S: serde::Serializer,
         {
             self.0.serialize(serializer)
         }
@@ -588,7 +592,7 @@ mod body_section {
     impl<T: Serialize> Serialize for Serializable<&BodySection<T>> {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
-            S: serde::Serializer 
+            S: serde::Serializer,
         {
             self.0.serialize(serializer)
         }
@@ -600,7 +604,7 @@ mod body_section {
     {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de> 
+            D: serde::Deserializer<'de>,
         {
             let value = BodySection::<T>::deserialize(deserializer)?;
             Ok(Deserializable(value))
@@ -675,7 +679,7 @@ mod body_section {
         marker: PhantomData<T>,
     }
 
-    impl<'de, T> de::Visitor<'de> for Visitor<T> 
+    impl<'de, T> de::Visitor<'de> for Visitor<T>
     where
         T: de::Deserialize<'de>,
     {
@@ -708,7 +712,7 @@ mod body_section {
         }
     }
 
-    impl<'de, T> BodySection<T> 
+    impl<'de, T> BodySection<T>
     where
         T: de::Deserialize<'de>,
     {
@@ -720,7 +724,7 @@ mod body_section {
                 serde_amqp::__constants::UNTAGGED_ENUM,
                 &["Data", "Sequence", "Value"],
                 Visitor {
-                    marker: PhantomData
+                    marker: PhantomData,
                 },
             )
         }
@@ -731,12 +735,15 @@ mod body_section {
 mod tests {
     use std::{collections::BTreeMap, vec};
 
-    use serde_amqp::{from_slice, to_vec, value::Value, read::SliceReader};
+    use serde_amqp::{from_slice, read::SliceReader, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
     use crate::messaging::{
-        message::{BodySection, __private::{Serializable, Deserializable}}, AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header,
-        MessageAnnotations,
+        message::{
+            BodySection,
+            __private::{Deserializable, Serializable},
+        },
+        AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header, MessageAnnotations,
     };
 
     use super::Message;

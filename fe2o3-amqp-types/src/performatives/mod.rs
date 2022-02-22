@@ -25,16 +25,16 @@ pub use transfer::*;
 pub enum Performative {
     /// Open
     Open(Open),
-    
+
     /// Begin
     Begin(Begin),
-    
+
     /// Attach
     Attach(Attach),
-    
+
     /// Flow
     Flow(Flow),
-    
+
     /// Transfer
     Transfer(Transfer),
 

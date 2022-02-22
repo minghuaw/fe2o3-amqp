@@ -3,8 +3,9 @@ use syn::{spanned::Spanned, DeriveInput, Fields};
 
 use crate::{
     util::{
-        convert_to_case, get_span_of, macro_rules_unwrap_or_default, macro_rules_unwrap_or_none,
-        parse_described_struct_attr, parse_named_field_attrs, generic_visitor, where_deserialize,
+        convert_to_case, generic_visitor, get_span_of, macro_rules_unwrap_or_default,
+        macro_rules_unwrap_or_none, parse_described_struct_attr, parse_named_field_attrs,
+        where_deserialize,
     },
     DescribedStructAttr, EncodingType, FieldAttr,
 };
@@ -16,7 +17,9 @@ pub(crate) fn expand_deserialize(
     let ident = &input.ident;
     let generics = &input.generics;
     match &input.data {
-        syn::Data::Struct(data) => expand_deserialize_on_datastruct(&attr, ident, generics, data, input),
+        syn::Data::Struct(data) => {
+            expand_deserialize_on_datastruct(&attr, ident, generics, data, input)
+        }
         _ => unimplemented!(),
     }
 }

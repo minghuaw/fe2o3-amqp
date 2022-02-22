@@ -49,7 +49,7 @@ pub struct SaslMechanisms {
 )]
 pub struct SaslInit {
     /// selected security mechanism
-    /// 
+    ///
     /// The name of the SASL mechanism used for the SASL exchange. If the selected mechanism is
     /// not supported by the receiving peer, it MUST close the connection with the authentication-failure
     /// close-code. Each peer MUST authenticate using the highest-level security profile it can handle
@@ -57,14 +57,14 @@ pub struct SaslInit {
     pub mechanism: Symbol,
 
     /// security response data
-    /// 
+    ///
     /// A block of opaque data passed to the security mechanism. The contents of this data are defined
     /// by the SASL security mechanism.
     pub initial_response: Option<Binary>,
 
     /// the name of the target host
-    /// 
-    /// The DNS name of the host (either fully qualified or relative) to which the sending peer is connecting. 
+    ///
+    /// The DNS name of the host (either fully qualified or relative) to which the sending peer is connecting.
     /// It is not mandatory to provide the hostname. If no hostname is provided the receiving peer
     /// SHOULD select a default based on its own configuration.
     /// This field can be used by AMQP proxies to determine the correct back-end service to connect the
@@ -163,16 +163,16 @@ pub enum SaslCode {
 }
 
 pub mod constant {
-//! Constans definedin AMQP 1.0 specification Part 5.3.4
+    //! Constans definedin AMQP 1.0 specification Part 5.3.4
 
     ///  major protocol version
     pub const SASL_MAJOR: u8 = 1;
-    
+
     /// minor protocol version.
-    pub const SASL_MINOR: u8 = 0; 
+    pub const SASL_MINOR: u8 = 0;
 
     /// protocol revision.
-    pub const SASL_REVISION: u8 = 0; 
+    pub const SASL_REVISION: u8 = 0;
 }
 
 #[cfg(test)]

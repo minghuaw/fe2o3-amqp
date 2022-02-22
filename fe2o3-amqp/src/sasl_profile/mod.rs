@@ -1,4 +1,4 @@
-use bytes::{BufMut};
+use bytes::BufMut;
 use fe2o3_amqp_types::{
     definitions::AmqpError,
     primitives::{Binary, Symbol},

@@ -115,8 +115,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        use crate::util::Consume;
         use crate::endpoint::Link;
+        use crate::util::Consume;
 
         println!(">>> Debug: SenderLink::send_transfer");
 
@@ -132,7 +132,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                         // messages) advance the delivery-count as much as possible,
                         // consuming all link-credit, and send the flow state to the
                         // receiver
-        
+
                         // Drain is set
                         todo!()
                     }

@@ -164,7 +164,7 @@ pub enum SimpleValue {
     /// encoding name = "ms64", code = 0x83,
     /// category = fixed, width = 8
     /// label = "64-bit two’s-complement integer representing milliseconds since the unix epoch"
-    
+
     /// A universally unique identifier as defined by RFC-4122 in section 4.1.2
     ///
     /// encoding code = 0x98,
@@ -210,7 +210,6 @@ pub enum SimpleValue {
     /// given application will be small, e.g. small enough that it is reasonable
     /// to cache all the distinct values. Symbols are encoded as ASCII characters ASCII.
     Symbol(Symbol),
-
 }
 
 impl Default for SimpleValue {
