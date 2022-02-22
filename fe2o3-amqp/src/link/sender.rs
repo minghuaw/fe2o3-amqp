@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
-use tokio::{sync::mpsc, time::{error::Elapsed, timeout}};
+use tokio::{sync::mpsc, time::{error::Elapsed, timeout, Timeout}};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
@@ -51,7 +51,7 @@ pub struct Sender<S> {
 
 impl Sender<Detached> {
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
-        builder::Builder::new().source(Source::builder().build()) // TODO: where should
+        builder::Builder::new().source(Source::builder().build())
     }
 
     // // Re-attach the link
@@ -220,8 +220,9 @@ impl Sender<Attached> {
         &mut self,
         sendable: impl Into<Sendable<T>>,
         duration: impl Into<Duration>,
-    ) -> Result<Result<DeliveryFut, Error>, Elapsed> {
-        timeout(duration.into(), self.send_batchable(sendable)).await
+    ) -> Result<Timeout<DeliveryFut>, Error> {
+        let fut = self.send_batchable(sendable).await?;
+        Ok(timeout(duration.into(), fut))
     }
 
     /// Detach the link
@@ -294,7 +295,7 @@ impl Sender<Attached> {
             }
         }
 
-        // TODO: de-allocate link from session
+        // The local outgoing handle must have been dropped, de-allocate link from session
         match detaching
             .session
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
@@ -390,7 +391,7 @@ impl Sender<Attached> {
             }
         };
 
-        // TODO: de-allocate link from session
+        // de-allocate link from session
         match detaching
             .session
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
