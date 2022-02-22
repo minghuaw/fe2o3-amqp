@@ -242,19 +242,19 @@ impl<'a> Builder<'a, WithContainerId> {
         self.open_with_stream(stream).await
     }
 
-    pub async fn pipelined_open_with_stream<Io>(
-        self,
-        mut _stream: Io,
-    ) -> Result<ConnectionHandle, Error>
-    where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
-        todo!()
-    }
+    // pub async fn pipelined_open_with_stream<Io>(
+    //     self,
+    //     mut _stream: Io,
+    // ) -> Result<ConnectionHandle, Error>
+    // where
+    //     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    // {
+    //     todo!()
+    // }
 
-    pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
-        todo!()
-    }
+    // pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
+    //     todo!()
+    // }
 
     async fn connect_with_stream<Io>(
         self,

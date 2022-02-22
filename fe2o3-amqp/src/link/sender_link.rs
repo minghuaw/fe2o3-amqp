@@ -134,7 +134,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                         // receiver
 
                         // Drain is set
-                        todo!()
+                        return Ok(Settlement::Drained)
                     }
                 }
             },

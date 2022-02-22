@@ -186,7 +186,7 @@ impl Sender<Attached> {
 
         // If not settled, must wait for outcome
         match settlement {
-            Settlement::Settled => Ok(()),
+            Settlement::Settled | Settlement::Drained => Ok(()),
             Settlement::Unsettled {
                 delivery_tag: _,
                 outcome,

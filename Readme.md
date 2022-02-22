@@ -20,6 +20,7 @@ An implementation of the AMQP1.0 protocol based on serde and tokio.
 
 ## Road map
 
+- [ ] Pipelined open
 - [ ] SASL SCRAM-SHA1
 - [ ] Transaction
 - [ ] Listeners

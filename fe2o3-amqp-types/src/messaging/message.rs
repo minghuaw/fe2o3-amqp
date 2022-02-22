@@ -536,21 +536,6 @@ pub enum BodySection<T> {
     Value(AmqpValue<T>),
 }
 
-// impl BodySection {
-//     pub fn unmarshal<T>(self) -> Result<T, serde_amqp::Error>
-//     where
-//         T: for<'de> de::Deserialize<'de>,
-//     {
-//         todo!()
-//     }
-// }
-
-// impl<T: Into<AmqpValue<T>>> From<T> for BodySection<T> {
-//     fn from(value: T) -> Self {
-//         BodySection::Value(value.into())
-//     }
-// }
-
 impl<T: Serialize> From<T> for BodySection<T> {
     fn from(value: T) -> Self {
         Self::Value(AmqpValue(value))

@@ -231,6 +231,7 @@ impl TryFrom<Flow> for LinkFlow {
 }
 
 pub enum Settlement {
+    Drained,
     Settled,
     Unsettled {
         delivery_tag: [u8; 4],
