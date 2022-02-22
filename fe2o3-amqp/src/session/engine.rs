@@ -62,7 +62,10 @@ where
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
-            None => todo!(),
+            None => {
+                //
+                todo!()
+            }
         };
         let SessionFrame { channel, body } = frame;
         let remote_begin = match body {
@@ -257,7 +260,10 @@ where
                 control = self.control.recv() => {
                     match control {
                         Some(control) => self.on_control(control).await,
-                        None => todo!()
+                        None => {
+                            // all Links and SessionHandle are dropped
+                            Ok(Running::Stop)
+                        }
                     }
                 },
                 frame = self.outgoing_link_frames.recv() => {
