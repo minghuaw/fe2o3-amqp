@@ -65,20 +65,6 @@ impl LinkFlowStateInner {
     }
 }
 
-// impl From<&LinkFlowStateInner> for LinkFlow {
-//     fn from(state: &LinkFlowStateInner) -> Self {
-//         LinkFlow {
-//             handle: state.handle.value().,
-//             delivery_count: Some(state.delivery_count),
-//             link_credit: Some(state.link_credit),
-//             available: Some(state.avaiable),
-//             drain: state.drain,
-//             echo: false,
-//             properties: state.properties.clone()
-//         }
-//     }
-// }
-
 /// The Sender and Receiver handle link flow control differently
 #[derive(Debug)]
 pub struct LinkFlowState<R> {
@@ -312,15 +298,15 @@ impl Producer<Arc<LinkFlowState<role::Sender>>> {
     }
 }
 
-pub enum SenderPermit {
-    Send,
-    Drain,
-}
+// pub enum SenderPermit {
+//     Send,
+//     Drain,
+// }
 
 #[async_trait]
 impl Consume for SenderFlowState {
     type Item = u32;
-    type Outcome = SenderPermit;
+    type Outcome = ();
 
     /// Increment delivery count and decrement link_credit. Wait asynchronously
     /// if there is not enough credit
@@ -337,18 +323,26 @@ impl Consume for SenderFlowState {
 async fn consume_link_credit(
     lock: &RwLock<LinkFlowStateInner>,
     count: u32,
-) -> Result<SenderPermit, ()> {
+) -> Result<(), ()> {
     // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
-    if state.drain {
-        Ok(SenderPermit::Drain)
+    // if state.drain {
+    //     Ok(SenderPermit::Drain)
+    // } else {
+    //     if state.link_credit < count {
+    //         Err(())
+    //     } else {
+    //         state.delivery_count += count;
+    //         state.link_credit -= count;
+    //         Ok(SenderPermit::Send)
+    //     }
+    // }
+    if state.link_credit < count {
+        Err(())
     } else {
-        if state.link_credit < count {
-            Err(())
-        } else {
-            state.delivery_count += count;
-            state.link_credit -= count;
-            Ok(SenderPermit::Send)
-        }
+        state.delivery_count += count;
+        state.link_credit -= count;
+        // Ok(SenderPermit::Send)
+        Ok(())
     }
 }

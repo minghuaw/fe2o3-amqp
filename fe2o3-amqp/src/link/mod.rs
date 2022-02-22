@@ -32,7 +32,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
-    link::{self, delivery::UnsettledMessage, state::SenderPermit},
+    link::{self, delivery::UnsettledMessage},
     session,
     util::{Consumer, Producer},
     Payload,

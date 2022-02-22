@@ -237,7 +237,7 @@ impl Future for DeliveryFut {
         let mut settlement = this.settlement;
 
         match &mut *settlement {
-            Settlement::Settled | Settlement::Drained => Poll::Ready(Ok(())),
+            Settlement::Settled => Poll::Ready(Ok(())),
             Settlement::Unsettled {
                 delivery_tag: _,
                 outcome,

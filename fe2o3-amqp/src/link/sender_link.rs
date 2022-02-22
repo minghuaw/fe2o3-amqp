@@ -121,22 +121,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         println!(">>> Debug: SenderLink::send_transfer");
 
         tokio::select! {
-            permit = self.flow_state.consume(1) => {
+            _ = self.flow_state.consume(1) => {
                 // link-credit is defined as
                 // "The current maximum number of messages that can be handled
                 // at the receiver endpoint of the link"
-                match permit {
-                    SenderPermit::Send => {} // There is enough credit to send
-                    SenderPermit::Drain => {
-                        // If set, the sender will (after sending all available
-                        // messages) advance the delivery-count as much as possible,
-                        // consuming all link-credit, and send the flow state to the
-                        // receiver
-
-                        // Drain is set
-                        return Ok(Settlement::Drained)
-                    }
-                }
+                
+                // Draining should already set the link credit to 0, causing 
+                // sender to wait for new link credit
             },
             frame = detached => {
                 match frame {

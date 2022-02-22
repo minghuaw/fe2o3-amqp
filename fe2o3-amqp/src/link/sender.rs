@@ -6,8 +6,7 @@ use tokio::{sync::mpsc, time::{error::Elapsed, timeout}};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{message::__private::Serializable, Address, DeliveryState, Message, Source},
-    performatives::Disposition,
+    messaging::{message::__private::Serializable, Address, DeliveryState, Source},
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -181,7 +180,7 @@ impl Sender<Attached> {
 
         // If not settled, must wait for outcome
         match settlement {
-            Settlement::Settled | Settlement::Drained => Ok(()),
+            Settlement::Settled => Ok(()),
             Settlement::Unsettled {
                 delivery_tag: _,
                 outcome,

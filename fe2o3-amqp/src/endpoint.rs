@@ -29,7 +29,6 @@ use fe2o3_amqp_types::{
     primitives::{Boolean, UInt},
 };
 use futures_util::{Future, Sink};
-use rustls::WantsCipherSuites;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -232,7 +231,7 @@ impl TryFrom<Flow> for LinkFlow {
 }
 
 pub enum Settlement {
-    Drained,
+    // Drained,
     Settled,
     Unsettled {
         delivery_tag: [u8; 4],
