@@ -83,6 +83,7 @@ pub enum Error {
 }
 
 impl Error {
+    // May want to have different handling of SendError
     pub(crate) fn error_sending_to_session() -> Self {
         Self::AmqpError {
             condition: AmqpError::IllegalState,

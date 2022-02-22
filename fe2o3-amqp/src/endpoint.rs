@@ -29,6 +29,7 @@ use fe2o3_amqp_types::{
     primitives::{Boolean, UInt},
 };
 use futures_util::{Future, Sink};
+use rustls::WantsCipherSuites;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
@@ -275,6 +276,18 @@ pub(crate) trait SenderLink: Link {
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
+        batchable: bool,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin;
+
+    async fn batch_dispose<W>(
+        &mut self,
+        writer: &mut W,
+        ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
+        settled: bool,
+        state: DeliveryState,
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin;

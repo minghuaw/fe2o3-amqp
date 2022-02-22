@@ -163,7 +163,10 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     },
                     _ => {
                         // Other frames should not forwarded to the sender by the session
-                        todo!()
+                        return Err(Error::AmqpError {
+                            condition: AmqpError::IllegalState,
+                            description: Some(format!("Expecting a Detach frame but found {:?}", frame))
+                        })
                     }
                 }
             }
@@ -313,11 +316,95 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
+        batchable: bool
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        todo!()
+        if let SenderSettleMode::Settled = self.snd_settle_mode {
+            return Ok(())
+        }
+
+        {
+            let mut lock = self.unsettled.write().await;
+            if settled {
+                if let Some(msg) = lock.remove(&delivery_tag) {
+                    let _ = msg.settle();
+                }
+            } else {
+                if let Some(msg) = lock.get_mut(&delivery_tag) {
+                    *msg.state_mut() = state.clone();
+                }
+            }
+        }
+
+        send_disposition(writer, delivery_id, None, settled, Some(state), batchable).await
+    }
+
+    async fn batch_dispose<W>(
+        &mut self,
+        writer: &mut W,
+        mut ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
+        settled: bool,
+        state: DeliveryState,
+        batchable: bool
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+    {
+        if let SenderSettleMode::Settled = self.snd_settle_mode {
+            return Ok(())
+        }
+
+        let mut first = None;
+        let mut last = None;
+
+        // TODO: Is sort necessary?
+        ids_and_tags.sort_by(|left, right| {
+            left.0.cmp(&right.0)
+        });
+
+        let mut lock = self.unsettled.write().await;
+
+        // Find continuous ranges
+        for (delivery_id, delivery_tag) in ids_and_tags {
+            if settled {
+                if let Some(msg) = lock.remove(&delivery_tag) {
+                    let _ = msg.settle();
+                }
+            } else {
+                if let Some(msg) = lock.get_mut(&delivery_tag) {
+                    *msg.state_mut() = state.clone();
+                }
+            }
+
+            match (first, last) {
+                // First pair
+                (None, _) => first = Some(delivery_id),
+                // Second pair
+                (Some(first_id), None) => {
+                    // Find discontinuity
+                    if delivery_id - first_id > 1 {
+                        send_disposition(writer, first_id, None, settled, Some(state.clone()), batchable).await?;
+                    }
+                    last = Some(delivery_id);
+                }
+                // Third and more
+                (Some(first_id), Some(last_id)) => {
+                    // Find discontinuity
+                    if delivery_id - last_id > 1 {
+                        send_disposition(writer, first_id, Some(last_id), settled, Some(state.clone()), batchable).await?;
+                    }
+                    last = Some(delivery_id);
+                },
+            }
+        }
+
+        // if there is only one message to dispose
+        if let (Some(first_id), None) = (first, last) {
+            send_disposition(writer, first_id, None, settled, Some(state), batchable).await?;
+        }
+        Ok(())
     }
 }
 
@@ -337,4 +424,29 @@ where
             condition: AmqpError::IllegalState,
             description: Some("Session is already dropped".to_string()),
         })
+}
+
+#[inline]
+async fn send_disposition<W>(
+    writer: &mut W, 
+    first: DeliveryNumber, 
+    last: Option<DeliveryNumber>,
+    settled: bool,
+    state: Option<DeliveryState>,
+    batchable: bool,
+) -> Result<(), Error>
+where
+    W: Sink<LinkFrame> + Send + Unpin,
+{
+    let disposition = Disposition {
+        role: Role::Sender,
+        first,
+        last,
+        settled,
+        state,
+        batchable
+    };
+    let frame = LinkFrame::Disposition(disposition);
+    writer.send(frame).await
+        .map_err(|_| Error::error_sending_to_session())
 }
