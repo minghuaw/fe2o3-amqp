@@ -24,6 +24,17 @@ pub enum ConnectionControl {
     DeallocateSession(SessionId),
 }
 
+impl std::fmt::Display for ConnectionControl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Open => write!(f, "Open"),
+            Self::Close(err) => write!(f, "Close({:?})", err),
+            Self::AllocateSession {tx:_, responder:_} => write!(f, "AllocateSession"),
+            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id)
+        }
+    }
+}
+
 pub enum SessionControl {
     Begin,
     End(Option<definitions::Error>),

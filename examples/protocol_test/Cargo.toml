@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 fe2o3-amqp = {version = "0.0.1", path = "../../fe2o3-amqp"}
 tokio = { version = "1.11.0", features = ["net", "macros", "rt-multi-thread", "time"] }
+tracing = "0.1.31"
+tracing-subscriber = "0.3.9"

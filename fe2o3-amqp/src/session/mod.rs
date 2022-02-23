@@ -76,6 +76,7 @@ pub struct SessionHandle {
 }
 
 impl SessionHandle {
+    /// End the session
     pub async fn end(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
@@ -118,7 +119,7 @@ pub(crate) async fn allocate_link(
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
     // session_id: usize,
-    outgoing_channel: u16,
+    pub(crate) outgoing_channel: u16,
 
     // local amqp states
     local_state: SessionState,
@@ -234,12 +235,10 @@ impl endpoint::Session for Session {
         _channel: u16,
         attach: Attach,
     ) -> Result<(), Self::Error> {
-        println!(">>> Debug: Session::on_incoming_attach");
         // look up link Handle by link name
         match self.link_by_name.get(&attach.name) {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link) => {
-                    println!(">>> Debug: found local link");
                     // Only Sender need to update the receiver settle mode
                     // link.receiver_settle_mode = attach.rcv_settle_mode.clone();
                     if let LinkHandle::Sender {
@@ -273,8 +272,6 @@ impl endpoint::Session for Session {
     }
 
     async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
-        println!(">>> Debug: Session::on_incoming_flow");
-
         // TODO: handle session flow control
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
         // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
@@ -335,8 +332,6 @@ impl endpoint::Session for Session {
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
 
-        println!(">>> Debug: Session::on_incoming_transfer");
-
         self.next_incoming_id += 1;
         self.remote_outgoing_window -= 1;
 
@@ -372,8 +367,6 @@ impl endpoint::Session for Session {
         _channel: u16,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
-        println!(">>> Debug: Session::on_incoming_disposition");
-
         // TODO: what to do when session lost delivery_tag_by_id
         // and disposition only has delivery id?
 
@@ -467,7 +460,6 @@ impl endpoint::Session for Session {
         _channel: u16,
         detach: Detach,
     ) -> Result<(), Self::Error> {
-        println!(">>> Debug: Session::on_incoming_detach");
         // Remove the link by input handle
         let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
             Some(handle) => handle,
@@ -488,10 +480,10 @@ impl endpoint::Session for Session {
     }
 
     async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
-        println!(">>> Debug: Session::on_incoming_end");
-
         match self.local_state {
-            SessionState::Mapped => {
+            SessionState::BeginSent 
+            | SessionState::BeginReceived
+            | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
                 self.control
                     .send(SessionControl::End(None))
@@ -501,7 +493,8 @@ impl endpoint::Session for Session {
                     // and thus should yield an illegal state error
                     .map_err(|_| AmqpError::IllegalState)?;
             }
-            SessionState::Discarding | SessionState::EndSent => {
+            SessionState::EndSent
+            | SessionState::Discarding  => {
                 self.local_state = SessionState::Unmapped
             }
             _ => return Err(AmqpError::IllegalState.into()),
@@ -509,7 +502,8 @@ impl endpoint::Session for Session {
 
         if let Some(error) = end.error {
             // TODO: handle remote error
-            println!(">>> Debug: Remote End carries error: {:?}", error);
+            tracing::error!(remote_error = ?error);
+            return Err(Error::RemoteError(error))
         }
 
         Ok(())
@@ -519,7 +513,6 @@ impl endpoint::Session for Session {
     where
         W: Sink<SessionFrame> + Send + Unpin,
     {
-        println!(">>> Debug: Session::send_begin");
         let begin = Begin {
             remote_channel: self.incoming_channel,
             next_outgoing_id: self.next_outgoing_id,
@@ -566,8 +559,6 @@ impl endpoint::Session for Session {
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
         // TODO: is state checking redundant?
 
-        println!(">>> Debug: Session::on_outgoing_attach");
-
         let body = SessionFrameBody::Attach(attach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
@@ -575,8 +566,6 @@ impl endpoint::Session for Session {
 
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
-
-        println!(">>> Debug: Session::on_outgoing_flow");
 
         let flow = Flow {
             // Session flow states
@@ -629,7 +618,6 @@ impl endpoint::Session for Session {
         // remote session endpoint state.
         self.remote_incoming_window -= 1;
 
-        println!(">>> Debug: Session::on_outgoing_transfer");
         let body = SessionFrameBody::Transfer {
             performative: transfer,
             payload,
@@ -646,7 +634,6 @@ impl endpoint::Session for Session {
         // Currently the sender cannot actively dispose any message
         // because the sender doesn't have access to the delivery_id
 
-        println!(">>> Debug: Session::on_outgoing_disposition");
         let body = SessionFrameBody::Disposition(disposition);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
@@ -655,7 +642,6 @@ impl endpoint::Session for Session {
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
 
-        println!(">>> Debug: Session::on_outgoing_detach");
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)

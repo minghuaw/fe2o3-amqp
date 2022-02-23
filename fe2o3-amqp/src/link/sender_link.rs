@@ -118,8 +118,6 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         use crate::endpoint::Link;
         use crate::util::Consume;
 
-        println!(">>> Debug: SenderLink::send_transfer");
-
         tokio::select! {
             _ = self.flow_state.consume(1) => {
                 // link-credit is defined as

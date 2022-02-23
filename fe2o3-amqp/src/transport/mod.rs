@@ -15,6 +15,7 @@ use fe2o3_amqp_types::{
     sasl::SaslCode,
 };
 use tokio_rustls::{client::TlsStream, TlsConnector};
+use tracing::{instrument, trace, span, Level, event};
 
 /* -------------------------------- Transport ------------------------------- */
 
@@ -38,6 +39,7 @@ use crate::{
 use protocol_header::ProtocolHeader;
 
 pin_project! {
+    #[derive(Debug)]
     pub struct Transport<Io, Ftype> {
         #[pin]
         framed: Framed<Io, LengthDelimitedCodec>,
@@ -57,8 +59,6 @@ where
     }
 
     pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
-        println!(">>> Debug: Transport::bind");
-
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
@@ -87,6 +87,7 @@ impl<Io> Transport<Io, amqp::Frame>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
+    #[instrument(skip_all, fields(domain = %domain))]
     pub async fn connect_tls(
         mut stream: Io,
         domain: &str,
@@ -95,18 +96,29 @@ where
         use rustls::ServerName;
         use std::sync::Arc;
 
+        let span = span!(Level::TRACE, "SEND");
         // Exchange TLS proto header
         let proto_header = ProtocolHeader::tls();
+        event!(parent: &span, Level::TRACE, ?proto_header);
+
         let mut buf: [u8; 8] = proto_header.clone().into();
         stream.write_all(&buf).await?;
         stream.read_exact(&mut buf).await?;
-        let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
-            // TODO: other error type?
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid protocol header",
-            ))
-        })?;
+        
+        let span = span!(Level::TRACE, "RECV");
+        let incoming_header = match ProtocolHeader::try_from(buf) {
+            Ok(header) => {
+                event!(parent: &span, Level::TRACE, proto_header = ?header);
+                header
+            },
+            Err(buf) => {
+                event!(parent: &span, Level::ERROR, ?buf);
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid protocol header",
+                )))
+            }
+        };
         if proto_header != incoming_header {
             return Err(Error::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -126,24 +138,35 @@ where
         Ok(tls)
     }
 
+    #[instrument(skip_all, fields(hostname = ?hostname))]
     pub async fn connect_sasl(
         mut stream: Io,
         hostname: Option<&str>,
         mut profile: SaslProfile,
     ) -> Result<Io, Error> {
-        println!(">>> Debug: Transport::connect_sasl");
-
+        let span = span!(Level::TRACE, "SEND");
         let proto_header = ProtocolHeader::sasl();
+        event!(parent: &span, Level::TRACE, ?proto_header);
+
         let mut buf: [u8; 8] = proto_header.clone().into();
         stream.write_all(&buf).await?;
         stream.read_exact(&mut buf).await?;
-        let incoming_header = ProtocolHeader::try_from(buf).map_err(|_| {
-            // TODO: other error type?
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid protocol header",
-            ))
-        })?;
+
+        let span = span!(Level::TRACE, "RECV");
+        let incoming_header = match ProtocolHeader::try_from(buf) {
+            Ok(header) => {
+                event!(parent: &span, Level::TRACE, proto_header = ?header);
+                header
+            },
+            Err(buf) => {
+                event!(parent: &span, Level::ERROR, ?buf);
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid protocol header",
+                )))
+            }
+        };
+
         if proto_header != incoming_header {
             return Err(Error::Io(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -178,16 +201,15 @@ where
         )))
     }
 
+    #[instrument(skip_all)]
     pub async fn negotiate(
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, Error> {
-        println!(">>> Debug: Transport::negotiate");
-
         send_proto_header(io, local_state, proto_header.clone()).await?;
         let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
-        println!(">>> Debug: incoming_header {:?}", incoming_header);
+
         Ok(incoming_header)
     }
 
@@ -215,6 +237,7 @@ where
     }
 }
 
+#[instrument(name = "SEND", skip_all)]
 async fn send_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
@@ -223,7 +246,7 @@ async fn send_proto_header<Io>(
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    println!(">>> Debug: send_proto_header");
+    trace!(?proto_header);
     let buf: [u8; 8] = proto_header.into();
     match local_state {
         ConnectionState::Start => {
@@ -239,6 +262,7 @@ where
     Ok(())
 }
 
+#[instrument(name = "RECV", skip_all)]
 async fn recv_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
@@ -248,21 +272,24 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     // wait for incoming header
-    match local_state {
+    let proto_header = match local_state {
         ConnectionState::Start => {
             let incoming_header =
                 read_and_compare_proto_header(io, local_state, &proto_header).await?;
             *local_state = ConnectionState::HeaderReceived;
-            Ok(incoming_header)
+            incoming_header
         }
         ConnectionState::HeaderSent => {
             let incoming_header =
                 read_and_compare_proto_header(io, local_state, &proto_header).await?;
             *local_state = ConnectionState::HeaderExchange;
-            Ok(incoming_header)
+            incoming_header
         }
         _ => return Err(AmqpError::IllegalState.into()),
-    }
+    };
+    trace!(?proto_header);
+
+    Ok(proto_header)
 }
 
 async fn read_and_compare_proto_header<Io>(
@@ -276,20 +303,11 @@ where
     let mut inbound_buf = [0u8; 8];
     io.read_exact(&mut inbound_buf).await?;
 
-    println!(">>> Debug: inbound_buf {:#x?}", inbound_buf);
-
     // check header
     let incoming_header = match ProtocolHeader::try_from(inbound_buf) {
         Ok(h) => h,
-        Err(_buf) => {
-            // println!("!!! Error");
-            // println!("buf: {:#x?}", _buf);
-
-            // loop {
-            //     let mut new_buf = [0u8; 1];
-            //     io.read_exact(&mut new_buf).await.unwrap();
-            //     println!("{:#x?}", new_buf[0]);
-            // }
+        Err(buf) => {
+            tracing::error!(?buf);
 
             return Err(Error::amqp_error(
                 AmqpError::NotImplemented,
@@ -375,7 +393,6 @@ where
         match this.framed.poll_next(cx) {
             Poll::Ready(next) => {
                 if let Some(mut delay) = this.idle_timeout.as_pin_mut() {
-                    println!(">>> Debug: poll_next() resetting idle_timeout");
                     delay.reset();
                 }
 
@@ -383,7 +400,6 @@ where
                     Some(item) => {
                         let mut src = match item {
                             Ok(b) => {
-                                println!(">>> Debug: frame {:#x?}", &b[..]);
                                 b
                             }
                             Err(err) => {
@@ -486,7 +502,6 @@ where
                     Some(item) => {
                         let mut src = match item {
                             Ok(b) => {
-                                println!(">>> Debug: frame {:#x?}", &b[..]);
                                 b
                             }
                             Err(err) => {
@@ -553,7 +568,6 @@ mod tests {
 
         let payload = Bytes::from("AMQP");
         framed.send(payload).await.unwrap();
-        println!("{:?}", writer);
 
         // test read
         let reader = &writer[..];
@@ -562,8 +576,7 @@ mod tests {
             .length_field_length(4)
             .length_adjustment(-4)
             .new_read(reader);
-        let outcome = framed.next().await.unwrap();
-        println!("{:?}", outcome)
+        let _outcome = framed.next().await.unwrap();
     }
 
     #[tokio::test]
@@ -627,6 +640,5 @@ mod tests {
         let frame = Frame::new(0u16, body);
 
         transport.send(frame).await.unwrap();
-        // println!("{:x?}", buf);
     }
 }

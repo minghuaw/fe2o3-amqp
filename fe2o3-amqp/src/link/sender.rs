@@ -235,7 +235,6 @@ impl Sender<Attached> {
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
     pub async fn detach(self) -> Result<Sender<Detached>, DetachError<Sender<Detached>>> {
-        println!(">>> Debug: Sender::detach");
         let mut detaching = self.into_detached();
 
         // TODO: how should disposition be handled?
@@ -257,7 +256,6 @@ impl Sender<Attached> {
             None => return Err(detach_error_expecting_frame(detaching)),
         };
 
-        println!(">>> Debug: incoming link frame: {:?}", &frame);
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
             _ => return Err(detach_error_expecting_frame(detaching)),

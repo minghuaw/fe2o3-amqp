@@ -9,6 +9,7 @@ use tokio_stream::wrappers::IntervalStream;
 pin_project! {
     /// A wrapper over an `Option<IntervalStream>` which will never tick ready if the underlying
     /// `Interval` is `None`
+    #[derive(Debug)]
     pub struct HeartBeat {
         #[pin]
         interval: Option<IntervalStream>

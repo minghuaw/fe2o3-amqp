@@ -10,6 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
+use tracing::{instrument, trace, debug, error};
 
 use crate::control::ConnectionControl;
 use crate::frames::amqp::{self, Frame};
@@ -23,6 +24,7 @@ use super::{heartbeat::HeartBeat, ConnectionState, Error};
 
 pub(crate) type SessionId = usize;
 
+#[derive(Debug)]
 pub(crate) struct ConnectionEngine<Io, C> {
     transport: Transport<Io, amqp::Frame>,
     connection: C,
@@ -35,8 +37,8 @@ pub(crate) struct ConnectionEngine<Io, C> {
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
-    Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    C: endpoint::Connection<State = ConnectionState> + Send + 'static,
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
 {
@@ -46,7 +48,6 @@ where
         connection: C,
         control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
-        // session_control: Receiver<SessionControl>,
     ) -> Result<Self, Error> {
         use crate::frames::amqp::FrameBody;
 
@@ -118,8 +119,8 @@ where
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
-    Io: AsyncRead + AsyncWrite + Send + Unpin,
-    C: endpoint::Connection<State = ConnectionState> + Send + 'static,
+    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin,
+    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
 {
@@ -136,10 +137,12 @@ where
         Ok(())
     }
 
+    // #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
         use crate::frames::amqp::FrameBody;
 
         let frame = incoming?;
+        // trace!("{:?}", frame);
 
         let Frame { channel, body } = frame;
 
@@ -229,8 +232,9 @@ where
     }
 
     #[inline]
+    #[instrument(skip_all)]
     async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
-        println!(">>> Debug: ConectionEnginer::on_control");
+        debug!(?control);
         match control {
             ConnectionControl::Open => {
                 // let open = self.connection.local_open().clone();
@@ -266,6 +270,7 @@ where
     }
 
     #[inline]
+    #[instrument(name = "SEND", skip_all)]
     async fn on_outgoing_session_frames(&mut self, frame: SessionFrame) -> Result<Running, Error> {
         use crate::frames::amqp::FrameBody;
 
@@ -281,28 +286,42 @@ where
                 .connection
                 .on_outgoing_begin(channel, begin)
                 .map_err(Into::into)?,
-            SessionFrameBody::Attach(attach) => Frame::new(channel, FrameBody::Attach(attach)),
-            SessionFrameBody::Flow(flow) => Frame::new(channel, FrameBody::Flow(flow)),
+            SessionFrameBody::Attach(attach) => {
+                // trace!(channel, frame = ?attach);
+                Frame::new(channel, FrameBody::Attach(attach))
+            },
+            SessionFrameBody::Flow(flow) => {
+                // trace!(channel, frame = ?flow);
+                Frame::new(channel, FrameBody::Flow(flow))
+            },
             SessionFrameBody::Transfer {
                 performative,
                 payload,
-            } => Frame::new(
-                channel,
-                FrameBody::Transfer {
-                    performative,
-                    payload,
-                },
-            ),
+            } => {
+                // trace!(channel, frame = ?performative, payload_len = payload.len());
+                Frame::new(
+                    channel,
+                    FrameBody::Transfer {
+                        performative,
+                        payload,
+                    },
+                )
+            },
             SessionFrameBody::Disposition(disposition) => {
+                // trace!(channel, frame = ?disposition);
                 Frame::new(channel, FrameBody::Disposition(disposition))
             }
-            SessionFrameBody::Detach(detach) => Frame::new(channel, FrameBody::Detach(detach)),
+            SessionFrameBody::Detach(detach) => {
+                // trace!(channel, frame = ?detach);
+                Frame::new(channel, FrameBody::Detach(detach))
+            },
             SessionFrameBody::End(end) => self
                 .connection
                 .on_outgoing_end(channel, end)
                 .map_err(Into::into)?,
         };
 
+        trace!(channel = frame.channel, frame = ?frame.body);
         self.transport.send(frame).await?;
         Ok(Running::Continue)
     }
@@ -320,23 +339,22 @@ where
         Ok(Running::Continue)
     }
 
+    #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]
     async fn event_loop(mut self) -> Result<(), Error> {
         loop {
             let result = tokio::select! {
                 _ = self.heartbeat.next() => self.on_heartbeat().await,
                 incoming = self.transport.next() => {
-                    println!(">>> Debug: connection incoming frames");
                     match incoming {
                         Some(incoming) => self.on_incoming(incoming.map_err(Into::into)).await,
                         None => {
                             // Incoming stream is closed
-                            println!(">>> Debug: Incoming connection is dropped");
+                            debug!("Incoming stream is closed");
                             Ok(Running::Stop)
                         },
                     }
                 },
                 control = self.control.recv() => {
-                    println!(">>> Debug: connection control");
                     match control {
                         Some(control) => self.on_control(control).await,
                         None => {
@@ -346,7 +364,6 @@ where
                     }
                 },
                 frame = self.outgoing_session_frames.recv() => {
-                    println!(">>> Debug: connection outgoing session frames");
                     match frame {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
                         None => {
@@ -364,12 +381,12 @@ where
                 },
                 Err(err) => {
                     // TODO: error handling
-                    panic!("{:?}", err)
+                    error!("{:?}", err)
                 }
             }
         }
 
-        println!(">>> Debug: ConnectionEngine exiting event_loop");
+        debug!("Stopped");
 
         Ok(())
     }

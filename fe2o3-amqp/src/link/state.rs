@@ -108,8 +108,6 @@ impl LinkFlowState<role::Sender> {
         flow: LinkFlow,
         output_handle: Handle,
     ) -> Option<LinkFlow> {
-        println!(">>> Debug: LinkFlowState<role::Sender>::on_incoming_flow");
-
         let mut state = self.lock.write().await;
 
         // delivery count
@@ -175,7 +173,6 @@ impl LinkFlowState<role::Receiver> {
         flow: LinkFlow,
         output_handle: Handle,
     ) -> Option<LinkFlow> {
-        println!(">>> Debug: LinkFlowState<role::Sender>::on_incoming_flow");
         let mut state = self.lock.write().await;
 
         // delivery count

@@ -1,6 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{AmqpError, SessionError};
+use fe2o3_amqp_types::definitions::{AmqpError, SessionError, self};
 use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;
@@ -27,6 +27,9 @@ pub enum Error {
         condition: SessionError,
         description: Option<String>,
     },
+
+    #[error("Remote error {:?}", .0)]
+    RemoteError(definitions::Error)
 }
 
 impl From<AmqpError> for Error {
@@ -71,3 +74,15 @@ impl From<AllocSessionError> for Error {
         }
     }
 }
+
+// #[derive(Debug, thiserror::Error)]
+// pub enum EndError {
+//     #[error("Illegal state")]
+//     IllegalState,
+    
+//     #[error("Remote session error: {:?}", .0)]
+//     RemoteSessionError(definitions::Error),
+
+//     // #[error("None")]
+//     // None,
+// }

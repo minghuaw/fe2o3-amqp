@@ -15,6 +15,7 @@ pub enum Running {
     Stop,
 }
 
+#[derive(Debug)]
 pub struct IdleTimeout {
     delay: Pin<Box<Sleep>>,
     duration: Duration,

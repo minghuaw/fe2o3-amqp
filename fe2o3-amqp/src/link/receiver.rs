@@ -280,7 +280,6 @@ impl Receiver<Attached> {
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        println!(">>> Debug: recv_inner");
         let frame = self.incoming.next().await.ok_or_else(|| Error::AmqpError {
             condition: AmqpError::IllegalState,
             description: Some("Session is dropped".into()),
@@ -439,7 +438,6 @@ impl Receiver<Attached> {
 
     // TODO: reduce mostly duplicated code (Sender/Receiver::detach/close)?
     pub async fn detach(self) -> Result<Receiver<Detached>, DetachError<Receiver<Detached>>> {
-        println!(">>> Debug: Receiver::detach");
         let mut detaching = Receiver::<Detached> {
             link: self.link,
             buffer_size: self.buffer_size,

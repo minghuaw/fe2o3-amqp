@@ -207,7 +207,7 @@ impl<'a, Mode> Builder<'a, Mode> {
 impl<'a> Builder<'a, WithContainerId> {
     pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, Error>
     where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         match self.sasl_profile.take() {
             Some(profile) => {
@@ -263,10 +263,8 @@ impl<'a> Builder<'a, WithContainerId> {
         domain: Option<&str>,
     ) -> Result<ConnectionHandle, Error>
     where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        println!(">>> Debug: connection::Builder::connect_with_stream");
-
         match scheme {
             "amqp" => self.connect_with_stream_inner(stream).await,
             "amqps" => {
@@ -283,7 +281,6 @@ impl<'a> Builder<'a, WithContainerId> {
                     ))
                 })?;
                 let tls_stream = Transport::connect_tls(stream, domain, config).await?;
-                println!("TlsStream connected");
                 self.connect_with_stream_inner(tls_stream).await
             }
             _ => Err(Error::Io(std::io::Error::new(
@@ -295,11 +292,9 @@ impl<'a> Builder<'a, WithContainerId> {
 
     async fn connect_with_stream_inner<Io>(self, mut stream: Io) -> Result<ConnectionHandle, Error>
     where
-        Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         use tokio::sync::mpsc;
-
-        println!(">>> Debug: connection::Builder::open_with_stream");
 
         // exchange header
         let mut local_state = ConnectionState::Start;
@@ -310,7 +305,6 @@ impl<'a> Builder<'a, WithContainerId> {
             .map(|millis| Duration::from_millis(millis as u64));
         let transport =
             Transport::<_, amqp::Frame>::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
-        println!(">>> Debug: Header exchanged");
 
         // spawn Connection Mux
         let local_open = Open {

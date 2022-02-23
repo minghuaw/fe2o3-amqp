@@ -137,7 +137,6 @@ where
     type Error = link::Error;
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::Error> {
-        println!(">>> Debug: Link<{:?}>::on_incoming_attach", R::into_role());
         match self.local_state {
             LinkState::AttachSent => self.local_state = LinkState::Attached,
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
@@ -164,7 +163,6 @@ where
 
                 // The delivery-count is initialized by the sender when a link endpoint is
                 // created, and is incre- mented whenever a message is sent
-                println!("{:?}", remote_attach.initial_delivery_count);
                 let initial_delivery_count = match remote_attach.initial_delivery_count {
                     Some(val) => val,
                     None => return Err(AmqpError::NotAllowed.into()),
@@ -202,7 +200,6 @@ where
 
     /// Closing or not isn't taken care of here but outside
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-        println!(">>> Debug: SenderLink::on_incoming_detach");
 
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
@@ -231,9 +228,6 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        println!(">>> Debug: Link::send_attach");
-        println!(">>> Debug: Link.local_state: {:?}", &self.local_state);
-
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
@@ -315,8 +309,6 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        println!(">>> Debug: Link::send_detach");
-
         // Detach may fail and may try re-attach
         // The local output handle is not removed from the session
         // until `deallocate_link`. The outgoing detach will not remove

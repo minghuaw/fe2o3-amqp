@@ -10,13 +10,25 @@ use fe2o3_amqp::session::Session;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::message::BodySection;
 use fe2o3_amqp::types::messaging::Message;
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
-    println!("Starting connection");
+    // a builder for `FmtSubscriber`.
+    let subscriber = FmtSubscriber::builder()
+        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
+        // will be written to stdout.
+        .with_max_level(Level::TRACE)
+        // .with_max_level(Level::DEBUG)
+        // completes the builder.
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
 
     let mut connection = Connection::builder()
-        .container_id("fe2o3-amqp")
+        .container_id("connection-1")
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
@@ -57,26 +69,26 @@ async fn main() {
     //     println!("+++++++++ {:?}", err)
     // }
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
+    
     // let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
     //     .await
     //     .unwrap();
-
+    
     // sender.send("HELLO AMQP").await.unwrap();
-
+    
     // let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
-
+    
     // let result = fut.await;
     // println!("fut {:?}", result);
-
+    
     sender.close().await.unwrap();
-
+    
     // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
     //     .await
     //     .unwrap();
     // let result = receiver.detach().await;
     // println!("{:?}", result);
     session.end().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
     connection.close().await.unwrap();
 }
