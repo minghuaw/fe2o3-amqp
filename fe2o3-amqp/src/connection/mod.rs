@@ -68,14 +68,37 @@ pub struct ConnectionHandle {
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
-    // session_control: Sender<SessionControl>,
 }
 
 impl ConnectionHandle {
+    /// Checks if the underlying event loop has stopped
+    pub fn is_closed(&self) -> bool {
+        self.control.is_closed()
+    }
+
+    /// Close the connection
     pub async fn close(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(ConnectionControl::Close(None)).await;
+        self.on_close().await
+    }
+
+    /// Close the connection with an error
+    pub async fn close_with_error(&mut self, error: impl Into<definitions::Error>) -> Result<(), Error> {
+        // If sending is unsuccessful, the `ConnectionEngine` event loop is
+        // already dropped, this should be reflected by `JoinError` then.
+        let _ = self.control.send(ConnectionControl::Close(Some(error.into()))).await;
+        self.on_close().await
+    }
+
+    /// Returns when the underlying event loop has stopped
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`]. 
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    pub async fn on_close(&mut self) -> Result<(), Error> {
         match (&mut self.handle).await {
             Ok(res) => res,
             Err(e) => Err(Error::JoinError(e)),

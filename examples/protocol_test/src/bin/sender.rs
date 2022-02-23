@@ -15,6 +15,11 @@ use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
+    // let (tx, mut rx) = mpsc::channel(1);
+    // rx.close();
+    // let result = tx.send(()).await;
+    // println!("{:?}", result);
+
     // a builder for `FmtSubscriber`.
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
@@ -88,7 +93,11 @@ async fn main() {
     //     .unwrap();
     // let result = receiver.detach().await;
     // println!("{:?}", result);
-    session.end().await.unwrap();
+    // session.end().await.unwrap();
+    let result = session.on_end().await;
+    println!("{:?}", result);
     tokio::time::sleep(Duration::from_millis(500)).await;
-    connection.close().await.unwrap();
+    // connection.close().await.unwrap();
+    let result = connection.on_close().await;
+    println!("{:?}", result);
 }

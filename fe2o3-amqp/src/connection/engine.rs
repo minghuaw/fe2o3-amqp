@@ -341,6 +341,7 @@ where
 
     #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]
     async fn event_loop(mut self) -> Result<(), Error> {
+        let mut outcome = Ok(());
         loop {
             let result = tokio::select! {
                 _ = self.heartbeat.next() => self.on_heartbeat().await,
@@ -349,8 +350,26 @@ where
                         Some(incoming) => self.on_incoming(incoming.map_err(Into::into)).await,
                         None => {
                             // Incoming stream is closed
-                            debug!("Incoming stream is closed");
-                            Ok(Running::Stop)
+
+                            match self.connection.local_state() {
+                                ConnectionState::Start 
+                                | ConnectionState::HeaderReceived 
+                                | ConnectionState::HeaderSent 
+                                | ConnectionState::HeaderExchange 
+                                | ConnectionState::OpenPipe 
+                                | ConnectionState::OpenClosePipe 
+                                | ConnectionState::OpenReceived 
+                                | ConnectionState::OpenSent 
+                                | ConnectionState::Opened 
+                                | ConnectionState::CloseReceived 
+                                | ConnectionState::CloseSent => Err(Error::Io(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "Transport is closed before connection is closed"
+                                ))),
+                                ConnectionState::ClosePipe 
+                                | ConnectionState::Discarding 
+                                | ConnectionState::End => Ok(Running::Stop),
+                            }
                         },
                     }
                 },
@@ -381,13 +400,25 @@ where
                 },
                 Err(err) => {
                     // TODO: error handling
-                    error!("{:?}", err)
+                    error!("{:?}", err);
+                    outcome = Err(err);
+                    break;
                 }
             }
         }
 
+        // Clean Shutdown
+        //
+        // When the Receiver is dropped, it is possible for unprocessed messages to remain 
+        // in the channel. Instead, it is usually desirable to perform a “clean” shutdown. 
+        // To do this, the receiver first calls close, which will prevent any further messages 
+        // to be sent into the channel. Then, the receiver consumes the channel to completion, 
+        // at which point the receiver can be dropped.
+        self.control.close();
+        self.outgoing_session_frames.close();
+
         debug!("Stopped");
 
-        Ok(())
+        outcome
     }
 }

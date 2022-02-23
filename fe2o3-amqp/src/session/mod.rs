@@ -76,16 +76,50 @@ pub struct SessionHandle {
 }
 
 impl SessionHandle {
-    /// End the session
+    /// Checks if the underlying event loop has stopped
+    pub fn is_ended(&self) -> bool {
+        self.control.is_closed()
+    }
+
+    /// End the session 
+    ///
+    /// # Panics
+    /// 
+    /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(SessionControl::End(None)).await;
+        self.on_end().await
+    }
+
+    /// End the session with an error
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    pub async fn end_with_error(&mut self, error: impl Into<definitions::Error>) -> Result<(), Error> {
+        // If sending is unsuccessful, the `SessionEngine` event loop is
+        // already dropped, this should be reflected by `JoinError` then.
+        let _ = self.control.send(SessionControl::End(Some(error.into()))).await;
+        self.on_end().await
+    }
+
+    /// Returns when the underlying event loop has stopped
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
+    pub async fn on_end(&mut self) -> Result<(), Error> {
         match (&mut self.engine_handle).await {
             Ok(res) => res,
             Err(e) => Err(Error::JoinError(e)),
         }
     }
+
 }
 
 pub(crate) async fn allocate_link(

@@ -259,8 +259,22 @@ impl SessionEngine<super::Session>
                     match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
-                            // TODO: incoming connection dropped
-                            Ok(Running::Stop)
+                            // Check local state
+                            match self.session.local_state {
+                                SessionState::BeginSent 
+                                | SessionState::BeginReceived 
+                                | SessionState::Mapped 
+                                | SessionState::EndSent 
+                                | SessionState::EndReceived => {
+                                    Err(Error::Io(io::Error::new(
+                                        io::ErrorKind::UnexpectedEof,
+                                        "Connection has stopped before session is ended"
+                                    )))
+                                },
+                                SessionState::Unmapped 
+                                | SessionState::Discarding => Ok(Running::Stop),
+                            }
+                            
                         }
                     }
                 },
