@@ -160,7 +160,7 @@ impl Connection {
         max_frame_size: impl Into<MaxFrameSize>, // TODO: make this use default?
         channel_max: impl Into<ChannelMax>, // make this use default?
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, Error> {
+    ) -> Result<ConnectionHandle, OpenError> {
         Connection::builder()
             .container_id(container_id)
             .max_frame_size(max_frame_size)

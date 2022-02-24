@@ -7,19 +7,13 @@ use fe2o3_amqp_types::{
 };
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::transport;
+use crate::transport::{self, error::NegotiationError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("IO Error {0:?}")]
     Io(#[from] io::Error),
-
-    #[error("Idle timeout")]
-    IdleTimeout,
-
-    #[error(transparent)]
-    UrlError(#[from] url::ParseError),
-
+    
     #[error(transparent)]
     JoinError(JoinError),
 
@@ -36,12 +30,6 @@ pub enum Error {
     ConnectionError {
         condition: ConnectionError,
         description: Option<String>,
-    },
-
-    #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
-    SaslError {
-        code: SaslCode,
-        additional_data: Option<Binary>,
     },
 }
 
@@ -89,7 +77,10 @@ impl From<transport::Error> for Error {
     fn from(err: transport::Error) -> Self {
         match err {
             transport::Error::Io(e) => Self::Io(e),
-            transport::Error::IdleTimeout => Self::IdleTimeout,
+            transport::Error::IdleTimeout => Self::ConnectionError {
+                condition: ConnectionError::ConnectionForced,
+                description: Some("Idle timeout".to_string())
+            },
             transport::Error::AmqpError {
                 condition,
                 description,
@@ -101,16 +92,6 @@ impl From<transport::Error> for Error {
                 condition: ConnectionError::FramingError,
                 description: None,
             },
-            transport::Error::SaslError {code, additional_data} => Self::SaslError {
-                code, additional_data
-            }
-            // transport::Error::ConnectionError {
-            //     condition,
-            //     description,
-            // } => Self::ConnectionError {
-            //     condition,
-            //     description,
-            // },
         }
     }
 }
@@ -134,5 +115,69 @@ where
 {
     fn from(err: mpsc::error::SendError<T>) -> Self {
         Self::Io(io::Error::new(io::ErrorKind::Other, err.to_string()))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum OpenError {
+    #[error("IO Error {0:?}")]
+    Io(#[from] io::Error),
+
+    #[error(transparent)]
+    UrlError(#[from] url::ParseError),
+
+    #[error("Protocol header mismatch {0:?}")]
+    ProtocolHeaderMismatch([u8; 8]),
+
+    #[error("Invalid domain")]
+    InvalidDomain,
+
+    #[error("TLS client config is not found")]
+    TlsClientConfigNotFound,
+
+    #[error(r#"Invalid scheme. Only "amqp" and "amqps" are supported."#)]
+    InvalidScheme,
+
+    #[error("AMQP error {:?}, {:?}", .condition, .description)]
+    AmqpError {
+        condition: AmqpError,
+        description: Option<String>,
+    },
+
+    #[error("Connection error {:?}, {:?}", .condition, .description)]
+    ConnectionError {
+        condition: ConnectionError,
+        description: Option<String>,
+    },
+
+    #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
+    SaslError {
+        code: SaslCode,
+        additional_data: Option<Binary>,
+    },
+}
+
+impl From<NegotiationError> for OpenError {
+    fn from(err: NegotiationError) -> Self {
+        match err {
+            NegotiationError::Io(err) => Self::Io(err),
+            NegotiationError::ProtocolHeaderMismatch(buf) => Self::ProtocolHeaderMismatch(buf),
+            NegotiationError::InvalidDomain => Self::InvalidDomain,
+            NegotiationError::AmqpError { condition, description } => Self::AmqpError {
+                condition, description
+            },
+            NegotiationError::SaslError { code, additional_data } => Self::SaslError {
+                code, additional_data
+            },
+        }
+    }
+}
+
+impl From<AmqpError> for OpenError {
+    fn from(err: AmqpError) -> Self {
+        Self::AmqpError {
+            condition: err,
+            description: None
+        }
     }
 }

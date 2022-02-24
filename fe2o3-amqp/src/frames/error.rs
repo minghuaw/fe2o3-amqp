@@ -11,8 +11,8 @@ pub enum Error {
     #[error("AmqpError: NotImplemented")]
     NotImplemented,
 
-    #[error("Framing Error")]
-    FramingError,
+    // #[error("Framing Error")]
+    // FramingError,
 }
 
 /// TODO: What about encode error?

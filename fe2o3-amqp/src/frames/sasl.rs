@@ -62,7 +62,7 @@ impl Decoder for FrameCodec {
         }
 
         if doff != 2 {
-            return Err(Error::FramingError);
+            return Err(Error::NotImplemented);
         }
 
         let reader = IoReader::new(src.reader());

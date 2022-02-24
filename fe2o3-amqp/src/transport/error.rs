@@ -21,11 +21,11 @@ pub enum Error {
     #[error("Connection error: framing error")]
     FramingError,
 
-    #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
-    SaslError {
-        code: SaslCode,
-        additional_data: Option<Binary>,
-    },
+    // #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
+    // SaslError {
+    //     code: SaslCode,
+    //     additional_data: Option<Binary>,
+    // },
 }
 
 impl Error {
@@ -96,7 +96,6 @@ impl From<frames::Error> for Error {
                 condition: AmqpError::NotImplemented,
                 description: None,
             },
-            frames::Error::FramingError => Self::FramingError,
         }
     }
 }
@@ -111,6 +110,67 @@ impl From<sasl_profile::Error> for Error {
                 condition,
                 description,
             },
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum NegotiationError {
+    #[error("IO Error {0:?}")]
+    Io(#[from] io::Error),
+
+    #[error("Protocol header mismatch {0:?}")]
+    ProtocolHeaderMismatch([u8;8]),
+
+    #[error("Invalid domain")]
+    InvalidDomain,
+
+    #[error("AMQP error {:?}, {:?}", .condition, .description)]
+    AmqpError {
+        condition: AmqpError,
+        description: Option<String>,
+    },
+
+    #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
+    SaslError {
+        code: SaslCode,
+        additional_data: Option<Binary>,
+    },
+}
+
+/// TODO: What about encode error?
+impl From<frames::Error> for NegotiationError {
+    fn from(err: frames::Error) -> Self {
+        match err {
+            frames::Error::Io(err) => Self::Io(err),
+            frames::Error::DecodeError => Self::AmqpError {
+                condition: AmqpError::DecodeError,
+                description: None,
+            },
+            frames::Error::NotImplemented => Self::AmqpError {
+                condition: AmqpError::NotImplemented,
+                description: None,
+            },
+        }
+    }
+}
+
+impl From<sasl_profile::Error> for NegotiationError {
+    fn from(err: sasl_profile::Error) -> Self {
+        match err {
+            sasl_profile::Error::AmqpError { condition, description } => Self::AmqpError {
+                condition,
+                description
+            },
+        }
+    }
+}
+
+impl From<AmqpError> for NegotiationError {
+    fn from(err: AmqpError) -> Self {
+        Self::AmqpError {
+            condition: err,
+            description: None
         }
     }
 }

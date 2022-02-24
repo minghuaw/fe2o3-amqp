@@ -20,7 +20,7 @@ use crate::{
     transport::Transport,
 };
 
-use super::{engine::ConnectionEngine, ConnectionHandle, Error};
+use super::{engine::ConnectionEngine, ConnectionHandle, OpenError};
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -205,7 +205,7 @@ impl<'a, Mode> Builder<'a, Mode> {
 }
 
 impl<'a> Builder<'a, WithContainerId> {
-    pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, Error>
+    pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -228,7 +228,7 @@ impl<'a> Builder<'a, WithContainerId> {
     pub async fn open(
         mut self,
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, Error> {
+    ) -> Result<ConnectionHandle, OpenError> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
@@ -261,36 +261,24 @@ impl<'a> Builder<'a, WithContainerId> {
         stream: Io,
         scheme: &str,
         domain: Option<&str>,
-    ) -> Result<ConnectionHandle, Error>
+    ) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         match scheme {
             "amqp" => self.connect_with_stream_inner(stream).await,
             "amqps" => {
-                let domain = domain.ok_or_else(|| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Invalid DNS name",
-                    ))
-                })?;
-                let config = self.client_config.clone().ok_or_else(|| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "ClientConfig not found",
-                    ))
-                })?;
+                let domain = domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let config = self.client_config.clone()
+                    .ok_or_else(|| OpenError::TlsClientConfigNotFound)?;
                 let tls_stream = Transport::connect_tls(stream, domain, config).await?;
                 self.connect_with_stream_inner(tls_stream).await
             }
-            _ => Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid url scheme",
-            ))),
+            _ => Err(OpenError::InvalidScheme),
         }
     }
 
-    async fn connect_with_stream_inner<Io>(self, mut stream: Io) -> Result<ConnectionHandle, Error>
+    async fn connect_with_stream_inner<Io>(self, mut stream: Io) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {

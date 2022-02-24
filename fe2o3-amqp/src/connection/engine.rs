@@ -5,7 +5,7 @@ use std::cmp::min;
 use std::io;
 use std::time::Duration;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError};
+use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
@@ -19,7 +19,7 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};
 
-use super::AllocSessionError;
+use super::{AllocSessionError, OpenError};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
 
 pub(crate) type SessionId = usize;
@@ -42,13 +42,49 @@ where
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
 {
+    async fn on_open_error(
+        transport: &mut Transport<Io, amqp::Frame>,
+        connection: &mut C,
+        error: Error
+    ) -> OpenError {
+        match error {
+            Error::Io(err) => OpenError::Io(err),
+            Error::JoinError(_) => unreachable!(),
+            Error::ChannelMaxReached => unreachable!(),
+            Error::AmqpError { condition, description } => {
+                let error = definitions::Error {
+                    condition: ErrorCondition::AmqpError(condition.clone()),
+                    description: description.clone(),
+                    info: None
+                };
+                let _ = connection.send_close(transport, Some(error)).await;
+
+                OpenError::AmqpError {
+                    condition, description
+                }
+            },
+            Error::ConnectionError { condition, description } => {
+                let error = definitions::Error {
+                    condition: ErrorCondition::ConnectionError(condition.clone()),
+                    description: description.clone(),
+                    info: None
+                };
+                let _ = connection.send_close(transport, Some(error)).await;
+
+                OpenError::ConnectionError {
+                    condition, description
+                }
+            },
+        }
+    }
+
     /// Open Connection without starting the Engine::event_loop()
     pub(crate) async fn open(
         transport: Transport<Io, amqp::Frame>,
         connection: C,
         control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, OpenError> {
         use crate::frames::amqp::FrameBody;
 
         let mut engine = Self {
@@ -61,17 +97,23 @@ where
         };
 
         // Send an Open
-        engine
+        if let Err(error) = engine
             .connection
             .send_open(&mut engine.transport)
             .await
-            .map_err(Into::into)?;
+        {
+            return Err(Self::on_open_error(&mut engine.transport, &mut engine.connection, error.into()).await)
+        }
+        
 
         // Wait for an Open
         let frame = match engine.transport.next().await {
-            Some(frame) => frame?,
+            Some(frame) => match frame {
+                Ok(fr) => fr,
+                Err(error) => return Err(Self::on_open_error(&mut engine.transport, &mut engine.connection, error.into()).await)
+            },
             None => {
-                return Err(Error::Io(io::Error::new(
+                return Err(OpenError::Io(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "Expecting an Open frame",
                 )))
@@ -86,11 +128,13 @@ where
         // Handle incoming remote_open
         let remote_max_frame_size = remote_open.max_frame_size.0;
         let remote_idle_timeout = remote_open.idle_time_out;
-        engine
+        if let Err(error) = engine
             .connection
             .on_incoming_open(channel, remote_open)
             .await
-            .map_err(Into::into)?;
+        {
+            return Err(Self::on_open_error(&mut engine.transport, &mut engine.connection, error.into()).await)
+        }
 
         // update transport setting
         let max_frame_size = min(
