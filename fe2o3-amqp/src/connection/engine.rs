@@ -23,7 +23,7 @@ use crate::{endpoint, transport};
 use super::{AllocSessionError, OpenError};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
 
-pub const ERROR_CLOSE_WAIT_SECS: u64 = 10;
+pub const ERROR_CLOSE_WAIT_SECS: u64 = 10; // seconds
 
 pub(crate) type SessionId = usize;
 
@@ -33,7 +33,6 @@ pub(crate) struct ConnectionEngine<Io, C> {
     connection: C,
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
-    // session_control: Receiver<SessionControl>,
     heartbeat: HeartBeat,
     remote_err: Option<definitions::Error>, // TODO: how to present this back to the user?
 }
@@ -88,8 +87,6 @@ where
         control: Receiver<ConnectionControl>,
         outgoing_session_frames: Receiver<SessionFrame>,
     ) -> Result<Self, OpenError> {
-        use crate::frames::amqp::FrameBody;
-
         let mut engine = Self {
             transport,
             connection,
@@ -186,10 +183,7 @@ where
 
     // #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
-        use crate::frames::amqp::FrameBody;
-
         let frame = incoming?;
-        // trace!("{:?}", frame);
 
         let Frame { channel, body } = frame;
 
