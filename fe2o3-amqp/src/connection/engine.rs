@@ -5,7 +5,7 @@ use std::cmp::min;
 use std::io;
 use std::time::Duration;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, ConnectionError, ErrorCondition};
+use fe2o3_amqp_types::definitions::{self, AmqpError};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
@@ -34,7 +34,6 @@ pub(crate) struct ConnectionEngine<Io, C> {
     control: Receiver<ConnectionControl>,
     outgoing_session_frames: Receiver<SessionFrame>,
     heartbeat: HeartBeat,
-    remote_err: Option<definitions::Error>, // TODO: how to present this back to the user?
 }
 
 impl<Io, C> ConnectionEngine<Io, C>
@@ -52,39 +51,11 @@ where
         match error {
             Error::Io(err) => OpenError::Io(err),
             Error::JoinError(_) => unreachable!(),
-            Error::ChannelMaxReached => unreachable!(),
-            Error::AmqpError {
-                condition,
-                description,
-            } => {
-                let error = definitions::Error {
-                    condition: ErrorCondition::AmqpError(condition.clone()),
-                    description: description.clone(),
-                    info: None,
-                };
-                let _ = connection.send_close(transport, Some(error)).await;
-
-                OpenError::AmqpError {
-                    condition,
-                    description,
-                }
-            }
-            Error::ConnectionError {
-                condition,
-                description,
-            } => {
-                let error = definitions::Error {
-                    condition: ErrorCondition::ConnectionError(condition.clone()),
-                    description: description.clone(),
-                    info: None,
-                };
-                let _ = connection.send_close(transport, Some(error)).await;
-
-                OpenError::ConnectionError {
-                    condition,
-                    description,
-                }
-            }
+            Error::LocalError(err) => {
+                let _ = connection.send_close(transport, Some(err.clone())).await;
+                OpenError::LocalError(err)
+            },
+            Error::RemoteError(err) => OpenError::RemoteError(err),
         }
     }
 
@@ -101,7 +72,6 @@ where
             control,
             outgoing_session_frames,
             heartbeat: HeartBeat::never(),
-            remote_err: None,
         };
 
         // Send an Open
@@ -137,7 +107,7 @@ where
         let Frame { channel, body } = frame;
         let remote_open = match body {
             FrameBody::Open(open) => open,
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(OpenError::LocalError(definitions::Error::new(AmqpError::IllegalState, None, None))),
         };
 
         // Handle incoming remote_open
@@ -275,7 +245,7 @@ where
                     .map_err(Into::into)?;
             }
             FrameBody::Close(close) => {
-                self.remote_err = self
+                self
                     .connection
                     .on_incoming_close(channel, close)
                     .await
@@ -405,57 +375,85 @@ where
         match error {
             Error::Io(_) => Running::Stop,
             Error::JoinError(_) => unreachable!(),
-            Error::ChannelMaxReached => {
-                let error = definitions::Error {
-                    condition: ErrorCondition::ConnectionError(ConnectionError::FramingError),
-                    description: Some("Channel max reached".to_string()),
-                    info: None,
-                };
-                let _ = self
-                    .connection
-                    .send_close(&mut self.transport, Some(error))
+            // Error::ChannelMaxReached => {
+            //     let error = definitions::Error {
+            //         condition: ErrorCondition::ConnectionError(ConnectionError::FramingError),
+            //         description: Some("Channel max reached".to_string()),
+            //         info: None,
+            //     };
+            //     let _ = self
+            //         .connection
+            //         .send_close(&mut self.transport, Some(error))
+            //         .await;
+            //     if let Err(err) = self.recv_remote_close_with_timeout().await {
+            //         error!(?err)
+            //     }
+            //     Running::Stop
+            // }
+            Error::LocalError(error) => {
+                let _ = self.connection
+                    .send_close(&mut self.transport, Some(error.clone()))
                     .await;
                 if let Err(err) = self.recv_remote_close_with_timeout().await {
-                    error!(?err)
+                    error!(?err);
                 }
                 Running::Stop
             }
-            Error::AmqpError {
-                condition,
-                description,
-            } => {
-                let error = definitions::Error {
-                    condition: ErrorCondition::AmqpError(condition.clone()),
-                    description: description.clone(),
-                    info: None,
-                };
-                let _ = self
-                    .connection
-                    .send_close(&mut self.transport, Some(error))
-                    .await;
-                if let Err(err) = self.recv_remote_close_with_timeout().await {
-                    error!(?err)
+            Error::RemoteError(_) => {
+                // TODO: Simplify remote error handling?
+                match self.connection.local_state() {
+                    ConnectionState::Start
+                    | ConnectionState::HeaderReceived
+                    | ConnectionState::HeaderSent
+                    | ConnectionState::HeaderExchange
+                    | ConnectionState::OpenPipe
+                    | ConnectionState::OpenClosePipe
+                    | ConnectionState::OpenReceived
+                    | ConnectionState::OpenSent
+                    | ConnectionState::Opened
+                    | ConnectionState::CloseReceived
+                    | ConnectionState::CloseSent => Running::Continue,
+                    ConnectionState::ClosePipe
+                    | ConnectionState::Discarding
+                    | ConnectionState::End => Running::Stop,
                 }
-                Running::Stop
             }
-            Error::ConnectionError {
-                condition,
-                description,
-            } => {
-                let error = definitions::Error {
-                    condition: ErrorCondition::ConnectionError(condition.clone()),
-                    description: description.clone(),
-                    info: None,
-                };
-                let _ = self
-                    .connection
-                    .send_close(&mut self.transport, Some(error))
-                    .await;
-                if let Err(err) = self.recv_remote_close_with_timeout().await {
-                    error!(?err)
-                }
-                Running::Stop
-            }
+            // Error::AmqpError {
+            //     condition,
+            //     description,
+            // } => {
+            //     let error = definitions::Error {
+            //         condition: ErrorCondition::AmqpError(condition.clone()),
+            //         description: description.clone(),
+            //         info: None,
+            //     };
+            //     let _ = self
+            //         .connection
+            //         .send_close(&mut self.transport, Some(error))
+            //         .await;
+            //     if let Err(err) = self.recv_remote_close_with_timeout().await {
+            //         error!(?err)
+            //     }
+            //     Running::Stop
+            // }
+            // Error::ConnectionError {
+            //     condition,
+            //     description,
+            // } => {
+            //     let error = definitions::Error {
+            //         condition: ErrorCondition::ConnectionError(condition.clone()),
+            //         description: description.clone(),
+            //         info: None,
+            //     };
+            //     let _ = self
+            //         .connection
+            //         .send_close(&mut self.transport, Some(error))
+            //         .await;
+            //     if let Err(err) = self.recv_remote_close_with_timeout().await {
+            //         error!(?err)
+            //     }
+            //     Running::Stop
+            // }
         }
     }
 

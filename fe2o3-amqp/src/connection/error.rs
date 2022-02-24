@@ -1,7 +1,7 @@
 use std::io;
 
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, ConnectionError},
+    definitions::{AmqpError, ConnectionError, self, ErrorCondition},
     primitives::Binary,
     sasl::SaslCode,
 };
@@ -17,20 +17,25 @@ pub enum Error {
     #[error(transparent)]
     JoinError(JoinError),
 
-    #[error("Exceeding channel-max")]
-    ChannelMaxReached,
+    // #[error("Exceeding channel-max")]
+    // ChannelMaxReached,
 
-    #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    AmqpError {
-        condition: AmqpError,
-        description: Option<String>,
-    },
+    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
+    // AmqpError {
+    //     condition: AmqpError,
+    //     description: Option<String>,
+    // },
 
-    #[error("Connection error {:?}, {:?}", .condition, .description)]
-    ConnectionError {
-        condition: ConnectionError,
-        description: Option<String>,
-    },
+    // #[error("Connection error {:?}, {:?}", .condition, .description)]
+    // ConnectionError {
+    //     condition: ConnectionError,
+    //     description: Option<String>,
+    // },
+    #[error("Local error {:?}", .0)]
+    LocalError(definitions::Error),
+
+    #[error("Remote error {:?}", .0)]
+    RemoteError(definitions::Error)
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error
@@ -44,32 +49,41 @@ where
 
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
-        Self::AmqpError {
-            condition: err,
-            description: None,
-        }
+        Self::LocalError(
+            definitions::Error {
+                condition: ErrorCondition::AmqpError(err),
+                description: None,
+                info: None
+            }
+        )
     }
 }
 
 impl Error {
-    pub fn amqp_error(
+    pub(crate) fn amqp_error(
         condition: impl Into<AmqpError>,
         description: impl Into<Option<String>>,
     ) -> Self {
-        Self::AmqpError {
-            condition: condition.into(),
-            description: description.into(),
-        }
+        Self::LocalError(
+            definitions::Error {
+                condition: ErrorCondition::AmqpError(condition.into()),
+                description: description.into(),
+                info: None
+            }
+        )
     }
 
-    pub fn connection_error(
+    pub(crate) fn connection_error(
         condition: impl Into<ConnectionError>,
         description: impl Into<Option<String>>,
     ) -> Self {
-        Self::ConnectionError {
-            condition: condition.into(),
-            description: description.into(),
-        }
+        Self::LocalError(
+            definitions::Error {
+                condition: ErrorCondition::ConnectionError(condition.into()),
+                description: description.into(),
+                info: None
+            }
+        )
     }
 }
 
@@ -77,21 +91,12 @@ impl From<transport::Error> for Error {
     fn from(err: transport::Error) -> Self {
         match err {
             transport::Error::Io(e) => Self::Io(e),
-            transport::Error::IdleTimeout => Self::ConnectionError {
-                condition: ConnectionError::ConnectionForced,
-                description: Some("Idle timeout".to_string()),
-            },
+            transport::Error::IdleTimeout => Self::connection_error(ConnectionError::ConnectionForced, Some("Idle timeout".to_string())),
             transport::Error::AmqpError {
                 condition,
                 description,
-            } => Self::AmqpError {
-                condition,
-                description,
-            },
-            transport::Error::FramingError => Self::ConnectionError {
-                condition: ConnectionError::FramingError,
-                description: None,
-            },
+            } => Self::amqp_error(condition, description),
+            transport::Error::FramingError => Self::connection_error(ConnectionError::FramingError, None),
         }
     }
 }
@@ -138,23 +143,29 @@ pub enum OpenError {
     #[error(r#"Invalid scheme. Only "amqp" and "amqps" are supported."#)]
     InvalidScheme,
 
-    #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    AmqpError {
-        condition: AmqpError,
-        description: Option<String>,
-    },
+    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
+    // AmqpError {
+    //     condition: AmqpError,
+    //     description: Option<String>,
+    // },
 
-    #[error("Connection error {:?}, {:?}", .condition, .description)]
-    ConnectionError {
-        condition: ConnectionError,
-        description: Option<String>,
-    },
+    // #[error("Connection error {:?}, {:?}", .condition, .description)]
+    // ConnectionError {
+    //     condition: ConnectionError,
+    //     description: Option<String>,
+    // },
 
     #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
     SaslError {
         code: SaslCode,
         additional_data: Option<Binary>,
     },
+
+    #[error("Local error {:?}", .0)]
+    LocalError(definitions::Error),
+
+    #[error("Remote error {:?}", .0)]
+    RemoteError(definitions::Error)
 }
 
 impl From<NegotiationError> for OpenError {
@@ -163,13 +174,6 @@ impl From<NegotiationError> for OpenError {
             NegotiationError::Io(err) => Self::Io(err),
             NegotiationError::ProtocolHeaderMismatch(buf) => Self::ProtocolHeaderMismatch(buf),
             NegotiationError::InvalidDomain => Self::InvalidDomain,
-            NegotiationError::AmqpError {
-                condition,
-                description,
-            } => Self::AmqpError {
-                condition,
-                description,
-            },
             NegotiationError::SaslError {
                 code,
                 additional_data,
@@ -177,15 +181,18 @@ impl From<NegotiationError> for OpenError {
                 code,
                 additional_data,
             },
+            NegotiationError::DecodeError => todo!(),
+            NegotiationError::NotImplemented(_) => todo!(),
+            NegotiationError::IllegalState => todo!(),
         }
     }
 }
 
-impl From<AmqpError> for OpenError {
-    fn from(err: AmqpError) -> Self {
-        Self::AmqpError {
-            condition: err,
-            description: None,
-        }
-    }
-}
+// impl From<AmqpError> for OpenError {
+//     fn from(err: AmqpError) -> Self {
+//         Self::AmqpError {
+//             condition: err,
+//             description: None,
+//         }
+//     }
+// }

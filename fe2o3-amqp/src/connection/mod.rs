@@ -305,10 +305,11 @@ impl endpoint::Connection for Connection {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
-                return Err(Error::AmqpError {
-                    condition: AmqpError::NotAllowed,
-                    description: Some("remote-channel is not set".to_string()),
-                });
+                // TODO: allow remotely initiated session
+                return Err(Error::amqp_error (
+                    AmqpError::NotImplemented,
+                    Some("Remotely initiazted session is not supported yet".to_string()),
+                ));
             }
         }
 
@@ -346,7 +347,7 @@ impl endpoint::Connection for Connection {
         &mut self,
         channel: u16,
         close: Close,
-    ) -> Result<Option<definitions::Error>, Self::Error> {
+    ) -> Result<(), Self::Error> {
         trace!(channel, frame=?close);
 
         match &self.local_state {
@@ -358,7 +359,10 @@ impl endpoint::Connection for Connection {
             _ => return Err(AmqpError::IllegalState.into()),
         };
 
-        Ok(close.error)
+        match close.error {
+            Some(error) => Err(Error::RemoteError(error)),
+            None => Ok(())
+        }
     }
 
     #[instrument(name = "SEND", skip_all)]

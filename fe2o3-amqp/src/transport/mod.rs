@@ -250,7 +250,7 @@ where
             io.write_all(&buf).await?;
             *local_state = ConnectionState::HeaderExchange
         }
-        _ => return Err(AmqpError::IllegalState.into()), // TODO: is this necessary?
+        _ => return Err(NegotiationError::IllegalState), // TODO: is this necessary?
     }
     Ok(())
 }
@@ -278,7 +278,7 @@ where
             *local_state = ConnectionState::HeaderExchange;
             incoming_header
         }
-        _ => return Err(AmqpError::IllegalState.into()),
+        _ => return Err(NegotiationError::IllegalState),
     };
     trace!(?proto_header);
 
@@ -302,22 +302,18 @@ where
         Err(buf) => {
             tracing::error!(?buf);
 
-            return Err(NegotiationError::AmqpError {
-                condition: AmqpError::NotImplemented,
-                description: Some(format!("Found: {:?}", inbound_buf)),
-            });
+            return Err(NegotiationError::NotImplemented(Some(format!("Found: {:?}", inbound_buf))));
         }
     };
     // .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
-        return Err(NegotiationError::AmqpError {
-            condition: AmqpError::NotImplemented,
-            description: Some(format!(
+        return Err(NegotiationError::NotImplemented(
+            Some(format!(
                 "Expecting {:?}, found {:?}",
                 proto_header, incoming_header
             )),
-        });
+        ));
     }
     Ok(incoming_header)
 }
