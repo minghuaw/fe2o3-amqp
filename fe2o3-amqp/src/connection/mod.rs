@@ -85,18 +85,24 @@ impl ConnectionHandle {
     }
 
     /// Close the connection with an error
-    pub async fn close_with_error(&mut self, error: impl Into<definitions::Error>) -> Result<(), Error> {
+    pub async fn close_with_error(
+        &mut self,
+        error: impl Into<definitions::Error>,
+    ) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(ConnectionControl::Close(Some(error.into()))).await;
+        let _ = self
+            .control
+            .send(ConnectionControl::Close(Some(error.into())))
+            .await;
         self.on_close().await
     }
 
     /// Returns when the underlying event loop has stopped
-    /// 
+    ///
     /// # Panics
-    /// 
-    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`]. 
+    ///
+    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_close(&mut self) -> Result<(), Error> {
         match (&mut self.handle).await {

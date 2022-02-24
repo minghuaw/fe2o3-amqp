@@ -20,7 +20,6 @@ pub enum Error {
 
     #[error("Connection error: framing error")]
     FramingError,
-
     // #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
     // SaslError {
     //     code: SaslCode,
@@ -120,7 +119,7 @@ pub enum NegotiationError {
     Io(#[from] io::Error),
 
     #[error("Protocol header mismatch {0:?}")]
-    ProtocolHeaderMismatch([u8;8]),
+    ProtocolHeaderMismatch([u8; 8]),
 
     #[error("Invalid domain")]
     InvalidDomain,
@@ -158,9 +157,12 @@ impl From<frames::Error> for NegotiationError {
 impl From<sasl_profile::Error> for NegotiationError {
     fn from(err: sasl_profile::Error) -> Self {
         match err {
-            sasl_profile::Error::AmqpError { condition, description } => Self::AmqpError {
+            sasl_profile::Error::AmqpError {
                 condition,
-                description
+                description,
+            } => Self::AmqpError {
+                condition,
+                description,
             },
         }
     }
@@ -170,7 +172,7 @@ impl From<AmqpError> for NegotiationError {
     fn from(err: AmqpError) -> Self {
         Self::AmqpError {
             condition: err,
-            description: None
+            description: None,
         }
     }
 }

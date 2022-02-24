@@ -10,7 +10,6 @@ pub enum Error {
 
     #[error("AmqpError: NotImplemented")]
     NotImplemented,
-
     // #[error("Framing Error")]
     // FramingError,
 }

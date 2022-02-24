@@ -317,10 +317,7 @@ impl Consume for SenderFlowState {
     }
 }
 
-async fn consume_link_credit(
-    lock: &RwLock<LinkFlowStateInner>,
-    count: u32,
-) -> Result<(), ()> {
+async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
     // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
     // if state.drain {

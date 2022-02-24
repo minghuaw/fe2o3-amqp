@@ -13,7 +13,7 @@ use crate::transport::{self, error::NegotiationError};
 pub enum Error {
     #[error("IO Error {0:?}")]
     Io(#[from] io::Error),
-    
+
     #[error(transparent)]
     JoinError(JoinError),
 
@@ -79,7 +79,7 @@ impl From<transport::Error> for Error {
             transport::Error::Io(e) => Self::Io(e),
             transport::Error::IdleTimeout => Self::ConnectionError {
                 condition: ConnectionError::ConnectionForced,
-                description: Some("Idle timeout".to_string())
+                description: Some("Idle timeout".to_string()),
             },
             transport::Error::AmqpError {
                 condition,
@@ -163,11 +163,19 @@ impl From<NegotiationError> for OpenError {
             NegotiationError::Io(err) => Self::Io(err),
             NegotiationError::ProtocolHeaderMismatch(buf) => Self::ProtocolHeaderMismatch(buf),
             NegotiationError::InvalidDomain => Self::InvalidDomain,
-            NegotiationError::AmqpError { condition, description } => Self::AmqpError {
-                condition, description
+            NegotiationError::AmqpError {
+                condition,
+                description,
+            } => Self::AmqpError {
+                condition,
+                description,
             },
-            NegotiationError::SaslError { code, additional_data } => Self::SaslError {
-                code, additional_data
+            NegotiationError::SaslError {
+                code,
+                additional_data,
+            } => Self::SaslError {
+                code,
+                additional_data,
             },
         }
     }
@@ -177,7 +185,7 @@ impl From<AmqpError> for OpenError {
     fn from(err: AmqpError) -> Self {
         Self::AmqpError {
             condition: err,
-            description: None
+            description: None,
         }
     }
 }

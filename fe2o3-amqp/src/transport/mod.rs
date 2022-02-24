@@ -15,7 +15,7 @@ use fe2o3_amqp_types::{
     sasl::SaslCode,
 };
 use tokio_rustls::{client::TlsStream, TlsConnector};
-use tracing::{instrument, trace, span, Level, event};
+use tracing::{event, instrument, span, trace, Level};
 
 /* -------------------------------- Transport ------------------------------- */
 
@@ -106,29 +106,30 @@ where
         let mut buf: [u8; 8] = proto_header.clone().into();
         stream.write_all(&buf).await?;
         stream.read_exact(&mut buf).await?;
-        
+
         let span = span!(Level::TRACE, "RECV");
         let incoming_header = match ProtocolHeader::try_from(buf) {
             Ok(header) => {
                 event!(parent: &span, Level::TRACE, proto_header = ?header);
                 header
-            },
+            }
             Err(buf) => {
                 event!(parent: &span, Level::ERROR, ?buf);
                 return Err(NegotiationError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "Invalid protocol header",
-                )))
+                )));
             }
         };
         if proto_header != incoming_header {
-            return Err(NegotiationError::ProtocolHeaderMismatch(incoming_header.into()))
+            return Err(NegotiationError::ProtocolHeaderMismatch(
+                incoming_header.into(),
+            ));
         }
 
         // TLS negotiation
         let connector = TlsConnector::from(Arc::new(config));
-        let domain = ServerName::try_from(domain)
-            .map_err(|_| NegotiationError::InvalidDomain)?;
+        let domain = ServerName::try_from(domain).map_err(|_| NegotiationError::InvalidDomain)?;
         let tls = connector.connect(domain, stream).await?;
         Ok(tls)
     }
@@ -152,15 +153,17 @@ where
             Ok(header) => {
                 event!(parent: &span, Level::TRACE, proto_header = ?header);
                 header
-            },
+            }
             Err(buf) => {
                 event!(parent: &span, Level::ERROR, ?buf);
-                return Err(NegotiationError::ProtocolHeaderMismatch(buf))
+                return Err(NegotiationError::ProtocolHeaderMismatch(buf));
             }
         };
 
         if proto_header != incoming_header {
-            return Err(NegotiationError::ProtocolHeaderMismatch(incoming_header.into()));
+            return Err(NegotiationError::ProtocolHeaderMismatch(
+                incoming_header.into(),
+            ));
         }
 
         // TODO: use a different frame size?
@@ -389,9 +392,7 @@ where
                 match next {
                     Some(item) => {
                         let mut src = match item {
-                            Ok(b) => {
-                                b
-                            }
+                            Ok(b) => b,
                             Err(err) => {
                                 use std::any::Any;
                                 let any = &err as &dyn Any;
@@ -483,27 +484,20 @@ where
         let this = self.project();
 
         match this.framed.poll_next(cx) {
-            Poll::Ready(next) => {
-            
-                match next {
-                    Some(item) => {
-                        let mut src = match item {
-                            Ok(b) => {
-                                b
-                            }
-                            Err(err) => {
-                                return Poll::Ready(Some(Err(err.into())));
-                            }
-                        };
-                        let mut decoder = sasl::FrameCodec {};
-                        Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
-                    }
-                    None => Poll::Ready(None),
+            Poll::Ready(next) => match next {
+                Some(item) => {
+                    let mut src = match item {
+                        Ok(b) => b,
+                        Err(err) => {
+                            return Poll::Ready(Some(Err(err.into())));
+                        }
+                    };
+                    let mut decoder = sasl::FrameCodec {};
+                    Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
                 }
-            }
-            Poll::Pending => {
-                Poll::Pending
-            }
+                None => Poll::Ready(None),
+            },
+            Poll::Pending => Poll::Pending,
         }
     }
 }

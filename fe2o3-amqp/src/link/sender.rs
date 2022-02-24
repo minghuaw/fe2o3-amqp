@@ -2,7 +2,10 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
-use tokio::{sync::mpsc, time::{error::Elapsed, timeout, Timeout}};
+use tokio::{
+    sync::mpsc,
+    time::{error::Elapsed, timeout, Timeout},
+};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
@@ -174,8 +177,10 @@ impl Sender<Attached> {
         Ok(settlement)
     }
 
-    pub async fn send<T: serde::Serialize>(&mut self, sendable: impl Into<Sendable<T>>) -> Result<(), Error>
-    {
+    pub async fn send<T: serde::Serialize>(
+        &mut self,
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<(), Error> {
         let settlement = self.send_inner(sendable.into()).await?;
 
         // If not settled, must wait for outcome
@@ -306,7 +311,10 @@ impl Sender<Attached> {
         Ok(detaching)
     }
 
-    pub async fn detach_with_timeout(self, duration: impl Into<Duration>) -> Result<Result<Sender<Detached>, DetachError<Sender<Detached>>>, Elapsed> {
+    pub async fn detach_with_timeout(
+        self,
+        duration: impl Into<Duration>,
+    ) -> Result<Result<Sender<Detached>, DetachError<Sender<Detached>>>, Elapsed> {
         timeout(duration.into(), self.detach()).await
     }
 

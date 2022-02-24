@@ -269,7 +269,9 @@ impl<'a> Builder<'a, WithContainerId> {
             "amqp" => self.connect_with_stream_inner(stream).await,
             "amqps" => {
                 let domain = domain.ok_or_else(|| OpenError::InvalidDomain)?;
-                let config = self.client_config.clone()
+                let config = self
+                    .client_config
+                    .clone()
                     .ok_or_else(|| OpenError::TlsClientConfigNotFound)?;
                 let tls_stream = Transport::connect_tls(stream, domain, config).await?;
                 self.connect_with_stream_inner(tls_stream).await
@@ -278,7 +280,10 @@ impl<'a> Builder<'a, WithContainerId> {
         }
     }
 
-    async fn connect_with_stream_inner<Io>(self, mut stream: Io) -> Result<ConnectionHandle, OpenError>
+    async fn connect_with_stream_inner<Io>(
+        self,
+        mut stream: Io,
+    ) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {

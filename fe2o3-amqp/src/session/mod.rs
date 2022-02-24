@@ -81,10 +81,10 @@ impl SessionHandle {
         self.control.is_closed()
     }
 
-    /// End the session 
+    /// End the session
     ///
     /// # Panics
-    /// 
+    ///
     /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end(&mut self) -> Result<(), Error> {
@@ -95,22 +95,28 @@ impl SessionHandle {
     }
 
     /// End the session with an error
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end_with_error(&mut self, error: impl Into<definitions::Error>) -> Result<(), Error> {
+    pub async fn end_with_error(
+        &mut self,
+        error: impl Into<definitions::Error>,
+    ) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(SessionControl::End(Some(error.into()))).await;
+        let _ = self
+            .control
+            .send(SessionControl::End(Some(error.into())))
+            .await;
         self.on_end().await
     }
 
     /// Returns when the underlying event loop has stopped
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_end(&mut self) -> Result<(), Error> {
@@ -119,7 +125,6 @@ impl SessionHandle {
             Err(e) => Err(Error::JoinError(e)),
         }
     }
-
 }
 
 pub(crate) async fn allocate_link(
@@ -291,15 +296,13 @@ impl endpoint::Session for Session {
                         Err(_) => {
                             // TODO: how should this error be handled?
                             // End with UnattachedHandle?
-                            return Err(Error::from(SessionError::UnattachedHandle))
+                            return Err(Error::from(SessionError::UnattachedHandle));
                         }
                     }
                 }
-                None => return Err(Error::from(SessionError::UnattachedHandle))
+                None => return Err(Error::from(SessionError::UnattachedHandle)),
             },
-            None => {
-                return Err(Error::from(SessionError::UnattachedHandle))
-            }
+            None => return Err(Error::from(SessionError::UnattachedHandle)),
         }
 
         Ok(())
@@ -515,9 +518,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
         match self.local_state {
-            SessionState::BeginSent 
-            | SessionState::BeginReceived
-            | SessionState::Mapped => {
+            SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
                 self.control
                     .send(SessionControl::End(None))
@@ -527,8 +528,7 @@ impl endpoint::Session for Session {
                     // and thus should yield an illegal state error
                     .map_err(|_| AmqpError::IllegalState)?;
             }
-            SessionState::EndSent
-            | SessionState::Discarding  => {
+            SessionState::EndSent | SessionState::Discarding => {
                 self.local_state = SessionState::Unmapped
             }
             _ => return Err(AmqpError::IllegalState.into()),
@@ -537,7 +537,7 @@ impl endpoint::Session for Session {
         if let Some(error) = end.error {
             // TODO: handle remote error
             tracing::error!(remote_error = ?error);
-            return Err(Error::RemoteError(error))
+            return Err(Error::RemoteError(error));
         }
 
         Ok(())

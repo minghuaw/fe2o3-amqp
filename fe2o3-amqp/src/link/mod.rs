@@ -200,7 +200,6 @@ where
 
     /// Closing or not isn't taken care of here but outside
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => {

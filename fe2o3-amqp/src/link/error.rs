@@ -42,7 +42,7 @@ impl<L> fmt::Display for DetachError<L> {
     }
 }
 
-impl<L: fmt::Debug> std::error::Error for DetachError<L> { }
+impl<L: fmt::Debug> std::error::Error for DetachError<L> {}
 
 /// TODO: Simplify the error structures
 #[derive(Debug, thiserror::Error)]

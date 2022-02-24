@@ -123,8 +123,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 // link-credit is defined as
                 // "The current maximum number of messages that can be handled
                 // at the receiver endpoint of the link"
-                
-                // Draining should already set the link credit to 0, causing 
+
+                // Draining should already set the link credit to 0, causing
                 // sender to wait for new link credit
             },
             frame = detached => {
@@ -305,13 +305,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
-        batchable: bool
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
         if let SenderSettleMode::Settled = self.snd_settle_mode {
-            return Ok(())
+            return Ok(());
         }
 
         {
@@ -336,22 +336,20 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         mut ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
         settled: bool,
         state: DeliveryState,
-        batchable: bool
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
         if let SenderSettleMode::Settled = self.snd_settle_mode {
-            return Ok(())
+            return Ok(());
         }
 
         let mut first = None;
         let mut last = None;
 
         // TODO: Is sort necessary?
-        ids_and_tags.sort_by(|left, right| {
-            left.0.cmp(&right.0)
-        });
+        ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
 
         let mut lock = self.unsettled.write().await;
 
@@ -374,7 +372,15 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 (Some(first_id), None) => {
                     // Find discontinuity
                     if delivery_id - first_id > 1 {
-                        send_disposition(writer, first_id, None, settled, Some(state.clone()), batchable).await?;
+                        send_disposition(
+                            writer,
+                            first_id,
+                            None,
+                            settled,
+                            Some(state.clone()),
+                            batchable,
+                        )
+                        .await?;
                     }
                     last = Some(delivery_id);
                 }
@@ -382,10 +388,18 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 (Some(first_id), Some(last_id)) => {
                     // Find discontinuity
                     if delivery_id - last_id > 1 {
-                        send_disposition(writer, first_id, Some(last_id), settled, Some(state.clone()), batchable).await?;
+                        send_disposition(
+                            writer,
+                            first_id,
+                            Some(last_id),
+                            settled,
+                            Some(state.clone()),
+                            batchable,
+                        )
+                        .await?;
                     }
                     last = Some(delivery_id);
-                },
+                }
             }
         }
 
@@ -417,8 +431,8 @@ where
 
 #[inline]
 async fn send_disposition<W>(
-    writer: &mut W, 
-    first: DeliveryNumber, 
+    writer: &mut W,
+    first: DeliveryNumber,
     last: Option<DeliveryNumber>,
     settled: bool,
     state: Option<DeliveryState>,
@@ -433,9 +447,11 @@ where
         last,
         settled,
         state,
-        batchable
+        batchable,
     };
     let frame = LinkFrame::Disposition(disposition);
-    writer.send(frame).await
+    writer
+        .send(frame)
+        .await
         .map_err(|_| Error::error_sending_to_session())
 }

@@ -5,13 +5,13 @@ use std::cmp::min;
 use std::io;
 use std::time::Duration;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, ConnectionError};
+use fe2o3_amqp_types::definitions::{self, AmqpError, ConnectionError, ErrorCondition};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 use tokio::time::error::Elapsed;
-use tracing::{instrument, trace, debug, error};
+use tracing::{debug, error, instrument, trace};
 
 use crate::control::ConnectionControl;
 use crate::frames::amqp::{self, Frame, FrameBody};
@@ -20,8 +20,8 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};
 
-use super::{AllocSessionError, OpenError};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
+use super::{AllocSessionError, OpenError};
 
 pub const ERROR_CLOSE_WAIT_SECS: u64 = 10; // seconds
 
@@ -47,36 +47,44 @@ where
     async fn on_open_error(
         transport: &mut Transport<Io, amqp::Frame>,
         connection: &mut C,
-        error: Error
+        error: Error,
     ) -> OpenError {
         match error {
             Error::Io(err) => OpenError::Io(err),
             Error::JoinError(_) => unreachable!(),
             Error::ChannelMaxReached => unreachable!(),
-            Error::AmqpError { condition, description } => {
+            Error::AmqpError {
+                condition,
+                description,
+            } => {
                 let error = definitions::Error {
                     condition: ErrorCondition::AmqpError(condition.clone()),
                     description: description.clone(),
-                    info: None
+                    info: None,
                 };
                 let _ = connection.send_close(transport, Some(error)).await;
 
                 OpenError::AmqpError {
-                    condition, description
+                    condition,
+                    description,
                 }
-            },
-            Error::ConnectionError { condition, description } => {
+            }
+            Error::ConnectionError {
+                condition,
+                description,
+            } => {
                 let error = definitions::Error {
                     condition: ErrorCondition::ConnectionError(condition.clone()),
                     description: description.clone(),
-                    info: None
+                    info: None,
                 };
                 let _ = connection.send_close(transport, Some(error)).await;
 
                 OpenError::ConnectionError {
-                    condition, description
+                    condition,
+                    description,
                 }
-            },
+            }
         }
     }
 
@@ -97,20 +105,27 @@ where
         };
 
         // Send an Open
-        if let Err(error) = engine
-            .connection
-            .send_open(&mut engine.transport)
-            .await
-        {
-            return Err(Self::on_open_error(&mut engine.transport, &mut engine.connection, error.into()).await)
+        if let Err(error) = engine.connection.send_open(&mut engine.transport).await {
+            return Err(Self::on_open_error(
+                &mut engine.transport,
+                &mut engine.connection,
+                error.into(),
+            )
+            .await);
         }
-        
 
         // Wait for an Open
         let frame = match engine.transport.next().await {
             Some(frame) => match frame {
                 Ok(fr) => fr,
-                Err(error) => return Err(Self::on_open_error(&mut engine.transport, &mut engine.connection, error.into()).await)
+                Err(error) => {
+                    return Err(Self::on_open_error(
+                        &mut engine.transport,
+                        &mut engine.connection,
+                        error.into(),
+                    )
+                    .await)
+                }
             },
             None => {
                 return Err(OpenError::Io(io::Error::new(
@@ -133,7 +148,12 @@ where
             .on_incoming_open(channel, remote_open)
             .await
         {
-            return Err(Self::on_open_error(&mut engine.transport, &mut engine.connection, error.into()).await)
+            return Err(Self::on_open_error(
+                &mut engine.transport,
+                &mut engine.connection,
+                error.into(),
+            )
+            .await);
         }
 
         // update transport setting
@@ -330,11 +350,11 @@ where
             SessionFrameBody::Attach(attach) => {
                 // trace!(channel, frame = ?attach);
                 Frame::new(channel, FrameBody::Attach(attach))
-            },
+            }
             SessionFrameBody::Flow(flow) => {
                 // trace!(channel, frame = ?flow);
                 Frame::new(channel, FrameBody::Flow(flow))
-            },
+            }
             SessionFrameBody::Transfer {
                 performative,
                 payload,
@@ -347,7 +367,7 @@ where
                         payload,
                     },
                 )
-            },
+            }
             SessionFrameBody::Disposition(disposition) => {
                 // trace!(channel, frame = ?disposition);
                 Frame::new(channel, FrameBody::Disposition(disposition))
@@ -355,7 +375,7 @@ where
             SessionFrameBody::Detach(detach) => {
                 // trace!(channel, frame = ?detach);
                 Frame::new(channel, FrameBody::Detach(detach))
-            },
+            }
             SessionFrameBody::End(end) => self
                 .connection
                 .on_outgoing_end(channel, end)
@@ -383,46 +403,59 @@ where
     #[inline]
     async fn on_error(&mut self, error: &Error) -> Running {
         match error {
-            Error::Io(_) => {
-                Running::Stop
-            },
+            Error::Io(_) => Running::Stop,
             Error::JoinError(_) => unreachable!(),
             Error::ChannelMaxReached => {
                 let error = definitions::Error {
                     condition: ErrorCondition::ConnectionError(ConnectionError::FramingError),
                     description: Some("Channel max reached".to_string()),
-                    info: None
+                    info: None,
                 };
-                let _ = self.connection.send_close(&mut self.transport, Some(error)).await;
+                let _ = self
+                    .connection
+                    .send_close(&mut self.transport, Some(error))
+                    .await;
                 if let Err(err) = self.recv_remote_close_with_timeout().await {
                     error!(?err)
                 }
                 Running::Stop
-            },
-            Error::AmqpError { condition, description } => {
+            }
+            Error::AmqpError {
+                condition,
+                description,
+            } => {
                 let error = definitions::Error {
                     condition: ErrorCondition::AmqpError(condition.clone()),
                     description: description.clone(),
-                    info: None
+                    info: None,
                 };
-                let _ = self.connection.send_close(&mut self.transport, Some(error)).await;
+                let _ = self
+                    .connection
+                    .send_close(&mut self.transport, Some(error))
+                    .await;
                 if let Err(err) = self.recv_remote_close_with_timeout().await {
                     error!(?err)
                 }
                 Running::Stop
-            },
-            Error::ConnectionError { condition, description } => {
+            }
+            Error::ConnectionError {
+                condition,
+                description,
+            } => {
                 let error = definitions::Error {
                     condition: ErrorCondition::ConnectionError(condition.clone()),
                     description: description.clone(),
-                    info: None
+                    info: None,
                 };
-                let _ = self.connection.send_close(&mut self.transport, Some(error)).await;
+                let _ = self
+                    .connection
+                    .send_close(&mut self.transport, Some(error))
+                    .await;
                 if let Err(err) = self.recv_remote_close_with_timeout().await {
                     error!(?err)
                 }
                 Running::Stop
-            },
+            }
         }
     }
 
@@ -432,19 +465,20 @@ where
             loop {
                 let frame = match self.transport.next().await {
                     Some(fr) => fr,
-                    None => break
+                    None => break,
                 };
 
                 match frame {
                     Ok(amqp::Frame { channel: _, body }) => {
                         if let FrameBody::Close(_) = body {
-                            break
+                            break;
                         }
-                    },
+                    }
                     _ => {}
                 }
             }
-        }).await
+        })
+        .await
     }
 
     #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]
@@ -460,22 +494,22 @@ where
                             // Incoming stream is closed
 
                             match self.connection.local_state() {
-                                ConnectionState::Start 
-                                | ConnectionState::HeaderReceived 
-                                | ConnectionState::HeaderSent 
-                                | ConnectionState::HeaderExchange 
-                                | ConnectionState::OpenPipe 
-                                | ConnectionState::OpenClosePipe 
-                                | ConnectionState::OpenReceived 
-                                | ConnectionState::OpenSent 
-                                | ConnectionState::Opened 
-                                | ConnectionState::CloseReceived 
+                                ConnectionState::Start
+                                | ConnectionState::HeaderReceived
+                                | ConnectionState::HeaderSent
+                                | ConnectionState::HeaderExchange
+                                | ConnectionState::OpenPipe
+                                | ConnectionState::OpenClosePipe
+                                | ConnectionState::OpenReceived
+                                | ConnectionState::OpenSent
+                                | ConnectionState::Opened
+                                | ConnectionState::CloseReceived
                                 | ConnectionState::CloseSent => Err(Error::Io(io::Error::new(
                                     io::ErrorKind::UnexpectedEof,
                                     "Transport is closed before connection is closed"
                                 ))),
-                                ConnectionState::ClosePipe 
-                                | ConnectionState::Discarding 
+                                ConnectionState::ClosePipe
+                                | ConnectionState::Discarding
                                 | ConnectionState::End => Ok(Running::Stop),
                             }
                         },
@@ -513,17 +547,17 @@ where
             };
 
             match running {
-                Running::Continue => {},
-                Running::Stop => break
+                Running::Continue => {}
+                Running::Stop => break,
             }
         }
 
         // Clean Shutdown
         //
-        // When the Receiver is dropped, it is possible for unprocessed messages to remain 
-        // in the channel. Instead, it is usually desirable to perform a “clean” shutdown. 
-        // To do this, the receiver first calls close, which will prevent any further messages 
-        // to be sent into the channel. Then, the receiver consumes the channel to completion, 
+        // When the Receiver is dropped, it is possible for unprocessed messages to remain
+        // in the channel. Instead, it is usually desirable to perform a “clean” shutdown.
+        // To do this, the receiver first calls close, which will prevent any further messages
+        // to be sent into the channel. Then, the receiver consumes the channel to completion,
         // at which point the receiver can be dropped.
         self.control.close();
         self.outgoing_session_frames.close();
