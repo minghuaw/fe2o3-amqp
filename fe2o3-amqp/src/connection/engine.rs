@@ -5,15 +5,16 @@ use std::cmp::min;
 use std::io;
 use std::time::Duration;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition};
+use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, ConnectionError};
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
+use tokio::time::error::Elapsed;
 use tracing::{instrument, trace, debug, error};
 
 use crate::control::ConnectionControl;
-use crate::frames::amqp::{self, Frame};
+use crate::frames::amqp::{self, Frame, FrameBody};
 use crate::session::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
 use crate::util::Running;
@@ -21,6 +22,8 @@ use crate::{endpoint, transport};
 
 use super::{AllocSessionError, OpenError};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
+
+pub const ERROR_CLOSE_WAIT_SECS: u64 = 10;
 
 pub(crate) type SessionId = usize;
 
@@ -383,6 +386,73 @@ where
         Ok(Running::Continue)
     }
 
+    #[inline]
+    async fn on_error(&mut self, error: &Error) -> Running {
+        match error {
+            Error::Io(_) => {
+                Running::Stop
+            },
+            Error::JoinError(_) => unreachable!(),
+            Error::ChannelMaxReached => {
+                let error = definitions::Error {
+                    condition: ErrorCondition::ConnectionError(ConnectionError::FramingError),
+                    description: Some("Channel max reached".to_string()),
+                    info: None
+                };
+                let _ = self.connection.send_close(&mut self.transport, Some(error)).await;
+                if let Err(err) = self.recv_remote_close_with_timeout().await {
+                    error!(?err)
+                }
+                Running::Stop
+            },
+            Error::AmqpError { condition, description } => {
+                let error = definitions::Error {
+                    condition: ErrorCondition::AmqpError(condition.clone()),
+                    description: description.clone(),
+                    info: None
+                };
+                let _ = self.connection.send_close(&mut self.transport, Some(error)).await;
+                if let Err(err) = self.recv_remote_close_with_timeout().await {
+                    error!(?err)
+                }
+                Running::Stop
+            },
+            Error::ConnectionError { condition, description } => {
+                let error = definitions::Error {
+                    condition: ErrorCondition::ConnectionError(condition.clone()),
+                    description: description.clone(),
+                    info: None
+                };
+                let _ = self.connection.send_close(&mut self.transport, Some(error)).await;
+                if let Err(err) = self.recv_remote_close_with_timeout().await {
+                    error!(?err)
+                }
+                Running::Stop
+            },
+        }
+    }
+
+    #[inline]
+    async fn recv_remote_close_with_timeout(&mut self) -> Result<(), Elapsed> {
+        tokio::time::timeout(Duration::from_secs(ERROR_CLOSE_WAIT_SECS), async {
+            loop {
+                let frame = match self.transport.next().await {
+                    Some(fr) => fr,
+                    None => break
+                };
+
+                match frame {
+                    Ok(amqp::Frame { channel: _, body }) => {
+                        if let FrameBody::Close(_) = body {
+                            break
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }).await
+    }
+
     #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]
     async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
@@ -437,17 +507,20 @@ where
                 }
             };
 
-            match result {
-                Ok(running) => match running {
-                    Running::Continue => {}
-                    Running::Stop => break,
-                },
-                Err(err) => {
+            let running = match result {
+                Ok(running) => running,
+                Err(error) => {
                     // TODO: error handling
-                    error!("{:?}", err);
-                    outcome = Err(err);
-                    break;
+                    error!("{:?}", error);
+                    let running = self.on_error(&error).await;
+                    outcome = Err(error);
+                    running
                 }
+            };
+
+            match running {
+                Running::Continue => {},
+                Running::Stop => break
             }
         }
 
