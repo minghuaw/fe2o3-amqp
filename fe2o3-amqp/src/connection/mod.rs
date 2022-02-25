@@ -285,7 +285,7 @@ impl endpoint::Connection for Connection {
                 let session_id = self
                     .session_by_outgoing_channel
                     .get(&outgoing_channel)
-                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
+                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?; // Close with error NotFound
 
                 if self.session_by_incoming_channel.contains_key(&channel) {
                     return Err(AmqpError::NotAllowed.into()); // TODO: this is probably not how not allowed should be used?
@@ -309,7 +309,7 @@ impl endpoint::Connection for Connection {
                 return Err(Error::amqp_error (
                     AmqpError::NotImplemented,
                     Some("Remotely initiazted session is not supported yet".to_string()),
-                ));
+                )); // Close with error NotImplemented
             }
         }
 

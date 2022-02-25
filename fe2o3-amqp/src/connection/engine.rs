@@ -375,108 +375,38 @@ where
         match error {
             Error::Io(_) => Running::Stop,
             Error::JoinError(_) => unreachable!(),
-            // Error::ChannelMaxReached => {
-            //     let error = definitions::Error {
-            //         condition: ErrorCondition::ConnectionError(ConnectionError::FramingError),
-            //         description: Some("Channel max reached".to_string()),
-            //         info: None,
-            //     };
-            //     let _ = self
-            //         .connection
-            //         .send_close(&mut self.transport, Some(error))
-            //         .await;
-            //     if let Err(err) = self.recv_remote_close_with_timeout().await {
-            //         error!(?err)
-            //     }
-            //     Running::Stop
-            // }
             Error::LocalError(error) => {
                 let _ = self.connection
                     .send_close(&mut self.transport, Some(error.clone()))
                     .await;
-                if let Err(err) = self.recv_remote_close_with_timeout().await {
-                    error!(?err);
-                }
-                Running::Stop
+                self.continue_or_stop_by_state()
             }
             Error::RemoteError(_) => {
                 // TODO: Simplify remote error handling?
-                match self.connection.local_state() {
-                    ConnectionState::Start
-                    | ConnectionState::HeaderReceived
-                    | ConnectionState::HeaderSent
-                    | ConnectionState::HeaderExchange
-                    | ConnectionState::OpenPipe
-                    | ConnectionState::OpenClosePipe
-                    | ConnectionState::OpenReceived
-                    | ConnectionState::OpenSent
-                    | ConnectionState::Opened
-                    | ConnectionState::CloseReceived
-                    | ConnectionState::CloseSent => Running::Continue,
-                    ConnectionState::ClosePipe
-                    | ConnectionState::Discarding
-                    | ConnectionState::End => Running::Stop,
-                }
+                self.continue_or_stop_by_state()
             }
-            // Error::AmqpError {
-            //     condition,
-            //     description,
-            // } => {
-            //     let error = definitions::Error {
-            //         condition: ErrorCondition::AmqpError(condition.clone()),
-            //         description: description.clone(),
-            //         info: None,
-            //     };
-            //     let _ = self
-            //         .connection
-            //         .send_close(&mut self.transport, Some(error))
-            //         .await;
-            //     if let Err(err) = self.recv_remote_close_with_timeout().await {
-            //         error!(?err)
-            //     }
-            //     Running::Stop
-            // }
-            // Error::ConnectionError {
-            //     condition,
-            //     description,
-            // } => {
-            //     let error = definitions::Error {
-            //         condition: ErrorCondition::ConnectionError(condition.clone()),
-            //         description: description.clone(),
-            //         info: None,
-            //     };
-            //     let _ = self
-            //         .connection
-            //         .send_close(&mut self.transport, Some(error))
-            //         .await;
-            //     if let Err(err) = self.recv_remote_close_with_timeout().await {
-            //         error!(?err)
-            //     }
-            //     Running::Stop
-            // }
         }
     }
 
+    /// Get whether event loop should conditnue or stop by ConnectionState
     #[inline]
-    async fn recv_remote_close_with_timeout(&mut self) -> Result<(), Elapsed> {
-        tokio::time::timeout(Duration::from_secs(ERROR_CLOSE_WAIT_SECS), async {
-            loop {
-                let frame = match self.transport.next().await {
-                    Some(fr) => fr,
-                    None => break,
-                };
-
-                match frame {
-                    Ok(amqp::Frame { channel: _, body }) => {
-                        if let FrameBody::Close(_) = body {
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        })
-        .await
+    fn continue_or_stop_by_state(&self) -> Running {
+        match self.connection.local_state() {
+            ConnectionState::Start
+            | ConnectionState::HeaderReceived
+            | ConnectionState::HeaderSent
+            | ConnectionState::HeaderExchange
+            | ConnectionState::OpenPipe
+            | ConnectionState::OpenClosePipe
+            | ConnectionState::OpenReceived
+            | ConnectionState::OpenSent
+            | ConnectionState::Opened
+            | ConnectionState::CloseReceived
+            | ConnectionState::CloseSent => Running::Continue,
+            ConnectionState::ClosePipe
+            | ConnectionState::Discarding
+            | ConnectionState::End => Running::Stop,
+        }
     }
 
     #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]

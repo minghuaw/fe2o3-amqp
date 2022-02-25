@@ -1,6 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::AmqpError;
+use fe2o3_amqp_types::{definitions::{AmqpError, self, Handle}, performatives::Detach};
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
@@ -69,7 +69,14 @@ impl SessionEngine<super::Session>
         let SessionFrame { channel, body } = frame;
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
-            _ => return Err(AmqpError::IllegalState.into()),
+            SessionFrameBody::End(end) => return Err(Error::RemoteError(
+                end.error.unwrap_or_else(|| definitions::Error::new(
+                    AmqpError::InternalError,
+                    Some("Remote closed session wihtout explanation".into()),
+                    None
+                ))
+            )),
+            _ => return Err(AmqpError::IllegalState.into()), // End session with illegal state
         };
         engine
             .session
@@ -189,7 +196,7 @@ impl SessionEngine<super::Session>
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
         match self.session.local_state() {
             SessionState::Mapped => {}
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(AmqpError::IllegalState.into()),  // End session with illegal state
         }
 
         let session_frame = match frame {
@@ -220,6 +227,59 @@ impl SessionEngine<super::Session>
         match self.session.local_state() {
             SessionState::Unmapped => Ok(Running::Stop),
             _ => Ok(Running::Continue),
+        }
+    }
+
+    #[inline]
+    async fn on_error(&mut self, error: &Error) -> Running {
+        match error {
+            Error::Io(_) => Running::Stop,
+            Error::ChannelMaxReached => Running::Stop,
+            Error::JoinError(_) => unreachable!(),
+            Error::LocalError(error) => {
+                let _ = self.session
+                    .send_end(&mut self.outgoing, Some(error.clone())).await;
+                self.continue_or_stop_by_state()
+            },
+            Error::RemoteError(_) => self.continue_or_stop_by_state(),
+            Error::LinkHandleError {
+                handle, closed, error
+            } => self.on_link_handle_error(handle, closed, error).await
+        }
+    }
+
+    #[inline]
+    async fn on_link_handle_error(&mut self, handle: &Handle, closed: &bool, error: &definitions::Error) -> Running {
+        // TODO: detach?
+        let detach = Detach {
+            handle: handle.clone(),
+            closed: closed.clone(),
+            error: Some(error.clone()),
+        };
+        match self.session.on_outgoing_detach(detach) {
+            Ok(frame) => {
+                if let Err(error) = self.outgoing.send(frame).await {
+                    // The connection must have dropped
+                    error!(?error);
+                    return Running::Stop
+                }
+            }
+            Err(error) => error!(?error),
+        }
+        // Overall, link errors should not stop the session
+        Running::Continue
+    }
+
+    #[inline]
+    fn continue_or_stop_by_state(&self) -> Running {
+        match self.session.local_state {
+            SessionState::BeginSent
+            | SessionState::BeginReceived
+            | SessionState::Mapped
+            | SessionState::EndSent
+            | SessionState::EndReceived => Running::Continue,
+            SessionState::Unmapped
+            | SessionState::Discarding => Running::Stop,
         }
     }
 
@@ -271,19 +331,22 @@ impl SessionEngine<super::Session>
                 }
             };
 
-            match result {
-                Ok(running) => match running {
-                    Running::Continue => {}
-                    Running::Stop => break,
-                },
-                Err(err) => {
+            let running = match result {
+                Ok(running) => running,
+                Err(error) => {
                     // TODO: handle errors
                     // `UnattachedHandle`: session should end with error
 
-                    error!("{:?}", err);
-                    outcome = Err(err);
-                    break; // TODO properly handle errors
+                    error!("{:?}", error);
+                    let running = self.on_error(&error).await;
+                    outcome = Err(error);
+                    running
                 }
+            };
+
+            match running {
+                Running::Continue => {}
+                Running::Stop => break,
             }
         }
 

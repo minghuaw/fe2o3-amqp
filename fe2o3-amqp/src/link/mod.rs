@@ -489,18 +489,23 @@ impl LinkHandle {
         }
     }
 
+    /// LinkHandle operates in session's event loop
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, session::Error> {
+    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, (bool, definitions::Error)> {
         match self {
             LinkHandle::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
-                return Err(session::Error::AmqpError {
-                    condition: AmqpError::NotAllowed,
-                    description: Some("Sender should never receive a transfer".to_string()),
-                });
+                return Err((
+                    true, // Closing the link
+                    definitions::Error::new(
+                        AmqpError::NotAllowed,
+                        Some("Sender should never receive a transfer".to_string()),
+                        None
+                    ),
+                ));
             }
             LinkHandle::Receiver {
                 tx,
@@ -518,7 +523,16 @@ impl LinkHandle {
                     payload,
                 })
                 .await
-                .map_err(|_| SessionError::UnattachedHandle)?;
+                .map_err(|_| 
+                    (
+                        true, 
+                        definitions::Error::new(
+                            SessionError::UnattachedHandle, 
+                            None, 
+                            None
+                        )
+                    )
+                )?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {

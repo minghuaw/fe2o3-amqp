@@ -1,6 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError};
+use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError, Handle};
 use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;
@@ -16,37 +16,42 @@ pub enum Error {
     #[error(transparent)]
     JoinError(#[from] JoinError),
 
-    #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    AmqpError {
-        condition: AmqpError,
-        description: Option<String>,
-    },
+    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
+    // AmqpError {
+    //     condition: AmqpError,
+    //     description: Option<String>,
+    // },
 
-    #[error("Session error {:?}, {:?}", .condition, .description)]
-    SessionError {
-        condition: SessionError,
-        description: Option<String>,
-    },
+    // #[error("Session error {:?}, {:?}", .condition, .description)]
+    // SessionError {
+    //     condition: SessionError,
+    //     description: Option<String>,
+    // },
+
+    #[error("Local error {:?}", .0)]
+    LocalError(definitions::Error),
 
     #[error("Remote error {:?}", .0)]
     RemoteError(definitions::Error),
+
+    /// Link handle error should be handled differently. Link handle is only local
+    #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
+    LinkHandleError {
+        handle: Handle,
+        closed: bool,
+        error: definitions::Error,
+    },
 }
 
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
-        Self::AmqpError {
-            condition: err,
-            description: None,
-        }
+        Self::LocalError(definitions::Error::new(err, None, None))
     }
 }
 
 impl From<SessionError> for Error {
     fn from(err: SessionError) -> Self {
-        Self::SessionError {
-            condition: err,
-            description: None,
-        }
+        Self::LocalError(definitions::Error::new(err, None, None))
     }
 }
 
@@ -67,10 +72,9 @@ impl From<AllocSessionError> for Error {
         match err {
             AllocSessionError::Io(e) => Self::Io(e),
             AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
-            AllocSessionError::IllegalState => Self::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: None,
-            },
+            AllocSessionError::IllegalState => Self::LocalError(
+                definitions::Error::new(AmqpError::IllegalState, None, None)
+            ),
         }
     }
 }

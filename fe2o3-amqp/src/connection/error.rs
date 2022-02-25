@@ -17,20 +17,6 @@ pub enum Error {
     #[error(transparent)]
     JoinError(JoinError),
 
-    // #[error("Exceeding channel-max")]
-    // ChannelMaxReached,
-
-    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    // AmqpError {
-    //     condition: AmqpError,
-    //     description: Option<String>,
-    // },
-
-    // #[error("Connection error {:?}, {:?}", .condition, .description)]
-    // ConnectionError {
-    //     condition: ConnectionError,
-    //     description: Option<String>,
-    // },
     #[error("Local error {:?}", .0)]
     LocalError(definitions::Error),
 
@@ -143,18 +129,6 @@ pub enum OpenError {
     #[error(r#"Invalid scheme. Only "amqp" and "amqps" are supported."#)]
     InvalidScheme,
 
-    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    // AmqpError {
-    //     condition: AmqpError,
-    //     description: Option<String>,
-    // },
-
-    // #[error("Connection error {:?}, {:?}", .condition, .description)]
-    // ConnectionError {
-    //     condition: ConnectionError,
-    //     description: Option<String>,
-    // },
-
     #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
     SaslError {
         code: SaslCode,
@@ -187,12 +161,3 @@ impl From<NegotiationError> for OpenError {
         }
     }
 }
-
-// impl From<AmqpError> for OpenError {
-//     fn from(err: AmqpError) -> Self {
-//         Self::AmqpError {
-//             condition: err,
-//             description: None,
-//         }
-//     }
-// }
