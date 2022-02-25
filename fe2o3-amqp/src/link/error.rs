@@ -81,8 +81,7 @@ impl<L> TryFrom<Error> for DetachError<L> {
             Error::ParseError
             | Error::Rejected(_)
             | Error::Released(_)
-            | Error::Modified(_)
-            | Error::Detached(_) => Err(value),
+            | Error::Modified(_) => Err(value),
         }
     }
 }

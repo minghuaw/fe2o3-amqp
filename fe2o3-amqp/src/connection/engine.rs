@@ -10,7 +10,6 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
-use tokio::time::error::Elapsed;
 use tracing::{debug, error, instrument, trace};
 
 use crate::control::ConnectionControl;

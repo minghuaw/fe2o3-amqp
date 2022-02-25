@@ -155,9 +155,15 @@ impl From<NegotiationError> for OpenError {
                 code,
                 additional_data,
             },
-            NegotiationError::DecodeError => todo!(),
-            NegotiationError::NotImplemented(_) => todo!(),
-            NegotiationError::IllegalState => todo!(),
+            NegotiationError::DecodeError => Self::LocalError(
+                definitions::Error::new(AmqpError::DecodeError, None, None)
+            ),
+            NegotiationError::NotImplemented(description) => Self::LocalError(
+                definitions::Error::new(AmqpError::NotImplemented, description, None)
+            ),
+            NegotiationError::IllegalState => Self::LocalError(
+                definitions::Error::new(AmqpError::IllegalState, None, None)
+            ),
         }
     }
 }

@@ -11,7 +11,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::{Error, Link, LinkHandle, LinkIncomingItem},
+    link::{Link, LinkHandle, LinkIncomingItem},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -319,7 +319,11 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await
+            .map_err(|value| match AttachError::try_from(value) {
+                Ok(error) => error,
+                Err(_) => unreachable!(),
+            })?;
 
         // Attach completed, return Sender
         let sender = Sender::<Attached> {
@@ -379,7 +383,11 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await
+            .map_err(|value| match AttachError::try_from(value) {
+                Ok(error) => error,
+                Err(_) => unreachable!(),
+            })?;
 
         let mut receiver = Receiver::<Attached> {
             link,

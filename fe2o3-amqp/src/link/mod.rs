@@ -33,14 +33,13 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
     link::{self, delivery::UnsettledMessage},
-    session,
     util::{Consumer, Producer},
     Payload,
 };
 
 use self::{
     delivery::Delivery,
-    state::{LinkFlowState, LinkState, UnsettledMap}, error::AttachError,
+    state::{LinkFlowState, LinkState, UnsettledMap},
 };
 
 pub const DEFAULT_CREDIT: SequenceNo = 200;
@@ -576,7 +575,7 @@ pub(crate) async fn do_attach<L, W, R>(
     link: &mut L,
     writer: &mut W,
     reader: &mut R,
-) -> Result<(), AttachError>
+) -> Result<(), Error>
 where
     L: endpoint::Link<Error = Error>,
     W: Sink<LinkFrame> + Send + Unpin,
@@ -585,15 +584,15 @@ where
     use futures_util::StreamExt;
 
     // Send an Attach frame
-    endpoint::Link::send_attach(link, writer).await
-        .map_err(|value| match AttachError::try_from(value) {
-            Ok(error) => error,
-            Err(_) => unreachable!(),
-        })?;
+    endpoint::Link::send_attach(link, writer).await?;
+        // .map_err(|value| match AttachError::try_from(value) {
+        //     Ok(error) => error,
+        //     Err(_) => unreachable!(),
+        // })?;
 
     // Wait for an Attach frame
     let frame = reader.next().await
-        .ok_or_else(|| AttachError::Io(io::Error::new(
+        .ok_or_else(|| Error::Io(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "Expecting remote Attach frame"
         )))?;
@@ -601,7 +600,7 @@ where
         LinkFrame::Attach(attach) => attach,
         // TODO: how to handle this?
         _ => {
-            return Err(AttachError::LocalError(
+            return Err(Error::LocalError(
                 definitions::Error::new(
                     AmqpError::IllegalState,
                     Some("Expecting remote attach frame".to_string()),
@@ -626,11 +625,11 @@ where
         false => {
             // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
-            expect_detach_then_detach(link, writer, reader).await
-                .map_err(|value| match AttachError::try_from(value) {
-                    Ok(error) => error,
-                    Err(_) => unreachable!(),
-                })?;
+            expect_detach_then_detach(link, writer, reader).await?
+                // .map_err(|value| match AttachError::try_from(value) {
+                //     Ok(error) => error,
+                //     Err(_) => unreachable!(),
+                // })?;
         }
     }
 

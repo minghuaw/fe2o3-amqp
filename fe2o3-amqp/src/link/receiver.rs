@@ -233,13 +233,12 @@ impl Receiver<Detached> {
         if let Err(err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            // return Err(DetachError {
-            //     link: self,
-            //     is_closed_by_remote: false,
-            //     error: 
-            // });
-
-            todo!()
+            return Err(
+                match DetachError::try_from((self, err.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            )
         }
 
         Ok(Receiver::<Attached> {

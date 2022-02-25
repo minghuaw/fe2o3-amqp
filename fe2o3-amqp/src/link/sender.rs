@@ -99,7 +99,12 @@ impl Sender<Detached> {
         if let Err(err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            todo!()
+            return Err(
+                match DetachError::try_from((self, err.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            )
         }
 
         Ok(Sender::<Attached> {
