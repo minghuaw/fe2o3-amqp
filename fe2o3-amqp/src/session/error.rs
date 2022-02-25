@@ -1,6 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError, Handle};
+use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError, Handle, ConnectionError};
 use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;
@@ -15,18 +15,6 @@ pub enum Error {
 
     #[error(transparent)]
     JoinError(#[from] JoinError),
-
-    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    // AmqpError {
-    //     condition: AmqpError,
-    //     description: Option<String>,
-    // },
-
-    // #[error("Session error {:?}, {:?}", .condition, .description)]
-    // SessionError {
-    //     condition: SessionError,
-    //     description: Option<String>,
-    // },
 
     #[error("Local error {:?}", .0)]
     LocalError(definitions::Error),
@@ -75,6 +63,28 @@ impl From<AllocSessionError> for Error {
             AllocSessionError::IllegalState => Self::LocalError(
                 definitions::Error::new(AmqpError::IllegalState, None, None)
             ),
+        }
+    }
+}
+
+impl From<AllocLinkError> for definitions::Error {
+    fn from(err: AllocLinkError) -> Self {
+        match err {
+            AllocLinkError::IllegalState => Self {
+                condition: AmqpError::IllegalState.into(),
+                description: None,
+                info: None,
+            },
+            AllocLinkError::HandleMaxReached => Self {
+                condition: ConnectionError::FramingError.into(),
+                description: Some("Handle max has been reached".to_string()),
+                info: None,
+            },
+            AllocLinkError::DuplicatedLinkName => Self {
+                condition: AmqpError::NotAllowed.into(),
+                description: Some("Link name is duplicated".to_string()),
+                info: None,
+            },
         }
     }
 }

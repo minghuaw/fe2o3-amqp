@@ -18,10 +18,10 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Link is not attached".into()),
-        })?;
+        let handle = self.output_handle.clone().ok_or_else(|| Error::amqp_error (
+            AmqpError::IllegalState,
+            Some("Link is not attached".into()),
+        ))?;
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -96,10 +96,10 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is not attached".into()),
-            })
+            .map_err(|_| Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "Session LinkFrame receiver has dropped"
+            )))
     }
 
     async fn send_transfer<W, Fut>(
@@ -152,10 +152,10 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     },
                     _ => {
                         // Other frames should not forwarded to the sender by the session
-                        return Err(Error::AmqpError {
-                            condition: AmqpError::IllegalState,
-                            description: Some(format!("Expecting a Detach frame but found {:?}", frame))
-                        })
+                        return Err(Error::amqp_error (
+                            AmqpError::IllegalState,
+                            Some(format!("Expecting a Detach frame but found {:?}", frame))
+                        ))
                     }
                 }
             }
@@ -423,10 +423,10 @@ where
     writer
         .send(frame)
         .await
-        .map_err(|_| link::Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Session is already dropped".to_string()),
-        })
+        .map_err(|_| Error::Io(io::Error::new(
+            io::ErrorKind::Other,
+            "Session LinkFrame receiver has dropped"
+        )))
 }
 
 #[inline]

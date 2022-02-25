@@ -14,7 +14,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     control::SessionControl,
     endpoint::Link,
-    link::error::{detach_error_expecting_frame, map_send_detach_error},
+    link::error::{detach_error_expecting_frame},
     session::{self, SessionHandle},
     Payload,
 };
@@ -22,7 +22,7 @@ use crate::{
 use super::{
     builder::{self, WithTarget, WithoutName},
     delivery::Delivery,
-    error::DetachError,
+    error::{DetachError, AttachError},
     receiver_link::section_number_and_offset,
     role,
     state::LinkFlowState,
@@ -36,10 +36,14 @@ macro_rules! or_assign {
             Some(value) => {
                 if let Some(other_value) = $other.$field {
                     if *value != other_value {
-                        return Err(Error::AmqpError {
-                            condition: AmqpError::NotAllowed,
-                            description: Some(format!("Inconsistent {:?} in multi-frame delivery", value))
-                        })
+                        return Err(Error::LocalError(
+                            definitions::Error::new(
+                                AmqpError::NotAllowed,
+                                Some(format!("Inconsistent {:?} in multi-frame delivery", value)),
+                                None
+                            )
+                        ))
+                        
                     }
                 }
             },
@@ -183,7 +187,7 @@ impl Receiver<Detached> {
         session: &mut SessionHandle,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Receiver<Attached>, Error> {
+    ) -> Result<Receiver<Attached>, AttachError> {
         Self::builder()
             .name(name)
             .source(addr)
@@ -229,7 +233,13 @@ impl Receiver<Detached> {
         if let Err(err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(map_send_detach_error(err, self));
+            // return Err(DetachError {
+            //     link: self,
+            //     is_closed_by_remote: false,
+            //     error: 
+            // });
+
+            todo!()
         }
 
         Ok(Receiver::<Attached> {
@@ -280,10 +290,14 @@ impl Receiver<Attached> {
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        let frame = self.incoming.next().await.ok_or_else(|| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Session is dropped".into()),
-        })?;
+        let frame = self.incoming.next().await
+            .ok_or_else(|| Error::LocalError(
+                definitions::Error::new(
+                    AmqpError::IllegalState,
+                    Some("Session is dropped".into()),
+                    None
+                )
+            ))?;
 
         match frame {
             LinkFrame::Detach(detach) => {
@@ -299,10 +313,13 @@ impl Receiver<Attached> {
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
             LinkFrame::Attach(_) => {
-                return Err(Error::AmqpError {
-                    condition: AmqpError::IllegalState,
-                    description: Some("Received Attach on an attached link".into()),
-                })
+                return Err(Error::LocalError(
+                    definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Received Attach on an attached link".into()),
+                        None
+                    )
+                ))
             }
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkHandle which runs
@@ -452,14 +469,16 @@ impl Receiver<Attached> {
         };
 
         // Send a non-closing detach
-        match detaching
+        if let Err(err) = detaching
             .link
             .send_detach(&mut detaching.outgoing, false, None)
             .await
         {
-            Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
-        };
+            match DetachError::try_from((detaching, err)) {
+                Ok(error) => return Err(error),
+                Err(_) => unreachable!()
+            }
+        }
 
         // Wait for remote detach
         let frame = match detaching.incoming.next().await {
@@ -510,7 +529,12 @@ impl Receiver<Attached> {
             .await
         {
             Ok(_) => Ok(detaching),
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         }
     }
 
@@ -526,7 +550,12 @@ impl Receiver<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         }
 
         // Wait for remote detach
@@ -583,7 +612,12 @@ impl Receiver<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(err) => return Err(map_send_detach_error(err, detaching)),
+                Err(e) => return Err(
+                    match DetachError::try_from((detaching, e.into())) {
+                        Ok(err) => err,
+                        Err(_) => unreachable!()
+                    }
+                ),
             }
         };
 
@@ -594,7 +628,12 @@ impl Receiver<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         }
 
         Ok(())
