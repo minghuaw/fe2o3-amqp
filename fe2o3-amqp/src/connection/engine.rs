@@ -22,8 +22,6 @@ use crate::{endpoint, transport};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
 use super::{AllocSessionError, OpenError};
 
-pub const ERROR_CLOSE_WAIT_SECS: u64 = 10; // seconds
-
 pub(crate) type SessionId = usize;
 
 #[derive(Debug)]

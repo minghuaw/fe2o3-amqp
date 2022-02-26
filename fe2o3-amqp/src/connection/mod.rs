@@ -98,7 +98,9 @@ pub enum ConnectionState {
     End,
 }
 
-/// A handle to 
+/// A handle to the [`Connection`] event loop. 
+/// 
+/// Dropping the handle will also stop the [`Connection`] event loop
 pub struct ConnectionHandle {
     pub(crate) control: Sender<ConnectionControl>,
     handle: JoinHandle<Result<(), Error>>,
@@ -115,11 +117,21 @@ impl Drop for ConnectionHandle {
 
 impl ConnectionHandle {
     /// Checks if the underlying event loop has stopped
+    /// 
+    /// # Panics
+    ///
+    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub fn is_closed(&self) -> bool {
         self.control.is_closed()
     }
 
     /// Close the connection
+    /// 
+    /// # Panics
+    ///
+    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn close(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
@@ -128,6 +140,11 @@ impl ConnectionHandle {
     }
 
     /// Close the connection with an error
+    /// 
+    /// # Panics
+    ///
+    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
+    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn close_with_error(
         &mut self,
         error: impl Into<definitions::Error>,
@@ -154,6 +171,7 @@ impl ConnectionHandle {
         }
     }
 
+    /// Allocte (channel, session_id) for a new session
     pub(crate) async fn allocate_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
@@ -173,13 +191,22 @@ impl ConnectionHandle {
         })?;
         result
     }
-
-    // pub(crate) async fn drop_session(&mut self, session_id: SessionId) -> Result<(), Error> {
-    //     self.control.send(ConnectionControl::DropSession(session_id)).await?;
-    //     Ok(())
-    // }
 }
 
+/// An AMQP 1.0 Connection. 
+/// 
+/// # Open a new [`Connection`]
+/// 
+/// ## Builder
+/// 
+/// ## TLS
+/// 
+/// TODO
+/// 
+/// ## SASL
+/// 
+/// TODO
+///
 #[derive(Debug)]
 pub struct Connection {
     control: Sender<ConnectionControl>,
@@ -200,10 +227,27 @@ pub struct Connection {
 
 /* ------------------------------- Public API ------------------------------- */
 impl Connection {
+    /// Creates a Builder for [`Connection`]
     pub fn builder<'a>() -> builder::Builder<'a, WithoutContainerId> {
         builder::Builder::new()
     }
 
+    /// Negotiate and open a [`Connection`] 
+    /// 
+    /// The negotiation depends on the url supplied.
+    /// 
+    /// # Raw AMQP
+    /// 
+    /// TODO
+    /// 
+    /// # TLS
+    /// 
+    /// TODO
+    /// 
+    /// # SASL
+    /// 
+    /// TODO
+    /// 
     pub async fn open(
         container_id: impl Into<String>, // TODO: default container id? random uuid-ish
         max_frame_size: impl Into<MaxFrameSize>, // TODO: make this use default?

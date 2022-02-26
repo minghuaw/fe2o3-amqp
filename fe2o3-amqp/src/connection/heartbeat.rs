@@ -1,3 +1,5 @@
+//! Implements an asynchronous heartbeat
+
 use std::{task::Poll, time::Duration};
 
 use futures_util::Stream;
@@ -17,10 +19,12 @@ pin_project! {
 }
 
 impl HeartBeat {
+    /// A [`HeartBeat`] that will never yield `Poll::Ready(_)` with `StreamExt::next()`
     pub fn never() -> Self {
         Self { interval: None }
     }
 
+    /// A [`HeartBeat`] that will yield `Poll::Ready(_)` per the given interval with `StreamExt::next()`
     pub fn new(period: Duration) -> Self {
         let interval = Some(IntervalStream::new(tokio::time::interval(period)));
         Self { interval }

@@ -26,4 +26,8 @@ pub mod types {
     pub use fe2o3_amqp_types::*;
 }
 
+pub use connection::{Connection};
+pub use session::{Session};
+pub use link::{Sender, Receiver};
+
 type Payload = bytes::Bytes;

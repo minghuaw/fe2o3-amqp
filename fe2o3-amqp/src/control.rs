@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub enum ConnectionControl {
+pub(crate) enum ConnectionControl {
     Open,
     Close(Option<definitions::Error>),
     AllocateSession {
