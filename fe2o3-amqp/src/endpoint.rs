@@ -204,12 +204,25 @@ pub(crate) trait Link {
 /// A subset of the fields in the Flow performative
 #[derive(Debug, Default)]
 pub struct LinkFlow {
+    /// Link handle
     pub handle: Handle,
+
+    /// The endpoint’s value for the delivery-count sequence number
     pub delivery_count: Option<SequenceNo>,
+
+    /// The current maximum number of messages that can be received
     pub link_credit: Option<UInt>,
+
+    /// The number of available messages
     pub available: Option<UInt>,
+
+    /// Indicates drain mode
     pub drain: Boolean,
+
+    /// Request state from partner
     pub echo: Boolean,
+
+    /// Link state properties
     pub properties: Option<Fields>,
 }
 
@@ -230,8 +243,7 @@ impl TryFrom<Flow> for LinkFlow {
     }
 }
 
-pub enum Settlement {
-    // Drained,
+pub(crate) enum Settlement {
     Settled,
     Unsettled {
         delivery_tag: [u8; 4],
