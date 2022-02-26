@@ -264,13 +264,6 @@ where
     async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
         debug!(?control);
         match control {
-            ConnectionControl::Open => {
-                // let open = self.connection.local_open().clone();
-                self.connection
-                    .send_open(&mut self.transport)
-                    .await
-                    .map_err(Into::into)?;
-            }
             ConnectionControl::Close(error) => {
                 self.connection
                     .send_close(&mut self.transport, error)

@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {
-    Open,
+    // Open,
     Close(Option<definitions::Error>),
     AllocateSession {
         tx: Sender<SessionIncomingItem>,
@@ -27,7 +27,7 @@ pub(crate) enum ConnectionControl {
 impl std::fmt::Display for ConnectionControl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Open => write!(f, "Open"),
+            // Self::Open => write!(f, "Open"),
             Self::Close(err) => write!(f, "Close({:?})", err),
             Self::AllocateSession {
                 tx: _,
@@ -38,8 +38,7 @@ impl std::fmt::Display for ConnectionControl {
     }
 }
 
-pub enum SessionControl {
-    Begin,
+pub(crate) enum SessionControl {
     End(Option<definitions::Error>),
     AllocateLink {
         link_name: String,
@@ -50,5 +49,3 @@ pub enum SessionControl {
     LinkFlow(LinkFlow),
     Disposition(Disposition),
 }
-
-pub enum LinkControl {}
