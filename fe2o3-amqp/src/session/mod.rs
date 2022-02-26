@@ -1,3 +1,5 @@
+//! Implements AMQP1.0 Session
+
 use std::{collections::BTreeMap, io};
 
 use async_trait::async_trait;
@@ -35,26 +37,27 @@ pub mod engine;
 mod error;
 pub use self::error::{AllocLinkError, Error};
 
-// 2.5.5 Session States
-// UNMAPPED
-// BEGIN SENT
-// BEGIN RCVD
-// MAPPED END SENT
-// END RCVD
-// DISCARDING
+/// 2.5.5 Session States
 pub enum SessionState {
+    /// UNMAPPED
     Unmapped,
-
+    
+    /// BEGIN SENT
     BeginSent,
-
+    
+    /// BEGIN RCVD
     BeginReceived,
-
+    
+    /// MAPPED 
     Mapped,
-
+    
+    /// END SENT
     EndSent,
-
+    
+    /// END RCVD
     EndReceived,
-
+    
+    /// DISCARDING
     Discarding,
 }
 
@@ -161,6 +164,11 @@ pub(crate) async fn allocate_link(
     result
 }
 
+/// AMQP1.0 Session
+/// 
+/// # Begin a new Session
+/// 
+/// TODO
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
     // session_id: usize,
@@ -200,10 +208,12 @@ impl Session {
         Self::begin(conn).await
     }
 
+    /// Creates a builder for [`Session`]
     pub fn builder() -> builder::Builder {
         builder::Builder::new()
     }
 
+    /// Begins a new session with the default configurations
     pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         Session::builder().begin(conn).await
     }

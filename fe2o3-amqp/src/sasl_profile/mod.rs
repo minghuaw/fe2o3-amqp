@@ -1,3 +1,5 @@
+//! Implements SASL profile
+
 use bytes::BufMut;
 use fe2o3_amqp_types::{
     primitives::{Binary, Symbol},

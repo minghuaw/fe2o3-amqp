@@ -1,3 +1,5 @@
+//! Implements AMQP1.0 Link
+
 mod frame;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 

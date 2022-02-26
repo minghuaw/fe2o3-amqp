@@ -1,4 +1,4 @@
-//! Implementation of AMQP 1.0 Connection
+//! Implements AMQP1.0 Connection
 
 use std::{cmp::min, collections::BTreeMap, convert::TryInto, io};
 
