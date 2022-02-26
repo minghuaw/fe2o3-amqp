@@ -1,6 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError, Handle, ConnectionError};
+use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError, Handle, ConnectionError, ErrorCondition};
 use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;
@@ -17,10 +17,10 @@ pub enum Error {
     JoinError(#[from] JoinError),
 
     #[error("Local error {:?}", .0)]
-    LocalError(definitions::Error),
+    Local(definitions::Error),
 
     #[error("Remote error {:?}", .0)]
-    RemoteError(definitions::Error),
+    Remote(definitions::Error),
 
     /// Link handle error should be handled differently. Link handle is only local
     #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
@@ -31,15 +31,31 @@ pub enum Error {
     },
 }
 
-impl From<AmqpError> for Error {
-    fn from(err: AmqpError) -> Self {
-        Self::LocalError(definitions::Error::new(err, None, None))
+impl Error {
+    pub(crate) fn amqp_error(
+        condition: impl Into<AmqpError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
+        Self::Local(
+            definitions::Error {
+                condition: ErrorCondition::AmqpError(condition.into()),
+                description: description.into(),
+                info: None
+            }
+        )
     }
-}
 
-impl From<SessionError> for Error {
-    fn from(err: SessionError) -> Self {
-        Self::LocalError(definitions::Error::new(err, None, None))
+    pub(crate) fn session_error(
+        condition: impl Into<SessionError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
+        Self::Local(
+            definitions::Error {
+                condition: ErrorCondition::SessionError(condition.into()),
+                description: description.into(),
+                info: None
+            }
+        )
     }
 }
 
@@ -60,7 +76,7 @@ impl From<AllocSessionError> for Error {
         match err {
             AllocSessionError::Io(e) => Self::Io(e),
             AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
-            AllocSessionError::IllegalState => Self::LocalError(
+            AllocSessionError::IllegalState => Self::Local(
                 definitions::Error::new(AmqpError::IllegalState, None, None)
             ),
         }
@@ -88,15 +104,3 @@ impl From<AllocLinkError> for definitions::Error {
         }
     }
 }
-
-// #[derive(Debug, thiserror::Error)]
-// pub enum EndError {
-//     #[error("Illegal state")]
-//     IllegalState,
-
-//     #[error("Remote session error: {:?}", .0)]
-//     RemoteSessionError(definitions::Error),
-
-//     // #[error("None")]
-//     // None,
-// }

@@ -69,14 +69,14 @@ impl SessionEngine<super::Session>
         let SessionFrame { channel, body } = frame;
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
-            SessionFrameBody::End(end) => return Err(Error::RemoteError(
+            SessionFrameBody::End(end) => return Err(Error::Remote(
                 end.error.unwrap_or_else(|| definitions::Error::new(
                     AmqpError::InternalError,
                     Some("Remote closed session wihtout explanation".into()),
                     None
                 ))
             )),
-            _ => return Err(AmqpError::IllegalState.into()), // End session with illegal state
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         };
         engine
             .session
@@ -196,7 +196,7 @@ impl SessionEngine<super::Session>
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
         match self.session.local_state() {
             SessionState::Mapped => {}
-            _ => return Err(AmqpError::IllegalState.into()),  // End session with illegal state
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),  // End session with illegal state
         }
 
         let session_frame = match frame {
@@ -236,12 +236,12 @@ impl SessionEngine<super::Session>
             Error::Io(_) => Running::Stop,
             Error::ChannelMaxReached => Running::Stop,
             Error::JoinError(_) => unreachable!(),
-            Error::LocalError(error) => {
+            Error::Local(error) => {
                 let _ = self.session
                     .send_end(&mut self.outgoing, Some(error.clone())).await;
                 self.continue_or_stop_by_state()
             },
-            Error::RemoteError(_) => self.continue_or_stop_by_state(),
+            Error::Remote(_) => self.continue_or_stop_by_state(),
             Error::LinkHandleError {
                 handle, closed, error
             } => self.on_link_handle_error(handle, closed, error).await
