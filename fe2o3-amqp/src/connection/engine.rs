@@ -50,11 +50,11 @@ where
         match error {
             Error::Io(err) => OpenError::Io(err),
             Error::JoinError(_) => unreachable!(),
-            Error::LocalError(err) => {
+            Error::Local(err) => {
                 let _ = connection.send_close(transport, Some(err.clone())).await;
                 OpenError::LocalError(err)
             },
-            Error::RemoteError(err) => OpenError::RemoteError(err),
+            Error::Remote(err) => OpenError::RemoteError(err),
         }
     }
 
@@ -160,12 +160,12 @@ where
     async fn forward_to_session(&mut self, channel: u16, frame: SessionFrame) -> Result<(), Error> {
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
             Some(tx) => tx.send(frame).await?,
-            None => return Err(AmqpError::NotFound.into()),
+            None => return Err(Error::amqp_error(AmqpError::NotFound, None)),
         };
         Ok(())
     }
@@ -306,7 +306,7 @@ where
 
         match self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
         }
 
         let SessionFrame { channel, body } = frame;
@@ -373,14 +373,14 @@ where
     async fn on_error(&mut self, error: &Error) -> Running {
         match error {
             Error::Io(_) => Running::Stop,
-            Error::JoinError(_) => unreachable!(),
-            Error::LocalError(error) => {
+            Error::JoinError(_) => unreachable!(), // JoinError is only for the event_loop task
+            Error::Local(error) => {
                 let _ = self.connection
                     .send_close(&mut self.transport, Some(error.clone()))
                     .await;
                 self.continue_or_stop_by_state()
             }
-            Error::RemoteError(_) => {
+            Error::Remote(_) => {
                 // TODO: Simplify remote error handling?
                 self.continue_or_stop_by_state()
             }

@@ -18,10 +18,10 @@ pub enum Error {
     JoinError(JoinError),
 
     #[error("Local error {:?}", .0)]
-    LocalError(definitions::Error),
+    Local(definitions::Error),
 
     #[error("Remote error {:?}", .0)]
-    RemoteError(definitions::Error)
+    Remote(definitions::Error)
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error
@@ -33,24 +33,12 @@ where
     }
 }
 
-impl From<AmqpError> for Error {
-    fn from(err: AmqpError) -> Self {
-        Self::LocalError(
-            definitions::Error {
-                condition: ErrorCondition::AmqpError(err),
-                description: None,
-                info: None
-            }
-        )
-    }
-}
-
 impl Error {
     pub(crate) fn amqp_error(
         condition: impl Into<AmqpError>,
         description: impl Into<Option<String>>,
     ) -> Self {
-        Self::LocalError(
+        Self::Local(
             definitions::Error {
                 condition: ErrorCondition::AmqpError(condition.into()),
                 description: description.into(),
@@ -63,7 +51,7 @@ impl Error {
         condition: impl Into<ConnectionError>,
         description: impl Into<Option<String>>,
     ) -> Self {
-        Self::LocalError(
+        Self::Local(
             definitions::Error {
                 condition: ErrorCondition::ConnectionError(condition.into()),
                 description: description.into(),
