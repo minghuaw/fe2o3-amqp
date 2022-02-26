@@ -1,3 +1,5 @@
+//! SASL frame type and corresponding encoder and decoder
+
 use serde::{
     de::{self, VariantAccess},
     ser, Deserialize, Serialize,
@@ -9,20 +11,26 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use super::{Error, FRAME_TYPE_SASL};
 
-// pub struct Frame {
-//     pub body: FrameBody,
-// }
-
-/// TODO: impl Serialize and Deserialize
+/// SASL frame
 #[derive(Debug)]
 pub enum Frame {
+    /// SASL Mechanism
     Mechanisms(SaslMechanisms),
+
+    /// SASL Init
     Init(SaslInit),
+
+    /// SASL Challenge
     Challenge(SaslChallenge),
+
+    /// SASL Response
     Response(SaslResponse),
+
+    /// SASL Outcome
     Outcome(SaslOutcome),
 }
 
+/// Encoder and Decoder for SASL frame
 pub struct FrameCodec {}
 
 impl Encoder<Frame> for FrameCodec {

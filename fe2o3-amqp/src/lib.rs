@@ -11,8 +11,9 @@
 //! Examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
 //! The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 
+pub(crate) mod control;
+
 pub mod connection;
-pub mod control;
 pub mod endpoint;
 pub mod frames;
 pub mod link;

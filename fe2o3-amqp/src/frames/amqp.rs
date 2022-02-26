@@ -1,3 +1,5 @@
+//! AMQP frame type and corresponding encoder and decoder
+
 use bytes::{Buf, BufMut, BytesMut};
 use fe2o3_amqp_types::performatives::{
     Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Performative, Transfer,
@@ -10,13 +12,18 @@ use crate::Payload;
 
 use super::{Error, FRAME_TYPE_AMQP};
 
+/// AMQP frame
 #[derive(Debug)]
 pub struct Frame {
+    /// AMQP frame channel
     pub channel: u16,
+
+    /// AMQP frame body
     pub body: FrameBody,
 }
 
 impl Frame {
+    /// Creates a new AMQP frame
     pub fn new(channel: impl Into<u16>, body: FrameBody) -> Self {
         Self {
             channel: channel.into(),
@@ -24,18 +31,23 @@ impl Frame {
         }
     }
 
+    /// Get the channel of the frame
     pub fn channel(&self) -> u16 {
         self.channel
     }
 
+    /// Get the body of the frame
     pub fn body(&self) -> &FrameBody {
         &self.body
     }
 
+    /// Consume the frame to get the frame body
     pub fn into_body(self) -> FrameBody {
         self.body
     }
 
+    /// Creates an emtpy frame. The empty frame is only used to reset
+    /// the remote idle timeout
     pub fn empty() -> Self {
         Self {
             channel: 0,
@@ -44,6 +56,7 @@ impl Frame {
     }
 }
 
+/// Encoder and Decoder of the AMQP frames
 pub struct FrameCodec {}
 
 impl Encoder<Frame> for FrameCodec {
@@ -92,49 +105,53 @@ impl Decoder for FrameCodec {
     }
 }
 
+/// AMQP frame body
 #[derive(Debug)]
 pub enum FrameBody {
     // Frames handled by Link
+    
+    /// Attach performative
     Attach(Attach),
+    
+    /// Flow performative
     Flow(Flow),
+
+    /// Transfer performative and payload
     Transfer {
+        /// Transfer performative
         performative: Transfer,
+
+        /// Binary payload
         payload: Payload, // The payload should have ownership passed around not shared
     },
+
+    /// Disposition performative
     Disposition(Disposition),
+
+    /// Detach performative
     Detach(Detach),
 
     // Frames handled by Session
+
+    /// Begin performative
     Begin(Begin),
+
+    /// End performative
     End(End),
 
     // Frames handled by Connection
+
+    /// Open performative
     Open(Open),
+
+    /// Close performative
     Close(Close),
-    // An empty frame used only for heartbeat
+
+    /// An empty frame used only for resetting idle timeout
     Empty,
 }
 
-// impl FrameBody {
-//     /// The payload will be ignored unless the performative is Transfer
-//     pub fn from_parts(performative: Performative, message: impl Into<Message>) -> Self {
-//         match performative {
-//             Performative::Open(performative) => FrameBody::Open(performative),
-//             Performative::Begin(performative) => FrameBody::Begin(performative),
-//             Performative::Attach(performative) => FrameBody::Attach(performative),
-//             Performative::Flow(performative) => FrameBody::Flow(performative),
-//             Performative::Transfer(performative) => FrameBody::Transfer {
-//                 performative,
-//                 message: message.into(),
-//             },
-//             Performative::Disposition(performative) => FrameBody::Disposition(performative),
-//             Performative::Detach(performative) => FrameBody::Detach(performative),
-//             Performative::End(performative) => FrameBody::End(performative),
-//             Performative::Close(performative) => FrameBody::Close(performative),
-//         }
-//     }
-// }
-
+/// Encoder and Decoder for AMQP frame body
 pub struct FrameBodyCodec {}
 
 impl Encoder<FrameBody> for FrameBodyCodec {
