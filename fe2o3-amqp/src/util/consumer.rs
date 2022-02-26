@@ -19,10 +19,6 @@ impl<State> Consumer<State> {
     pub fn state(&self) -> &State {
         &self.state
     }
-
-    pub fn state_mut(&mut self) -> &mut State {
-        &mut self.state
-    }
 }
 
 impl<State> AsRef<State> for Consumer<Arc<State>> {

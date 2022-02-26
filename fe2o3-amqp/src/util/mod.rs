@@ -1,3 +1,5 @@
+//! Common utilities
+
 use futures_util::Future;
 use std::ops::Deref;
 use std::{pin::Pin, task::Poll, time::Duration};
@@ -10,13 +12,13 @@ mod producer;
 pub use consumer::*;
 pub use producer::*;
 
-pub enum Running {
+pub(crate) enum Running {
     Continue,
     Stop,
 }
 
 #[derive(Debug)]
-pub struct IdleTimeout {
+pub(crate) struct IdleTimeout {
     delay: Pin<Box<Sleep>>,
     duration: Duration,
 }
@@ -25,10 +27,6 @@ impl IdleTimeout {
     pub fn new(duration: Duration) -> Self {
         let delay = Box::pin(tokio::time::sleep(duration));
         Self { delay, duration }
-    }
-
-    pub fn duration(&self) -> Duration {
-        self.duration
     }
 
     pub fn reset(&mut self) {
@@ -49,7 +47,7 @@ impl Future for IdleTimeout {
 
 /// An custom type to make a field immutable to
 /// prevent accidental mutations
-pub struct Constant<T> {
+pub(crate) struct Constant<T> {
     value: T,
 }
 
@@ -73,5 +71,3 @@ impl<T> Deref for Constant<T> {
 
 /// Shared type state for builder
 pub struct Uninitialized {}
-
-// pub struct Initialized {}

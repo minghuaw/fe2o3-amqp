@@ -12,6 +12,7 @@
 //! The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 
 pub(crate) mod control;
+pub(crate) mod util;
 
 pub mod connection;
 pub mod endpoint;
@@ -20,7 +21,6 @@ pub mod link;
 pub mod sasl_profile;
 pub mod session;
 pub mod transport;
-pub mod util;
 
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`

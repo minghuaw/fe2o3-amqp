@@ -218,11 +218,6 @@ where
         self
     }
 
-    /// Get the idle timeout of the transport
-    pub fn idle_timeout(&self) -> &Option<IdleTimeout> {
-        &self.idle_timeout
-    }
-
     /// Set the idle timeout of the transport
     pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
         let idle_timeout = match duration.is_zero() {
