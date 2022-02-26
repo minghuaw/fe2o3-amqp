@@ -177,11 +177,10 @@ where
         // TODO: timeout?
         while let Some(frame) = transport.next().await {
             let frame = frame?;
-            let negotiation = profile.on_frame(frame, hostname).await?;
 
-            match negotiation {
-                Negotiation::Continue => {}
+            match profile.on_frame(frame, hostname).await? {
                 Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
+                Negotiation::Response(response) => transport.send(sasl::Frame::Response(response)).await?,
                 Negotiation::Outcome(outcome) => match outcome.code {
                     SaslCode::Ok => return Ok(transport.into_inner_io()),
                     code @ _ => {

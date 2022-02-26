@@ -3,31 +3,39 @@
 use bytes::BufMut;
 use fe2o3_amqp_types::{
     primitives::{Binary, Symbol},
-    sasl::{SaslInit, SaslOutcome},
+    sasl::{SaslInit, SaslOutcome, SaslResponse},
 };
 use serde_bytes::ByteBuf;
 use url::Url;
 
-pub mod error;
-
+mod error;
 pub use error::Error;
 
 use crate::frames::sasl;
 
 // pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
-pub const ANONYMOUS: &str = "ANONYMOUS";
-pub const PLAIN: &str = "PLAIN";
+pub(crate) const ANONYMOUS: &str = "ANONYMOUS";
+pub(crate) const PLAIN: &str = "PLAIN";
 
-pub enum Negotiation {
-    Continue,
+pub(crate) enum Negotiation {
     Init(SaslInit),
+    Response(SaslResponse),
     Outcome(SaslOutcome),
 }
 
+/// SASL profile
 #[derive(Debug, Clone)]
 pub enum SaslProfile {
+    /// SASL profile for ANONYMOUS mechanism
     Anonymous,
-    Plain { username: String, password: String },
+    
+    /// SASL profile for PLAIN mechanism
+    Plain { 
+        /// Username
+        username: String,     
+        /// Password
+        password: String 
+    },
 }
 
 impl<'a> TryFrom<&'a Url> for SaslProfile {
@@ -45,7 +53,7 @@ impl<'a> TryFrom<&'a Url> for SaslProfile {
 }
 
 impl SaslProfile {
-    pub fn mechanism(&self) -> Symbol {
+    pub(crate) fn mechanism(&self) -> Symbol {
         let value = match self {
             SaslProfile::Anonymous => ANONYMOUS,
             SaslProfile::Plain {
@@ -56,7 +64,7 @@ impl SaslProfile {
         Symbol::from(value)
     }
 
-    pub fn initial_response(&self) -> Option<Binary> {
+    pub(crate) fn initial_response(&self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
             SaslProfile::Plain { username, password } => {
@@ -72,7 +80,7 @@ impl SaslProfile {
         }
     }
 
-    pub async fn on_frame(
+    pub(crate) async fn on_frame(
         &mut self,
         frame: sasl::Frame,
         hostname: Option<&str>,
@@ -94,7 +102,8 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(_challenge) => {
-                todo!()
+                // TODO
+                Err(Error::NotImplemented(Some("SASL Challenge is not implemented.".to_string())))
             }
             Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
             _ => Err(Error::NotImplemented(Some(format!("{:?} is not expected", frame)))),
