@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! An implementation of ASMQP 1.0 protocol based on serde and tokio.
 //!
 //! # Quick start
@@ -20,6 +22,7 @@ pub mod transport;
 pub mod util;
 
 pub mod types {
+    //! Re-exporting `fe2o3-amqp-types`
     pub use fe2o3_amqp_types::*;
 }
 
