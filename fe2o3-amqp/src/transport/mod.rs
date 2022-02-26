@@ -41,6 +41,7 @@ use protocol_header::ProtocolHeader;
 use self::error::NegotiationError;
 
 pin_project! {
+    /// Frame transport
     #[derive(Debug)]
     pub struct Transport<Io, Ftype> {
         #[pin]
@@ -56,10 +57,12 @@ impl<Io, Ftype> Transport<Io, Ftype>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Consume the transport and return the wrapped IO
     pub fn into_inner_io(self) -> Io {
         self.framed.into_inner()
     }
 
+    /// Bind to an IO
     pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
         let framed = LengthDelimitedCodec::builder()
             .big_endian()
@@ -89,7 +92,8 @@ impl<Io> Transport<Io, amqp::Frame>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    // #[instrument(skip_all, fields(domain = %domain))]
+    /// Perform TLS negotiation
+    #[instrument(skip_all, fields(domain = %domain))]
     pub async fn connect_tls(
         mut stream: Io,
         domain: &str,
@@ -134,7 +138,8 @@ where
         Ok(tls)
     }
 
-    // #[instrument(skip_all, fields(hostname = ?hostname))]
+    /// Performs SASL negotiation
+    #[instrument(skip_all, fields(hostname = ?hostname))]
     pub async fn connect_sasl(
         mut stream: Io,
         hostname: Option<&str>,
@@ -194,6 +199,7 @@ where
         )))
     }
 
+    /// Performs AMQP negotiation
     #[instrument(skip_all)]
     pub async fn negotiate(
         io: &mut Io,
@@ -206,19 +212,18 @@ where
         Ok(incoming_header)
     }
 
+    /// Change the max_frame_size for the transport
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         self.framed.codec_mut().set_max_frame_length(max_frame_size);
         self
     }
 
+    /// Get the idle timeout of the transport
     pub fn idle_timeout(&self) -> &Option<IdleTimeout> {
         &self.idle_timeout
     }
 
-    pub fn idle_timeout_mut(&mut self) -> &mut Option<IdleTimeout> {
-        &mut self.idle_timeout
-    }
-
+    /// Set the idle timeout of the transport
     pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
         let idle_timeout = match duration.is_zero() {
             true => None,

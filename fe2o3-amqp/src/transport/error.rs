@@ -4,31 +4,34 @@ use fe2o3_amqp_types::{definitions::AmqpError, primitives::Binary, sasl::SaslCod
 
 use crate::{frames, sasl_profile};
 
+/// Transport error
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// IO error
     #[error("IO Error {0:?}")]
     Io(#[from] io::Error),
 
+    /// Idle timeout
     #[error("Idle timeout")]
     IdleTimeout,
 
+    /// AMQP error
     #[error("AMQP error {:?}, {:?}", .condition, .description)]
     AmqpError {
+        /// Error condition
         condition: AmqpError,
+
+        /// Error description
         description: Option<String>,
     },
 
+    /// Connection error: framing error 
     #[error("Connection error: framing error")]
     FramingError,
-    // #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]
-    // SaslError {
-    //     code: SaslCode,
-    //     additional_data: Option<Binary>,
-    // },
 }
 
 impl Error {
-    pub fn amqp_error(
+    pub(crate) fn amqp_error(
         condition: impl Into<AmqpError>,
         description: impl Into<Option<String>>,
     ) -> Self {
@@ -37,16 +40,6 @@ impl Error {
             description: description.into(),
         }
     }
-
-    // pub fn connection_error(
-    //     condition: impl Into<ConnectionError>,
-    //     description: impl Into<Option<String>>,
-    // ) -> Self {
-    //     Self::ConnectionError {
-    //         condition: condition.into(),
-    //         description: description.into(),
-    //     }
-    // }
 }
 
 /// TODO: What about encode error?

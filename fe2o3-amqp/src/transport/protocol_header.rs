@@ -1,12 +1,22 @@
+//! Implements the protocol headers
+
 use std::convert::{TryFrom, TryInto};
 
 const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 
+/// Protocol header
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProtocolHeader {
+    /// Protocol ID 
     pub id: ProtocolId,
+
+    /// Major number
     pub major: u8,
+
+    /// Minor number
     pub minor: u8,
+
+    /// Revision number
     pub revision: u8,
 }
 
@@ -22,6 +32,7 @@ impl Default for ProtocolHeader {
 }
 
 impl ProtocolHeader {
+    /// Creates a new protocol header
     pub fn new(id: ProtocolId, major: u8, minor: u8, revision: u8) -> Self {
         Self {
             id,
@@ -31,6 +42,7 @@ impl ProtocolHeader {
         }
     }
 
+    /// Creates an AMQP protocol header
     pub fn amqp() -> Self {
         Self {
             id: ProtocolId::Amqp,
@@ -38,6 +50,7 @@ impl ProtocolHeader {
         }
     }
 
+    /// Creates a TLS protocol header
     pub fn tls() -> Self {
         Self {
             id: ProtocolId::Tls,
@@ -45,6 +58,7 @@ impl ProtocolHeader {
         }
     }
 
+    /// Creates a SASL protocol header
     pub fn sasl() -> Self {
         Self {
             id: ProtocolId::Sasl,
@@ -84,10 +98,16 @@ impl TryFrom<[u8; 8]> for ProtocolHeader {
     }
 }
 
+/// Protocol ID
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolId {
+    /// AMQP
     Amqp = 0x0,
+
+    /// TLS
     Tls = 0x2,
+
+    /// SASL
     Sasl = 0x3,
 }
 
