@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::{fmt};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
 
+/// 
 #[derive(Debug)]
 pub struct DetachError<L> {
     pub link: Option<L>,
@@ -30,6 +31,14 @@ impl<L> DetachError<L> {
     pub fn into_error(self) -> Option<definitions::Error> {
         self.error
     }
+
+    pub(crate) fn empty() -> Self {
+        Self {
+            link: None,
+            is_closed_by_remote: false,
+            error: None
+        }
+    }
 }
 
 impl<L> fmt::Display for DetachError<L> {
@@ -49,20 +58,7 @@ impl<L> TryFrom<Error> for DetachError<L> {
 
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
-            Error::Io(error) => {
-                let error = definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some(format!("{:?}", error)),
-                    None
-                );
-                let err = Self {
-                    link: None,
-                    is_closed_by_remote: false,
-                    error: Some(error)
-                };
-                Ok(err)
-            },
-            Error::LocalError(error) => {
+            Error::Local(error) => {
                 let err = Self {
                     link: None,
                     is_closed_by_remote: false,
@@ -91,20 +87,7 @@ impl<L> TryFrom<(L, Error)> for DetachError<L> {
 
     fn try_from((link, value): (L, Error)) -> Result<Self, Self::Error> {
         match value {
-            Error::Io(error) => {
-                let error = definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some(format!("{:?}", error)),
-                    None
-                );
-                let err = Self {
-                    link: Some(link),
-                    is_closed_by_remote: false,
-                    error: Some(error)
-                };
-                Ok(err)
-            },
-            Error::LocalError(error) => {
+            Error::Local(error) => {
                 let err = Self {
                     link: Some(link),
                     is_closed_by_remote: false,
@@ -131,18 +114,15 @@ impl<L> TryFrom<(L, Error)> for DetachError<L> {
 /// TODO: Simplify the error structures
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
     #[error("Parse error")]
     ParseError,
     
+    #[error("Local error: {:?}", .0)]
+    Local(definitions::Error),
+
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError<()>),
     
-    #[error("Local error: {:?}", .0)]
-    LocalError(definitions::Error),
-
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),
 
@@ -155,22 +135,34 @@ pub enum Error {
 
 impl Error {
     // May want to have different handling of SendError
-    pub(crate) fn error_sending_to_session() -> Self {
-        Self::LocalError(definitions::Error::new(
+    pub(crate) fn sending_to_session() -> Self {
+        Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Failed to send to sesssion".to_string()),
             None
         ))
     }
 
-    pub(crate) fn amqp_error(condition: AmqpError, description: impl Into<Option<String>>) -> Self {
-        Self::LocalError(definitions::Error::new(condition, description, None))
+    pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some(format!("Expecting {}", frame_ident.into())),
+            None
+        ))
+    }
+
+    pub(crate) fn not_attached() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Link is not attached".to_string()),
+            None
+        ))
     }
 }
 
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
-        Self::LocalError(definitions::Error::new(
+        Self::Local(definitions::Error::new(
             err,
             None,
             None
@@ -180,7 +172,7 @@ impl From<AmqpError> for Error {
 
 impl From<LinkError> for Error {
     fn from(err: LinkError) -> Self {
-        Self::LocalError(definitions::Error::new(
+        Self::Local(definitions::Error::new(
             err,
             None,
             None
@@ -190,7 +182,7 @@ impl From<LinkError> for Error {
 
 impl<T> From<mpsc::error::SendError<T>> for Error {
     fn from(_: mpsc::error::SendError<T>) -> Self {
-        Self::LocalError(definitions::Error::new(
+        Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Failed to send to sesssion".to_string()),
             None
@@ -221,9 +213,6 @@ pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AttachError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
     #[error("Illegal session state")]
     IllegalSessionState,
 
@@ -252,8 +241,7 @@ impl TryFrom<Error> for AttachError {
 
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
-            Error::Io(error) => Ok(AttachError::Io(error)),
-            Error::LocalError(error) => Ok(AttachError::LocalError(error)),
+            Error::Local(error) => Ok(AttachError::LocalError(error)),
             Error::ParseError
             | Error::Rejected(_)
             | Error::Released(_)

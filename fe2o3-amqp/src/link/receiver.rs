@@ -36,7 +36,7 @@ macro_rules! or_assign {
             Some(value) => {
                 if let Some(other_value) = $other.$field {
                     if *value != other_value {
-                        return Err(Error::LocalError(
+                        return Err(Error::Local(
                             definitions::Error::new(
                                 AmqpError::NotAllowed,
                                 Some(format!("Inconsistent {:?} in multi-frame delivery", value)),
@@ -290,7 +290,7 @@ impl Receiver<Attached> {
         T: for<'de> serde::Deserialize<'de> + Send,
     {
         let frame = self.incoming.next().await
-            .ok_or_else(|| Error::LocalError(
+            .ok_or_else(|| Error::Local(
                 definitions::Error::new(
                     AmqpError::IllegalState,
                     Some("Session is dropped".into()),
@@ -312,7 +312,7 @@ impl Receiver<Attached> {
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
             LinkFrame::Attach(_) => {
-                return Err(Error::LocalError(
+                return Err(Error::Local(
                     definitions::Error::new(
                         AmqpError::IllegalState,
                         Some("Received Attach on an attached link".into()),

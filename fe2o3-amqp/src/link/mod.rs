@@ -1,5 +1,5 @@
 mod frame;
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc, io};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Buf;
@@ -32,7 +32,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
-    link::{self, delivery::UnsettledMessage},
+    link::{self, delivery::UnsettledMessage, error::DetachError},
     util::{Consumer, Producer},
     Payload,
 };
@@ -230,7 +230,7 @@ where
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
             None => {
-                return Err(link::Error::LocalError(
+                return Err(link::Error::Local(
                     definitions::Error::new(
                         AmqpError::InvalidField,
                         Some("Output handle is None".into()),
@@ -287,12 +287,12 @@ where
             | LinkState::Detached // May attempt to re-attach
             | LinkState::DetachSent => {
                 writer.send(frame).await
-                    .map_err(|_| Self::Error::error_sending_to_session())?;
+                    .map_err(|_| Self::Error::sending_to_session())?;
                 self.local_state = LinkState::AttachSent
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
-                    .map_err(|_| Self::Error::error_sending_to_session())?;
+                    .map_err(|_| Self::Error::sending_to_session())?;
                 self.local_state = LinkState::Attached
             }
             _ => return Err(AmqpError::IllegalState.into()),
@@ -333,19 +333,12 @@ where
                     closed,
                     error,
                 };
-                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
-                    link::Error::amqp_error (
-                        AmqpError::IllegalState,
-                        Some("Session is already dropped".to_string()),
-                    )
-                })?;
+                writer.send(LinkFrame::Detach(detach)).await
+                    .map_err(|_| link::Error::sending_to_session())?;
                 remove_handle
             }
             None => {
-                return Err(link::Error::amqp_error (
-                    AmqpError::IllegalState,
-                    Some("Link is already detached".to_string()),
-                ))
+                return Err(link::Error::not_attached())
             }
         };
 
@@ -585,28 +578,23 @@ where
 
     // Send an Attach frame
     endpoint::Link::send_attach(link, writer).await?;
-        // .map_err(|value| match AttachError::try_from(value) {
-        //     Ok(error) => error,
-        //     Err(_) => unreachable!(),
-        // })?;
 
     // Wait for an Attach frame
     let frame = reader.next().await
-        .ok_or_else(|| Error::Io(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            "Expecting remote Attach frame"
-        )))?;
+        .ok_or_else(|| Error::Detached(DetachError::empty()))?;
+        
     let remote_attach = match frame {
         LinkFrame::Attach(attach) => attach,
+        LinkFrame::Detach(detach) => {
+            return Err(Error::Detached(DetachError {
+                link: None,
+                is_closed_by_remote: detach.closed,
+                error: detach.error
+            }))
+        }
         // TODO: how to handle this?
         _ => {
-            return Err(Error::LocalError(
-                definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Expecting remote attach frame".to_string()),
-                    None
-                )
-            ))
+            return Err(Error::expecting_frame("Attach"))
         }
     };
 
@@ -626,10 +614,6 @@ where
             // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
             expect_detach_then_detach(link, writer, reader).await?
-                // .map_err(|value| match AttachError::try_from(value) {
-                //     Ok(error) => error,
-                //     Err(_) => unreachable!(),
-                // })?;
         }
     }
 
@@ -648,20 +632,13 @@ where
 {
     use futures_util::StreamExt;
 
-    let frame = reader.next().await.ok_or_else(|| Error::Io(io::Error::new(
-        io::ErrorKind::UnexpectedEof,
-        "Expecting a remote Detach"
-    )))?;
+    let frame = reader.next().await
+        .ok_or_else(|| Error::expecting_frame("Detach"))?;
+
     let _remote_detach = match frame {
         LinkFrame::Detach(detach) => detach,
         _ => {
-            return Err(Error::LocalError(
-                definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Expecting remote detach frame".to_string()),
-                    None,
-                )
-            ))
+            return Err(Error::expecting_frame("Detach"))
         }
     };
 

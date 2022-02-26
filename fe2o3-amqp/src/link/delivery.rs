@@ -267,7 +267,7 @@ impl Future for DeliveryFut {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
                                 
-                                Poll::Ready(Err(link::Error::LocalError(
+                                Poll::Ready(Err(link::Error::Local(
                                     definitions::Error::new(
                                         AmqpError::IllegalState,
                                         Some("Outcome sender is dropped".into()),

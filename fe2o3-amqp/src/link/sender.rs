@@ -195,9 +195,12 @@ impl Sender<Attached> {
                 delivery_tag: _,
                 outcome,
             } => {
-                let state = outcome.await.map_err(|_| Error::amqp_error (
-                    AmqpError::IllegalState,
-                    Some("Outcome sender is dropped".into()),
+                let state = outcome.await.map_err(|_| Error::Local(
+                    definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Delivery outcome sender has dropped".into()),
+                        None
+                    )
                 ))?;
                 match state {
                     DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
