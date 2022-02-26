@@ -18,10 +18,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        let handle = self.output_handle.clone().ok_or_else(|| Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Link is not attached".into()),
-        })?;
+        let handle = self.output_handle.clone().ok_or_else(|| Error::not_attached())?;
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -96,10 +93,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Link is not attached".into()),
-            })
+            .map_err(|_| Error::sending_to_session())
     }
 
     async fn send_transfer<W, Fut>(
@@ -123,8 +117,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 // link-credit is defined as
                 // "The current maximum number of messages that can be handled
                 // at the receiver endpoint of the link"
-                
-                // Draining should already set the link credit to 0, causing 
+
+                // Draining should already set the link credit to 0, causing
                 // sender to wait for new link credit
             },
             frame = detached => {
@@ -152,10 +146,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     },
                     _ => {
                         // Other frames should not forwarded to the sender by the session
-                        return Err(Error::AmqpError {
-                            condition: AmqpError::IllegalState,
-                            description: Some(format!("Expecting a Detach frame but found {:?}", frame))
-                        })
+                        return Err(Error::expecting_frame("Detach"))
                     }
                 }
             }
@@ -305,13 +296,13 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
-        batchable: bool
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
         if let SenderSettleMode::Settled = self.snd_settle_mode {
-            return Ok(())
+            return Ok(());
         }
 
         {
@@ -336,22 +327,20 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         mut ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
         settled: bool,
         state: DeliveryState,
-        batchable: bool
+        batchable: bool,
     ) -> Result<(), Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
         if let SenderSettleMode::Settled = self.snd_settle_mode {
-            return Ok(())
+            return Ok(());
         }
 
         let mut first = None;
         let mut last = None;
 
         // TODO: Is sort necessary?
-        ids_and_tags.sort_by(|left, right| {
-            left.0.cmp(&right.0)
-        });
+        ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
 
         let mut lock = self.unsettled.write().await;
 
@@ -374,7 +363,15 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 (Some(first_id), None) => {
                     // Find discontinuity
                     if delivery_id - first_id > 1 {
-                        send_disposition(writer, first_id, None, settled, Some(state.clone()), batchable).await?;
+                        send_disposition(
+                            writer,
+                            first_id,
+                            None,
+                            settled,
+                            Some(state.clone()),
+                            batchable,
+                        )
+                        .await?;
                     }
                     last = Some(delivery_id);
                 }
@@ -382,10 +379,18 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 (Some(first_id), Some(last_id)) => {
                     // Find discontinuity
                     if delivery_id - last_id > 1 {
-                        send_disposition(writer, first_id, Some(last_id), settled, Some(state.clone()), batchable).await?;
+                        send_disposition(
+                            writer,
+                            first_id,
+                            Some(last_id),
+                            settled,
+                            Some(state.clone()),
+                            batchable,
+                        )
+                        .await?;
                     }
                     last = Some(delivery_id);
-                },
+                }
             }
         }
 
@@ -409,16 +414,13 @@ where
     writer
         .send(frame)
         .await
-        .map_err(|_| link::Error::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Session is already dropped".to_string()),
-        })
+        .map_err(|_| Error::sending_to_session())
 }
 
 #[inline]
 async fn send_disposition<W>(
-    writer: &mut W, 
-    first: DeliveryNumber, 
+    writer: &mut W,
+    first: DeliveryNumber,
     last: Option<DeliveryNumber>,
     settled: bool,
     state: Option<DeliveryState>,
@@ -433,9 +435,11 @@ where
         last,
         settled,
         state,
-        batchable
+        batchable,
     };
     let frame = LinkFrame::Disposition(disposition);
-    writer.send(frame).await
-        .map_err(|_| Error::error_sending_to_session())
+    writer
+        .send(frame)
+        .await
+        .map_err(|_| Error::sending_to_session())
 }

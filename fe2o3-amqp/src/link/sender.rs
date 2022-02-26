@@ -2,7 +2,10 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
-use tokio::{sync::mpsc, time::{error::Elapsed, timeout, Timeout}};
+use tokio::{
+    sync::mpsc,
+    time::{error::Elapsed, timeout, Timeout},
+};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
@@ -14,7 +17,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     control::SessionControl,
     endpoint::{Link, Settlement},
-    link::error::{detach_error_expecting_frame, map_send_detach_error},
+    link::error::{detach_error_expecting_frame},
     session::{self, SessionHandle},
     util::Consumer,
 };
@@ -22,7 +25,7 @@ use crate::{
 use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable, UnsettledMessage},
-    error::DetachError,
+    error::{DetachError, AttachError},
     role,
     state::LinkFlowState,
     type_state::{Attached, Detached},
@@ -96,7 +99,12 @@ impl Sender<Detached> {
         if let Err(err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(map_send_detach_error(err, self));
+            return Err(
+                match DetachError::try_from((self, err.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            )
         }
 
         Ok(Sender::<Attached> {
@@ -113,7 +121,7 @@ impl Sender<Detached> {
         session: &mut SessionHandle,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Sender<Attached>, Error> {
+    ) -> Result<Sender<Attached>, AttachError> {
         Self::builder()
             .name(name)
             .target(addr)
@@ -174,8 +182,10 @@ impl Sender<Attached> {
         Ok(settlement)
     }
 
-    pub async fn send<T: serde::Serialize>(&mut self, sendable: impl Into<Sendable<T>>) -> Result<(), Error>
-    {
+    pub async fn send<T: serde::Serialize>(
+        &mut self,
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<(), Error> {
         let settlement = self.send_inner(sendable.into()).await?;
 
         // If not settled, must wait for outcome
@@ -185,10 +195,13 @@ impl Sender<Attached> {
                 delivery_tag: _,
                 outcome,
             } => {
-                let state = outcome.await.map_err(|_| Error::AmqpError {
-                    condition: AmqpError::IllegalState,
-                    description: Some("Outcome sender is dropped".into()),
-                })?;
+                let state = outcome.await.map_err(|_| Error::Local(
+                    definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Delivery outcome sender has dropped".into()),
+                        None
+                    )
+                ))?;
                 match state {
                     DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
                     DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
@@ -247,7 +260,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         };
 
         // Wait for remote detach
@@ -300,13 +318,21 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         }
 
         Ok(detaching)
     }
 
-    pub async fn detach_with_timeout(self, duration: impl Into<Duration>) -> Result<Result<Sender<Detached>, DetachError<Sender<Detached>>>, Elapsed> {
+    pub async fn detach_with_timeout(
+        self,
+        duration: impl Into<Duration>,
+    ) -> Result<Result<Sender<Detached>, DetachError<Sender<Detached>>>, Elapsed> {
         timeout(duration.into(), self.detach()).await
     }
 
@@ -328,7 +354,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         }
 
         // Wait for remote detach
@@ -385,7 +416,12 @@ impl Sender<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(err) => return Err(map_send_detach_error(err, detaching)),
+                Err(e) => return Err(
+                    match DetachError::try_from((detaching, e.into())) {
+                        Ok(err) => err,
+                        Err(_) => unreachable!()
+                    }
+                ),
             }
         };
 
@@ -396,7 +432,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(map_send_detach_error(e, detaching)),
+            Err(e) => return Err(
+                match DetachError::try_from((detaching, e.into())) {
+                    Ok(err) => err,
+                    Err(_) => unreachable!()
+                }
+            ),
         }
 
         Ok(())

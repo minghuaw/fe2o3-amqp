@@ -81,10 +81,10 @@ impl SessionHandle {
         self.control.is_closed()
     }
 
-    /// End the session 
+    /// End the session
     ///
     /// # Panics
-    /// 
+    ///
     /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end(&mut self) -> Result<(), Error> {
@@ -95,22 +95,28 @@ impl SessionHandle {
     }
 
     /// End the session with an error
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end_with_error(&mut self, error: impl Into<definitions::Error>) -> Result<(), Error> {
+    pub async fn end_with_error(
+        &mut self,
+        error: impl Into<definitions::Error>,
+    ) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
-        let _ = self.control.send(SessionControl::End(Some(error.into()))).await;
+        let _ = self
+            .control
+            .send(SessionControl::End(Some(error.into())))
+            .await;
         self.on_end().await
     }
 
     /// Returns when the underlying event loop has stopped
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_end(&mut self) -> Result<(), Error> {
@@ -119,7 +125,6 @@ impl SessionHandle {
             Err(e) => Err(Error::JoinError(e)),
         }
     }
-
 }
 
 pub(crate) async fn allocate_link(
@@ -253,7 +258,7 @@ impl endpoint::Session for Session {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with unattached handle?
         }
 
         self.incoming_channel = Some(channel);
@@ -291,15 +296,13 @@ impl endpoint::Session for Session {
                         Err(_) => {
                             // TODO: how should this error be handled?
                             // End with UnattachedHandle?
-                            return Err(Error::from(SessionError::UnattachedHandle))
+                            return Err(Error::session_error(SessionError::UnattachedHandle, None)); // End session with unattached handle?
                         }
                     }
                 }
-                None => return Err(Error::from(SessionError::UnattachedHandle))
+                None => return Err(Error::session_error(SessionError::UnattachedHandle, None)),  // End session with unattached handle?
             },
-            None => {
-                return Err(Error::from(SessionError::UnattachedHandle))
-            }
+            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)),  // End session with unattached handle?
         }
 
         Ok(())
@@ -344,12 +347,14 @@ impl endpoint::Session for Session {
                                 // Sending control to self. This will only give an error if the receiving
                                 // half is dropped. An error would thus indicate that the event loop
                                 // has stopped, so it could be considered illegal state.
-                                .map_err(|_| AmqpError::IllegalState)?;
+                                // 
+                                // If the event loop has stopped, this should not be executed at all
+                                .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?;
                         }
                     }
-                    None => return Err(SessionError::UnattachedHandle.into()),
+                    None => return Err(Error::session_error(SessionError::UnattachedHandle, None)),  // End session with unattached handle?
                 },
-                None => return Err(SessionError::UnattachedHandle.into()),
+                None => return Err(Error::session_error(SessionError::UnattachedHandle, None)),  // End session with unattached handle?
             }
         }
 
@@ -372,24 +377,27 @@ impl endpoint::Session for Session {
         match self.link_by_input_handle.get(&transfer.handle) {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link_handle) => {
-                    let delivery_id =
+                    let id_and_tag =
                         match link_handle.on_incoming_transfer(transfer, payload).await {
                             Ok(opt) => opt,
-                            Err(_) => {
-                                // TODO: should the link handle be removed from the session?
-                                return Err(SessionError::UnattachedHandle.into());
+                            Err((closed, error)) => {
+                                return Err(Error::LinkHandleError {
+                                    handle: output_handle.clone(),
+                                    closed,
+                                    error,
+                                })
                             }
                         };
 
                     // If the unsettled map needs this
-                    if let Some((delivery_id, delivery_tag)) = delivery_id {
+                    if let Some((delivery_id, delivery_tag)) = id_and_tag {
                         self.delivery_tag_by_id
                             .insert(delivery_id, (output_handle.clone(), delivery_tag));
                     }
                 }
-                None => return Err(SessionError::UnattachedHandle.into()),
+                None => return Err(Error::session_error(SessionError::UnattachedHandle, None)),  // End session with unattached handle?
             },
-            None => return Err(SessionError::UnattachedHandle.into()),
+            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
         };
 
         Ok(())
@@ -477,7 +485,7 @@ impl endpoint::Session for Session {
                             self.control
                                 .send(SessionControl::Disposition(disposition))
                                 .await
-                                .map_err(|_| AmqpError::IllegalState)?
+                                .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))? // event loop has stopped
                         }
 
                         prev = echo;
@@ -497,17 +505,17 @@ impl endpoint::Session for Session {
         // Remove the link by input handle
         let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
             Some(handle) => handle,
-            None => return Err(Error::from(SessionError::UnattachedHandle)), // End session with unattached handle?
+            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
         };
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
                 // TODO:
                 match link.send(LinkFrame::Detach(detach)).await {
                     Ok(_) => {}
-                    Err(_) => return Err(Error::from(SessionError::UnattachedHandle)), // End session with unattached handle?
+                    Err(_) => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
                 }
             }
-            None => return Err(Error::from(SessionError::UnattachedHandle)), // End session with unattached handle?
+            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
         }
 
         Ok(())
@@ -515,9 +523,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
         match self.local_state {
-            SessionState::BeginSent 
-            | SessionState::BeginReceived
-            | SessionState::Mapped => {
+            SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
                 self.control
                     .send(SessionControl::End(None))
@@ -525,19 +531,18 @@ impl endpoint::Session for Session {
                     // The `SendError` occurs when the receiving half is dropped,
                     // indicating that the `SessionEngine::event_loop` has stopped.
                     // and thus should yield an illegal state error
-                    .map_err(|_| AmqpError::IllegalState)?;
+                    .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?; // event loop has stopped
             }
-            SessionState::EndSent
-            | SessionState::Discarding  => {
+            SessionState::EndSent | SessionState::Discarding => {
                 self.local_state = SessionState::Unmapped
             }
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),  // End session with illegal state?
         }
 
         if let Some(error) = end.error {
             // TODO: handle remote error
             tracing::error!(remote_error = ?error);
-            return Err(Error::RemoteError(error))
+            return Err(Error::Remote(error));
         }
 
         Ok(())
@@ -584,7 +589,7 @@ impl endpoint::Session for Session {
                 })?;
                 self.local_state = SessionState::Mapped;
             }
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         }
 
         Ok(())
@@ -695,7 +700,7 @@ impl endpoint::Session for Session {
                 false => self.local_state = SessionState::EndSent,
             },
             SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),  // End session with illegal state
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));

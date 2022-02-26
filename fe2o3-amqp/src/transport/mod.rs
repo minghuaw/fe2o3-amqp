@@ -7,7 +7,7 @@
 //! Layer 0 should be hidden within the connection and there should be API that provide
 //! access to layer 1 for types that implement Encoder
 
-mod error;
+pub(crate) mod error;
 pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::{
@@ -15,7 +15,7 @@ use fe2o3_amqp_types::{
     sasl::SaslCode,
 };
 use tokio_rustls::{client::TlsStream, TlsConnector};
-use tracing::{instrument, trace, span, Level, event};
+use tracing::{event, instrument, span, trace, Level};
 
 /* -------------------------------- Transport ------------------------------- */
 
@@ -37,6 +37,8 @@ use crate::{
 };
 
 use protocol_header::ProtocolHeader;
+
+use self::error::NegotiationError;
 
 pin_project! {
     #[derive(Debug)]
@@ -87,12 +89,12 @@ impl<Io> Transport<Io, amqp::Frame>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    #[instrument(skip_all, fields(domain = %domain))]
+    // #[instrument(skip_all, fields(domain = %domain))]
     pub async fn connect_tls(
         mut stream: Io,
         domain: &str,
         config: rustls::ClientConfig,
-    ) -> Result<TlsStream<Io>, Error> {
+    ) -> Result<TlsStream<Io>, NegotiationError> {
         use rustls::ServerName;
         use std::sync::Arc;
 
@@ -104,46 +106,40 @@ where
         let mut buf: [u8; 8] = proto_header.clone().into();
         stream.write_all(&buf).await?;
         stream.read_exact(&mut buf).await?;
-        
+
         let span = span!(Level::TRACE, "RECV");
         let incoming_header = match ProtocolHeader::try_from(buf) {
             Ok(header) => {
                 event!(parent: &span, Level::TRACE, proto_header = ?header);
                 header
-            },
+            }
             Err(buf) => {
                 event!(parent: &span, Level::ERROR, ?buf);
-                return Err(Error::Io(std::io::Error::new(
+                return Err(NegotiationError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "Invalid protocol header",
-                )))
+                )));
             }
         };
         if proto_header != incoming_header {
-            return Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Protocol header mismatch",
-            )));
+            return Err(NegotiationError::ProtocolHeaderMismatch(
+                incoming_header.into(),
+            ));
         }
 
         // TLS negotiation
         let connector = TlsConnector::from(Arc::new(config));
-        let domain = ServerName::try_from(domain).map_err(|_| {
-            Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid domain",
-            ))
-        })?;
+        let domain = ServerName::try_from(domain).map_err(|_| NegotiationError::InvalidDomain)?;
         let tls = connector.connect(domain, stream).await?;
         Ok(tls)
     }
 
-    #[instrument(skip_all, fields(hostname = ?hostname))]
+    // #[instrument(skip_all, fields(hostname = ?hostname))]
     pub async fn connect_sasl(
         mut stream: Io,
         hostname: Option<&str>,
         mut profile: SaslProfile,
-    ) -> Result<Io, Error> {
+    ) -> Result<Io, NegotiationError> {
         let span = span!(Level::TRACE, "SEND");
         let proto_header = ProtocolHeader::sasl();
         event!(parent: &span, Level::TRACE, ?proto_header);
@@ -157,21 +153,17 @@ where
             Ok(header) => {
                 event!(parent: &span, Level::TRACE, proto_header = ?header);
                 header
-            },
+            }
             Err(buf) => {
                 event!(parent: &span, Level::ERROR, ?buf);
-                return Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Invalid protocol header",
-                )))
+                return Err(NegotiationError::ProtocolHeaderMismatch(buf));
             }
         };
 
         if proto_header != incoming_header {
-            return Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Protocol header mismatch",
-            )));
+            return Err(NegotiationError::ProtocolHeaderMismatch(
+                incoming_header.into(),
+            ));
         }
 
         // TODO: use a different frame size?
@@ -180,14 +172,15 @@ where
         // TODO: timeout?
         while let Some(frame) = transport.next().await {
             let frame = frame?;
+            let negotiation = profile.on_frame(frame, hostname).await?;
 
-            match profile.on_frame(frame, hostname).await? {
+            match negotiation {
                 Negotiation::Continue => {}
                 Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
                 Negotiation::Outcome(outcome) => match outcome.code {
                     SaslCode::Ok => return Ok(transport.into_inner_io()),
                     code @ _ => {
-                        return Err(Error::SaslError {
+                        return Err(NegotiationError::SaslError {
                             code,
                             additional_data: outcome.additional_data,
                         })
@@ -195,7 +188,7 @@ where
                 },
             }
         }
-        Err(Error::Io(io::Error::new(
+        Err(NegotiationError::Io(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "Expecting SASL negotiation",
         )))
@@ -206,7 +199,7 @@ where
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
-    ) -> Result<ProtocolHeader, Error> {
+    ) -> Result<ProtocolHeader, NegotiationError> {
         send_proto_header(io, local_state, proto_header.clone()).await?;
         let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
 
@@ -242,7 +235,7 @@ async fn send_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
-) -> Result<(), Error>
+) -> Result<(), NegotiationError>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -257,7 +250,7 @@ where
             io.write_all(&buf).await?;
             *local_state = ConnectionState::HeaderExchange
         }
-        _ => return Err(AmqpError::IllegalState.into()), // TODO: is this necessary?
+        _ => return Err(NegotiationError::IllegalState), // TODO: is this necessary?
     }
     Ok(())
 }
@@ -267,7 +260,7 @@ async fn recv_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
-) -> Result<ProtocolHeader, Error>
+) -> Result<ProtocolHeader, NegotiationError>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -285,7 +278,7 @@ where
             *local_state = ConnectionState::HeaderExchange;
             incoming_header
         }
-        _ => return Err(AmqpError::IllegalState.into()),
+        _ => return Err(NegotiationError::IllegalState),
     };
     trace!(?proto_header);
 
@@ -296,7 +289,7 @@ async fn read_and_compare_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: &ProtocolHeader,
-) -> Result<ProtocolHeader, Error>
+) -> Result<ProtocolHeader, NegotiationError>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -309,17 +302,13 @@ where
         Err(buf) => {
             tracing::error!(?buf);
 
-            return Err(Error::amqp_error(
-                AmqpError::NotImplemented,
-                Some(format!("Found: {:?}", inbound_buf)),
-            ));
+            return Err(NegotiationError::NotImplemented(Some(format!("Found: {:?}", inbound_buf))));
         }
     };
     // .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
-        return Err(Error::amqp_error(
-            AmqpError::NotImplemented,
+        return Err(NegotiationError::NotImplemented(
             Some(format!(
                 "Expecting {:?}, found {:?}",
                 proto_header, incoming_header
@@ -399,9 +388,7 @@ where
                 match next {
                     Some(item) => {
                         let mut src = match item {
-                            Ok(b) => {
-                                b
-                            }
+                            Ok(b) => b,
                             Err(err) => {
                                 use std::any::Any;
                                 let any = &err as &dyn Any;
@@ -441,7 +428,7 @@ impl<Io> Sink<sasl::Frame> for Transport<Io, sasl::Frame>
 where
     Io: AsyncWrite + Unpin,
 {
-    type Error = Error;
+    type Error = NegotiationError;
 
     fn poll_ready(
         self: std::pin::Pin<&mut Self>,
@@ -484,7 +471,7 @@ impl<Io> Stream for Transport<Io, sasl::Frame>
 where
     Io: AsyncRead + Unpin,
 {
-    type Item = Result<sasl::Frame, Error>;
+    type Item = Result<sasl::Frame, NegotiationError>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
@@ -493,46 +480,20 @@ where
         let this = self.project();
 
         match this.framed.poll_next(cx) {
-            Poll::Ready(next) => {
-                if let Some(mut delay) = this.idle_timeout.as_pin_mut() {
-                    delay.reset();
+            Poll::Ready(next) => match next {
+                Some(item) => {
+                    let mut src = match item {
+                        Ok(b) => b,
+                        Err(err) => {
+                            return Poll::Ready(Some(Err(err.into())));
+                        }
+                    };
+                    let mut decoder = sasl::FrameCodec {};
+                    Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
                 }
-
-                match next {
-                    Some(item) => {
-                        let mut src = match item {
-                            Ok(b) => {
-                                b
-                            }
-                            Err(err) => {
-                                use std::any::Any;
-                                let any = &err as &dyn Any;
-                                if any.is::<LengthDelimitedCodecError>() {
-                                    return Poll::Ready(Some(Err(Error::amqp_error(
-                                        AmqpError::FrameSizeTooSmall,
-                                        None,
-                                    ))));
-                                } else {
-                                    return Poll::Ready(Some(Err(err.into())));
-                                }
-                            }
-                        };
-                        let mut decoder = sasl::FrameCodec {};
-                        Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
-                    }
-                    None => Poll::Ready(None),
-                }
-            }
-            Poll::Pending => {
-                if let Some(delay) = this.idle_timeout.as_pin_mut() {
-                    match delay.poll(cx) {
-                        Poll::Ready(()) => return Poll::Ready(Some(Err(Error::IdleTimeout))),
-                        Poll::Pending => return Poll::Pending,
-                    }
-                }
-
-                Poll::Pending
-            }
+                None => Poll::Ready(None),
+            },
+            Poll::Pending => Poll::Pending,
         }
     }
 }

@@ -32,8 +32,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
-    link::{self, delivery::UnsettledMessage},
-    session,
+    link::{self, delivery::UnsettledMessage, error::DetachError},
     util::{Consumer, Producer},
     Payload,
 };
@@ -200,7 +199,6 @@ where
 
     /// Closing or not isn't taken care of here but outside
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => {
@@ -232,10 +230,13 @@ where
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
             None => {
-                return Err(link::Error::AmqpError {
-                    condition: AmqpError::InvalidField,
-                    description: Some("Output handle is None".into()),
-                })
+                return Err(link::Error::Local(
+                    definitions::Error::new(
+                        AmqpError::InvalidField,
+                        Some("Output handle is None".into()),
+                        None
+                    )
+                ))
             }
         };
         let unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>> = {
@@ -286,12 +287,12 @@ where
             | LinkState::Detached // May attempt to re-attach
             | LinkState::DetachSent => {
                 writer.send(frame).await
-                    .map_err(|_| Self::Error::error_sending_to_session())?;
+                    .map_err(|_| Self::Error::sending_to_session())?;
                 self.local_state = LinkState::AttachSent
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
-                    .map_err(|_| Self::Error::error_sending_to_session())?;
+                    .map_err(|_| Self::Error::sending_to_session())?;
                 self.local_state = LinkState::Attached
             }
             _ => return Err(AmqpError::IllegalState.into()),
@@ -332,19 +333,12 @@ where
                     closed,
                     error,
                 };
-                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
-                    link::Error::AmqpError {
-                        condition: AmqpError::IllegalState,
-                        description: Some("Session is already dropped".to_string()),
-                    }
-                })?;
+                writer.send(LinkFrame::Detach(detach)).await
+                    .map_err(|_| link::Error::sending_to_session())?;
                 remove_handle
             }
             None => {
-                return Err(link::Error::AmqpError {
-                    condition: AmqpError::IllegalState,
-                    description: Some("Link is already detached".to_string()),
-                })
+                return Err(link::Error::not_attached())
             }
         };
 
@@ -490,18 +484,23 @@ impl LinkHandle {
         }
     }
 
+    /// LinkHandle operates in session's event loop
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, session::Error> {
+    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, (bool, definitions::Error)> {
         match self {
             LinkHandle::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
-                return Err(session::Error::AmqpError {
-                    condition: AmqpError::NotAllowed,
-                    description: Some("Sender should never receive a transfer".to_string()),
-                });
+                return Err((
+                    true, // Closing the link
+                    definitions::Error::new(
+                        AmqpError::NotAllowed,
+                        Some("Sender should never receive a transfer".to_string()),
+                        None
+                    ),
+                ));
             }
             LinkHandle::Receiver {
                 tx,
@@ -519,7 +518,16 @@ impl LinkHandle {
                     payload,
                 })
                 .await
-                .map_err(|_| SessionError::UnattachedHandle)?;
+                .map_err(|_| 
+                    (
+                        true, 
+                        definitions::Error::new(
+                            SessionError::UnattachedHandle, 
+                            None, 
+                            None
+                        )
+                    )
+                )?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {
@@ -572,18 +580,21 @@ where
     endpoint::Link::send_attach(link, writer).await?;
 
     // Wait for an Attach frame
-    let frame = reader.next().await.ok_or_else(|| Error::AmqpError {
-        condition: AmqpError::IllegalState,
-        description: Some("Expecting remote attach frame".to_string()),
-    })?;
+    let frame = reader.next().await
+        .ok_or_else(|| Error::Detached(DetachError::empty()))?;
+        
     let remote_attach = match frame {
         LinkFrame::Attach(attach) => attach,
+        LinkFrame::Detach(detach) => {
+            return Err(Error::Detached(DetachError {
+                link: None,
+                is_closed_by_remote: detach.closed,
+                error: detach.error
+            }))
+        }
         // TODO: how to handle this?
         _ => {
-            return Err(Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Expecting remote attach frame".to_string()),
-            })
+            return Err(Error::expecting_frame("Attach"))
         }
     };
 
@@ -602,7 +613,7 @@ where
         false => {
             // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
-            expect_detach_then_detach(link, writer, reader).await?;
+            expect_detach_then_detach(link, writer, reader).await?
         }
     }
 
@@ -621,17 +632,13 @@ where
 {
     use futures_util::StreamExt;
 
-    let frame = reader.next().await.ok_or_else(|| Error::AmqpError {
-        condition: AmqpError::IllegalState,
-        description: Some("Expecting remote detach frame".to_string()),
-    })?;
+    let frame = reader.next().await
+        .ok_or_else(|| Error::expecting_frame("Detach"))?;
+
     let _remote_detach = match frame {
         LinkFrame::Detach(detach) => detach,
         _ => {
-            return Err(Error::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some("Expecting remote detach frame".to_string()),
-            })
+            return Err(Error::expecting_frame("Detach"))
         }
     };
 

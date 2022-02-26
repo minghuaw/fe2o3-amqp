@@ -1,5 +1,5 @@
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
+    definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, self},
     messaging::{message::BodySection, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
@@ -266,10 +266,14 @@ impl Future for DeliveryFut {
                             Err(_) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-                                Poll::Ready(Err(link::Error::AmqpError {
-                                    condition: AmqpError::IllegalState,
-                                    description: Some("Outcome sender is dropped".into()),
-                                }))
+                                
+                                Poll::Ready(Err(link::Error::Local(
+                                    definitions::Error::new(
+                                        AmqpError::IllegalState,
+                                        Some("Outcome sender is dropped".into()),
+                                        None
+                                    )
+                                )))
                             }
                         }
                     }

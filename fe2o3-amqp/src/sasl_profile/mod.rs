@@ -1,6 +1,5 @@
 use bytes::BufMut;
 use fe2o3_amqp_types::{
-    definitions::AmqpError,
     primitives::{Binary, Symbol},
     sasl::{SaslInit, SaslOutcome},
 };
@@ -89,20 +88,14 @@ impl SaslProfile {
                     };
                     Ok(Negotiation::Init(init))
                 } else {
-                    Err(Error::AmqpError {
-                        condition: AmqpError::NotImplemented,
-                        description: Some(format!("{:?} is not supported", mechanism)),
-                    })
+                    Err(Error::NotImplemented(Some(format!("{:?} is not supported", mechanism))))
                 }
             }
             Frame::Challenge(_challenge) => {
                 todo!()
             }
             Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
-            _ => Err(Error::AmqpError {
-                condition: AmqpError::NotImplemented,
-                description: Some(format!("{:?} is not expected", frame)),
-            }),
+            _ => Err(Error::NotImplemented(Some(format!("{:?} is not expected", frame)))),
         }
     }
 }

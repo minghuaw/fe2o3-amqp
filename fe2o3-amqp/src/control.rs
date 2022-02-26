@@ -29,8 +29,11 @@ impl std::fmt::Display for ConnectionControl {
         match self {
             Self::Open => write!(f, "Open"),
             Self::Close(err) => write!(f, "Close({:?})", err),
-            Self::AllocateSession {tx:_, responder:_} => write!(f, "AllocateSession"),
-            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id)
+            Self::AllocateSession {
+                tx: _,
+                responder: _,
+            } => write!(f, "AllocateSession"),
+            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id),
         }
     }
 }

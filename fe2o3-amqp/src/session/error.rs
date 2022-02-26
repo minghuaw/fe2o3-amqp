@@ -1,6 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{AmqpError, SessionError, self};
+use fe2o3_amqp_types::definitions::{self, AmqpError, SessionError, Handle, ConnectionError, ErrorCondition};
 use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;
@@ -16,37 +16,46 @@ pub enum Error {
     #[error(transparent)]
     JoinError(#[from] JoinError),
 
-    #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    AmqpError {
-        condition: AmqpError,
-        description: Option<String>,
-    },
-
-    #[error("Session error {:?}, {:?}", .condition, .description)]
-    SessionError {
-        condition: SessionError,
-        description: Option<String>,
-    },
+    #[error("Local error {:?}", .0)]
+    Local(definitions::Error),
 
     #[error("Remote error {:?}", .0)]
-    RemoteError(definitions::Error)
+    Remote(definitions::Error),
+
+    /// Link handle error should be handled differently. Link handle is only local
+    #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
+    LinkHandleError {
+        handle: Handle,
+        closed: bool,
+        error: definitions::Error,
+    },
 }
 
-impl From<AmqpError> for Error {
-    fn from(err: AmqpError) -> Self {
-        Self::AmqpError {
-            condition: err,
-            description: None,
-        }
+impl Error {
+    pub(crate) fn amqp_error(
+        condition: impl Into<AmqpError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
+        Self::Local(
+            definitions::Error {
+                condition: ErrorCondition::AmqpError(condition.into()),
+                description: description.into(),
+                info: None
+            }
+        )
     }
-}
 
-impl From<SessionError> for Error {
-    fn from(err: SessionError) -> Self {
-        Self::SessionError {
-            condition: err,
-            description: None,
-        }
+    pub(crate) fn session_error(
+        condition: impl Into<SessionError>,
+        description: impl Into<Option<String>>,
+    ) -> Self {
+        Self::Local(
+            definitions::Error {
+                condition: ErrorCondition::SessionError(condition.into()),
+                description: description.into(),
+                info: None
+            }
+        )
     }
 }
 
@@ -67,22 +76,31 @@ impl From<AllocSessionError> for Error {
         match err {
             AllocSessionError::Io(e) => Self::Io(e),
             AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
-            AllocSessionError::IllegalState => Self::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: None,
-            },
+            AllocSessionError::IllegalState => Self::Local(
+                definitions::Error::new(AmqpError::IllegalState, None, None)
+            ),
         }
     }
 }
 
-// #[derive(Debug, thiserror::Error)]
-// pub enum EndError {
-//     #[error("Illegal state")]
-//     IllegalState,
-    
-//     #[error("Remote session error: {:?}", .0)]
-//     RemoteSessionError(definitions::Error),
-
-//     // #[error("None")]
-//     // None,
-// }
+impl From<AllocLinkError> for definitions::Error {
+    fn from(err: AllocLinkError) -> Self {
+        match err {
+            AllocLinkError::IllegalState => Self {
+                condition: AmqpError::IllegalState.into(),
+                description: None,
+                info: None,
+            },
+            AllocLinkError::HandleMaxReached => Self {
+                condition: ConnectionError::FramingError.into(),
+                description: Some("Handle max has been reached".to_string()),
+                info: None,
+            },
+            AllocLinkError::DuplicatedLinkName => Self {
+                condition: AmqpError::NotAllowed.into(),
+                description: Some("Link name is duplicated".to_string()),
+                info: None,
+            },
+        }
+    }
+}

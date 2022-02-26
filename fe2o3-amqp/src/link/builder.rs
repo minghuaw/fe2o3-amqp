@@ -11,7 +11,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::{Error, Link, LinkHandle, LinkIncomingItem},
+    link::{Link, LinkHandle, LinkIncomingItem},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -21,7 +21,7 @@ use super::{
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     type_state::Attached,
-    Receiver, Sender,
+    Receiver, Sender, error::AttachError,
 };
 
 /// Type state for link::builder::Builder;
@@ -230,12 +230,12 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    async fn create_link_instance<C, M>(
+    fn create_link<C, M>(
         self,
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
         flow_state_consumer: C,
-    ) -> Result<Link<Role, C, M>, Error> {
+    ) -> Link<Role, C, M> {
         let local_state = LinkState::Unattached;
 
         let max_message_size = match self.max_message_size {
@@ -244,7 +244,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         };
 
         // Create a SenderLink instance
-        let link = Link::<Role, C, M> {
+        Link::<Role, C, M> {
             role: PhantomData,
             local_state,
             name: self.name,
@@ -263,8 +263,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             // flow_state: Consumer::new(notifier, flow_state),
             flow_state: flow_state_consumer,
             unsettled,
-        };
-        Ok(link)
+        }
     }
 }
 
@@ -281,7 +280,7 @@ impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
 impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
 
 impl Builder<role::Sender, WithName, WithTarget> {
-    pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Sender<Attached>, Error> {
+    pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Sender<Attached>, AttachError> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
@@ -313,15 +312,18 @@ impl Builder<role::Sender, WithName, WithTarget> {
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         let mut link = self
-            .create_link_instance(unsettled, output_handle, flow_state_consumer)
-            .await?;
+            .create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await
+            .map_err(|value| match AttachError::try_from(value) {
+                Ok(error) => error,
+                Err(_) => unreachable!(),
+            })?;
 
         // Attach completed, return Sender
         let sender = Sender::<Attached> {
@@ -340,7 +342,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
     pub async fn attach(
         mut self,
         session: &mut SessionHandle,
-    ) -> Result<Receiver<Attached>, Error> {
+    ) -> Result<Receiver<Attached>, AttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size.clone();
         let credit_mode = self.credit_mode.clone();
@@ -374,15 +376,18 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         let mut link = self
-            .create_link_instance(unsettled, output_handle, flow_state_consumer)
-            .await?;
+            .create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await
+            .map_err(|value| match AttachError::try_from(value) {
+                Ok(error) => error,
+                Err(_) => unreachable!(),
+            })?;
 
         let mut receiver = Receiver::<Attached> {
             link,
@@ -398,7 +403,11 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         };
 
         if let CreditMode::Auto(credit) = receiver.credit_mode {
-            receiver.set_credit(credit).await?;
+            receiver.set_credit(credit).await
+                .map_err(|value| match AttachError::try_from(value) {
+                    Ok(error) => error,
+                    Err(_) => unreachable!(),
+                })?;
         }
 
         Ok(receiver)

@@ -79,7 +79,7 @@ impl Decoder for FrameCodec {
 
         match doff {
             2 => {}
-            _ => return Err(Error::FramingError),
+            _ => return Err(Error::NotImplemented),
         }
 
         // decode body

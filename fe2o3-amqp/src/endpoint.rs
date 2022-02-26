@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        self, DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo,
+        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo,
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
@@ -76,7 +76,7 @@ pub(crate) trait Connection {
         &mut self,
         channel: u16,
         close: Close,
-    ) -> Result<Option<definitions::Error>, Self::Error>;
+    ) -> Result<(), Self::Error>;
 
     /// Sending out an Open frame
     ///

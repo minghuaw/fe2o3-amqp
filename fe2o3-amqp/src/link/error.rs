@@ -1,13 +1,14 @@
-use std::{convert::Infallible, fmt};
+use std::{fmt};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ConnectionError, ErrorCondition, LinkError},
+    definitions::{self, AmqpError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
 };
 use tokio::sync::mpsc;
 
 use crate::session::AllocLinkError;
 
+/// 
 #[derive(Debug)]
 pub struct DetachError<L> {
     pub link: Option<L>,
@@ -30,6 +31,14 @@ impl<L> DetachError<L> {
     pub fn into_error(self) -> Option<definitions::Error> {
         self.error
     }
+
+    pub(crate) fn empty() -> Self {
+        Self {
+            link: None,
+            is_closed_by_remote: false,
+            error: None
+        }
+    }
 }
 
 impl<L> fmt::Display for DetachError<L> {
@@ -42,20 +51,78 @@ impl<L> fmt::Display for DetachError<L> {
     }
 }
 
-impl<L: fmt::Debug> std::error::Error for DetachError<L> { }
+impl<L: fmt::Debug> std::error::Error for DetachError<L> {}
+
+impl<L> TryFrom<Error> for DetachError<L> {
+    type Error = Error;
+
+    fn try_from(value: Error) -> Result<Self, Self::Error> {
+        match value {
+            Error::Local(error) => {
+                let err = Self {
+                    link: None,
+                    is_closed_by_remote: false,
+                    error: Some(error)
+                };
+                Ok(err)
+            },
+            Error::Detached(err) => {
+                let error = DetachError {
+                    link: None,
+                    is_closed_by_remote: err.is_closed_by_remote,
+                    error: err.error
+                };
+                Ok(error)
+            },
+            Error::ParseError
+            | Error::Rejected(_)
+            | Error::Released(_)
+            | Error::Modified(_) => Err(value),
+        }
+    }
+}
+
+impl<L> TryFrom<(L, Error)> for DetachError<L> {
+    type Error = Error;
+
+    fn try_from((link, value): (L, Error)) -> Result<Self, Self::Error> {
+        match value {
+            Error::Local(error) => {
+                let err = Self {
+                    link: Some(link),
+                    is_closed_by_remote: false,
+                    error: Some(error)
+                };
+                Ok(err)
+            },
+            Error::Detached(err) => {
+                let error = DetachError {
+                    link: Some(link),
+                    is_closed_by_remote: err.is_closed_by_remote,
+                    error: err.error
+                };
+                Ok(error)
+            },
+            Error::ParseError
+            | Error::Rejected(_)
+            | Error::Released(_)
+            | Error::Modified(_) => Err(value),
+        }
+    }
+}
 
 /// TODO: Simplify the error structures
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Handle max reached")]
-    HandleMaxReached,
-
-    #[error("Link name must be unique")]
-    DuplicatedLinkName,
-
     #[error("Parse error")]
     ParseError,
+    
+    #[error("Local error: {:?}", .0)]
+    Local(definitions::Error),
 
+    #[error("Link is detached {:?}", .0)]
+    Detached(DetachError<()>),
+    
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),
 
@@ -64,108 +131,69 @@ pub enum Error {
 
     #[error("Outcome Modified: {:?}", .0)]
     Modified(Modified),
-
-    #[error("Link is detached {:?}", .0)]
-    Detached(DetachError<()>),
-
-    #[error("AMQP Error {:?}, {:?}", .condition, .description)]
-    AmqpError {
-        condition: AmqpError,
-        // Option<String> takes the same amount of memory
-        description: Option<String>,
-    },
-
-    #[error("Link Error {:?}, {:?}", .condition, .description)]
-    LinkError {
-        condition: LinkError,
-        description: Option<String>,
-    },
 }
 
 impl Error {
     // May want to have different handling of SendError
-    pub(crate) fn error_sending_to_session() -> Self {
-        Self::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Failed to send to sesssion".to_string()),
-        }
+    pub(crate) fn sending_to_session() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Failed to send to sesssion".to_string()),
+            None
+        ))
+    }
+
+    pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some(format!("Expecting {}", frame_ident.into())),
+            None
+        ))
+    }
+
+    pub(crate) fn not_attached() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Link is not attached".to_string()),
+            None
+        ))
     }
 }
 
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
-        Self::AmqpError {
-            condition: err,
-            description: None,
-        }
+        Self::Local(definitions::Error::new(
+            err,
+            None,
+            None
+        ))
     }
 }
 
 impl From<LinkError> for Error {
     fn from(err: LinkError) -> Self {
-        Self::LinkError {
-            condition: err,
-            description: None,
-        }
+        Self::Local(definitions::Error::new(
+            err,
+            None,
+            None
+        ))
     }
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error {
     fn from(_: mpsc::error::SendError<T>) -> Self {
-        Self::AmqpError {
-            condition: AmqpError::IllegalState,
-            description: Some("Failed to send to sesssion".to_string()),
-        }
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Failed to send to sesssion".to_string()),
+            None
+        ))
     }
 }
 
-impl From<AllocLinkError> for Error {
-    fn from(err: AllocLinkError) -> Self {
-        match err {
-            AllocLinkError::IllegalState => Self::AmqpError {
-                condition: AmqpError::IllegalState,
-                description: Some(String::from("Invalid session state")),
-            },
-            AllocLinkError::HandleMaxReached => Self::HandleMaxReached,
-            AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
-        }
-    }
-}
-
-impl From<AllocLinkError> for definitions::Error {
-    fn from(err: AllocLinkError) -> Self {
-        match err {
-            AllocLinkError::IllegalState => Self {
-                condition: AmqpError::IllegalState.into(),
-                description: None,
-                info: None,
-            },
-            AllocLinkError::HandleMaxReached => Self {
-                condition: ConnectionError::FramingError.into(),
-                description: Some("Handle max has been reached".to_string()),
-                info: None,
-            },
-            AllocLinkError::DuplicatedLinkName => Self {
-                condition: AmqpError::NotAllowed.into(),
-                description: Some("Link name is duplicated".to_string()),
-                info: None,
-            },
-        }
-    }
-}
 
 impl From<serde_amqp::Error> for Error {
     fn from(_: serde_amqp::Error) -> Self {
         Self::ParseError
-    }
-}
-
-impl From<Infallible> for Error {
-    fn from(_: Infallible) -> Self {
-        Self::AmqpError {
-            condition: AmqpError::InternalError,
-            description: Some("Infallible".to_string()),
-        }
     }
 }
 
@@ -183,33 +211,42 @@ pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
     }
 }
 
-pub(crate) fn map_send_detach_error<L>(err: impl Into<Error>, link: L) -> DetachError<L> {
-    let (condition, description): (ErrorCondition, _) = match err.into() {
-        Error::AmqpError {
-            condition,
-            description,
-        } => (condition.into(), description),
-        Error::LinkError {
-            condition,
-            description,
-        } => (condition.into(), description),
-        Error::Detached(e) => {
-            return DetachError {
-                link: None,
-                is_closed_by_remote: e.is_closed_by_remote,
-                error: e.error,
-            }
+#[derive(Debug, thiserror::Error)]
+pub enum AttachError {
+    #[error("Illegal session state")]
+    IllegalSessionState,
+
+    #[error("Handle max reached")]
+    HandleMaxReached,
+
+    #[error("Link name must be unique")]
+    DuplicatedLinkName,
+
+    #[error("Local error: {:?}", .0)]
+    LocalError(definitions::Error),
+}
+
+impl From<AllocLinkError> for AttachError {
+    fn from(error: AllocLinkError) -> Self {
+        match error {
+            AllocLinkError::IllegalState => Self::IllegalSessionState,
+            AllocLinkError::HandleMaxReached => Self::HandleMaxReached,
+            AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
         }
-        Error::HandleMaxReached
-        | Error::DuplicatedLinkName
-        | Error::ParseError
-        | Error::Rejected(_)
-        | Error::Released(_)
-        | Error::Modified(_) => unreachable!(),
-    };
-    DetachError {
-        link: Some(link),
-        is_closed_by_remote: false,
-        error: Some(definitions::Error::new(condition, description, None)),
+    }
+}
+
+impl TryFrom<Error> for AttachError {
+    type Error = Error;
+
+    fn try_from(value: Error) -> Result<Self, Self::Error> {
+        match value {
+            Error::Local(error) => Ok(AttachError::LocalError(error)),
+            Error::ParseError
+            | Error::Rejected(_)
+            | Error::Released(_)
+            | Error::Modified(_)
+            | Error::Detached(_) => Err(value),
+        }
     }
 }
