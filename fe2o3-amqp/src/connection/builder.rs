@@ -1,3 +1,5 @@
+//! Builder for [`crate::Connection`]
+
 use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp_types::{
@@ -23,29 +25,64 @@ use crate::{
 use super::{engine::ConnectionEngine, ConnectionHandle, OpenError};
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
-pub const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
+pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
 
+/// Type state for connection [`Builder`] representing state where a valid container id is not present
 pub struct WithoutContainerId {}
+
+/// Type state for connection [`Builder`] representing state where a valid container id is present
 pub struct WithContainerId {}
 
-/// Connection builder
+/// Builder for [`crate::Connection`]
 pub struct Builder<'a, Mode> {
+    /// The id of the source container
     pub container_id: String,
+
+    /// The name of the target host
     pub hostname: Option<&'a str>,
+
+    /// URL scheme
     pub scheme: &'a str,
+
+    /// URL domain
     pub domain: Option<&'a str>,
+
+    /// Proposed maximum frame size
     pub max_frame_size: MaxFrameSize,
+
+    /// The maximum channel number that can be used on the connection
     pub channel_max: ChannelMax,
+
+    /// Idle time-out
     pub idle_time_out: Option<Milliseconds>,
+
+    /// Locales available for outgoing text
     pub outgoing_locales: Option<Vec<IetfLanguageTag>>,
+
+    /// Desired locales for incoming text in decreasing level of preference
     pub incoming_locales: Option<Vec<IetfLanguageTag>>,
+
+    /// Extension capabilities the sender supports
     pub offered_capabilities: Option<Vec<Symbol>>,
+
+    /// Extension capabilities the sender can use if the receiver supports them
     pub desired_capabilities: Option<Vec<Symbol>>,
+
+    /// Connection properties
     pub properties: Option<Fields>,
 
+    /// TLS client config
     pub client_config: Option<ClientConfig>,
 
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions
     pub buffer_size: usize,
+
+    /// SASL profile for SASL negotiation. 
+    /// 
+    /// # Warn
+    /// 
+    /// If username and password are supplied with the url, this field will be overriden with a
+    /// PLAIN SASL profile that is interpreted from the url.
     pub sasl_profile: Option<SaslProfile>,
 
     // type state marker
@@ -53,6 +90,7 @@ pub struct Builder<'a, Mode> {
 }
 
 impl<'a> Builder<'a, WithoutContainerId> {
+    /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
             container_id: String::new(),
@@ -80,10 +118,11 @@ impl<'a> Builder<'a, WithoutContainerId> {
 }
 
 impl<'a, Mode> Builder<'a, Mode> {
-    // In Rust, it’s more common to pass slices as arguments
-    // rather than vectors when you just want to provide read access.
-    // The same goes for String and &str.
+    /// The id of the source container
     pub fn container_id(self, id: impl Into<String>) -> Builder<'a, WithContainerId> {
+        // In Rust, it’s more common to pass slices as arguments
+        // rather than vectors when you just want to provide read access.
+        // The same goes for String and &str.
         Builder::<WithContainerId> {
             container_id: id.into(),
             hostname: self.hostname,
@@ -109,21 +148,25 @@ impl<'a, Mode> Builder<'a, Mode> {
 }
 
 impl<'a, Mode> Builder<'a, Mode> {
+    /// The name of the target host
     pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
         self.hostname = hostname.into();
         self
     }
 
+    /// URL scheme
     pub fn scheme(mut self, scheme: impl Into<&'a str>) -> Self {
         self.scheme = scheme.into();
         self
     }
 
+    /// URL domain
     pub fn domain(mut self, domain: impl Into<Option<&'a str>>) -> Self {
         self.domain = domain.into();
         self
     }
 
+    /// Proposed maximum frame size
     pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
         let max_frame_size = max_frame_size.into();
         let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE as u32, max_frame_size.0);
@@ -131,16 +174,19 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
+    /// The maximum channel number that can be used on the connection
     pub fn channel_max(mut self, channel_max: impl Into<ChannelMax>) -> Self {
         self.channel_max = channel_max.into();
         self
     }
 
+    /// Idle time-out
     pub fn idle_time_out(mut self, idle_time_out: impl Into<Milliseconds>) -> Self {
         self.idle_time_out = Some(idle_time_out.into());
         self
     }
 
+    /// Add one locales available for outgoing text
     pub fn add_outgoing_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
         match &mut self.outgoing_locales {
             Some(locales) => locales.push(locale.into()),
@@ -149,11 +195,13 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
+    /// Set the locales available for outgoing text
     pub fn set_outgoing_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
         self.outgoing_locales = Some(locales);
         self
     }
 
+    /// Add one desired locales for incoming text in decreasing level of preference
     pub fn add_incoming_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
         match &mut self.incoming_locales {
             Some(locales) => locales.push(locale.into()),
@@ -162,11 +210,13 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
+    /// Set the desired locales for incoming text in decreasing level of preference
     pub fn set_incoming_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
         self.incoming_locales = Some(locales);
         self
     }
 
+    /// Add one extension capabilities the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -175,11 +225,13 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
+    /// Set the extension capabilities the sender supports
     pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.offered_capabilities = Some(capabilities);
         self
     }
 
+    /// Add one extension capabilities the sender can use if the receiver supports them
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -188,23 +240,44 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
+    /// Set the extension capabilities the sender can use if the receiver supports them
     pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.desired_capabilities = Some(capabilities);
         self
     }
 
+    /// TLS client config
+    pub fn client_config(mut self, client_config: Option<ClientConfig>) -> Self {
+        self.client_config = client_config;
+        self
+    }
+
+    /// Connection properties
     pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
         self
     }
 
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions
     pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
+        self
+    }
+
+    /// SASL profile for SASL negotiation. 
+    /// 
+    /// # Warn
+    /// 
+    /// If username and password are supplied with the url, this field will be overriden with a
+    /// PLAIN SASL profile that is interpreted from the url.
+    pub fn sasl_profile(mut self, profile: impl Into<SaslProfile>) -> Self {
+        self.sasl_profile = Some(profile.into());
         self
     }
 }
 
 impl<'a> Builder<'a, WithContainerId> {
+    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
     pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -225,6 +298,20 @@ impl<'a> Builder<'a, WithContainerId> {
         }
     }
 
+    /// Open a [`crate::Connection`] with an url
+    /// 
+    /// # Raw AMQP connection
+    /// 
+    /// TODO
+    /// 
+    /// # TLS
+    /// 
+    /// TODO
+    /// 
+    /// # SASL
+    /// 
+    /// TODO
+    /// 
     pub async fn open(
         mut self,
         url: impl TryInto<Url, Error = url::ParseError>,
@@ -235,7 +322,9 @@ impl<'a> Builder<'a, WithContainerId> {
         self.hostname = url.host_str().map(Into::into);
         self.scheme = url.scheme().into();
         self.domain = url.domain().map(Into::into);
-        self.sasl_profile = SaslProfile::try_from(&url).ok();
+        if let Ok(profile) = SaslProfile::try_from(&url) {
+            self.sasl_profile = Some(profile);
+        }
 
         let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
         let stream = TcpStream::connect(&*addr).await?; // std::io::Error

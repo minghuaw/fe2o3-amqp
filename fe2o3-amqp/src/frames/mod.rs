@@ -1,3 +1,5 @@
+//! Implements frame encoder and decoder
+
 pub mod amqp;
 pub mod sasl;
 

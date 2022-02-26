@@ -75,6 +75,12 @@ pub struct SessionHandle {
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
 }
 
+impl Drop for SessionHandle {
+    fn drop(&mut self) {
+        let _ = self.control.try_send(SessionControl::End(None));
+    }
+}
+
 impl SessionHandle {
     /// Checks if the underlying event loop has stopped
     pub fn is_ended(&self) -> bool {

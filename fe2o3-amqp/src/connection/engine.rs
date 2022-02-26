@@ -22,8 +22,6 @@ use crate::{endpoint, transport};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
 use super::{AllocSessionError, OpenError};
 
-pub const ERROR_CLOSE_WAIT_SECS: u64 = 10; // seconds
-
 pub(crate) type SessionId = usize;
 
 #[derive(Debug)]
@@ -266,13 +264,6 @@ where
     async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
         debug!(?control);
         match control {
-            ConnectionControl::Open => {
-                // let open = self.connection.local_open().clone();
-                self.connection
-                    .send_open(&mut self.transport)
-                    .await
-                    .map_err(Into::into)?;
-            }
             ConnectionControl::Close(error) => {
                 self.connection
                     .send_close(&mut self.transport, error)

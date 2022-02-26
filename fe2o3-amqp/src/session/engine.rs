@@ -140,10 +140,6 @@ impl SessionEngine<super::Session>
     #[inline]
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
         match control {
-            SessionControl::Begin => {
-                self.session.send_begin(&mut self.outgoing).await?;
-                // .map_err(Into::into)?;
-            }
             SessionControl::End(error) => {
                 self.session.send_end(&mut self.outgoing, error).await?;
                 // .map_err(Into::into)?;
