@@ -94,7 +94,8 @@ impl SessionHandle {
     ///
     /// # Panics
     ///
-    /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
+    /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error), 
+    /// [`on_end`](#on_end) has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
@@ -107,7 +108,8 @@ impl SessionHandle {
     ///
     /// # Panics
     ///
-    /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
+    /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error), 
+    /// [`on_end`](#on_end) has beend executed.    
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn end_with_error(
         &mut self,
@@ -126,7 +128,8 @@ impl SessionHandle {
     ///
     /// # Panics
     ///
-    /// Panics if executed after any of [`end`], [`end_with_error`], [`on_end`] has beend executed.
+    /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error), 
+    /// [`on_end`](#on_end) has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_end(&mut self) -> Result<(), Error> {
         match (&mut self.engine_handle).await {

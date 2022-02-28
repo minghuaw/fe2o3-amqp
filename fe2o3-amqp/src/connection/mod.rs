@@ -117,11 +117,6 @@ impl Drop for ConnectionHandle {
 
 impl ConnectionHandle {
     /// Checks if the underlying event loop has stopped
-    /// 
-    /// # Panics
-    ///
-    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
-    /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub fn is_closed(&self) -> bool {
         self.control.is_closed()
     }
@@ -130,7 +125,8 @@ impl ConnectionHandle {
     /// 
     /// # Panics
     ///
-    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
+    /// Panics if this is called after executing any of [`close`](#method.close), 
+    /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn close(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
@@ -143,7 +139,8 @@ impl ConnectionHandle {
     /// 
     /// # Panics
     ///
-    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
+    /// Panics if this is called after executing any of [`close`](#method.close), 
+    /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn close_with_error(
         &mut self,
@@ -162,7 +159,8 @@ impl ConnectionHandle {
     ///
     /// # Panics
     ///
-    /// Panics if calling `on_close` after executing any of [`close`] [`close_with_error`] or [`on_close`].
+    /// Panics if this is called after executing any of [`close`](#method.close), 
+    /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_close(&mut self) -> Result<(), Error> {
         match (&mut self.handle).await {
