@@ -1,3 +1,5 @@
+//! Session builder
+
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
@@ -15,23 +17,42 @@ use crate::{
 
 use super::{Error, SessionHandle};
 
-pub const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
-pub const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
+pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
+pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
+
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 2048;
 
+/// Builder for [`crate::Session`]
 pub struct Builder {
+    /// The transfer-id of the first transfer id the sender will send
     pub next_outgoing_id: TransferNumber,
+
+    /// The initial incoming-window of the sender
     pub incoming_window: TransferNumber,
+
+    /// The initial outgoing-window of the sender
     pub outgoing_window: TransferNumber,
+
+    /// The maximum handle value that can be used on the session
     pub handle_max: Handle,
+
+    /// The extension capabilities the sender supports
     pub offered_capabilities: Option<Vec<Symbol>>,
+
+    /// The extension capabilities the sender can use if the receiver supports them
     pub desired_capabilities: Option<Vec<Symbol>>,
+
+    /// Session properties
     pub properties: Option<Fields>,
+
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] 
+    /// that are used by links attached to the session
     pub buffer_size: usize,
 }
 
 impl Builder {
+    /// Creates a new builder for [`crate::Session`]
     pub fn new() -> Self {
         Self {
             next_outgoing_id: 0,
@@ -45,26 +66,31 @@ impl Builder {
         }
     }
 
+    /// The transfer-id of the first transfer id the sender will send
     pub fn next_outgoing_id(mut self, value: TransferNumber) -> Self {
         self.next_outgoing_id = value;
         self
     }
 
+    /// The initial incoming-window of the sender
     pub fn incoming_window(mut self, value: TransferNumber) -> Self {
         self.incoming_window = value;
         self
     }
 
+    /// The initial outgoing-window of the sender
     pub fn outgoing_widnow(mut self, value: TransferNumber) -> Self {
         self.outgoing_window = value;
         self
     }
 
+    /// The maximum handle value that can be used on the session
     pub fn handle_max(mut self, value: impl Into<Handle>) -> Self {
         self.handle_max = value.into();
         self
     }
 
+    /// Add one extension capabilities the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -73,11 +99,13 @@ impl Builder {
         self
     }
 
+    /// Set the extension capabilities the sender supports
     pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.offered_capabilities = Some(capabilities);
         self
     }
 
+    /// Add one extension capabilities the sender can use if the receiver supports them
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -86,21 +114,30 @@ impl Builder {
         self
     }
 
+    /// Set the extension capabilities the sender can use if the receiver supports them
     pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.desired_capabilities = Some(capabilities);
         self
     }
 
+    /// Session properties
     pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
         self
     }
 
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] 
+    /// that are used by links attached to the session
     pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
         self
     }
 
+    /// Begins a new session
+    /// 
+    /// # Example
+    /// 
+    /// TODO
     pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         use super::Session;
 

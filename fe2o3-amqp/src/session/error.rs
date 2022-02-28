@@ -5,6 +5,7 @@ use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;
 
+/// Session errors
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]

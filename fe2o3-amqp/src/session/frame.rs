@@ -2,13 +2,12 @@ use fe2o3_amqp_types::performatives::{Attach, Begin, Detach, Disposition, End, F
 
 use crate::Payload;
 
-// pub type SessionIncomingItem = Result<SessionFrame, connection::Error>;
-pub type SessionIncomingItem = SessionFrame;
+pub(crate) type SessionIncomingItem = SessionFrame;
 
 /// A subset of AMQP frames that should be handled or intercepted by
 /// a Session endpoint.
 #[derive(Debug)]
-pub struct SessionFrame {
+pub(crate) struct SessionFrame {
     pub channel: u16, // outgoing/local channel number
     pub body: SessionFrameBody,
 }
@@ -23,7 +22,7 @@ impl SessionFrame {
 }
 
 #[derive(Debug)]
-pub enum SessionFrameBody {
+pub(crate) enum SessionFrameBody {
     // Frames handled by Link
     Attach(Attach),
     Flow(Flow),
