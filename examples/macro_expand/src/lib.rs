@@ -8,18 +8,23 @@ use serde_amqp::{
     primitives::{Boolean, UInt, ULong},
 };
 
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:amqp-value:*",
-    code = 0x0000_0000_0000_0077,
-    encoding = "list"
-)]
-// pub struct AmqpValue<T>(pub T);
-pub struct Foo<A, B> {
-    a: A,
-    b: B,
-}
+// #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+// #[amqp_contract(
+//     name = "amqp:amqp-value:*",
+//     code = 0x0000_0000_0000_0077,
+//     encoding = "list"
+// )]
+// // pub struct AmqpValue<T>(pub T);
+// pub struct Foo<A, B> {
+//     a: A,
+//     b: B,
+// }
 // pub struct A(i32);
+
+#[derive(Serialize, Deserialize)]
+pub struct AnotherNewType<T> {
+    inner: T
+}
 
 // #[derive(SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]

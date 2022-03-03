@@ -298,6 +298,10 @@ impl Deserializer {
 impl<'de> de::Deserializer<'de> for Deserializer {
     type Error = Error;
 
+    fn is_human_readable(&self) -> bool {
+        false
+    }
+
     #[inline]
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where

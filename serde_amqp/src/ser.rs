@@ -2275,4 +2275,18 @@ mod test {
         ];
         assert_eq_on_serialized_vs_expected(val, &expected);
     }
+
+    #[derive(Debug, Serialize)]
+    pub struct NewType<T>(T);
+
+    #[derive(Debug, Serialize)]
+    pub struct AnotherNewType<T>(T);
+
+    #[test]
+    fn test_serialize_vec_of_tuple() {
+        
+        let data = vec![(&NewType(NewType(1i32)), &false, "amqp")];
+        let buf = to_vec(&data).unwrap();
+        println!("{:#x?}", buf);
+    }
 }

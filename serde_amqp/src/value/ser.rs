@@ -576,7 +576,7 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
 mod tests {
     use std::collections::BTreeMap;
 
-    use serde::Serialize;
+    use serde::{Serialize, Deserialize};
 
     use crate::{
         primitives::{Array, Timestamp},
@@ -711,5 +711,26 @@ mod tests {
             Value::List(vec![Value::UInt(13), Value::Bool(true)]),
         ]);
         assert_eq_on_value_vs_expected(val, expected);
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct NewType<T>(T);
+
+    #[derive(Debug, Serialize)]
+    pub struct AnotherNewType<T> {
+        inner: T
+    }
+
+    #[test]
+    fn test_serialize_vec_of_tuple() {
+        
+        // let data = vec![(&AnotherNewType{ inner: NewType(1i32) }, &NewType(false), &NewType("amqp"))];
+        let data = AnotherNewType {
+            inner: NewType(3i32)
+        };
+        let data = (data, );
+
+        let buf = to_value(&data).unwrap();
+        println!("{:?}", buf);
     }
 }

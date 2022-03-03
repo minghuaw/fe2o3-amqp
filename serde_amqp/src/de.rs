@@ -391,6 +391,10 @@ where
 {
     type Error = Error;
 
+    fn is_human_readable(&self) -> bool {
+        false
+    }
+
     #[inline]
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
@@ -609,6 +613,7 @@ where
                     }
                     _ => return Err(Error::InvalidFormatCode),
                 };
+                println!(">>> Debug: deserialize_bytes");
                 self.reader.forward_read_bytes(len, visitor)
             }
         }
