@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde_amqp = { version = "0.0.2", path = "../../serde_amqp", features = ["derive"] }
+serde_amqp = { version = "0.0.3", path = "../../serde_amqp", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
