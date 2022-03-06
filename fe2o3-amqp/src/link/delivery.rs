@@ -1,3 +1,5 @@
+//! Helper types differentiating message delivery
+
 use fe2o3_amqp_types::{
     definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, self},
     messaging::{message::BodySection, DeliveryState, Message, Received},

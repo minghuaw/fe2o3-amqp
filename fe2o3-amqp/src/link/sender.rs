@@ -1,3 +1,5 @@
+//! Implementation of AMQP1.0 sender
+
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use bytes::BytesMut;

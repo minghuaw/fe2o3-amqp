@@ -1,3 +1,5 @@
+//! Implements the builder for a link
+
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
@@ -36,6 +38,7 @@ pub struct WithoutTarget;
 /// Type state for link::builder::Builder;
 pub struct WithTarget;
 
+/// Builder for a Link
 pub struct Builder<Role, NameState, Addr> {
     pub name: String,
     pub snd_settle_mode: SenderSettleMode,

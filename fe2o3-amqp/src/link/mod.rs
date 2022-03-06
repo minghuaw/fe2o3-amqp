@@ -14,7 +14,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
-pub use frame::*;
+pub(crate) use frame::*;
 pub mod builder;
 pub mod delivery;
 mod error;
@@ -44,20 +44,27 @@ use self::{
     state::{LinkFlowState, LinkState, UnsettledMap},
 };
 
+/// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
 
 type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 pub mod type_state {
+//! Type states for link
+
+    /// Type state showing that a link is attached
     #[derive(Debug)]
     pub struct Attached {}
 
+    /// Type state showing that a link is not attached
     #[derive(Debug)]
     pub struct Detached {}
 }
 
 pub mod role {
+//! Type state definition of link role
+
     use fe2o3_amqp_types::definitions::Role;
 
     /// Type state for link::builder::Builder
@@ -68,7 +75,7 @@ pub mod role {
     #[derive(Debug)]
     pub struct Receiver {}
 
-    pub trait IntoRole {
+    pub(crate) trait IntoRole {
         fn into_role() -> Role;
     }
 
