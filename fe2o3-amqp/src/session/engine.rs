@@ -14,7 +14,7 @@ use crate::{
     util::Running,
 };
 
-use super::{Error, SessionFrame, SessionFrameBody, SessionIncomingItem, SessionState};
+use super::{Error, SessionFrame, SessionFrameBody, frame::SessionIncomingItem, SessionState};
 
 pub(crate) struct SessionEngine<S: Session> {
     conn: mpsc::Sender<ConnectionControl>,

@@ -8,26 +8,35 @@ use crate::connection::AllocSessionError;
 /// Session errors
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Io Error. If includes failing to send to the underlying connection event loop
     #[error(transparent)]
     Io(#[from] io::Error),
 
+    /// An attempt is trying to exceed the maximum number of allowed channel 
     #[error("All channels have been allocated")]
     ChannelMaxReached,
 
+    /// Error joining the event loop task. This could occur only when the user attempts
+    /// to end the session
     #[error(transparent)]
     JoinError(#[from] JoinError),
 
+    /// A local error
     #[error("Local error {:?}", .0)]
     Local(definitions::Error),
 
+    /// The remote peer ended the session with the provided error
     #[error("Remote error {:?}", .0)]
     Remote(definitions::Error),
 
     /// Link handle error should be handled differently. Link handle is only local
     #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
     LinkHandleError {
+        /// A handle to the link used by session
         handle: Handle,
+        /// Whether the link should close upon having an error
         closed: bool,
+        /// Error
         error: definitions::Error,
     },
 }
@@ -61,7 +70,7 @@ impl Error {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum AllocLinkError {
+pub(crate) enum AllocLinkError {
     #[error("Illegal session state")]
     IllegalState,
 

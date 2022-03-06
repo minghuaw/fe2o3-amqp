@@ -14,7 +14,7 @@ use tracing::{debug, error, instrument, trace};
 
 use crate::control::ConnectionControl;
 use crate::frames::amqp::{self, Frame, FrameBody};
-use crate::session::{SessionFrame, SessionFrameBody};
+use crate::session::frame::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};

@@ -35,7 +35,7 @@ use crate::{
     connection::engine::SessionId,
     frames::amqp::Frame,
     link::{delivery::Delivery, LinkFrame},
-    session::{SessionFrame, SessionIncomingItem},
+    session::frame::{SessionFrame, SessionIncomingItem},
     Payload,
 };
 

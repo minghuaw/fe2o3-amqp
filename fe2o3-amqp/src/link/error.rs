@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::mpsc;
 
-use crate::session::AllocLinkError;
+use crate::session::error::AllocLinkError;
 
 /// 
 #[derive(Debug)]

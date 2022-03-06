@@ -30,12 +30,15 @@ use crate::{
     Payload,
 };
 
-mod frame;
-pub use frame::*;
+
 pub mod builder;
-pub mod engine;
-mod error;
-pub use self::error::{AllocLinkError, Error};
+pub(crate) mod engine;
+
+pub(crate) mod frame;
+pub(crate) mod error;
+
+use self::{error::AllocLinkError, frame::{SessionFrame, SessionFrameBody}};
+pub use self::error::{Error};
 
 /// 2.5.5 Session States
 pub enum SessionState {

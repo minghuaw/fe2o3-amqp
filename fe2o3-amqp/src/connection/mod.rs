@@ -21,8 +21,8 @@ use crate::{
     control::ConnectionControl,
     endpoint,
     frames::amqp::{Frame, FrameBody},
-    session::SessionFrame,
-    session::{Session, SessionFrameBody, SessionIncomingItem},
+    session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
+    session::Session,
 };
 
 use self::{builder::WithoutContainerId, engine::SessionId};

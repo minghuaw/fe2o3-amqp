@@ -18,7 +18,7 @@ pub enum Error {
     #[error("IO Error {0:?}")]
     Io(#[from] io::Error),
 
-    /// This is only expected when the user attempts to close the connection
+    /// This could occur only when the user attempts to close the connection
     #[error(transparent)]
     JoinError(JoinError),
 
