@@ -80,6 +80,7 @@ impl SaslProfile {
         }
     }
 
+    /// How a SASL profile should respond to a SASL frame
     pub(crate) async fn on_frame(
         &mut self,
         frame: sasl::Frame,

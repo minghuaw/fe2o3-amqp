@@ -32,7 +32,7 @@ pub enum Error {
     /// Link handle error should be handled differently. Link handle is only local
     #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
     LinkHandleError {
-        /// A handle to the link used by session
+        /// Handle of the link
         handle: Handle,
         /// Whether the link should close upon having an error
         closed: bool,
