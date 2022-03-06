@@ -37,6 +37,11 @@ use super::{
 type SenderFlowState = LinkFlowState<role::Sender>;
 type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, UnsettledMessage>;
 
+/// An AMQP1.0 sender
+/// 
+/// # Example 
+/// 
+/// TODO
 #[derive(Debug)]
 pub struct Sender<S> {
     // The SenderLink manages the state
@@ -55,6 +60,7 @@ pub struct Sender<S> {
 }
 
 impl Sender<Detached> {
+    /// Creates a builder for [`Sender`] link
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
         builder::Builder::new().source(Source::builder().build())
     }
@@ -119,6 +125,7 @@ impl Sender<Detached> {
         })
     }
 
+    /// Attach the sender link to a session
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
@@ -184,6 +191,11 @@ impl Sender<Attached> {
         Ok(settlement)
     }
 
+    /// Send a message and wait for acknowledgement (disposition)
+    /// 
+    /// # Example
+    /// 
+    /// TODO
     pub async fn send<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -214,6 +226,13 @@ impl Sender<Attached> {
         }
     }
 
+    /// Send a message and wait for acknowledgement (disposition) with a timeout.
+    /// 
+    /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
+    /// 
+    /// # Example 
+    /// 
+    /// TODO
     pub async fn send_with_timeout<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -222,6 +241,13 @@ impl Sender<Attached> {
         timeout(duration.into(), self.send(sendable)).await
     }
 
+    /// Send a message without waiting for the acknowledgement.
+    /// 
+    /// This will set the batchable field of the `Transfer` performative to true.
+    /// 
+    /// # Example 
+    /// 
+    /// TODO
     pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -231,6 +257,13 @@ impl Sender<Attached> {
         Ok(DeliveryFut::from(settlement))
     }
 
+    /// Send a message without waiting for the acknowledgement with a timeout.
+    /// 
+    /// This will set the batchable field of the `Transfer` performative to true.
+    /// 
+    /// # Example
+    /// 
+    /// TODO
     pub async fn send_batchable_with_timeout<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -331,6 +364,7 @@ impl Sender<Attached> {
         Ok(detaching)
     }
 
+    /// Detach the link with a timeout
     pub async fn detach_with_timeout(
         self,
         duration: impl Into<Duration>,
@@ -338,6 +372,9 @@ impl Sender<Attached> {
         timeout(duration.into(), self.detach()).await
     }
 
+    /// Close the link.
+    /// 
+    /// This will set the `closed` field in the Detach performative to true
     pub async fn close(self) -> Result<(), DetachError<Sender<Detached>>> {
         let mut detaching = Sender::<Detached> {
             link: self.link,
