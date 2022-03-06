@@ -23,20 +23,29 @@ pub struct Delivery<T> {
 }
 
 impl<T> Delivery<T> {
+    /// Get the link output handle
     pub fn handle(&self) -> &Handle {
         &self.link_output_handle
     }
 
+    /// Get the message
     pub fn message(&self) -> &Message<T> {
         &self.message
     }
 
+    /// Consume the delivery into the message
     pub fn into_message(self) -> Message<T> {
         self.message
     }
 }
 
-/// TODO: Add a crate level pub field to Delivery for resuming link?
+/// A type representing the delivery before sending
+/// 
+/// This allows pre-setting a message as settled.
+/// 
+/// # Example
+/// 
+/// TODO
 #[derive(Debug)]
 pub struct Sendable<T> {
     pub(crate) message: Message<T>,
@@ -46,6 +55,7 @@ pub struct Sendable<T> {
 }
 
 impl Sendable<Uninitialized> {
+    /// Creates a builder for [`Sendable`]
     pub fn builder() -> Builder<Uninitialized> {
         Builder::new()
     }
@@ -93,50 +103,61 @@ impl<T> From<BodySection<T>> for Sendable<T> {
     }
 }
 
+/// A builder for [`Sendable`]
 pub struct Builder<T> {
+    /// The message to send
     pub message: T,
+
+    /// Message format. 
+    /// 
+    /// See 2.8.11 Message Format in the AMQP1.0 specification
     pub message_format: MessageFormat,
+
+    /// Indicates whether the message is considered settled by the sender
     pub settled: Option<bool>,
-    pub batchable: bool,
+    // pub batchable: bool,
 }
 
 impl Builder<Uninitialized> {
+    /// Creates a new builder for [`Sendable`]
     pub fn new() -> Self {
         Self {
             message: Uninitialized {},
             message_format: 0,
             settled: None,
-            batchable: false,
+            // batchable: false,
         }
     }
 }
 
 impl<State> Builder<State> {
+    /// The message to send
     pub fn message<T>(self, message: impl Into<Message<T>>) -> Builder<Message<T>> {
         Builder {
             message: message.into(),
             message_format: self.message_format,
             settled: self.settled,
-            batchable: self.batchable,
+            // batchable: self.batchable,
         }
     }
 
+    /// Message format. 
+    /// 
+    /// See 2.8.11 Message Format in the AMQP1.0 specification
     pub fn message_format(mut self, message_format: impl Into<MessageFormat>) -> Self {
         self.message_format = message_format.into();
         self
     }
 
+    /// Indicates whether the message is considered settled by the sender
     pub fn settled(mut self, settled: impl Into<Option<bool>>) -> Self {
         self.settled = settled.into();
         self
     }
 }
 
-// impl<T> Builder<Message<T>> {
-
-// }
-
 impl<T> Builder<Message<T>> {
+    /// Builds a [`Sendable`]
     pub fn build(self) -> Sendable<T> {
         Sendable {
             message: self.message,
@@ -153,9 +174,10 @@ impl<T> From<Builder<Message<T>>> for Sendable<T> {
     }
 }
 
+/// An unsettled message stored in the Sender's unsettled map
 #[derive(Debug)]
-pub struct UnsettledMessage {
-    payload: Payload,
+pub(crate) struct UnsettledMessage {
+    _payload: Payload,
     state: DeliveryState,
     sender: oneshot::Sender<DeliveryState>,
 }
@@ -170,23 +192,23 @@ impl UnsettledMessage {
         };
 
         Self {
-            payload,
+            _payload: payload,
             state: DeliveryState::Received(received),
             sender,
         }
     }
 
-    pub fn state(&self) -> &DeliveryState {
-        &self.state
-    }
+    // pub fn state(&self) -> &DeliveryState {
+    //     &self.state
+    // }
 
     pub fn state_mut(&mut self) -> &mut DeliveryState {
         &mut self.state
     }
 
-    pub fn payload(&self) -> &Payload {
-        &self.payload
-    }
+    // pub fn payload(&self) -> &Payload {
+    //     &self._payload
+    // }
 
     pub fn settle(self) -> Result<(), DeliveryState> {
         self.sender.send(self.state)
@@ -213,7 +235,7 @@ impl AsMut<DeliveryState> for UnsettledMessage {
 }
 
 pin_project! {
-    /// A future for delivery that can be `await`ed for the settlement
+    /// A future for delivery that can be `.await`ed for the settlement
     /// from receiver
     pub struct DeliveryFut {
         #[pin]
