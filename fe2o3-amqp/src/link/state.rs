@@ -11,6 +11,9 @@ use crate::{
 
 use super::{role, SenderFlowState};
 
+/// Link state.
+/// 
+/// There is no official definition of the link state in the specification
 #[derive(Debug)]
 pub enum LinkState {
     /// The initial state after initialization
@@ -42,7 +45,7 @@ pub enum LinkState {
 }
 
 #[derive(Debug)]
-pub struct LinkFlowStateInner {
+pub(crate) struct LinkFlowStateInner {
     pub initial_delivery_count: SequenceNo,
     pub delivery_count: SequenceNo, // SequenceNo = u32
     pub link_credit: u32,
@@ -67,7 +70,7 @@ impl LinkFlowStateInner {
 
 /// The Sender and Receiver handle link flow control differently
 #[derive(Debug)]
-pub struct LinkFlowState<R> {
+pub(crate) struct LinkFlowState<R> {
     // Sender(RwLock<LinkFlowStateInner>),
     // Receiver(RwLock<LinkFlowStateInner>),
     pub(crate) lock: RwLock<LinkFlowStateInner>,
@@ -223,11 +226,11 @@ impl<R> LinkFlowState<R> {
         self.lock.read().await.drain
     }
 
-    pub async fn drain_mut(&self, f: impl Fn(bool) -> bool) {
-        let mut guard = self.lock.write().await;
-        let new = f(guard.drain);
-        guard.drain = new;
-    }
+    // pub async fn drain_mut(&self, f: impl Fn(bool) -> bool) {
+    //     let mut guard = self.lock.write().await;
+    //     let new = f(guard.drain);
+    //     guard.drain = new;
+    // }
 
     pub async fn initial_delivery_count(&self) -> SequenceNo {
         self.lock.read().await.initial_delivery_count
@@ -271,7 +274,7 @@ impl LinkFlowState<role::Receiver> {
 }
 
 // pub type UnsettledMap<M> = BTreeMap<[u8; 4], M>;
-pub type UnsettledMap<M> = BTreeMap<DeliveryTag, M>;
+pub(crate) type UnsettledMap<M> = BTreeMap<DeliveryTag, M>;
 
 #[async_trait]
 impl ProducerState for Arc<LinkFlowState<role::Sender>> {

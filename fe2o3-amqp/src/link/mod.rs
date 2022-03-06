@@ -352,8 +352,7 @@ where
     }
 }
 
-/// TODO: How would this be changed when switched to ReceiverLink
-pub enum LinkHandle {
+pub(crate) enum LinkHandle {
     Sender {
         tx: mpsc::Sender<LinkIncomingItem>,
         // This should be wrapped inside a Producer because the SenderLink
