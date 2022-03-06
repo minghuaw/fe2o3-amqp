@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, fmt::Debug};
 
 use fe2o3_amqp_types::{definitions::{AmqpError, self, Handle}, performatives::Detach};
 use futures_util::SinkExt;
@@ -9,12 +9,12 @@ use tracing::{debug, error, instrument};
 use crate::{
     connection::engine::SessionId,
     control::{ConnectionControl, SessionControl},
-    endpoint::Session,
-    link::LinkFrame,
+    endpoint::{Session, self},
+    link::{LinkFrame, LinkHandle},
     util::Running,
 };
 
-use super::{Error, SessionFrame, SessionFrameBody, frame::SessionIncomingItem, SessionState};
+use super::{Error, SessionFrame, SessionFrameBody, frame::SessionIncomingItem, SessionState, error::AllocLinkError};
 
 pub(crate) struct SessionEngine<S: Session> {
     conn: mpsc::Sender<ConnectionControl>,
@@ -27,15 +27,15 @@ pub(crate) struct SessionEngine<S: Session> {
     outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl SessionEngine<super::Session>
-// where
-//     S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
-//     S::Error: Into<Error>,
-//     S::AllocError: Into<AllocLinkError>,
+impl<S> SessionEngine<S>
+where
+    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
+    S::Error: Into<Error> + Debug,
+    S::AllocError: Into<AllocLinkError>,
 {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
-        session: super::Session,
+        session: S,
         session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
@@ -53,8 +53,8 @@ impl SessionEngine<super::Session>
         };
 
         // send a begin
-        engine.session.send_begin(&mut engine.outgoing).await?;
-        // .map_err(|e| e.into())?;
+        engine.session.send_begin(&mut engine.outgoing).await
+            .map_err(|e| e.into())?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
@@ -81,8 +81,8 @@ impl SessionEngine<super::Session>
         engine
             .session
             .on_incoming_begin(channel, remote_begin)
-            .await?;
-        // .map_err(Into::into)?;
+            .await
+            .map_err(Into::into)?;
         Ok(engine)
     }
 
@@ -96,16 +96,16 @@ impl SessionEngine<super::Session>
 
         match body {
             SessionFrameBody::Begin(begin) => {
-                self.session.on_incoming_begin(channel, begin).await?;
-                // .map_err(Into::into)?;
+                self.session.on_incoming_begin(channel, begin).await
+                    .map_err(Into::into)?;
             }
             SessionFrameBody::Attach(attach) => {
-                self.session.on_incoming_attach(channel, attach).await?;
-                // .map_err(Into::into)?;
+                self.session.on_incoming_attach(channel, attach).await
+                    .map_err(Into::into)?;
             }
             SessionFrameBody::Flow(flow) => {
-                self.session.on_incoming_flow(channel, flow).await?;
-                // .map_err(Into::into)?;
+                self.session.on_incoming_flow(channel, flow).await
+                    .map_err(Into::into)?;
             }
             SessionFrameBody::Transfer {
                 performative,
@@ -113,21 +113,22 @@ impl SessionEngine<super::Session>
             } => {
                 self.session
                     .on_incoming_transfer(channel, performative, payload)
-                    .await?
-                // .map_err(Into::into)?;
+                    .await
+                    .map_err(Into::into)?;
             }
             SessionFrameBody::Disposition(disposition) => {
                 self.session
                     .on_incoming_disposition(channel, disposition)
-                    .await?
-                // .map_err(Into::into)?;
+                    .await
+                    .map_err(Into::into)?;
             }
             SessionFrameBody::Detach(detach) => {
-                self.session.on_incoming_detach(channel, detach).await?;
-                // .map_err(Into::into)?;
+                self.session.on_incoming_detach(channel, detach).await
+                    .map_err(Into::into)?;
             }
             SessionFrameBody::End(end) => {
-                self.session.on_incoming_end(channel, end).await?;
+                self.session.on_incoming_end(channel, end).await
+                    .map_err(Into::into)?;
             }
         }
 
@@ -141,8 +142,8 @@ impl SessionEngine<super::Session>
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
         match control {
             SessionControl::End(error) => {
-                self.session.send_end(&mut self.outgoing, error).await?;
-                // .map_err(Into::into)?;
+                self.session.send_end(&mut self.outgoing, error).await
+                    .map_err(Into::into)?;
             }
             SessionControl::AllocateLink {
                 link_name,
@@ -161,8 +162,8 @@ impl SessionEngine<super::Session>
                 self.session.deallocate_link(link_name);
             }
             SessionControl::LinkFlow(flow) => {
-                let flow = self.session.on_outgoing_flow(flow)?;
-                // .map_err(Into::into)?;
+                let flow = self.session.on_outgoing_flow(flow)
+                    .map_err(Into::into)?;
                 self.outgoing
                     .send(flow)
                     .await
@@ -171,8 +172,8 @@ impl SessionEngine<super::Session>
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
             SessionControl::Disposition(disposition) => {
-                let disposition = self.session.on_outgoing_disposition(disposition)?;
-                // .map_err(Into::into)?;
+                let disposition = self.session.on_outgoing_disposition(disposition)
+                    .map_err(Into::into)?;
                 self.outgoing
                     .send(disposition)
                     .await
@@ -196,21 +197,21 @@ impl SessionEngine<super::Session>
         }
 
         let session_frame = match frame {
-            LinkFrame::Attach(attach) => self.session.on_outgoing_attach(attach)?,
-            // .map_err(Into::into)?,
-            LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow)?,
-            // .map_err(Into::into)?,
+            LinkFrame::Attach(attach) => self.session.on_outgoing_attach(attach)
+                .map_err(Into::into)?,
+            LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow)
+                .map_err(Into::into)?,
             LinkFrame::Transfer {
                 performative,
                 payload,
-            } => self.session.on_outgoing_transfer(performative, payload)?,
-            // .map_err(Into::into)?,
+            } => self.session.on_outgoing_transfer(performative, payload)
+                .map_err(Into::into)?,
             LinkFrame::Disposition(disposition) => {
-                self.session.on_outgoing_disposition(disposition)?
+                self.session.on_outgoing_disposition(disposition)
+                    .map_err(Into::into)?
             }
-            // .map_err(Into::into)?,
-            LinkFrame::Detach(detach) => self.session.on_outgoing_detach(detach)?,
-            // .map_err(Into::into)?,
+            LinkFrame::Detach(detach) => self.session.on_outgoing_detach(detach)
+                .map_err(Into::into)?,
         };
 
         self.outgoing
@@ -268,7 +269,7 @@ impl SessionEngine<super::Session>
 
     #[inline]
     fn continue_or_stop_by_state(&self) -> Running {
-        match self.session.local_state {
+        match self.session.local_state() {
             SessionState::BeginSent
             | SessionState::BeginReceived
             | SessionState::Mapped
@@ -279,7 +280,7 @@ impl SessionEngine<super::Session>
         }
     }
 
-    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel))]
+    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel()))]
     async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
@@ -289,7 +290,7 @@ impl SessionEngine<super::Session>
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
                             // Check local state
-                            match self.session.local_state {
+                            match self.session.local_state() {
                                 SessionState::BeginSent
                                 | SessionState::BeginReceived
                                 | SessionState::Mapped
@@ -330,9 +331,6 @@ impl SessionEngine<super::Session>
             let running = match result {
                 Ok(running) => running,
                 Err(error) => {
-                    // TODO: handle errors
-                    // `UnattachedHandle`: session should end with error
-
                     error!("{:?}", error);
                     let running = self.on_error(&error).await;
                     outcome = Err(error);

@@ -64,15 +64,9 @@ pub enum SessionState {
     Discarding,
 }
 
-/// This is not necessary as these will just stay in the SessionEngine
-/// and not shared with other tasks/threads
-// pub struct SessionFlowState {
-//     next_incoming_id: TransferNumber,
-//     incoming_window: u32,
-//     next_outgoing_id: TransferNumber,
-//     outgoing_window: u32,
-// }
-
+/// A handle to the [`Session`] event loop
+/// 
+/// Dropping the handle will also stop the [`Session`] event loop
 pub struct SessionHandle {
     pub(crate) control: mpsc::Sender<SessionControl>,
     engine_handle: JoinHandle<Result<(), Error>>,
@@ -238,6 +232,10 @@ impl endpoint::Session for Session {
 
     fn local_state_mut(&mut self) -> &mut Self::State {
         &mut self.local_state
+    }
+
+    fn outgoing_channel(&self) -> u16 {
+        self.outgoing_channel
     }
 
     fn allocate_link(
