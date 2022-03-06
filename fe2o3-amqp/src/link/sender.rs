@@ -125,7 +125,16 @@ impl Sender<Detached> {
         })
     }
 
-    /// Attach the sender link to a session
+    /// Attach the sender link to a session with default configuration
+    /// 
+    /// # Default configuration
+    /// 
+    /// TODO
+    /// 
+    /// # Example
+    /// 
+    /// TODO
+    /// 
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,

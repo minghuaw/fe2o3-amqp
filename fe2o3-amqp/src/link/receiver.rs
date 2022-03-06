@@ -147,9 +147,14 @@ impl IncompleteTransfer {
 type ReceiverFlowState = LinkFlowState<role::Receiver>;
 type ReceiverLink = super::Link<role::Receiver, Arc<ReceiverFlowState>, DeliveryState>;
 
+/// Credit mode for the link
 #[derive(Debug, Clone)]
 pub enum CreditMode {
+    /// Manual mode will require the user to manually allocate credit whenever 
+    /// the available credits are depleted
     Manual,
+
+    /// The receiver will automatically re-fill the credit
     Auto(SequenceNo),
 }
 
@@ -160,6 +165,11 @@ impl Default for CreditMode {
     }
 }
 
+/// An AMQP1.0 receiver
+/// 
+/// # Example
+/// 
+/// TODO
 #[derive(Debug)]
 pub struct Receiver<S> {
     pub(crate) link: ReceiverLink,
@@ -181,10 +191,20 @@ pub struct Receiver<S> {
 }
 
 impl Receiver<Detached> {
+    /// Creates a builder for the [`Receiver`]
     pub fn builder() -> builder::Builder<role::Receiver, WithoutName, WithTarget> {
         builder::Builder::new().target(Target::builder().build())
     }
 
+    /// Attach the receiver link to a session with the default configuration
+    /// 
+    /// # Defaults
+    /// 
+    /// TODO
+    /// 
+    /// # Example
+    /// 
+    /// TODO
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
@@ -274,6 +294,11 @@ impl Receiver<Attached> {
         }
     }
 
+    /// Receive a message from the link
+    /// 
+    /// # Example
+    /// 
+    /// TODO
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
@@ -437,7 +462,14 @@ impl Receiver<Attached> {
             .await
     }
 
-    // TODO: how to stop draining? `set_credit` will stop draining
+    /// Drain the link.
+    /// 
+    /// This will send a `Flow` performative with the `drain` field set to true.
+    /// Setting the credit will set the `drain` field to false and stop draining
+    /// 
+    /// # Example 
+    /// 
+    /// TODO
     pub async fn drain(&mut self) -> Result<(), Error> {
         use crate::endpoint::ReceiverLink;
 
@@ -454,7 +486,11 @@ impl Receiver<Attached> {
             .await
     }
 
-    // TODO: reduce mostly duplicated code (Sender/Receiver::detach/close)?
+    /// Detach the link.
+    /// 
+    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
+    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
+    /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(self) -> Result<Receiver<Detached>, DetachError<Receiver<Detached>>> {
         let mut detaching = Receiver::<Detached> {
             link: self.link,
@@ -539,6 +575,9 @@ impl Receiver<Attached> {
         }
     }
 
+    /// Close the link.
+    /// 
+    /// This will send a Detach performative with the `closed` field set to true.
     pub async fn close(self) -> Result<(), DetachError<Receiver<Detached>>> {
         let mut detaching = self.into_detached();
         let link_name = detaching.link.name.clone();
@@ -677,6 +716,8 @@ impl Receiver<Attached> {
         Ok(())
     }
 
+    /// Accept the message by sending a disposition with the `delivery_state` field set
+    /// to `Accept`
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Accepted(Accepted {});
         self.dispose(
@@ -687,6 +728,8 @@ impl Receiver<Attached> {
         .await
     }
 
+    /// Reject the message by sending a disposition with the `delivery_state` field set
+    /// to `Reject`
     pub async fn reject<T>(
         &mut self,
         delivery: &Delivery<T>,
@@ -703,6 +746,8 @@ impl Receiver<Attached> {
         .await
     }
 
+    /// Release the message by sending a disposition with the `delivery_state` field set
+    /// to `Release`
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Released(Released {});
         self.dispose(
@@ -713,6 +758,8 @@ impl Receiver<Attached> {
         .await
     }
 
+    /// Modify the message by sending a disposition with the `delivery_state` field set
+    /// to `Modify`
     pub async fn modify<T>(
         &mut self,
         delivery: &Delivery<T>,

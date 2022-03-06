@@ -20,9 +20,10 @@ An implementation of the AMQP1.0 protocol based on serde and tokio.
 
 ## Road map
 
-- [ ] Proper error handling
+- [x] Proper error handling (more or less)
 - [ ] Pipelined open
 - [ ] SASL SCRAM-SHA1
 - [ ] Transaction
 - [ ] Listeners
 - [ ] Link re-attachment
+- [ ] Message batch disposition

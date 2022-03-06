@@ -40,10 +40,19 @@ pub struct WithTarget;
 
 /// Builder for a Link
 pub struct Builder<Role, NameState, Addr> {
+    /// The name of the link
     pub name: String,
+
+    /// Settlement policy for the sender
     pub snd_settle_mode: SenderSettleMode,
+
+    /// The settlement policy of the receiver
     pub rcv_settle_mode: ReceiverSettleMode,
+
+    /// The source for messages
     pub source: Option<Source>,
+
+    /// The target for messages
     pub target: Option<Target>,
 
     /// This MUST NOT be null if role is sender,
@@ -51,12 +60,22 @@ pub struct Builder<Role, NameState, Addr> {
     /// See subsection 2.6.7.
     pub initial_delivery_count: SequenceNo,
 
+    /// The maximum message size supported by the link endpoint
     pub max_message_size: Option<ULong>,
+
+    /// The extension capabilities the sender supports
     pub offered_capabilities: Option<Vec<Symbol>>,
+
+    /// The extension capabilities the sender can use if the receiver supports them
     pub desired_capabilities: Option<Vec<Symbol>>,
+
+    /// Link properties
     pub properties: Option<Fields>,
 
+    /// Buffer size for the underlying `mpsc:channel`
     pub buffer_size: usize,
+
+    /// Credit mode of the link. This has no effect if a sender is built
     pub credit_mode: CreditMode,
 
     // Type state markers
@@ -88,7 +107,8 @@ impl<Role> Builder<Role, WithoutName, WithoutTarget> {
     }
 }
 
-impl<Role, Addr> Builder<Role, WithoutName, Addr> {
+impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
+    /// The name of the link
     pub fn name(self, name: impl Into<String>) -> Builder<Role, WithName, Addr> {
         Builder {
             name: name.into(),
@@ -109,16 +129,8 @@ impl<Role, Addr> Builder<Role, WithoutName, Addr> {
             addr_state: self.addr_state,
         }
     }
-}
 
-impl<Role, Addr> Builder<Role, WithName, Addr> {
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
-        self
-    }
-}
-
-impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
+    /// Set the link's role to sender
     pub fn sender(self) -> Builder<role::Sender, NameState, Addr> {
         Builder {
             name: self.name,
@@ -140,6 +152,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         }
     }
 
+    /// Set the link's role to receiver
     pub fn receiver(self) -> Builder<role::Receiver, NameState, Addr> {
         Builder {
             name: self.name,
@@ -161,21 +174,25 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         }
     }
 
+    /// Settlement policy for the sender
     pub fn sender_settle_mode(mut self, mode: SenderSettleMode) -> Self {
         self.snd_settle_mode = mode;
         self
     }
 
+    /// The settlement policy of the receiver
     pub fn receiver_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
         self.rcv_settle_mode = mode;
         self
     }
 
+    /// The source for messages
     pub fn source(mut self, source: impl Into<Source>) -> Self {
         self.source = Some(source.into());
         self
     }
 
+    /// The target for messages
     pub fn target(self, target: impl Into<Target>) -> Builder<Role, NameState, WithTarget> {
         Builder {
             name: self.name,
@@ -197,11 +214,13 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         }
     }
 
+    /// The maximum message size supported by the link endpoint
     pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
         self.max_message_size = Some(max_size.into());
         self
     }
 
+    /// Add one extension capability the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -210,11 +229,13 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
+    /// Set the extension capabilities the sender supports
     pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.offered_capabilities = Some(capabilities);
         self
     }
 
+    /// Add one extension capability the sender can use if the receiver supports
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
@@ -223,11 +244,13 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
+    /// Set the extension capabilities the sender can use if the receiver supports them
     pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
         self.desired_capabilities = Some(capabilities);
         self
     }
 
+    /// Link properties
     pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
         self
@@ -283,6 +306,9 @@ impl<NameState, Addr> Builder<role::Sender, NameState, Addr> {
 impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
 
 impl Builder<role::Sender, WithName, WithTarget> {
+    /// Attach the link as a sender
+    /// 
+    /// # Example
     pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Sender<Attached>, AttachError> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
@@ -342,6 +368,11 @@ impl Builder<role::Sender, WithName, WithTarget> {
 }
 
 impl Builder<role::Receiver, WithName, WithTarget> {
+    /// Attach the link as a receiver
+    /// 
+    /// # Example
+    /// 
+    /// TODO
     pub async fn attach(
         mut self,
         session: &mut SessionHandle,
