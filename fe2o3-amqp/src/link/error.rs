@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::session::error::AllocLinkError;
 
-/// 
+/// Error associated with detaching a link
 #[derive(Debug)]
 pub struct DetachError<L> {
     pub link: Option<L>,
@@ -74,8 +74,7 @@ impl<L> TryFrom<Error> for DetachError<L> {
                 };
                 Ok(error)
             },
-            Error::ParseError
-            | Error::Rejected(_)
+            Error::Rejected(_)
             | Error::Released(_)
             | Error::Modified(_) => Err(value),
         }
@@ -103,32 +102,33 @@ impl<L> TryFrom<(L, Error)> for DetachError<L> {
                 };
                 Ok(error)
             },
-            Error::ParseError
-            | Error::Rejected(_)
+            Error::Rejected(_)
             | Error::Released(_)
             | Error::Modified(_) => Err(value),
         }
     }
 }
 
-/// TODO: Simplify the error structures
+/// Error associated with normal operations on a link
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Parse error")]
-    ParseError,
-    
+    /// A local error
     #[error("Local error: {:?}", .0)]
     Local(definitions::Error),
 
+    /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError<()>),
     
+    /// The message was rejected
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),
 
+    /// The message was released
     #[error("Outsome Released: {:?}", .0)]
     Released(Released),
 
+    /// The message was modified
     #[error("Outcome Modified: {:?}", .0)]
     Modified(Modified),
 }
@@ -192,8 +192,12 @@ impl<T> From<mpsc::error::SendError<T>> for Error {
 
 
 impl From<serde_amqp::Error> for Error {
-    fn from(_: serde_amqp::Error) -> Self {
-        Self::ParseError
+    fn from(err: serde_amqp::Error) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::DecodeError,
+            Some(format!("{:?}", err)),
+            None
+        ))
     }
 }
 
@@ -242,8 +246,7 @@ impl TryFrom<Error> for AttachError {
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
             Error::Local(error) => Ok(AttachError::LocalError(error)),
-            Error::ParseError
-            | Error::Rejected(_)
+            Error::Rejected(_)
             | Error::Released(_)
             | Error::Modified(_)
             | Error::Detached(_) => Err(value),
