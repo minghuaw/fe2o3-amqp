@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    connection::{builder::DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
+    connection::{DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
     control::SessionControl,
     session::{engine::SessionEngine, SessionState},
     util::Constant,

@@ -12,7 +12,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    connection::builder::DEFAULT_OUTGOING_BUFFER_SIZE,
+    connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     link::{Link, LinkHandle, LinkIncomingItem},
     session::{self, SessionHandle},
     util::{Consumer, Producer},

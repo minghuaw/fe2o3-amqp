@@ -27,10 +27,13 @@ use crate::{
 
 use self::{builder::WithoutContainerId, engine::SessionId};
 
-pub mod builder;
-pub mod engine;
-mod error;
+mod builder;
+pub use builder::*;
+
+pub(crate) mod engine;
+
 pub mod heartbeat;
+mod error;
 pub use error::*;
 
 /// Default max-frame-size
@@ -199,17 +202,84 @@ impl ConnectionHandle {
 
 /// An AMQP 1.0 Connection. 
 /// 
-/// # Open a new [`Connection`]
+/// # Open a new [`Connection`] with default configuration
+/// 
+/// Below is an example with a local broker (
+/// [`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
+/// listening on the localhost. The broker is executed with the following command
+/// 
+/// ```powershell
+/// ./TestAmqpBroker.exe amqp://localhost:5672 /creds:guest:guest /queues:q1
+/// ```
+/// 
+/// ```rust,ignore
+/// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+/// ```
 /// 
 /// ## Builder
 /// 
+/// The example above creates a connection with the default configuration. If the user needs to customize the 
+/// configuration, the connection [`Builder`] should be used.
+/// 
+/// ```rust, ignore
+/// let connection = Connection::builder()
+///     .container_id("connection-1")
+///     .max_frame_size(4096)
+///     .channel_max(64)
+///     .idle_time_out(50_000 as u32)
+///     .open("amqp://guest:guest@localhost:5672")
+///     .await.unwrap();
+/// ```
+/// 
+/// ## Default configuration
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
+/// |`channel_max`| [`DEFAULT_CHANNEL_MAX`] |
+/// |`idle_time_out`| `None` |
+/// |`outgoing_locales`| `None` |
+/// |`incoming_locales`| `None` |
+/// |`offered_capabilities`| `None` |
+/// |`desired_capabilities`| `None` |
+/// |`Properties`| `None` |
+/// 
 /// ## TLS
 /// 
-/// TODO
+/// TLS is supported with `rustls`. The user must supply a `ClientConfig` to the `client_config` field, and
+/// the url scheme must be `"amqps"`.
+/// 
+/// ```rust, ignore
+/// let connection = Connection::builder()
+///     .container_id("connection-1")
+///     .client_config(config)
+///     .open("amqps://guest:guest@localhost:5672")
+///     .await.unwrap();
+/// ```
 /// 
 /// ## SASL
 /// 
-/// TODO
+/// If `username` and `password` are supplied with the url, the connection negotiation will start with 
+/// SASL PLAIN negotiation. Other than filling `username` and `password` in the url, one could also
+/// supply the information with `sasl_profile` field of the [`Builder`]. Please note that the SASL profile
+/// found in the url will override whatever `SaslProfile` supplied to the [`Builder`].
+/// 
+/// The example below shows two ways of starting the connection with SASL negotiation.
+/// 
+/// ```rust,ignore
+/// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+/// 
+/// // This is equivalent to the line above
+/// let profile = SaslProfile::Plain {
+///     username: "guest".to_string(),
+///     password: "guest".to_string()
+/// };
+/// let connection = Connection::builder()
+///     .container_id("connection-1")
+///     .sasl_profile(profile)
+///     .open("amqp://localhost:5672")
+///     .await.unwrap();
+/// ```
 ///
 #[derive(Debug)]
 pub struct Connection {

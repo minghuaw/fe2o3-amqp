@@ -79,6 +79,10 @@ pub struct Builder<'a, Mode> {
     pub client_config: Option<ClientConfig>,
 
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions
+    /// 
+    /// # Default
+    /// 
+    /// [`DEFAULT_OUTGOING_BUFFER_SIZE`]
     pub buffer_size: usize,
 
     /// SASL profile for SASL negotiation. 
