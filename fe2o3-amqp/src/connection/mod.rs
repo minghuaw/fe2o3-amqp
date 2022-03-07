@@ -6,7 +6,7 @@ use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    performatives::{Begin, ChannelMax, Close, End, MaxFrameSize, Open},
+    performatives::{Begin, ChannelMax, Close, End, Open},
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -32,6 +32,12 @@ pub mod engine;
 mod error;
 pub mod heartbeat;
 pub use error::*;
+
+/// Default max-frame-size
+pub const DEFAULT_MAX_FRAME_SIZE: u32 = 256  * 1024;
+
+/// Default channel-max
+pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 
 /// Connection states as defined in the AMQP 1.0 Protocol Part 2.4.6
 #[derive(Debug, Clone)]
@@ -230,7 +236,11 @@ impl Connection {
         builder::Builder::new()
     }
 
-    /// Negotiate and open a [`Connection`] 
+    /// Negotiate and open a [`Connection`] with the default configuration
+    /// 
+    /// # Default configuration
+    /// 
+    /// TODO
     /// 
     /// The negotiation depends on the url supplied.
     /// 
@@ -248,14 +258,10 @@ impl Connection {
     /// 
     pub async fn open(
         container_id: impl Into<String>, // TODO: default container id? random uuid-ish
-        max_frame_size: impl Into<MaxFrameSize>, // TODO: make this use default?
-        channel_max: impl Into<ChannelMax>, // make this use default?
         url: impl TryInto<Url, Error = url::ParseError>,
     ) -> Result<ConnectionHandle, OpenError> {
         Connection::builder()
             .container_id(container_id)
-            .max_frame_size(max_frame_size)
-            .channel_max(channel_max)
             .open(url)
             .await
     }

@@ -4,7 +4,7 @@ use serde_amqp::{
     primitives::{Binary, Boolean, Symbol, UByte, UInt, ULong, Uuid},
     value::Value,
 };
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
@@ -126,6 +126,12 @@ impl TryFrom<Value> for Data {
     }
 }
 
+impl Display for Data {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Data of length: {}", self.0.len())
+    }
+}
+
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
@@ -136,7 +142,7 @@ impl TryFrom<Value> for Data {
     code = 0x0000_0000_0000_0076,
     encoding = "basic"
 )]
-pub struct AmqpSequence<T>(pub Vec<T>);
+pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
 
 // impl TryFrom<Value> for AmqpSequence {
 //     type Error = Value;
@@ -219,7 +225,7 @@ pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::to_vec;
+    use serde_amqp::{to_vec, primitives::Binary};
 
     use super::{Header, Priority};
 
@@ -234,5 +240,11 @@ mod tests {
         };
         let serialized = to_vec(&header).unwrap();
         println!("{:x?}", &serialized);
+    }
+
+    #[test]
+    fn test_display_data() {
+        let b = Binary::from(vec![1u8, 2]);
+        println!("{}", b.len());
     }
 }

@@ -32,29 +32,33 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed");
 
-    let mut connection = Connection::builder()
-        .container_id("connection-1")
-        .max_frame_size(1000)
-        .channel_max(9)
-        .idle_time_out(50_000 as u32)
-        // .open("amqp://localhost:5672")
-        .open("amqp://guest:guest@localhost:5672")
-        .await
-        .unwrap();
-
-    let mut session = Session::begin(&mut connection).await.unwrap();
-
-    // let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
+    let mut connection = Connection::open(
+        "connection-1", 
+        "amqp://guest:guest@localhost:5672"
+    ).await.unwrap();
+    // let mut connection = Connection::builder()
+    //     .container_id("connection-1")
+    //     .max_frame_size(1000)
+    //     .channel_max(9)
+    //     .idle_time_out(50_000 as u32)
+    //     // .open("amqp://localhost:5672")
+    //     .open("amqp://guest:guest@localhost:5672")
     //     .await
     //     .unwrap();
 
-    let mut sender = Sender::builder()
-        .name("rust-sender-link-1")
-        .target("q1")
-        .sender_settle_mode(SenderSettleMode::Mixed)
-        .attach(&mut session)
+    let mut session = Session::begin(&mut connection).await.unwrap();
+
+    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await
         .unwrap();
+
+    // let mut sender = Sender::builder()
+    //     .name("rust-sender-link-1")
+    //     .target("q1")
+    //     .sender_settle_mode(SenderSettleMode::Mixed)
+    //     .attach(&mut session)
+    //     .await
+    //     .unwrap();
 
     let body = BodySection::from("hello body_section");
     // let message = Message::from("hello");
@@ -93,11 +97,11 @@ async fn main() {
     //     .unwrap();
     // let result = receiver.detach().await;
     // println!("{:?}", result);
-    // session.end().await.unwrap();
-    let result = session.on_end().await;
-    println!("{:?}", result);
+    session.end().await.unwrap();
+    // let result = session.on_end().await;
+    // println!("{:?}", result);
     tokio::time::sleep(Duration::from_millis(500)).await;
-    // connection.close().await.unwrap();
-    let result = connection.on_close().await;
-    println!("{:?}", result);
+    connection.close().await.unwrap();
+    // let result = connection.on_close().await;
+    // println!("{:?}", result);
 }

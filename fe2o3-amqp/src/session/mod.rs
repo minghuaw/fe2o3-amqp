@@ -101,6 +101,11 @@ impl SessionHandle {
         self.on_end().await
     }
 
+    /// Alias for [`end`](#method.end)
+    pub async fn close(&mut self) -> Result<(), Error> {
+        self.end().await
+    }
+
     /// End the session with an error
     ///
     /// # Panics

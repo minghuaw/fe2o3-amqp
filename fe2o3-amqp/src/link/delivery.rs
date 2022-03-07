@@ -37,7 +37,23 @@ impl<T> Delivery<T> {
     pub fn into_message(self) -> Message<T> {
         self.message
     }
+
+    /// Consume the delivery into the message body section
+    pub fn into_body(self) -> BodySection<T> {
+        self.message.body_section
+    }
 }
+
+// TODO: Vec doesnt implement display trait
+// impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match &self.message.body_section {
+//             BodySection::Data(data) => write!(f, "{}", data),
+//             BodySection::Sequence(seq) => write!(f, "{}", seq),
+//             BodySection::Value(val) => write!(f, "{}", val),
+//         }
+//     }
+// }
 
 /// A type representing the delivery before sending
 /// 

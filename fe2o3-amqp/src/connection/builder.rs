@@ -22,7 +22,7 @@ use crate::{
     transport::Transport,
 };
 
-use super::{engine::ConnectionEngine, ConnectionHandle, OpenError};
+use super::{engine::ConnectionEngine, ConnectionHandle, OpenError, DEFAULT_MAX_FRAME_SIZE, DEFAULT_CHANNEL_MAX};
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -51,6 +51,10 @@ pub struct Builder<'a, Mode> {
     pub max_frame_size: MaxFrameSize,
 
     /// The maximum channel number that can be used on the connection
+    /// 
+    /// The channel-max value is the highest channel number that can be used on the connection. This
+    /// value plus one is the maximum number of sessions that can be simultaneously active on the
+    /// connection
     pub channel_max: ChannelMax,
 
     /// Idle time-out
@@ -98,8 +102,8 @@ impl<'a> Builder<'a, WithoutContainerId> {
             scheme: "amqp".into(), // Assume non-TLS by default
             domain: None,
             // set to 512 before Open frame is sent
-            max_frame_size: MaxFrameSize(MIN_MAX_FRAME_SIZE as u32),
-            channel_max: ChannelMax::default(),
+            max_frame_size: MaxFrameSize(DEFAULT_MAX_FRAME_SIZE),
+            channel_max: ChannelMax(DEFAULT_CHANNEL_MAX),
             idle_time_out: None,
             outgoing_locales: None,
             incoming_locales: None,
@@ -175,8 +179,23 @@ impl<'a, Mode> Builder<'a, Mode> {
     }
 
     /// The maximum channel number that can be used on the connection
+    /// 
+    /// The channel-max value is the highest channel number that can be used on the connection. This
+    /// value plus one is the maximum number of sessions that can be simultaneously active on the
+    /// connection
     pub fn channel_max(mut self, channel_max: impl Into<ChannelMax>) -> Self {
         self.channel_max = channel_max.into();
+        self
+    }
+
+    /// The maximum number of session that can be established on this connection.
+    /// 
+    /// This will modify the `channel-max` field. The `channel-max` plus one is the maximum
+    /// number of sessions taht can be simultaenously active on the connection
+    pub fn session_max(mut self, session_max: impl Into<ChannelMax>) -> Self {
+        let mut channel_max = session_max.into();
+        channel_max.0 -= 1;
+        self.channel_max = channel_max;
         self
     }
 

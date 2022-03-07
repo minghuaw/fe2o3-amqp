@@ -1,5 +1,6 @@
 use fe2o3_amqp::{
     connection::Connection, link::Receiver, session::Session, types::primitives::Value,
+    Delivery
 };
 
 #[tokio::main]
@@ -18,23 +19,25 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let mut receiver = Receiver::builder()
-        .name("rust-receiver-link-1")
-        .source("q1")
-        .attach(&mut session)
-        .await
-        .unwrap();
+    let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1").await.unwrap();
+    // let mut receiver = Receiver::builder()
+    //     .name("rust-receiver-link-1")
+    //     .source("q1")
+    //     .attach(&mut session)
+    //     .await
+    //     .unwrap();
 
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery: Delivery<_> = receiver.recv::<String>().await.unwrap();
     println!("<<< Message >>> {:?}", delivery);
     receiver.accept(&delivery).await.unwrap();
 
-    let delivery = receiver.recv::<Value>().await.unwrap();
-    println!("<<< Message >>> {:?}", delivery);
+    let delivery = receiver.recv::<String>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
+    let body = delivery.into_body();
+    println!("<<< Message >>> {:?}", body);
 
     if let Err(err) = receiver.close().await {
         println!("{}", err);
