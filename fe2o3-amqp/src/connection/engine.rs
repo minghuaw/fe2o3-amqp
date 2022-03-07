@@ -51,7 +51,7 @@ where
             Error::Local(err) => {
                 let _ = connection.send_close(transport, Some(err.clone())).await;
                 OpenError::LocalError(err)
-            },
+            }
             Error::Remote(err) => OpenError::RemoteError(err),
         }
     }
@@ -104,7 +104,13 @@ where
         let Frame { channel, body } = frame;
         let remote_open = match body {
             FrameBody::Open(open) => open,
-            _ => return Err(OpenError::LocalError(definitions::Error::new(AmqpError::IllegalState, None, None))),
+            _ => {
+                return Err(OpenError::LocalError(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    None,
+                    None,
+                )))
+            }
         };
 
         // Handle incoming remote_open
@@ -242,8 +248,7 @@ where
                     .map_err(Into::into)?;
             }
             FrameBody::Close(close) => {
-                self
-                    .connection
+                self.connection
                     .on_incoming_close(channel, close)
                     .await
                     .map_err(Into::into)?;
@@ -366,7 +371,8 @@ where
             Error::Io(_) => Running::Stop,
             Error::JoinError(_) => unreachable!(), // JoinError is only for the event_loop task
             Error::Local(error) => {
-                let _ = self.connection
+                let _ = self
+                    .connection
                     .send_close(&mut self.transport, Some(error.clone()))
                     .await;
                 self.continue_or_stop_by_state()
@@ -393,9 +399,9 @@ where
             | ConnectionState::Opened
             | ConnectionState::CloseReceived
             | ConnectionState::CloseSent => Running::Continue,
-            ConnectionState::ClosePipe
-            | ConnectionState::Discarding
-            | ConnectionState::End => Running::Stop,
+            ConnectionState::ClosePipe | ConnectionState::Discarding | ConnectionState::End => {
+                Running::Stop
+            }
         }
     }
 

@@ -22,7 +22,10 @@ use crate::{
     transport::Transport,
 };
 
-use super::{engine::ConnectionEngine, ConnectionHandle, OpenError, DEFAULT_MAX_FRAME_SIZE, DEFAULT_CHANNEL_MAX};
+use super::{
+    engine::ConnectionEngine, ConnectionHandle, OpenError, DEFAULT_CHANNEL_MAX,
+    DEFAULT_MAX_FRAME_SIZE,
+};
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -51,7 +54,7 @@ pub struct Builder<'a, Mode> {
     pub max_frame_size: MaxFrameSize,
 
     /// The maximum channel number that can be used on the connection
-    /// 
+    ///
     /// The channel-max value is the highest channel number that can be used on the connection. This
     /// value plus one is the maximum number of sessions that can be simultaneously active on the
     /// connection
@@ -79,16 +82,16 @@ pub struct Builder<'a, Mode> {
     pub client_config: Option<ClientConfig>,
 
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions
-    /// 
+    ///
     /// # Default
-    /// 
+    ///
     /// [`DEFAULT_OUTGOING_BUFFER_SIZE`]
     pub buffer_size: usize,
 
-    /// SASL profile for SASL negotiation. 
-    /// 
+    /// SASL profile for SASL negotiation.
+    ///
     /// # Warn
-    /// 
+    ///
     /// If username and password are supplied with the url, this field will be overriden with a
     /// PLAIN SASL profile that is interpreted from the url.
     pub sasl_profile: Option<SaslProfile>,
@@ -183,7 +186,7 @@ impl<'a, Mode> Builder<'a, Mode> {
     }
 
     /// The maximum channel number that can be used on the connection
-    /// 
+    ///
     /// The channel-max value is the highest channel number that can be used on the connection. This
     /// value plus one is the maximum number of sessions that can be simultaneously active on the
     /// connection
@@ -193,7 +196,7 @@ impl<'a, Mode> Builder<'a, Mode> {
     }
 
     /// The maximum number of session that can be established on this connection.
-    /// 
+    ///
     /// This will modify the `channel-max` field. The `channel-max` plus one is the maximum
     /// number of sessions taht can be simultaenously active on the connection
     pub fn session_max(mut self, session_max: impl Into<ChannelMax>) -> Self {
@@ -287,10 +290,10 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
-    /// SASL profile for SASL negotiation. 
-    /// 
+    /// SASL profile for SASL negotiation.
+    ///
     /// # Warn
-    /// 
+    ///
     /// If username and password are supplied with the url, this field will be overriden with a
     /// PLAIN SASL profile that is interpreted from the url.
     pub fn sasl_profile(mut self, profile: impl Into<SaslProfile>) -> Self {
@@ -322,19 +325,19 @@ impl<'a> Builder<'a, WithContainerId> {
     }
 
     /// Open a [`crate::Connection`] with an url
-    /// 
+    ///
     /// # Raw AMQP connection
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// # TLS
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// # SASL
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     pub async fn open(
         mut self,
         url: impl TryInto<Url, Error = url::ParseError>,

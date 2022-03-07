@@ -109,10 +109,9 @@ impl Decoder for FrameCodec {
 #[derive(Debug)]
 pub enum FrameBody {
     // Frames handled by Link
-    
     /// Attach performative
     Attach(Attach),
-    
+
     /// Flow performative
     Flow(Flow),
 
@@ -132,7 +131,6 @@ pub enum FrameBody {
     Detach(Detach),
 
     // Frames handled by Session
-
     /// Begin performative
     Begin(Begin),
 
@@ -140,7 +138,6 @@ pub enum FrameBody {
     End(End),
 
     // Frames handled by Connection
-
     /// Open performative
     Open(Open),
 

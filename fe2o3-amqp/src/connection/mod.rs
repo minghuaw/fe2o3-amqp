@@ -6,7 +6,7 @@ use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    performatives::{Begin, ChannelMax, Close, End, Open},
+    performatives::{Begin, Close, End, Open},
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -32,12 +32,12 @@ pub use builder::*;
 
 pub(crate) mod engine;
 
-pub mod heartbeat;
 mod error;
+pub mod heartbeat;
 pub use error::*;
 
 /// Default max-frame-size
-pub const DEFAULT_MAX_FRAME_SIZE: u32 = 256  * 1024;
+pub const DEFAULT_MAX_FRAME_SIZE: u32 = 256 * 1024;
 
 /// Default channel-max
 pub const DEFAULT_CHANNEL_MAX: u16 = 255;
@@ -69,7 +69,7 @@ pub enum ConnectionState {
     /// the close frame have been sent but nothing has been received.
     OpenClosePipe,
 
-    /// In this state the connection headers have been exchanged. An open frame has been received 
+    /// In this state the connection headers have been exchanged. An open frame has been received
     /// from the peer but an open frame has not been sent.
     OpenReceived,
 
@@ -107,8 +107,8 @@ pub enum ConnectionState {
     End,
 }
 
-/// A handle to the [`Connection`] event loop. 
-/// 
+/// A handle to the [`Connection`] event loop.
+///
 /// Dropping the handle will also stop the [`Connection`] event loop
 pub struct ConnectionHandle {
     pub(crate) control: Sender<ConnectionControl>,
@@ -131,10 +131,10 @@ impl ConnectionHandle {
     }
 
     /// Close the connection
-    /// 
+    ///
     /// # Panics
     ///
-    /// Panics if this is called after executing any of [`close`](#method.close), 
+    /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn close(&mut self) -> Result<(), Error> {
@@ -145,10 +145,10 @@ impl ConnectionHandle {
     }
 
     /// Close the connection with an error
-    /// 
+    ///
     /// # Panics
     ///
-    /// Panics if this is called after executing any of [`close`](#method.close), 
+    /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn close_with_error(
@@ -168,7 +168,7 @@ impl ConnectionHandle {
     ///
     /// # Panics
     ///
-    /// Panics if this is called after executing any of [`close`](#method.close), 
+    /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_close(&mut self) -> Result<(), Error> {
@@ -200,27 +200,27 @@ impl ConnectionHandle {
     }
 }
 
-/// An AMQP 1.0 Connection. 
-/// 
+/// An AMQP 1.0 Connection.
+///
 /// # Open a new [`Connection`] with default configuration
-/// 
+///
 /// Below is an example with a local broker (
 /// [`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
 /// listening on the localhost. The broker is executed with the following command
-/// 
+///
 /// ```powershell
 /// ./TestAmqpBroker.exe amqp://localhost:5672 /creds:guest:guest /queues:q1
 /// ```
-/// 
+///
 /// ```rust,ignore
 /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
 /// ```
-/// 
+///
 /// ## Builder
-/// 
-/// The example above creates a connection with the default configuration. If the user needs to customize the 
+///
+/// The example above creates a connection with the default configuration. If the user needs to customize the
 /// configuration, the connection [`Builder`] should be used.
-/// 
+///
 /// ```rust, ignore
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
@@ -230,9 +230,9 @@ impl ConnectionHandle {
 ///     .open("amqp://guest:guest@localhost:5672")
 ///     .await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
@@ -243,12 +243,12 @@ impl ConnectionHandle {
 /// |`offered_capabilities`| `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
-/// 
+///
 /// ## TLS
-/// 
+///
 /// TLS is supported with `rustls`. The user must supply a `ClientConfig` to the `client_config` field, and
 /// the url scheme must be `"amqps"`.
-/// 
+///
 /// ```rust, ignore
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
@@ -256,19 +256,19 @@ impl ConnectionHandle {
 ///     .open("amqps://guest:guest@localhost:5672")
 ///     .await.unwrap();
 /// ```
-/// 
+///
 /// ## SASL
-/// 
-/// If `username` and `password` are supplied with the url, the connection negotiation will start with 
+///
+/// If `username` and `password` are supplied with the url, the connection negotiation will start with
 /// SASL PLAIN negotiation. Other than filling `username` and `password` in the url, one could also
 /// supply the information with `sasl_profile` field of the [`Builder`]. Please note that the SASL profile
 /// found in the url will override whatever `SaslProfile` supplied to the [`Builder`].
-/// 
+///
 /// The example below shows two ways of starting the connection with SASL negotiation.
-/// 
+///
 /// ```rust,ignore
 /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
-/// 
+///
 /// // This is equivalent to the line above
 /// let profile = SaslProfile::Plain {
 ///     username: "guest".to_string(),
@@ -307,25 +307,25 @@ impl Connection {
     }
 
     /// Negotiate and open a [`Connection`] with the default configuration
-    /// 
+    ///
     /// # Default configuration
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// The negotiation depends on the url supplied.
-    /// 
+    ///
     /// # Raw AMQP
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// # TLS
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// # SASL
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     pub async fn open(
         container_id: impl Into<String>, // TODO: default container id? random uuid-ish
         url: impl TryInto<Url, Error = url::ParseError>,
@@ -467,7 +467,7 @@ impl endpoint::Connection for Connection {
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
                 // TODO: allow remotely initiated session
-                return Err(Error::amqp_error (
+                return Err(Error::amqp_error(
                     AmqpError::NotImplemented,
                     Some("Remotely initiazted session is not supported yet".to_string()),
                 )); // Close with error NotImplemented
@@ -504,11 +504,7 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote Close frame
     #[instrument(name = "RECV", skip_all)]
-    async fn on_incoming_close(
-        &mut self,
-        channel: u16,
-        close: Close,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error> {
         trace!(channel, frame=?close);
 
         match &self.local_state {
@@ -522,7 +518,7 @@ impl endpoint::Connection for Connection {
 
         match close.error {
             Some(error) => Err(Error::Remote(error)),
-            None => Ok(())
+            None => Ok(()),
         }
     }
 

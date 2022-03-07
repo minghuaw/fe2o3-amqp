@@ -1,6 +1,9 @@
-use std::{io, fmt::Debug};
+use std::{fmt::Debug, io};
 
-use fe2o3_amqp_types::{definitions::{AmqpError, self, Handle}, performatives::Detach};
+use fe2o3_amqp_types::{
+    definitions::{self, AmqpError, Handle},
+    performatives::Detach,
+};
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
@@ -9,12 +12,15 @@ use tracing::{debug, error, instrument};
 use crate::{
     connection::engine::SessionId,
     control::{ConnectionControl, SessionControl},
-    endpoint::{Session, self},
+    endpoint::{self, Session},
     link::{LinkFrame, LinkHandle},
     util::Running,
 };
 
-use super::{Error, SessionFrame, SessionFrameBody, frame::SessionIncomingItem, SessionState, error::AllocLinkError};
+use super::{
+    error::AllocLinkError, frame::SessionIncomingItem, Error, SessionFrame, SessionFrameBody,
+    SessionState,
+};
 
 pub(crate) struct SessionEngine<S: Session> {
     conn: mpsc::Sender<ConnectionControl>,
@@ -53,7 +59,10 @@ where
         };
 
         // send a begin
-        engine.session.send_begin(&mut engine.outgoing).await
+        engine
+            .session
+            .send_begin(&mut engine.outgoing)
+            .await
             .map_err(|e| e.into())?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
@@ -69,13 +78,15 @@ where
         let SessionFrame { channel, body } = frame;
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
-            SessionFrameBody::End(end) => return Err(Error::Remote(
-                end.error.unwrap_or_else(|| definitions::Error::new(
-                    AmqpError::InternalError,
-                    Some("Remote closed session wihtout explanation".into()),
-                    None
-                ))
-            )),
+            SessionFrameBody::End(end) => {
+                return Err(Error::Remote(end.error.unwrap_or_else(|| {
+                    definitions::Error::new(
+                        AmqpError::InternalError,
+                        Some("Remote closed session wihtout explanation".into()),
+                        None,
+                    )
+                })))
+            }
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         };
         engine
@@ -96,15 +107,21 @@ where
 
         match body {
             SessionFrameBody::Begin(begin) => {
-                self.session.on_incoming_begin(channel, begin).await
+                self.session
+                    .on_incoming_begin(channel, begin)
+                    .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Attach(attach) => {
-                self.session.on_incoming_attach(channel, attach).await
+                self.session
+                    .on_incoming_attach(channel, attach)
+                    .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Flow(flow) => {
-                self.session.on_incoming_flow(channel, flow).await
+                self.session
+                    .on_incoming_flow(channel, flow)
+                    .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Transfer {
@@ -123,11 +140,15 @@ where
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Detach(detach) => {
-                self.session.on_incoming_detach(channel, detach).await
+                self.session
+                    .on_incoming_detach(channel, detach)
+                    .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::End(end) => {
-                self.session.on_incoming_end(channel, end).await
+                self.session
+                    .on_incoming_end(channel, end)
+                    .await
                     .map_err(Into::into)?;
             }
         }
@@ -142,7 +163,9 @@ where
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
         match control {
             SessionControl::End(error) => {
-                self.session.send_end(&mut self.outgoing, error).await
+                self.session
+                    .send_end(&mut self.outgoing, error)
+                    .await
                     .map_err(Into::into)?;
             }
             SessionControl::AllocateLink {
@@ -162,8 +185,7 @@ where
                 self.session.deallocate_link(link_name);
             }
             SessionControl::LinkFlow(flow) => {
-                let flow = self.session.on_outgoing_flow(flow)
-                    .map_err(Into::into)?;
+                let flow = self.session.on_outgoing_flow(flow).map_err(Into::into)?;
                 self.outgoing
                     .send(flow)
                     .await
@@ -172,7 +194,9 @@ where
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
             SessionControl::Disposition(disposition) => {
-                let disposition = self.session.on_outgoing_disposition(disposition)
+                let disposition = self
+                    .session
+                    .on_outgoing_disposition(disposition)
                     .map_err(Into::into)?;
                 self.outgoing
                     .send(disposition)
@@ -193,24 +217,29 @@ where
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
         match self.session.local_state() {
             SessionState::Mapped => {}
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),  // End session with illegal state
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         }
 
         let session_frame = match frame {
-            LinkFrame::Attach(attach) => self.session.on_outgoing_attach(attach)
+            LinkFrame::Attach(attach) => self
+                .session
+                .on_outgoing_attach(attach)
                 .map_err(Into::into)?,
-            LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow)
-                .map_err(Into::into)?,
+            LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow).map_err(Into::into)?,
             LinkFrame::Transfer {
                 performative,
                 payload,
-            } => self.session.on_outgoing_transfer(performative, payload)
+            } => self
+                .session
+                .on_outgoing_transfer(performative, payload)
                 .map_err(Into::into)?,
-            LinkFrame::Disposition(disposition) => {
-                self.session.on_outgoing_disposition(disposition)
-                    .map_err(Into::into)?
-            }
-            LinkFrame::Detach(detach) => self.session.on_outgoing_detach(detach)
+            LinkFrame::Disposition(disposition) => self
+                .session
+                .on_outgoing_disposition(disposition)
+                .map_err(Into::into)?,
+            LinkFrame::Detach(detach) => self
+                .session
+                .on_outgoing_detach(detach)
                 .map_err(Into::into)?,
         };
 
@@ -234,19 +263,28 @@ where
             Error::ChannelMaxReached => Running::Stop,
             Error::JoinError(_) => unreachable!(),
             Error::Local(error) => {
-                let _ = self.session
-                    .send_end(&mut self.outgoing, Some(error.clone())).await;
+                let _ = self
+                    .session
+                    .send_end(&mut self.outgoing, Some(error.clone()))
+                    .await;
                 self.continue_or_stop_by_state()
-            },
+            }
             Error::Remote(_) => self.continue_or_stop_by_state(),
             Error::LinkHandleError {
-                handle, closed, error
-            } => self.on_link_handle_error(handle, closed, error).await
+                handle,
+                closed,
+                error,
+            } => self.on_link_handle_error(handle, closed, error).await,
         }
     }
 
     #[inline]
-    async fn on_link_handle_error(&mut self, handle: &Handle, closed: &bool, error: &definitions::Error) -> Running {
+    async fn on_link_handle_error(
+        &mut self,
+        handle: &Handle,
+        closed: &bool,
+        error: &definitions::Error,
+    ) -> Running {
         // TODO: detach?
         let detach = Detach {
             handle: handle.clone(),
@@ -258,7 +296,7 @@ where
                 if let Err(error) = self.outgoing.send(frame).await {
                     // The connection must have dropped
                     error!(?error);
-                    return Running::Stop
+                    return Running::Stop;
                 }
             }
             Err(error) => error!(?error),
@@ -275,8 +313,7 @@ where
             | SessionState::Mapped
             | SessionState::EndSent
             | SessionState::EndReceived => Running::Continue,
-            SessionState::Unmapped
-            | SessionState::Discarding => Running::Stop,
+            SessionState::Unmapped | SessionState::Discarding => Running::Stop,
         }
     }
 

@@ -72,11 +72,7 @@ pub(crate) trait Connection {
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(
-        &mut self,
-        channel: u16,
-        close: Close,
-    ) -> Result<(), Self::Error>;
+    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error>;
 
     /// Sending out an Open frame
     ///

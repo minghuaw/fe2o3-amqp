@@ -1,4 +1,4 @@
-use std::{fmt};
+use std::fmt;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
@@ -36,7 +36,7 @@ impl<L> DetachError<L> {
         Self {
             link: None,
             is_closed_by_remote: false,
-            error: None
+            error: None,
         }
     }
 }
@@ -62,21 +62,19 @@ impl<L> TryFrom<Error> for DetachError<L> {
                 let err = Self {
                     link: None,
                     is_closed_by_remote: false,
-                    error: Some(error)
+                    error: Some(error),
                 };
                 Ok(err)
-            },
+            }
             Error::Detached(err) => {
                 let error = DetachError {
                     link: None,
                     is_closed_by_remote: err.is_closed_by_remote,
-                    error: err.error
+                    error: err.error,
                 };
                 Ok(error)
-            },
-            Error::Rejected(_)
-            | Error::Released(_)
-            | Error::Modified(_) => Err(value),
+            }
+            Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
         }
     }
 }
@@ -90,21 +88,19 @@ impl<L> TryFrom<(L, Error)> for DetachError<L> {
                 let err = Self {
                     link: Some(link),
                     is_closed_by_remote: false,
-                    error: Some(error)
+                    error: Some(error),
                 };
                 Ok(err)
-            },
+            }
             Error::Detached(err) => {
                 let error = DetachError {
                     link: Some(link),
                     is_closed_by_remote: err.is_closed_by_remote,
-                    error: err.error
+                    error: err.error,
                 };
                 Ok(error)
-            },
-            Error::Rejected(_)
-            | Error::Released(_)
-            | Error::Modified(_) => Err(value),
+            }
+            Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
         }
     }
 }
@@ -119,7 +115,7 @@ pub enum Error {
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError<()>),
-    
+
     /// The message was rejected
     #[error("Outcome Rejected: {:?}", .0)]
     Rejected(Rejected),
@@ -139,7 +135,7 @@ impl Error {
         Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Failed to send to sesssion".to_string()),
-            None
+            None,
         ))
     }
 
@@ -147,7 +143,7 @@ impl Error {
         Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some(format!("Expecting {}", frame_ident.into())),
-            None
+            None,
         ))
     }
 
@@ -155,28 +151,20 @@ impl Error {
         Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Link is not attached".to_string()),
-            None
+            None,
         ))
     }
 }
 
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
-        Self::Local(definitions::Error::new(
-            err,
-            None,
-            None
-        ))
+        Self::Local(definitions::Error::new(err, None, None))
     }
 }
 
 impl From<LinkError> for Error {
     fn from(err: LinkError) -> Self {
-        Self::Local(definitions::Error::new(
-            err,
-            None,
-            None
-        ))
+        Self::Local(definitions::Error::new(err, None, None))
     }
 }
 
@@ -185,18 +173,17 @@ impl<T> From<mpsc::error::SendError<T>> for Error {
         Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Failed to send to sesssion".to_string()),
-            None
+            None,
         ))
     }
 }
-
 
 impl From<serde_amqp::Error> for Error {
     fn from(err: serde_amqp::Error) -> Self {
         Self::Local(definitions::Error::new(
             AmqpError::DecodeError,
             Some(format!("{:?}", err)),
-            None
+            None,
         ))
     }
 }
@@ -246,10 +233,9 @@ impl TryFrom<Error> for AttachError {
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
             Error::Local(error) => Ok(AttachError::LocalError(error)),
-            Error::Rejected(_)
-            | Error::Released(_)
-            | Error::Modified(_)
-            | Error::Detached(_) => Err(value),
+            Error::Rejected(_) | Error::Released(_) | Error::Modified(_) | Error::Detached(_) => {
+                Err(value)
+            }
         }
     }
 }

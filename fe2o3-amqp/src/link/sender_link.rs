@@ -18,7 +18,10 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        let handle = self.output_handle.clone().ok_or_else(|| Error::not_attached())?;
+        let handle = self
+            .output_handle
+            .clone()
+            .ok_or_else(|| Error::not_attached())?;
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {

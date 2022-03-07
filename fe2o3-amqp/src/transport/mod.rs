@@ -180,7 +180,9 @@ where
 
             match profile.on_frame(frame, hostname).await? {
                 Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
-                Negotiation::Response(response) => transport.send(sasl::Frame::Response(response)).await?,
+                Negotiation::Response(response) => {
+                    transport.send(sasl::Frame::Response(response)).await?
+                }
                 Negotiation::Outcome(outcome) => match outcome.code {
                     SaslCode::Ok => return Ok(transport.into_inner_io()),
                     code @ _ => {
@@ -301,18 +303,19 @@ where
         Err(buf) => {
             tracing::error!(?buf);
 
-            return Err(NegotiationError::NotImplemented(Some(format!("Found: {:?}", inbound_buf))));
+            return Err(NegotiationError::NotImplemented(Some(format!(
+                "Found: {:?}",
+                inbound_buf
+            ))));
         }
     };
     // .map_err(|_| Error::amqp_error(AmqpError::NotImplemented, Some(format!("Found: {:?}", inbound_buf))))?;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
-        return Err(NegotiationError::NotImplemented(
-            Some(format!(
-                "Expecting {:?}, found {:?}",
-                proto_header, incoming_header
-            )),
-        ));
+        return Err(NegotiationError::NotImplemented(Some(format!(
+            "Expecting {:?}, found {:?}",
+            proto_header, incoming_header
+        ))));
     }
     Ok(incoming_header)
 }

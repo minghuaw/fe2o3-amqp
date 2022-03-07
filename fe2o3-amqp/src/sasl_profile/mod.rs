@@ -28,13 +28,13 @@ pub(crate) enum Negotiation {
 pub enum SaslProfile {
     /// SASL profile for ANONYMOUS mechanism
     Anonymous,
-    
+
     /// SASL profile for PLAIN mechanism
-    Plain { 
+    Plain {
         /// Username
-        username: String,     
+        username: String,
         /// Password
-        password: String 
+        password: String,
     },
 }
 
@@ -99,15 +99,23 @@ impl SaslProfile {
                     };
                     Ok(Negotiation::Init(init))
                 } else {
-                    Err(Error::NotImplemented(Some(format!("{:?} is not supported", mechanism))))
+                    Err(Error::NotImplemented(Some(format!(
+                        "{:?} is not supported",
+                        mechanism
+                    ))))
                 }
             }
             Frame::Challenge(_challenge) => {
                 // TODO
-                Err(Error::NotImplemented(Some("SASL Challenge is not implemented.".to_string())))
+                Err(Error::NotImplemented(Some(
+                    "SASL Challenge is not implemented.".to_string(),
+                )))
             }
             Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
-            _ => Err(Error::NotImplemented(Some(format!("{:?} is not expected", frame)))),
+            _ => Err(Error::NotImplemented(Some(format!(
+                "{:?} is not expected",
+                frame
+            )))),
         }
     }
 }

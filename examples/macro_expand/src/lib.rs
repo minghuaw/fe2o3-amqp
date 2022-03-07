@@ -23,7 +23,7 @@ use serde_amqp::{
 
 #[derive(Serialize, Deserialize)]
 pub struct AnotherNewType<T> {
-    inner: T
+    inner: T,
 }
 
 // #[derive(SerializeComposite, DeserializeComposite)]

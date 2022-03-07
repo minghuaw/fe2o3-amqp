@@ -3,7 +3,7 @@
 use std::io;
 
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, ConnectionError, self, ErrorCondition},
+    definitions::{self, AmqpError, ConnectionError, ErrorCondition},
     primitives::Binary,
     sasl::SaslCode,
 };
@@ -28,7 +28,7 @@ pub enum Error {
 
     /// The remote peer closed with the provided error
     #[error("Remote error {:?}", .0)]
-    Remote(definitions::Error)
+    Remote(definitions::Error),
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error
@@ -45,26 +45,22 @@ impl Error {
         condition: impl Into<AmqpError>,
         description: impl Into<Option<String>>,
     ) -> Self {
-        Self::Local(
-            definitions::Error {
-                condition: ErrorCondition::AmqpError(condition.into()),
-                description: description.into(),
-                info: None
-            }
-        )
+        Self::Local(definitions::Error {
+            condition: ErrorCondition::AmqpError(condition.into()),
+            description: description.into(),
+            info: None,
+        })
     }
 
     pub(crate) fn connection_error(
         condition: impl Into<ConnectionError>,
         description: impl Into<Option<String>>,
     ) -> Self {
-        Self::Local(
-            definitions::Error {
-                condition: ErrorCondition::ConnectionError(condition.into()),
-                description: description.into(),
-                info: None
-            }
-        )
+        Self::Local(definitions::Error {
+            condition: ErrorCondition::ConnectionError(condition.into()),
+            description: description.into(),
+            info: None,
+        })
     }
 }
 
@@ -72,12 +68,17 @@ impl From<transport::Error> for Error {
     fn from(err: transport::Error) -> Self {
         match err {
             transport::Error::Io(e) => Self::Io(e),
-            transport::Error::IdleTimeout => Self::connection_error(ConnectionError::ConnectionForced, Some("Idle timeout".to_string())),
+            transport::Error::IdleTimeout => Self::connection_error(
+                ConnectionError::ConnectionForced,
+                Some("Idle timeout".to_string()),
+            ),
             transport::Error::AmqpError {
                 condition,
                 description,
             } => Self::amqp_error(condition, description),
-            transport::Error::FramingError => Self::connection_error(ConnectionError::FramingError, None),
+            transport::Error::FramingError => {
+                Self::connection_error(ConnectionError::FramingError, None)
+            }
         }
     }
 }
@@ -146,7 +147,7 @@ pub enum OpenError {
 
     /// The remote peer closed the connection with the provided error
     #[error("Remote error {:?}", .0)]
-    RemoteError(definitions::Error)
+    RemoteError(definitions::Error),
 }
 
 impl From<NegotiationError> for OpenError {
@@ -162,15 +163,15 @@ impl From<NegotiationError> for OpenError {
                 code,
                 additional_data,
             },
-            NegotiationError::DecodeError => Self::LocalError(
-                definitions::Error::new(AmqpError::DecodeError, None, None)
-            ),
+            NegotiationError::DecodeError => {
+                Self::LocalError(definitions::Error::new(AmqpError::DecodeError, None, None))
+            }
             NegotiationError::NotImplemented(description) => Self::LocalError(
-                definitions::Error::new(AmqpError::NotImplemented, description, None)
+                definitions::Error::new(AmqpError::NotImplemented, description, None),
             ),
-            NegotiationError::IllegalState => Self::LocalError(
-                definitions::Error::new(AmqpError::IllegalState, None, None)
-            ),
+            NegotiationError::IllegalState => {
+                Self::LocalError(definitions::Error::new(AmqpError::IllegalState, None, None))
+            }
         }
     }
 }

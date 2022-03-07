@@ -19,11 +19,12 @@ use crate::{
 };
 
 use super::{
+    error::AttachError,
     receiver::CreditMode,
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     type_state::Attached,
-    Receiver, Sender, error::AttachError,
+    Receiver, Sender,
 };
 
 /// Type state for link::builder::Builder;
@@ -307,9 +308,12 @@ impl<NameState, Addr> Builder<role::Receiver, NameState, Addr> {}
 
 impl Builder<role::Sender, WithName, WithTarget> {
     /// Attach the link as a sender
-    /// 
+    ///
     /// # Example
-    pub async fn attach(mut self, session: &mut SessionHandle) -> Result<Sender<Attached>, AttachError> {
+    pub async fn attach(
+        mut self,
+        session: &mut SessionHandle,
+    ) -> Result<Sender<Attached>, AttachError> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
@@ -340,15 +344,15 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self
-            .create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await
+        super::do_attach(&mut link, &mut writer, &mut reader)
+            .await
             .map_err(|value| match AttachError::try_from(value) {
                 Ok(error) => error,
                 Err(_) => unreachable!(),
@@ -369,9 +373,9 @@ impl Builder<role::Sender, WithName, WithTarget> {
 
 impl Builder<role::Receiver, WithName, WithTarget> {
     /// Attach the link as a receiver
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
     pub async fn attach(
         mut self,
@@ -409,15 +413,15 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self
-            .create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await
+        super::do_attach(&mut link, &mut writer, &mut reader)
+            .await
             .map_err(|value| match AttachError::try_from(value) {
                 Ok(error) => error,
                 Err(_) => unreachable!(),
@@ -437,11 +441,12 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         };
 
         if let CreditMode::Auto(credit) = receiver.credit_mode {
-            receiver.set_credit(credit).await
-                .map_err(|value| match AttachError::try_from(value) {
+            receiver.set_credit(credit).await.map_err(|value| {
+                match AttachError::try_from(value) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
-                })?;
+                }
+            })?;
         }
 
         Ok(receiver)

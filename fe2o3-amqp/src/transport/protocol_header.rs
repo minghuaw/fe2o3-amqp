@@ -7,7 +7,7 @@ const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 /// Protocol header
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProtocolHeader {
-    /// Protocol ID 
+    /// Protocol ID
     pub id: ProtocolId,
 
     /// Major number

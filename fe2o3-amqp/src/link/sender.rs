@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     control::SessionControl,
     endpoint::{Link, Settlement},
-    link::error::{detach_error_expecting_frame},
+    link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
     util::Consumer,
 };
@@ -27,7 +27,7 @@ use crate::{
 use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable, UnsettledMessage},
-    error::{DetachError, AttachError},
+    error::{AttachError, DetachError},
     role,
     state::LinkFlowState,
     type_state::{Attached, Detached},
@@ -38,9 +38,9 @@ type SenderFlowState = LinkFlowState<role::Sender>;
 type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, UnsettledMessage>;
 
 /// An AMQP1.0 sender
-/// 
-/// # Example 
-/// 
+///
+/// # Example
+///
 /// TODO
 #[derive(Debug)]
 pub struct Sender<S> {
@@ -107,12 +107,10 @@ impl Sender<Detached> {
         if let Err(err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(
-                match DetachError::try_from((self, err.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            )
+            return Err(match DetachError::try_from((self, err.into())) {
+                Ok(err) => err,
+                Err(_) => unreachable!(),
+            });
         }
 
         Ok(Sender::<Attached> {
@@ -126,15 +124,15 @@ impl Sender<Detached> {
     }
 
     /// Attach the sender link to a session with default configuration
-    /// 
+    ///
     /// # Default configuration
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
@@ -201,9 +199,9 @@ impl Sender<Attached> {
     }
 
     /// Send a message and wait for acknowledgement (disposition)
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
     pub async fn send<T: serde::Serialize>(
         &mut self,
@@ -218,13 +216,13 @@ impl Sender<Attached> {
                 delivery_tag: _,
                 outcome,
             } => {
-                let state = outcome.await.map_err(|_| Error::Local(
-                    definitions::Error::new(
+                let state = outcome.await.map_err(|_| {
+                    Error::Local(definitions::Error::new(
                         AmqpError::IllegalState,
                         Some("Delivery outcome sender has dropped".into()),
-                        None
-                    )
-                ))?;
+                        None,
+                    ))
+                })?;
                 match state {
                     DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
                     DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
@@ -236,11 +234,11 @@ impl Sender<Attached> {
     }
 
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
-    /// 
+    ///
     /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
-    /// 
-    /// # Example 
-    /// 
+    ///
+    /// # Example
+    ///
     /// TODO
     pub async fn send_with_timeout<T: serde::Serialize>(
         &mut self,
@@ -251,11 +249,11 @@ impl Sender<Attached> {
     }
 
     /// Send a message without waiting for the acknowledgement.
-    /// 
+    ///
     /// This will set the batchable field of the `Transfer` performative to true.
-    /// 
-    /// # Example 
-    /// 
+    ///
+    /// # Example
+    ///
     /// TODO
     pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
@@ -267,11 +265,11 @@ impl Sender<Attached> {
     }
 
     /// Send a message without waiting for the acknowledgement with a timeout.
-    /// 
+    ///
     /// This will set the batchable field of the `Transfer` performative to true.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
     pub async fn send_batchable_with_timeout<T: serde::Serialize>(
         &mut self,
@@ -304,12 +302,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         };
 
         // Wait for remote detach
@@ -362,12 +360,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         }
 
         Ok(detaching)
@@ -382,7 +380,7 @@ impl Sender<Attached> {
     }
 
     /// Close the link.
-    /// 
+    ///
     /// This will set the `closed` field in the Detach performative to true
     pub async fn close(self) -> Result<(), DetachError<Sender<Detached>>> {
         let mut detaching = Sender::<Detached> {
@@ -402,12 +400,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         }
 
         // Wait for remote detach
@@ -464,12 +462,12 @@ impl Sender<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(e) => return Err(
-                    match DetachError::try_from((detaching, e.into())) {
+                Err(e) => {
+                    return Err(match DetachError::try_from((detaching, e.into())) {
                         Ok(err) => err,
-                        Err(_) => unreachable!()
-                    }
-                ),
+                        Err(_) => unreachable!(),
+                    })
+                }
             }
         };
 
@@ -480,12 +478,12 @@ impl Sender<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         }
 
         Ok(())

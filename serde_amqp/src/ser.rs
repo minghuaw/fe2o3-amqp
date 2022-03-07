@@ -2284,7 +2284,6 @@ mod test {
 
     #[test]
     fn test_serialize_vec_of_tuple() {
-        
         let data = vec![(&NewType(NewType(1i32)), &false, "amqp")];
         let buf = to_vec(&data).unwrap();
         println!("{:#x?}", buf);

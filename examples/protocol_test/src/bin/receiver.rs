@@ -1,6 +1,5 @@
 use fe2o3_amqp::{
-    connection::Connection, link::Receiver, session::Session, types::primitives::Value,
-    Delivery
+    connection::Connection, link::Receiver, session::Session, types::primitives::Value, Delivery,
 };
 
 #[tokio::main]
@@ -19,7 +18,9 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1").await.unwrap();
+    let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
+        .await
+        .unwrap();
     // let mut receiver = Receiver::builder()
     //     .name("rust-receiver-link-1")
     //     .source("q1")

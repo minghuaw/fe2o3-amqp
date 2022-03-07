@@ -29,13 +29,11 @@ async fn main() {
         // completes the builder.
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let mut connection = Connection::open(
-        "connection-1", 
-        "amqp://guest:guest@localhost:5672"
-    ).await.unwrap();
+    let mut connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672")
+        .await
+        .unwrap();
     // let mut connection = Connection::builder()
     //     .container_id("connection-1")
     //     .max_frame_size(1000)
@@ -78,20 +76,19 @@ async fn main() {
     //     println!("+++++++++ {:?}", err)
     // }
 
-    
     // let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
     //     .await
     //     .unwrap();
-    
+
     // sender.send("HELLO AMQP").await.unwrap();
-    
+
     // let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
-    
+
     // let result = fut.await;
     // println!("fut {:?}", result);
-    
+
     sender.close().await.unwrap();
-    
+
     // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
     //     .await
     //     .unwrap();

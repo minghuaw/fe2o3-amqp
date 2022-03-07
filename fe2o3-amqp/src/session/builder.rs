@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    connection::{DEFAULT_OUTGOING_BUFFER_SIZE, ConnectionHandle},
+    connection::{ConnectionHandle, DEFAULT_OUTGOING_BUFFER_SIZE},
     control::SessionControl,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
@@ -46,7 +46,7 @@ pub struct Builder {
     /// Session properties
     pub properties: Option<Fields>,
 
-    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] 
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
     /// that are used by links attached to the session
     pub buffer_size: usize,
 }
@@ -126,7 +126,7 @@ impl Builder {
         self
     }
 
-    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] 
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
     /// that are used by links attached to the session
     pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
@@ -134,9 +134,9 @@ impl Builder {
     }
 
     /// Begins a new session
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
     pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         use super::Session;

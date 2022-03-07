@@ -5,7 +5,7 @@ use crate::{endpoint::LinkFlow, Payload};
 pub(crate) type LinkIncomingItem = LinkFrame;
 
 /// Link frames.
-/// 
+///
 /// This is a subset of the AMPQ frames
 #[derive(Debug)]
 pub(crate) enum LinkFrame {

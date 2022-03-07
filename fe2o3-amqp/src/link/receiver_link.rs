@@ -29,7 +29,10 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        let handle = self.output_handle.clone().ok_or_else(|| Error::not_attached())?;
+        let handle = self
+            .output_handle
+            .clone()
+            .ok_or_else(|| Error::not_attached())?;
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
@@ -166,20 +169,20 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
         // This only takes care of whether the message is considered
         // sett
         let settled_by_sender = transfer.settled.unwrap_or_else(|| false);
-        let delivery_id = transfer.delivery_id.ok_or_else(|| Error::Local(
-            definitions::Error::new(
+        let delivery_id = transfer.delivery_id.ok_or_else(|| {
+            Error::Local(definitions::Error::new(
                 AmqpError::NotAllowed,
                 Some("The delivery-id is not found".into()),
-                None
-            )
-        ))?;
-        let delivery_tag = transfer.delivery_tag.ok_or_else(|| Error::Local(
-            definitions::Error::new(
+                None,
+            ))
+        })?;
+        let delivery_tag = transfer.delivery_tag.ok_or_else(|| {
+            Error::Local(definitions::Error::new(
                 AmqpError::NotAllowed,
                 Some("The delivery-tag is not found".into()),
-                None
-            )
-        ))?;
+                None,
+            ))
+        })?;
 
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
@@ -194,13 +197,11 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
                 // field to second.
                 if let ReceiverSettleMode::First = &self.rcv_settle_mode {
                     if let ReceiverSettleMode::Second = mode {
-                        return Err(Error::Local(
-                            definitions::Error::new(
-                                AmqpError::NotAllowed,
-                                Some("Negotiated link value is First".into()),
-                                None
-                            )
-                        ));
+                        return Err(Error::Local(definitions::Error::new(
+                            AmqpError::NotAllowed,
+                            Some("Negotiated link value is First".into()),
+                            None,
+                        )));
                     }
                 }
                 mode
@@ -263,7 +264,10 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
             }
         };
 
-        let link_output_handle = self.output_handle.clone().ok_or_else(|| Error::not_attached())?;
+        let link_output_handle = self
+            .output_handle
+            .clone()
+            .ok_or_else(|| Error::not_attached())?;
 
         let delivery = Delivery {
             link_output_handle,
@@ -320,7 +324,10 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
             batchable,
         };
         let frame = LinkFrame::Disposition(disposition);
-        writer.send(frame).await.map_err(|_| Error::sending_to_session())?;
+        writer
+            .send(frame)
+            .await
+            .map_err(|_| Error::sending_to_session())?;
 
         // This is a unit enum, clone should be really cheap
         Ok(())

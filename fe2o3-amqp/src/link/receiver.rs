@@ -16,7 +16,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     control::SessionControl,
     endpoint::Link,
-    link::error::{detach_error_expecting_frame},
+    link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
     Payload,
 };
@@ -24,7 +24,7 @@ use crate::{
 use super::{
     builder::{self, WithTarget, WithoutName},
     delivery::Delivery,
-    error::{DetachError, AttachError},
+    error::{AttachError, DetachError},
     receiver_link::section_number_and_offset,
     role,
     state::LinkFlowState,
@@ -45,7 +45,7 @@ macro_rules! or_assign {
                                 None
                             )
                         ))
-                        
+
                     }
                 }
             },
@@ -150,7 +150,7 @@ type ReceiverLink = super::Link<role::Receiver, Arc<ReceiverFlowState>, Delivery
 /// Credit mode for the link
 #[derive(Debug, Clone)]
 pub enum CreditMode {
-    /// Manual mode will require the user to manually allocate credit whenever 
+    /// Manual mode will require the user to manually allocate credit whenever
     /// the available credits are depleted
     Manual,
 
@@ -166,9 +166,9 @@ impl Default for CreditMode {
 }
 
 /// An AMQP1.0 receiver
-/// 
+///
 /// # Example
-/// 
+///
 /// TODO
 #[derive(Debug)]
 pub struct Receiver<S> {
@@ -197,13 +197,13 @@ impl Receiver<Detached> {
     }
 
     /// Attach the receiver link to a session with the default configuration
-    /// 
+    ///
     /// # Defaults
-    /// 
+    ///
     /// TODO
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
     pub async fn attach(
         session: &mut SessionHandle,
@@ -255,12 +255,10 @@ impl Receiver<Detached> {
         if let Err(err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(
-                match DetachError::try_from((self, err.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            )
+            return Err(match DetachError::try_from((self, err.into())) {
+                Ok(err) => err,
+                Err(_) => unreachable!(),
+            });
         }
 
         Ok(Receiver::<Attached> {
@@ -295,9 +293,9 @@ impl Receiver<Attached> {
     }
 
     /// Receive a message from the link
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// TODO
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
     where
@@ -316,14 +314,13 @@ impl Receiver<Attached> {
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        let frame = self.incoming.next().await
-            .ok_or_else(|| Error::Local(
-                definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Session is dropped".into()),
-                    None
-                )
-            ))?;
+        let frame = self.incoming.next().await.ok_or_else(|| {
+            Error::Local(definitions::Error::new(
+                AmqpError::IllegalState,
+                Some("Session is dropped".into()),
+                None,
+            ))
+        })?;
 
         match frame {
             LinkFrame::Detach(detach) => {
@@ -339,13 +336,11 @@ impl Receiver<Attached> {
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
             LinkFrame::Attach(_) => {
-                return Err(Error::Local(
-                    definitions::Error::new(
-                        AmqpError::IllegalState,
-                        Some("Received Attach on an attached link".into()),
-                        None
-                    )
-                ))
+                return Err(Error::Local(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    Some("Received Attach on an attached link".into()),
+                    None,
+                )))
             }
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkHandle which runs
@@ -463,12 +458,12 @@ impl Receiver<Attached> {
     }
 
     /// Drain the link.
-    /// 
+    ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    /// 
-    /// # Example 
-    /// 
+    ///
+    /// # Example
+    ///
     /// TODO
     pub async fn drain(&mut self) -> Result<(), Error> {
         use crate::endpoint::ReceiverLink;
@@ -487,7 +482,7 @@ impl Receiver<Attached> {
     }
 
     /// Detach the link.
-    /// 
+    ///
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
@@ -513,7 +508,7 @@ impl Receiver<Attached> {
         {
             match DetachError::try_from((detaching, err)) {
                 Ok(error) => return Err(error),
-                Err(_) => unreachable!()
+                Err(_) => unreachable!(),
             }
         }
 
@@ -566,17 +561,17 @@ impl Receiver<Attached> {
             .await
         {
             Ok(_) => Ok(detaching),
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         }
     }
 
     /// Close the link.
-    /// 
+    ///
     /// This will send a Detach performative with the `closed` field set to true.
     pub async fn close(self) -> Result<(), DetachError<Receiver<Detached>>> {
         let mut detaching = self.into_detached();
@@ -590,12 +585,12 @@ impl Receiver<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         }
 
         // Wait for remote detach
@@ -652,12 +647,12 @@ impl Receiver<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(e) => return Err(
-                    match DetachError::try_from((detaching, e.into())) {
+                Err(e) => {
+                    return Err(match DetachError::try_from((detaching, e.into())) {
                         Ok(err) => err,
-                        Err(_) => unreachable!()
-                    }
-                ),
+                        Err(_) => unreachable!(),
+                    })
+                }
             }
         };
 
@@ -668,12 +663,12 @@ impl Receiver<Attached> {
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(
-                match DetachError::try_from((detaching, e.into())) {
+            Err(e) => {
+                return Err(match DetachError::try_from((detaching, e.into())) {
                     Ok(err) => err,
-                    Err(_) => unreachable!()
-                }
-            ),
+                    Err(_) => unreachable!(),
+                })
+            }
         }
 
         Ok(())

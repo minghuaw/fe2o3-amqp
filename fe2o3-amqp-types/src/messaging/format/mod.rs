@@ -225,7 +225,7 @@ pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{to_vec, primitives::Binary};
+    use serde_amqp::{primitives::Binary, to_vec};
 
     use super::{Header, Priority};
 

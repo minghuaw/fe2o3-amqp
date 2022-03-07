@@ -14,7 +14,7 @@ use crate::{
 use super::{role, SenderFlowState};
 
 /// Link state.
-/// 
+///
 /// There is no official definition of the link state in the specification
 #[derive(Debug)]
 pub enum LinkState {

@@ -51,7 +51,7 @@ type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 pub mod type_state {
-//! Type states for link
+    //! Type states for link
 
     /// Type state showing that a link is attached
     #[derive(Debug)]
@@ -63,7 +63,7 @@ pub mod type_state {
 }
 
 pub mod role {
-//! Type state definition of link role
+    //! Type state definition of link role
 
     use fe2o3_amqp_types::definitions::Role;
 
@@ -239,13 +239,11 @@ where
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
             None => {
-                return Err(link::Error::Local(
-                    definitions::Error::new(
-                        AmqpError::InvalidField,
-                        Some("Output handle is None".into()),
-                        None
-                    )
-                ))
+                return Err(link::Error::Local(definitions::Error::new(
+                    AmqpError::InvalidField,
+                    Some("Output handle is None".into()),
+                    None,
+                )))
             }
         };
         let unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>> = {
@@ -342,13 +340,13 @@ where
                     closed,
                     error,
                 };
-                writer.send(LinkFrame::Detach(detach)).await
+                writer
+                    .send(LinkFrame::Detach(detach))
+                    .await
                     .map_err(|_| link::Error::sending_to_session())?;
                 remove_handle
             }
-            None => {
-                return Err(link::Error::not_attached())
-            }
+            None => return Err(link::Error::not_attached()),
         };
 
         if remove_handle {
@@ -506,7 +504,7 @@ impl LinkHandle {
                     definitions::Error::new(
                         AmqpError::NotAllowed,
                         Some("Sender should never receive a transfer".to_string()),
-                        None
+                        None,
                     ),
                 ));
             }
@@ -526,16 +524,12 @@ impl LinkHandle {
                     payload,
                 })
                 .await
-                .map_err(|_| 
+                .map_err(|_| {
                     (
-                        true, 
-                        definitions::Error::new(
-                            SessionError::UnattachedHandle, 
-                            None, 
-                            None
-                        )
+                        true,
+                        definitions::Error::new(SessionError::UnattachedHandle, None, None),
                     )
-                )?;
+                })?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {
@@ -588,22 +582,22 @@ where
     endpoint::Link::send_attach(link, writer).await?;
 
     // Wait for an Attach frame
-    let frame = reader.next().await
+    let frame = reader
+        .next()
+        .await
         .ok_or_else(|| Error::Detached(DetachError::empty()))?;
-        
+
     let remote_attach = match frame {
         LinkFrame::Attach(attach) => attach,
         LinkFrame::Detach(detach) => {
             return Err(Error::Detached(DetachError {
                 link: None,
                 is_closed_by_remote: detach.closed,
-                error: detach.error
+                error: detach.error,
             }))
         }
         // TODO: how to handle this?
-        _ => {
-            return Err(Error::expecting_frame("Attach"))
-        }
+        _ => return Err(Error::expecting_frame("Attach")),
     };
 
     // Note that if the application chooses not to create a terminus,
@@ -640,14 +634,14 @@ where
 {
     use futures_util::StreamExt;
 
-    let frame = reader.next().await
+    let frame = reader
+        .next()
+        .await
         .ok_or_else(|| Error::expecting_frame("Detach"))?;
 
     let _remote_detach = match frame {
         LinkFrame::Detach(detach) => detach,
-        _ => {
-            return Err(Error::expecting_frame("Detach"))
-        }
+        _ => return Err(Error::expecting_frame("Detach")),
     };
 
     link.send_detach(writer, false, None).await?;

@@ -1,7 +1,7 @@
 //! Helper types differentiating message delivery
 
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, self},
+    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{message::BodySection, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
@@ -56,11 +56,11 @@ impl<T> Delivery<T> {
 // }
 
 /// A type representing the delivery before sending
-/// 
+///
 /// This allows pre-setting a message as settled.
-/// 
+///
 /// # Example
-/// 
+///
 /// TODO
 #[derive(Debug)]
 pub struct Sendable<T> {
@@ -124,8 +124,8 @@ pub struct Builder<T> {
     /// The message to send
     pub message: T,
 
-    /// Message format. 
-    /// 
+    /// Message format.
+    ///
     /// See 2.8.11 Message Format in the AMQP1.0 specification
     pub message_format: MessageFormat,
 
@@ -157,8 +157,8 @@ impl<State> Builder<State> {
         }
     }
 
-    /// Message format. 
-    /// 
+    /// Message format.
+    ///
     /// See 2.8.11 Message Format in the AMQP1.0 specification
     pub fn message_format(mut self, message_format: impl Into<MessageFormat>) -> Self {
         self.message_format = message_format.into();
@@ -306,14 +306,12 @@ impl Future for DeliveryFut {
                             Err(_) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-                                
-                                Poll::Ready(Err(link::Error::Local(
-                                    definitions::Error::new(
-                                        AmqpError::IllegalState,
-                                        Some("Outcome sender is dropped".into()),
-                                        None
-                                    )
-                                )))
+
+                                Poll::Ready(Err(link::Error::Local(definitions::Error::new(
+                                    AmqpError::IllegalState,
+                                    Some("Outcome sender is dropped".into()),
+                                    None,
+                                ))))
                             }
                         }
                     }

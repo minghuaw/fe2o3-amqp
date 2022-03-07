@@ -25,7 +25,7 @@ pub enum Error {
         description: Option<String>,
     },
 
-    /// Connection error: framing error 
+    /// Connection error: framing error
     #[error("Connection error: framing error")]
     FramingError,
 }
@@ -114,7 +114,6 @@ pub enum NegotiationError {
     //     condition: AmqpError,
     //     description: Option<String>,
     // },
-
     #[error("Illegal state")]
     IllegalState,
 
@@ -139,7 +138,7 @@ impl From<frames::Error> for NegotiationError {
 impl From<sasl_profile::Error> for NegotiationError {
     fn from(err: sasl_profile::Error) -> Self {
         match err {
-            sasl_profile::Error::NotImplemented(msg) => Self::NotImplemented(msg)
+            sasl_profile::Error::NotImplemented(msg) => Self::NotImplemented(msg),
         }
     }
 }
