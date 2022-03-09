@@ -253,7 +253,7 @@ impl ConnectionHandle {
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .client_config(config)
-///     .open("amqps://guest:guest@localhost:5672")
+///     .open("amqps://localhost:5672")
 ///     .await.unwrap();
 /// ```
 ///

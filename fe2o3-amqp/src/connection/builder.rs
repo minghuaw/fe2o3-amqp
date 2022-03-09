@@ -328,15 +328,46 @@ impl<'a> Builder<'a, WithContainerId> {
     ///
     /// # Raw AMQP connection
     ///
-    /// TODO
+    /// ```rust
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
     ///
     /// # TLS
     ///
-    /// TODO
+    /// TLS is supported with `rustls`. The user must supply a `ClientConfig` to the `client_config` field, and
+    /// the url scheme must be `"amqps"`.
+    ///
+    /// ```rust, ignore
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .client_config(config)
+    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    /// ```
     ///
     /// # SASL
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .client_config(config)
+    ///     .open("amqp://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    /// 
+    /// // Or you can supply the SASL profile to the builder
+    /// let profile = SaslProfile::Plain {
+    ///     username: "guest".to_string(),
+    ///     password: "guest".to_string()
+    /// };
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .sasl_profile(profile)
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
     ///
     pub async fn open(
         mut self,
