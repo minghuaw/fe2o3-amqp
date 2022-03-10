@@ -90,7 +90,7 @@ pub struct Builder<'a, Mode> {
 
     /// SASL profile for SASL negotiation.
     ///
-    /// # Warn
+    /// # Warning
     ///
     /// If username and password are supplied with the url, this field will be overriden with a
     /// PLAIN SASL profile that is interpreted from the url.
@@ -292,7 +292,7 @@ impl<'a, Mode> Builder<'a, Mode> {
 
     /// SASL profile for SASL negotiation.
     ///
-    /// # Warn
+    /// # Warning
     ///
     /// If username and password are supplied with the url, this field will be overriden with a
     /// PLAIN SASL profile that is interpreted from the url.

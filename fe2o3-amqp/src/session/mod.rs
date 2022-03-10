@@ -30,15 +30,15 @@ use crate::{
     Payload,
 };
 
-pub mod builder;
 pub(crate) mod engine;
-
-pub(crate) mod error;
 pub(crate) mod frame;
+pub(crate) mod error;
 
-pub use self::error::Error;
+mod builder;
+pub use builder::*;
+
 use self::{
-    error::AllocLinkError,
+    error::{AllocLinkError, Error},
     frame::{SessionFrame, SessionFrameBody},
 };
 
@@ -173,9 +173,26 @@ pub(crate) async fn allocate_link(
 
 /// AMQP1.0 Session
 ///
-/// # Begin a new Session
+/// # Begin a new Session with default configuration
 ///
-/// TODO
+/// ```rust,ignore
+/// use fe2o3_amqp::Session;
+/// 
+/// let session = Session::begin(&mut connection).await.unwrap();
+/// ```
+/// 
+/// # Builder
+/// 
+/// The builder should be used if the user would like to customize the configuration
+/// for the session.
+/// 
+/// ## Default configuration
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`next_outgoing_id`| 0 |
+/// |`incoming_window`| [`DEFAULT_WINDOW`] |
+/// |`outgoing_window`| [`DEFAULT_WINDOW`] |
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
     // session_id: usize,
@@ -337,7 +354,8 @@ impl endpoint::Session for Session {
     }
 
     async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
-        // TODO: handle session flow control
+        // Handle session flow control
+        // 
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
         // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
         // window directly from the outgoing-window of the frame.
@@ -360,7 +378,7 @@ impl endpoint::Session for Session {
             }
         }
 
-        // TODO: handle link flow control
+        // Handle link flow control
         if let Ok(link_flow) = LinkFlow::try_from(flow) {
             match self.link_by_input_handle.get(&link_flow.handle) {
                 Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
