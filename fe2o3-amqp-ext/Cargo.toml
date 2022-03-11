@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 # serde_amqp = { version = "0.0.1", path = "../serde_amqp" }
 # fe2o3-amqp-types = { version = "0.0.1", path = "../fe2o3-amqp-types" }
-serde_amqp = "0.0.3"
-fe2o3-amqp-types = "0.0.3"
+serde_amqp = "0.0.4"
+fe2o3-amqp-types = "0.0.6"

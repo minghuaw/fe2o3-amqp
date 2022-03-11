@@ -4,19 +4,24 @@ use crate::error::Error;
 
 use super::{private, Read};
 
-pub(crate) struct SliceReader<'s> {
+/// A reader for a slice of bytes
+#[derive(Debug)]
+pub struct SliceReader<'s> {
     slice: &'s [u8],
 }
 
 impl<'s> SliceReader<'s> {
+    /// Creates a new slice reader
     pub fn new(slice: &'s [u8]) -> Self {
         Self { slice }
     }
 
-    pub fn unexpected_eof(msg: &str) -> Error {
+    pub(crate) fn unexpected_eof(msg: &str) -> Error {
         Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, msg))
     }
 
+    /// Return a slice of the given length. If the internal slice doesn't have
+    /// enough bytes, an `Err(_)` will be returned.
     pub fn get_byte_slice(&mut self, n: usize) -> Result<&'s [u8], Error> {
         if self.slice.len() < n {
             return Err(Self::unexpected_eof(""));

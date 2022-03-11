@@ -3,10 +3,10 @@
 use crate::error::Error;
 
 mod ioread;
-pub(crate) use ioread::*;
+pub use ioread::*;
 
 mod sliceread;
-pub(crate) use sliceread::*;
+pub use sliceread::*;
 
 mod private {
     pub trait Sealed {}

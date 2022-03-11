@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.5
+
+1. Made `serde_amqp::read::{IoReader, SliceReader}` public.
+
 ## 0.0.4
 
 1. Added `#![deny(missing_docs, missing_debug_implementations)]`

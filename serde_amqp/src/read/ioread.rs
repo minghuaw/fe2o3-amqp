@@ -4,21 +4,24 @@ use crate::error::Error;
 
 use super::{private, Read};
 
-pub(crate) struct IoReader<R> {
+/// A reader for IO stream
+#[derive(Debug)]
+pub struct IoReader<R> {
     // an io reader
     reader: R,
     buf: Vec<u8>,
 }
 
 impl<R: io::Read> IoReader<R> {
+    /// Creates a new reader over IO stream
     pub fn new(reader: R) -> Self {
         Self {
             reader,
-            // next_byte: None,
             buf: Vec::new(),
         }
     }
 
+    /// Pop the first byte
     pub fn pop_first(&mut self) -> Option<u8> {
         match self.buf.is_empty() {
             true => None,
@@ -26,6 +29,7 @@ impl<R: io::Read> IoReader<R> {
         }
     }
 
+    /// Fill the internal buffer with the given length
     pub fn fill_buffer(&mut self, len: usize) -> Result<(), Error> {
         let l = self.buf.len();
         if l < len {
