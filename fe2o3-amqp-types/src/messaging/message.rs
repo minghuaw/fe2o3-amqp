@@ -720,7 +720,7 @@ mod body_section {
 mod tests {
     use std::{collections::BTreeMap, vec};
 
-    use serde_amqp::{from_slice, read::SliceReader, to_vec, value::Value};
+    use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
     use crate::messaging::{
@@ -798,8 +798,7 @@ mod tests {
         let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         message.serialize(&mut serializer).unwrap();
         println!("{:x?}", buf);
-        let mut deserializer = serde_amqp::de::Deserializer::new(SliceReader::new(&buf));
-        let deserialized = Message::<Value>::deserialize(&mut deserializer).unwrap();
+        let deserialized: Deserializable<Message<Value>> = from_slice(&buf).unwrap();
         println!("{:?}", deserialized);
     }
 }

@@ -147,12 +147,10 @@ pub struct Modified {
 #[cfg(test)]
 mod tests {
     //! Test serialization and deserialization
-    use serde::Deserialize;
     use serde_amqp::{
-        de::{from_slice, Deserializer},
+        de::{from_slice},
         format_code::EncodingCodes,
-        read::SliceReader,
-        ser::to_vec,
+        ser::to_vec, from_reader,
     };
 
     use super::{Accepted, DeliveryState, Modified, Received, Rejected, Released};
@@ -328,9 +326,7 @@ mod tests {
         let state = DeliveryState::Accepted(Accepted {});
         let buf = to_vec(&state).unwrap();
         println!("{:#x?}", buf);
-        let reader = SliceReader::new(&buf);
-        let mut deserializer = Deserializer::new(reader);
-        let modified = <DeliveryState as Deserialize>::deserialize(&mut deserializer).unwrap();
+        let modified: DeliveryState = from_reader(&buf[..]).unwrap();
         println!("{:?}", modified);
     }
 }
