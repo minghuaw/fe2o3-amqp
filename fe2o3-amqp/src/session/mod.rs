@@ -42,6 +42,7 @@ use self::{
     frame::{SessionFrame, SessionFrameBody},
 };
 
+#[derive(Debug)]
 /// 2.5.5 Session States
 pub enum SessionState {
     /// UNMAPPED
