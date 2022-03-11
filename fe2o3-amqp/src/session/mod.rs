@@ -32,13 +32,15 @@ use crate::{
 
 pub(crate) mod engine;
 pub(crate) mod frame;
-pub(crate) mod error;
+
+mod error;
+pub(crate) use error::AllocLinkError;
+pub use error::Error;
 
 mod builder;
 pub use builder::*;
 
 use self::{
-    error::{AllocLinkError, Error},
     frame::{SessionFrame, SessionFrameBody},
 };
 

@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::mpsc;
 
-use crate::session::error::AllocLinkError;
+use crate::session::AllocLinkError;
 
 /// Error associated with detaching a link
 #[derive(Debug)]
@@ -202,17 +202,22 @@ pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
     }
 }
 
+/// Error associated with attaching a link
 #[derive(Debug, thiserror::Error)]
 pub enum AttachError {
+    /// Session is in an illegal state
     #[error("Illegal session state")]
     IllegalSessionState,
 
+    /// Session's max number of handle has reached
     #[error("Handle max reached")]
     HandleMaxReached,
 
+    /// Link name is duplicated
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
+    /// A local error
     #[error("Local error: {:?}", .0)]
     LocalError(definitions::Error),
 }

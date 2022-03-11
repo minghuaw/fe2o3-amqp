@@ -10,7 +10,7 @@ use crate::{
     connection::{engine::SessionId, AllocSessionError},
     endpoint::LinkFlow,
     link::LinkHandle,
-    session::{error::AllocLinkError, frame::SessionIncomingItem},
+    session::{AllocLinkError, frame::SessionIncomingItem},
 };
 
 #[derive(Debug)]

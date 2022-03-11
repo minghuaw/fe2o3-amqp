@@ -24,7 +24,7 @@ pub mod sender;
 mod sender_link;
 pub mod state;
 
-pub use error::Error;
+pub use error::*;
 
 use futures_util::{Sink, SinkExt, Stream};
 pub use receiver::Receiver;
