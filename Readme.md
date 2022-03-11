@@ -1,6 +1,8 @@
-# `fe2o3-amqp`
+# fe2o3-amqp
 
-An implementation of the AMQP1.0 protocol based on serde and tokio.
+An implementation of ASMQP 1.0 protocol based on serde and tokio.
+
+[![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
 
 ## Quick start
 
@@ -35,7 +37,7 @@ async fn main() {
 
     // Create a receiver
     let mut receiver = Receiver::attach(
-        &mut session,           // Session
+        &mut session,
         "rust-receiver-link-1", // link name
         "q1"                    // source address
     ).await.unwrap();

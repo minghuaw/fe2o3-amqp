@@ -2,6 +2,8 @@
 
 An implementation of ASMQP 1.0 protocol based on serde and tokio.
 
+[![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
+
 ## Quick start
 
 Below is an example with a local broker (
