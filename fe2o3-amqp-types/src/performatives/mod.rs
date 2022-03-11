@@ -21,7 +21,7 @@ pub use open::*;
 pub use transfer::*;
 
 /// AMQP 1.0 Performatives
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Performative {
     /// Open
     Open(Open),

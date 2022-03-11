@@ -11,7 +11,7 @@ use crate::definitions::{Fields, Handle, TransferNumber};
 ///     <descriptor name="amqp:begin:list" code="0x00000000:0x00000011"/>
 ///     ...
 /// </type>
-#[derive(Debug, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:begin:list",

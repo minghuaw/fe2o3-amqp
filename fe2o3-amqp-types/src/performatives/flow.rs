@@ -10,7 +10,7 @@ use crate::definitions::{Fields, Handle, SequenceNo, TransferNumber};
 /// <type name="flow" class="composite" source="list" provides="frame">
 ///     <descriptor name="amqp:flow:list" code="0x00000000:0x00000013"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:flow:list",

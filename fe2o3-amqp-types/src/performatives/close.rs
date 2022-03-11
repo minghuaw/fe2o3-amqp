@@ -5,7 +5,7 @@ use crate::definitions::Error;
 /// <type name="close" class="composite" source="list" provides="frame">
 /// <descriptor name="amqp:close:list" code="0x00000000:0x00000018"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:close:list",

@@ -13,7 +13,7 @@ use crate::{
 /// <type name="disposition" class="composite" source="list" provides="frame">
 ///     <descriptor name="amqp:disposition:list" code="0x00000000:0x00000015"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:disposition:list",
@@ -70,7 +70,7 @@ mod tests {
         assert_eq!(buf, expected);
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct Disposition {
         /// <field name="role" type="role" mandatory="true"/>
         pub role: Role,

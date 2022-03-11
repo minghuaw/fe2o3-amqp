@@ -62,6 +62,7 @@ impl<T: Into<Address>> From<T> for Target {
 }
 
 /// [`Target`] builder
+#[derive(Debug, Clone)]
 pub struct Builder {
     /// The [`Target`] instance being built
     pub target: Target,

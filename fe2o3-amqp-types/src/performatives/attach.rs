@@ -31,7 +31,7 @@ use crate::{
 ///     <field name="desired-capabilities" type="symbol" multiple="true"/>
 ///     <field name="properties" type="fields"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:attach:list",
     code = 0x0000_0000_0000_0012,

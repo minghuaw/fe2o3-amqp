@@ -89,6 +89,7 @@ impl Properties {
 }
 
 /// Builder for [`Properties`]
+#[derive(Debug, Clone)]
 pub struct Builder {
     inner: Properties,
 }

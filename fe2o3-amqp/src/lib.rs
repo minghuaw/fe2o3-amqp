@@ -1,7 +1,4 @@
-#![deny(
-    missing_docs, 
-    // missing_debug_implementations
-)]
+#![deny(missing_docs, missing_debug_implementations)]
 
 //! An implementation of ASMQP 1.0 protocol based on serde and tokio.
 //!

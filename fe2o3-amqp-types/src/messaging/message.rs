@@ -398,7 +398,7 @@ impl<T> From<BodySection<T>> for Message<T> {
 pub struct EmptyBody {}
 
 /// [`Message`] builder
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Builder<T> {
     /// header
     pub header: Option<Header>,

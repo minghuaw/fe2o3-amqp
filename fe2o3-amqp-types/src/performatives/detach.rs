@@ -10,7 +10,7 @@ use crate::definitions::{Error, Handle};
 /// <type name="detach" class="composite" source="list" provides="frame">
 ///     <descriptor name="amqp:detach:list" code="0x00000000:0x00000016"/>
 /// </type>
-#[derive(Debug, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:detach:list",

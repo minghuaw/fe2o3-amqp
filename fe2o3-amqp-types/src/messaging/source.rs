@@ -67,6 +67,7 @@ impl Source {
 }
 
 /// [`Source`] builder
+#[derive(Debug, Clone)]
 pub struct Builder {
     source: Source,
 }
