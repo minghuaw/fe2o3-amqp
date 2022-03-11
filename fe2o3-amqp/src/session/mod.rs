@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
         SessionError, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol,
+    primitives::Symbol, states::SessionState,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -41,31 +41,6 @@ use self::{
     error::{AllocLinkError, Error},
     frame::{SessionFrame, SessionFrameBody},
 };
-
-#[derive(Debug)]
-/// 2.5.5 Session States
-pub enum SessionState {
-    /// UNMAPPED
-    Unmapped,
-
-    /// BEGIN SENT
-    BeginSent,
-
-    /// BEGIN RCVD
-    BeginReceived,
-
-    /// MAPPED
-    Mapped,
-
-    /// END SENT
-    EndSent,
-
-    /// END RCVD
-    EndReceived,
-
-    /// DISCARDING
-    Discarding,
-}
 
 /// A handle to the [`Session`] event loop
 ///

@@ -19,8 +19,8 @@ testcontainers = "0.12"
 
 [dependencies]
 serde_amqp = "0.0.3"
-fe2o3-amqp-types = "0.0.4"
-# fe2o3-amqp-types = { version = "0.0.3", path = "../fe2o3-amqp-types" }
+# fe2o3-amqp-types = "0.0.4"
+fe2o3-amqp-types = { version = "0.0.4", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio = { version = "1", features = ["io-util", "net", "rt", "macros"] }

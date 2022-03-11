@@ -12,7 +12,7 @@ pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::{
     definitions::{AmqpError, MIN_MAX_FRAME_SIZE},
-    sasl::SaslCode,
+    sasl::SaslCode, states::ConnectionState,
 };
 use tokio_rustls::{client::TlsStream, TlsConnector};
 use tracing::{event, instrument, span, trace, Level};
@@ -30,7 +30,6 @@ use tokio_util::codec::{
 };
 
 use crate::{
-    connection::ConnectionState,
     frames::{amqp, sasl},
     sasl_profile::{Negotiation, SaslProfile},
     util::IdleTimeout,
@@ -503,12 +502,10 @@ where
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-    use fe2o3_amqp_types::performatives::Open;
+    use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
     use tokio_util::codec::LengthDelimitedCodec;
-
-    use crate::connection::ConnectionState;
 
     use super::{
         amqp::{Frame, FrameBody},
