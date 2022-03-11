@@ -405,7 +405,14 @@ impl Builder<role::Receiver, WithName, WithTarget> {
     ///
     /// # Example
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// let mut receiver = Receiver::builder()
+    ///     .name("rust-receiver-link-1")
+    ///     .source("q1")
+    ///     .attach(&mut session)
+    ///     .await
+    ///     .unwrap();
+    /// ```
     pub async fn attach(
         mut self,
         session: &mut SessionHandle,

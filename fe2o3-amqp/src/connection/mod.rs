@@ -150,7 +150,10 @@ impl ConnectionHandle {
 /// ```
 ///
 /// ```rust, ignore
-/// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+/// let connection = Connection::open(
+///     "connection-1", // container id
+///     "amqp://guest:guest@localhost:5672" // url with username and password
+/// ).await.unwrap();
 /// ```
 ///
 /// ## Default configuration

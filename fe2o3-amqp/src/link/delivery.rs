@@ -61,7 +61,13 @@ impl<T> Delivery<T> {
 ///
 /// # Example
 ///
-/// TODO
+/// ```rust, ignore
+/// let sendable = Sendable::builder()
+///     .message("hello world")
+///     .settled(true)
+///     .build();
+/// sender.send(sendable).await.unwrap();
+/// ```
 #[derive(Debug)]
 pub struct Sendable<T> {
     pub(crate) message: Message<T>,

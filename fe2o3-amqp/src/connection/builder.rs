@@ -87,7 +87,9 @@ pub struct Builder<'a, Mode> {
     ///
     /// # Default
     ///
-    /// [`DEFAULT_OUTGOING_BUFFER_SIZE`]
+    /// ```rust, ignore
+    /// u16::MAX
+    /// ```
     pub buffer_size: usize,
 
     /// SASL profile for SASL negotiation.

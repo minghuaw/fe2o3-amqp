@@ -167,9 +167,43 @@ impl Default for CreditMode {
 
 /// An AMQP1.0 receiver
 ///
-/// # Example
+/// # Attach a new receiver with default configurations
+/// 
+/// ```rust, ignore
+/// let mut receiver = Receiver::attach(
+///     &mut session,           // mutable reference to SessionHandle
+///     "rust-receiver-link-1", // link name
+///     "q1"                    // Source address
+/// ).await.unwrap();
+/// ```
+/// 
+/// ## Default configuration
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`name`|`String::default()`|
+/// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
+/// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
+/// |`source`|`None` |
+/// |`target`| `Some(Target)` |
+/// |`initial_delivery_count`| `0` |
+/// |`max_message_size`| `None` |
+/// |`offered_capabilities`| `None` |
+/// |`desired_capabilities`| `None` |
+/// |`Properties`| `None` |
+/// |`buffer_size`| `u16::MAX` |
+/// |`role`| `role::Sender` |
 ///
-/// TODO
+/// # Customize configuration with [`builder::Builder`]
+/// 
+/// ```rust, ignore
+/// let mut receiver = Receiver::builder()
+///     .name("rust-receiver-link-1")
+///     .source("q1")
+///     .attach(&mut session)
+///     .await
+///     .unwrap();
+/// ```
 #[derive(Debug)]
 pub struct Receiver<S> {
     pub(crate) link: ReceiverLink,
@@ -198,13 +232,33 @@ impl Receiver<Detached> {
 
     /// Attach the receiver link to a session with the default configuration
     ///
-    /// # Defaults
-    ///
-    /// TODO
-    ///
+    /// # Default configuration
+    /// 
+    /// | Field | Default Value |
+    /// |-------|---------------|
+    /// |`name`|`String::default()`|
+    /// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
+    /// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
+    /// |`source`|`None` |
+    /// |`target`| `Some(Target)` |
+    /// |`initial_delivery_count`| `0` |
+    /// |`max_message_size`| `None` |
+    /// |`offered_capabilities`| `None` |
+    /// |`desired_capabilities`| `None` |
+    /// |`Properties`| `None` |
+    /// |`buffer_size`| `u16::MAX` |
+    /// |`role`| `role::Sender` |
+    /// 
+    ///  
     /// # Example
-    ///
-    /// TODO
+    /// 
+    /// ```rust, ignore
+    /// let mut receiver = Receiver::attach(
+    ///     &mut session,           // mutable reference to SessionHandle
+    ///     "rust-receiver-link-1", // link name
+    ///     "q1"                    // Source address
+    /// ).await.unwrap();
+    /// ```
     pub async fn attach(
         session: &mut SessionHandle,
         name: impl Into<String>,
@@ -296,7 +350,10 @@ impl Receiver<Attached> {
     ///
     /// # Example
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
@@ -461,10 +518,6 @@ impl Receiver<Attached> {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    ///
-    /// # Example
-    ///
-    /// TODO
     pub async fn drain(&mut self) -> Result<(), Error> {
         use crate::endpoint::ReceiverLink;
 
@@ -685,9 +738,9 @@ impl Receiver<Attached> {
 //     }
 // }
 
-/// TODO: Use type state to differentiate Mode First and Mode Second?
+// TODO: Use type state to differentiate Mode First and Mode Second?
 impl Receiver<Attached> {
-    /// TODO: batch disposition
+    // TODO: batch disposition
     async fn dispose(
         &mut self,
         delivery_id: DeliveryNumber,

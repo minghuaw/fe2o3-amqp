@@ -35,7 +35,7 @@ async fn main() {
 
     // Create a receiver
     let mut receiver = Receiver::attach(
-        &mut session,           // Session
+        &mut session,
         "rust-receiver-link-1", // link name
         "q1"                    // source address
     ).await.unwrap();

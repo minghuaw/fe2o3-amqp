@@ -31,7 +31,7 @@ async fn main() {
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery: Delivery<_> = receiver.recv::<String>().await.unwrap();
+    let delivery: Delivery<String> = receiver.recv().await.unwrap();
     println!("<<< Message >>> {:?}", delivery);
     receiver.accept(&delivery).await.unwrap();
 
