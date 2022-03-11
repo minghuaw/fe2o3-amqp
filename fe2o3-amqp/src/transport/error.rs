@@ -42,7 +42,7 @@ impl Error {
     }
 }
 
-/// TODO: What about encode error?
+// TODO: What about encode error?
 impl From<serde_amqp::Error> for Error {
     fn from(err: serde_amqp::Error) -> Self {
         match err {
@@ -124,7 +124,7 @@ pub enum NegotiationError {
     },
 }
 
-/// TODO: What about encode error?
+// TODO: What about encode error?
 impl From<frames::Error> for NegotiationError {
     fn from(err: frames::Error) -> Self {
         match err {

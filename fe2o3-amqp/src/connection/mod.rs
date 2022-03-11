@@ -149,23 +149,8 @@ impl ConnectionHandle {
 /// ./TestAmqpBroker.exe amqp://localhost:5672 /creds:guest:guest /queues:q1
 /// ```
 ///
-/// ```rust,ignore
-/// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
-/// ```
-///
-/// ## Builder
-///
-/// The example above creates a connection with the default configuration. If the user needs to customize the
-/// configuration, the connection [`Builder`] should be used.
-///
 /// ```rust, ignore
-/// let connection = Connection::builder()
-///     .container_id("connection-1")
-///     .max_frame_size(4096)
-///     .channel_max(64)
-///     .idle_time_out(50_000 as u32)
-///     .open("amqp://guest:guest@localhost:5672")
-///     .await.unwrap();
+/// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
 /// ```
 ///
 /// ## Default configuration
@@ -180,13 +165,46 @@ impl ConnectionHandle {
 /// |`offered_capabilities`| `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
+/// 
+/// ## Customize configuration with [`Builder`]
+///
+/// The example above creates a connection with the default configuration. If the user needs to customize the
+/// configuration, the connection [`Builder`] should be used.
+///
+/// ```rust, ignore
+/// let connection = Connection::builder()
+///     .container_id("connection-1")
+///     .max_frame_size(4096)
+///     .channel_max(64)
+///     .idle_time_out(50_000 as u32)
+///     .open("amqp://guest:guest@localhost:5672")
+///     .await.unwrap();
+/// ```
 ///
 /// ## TLS
 ///
-/// TLS is supported with `rustls`. The user must supply a `ClientConfig` to the `client_config` field, and
-/// the url scheme must be `"amqps"`.
+/// TLS is supported with `rustls` by setting the url scheme to `"amqps"`. 
+/// The user must use the builder to supply a custom `ClientConfig` for the TLS connection. 
+/// If there is no custom `ClientConfig`, the TLS handshake will use the the following
+/// config.
+/// 
+/// ```rust, ignore
+/// ClientConfig::builder()
+///     .with_safe_defaults()
+///     .with_root_certificates(RootCertStore::empty())
+///     .with_no_client_auth()
+/// ```
+/// 
+/// The code example below shows TLS connection without supplying a custom `ClientConfig`
+/// 
+/// ```rust, ignore
+/// let connection = Connection::open("connection-1", "amqps://localhost:5672").await.unwrap();
+/// ```
+/// 
+/// The code example below shows how a user can supply a custom `ClientConfig` using builder.
 ///
 /// ```rust, ignore
+/// // Set custom `ClientConfig`
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .client_config(config)
@@ -201,22 +219,29 @@ impl ConnectionHandle {
 /// supply the information with `sasl_profile` field of the [`Builder`]. Please note that the SASL profile
 /// found in the url will override whatever `SaslProfile` supplied to the [`Builder`].
 ///
-/// The example below shows two ways of starting the connection with SASL negotiation.
+/// The examples below shows two ways of starting the connection with SASL negotiation.
+/// 
+/// 1. Start SASL negotiation with SASL PLAIN profile extracted from the url
 ///
-/// ```rust,ignore
-/// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
-///
-/// // This is equivalent to the line above
-/// let profile = SaslProfile::Plain {
-///     username: "guest".to_string(),
-///     password: "guest".to_string()
-/// };
-/// let connection = Connection::builder()
-///     .container_id("connection-1")
-///     .sasl_profile(profile)
-///     .open("amqp://localhost:5672")
-///     .await.unwrap();
-/// ```
+///     ```rust,ignore
+///     let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+///     ```
+/// 
+/// 2. Start SASL negotiation with the builder. Please note that tf the url contains `username` and `password`, 
+/// the profile supplied to the builder will be overriden.
+/// 
+///     ```
+///     // This is equivalent to the line above
+///     let profile = SaslProfile::Plain {
+///         username: "guest".to_string(),
+///         password: "guest".to_string()
+///     };
+///     let connection = Connection::builder()
+///         .container_id("connection-1")
+///         .sasl_profile(profile)
+///         .open("amqp://localhost:5672")
+///         .await.unwrap();
+///     ```
 ///
 #[derive(Debug)]
 pub struct Connection {
@@ -247,21 +272,47 @@ impl Connection {
     ///
     /// # Default configuration
     ///
-    /// TODO
+    /// | Field | Default Value |
+    /// |-------|---------------|
+    /// |`max_frame_size`| [`DEFAULT_MAX_FRAME_SIZE`] |
+    /// |`channel_max`| [`DEFAULT_CHANNEL_MAX`] |
+    /// |`idle_time_out`| `None` |
+    /// |`outgoing_locales`| `None` |
+    /// |`incoming_locales`| `None` |
+    /// |`offered_capabilities`| `None` |
+    /// |`desired_capabilities`| `None` |
+    /// |`Properties`| `None` |
     ///
     /// The negotiation depends on the url supplied.
     ///
     /// # Raw AMQP
     ///
-    /// TODO
-    ///
+    /// ```rust, ignore
+    /// let connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
+    /// ```
+    /// 
     /// # TLS
-    ///
-    /// TODO
+    /// 
+    /// This will start TLS negotiation with the following `ClientConfig`
+    /// 
+    /// ```rust, ignore
+    /// ClientConfig::builder()
+    ///     .with_safe_defaults()
+    ///     .with_root_certificates(RootCertStore::empty())
+    ///     .with_no_client_auth()
+    /// ```
+    /// 
+    /// ```rust, ignore
+    /// let connection = Connection::open("connection-1", "amqps://localhost:5672").await.unwrap();
+    /// ```
     ///
     /// # SASL
     ///
-    /// TODO
+    /// Start SASL negotiation with SASL PLAIN profile extracted from the url
+    /// 
+    /// ```rust, ignore
+    /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
+    /// ```
     ///
     pub async fn open(
         container_id: impl Into<String>, // TODO: default container id? random uuid-ish

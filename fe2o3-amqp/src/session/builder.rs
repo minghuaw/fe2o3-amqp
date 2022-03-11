@@ -138,7 +138,13 @@ impl Builder {
     ///
     /// # Example
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// let session = Session::builder()
+    ///     .handle_max(128u32)
+    ///     .begin(&mut connection)
+    ///     .await.unwrap();
+    /// ```
+    /// 
     pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         use super::Session;
 

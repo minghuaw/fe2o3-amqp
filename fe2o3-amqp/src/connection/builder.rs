@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
     performatives::{ChannelMax, MaxFrameSize, Open},
 };
-use rustls::ClientConfig;
+use rustls::{ClientConfig, RootCertStore};
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -433,7 +433,7 @@ impl<'a> Builder<'a, WithContainerId> {
     // }
 
     async fn connect_with_stream<Io>(
-        self,
+        mut self,
         stream: Io,
         scheme: &str,
         domain: Option<&str>,
@@ -447,8 +447,14 @@ impl<'a> Builder<'a, WithContainerId> {
                 let domain = domain.ok_or_else(|| OpenError::InvalidDomain)?;
                 let config = self
                     .client_config
-                    .clone()
-                    .ok_or_else(|| OpenError::TlsClientConfigNotFound)?;
+                    .take()
+                    .unwrap_or_else(|| 
+                        // Default `ClientConfig`
+                        ClientConfig::builder()
+                            .with_safe_defaults()
+                            .with_root_certificates(RootCertStore::empty())
+                            .with_no_client_auth()
+                );
                 let tls_stream = Transport::connect_tls(stream, domain, config).await?;
                 self.connect_with_stream_inner(tls_stream).await
             }

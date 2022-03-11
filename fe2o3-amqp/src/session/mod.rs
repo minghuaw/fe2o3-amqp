@@ -158,11 +158,6 @@ pub(crate) async fn allocate_link(
 /// let session = Session::begin(&mut connection).await.unwrap();
 /// ```
 /// 
-/// # Builder
-/// 
-/// The builder should be used if the user would like to customize the configuration
-/// for the session.
-/// 
 /// ## Default configuration
 /// 
 /// | Field | Default Value |
@@ -170,6 +165,23 @@ pub(crate) async fn allocate_link(
 /// |`next_outgoing_id`| 0 |
 /// |`incoming_window`| [`DEFAULT_WINDOW`] |
 /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
+/// |`handle_max`| `u32::MAX` |
+/// |`offered_capabilities` | `None` |
+/// |`desired_capabilities`| `None` |
+/// |`Properties`| `None` |
+/// 
+/// # Customize configuration with [`Builder`]
+/// 
+/// The builder should be used if the user would like to customize the configuration
+/// for the session.
+/// 
+/// ```rust, ignore
+/// let session = Session::builder()
+///     .handle_max(128)
+///     .begin(&mut connection)
+///     .await.unwrap();
+/// ```
+/// 
 #[derive(Debug)]
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
@@ -216,6 +228,11 @@ impl Session {
     }
 
     /// Begins a new session with the default configurations
+    /// 
+    /// # Default configuration
+    /// 
+    /// # 
+    /// 
     pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         Session::builder().begin(conn).await
     }
@@ -427,7 +444,6 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    /// TODO: sender send settled message in response to receivers disposition
     async fn on_incoming_disposition(
         &mut self,
         _channel: u16,
