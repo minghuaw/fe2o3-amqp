@@ -19,7 +19,7 @@ pub(crate) const PLAIN: &str = "PLAIN";
 
 pub(crate) enum Negotiation {
     Init(SaslInit),
-    Response(SaslResponse),
+    _Response(SaslResponse),
     Outcome(SaslOutcome),
 }
 

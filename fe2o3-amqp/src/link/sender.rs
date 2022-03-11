@@ -213,7 +213,7 @@ impl Sender<Attached> {
         match settlement {
             Settlement::Settled => Ok(()),
             Settlement::Unsettled {
-                delivery_tag: _,
+                _delivery_tag: _,
                 outcome,
             } => {
                 let state = outcome.await.map_err(|_| {

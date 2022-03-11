@@ -357,6 +357,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum LinkHandle {
     Sender {
         tx: mpsc::Sender<LinkIncomingItem>,

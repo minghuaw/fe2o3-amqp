@@ -285,7 +285,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                 }
 
                 Ok(Settlement::Unsettled {
-                    delivery_tag: tag,
+                    _delivery_tag: tag,
                     outcome: rx,
                 })
             }

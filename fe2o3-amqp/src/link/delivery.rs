@@ -120,6 +120,7 @@ impl<T> From<BodySection<T>> for Sendable<T> {
 }
 
 /// A builder for [`Sendable`]
+#[derive(Debug)]
 pub struct Builder<T> {
     /// The message to send
     pub message: T,
@@ -279,7 +280,7 @@ impl Future for DeliveryFut {
         match &mut *settlement {
             Settlement::Settled => Poll::Ready(Ok(())),
             Settlement::Unsettled {
-                delivery_tag: _,
+                _delivery_tag: _,
                 outcome,
             } => {
                 match outcome.poll_unpin(cx) {

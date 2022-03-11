@@ -28,18 +28,23 @@ use super::{
 };
 
 /// Type state for link::builder::Builder;
+#[derive(Debug)]
 pub struct WithoutName;
 
 /// Type state for link::builder::Builder;
+#[derive(Debug)]
 pub struct WithName;
 
 /// Type state for link::builder::Builder;
+#[derive(Debug)]
 pub struct WithoutTarget;
 
 /// Type state for link::builder::Builder;
+#[derive(Debug)]
 pub struct WithTarget;
 
 /// Builder for a Link
+#[derive(Debug)]
 pub struct Builder<Role, NameState, Addr> {
     /// The name of the link
     pub name: String,

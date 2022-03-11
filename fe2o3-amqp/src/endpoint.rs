@@ -243,7 +243,7 @@ impl TryFrom<Flow> for LinkFlow {
 pub(crate) enum Settlement {
     Settled,
     Unsettled {
-        delivery_tag: [u8; 4],
+        _delivery_tag: [u8; 4],
         outcome: oneshot::Receiver<DeliveryState>,
     },
 }

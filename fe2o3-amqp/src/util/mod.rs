@@ -47,6 +47,7 @@ impl Future for IdleTimeout {
 
 /// An custom type to make a field immutable to
 /// prevent accidental mutations
+#[derive(Debug)]
 pub(crate) struct Constant<T> {
     value: T,
 }
@@ -69,5 +70,6 @@ impl<T> Deref for Constant<T> {
     }
 }
 
-/// Shared type state for builder
+/// Shared type state for builders
+#[derive(Debug)]
 pub struct Uninitialized {}

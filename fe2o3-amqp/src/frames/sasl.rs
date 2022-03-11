@@ -31,6 +31,7 @@ pub enum Frame {
 }
 
 /// Encoder and Decoder for SASL frame
+#[derive(Debug)]
 pub struct FrameCodec {}
 
 impl Encoder<Frame> for FrameCodec {

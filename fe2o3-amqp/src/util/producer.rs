@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Notify;
 
+#[derive(Debug)]
 pub struct Producer<State> {
     pub notifier: Arc<Notify>,
     state: State,
@@ -11,14 +12,6 @@ pub struct Producer<State> {
 impl<State> Producer<State> {
     pub fn new(notifier: Arc<Notify>, state: State) -> Self {
         Self { notifier, state }
-    }
-
-    pub fn state(&self) -> &State {
-        &self.state
-    }
-
-    pub fn state_mut(&mut self) -> &mut State {
-        &mut self.state
     }
 }
 

@@ -179,7 +179,7 @@ where
 
             match profile.on_frame(frame, hostname).await? {
                 Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
-                Negotiation::Response(response) => {
+                Negotiation::_Response(response) => {
                     transport.send(sasl::Frame::Response(response)).await?
                 }
                 Negotiation::Outcome(outcome) => match outcome.code {

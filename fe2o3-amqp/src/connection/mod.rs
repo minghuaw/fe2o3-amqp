@@ -46,6 +46,7 @@ pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 /// A handle to the [`Connection`] event loop.
 ///
 /// Dropping the handle will also stop the [`Connection`] event loop
+#[derive(Debug)]
 pub struct ConnectionHandle {
     pub(crate) control: Sender<ConnectionControl>,
     handle: JoinHandle<Result<(), Error>>,

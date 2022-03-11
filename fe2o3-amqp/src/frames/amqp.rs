@@ -57,6 +57,7 @@ impl Frame {
 }
 
 /// Encoder and Decoder of the AMQP frames
+#[derive(Debug)]
 pub struct FrameCodec {}
 
 impl Encoder<Frame> for FrameCodec {
@@ -149,6 +150,7 @@ pub enum FrameBody {
 }
 
 /// Encoder and Decoder for AMQP frame body
+#[derive(Debug)]
 pub struct FrameBodyCodec {}
 
 impl Encoder<FrameBody> for FrameBodyCodec {

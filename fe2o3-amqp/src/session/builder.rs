@@ -24,6 +24,7 @@ pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
 pub const DEFAULT_WINDOW: UInt = 2048;
 
 /// Builder for [`crate::Session`]
+#[derive(Debug)]
 pub struct Builder {
     /// The transfer-id of the first transfer id the sender will send
     pub next_outgoing_id: TransferNumber,

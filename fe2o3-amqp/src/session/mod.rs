@@ -45,6 +45,7 @@ use self::{
 /// A handle to the [`Session`] event loop
 ///
 /// Dropping the handle will also stop the [`Session`] event loop
+#[derive(Debug)]
 pub struct SessionHandle {
     pub(crate) control: mpsc::Sender<SessionControl>,
     engine_handle: JoinHandle<Result<(), Error>>,
@@ -169,6 +170,7 @@ pub(crate) async fn allocate_link(
 /// |`next_outgoing_id`| 0 |
 /// |`incoming_window`| [`DEFAULT_WINDOW`] |
 /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
+#[derive(Debug)]
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
     // session_id: usize,

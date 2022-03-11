@@ -31,9 +31,11 @@ pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
 
 /// Type state for connection [`Builder`] representing state where a valid container id is not present
+#[derive(Debug)]
 pub struct WithoutContainerId {}
 
 /// Type state for connection [`Builder`] representing state where a valid container id is present
+#[derive(Debug)]
 pub struct WithContainerId {}
 
 /// Builder for [`crate::Connection`]
@@ -98,6 +100,34 @@ pub struct Builder<'a, Mode> {
 
     // type state marker
     marker: PhantomData<Mode>,
+}
+
+impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let client_config_value = match self.client_config {
+            Some(_) => "Some(_)",
+            None => "None"
+        };
+
+        f.debug_struct("Builder")
+            .field("container_id", &self.container_id)
+            .field("hostname", &self.hostname)
+            .field("scheme", &self.scheme)
+            .field("domain", &self.domain)
+            .field("max_frame_size", &self.max_frame_size)
+            .field("channel_max", &self.channel_max)
+            .field("idle_time_out", &self.idle_time_out)
+            .field("outgoing_locales", &self.outgoing_locales)
+            .field("incoming_locales", &self.incoming_locales)
+            .field("offered_capabilities", &self.offered_capabilities)
+            .field("desired_capabilities", &self.desired_capabilities)
+            .field("properties", &self.properties)
+            .field("client_config", &client_config_value)
+            .field("buffer_size", &self.buffer_size)
+            .field("sasl_profile", &self.sasl_profile)
+            .field("marker", &self.marker)
+            .finish()
+    }
 }
 
 impl<'a> Builder<'a, WithoutContainerId> {
@@ -356,7 +386,7 @@ impl<'a> Builder<'a, WithContainerId> {
     ///     .client_config(config)
     ///     .open("amqp://guest:guest@localhost:5672")
     ///     .await.unwrap();
-    /// 
+    ///
     /// // Or you can supply the SASL profile to the builder
     /// let profile = SaslProfile::Plain {
     ///     username: "guest".to_string(),
