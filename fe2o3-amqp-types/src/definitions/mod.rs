@@ -66,7 +66,6 @@ pub type SequenceNo = UInt;
 pub type MessageFormat = UInt;
 
 /// 2.8.12 IETF Language Tag
-/// TODO: impl Into
 pub type IetfLanguageTag = Symbol;
 
 /// 2.8.13 Fields

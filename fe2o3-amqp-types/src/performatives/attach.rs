@@ -81,7 +81,7 @@ pub struct Attach {
     pub target: Option<Target>,
 
     /// <field name="unsettled" type="map"/>
-    pub unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>>, // TODO: consider making the value `DeliveryState`
+    pub unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>>,
 
     /// <field name="incomplete-unsettled" type="boolean" default="false"/>
     #[amqp_contract(default)]
