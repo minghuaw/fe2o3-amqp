@@ -5,7 +5,7 @@ use std::{marker::PhantomData, sync::Arc};
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
-    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
+    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released},
     performatives::Transfer,
 };
 use futures_util::StreamExt;
@@ -193,7 +193,7 @@ pub struct Receiver<S> {
 impl Receiver<Detached> {
     /// Creates a builder for the [`Receiver`]
     pub fn builder() -> builder::Builder<role::Receiver, WithoutName, WithTarget> {
-        builder::Builder::new().target(Target::builder().build())
+        builder::Builder::<role::Receiver, _, _>::new()
     }
 
     /// Attach the receiver link to a session with the default configuration

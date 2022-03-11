@@ -11,7 +11,7 @@ use tokio::{
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{message::__private::Serializable, Address, DeliveryState, Source},
+    messaging::{message::__private::Serializable, Address, DeliveryState},
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -39,9 +39,32 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 
 /// An AMQP1.0 sender
 ///
-/// # Example
+/// # Attach a new sender with default configurations
 ///
-/// TODO
+/// ```rust, ignore
+/// let sender = Sender::attach(
+///     &mut session,           // mutable reference to SessionHandle
+///     "rust-sender-link-1",   // link name
+///     "q1"                    // Target address
+/// ).await.unwrap();
+/// ```
+/// 
+/// ## Default configuration
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`name`|`String::default()`|
+/// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
+/// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
+/// |`source`|`Some() |
+/// |`target`| |
+/// |`initial_delivery_count`| |
+/// |`max_message_size`| |
+/// |`offered_capabilities`| `None` |
+/// |`desired_capabilities`| `None` |
+/// |`Properties`| `None` |
+/// |`buffer_size`| |
+/// |`role`| |
 #[derive(Debug)]
 pub struct Sender<S> {
     // The SenderLink manages the state
@@ -62,7 +85,7 @@ pub struct Sender<S> {
 impl Sender<Detached> {
     /// Creates a builder for [`Sender`] link
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
-        builder::Builder::new().source(Source::builder().build())
+        builder::Builder::<role::Sender, _, _>::new()
     }
 
     // // Re-attach the link

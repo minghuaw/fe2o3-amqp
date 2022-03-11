@@ -90,8 +90,8 @@ pub struct Builder<Role, NameState, Addr> {
     addr_state: PhantomData<Addr>,
 }
 
-impl<Role> Builder<Role, WithoutName, WithoutTarget> {
-    pub(crate) fn new() -> Self {
+impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
+    fn default() -> Self {
         Self {
             name: Default::default(),
             snd_settle_mode: Default::default(),
@@ -110,6 +110,20 @@ impl<Role> Builder<Role, WithoutName, WithoutTarget> {
             name_state: PhantomData,
             addr_state: PhantomData,
         }
+    }
+}
+
+impl Builder<role::Sender, WithoutName, WithoutTarget> {
+    pub(crate) fn new() -> Self {
+        Self::default()
+            .source(Source::builder().build())
+    }
+}
+
+impl Builder<role::Receiver, WithoutName, WithTarget> {
+    pub(crate) fn new() -> Self {
+        Builder::default()
+            .target(Target::builder().build())
     }
 }
 
