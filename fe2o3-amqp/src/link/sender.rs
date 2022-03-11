@@ -56,15 +56,27 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 /// |`name`|`String::default()`|
 /// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
 /// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
-/// |`source`|`Some() |
-/// |`target`| |
-/// |`initial_delivery_count`| |
-/// |`max_message_size`| |
+/// |`source`|`Some(Source)` |
+/// |`target`| `None` |
+/// |`initial_delivery_count`| `0` |
+/// |`max_message_size`| `None` |
 /// |`offered_capabilities`| `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
-/// |`buffer_size`| |
-/// |`role`| |
+/// |`buffer_size`| `u16::MAX` |
+/// |`role`| `role::Sender` |
+/// 
+/// # Customize configuration with [`builder::Builder`]
+/// 
+/// ```rust, ignore
+/// let mut sender = Sender::builder()
+///     .name("rust-sender-link-1")
+///     .target("q1")
+///     .sender_settle_mode(SenderSettleMode::Mixed)
+///     .attach(&mut session)
+///     .await
+///     .unwrap();
+/// ```
 #[derive(Debug)]
 pub struct Sender<S> {
     // The SenderLink manages the state
@@ -148,13 +160,32 @@ impl Sender<Detached> {
 
     /// Attach the sender link to a session with default configuration
     ///
-    /// # Default configuration
-    ///
-    /// TODO
+    /// ## Default configuration
+    /// 
+    /// | Field | Default Value |
+    /// |-------|---------------|
+    /// |`name`|`String::default()`|
+    /// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
+    /// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
+    /// |`source`|`Some(Source)` |
+    /// |`target`| `None` |
+    /// |`initial_delivery_count`| `0` |
+    /// |`max_message_size`| `None` |
+    /// |`offered_capabilities`| `None` |
+    /// |`desired_capabilities`| `None` |
+    /// |`Properties`| `None` |
+    /// |`buffer_size`| `u16::MAX` |
+    /// |`role`| `role::Sender` |
     ///
     /// # Example
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// let sender = Sender::attach(
+    ///     &mut session,           // mutable reference to SessionHandle
+    ///     "rust-sender-link-1",   // link name
+    ///     "q1"                    // Target address
+    /// ).await.unwrap();
+    /// ```
     ///
     pub async fn attach(
         session: &mut SessionHandle,
@@ -225,7 +256,9 @@ impl Sender<Attached> {
     ///
     /// # Example
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// sender.send("hello").await.unwrap();
+    /// ```
     pub async fn send<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -259,10 +292,6 @@ impl Sender<Attached> {
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
     ///
     /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
-    ///
-    /// # Example
-    ///
-    /// TODO
     pub async fn send_with_timeout<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -277,7 +306,11 @@ impl Sender<Attached> {
     ///
     /// # Example
     ///
-    /// TODO
+    /// ```rust, ignore
+    /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
+    /// let result = fut.await;
+    /// println!("fut {:?}", result);
+    /// ```
     pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
@@ -290,10 +323,6 @@ impl Sender<Attached> {
     /// Send a message without waiting for the acknowledgement with a timeout.
     ///
     /// This will set the batchable field of the `Transfer` performative to true.
-    ///
-    /// # Example
-    ///
-    /// TODO
     pub async fn send_batchable_with_timeout<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,

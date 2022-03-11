@@ -231,8 +231,23 @@ impl Session {
     /// 
     /// # Default configuration
     /// 
-    /// # 
+    /// | Field | Default Value |
+    /// |-------|---------------|
+    /// |`next_outgoing_id`| 0 |
+    /// |`incoming_window`| [`DEFAULT_WINDOW`] |
+    /// |`outgoing_window`| [`DEFAULT_WINDOW`] |
+    /// |`handle_max`| `u32::MAX` |
+    /// |`offered_capabilities` | `None` |
+    /// |`desired_capabilities`| `None` |
+    /// |`Properties`| `None` |
     /// 
+    /// # Example
+    /// 
+    /// ```rust,ignore
+    /// use fe2o3_amqp::Session;
+    /// 
+    /// let session = Session::begin(&mut connection).await.unwrap();
+    /// ```
     pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         Session::builder().begin(conn).await
     }

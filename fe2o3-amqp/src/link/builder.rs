@@ -329,6 +329,16 @@ impl Builder<role::Sender, WithName, WithTarget> {
     /// Attach the link as a sender
     ///
     /// # Example
+    /// 
+    /// ```rust, ignore
+    /// let mut sender = Sender::builder()
+    ///     .name("rust-sender-link-1")
+    ///     .target("q1")
+    ///     .sender_settle_mode(SenderSettleMode::Mixed)
+    ///     .attach(&mut session)
+    ///     .await
+    ///     .unwrap();
+    /// ```
     pub async fn attach(
         mut self,
         session: &mut SessionHandle,
