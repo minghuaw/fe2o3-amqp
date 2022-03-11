@@ -27,14 +27,17 @@ use crate::__constants::SYMBOL;
 pub struct Symbol(pub String);
 
 impl Symbol {
+    /// Creates a new [`Symbol`]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
 
+    /// Consume the wrapper into the inner string
     pub fn into_inner(self) -> String {
         self.0
     }
 
+    /// Returns the inner value as str
     pub fn as_str(&self) -> &str {
         &self.0[..]
     }

@@ -35,6 +35,7 @@ impl<T> AsMut<Vec<T>> for Array<T> {
 }
 
 impl<T> Array<T> {
+    /// Consumes the wrapper into the inner vector
     pub fn into_inner(self) -> Vec<T> {
         self.0
     }

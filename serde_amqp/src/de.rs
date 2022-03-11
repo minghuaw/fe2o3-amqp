@@ -18,18 +18,22 @@ use crate::{
     util::{EnumType, NewType, StructEncoding},
 };
 
+/// Deserialize an instance of type T from an IO stream
 pub fn from_reader<T: de::DeserializeOwned>(reader: impl std::io::Read) -> Result<T, Error> {
     let reader = IoReader::new(reader);
     let mut de = Deserializer::new(reader);
     T::deserialize(&mut de)
 }
 
+/// Deserialize and instance of type T from a bytes slice
 pub fn from_slice<'de, T: de::Deserialize<'de>>(slice: &'de [u8]) -> Result<T, Error> {
     let reader = SliceReader::new(slice);
     let mut de = Deserializer::new(reader);
     T::deserialize(&mut de)
 }
 
+/// A structure that deserializes AMQP1.0 binary encoded values into rust types
+#[derive(Debug)]
 pub struct Deserializer<R> {
     reader: R,
     new_type: NewType,
@@ -39,28 +43,11 @@ pub struct Deserializer<R> {
 }
 
 impl<'de, R: Read<'de>> Deserializer<R> {
+    /// Creates a new AMQP1.0 (crate)deserializer 
     pub fn new(reader: R) -> Self {
         Self {
             reader,
             new_type: Default::default(),
-            enum_type: Default::default(),
-            struct_encoding: StructEncoding::None,
-            elem_format_code: None,
-        }
-    }
-
-    pub fn reader(&self) -> &R {
-        &self.reader
-    }
-
-    pub fn reader_mut(&mut self) -> &mut R {
-        &mut self.reader
-    }
-
-    pub fn symbol(reader: R) -> Self {
-        Self {
-            reader,
-            new_type: NewType::Symbol,
             enum_type: Default::default(),
             struct_encoding: StructEncoding::None,
             elem_format_code: None,
@@ -244,12 +231,14 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    #[inline]
     fn read_small_string(&mut self) -> Result<String, Error> {
         let len = self.reader.next()?;
         let buf = self.reader.read_bytes(len as usize)?;
         String::from_utf8(buf).map_err(Into::into)
     }
 
+    #[inline]
     fn read_string(&mut self) -> Result<String, Error> {
         let len_bytes = self.reader.read_const_bytes()?;
         let len = u32::from_be_bytes(len_bytes);
@@ -257,6 +246,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         String::from_utf8(buf).map_err(Into::into)
     }
 
+    #[inline]
     fn parse_string(&mut self) -> Result<String, Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Str8 => self.read_small_string(),
@@ -265,6 +255,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    #[inline]
     fn parse_symbol(&mut self) -> Result<String, Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::Sym8 => self.read_small_string(),
@@ -273,6 +264,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    #[inline]
     fn parse_byte_buf(&mut self) -> Result<Vec<u8>, Error> {
         match self.get_elem_code_or_read_format_code()? {
             EncodingCodes::VBin8 => {
@@ -288,6 +280,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    #[inline]
     fn parse_decimal<V>(&mut self, visitor: V) -> Result<V::Value, Error>
     where
         V: de::Visitor<'de>,
@@ -300,6 +293,7 @@ impl<'de, R: Read<'de>> Deserializer<R> {
         }
     }
 
+    #[inline]
     fn parse_uuid<V>(&mut self, visitor: V) -> Result<V::Value, Error>
     where
         V: de::Visitor<'de>,
@@ -1039,6 +1033,8 @@ where
     }
 }
 
+/// Accessor for array type
+#[derive(Debug)]
 pub struct ArrayAccess<'a, R> {
     de: &'a mut Deserializer<R>,
     _size: usize,
@@ -1046,11 +1042,10 @@ pub struct ArrayAccess<'a, R> {
 }
 
 impl<'a, R> ArrayAccess<'a, R> {
-    pub fn new(
+    pub(crate) fn new(
         de: &'a mut Deserializer<R>,
         size: usize,
         count: usize,
-        // buf: Vec<u8>
     ) -> Self {
         Self {
             de,
@@ -1086,6 +1081,8 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
     }
 }
 
+/// Accessor for list type
+#[derive(Debug)]
 pub struct ListAccess<'a, R> {
     de: &'a mut Deserializer<R>,
     _size: usize,
@@ -1093,7 +1090,7 @@ pub struct ListAccess<'a, R> {
 }
 
 impl<'a, R> ListAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
+    pub(crate) fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
         Self {
             de,
             _size: size,
@@ -1125,6 +1122,8 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
     }
 }
 
+/// Accessor for map type
+#[derive(Debug)]
 pub struct MapAccess<'a, R> {
     de: &'a mut Deserializer<R>,
     _size: usize,
@@ -1132,7 +1131,7 @@ pub struct MapAccess<'a, R> {
 }
 
 impl<'a, R> MapAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
+    pub(crate) fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
         Self {
             de,
             _size: size,
@@ -1193,12 +1192,14 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for MapAccess<'a, R> {
     }
 }
 
+/// Accessor for enum variant
+#[derive(Debug)]
 pub struct VariantAccess<'a, R> {
     de: &'a mut Deserializer<R>,
 }
 
 impl<'a, R> VariantAccess<'a, R> {
-    pub fn new(de: &'a mut Deserializer<R>) -> Self {
+    pub(crate) fn new(de: &'a mut Deserializer<R>) -> Self {
         Self { de }
     }
 }
@@ -1256,6 +1257,7 @@ impl<'a, 'de, R: Read<'de>> de::VariantAccess<'de> for VariantAccess<'a, R> {
 }
 
 /// A special visitor access to the `Described` type
+#[derive(Debug)]
 pub struct DescribedAccess<'a, R> {
     de: &'a mut Deserializer<R>,
     counter: u32,
@@ -1265,7 +1267,7 @@ pub struct DescribedAccess<'a, R> {
 impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
     /// There will be at least one descriptor, and the length of the
     /// remaining items will be determined from the bytes
-    pub fn list(de: &'a mut Deserializer<R>) -> Self {
+    pub(crate) fn list(de: &'a mut Deserializer<R>) -> Self {
         Self {
             de,
             field_count: 1,
@@ -1273,7 +1275,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
         }
     }
 
-    pub fn basic(de: &'a mut Deserializer<R>, field_count: u32) -> Self {
+    pub(crate) fn basic(de: &'a mut Deserializer<R>, field_count: u32) -> Self {
         Self {
             de,
             field_count,
@@ -1281,7 +1283,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
         }
     }
 
-    pub fn map(de: &'a mut Deserializer<R>) -> Self {
+    pub(crate) fn map(de: &'a mut Deserializer<R>) -> Self {
         Self {
             de,
             field_count: 1,
@@ -1289,7 +1291,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
         }
     }
 
-    pub fn consume_list_header(&mut self) -> Result<u32, Error> {
+    pub(crate) fn consume_list_header(&mut self) -> Result<u32, Error> {
         // consume the list headers if
         match self.as_mut().get_elem_code_or_read_format_code()? {
             EncodingCodes::List0 => Ok(0),
@@ -1309,7 +1311,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
         }
     }
 
-    pub fn consume_map_header(&mut self) -> Result<u32, Error> {
+    pub(crate) fn consume_map_header(&mut self) -> Result<u32, Error> {
         // consume the list headers if
         match self.as_mut().get_elem_code_or_read_format_code()? {
             EncodingCodes::Map8 => {

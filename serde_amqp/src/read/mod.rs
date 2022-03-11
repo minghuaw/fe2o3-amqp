@@ -3,15 +3,16 @@
 use crate::error::Error;
 
 mod ioread;
-pub use ioread::*;
+pub(crate) use ioread::*;
 
 mod sliceread;
-pub use sliceread::*;
+pub(crate) use sliceread::*;
 
 mod private {
     pub trait Sealed {}
 }
 
+/// A custom Read trait for internal use
 pub trait Read<'de>: private::Sealed {
     /// Peek the next byte without consuming
     fn peek(&mut self) -> Result<u8, Error>;
@@ -28,53 +29,25 @@ pub trait Read<'de>: private::Sealed {
         Ok(buf)
     }
 
+    /// Peek `n` number of bytes without consuming
     fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error>;
 
+    /// Consuming `n` number of bytes
     fn read_bytes(&mut self, n: usize) -> Result<Vec<u8>, Error> {
         let mut buf = vec![0u8; n];
         self.read_exact(&mut buf)?;
         Ok(buf)
     }
 
-    // fn read_item_bytes_with_format_code(&mut self) -> Result<Vec<u8>, Error> {
-    //     use crate::format::Category;
-    //     let code_byte = self.next()?;
-    //     let code: EncodingCodes = code_byte.try_into()?;
-    //     let mut vec = match code.try_into()? {
-    //         Category::Fixed(w) => {
-    //             let mut buf = vec![0u8; 1 + w as usize];
-    //             self.read_exact(&mut buf[1..])?;
-    //             buf
-    //         }
-    //         Category::Encoded(w) => match w {
-    //             EncodedWidth::Zero => return Ok(vec![code_byte]),
-    //             EncodedWidth::One => {
-    //                 let len = self.next()?;
-    //                 let mut buf = vec![0u8; 1 + 1 + len as usize];
-    //                 self.read_exact(&mut buf[2..])?;
-    //                 buf[1] = len;
-    //                 buf
-    //             }
-    //             EncodedWidth::Four => {
-    //                 let len_bytes = self.read_const_bytes()?;
-    //                 let len = u32::from_be_bytes(len_bytes);
-    //                 let mut buf = vec![0u8; 1 + 4 + len as usize];
-    //                 self.read_exact(&mut buf[5..])?;
-    //                 (&mut buf[1..5]).copy_from_slice(&len_bytes);
-    //                 buf
-    //             }
-    //         },
-    //     };
-    //     vec[0] = code_byte;
-    //     Ok(vec)
-    // }
-
+    /// Read to buffer
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error>;
 
+    /// Forward bytes to visitor
     fn forward_read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>;
 
+    /// Forward str to visitor
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
     where
         V: serde::de::Visitor<'de>;

@@ -4,7 +4,9 @@ use std::{convert::TryFrom, fmt::Display};
 
 use crate::error::Error;
 
+/// Encoding code for different types
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
 #[repr(u8)]
 pub enum EncodingCodes {
     DescribedType = 0x00 as u8,

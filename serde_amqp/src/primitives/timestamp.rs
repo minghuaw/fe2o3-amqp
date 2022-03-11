@@ -13,6 +13,7 @@ use crate::__constants::TIMESTAMP;
 pub struct Timestamp(i64);
 
 impl Timestamp {
+    /// Consume the wrapper into the inner i64
     pub fn into_inner(self) -> i64 {
         self.0
     }
@@ -25,10 +26,12 @@ impl From<i64> for Timestamp {
 }
 
 impl Timestamp {
+    /// Creates a new [`Timestamp`] from milliseconds
     pub fn from_milliseconds(milliseconds: i64) -> Self {
         Self(milliseconds)
     }
 
+    /// Get the timestamp value as milliseconds
     pub fn milliseconds(&self) -> i64 {
         self.0
     }

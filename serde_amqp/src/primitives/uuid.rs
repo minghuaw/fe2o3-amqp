@@ -18,6 +18,7 @@ use crate::fixed_width::UUID_WIDTH;
 pub struct Uuid([u8; UUID_WIDTH]);
 
 impl Uuid {
+    /// Consume the wrapper into the inner bytes
     pub fn into_inner(self) -> [u8; UUID_WIDTH] {
         self.0
     }

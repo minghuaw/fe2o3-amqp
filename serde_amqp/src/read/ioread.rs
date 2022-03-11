@@ -4,7 +4,7 @@ use crate::error::Error;
 
 use super::{private, Read};
 
-pub struct IoReader<R> {
+pub(crate) struct IoReader<R> {
     // an io reader
     reader: R,
     buf: Vec<u8>,
@@ -35,25 +35,6 @@ impl<R: io::Read> IoReader<R> {
         } else {
             Ok(())
         }
-    }
-
-    pub fn into_inner(self) -> R {
-        self.reader
-    }
-
-    pub fn get_ref(&self) -> &R {
-        &self.reader
-    }
-
-    pub fn get_mut(&mut self) -> &mut R {
-        &mut self.reader
-    }
-    pub fn buf(&self) -> &Vec<u8> {
-        &self.buf
-    }
-
-    pub fn buf_mut(&mut self) -> &mut Vec<u8> {
-        &mut self.buf
     }
 }
 
@@ -129,7 +110,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::read::IoReader;
+    use crate::read::ioread::IoReader;
 
     use super::Read;
 

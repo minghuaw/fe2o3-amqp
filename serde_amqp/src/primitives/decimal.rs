@@ -24,6 +24,7 @@ mod dec32 {
     pub struct Dec32([u8; DECIMAL32_WIDTH]);
 
     impl Dec32 {
+        /// Consume the wrapper into the inner bytes
         pub fn into_inner(self) -> [u8; DECIMAL32_WIDTH] {
             self.0
         }
@@ -107,6 +108,7 @@ mod dec64 {
     pub struct Dec64([u8; DECIMAL64_WIDTH]);
 
     impl Dec64 {
+        /// Consumes the wrapper into the inner bytes
         pub fn into_inner(self) -> [u8; DECIMAL64_WIDTH] {
             self.0
         }
@@ -184,6 +186,7 @@ mod dec128 {
     pub struct Dec128([u8; DECIMAL128_WIDTH]);
 
     impl Dec128 {
+        /// Consumes the wrapper into the inner bytes
         pub fn into_inner(self) -> [u8; DECIMAL128_WIDTH] {
             self.0
         }

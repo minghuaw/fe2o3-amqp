@@ -51,6 +51,7 @@ impl ser::Serialize for Value {
     }
 }
 
+/// Serializes a instance of type `T` as an AMQP1.0 [`Value`]
 pub fn to_value<T>(val: &T) -> Result<Value, Error>
 where
     T: ser::Serialize,
@@ -59,11 +60,14 @@ where
     ser::Serialize::serialize(val, &mut ser)
 }
 
+/// A structure that serializes types into [`Value`]
+#[derive(Debug)]
 pub struct Serializer {
     new_type: NewType,
 }
 
 impl Serializer {
+    /// Creates a new value serializer
     pub fn new() -> Self {
         Self {
             new_type: Default::default(),
@@ -351,13 +355,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 }
 
+/// Serializer for sequence types
+#[derive(Debug)]
 pub struct SeqSerializer<'a> {
     se: &'a mut Serializer,
     vec: Vec<Value>,
 }
 
 impl<'a> SeqSerializer<'a> {
-    pub fn new(se: &'a mut Serializer, len: usize) -> Self {
+    pub(crate) fn new(se: &'a mut Serializer, len: usize) -> Self {
         Self {
             se,
             vec: Vec::with_capacity(len),
@@ -449,6 +455,8 @@ impl<'a> ser::SerializeStruct for SeqSerializer<'a> {
     }
 }
 
+/// Serializer for map types
+#[derive(Debug)]
 pub struct MapSerializer<'a> {
     se: &'a mut Serializer,
     map: BTreeMap<Value, Value>,
@@ -498,6 +506,8 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     }
 }
 
+/// Serializer for enum variants
+#[derive(Debug)]
 pub struct VariantSerializer<'a> {
     se: &'a mut Serializer,
     _name: &'static str,
@@ -508,7 +518,7 @@ pub struct VariantSerializer<'a> {
 }
 
 impl<'a> VariantSerializer<'a> {
-    pub fn new(
+    pub(crate) fn new(
         se: &'a mut Serializer,
         name: &'static str,
         variant_index: u32,

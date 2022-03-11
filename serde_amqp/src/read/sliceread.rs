@@ -4,7 +4,7 @@ use crate::error::Error;
 
 use super::{private, Read};
 
-pub struct SliceReader<'s> {
+pub(crate) struct SliceReader<'s> {
     slice: &'s [u8],
 }
 

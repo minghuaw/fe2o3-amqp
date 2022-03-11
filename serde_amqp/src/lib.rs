@@ -1,3 +1,5 @@
+#![deny(missing_docs, missing_debug_implementations)]
+
 //! A serde implementation of AMQP1.0 protocol.
 //!
 //! # Serializing and deserializing data structures

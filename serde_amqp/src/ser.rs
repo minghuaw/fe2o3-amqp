@@ -27,6 +27,7 @@ const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
 const U32_MAX_MINUS_4: usize = u32::MAX as usize - 4;
 const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
 
+/// Serializes the given value into a byte vector
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
 where
     T: Serialize,
@@ -37,6 +38,8 @@ where
     Ok(writer)
 }
 
+/// A struct for serializing Rust structs/values into AMQP1.0 wire format
+#[derive(Debug)]
 pub struct Serializer<W> {
     /// The output of serialized data
     pub writer: W,
@@ -59,6 +62,7 @@ impl<W: Write> From<W> for Serializer<W> {
 }
 
 impl<W: Write> Serializer<W> {
+    /// Creates a new AMQP1.0 serializer
     pub fn new(writer: W) -> Self {
         Self {
             writer,
@@ -68,10 +72,12 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Consume the serializer and obtain the inner writer
     pub fn into_inner(self) -> W {
         self.writer
     }
 
+    /// Creates an AMQP1.0 serializer for Symbol type
     pub fn symbol(writer: W) -> Self {
         Self {
             writer,
@@ -81,6 +87,7 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Creates an AMQP1.0 serializer for described list
     pub fn described_list(writer: W) -> Self {
         Self {
             writer,
@@ -90,6 +97,7 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Creates an AMQP1.0 serilaizer for described map
     pub fn described_map(writer: W) -> Self {
         Self {
             writer,
@@ -99,6 +107,7 @@ impl<W: Write> Serializer<W> {
         }
     }
 
+    /// Creates an AMQP1.0 serializer for a described wrapper
     pub fn described_basic(writer: W) -> Self {
         Self {
             writer,
@@ -108,7 +117,7 @@ impl<W: Write> Serializer<W> {
         }
     }
 
-    pub fn struct_encoding(&self) -> &StructEncoding {
+    fn struct_encoding(&self) -> &StructEncoding {
         self.struct_encoding
             .last()
             .unwrap_or_else(|| &StructEncoding::None)
@@ -799,6 +808,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     }
 }
 
+/// Serializer for sequence types
+#[derive(Debug)]
 pub struct SeqSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
@@ -905,6 +916,8 @@ fn write_array<'a, W: Write + 'a>(
     Ok(())
 }
 
+/// Serializer for tuple types
+#[derive(Debug)]
 pub struct TupleSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
@@ -987,6 +1000,8 @@ fn write_list<'a, W: Write + 'a>(
     Ok(())
 }
 
+/// Serializer for map types
+#[derive(Debug)]
 pub struct MapSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     num: usize,
@@ -1113,6 +1128,8 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleSerializer<'a, W> {
     }
 }
 
+/// Serializer for tuple struct types
+#[derive(Debug)]
 pub struct TupleStructSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     field_role: FieldRole,
@@ -1217,6 +1234,8 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
     }
 }
 
+/// A serializer for struct types
+#[derive(Debug)]
 pub struct StructSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     count: usize,
@@ -1224,7 +1243,7 @@ pub struct StructSerializer<'a, W: 'a> {
 }
 
 impl<'a, W: 'a> StructSerializer<'a, W> {
-    pub fn basic_value(se: &'a mut Serializer<W>) -> Self {
+    fn basic_value(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
             count: 0,
@@ -1232,7 +1251,7 @@ impl<'a, W: 'a> StructSerializer<'a, W> {
         }
     }
 
-    pub fn list_value(se: &'a mut Serializer<W>) -> Self {
+    fn list_value(se: &'a mut Serializer<W>) -> Self {
         // let buf = init_vec(&role);
         Self {
             se,
@@ -1241,7 +1260,7 @@ impl<'a, W: 'a> StructSerializer<'a, W> {
         }
     }
 
-    pub fn map_value(se: &'a mut Serializer<W>) -> Self {
+    fn map_value(se: &'a mut Serializer<W>) -> Self {
         // let buf = init_vec(&role);
         Self {
             se,
@@ -1333,6 +1352,8 @@ impl<'a, W: Write + 'a> ser::SerializeStruct for StructSerializer<'a, W> {
     }
 }
 
+/// Serializer for enum variants
+#[derive(Debug)]
 pub struct VariantSerializer<'a, W: 'a> {
     se: &'a mut Serializer<W>,
     _name: &'static str,
@@ -1343,7 +1364,7 @@ pub struct VariantSerializer<'a, W: 'a> {
 }
 
 impl<'a, W: 'a> VariantSerializer<'a, W> {
-    pub fn new(
+    fn new(
         se: &'a mut Serializer<W>,
         name: &'static str,
         variant_index: u32,
@@ -1417,7 +1438,7 @@ mod test {
     use crate::{
         descriptor::Descriptor,
         format_code::EncodingCodes,
-        primitives::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid},
+        primitives::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid, Symbol},
     };
 
     use super::*;
@@ -1835,14 +1856,14 @@ mod test {
     #[test]
     fn test_serialize_descriptor_name() {
         // The descriptor name should just be serialized as a symbol
-        let descriptor = Descriptor::name("amqp");
+        let descriptor = Descriptor::Name(Symbol::from("amqp"));
         let expected = vec![0x00, 0xa3, 0x04, 0x61, 0x6d, 0x71, 0x70];
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
     #[test]
     fn test_serialize_descriptor_code() {
-        let descriptor = Descriptor::code(0xf2);
+        let descriptor = Descriptor::Code(0xf2);
         let expected = vec![0x00, 0x53, 0xf2];
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }

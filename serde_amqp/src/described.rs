@@ -15,7 +15,10 @@ use crate::{
 /// Two pointers are used to reduce the memory size of the Value type.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Described<T> {
+    /// Descriptor of descriptor
     pub descriptor: Descriptor,
+
+    /// Value of described
     pub value: Box<T>,
 }
 

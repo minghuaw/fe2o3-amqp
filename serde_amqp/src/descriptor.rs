@@ -21,18 +21,10 @@ use crate::primitives::Symbol;
 )]
 // #[serde(untagged)]
 pub enum Descriptor {
+    /// A name descriptor
     Name(Symbol),
+    /// A code descriptor
     Code(u64),
-}
-
-impl Descriptor {
-    pub fn name(name: impl Into<Symbol>) -> Self {
-        Self::Name(name.into())
-    }
-
-    pub fn code(code: u64) -> Self {
-        Self::Code(code.into())
-    }
 }
 
 use std::convert::TryInto;

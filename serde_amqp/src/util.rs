@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub(crate) enum NewType {
     None,
     Array,
@@ -36,7 +37,8 @@ impl Default for EnumType {
 }
 
 /// Described type has the descriptor as the first field
-pub enum FieldRole {
+#[derive(Debug)]
+pub(crate) enum FieldRole {
     Descriptor,
     Fields,
 }

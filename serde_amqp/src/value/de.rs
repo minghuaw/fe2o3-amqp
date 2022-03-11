@@ -266,11 +266,14 @@ impl<'de> de::Deserialize<'de> for Value {
     }
 }
 
+/// Interprete a [`Value`] as an instance of type `T`
 pub fn from_value<T: de::DeserializeOwned>(value: Value) -> Result<T, Error> {
     let de = Deserializer::new(value);
     T::deserialize(de)
 }
 
+/// A structure that deserializes a [`Value`] into type `T`
+#[derive(Debug)]
 pub struct Deserializer {
     new_type: NewType,
     value: Value,
@@ -278,6 +281,7 @@ pub struct Deserializer {
 }
 
 impl Deserializer {
+    /// Creates a new value deserializer
     pub fn new(value: Value) -> Self {
         Self {
             new_type: Default::default(),
@@ -286,7 +290,7 @@ impl Deserializer {
         }
     }
 
-    pub fn array(value: Value) -> Self {
+    pub(crate) fn array(value: Value) -> Self {
         Self {
             new_type: NewType::Array,
             enum_type: Default::default(),
@@ -757,11 +761,14 @@ impl<'de> de::Deserializer<'de> for Deserializer {
     }
 }
 
+#[derive(Debug)]
 enum SeqType {
     List,
     Array,
 }
 
+/// Accessor for sequence types
+#[derive(Debug)]
 pub struct SeqAccess {
     iter: <Vec<Value> as IntoIterator>::IntoIter,
     seq_type: SeqType,
@@ -769,21 +776,6 @@ pub struct SeqAccess {
 
 impl<'de> de::SeqAccess<'de> for SeqAccess {
     type Error = Error;
-
-    // fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
-    // where
-    //     T: serde::Deserialize<'de>,
-    // {
-    //     match self.iter.next() {
-    //         Some(elem) => {
-    //             match self.seq_type {
-    //                 SeqType::Array => T::deserialize(Deserializer::array(elem)).map(Some),
-    //                 SeqType::List => T::deserialize(Deserializer::new(elem)).map(Some)
-    //             }
-    //         },
-    //         None => Ok(None)
-    //     }
-    // }
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
     where
@@ -799,6 +791,8 @@ impl<'de> de::SeqAccess<'de> for SeqAccess {
     }
 }
 
+/// Accssor for map types
+#[derive(Debug)]
 pub struct MapAccess {
     iter: <BTreeMap<Value, Value> as IntoIterator>::IntoIter,
 }
@@ -840,6 +834,8 @@ impl<'de> de::MapAccess<'de> for MapAccess {
     }
 }
 
+/// Accessor for enum variants
+#[derive(Debug)]
 pub struct VariantAccess {
     iter: <Vec<Value> as IntoIterator>::IntoIter,
 }

@@ -275,6 +275,7 @@ impl Default for Value {
 }
 
 impl Value {
+    /// Get the format code of the value type
     pub fn format_code(&self) -> u8 {
         let code = match *self {
             Value::Described(_) => EncodingCodes::DescribedType,
