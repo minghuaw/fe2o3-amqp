@@ -791,6 +791,12 @@ impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
     }
 
     /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    /// 
+    /// # TLS
+    /// 
+    /// If the `scheme` field is `"amqps"`, the builder will attempt to start with
+    /// exchanging TLS protocol header and establish TLS stream using the user-supplied 
+    /// `tokio_rustls::TlsConnector`.
     pub async fn open_with_stream<Io>(
         self,
         stream: Io,
@@ -899,6 +905,12 @@ impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
     }
 
     /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    /// 
+    /// # TLS
+    /// 
+    /// If the `scheme` field is `"amqps"`, the builder will attempt to start with
+    /// exchanging TLS protocol header and establish TLS stream using the user-supplied 
+    /// `tokio_rustls::TlsConnector`.
     pub async fn open_with_stream<Io>(
         self,
         stream: Io,
