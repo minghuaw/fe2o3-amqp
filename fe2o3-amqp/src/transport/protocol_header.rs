@@ -50,6 +50,15 @@ impl ProtocolHeader {
         }
     }
 
+    /// Returns whether the protocol id is AMQP
+    pub fn is_amqp(&self) -> bool {
+        match self.id {
+            ProtocolId::Amqp => true,
+            ProtocolId::Tls => false,
+            ProtocolId::Sasl => false,
+        }
+    }
+
     /// Creates a TLS protocol header
     pub fn tls() -> Self {
         Self {
@@ -58,11 +67,29 @@ impl ProtocolHeader {
         }
     }
 
+    /// Returns whether the protocol id is TLS
+    pub fn is_tls(&self) -> bool {
+        match self.id {
+            ProtocolId::Amqp => false,
+            ProtocolId::Tls => true,
+            ProtocolId::Sasl => false,
+        }
+    }
+
     /// Creates a SASL protocol header
     pub fn sasl() -> Self {
         Self {
             id: ProtocolId::Sasl,
             ..Default::default()
+        }
+    }
+
+    /// Returns whether the protocol id is SASL
+    pub fn is_sasl(&self) -> bool {
+        match self.id {
+            ProtocolId::Amqp => false,
+            ProtocolId::Tls => false,
+            ProtocolId::Sasl => true,
         }
     }
 }

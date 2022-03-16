@@ -13,10 +13,6 @@ use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::message::BodySection;
 use fe2o3_amqp::types::messaging::Message;
 use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
-use tokio_rustls::rustls::ClientConfig;
-use tokio_rustls::rustls::RootCertStore;
-use tokio_rustls::rustls::ServerName;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -38,13 +34,14 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let stream = TcpStream::connect("localhost:5671").await.unwrap();
-    let config = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(RootCertStore::empty())
-        .with_no_client_auth();
-    let connector = TlsConnector::from(Arc::new(config));
-    let domain = ServerName::try_from("localhost").unwrap();
+    let addr = "localhost:5671";
+    let domain = "localhost";
+    let stream = TcpStream::connect(addr).await.unwrap();
+    let connector = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let connector = tokio_native_tls::TlsConnector::from(connector);
     let tls_stream = connector.connect(domain, stream).await.unwrap();
 
     // let mut connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5671")
@@ -52,6 +49,7 @@ async fn main() {
     //     .unwrap();
     let mut connection = Connection::builder()
         .container_id("connection-1")
+        .scheme("amqp")
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
