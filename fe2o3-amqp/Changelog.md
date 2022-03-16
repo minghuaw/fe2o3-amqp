@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.6
+
+1. Fixed errors in documentation about TLS protocol header
+2. Removed `"rustls"` from default features
+3. Changed feature dependend `connection::Builder::tls_connector()` method to aliases to `rustls_connector` and `native_tls_connector`
+
 ## 0.0.5
 
 1. Removed unused dependency `crossbeam`
