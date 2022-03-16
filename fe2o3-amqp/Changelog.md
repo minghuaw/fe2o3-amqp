@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.5
+
+1. Removed unused dependency `crossbeam`
+
 ## 0.0.4
 
 1. TLS is only supported if either "rustls" or "native-tls" feature is enabled.
