@@ -6,7 +6,6 @@ use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
     performatives::{ChannelMax, MaxFrameSize, Open},
 };
-use rustls::{ClientConfig, RootCertStore};
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -39,7 +38,7 @@ pub struct WithoutContainerId {}
 pub struct WithContainerId {}
 
 /// Builder for [`crate::Connection`]
-pub struct Builder<'a, Mode> {
+pub struct Builder<'a, Mode, Tls> {
     /// The id of the source container
     pub container_id: String,
 
@@ -81,7 +80,7 @@ pub struct Builder<'a, Mode> {
     pub properties: Option<Fields>,
 
     /// TLS client config
-    pub client_config: Option<ClientConfig>,
+    pub tls_connector: Tls,
 
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions
     ///
@@ -104,13 +103,8 @@ pub struct Builder<'a, Mode> {
     marker: PhantomData<Mode>,
 }
 
-impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode> {
+impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, ()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let client_config_value = match self.client_config {
-            Some(_) => "Some(_)",
-            None => "None"
-        };
-
         f.debug_struct("Builder")
             .field("container_id", &self.container_id)
             .field("hostname", &self.hostname)
@@ -124,7 +118,7 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode> {
             .field("offered_capabilities", &self.offered_capabilities)
             .field("desired_capabilities", &self.desired_capabilities)
             .field("properties", &self.properties)
-            .field("client_config", &client_config_value)
+            .field("tls_connector", &"()")
             .field("buffer_size", &self.buffer_size)
             .field("sasl_profile", &self.sasl_profile)
             .field("marker", &self.marker)
@@ -132,7 +126,55 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode> {
     }
 }
 
-impl<'a> Builder<'a, WithoutContainerId> {
+#[cfg(feature = "rustls")]
+impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, tokio_rustls::TlsConnector> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Builder")
+            .field("container_id", &self.container_id)
+            .field("hostname", &self.hostname)
+            .field("scheme", &self.scheme)
+            .field("domain", &self.domain)
+            .field("max_frame_size", &self.max_frame_size)
+            .field("channel_max", &self.channel_max)
+            .field("idle_time_out", &self.idle_time_out)
+            .field("outgoing_locales", &self.outgoing_locales)
+            .field("incoming_locales", &self.incoming_locales)
+            .field("offered_capabilities", &self.offered_capabilities)
+            .field("desired_capabilities", &self.desired_capabilities)
+            .field("properties", &self.properties)
+            .field("tls_connector", &"tokio_rustls::TlsConnector")
+            .field("buffer_size", &self.buffer_size)
+            .field("sasl_profile", &self.sasl_profile)
+            .field("marker", &self.marker)
+            .finish()
+    }
+}
+
+#[cfg(feature = "native-tls")]
+impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, tokio_native_tls::TlsConnector> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Builder")
+            .field("container_id", &self.container_id)
+            .field("hostname", &self.hostname)
+            .field("scheme", &self.scheme)
+            .field("domain", &self.domain)
+            .field("max_frame_size", &self.max_frame_size)
+            .field("channel_max", &self.channel_max)
+            .field("idle_time_out", &self.idle_time_out)
+            .field("outgoing_locales", &self.outgoing_locales)
+            .field("incoming_locales", &self.incoming_locales)
+            .field("offered_capabilities", &self.offered_capabilities)
+            .field("desired_capabilities", &self.desired_capabilities)
+            .field("properties", &self.properties)
+            .field("tls_connector", &"tokio_native_tls::TlsConnector")
+            .field("buffer_size", &self.buffer_size)
+            .field("sasl_profile", &self.sasl_profile)
+            .field("marker", &self.marker)
+            .finish()
+    }
+}
+
+impl<'a> Builder<'a, WithoutContainerId, ()> {
     /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
@@ -150,7 +192,7 @@ impl<'a> Builder<'a, WithoutContainerId> {
             desired_capabilities: None,
             properties: None,
 
-            client_config: None,
+            tls_connector: (),
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             sasl_profile: None,
@@ -160,13 +202,13 @@ impl<'a> Builder<'a, WithoutContainerId> {
     }
 }
 
-impl<'a, Mode> Builder<'a, Mode> {
+impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// The id of the source container
-    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, WithContainerId> {
+    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, WithContainerId, Tls> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
-        Builder::<WithContainerId> {
+        Builder {
             container_id: id.into(),
             hostname: self.hostname,
             scheme: self.scheme,
@@ -181,7 +223,65 @@ impl<'a, Mode> Builder<'a, Mode> {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            client_config: self.client_config,
+            tls_connector: self.tls_connector,
+
+            buffer_size: self.buffer_size,
+            sasl_profile: self.sasl_profile,
+            marker: PhantomData,
+        }
+    }
+
+    /// Set the TLS connector with `tokio-rustls`
+    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+    pub fn tls_connector(self, tls_connector: tokio_rustls::TlsConnector) -> Builder<'a, Mode, tokio_rustls::TlsConnector> {
+        // In Rust, it’s more common to pass slices as arguments
+        // rather than vectors when you just want to provide read access.
+        // The same goes for String and &str.
+        Builder {
+            container_id: self.container_id,
+            hostname: self.hostname,
+            scheme: self.scheme,
+            domain: self.domain,
+            // set to 512 before Open frame is sent
+            max_frame_size: self.max_frame_size,
+            channel_max: self.channel_max,
+            idle_time_out: self.idle_time_out,
+            outgoing_locales: self.outgoing_locales,
+            incoming_locales: self.incoming_locales,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
+
+            tls_connector: tls_connector,
+
+            buffer_size: self.buffer_size,
+            sasl_profile: self.sasl_profile,
+            marker: PhantomData,
+        }
+    }
+
+    /// Set the TLS connector with `tokio-native-tls`
+    #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+    pub fn tls_connector(self, tls_connector: tokio_native_tls::TlsConnector) -> Builder<'a, Mode, tokio_native_tls::TlsConnector> {
+        // In Rust, it’s more common to pass slices as arguments
+        // rather than vectors when you just want to provide read access.
+        // The same goes for String and &str.
+        Builder {
+            container_id: self.container_id,
+            hostname: self.hostname,
+            scheme: self.scheme,
+            domain: self.domain,
+            // set to 512 before Open frame is sent
+            max_frame_size: self.max_frame_size,
+            channel_max: self.channel_max,
+            idle_time_out: self.idle_time_out,
+            outgoing_locales: self.outgoing_locales,
+            incoming_locales: self.incoming_locales,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
+
+            tls_connector: tls_connector,
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
@@ -190,7 +290,7 @@ impl<'a, Mode> Builder<'a, Mode> {
     }
 }
 
-impl<'a, Mode> Builder<'a, Mode> {
+impl<'a, Mode> Builder<'a, Mode, ()> {
     /// The name of the target host
     pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
         self.hostname = hostname.into();
@@ -304,11 +404,11 @@ impl<'a, Mode> Builder<'a, Mode> {
         self
     }
 
-    /// TLS client config
-    pub fn client_config(mut self, client_config: Option<ClientConfig>) -> Self {
-        self.client_config = client_config;
-        self
-    }
+    // /// TLS client config
+    // pub fn client_config(mut self, client_config: Option<ClientConfig>) -> Self {
+    //     self.client_config = client_config;
+    //     self
+    // }
 
     /// Connection properties
     pub fn properties(mut self, properties: Fields) -> Self {
@@ -334,116 +434,7 @@ impl<'a, Mode> Builder<'a, Mode> {
     }
 }
 
-impl<'a> Builder<'a, WithContainerId> {
-    /// Open a [`crate::Connection`] with an url
-    ///
-    /// # Raw AMQP connection
-    ///
-    /// ```rust
-    /// let connection = Connection::builder()
-    ///     .container_id("connection-1")
-    ///     .open("amqp://localhost:5672")
-    ///     .await.unwrap();
-    /// ```
-    ///
-    /// # TLS
-    ///
-    /// TLS is supported with `rustls`. The user must supply a `ClientConfig` to the `client_config` field, and
-    /// the url scheme must be `"amqps"`.
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::builder()
-    ///     .container_id("connection-1")
-    ///     .client_config(config)
-    ///     .open("amqps://guest:guest@localhost:5672")
-    ///     .await.unwrap();
-    /// ```
-    ///
-    /// # SASL
-    ///
-    /// ```rust, ignore
-    /// let connection = Connection::builder()
-    ///     .container_id("connection-1")
-    ///     .client_config(config)
-    ///     .open("amqp://guest:guest@localhost:5672")
-    ///     .await.unwrap();
-    ///
-    /// // Or you can supply the SASL profile to the builder
-    /// let profile = SaslProfile::Plain {
-    ///     username: "guest".to_string(),
-    ///     password: "guest".to_string()
-    /// };
-    /// let connection = Connection::builder()
-    ///     .container_id("connection-1")
-    ///     .sasl_profile(profile)
-    ///     .open("amqp://localhost:5672")
-    ///     .await.unwrap();
-    /// ```
-    ///
-    pub async fn open(
-        mut self,
-        url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, OpenError> {
-        let url: Url = url.try_into()?;
-
-        // Url info will override the builder fields
-        self.hostname = url.host_str().map(Into::into);
-        self.scheme = url.scheme().into();
-        self.domain = url.domain().map(Into::into);
-        if let Ok(profile) = SaslProfile::try_from(&url) {
-            self.sasl_profile = Some(profile);
-        }
-
-        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
-        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
-        
-        self.open_with_stream(stream).await
-    }
-
-    // pub async fn pipelined_open_with_stream<Io>(
-    //     self,
-    //     mut _stream: Io,
-    // ) -> Result<ConnectionHandle, Error>
-    // where
-    //     Io: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    // {
-    //     todo!()
-    // }
-
-    // pub async fn pipelined_open(&self, _url: impl TryInto<Url>) -> Result<ConnectionHandle, Error> {
-    //     todo!()
-    // }
-
-    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
-    pub async fn open_with_stream<Io>(
-        mut self,
-        stream: Io,
-    ) -> Result<ConnectionHandle, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        match self.scheme {
-            "amqp" => self.connect_with_stream(stream).await,
-            "amqps" => {
-                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
-                let config = self
-                    .client_config
-                    .take()
-                    .unwrap_or_else(|| 
-                        // Default `ClientConfig`
-                        ClientConfig::builder()
-                            .with_safe_defaults()
-                            .with_root_certificates(RootCertStore::empty())
-                            .with_no_client_auth()
-                );
-                let tls_stream = Transport::connect_tls(stream, domain, config).await?;
-                self.connect_with_stream(tls_stream).await
-            }
-            _ => Err(OpenError::InvalidScheme),
-        }
-    }
-
-        
+impl<'a, Tls> Builder<'a, WithContainerId, Tls> {
     async fn connect_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -517,6 +508,301 @@ impl<'a> Builder<'a, WithContainerId> {
         };
 
         Ok(connection_handle)
+    }
+}
+
+impl<'a> Builder<'a, WithContainerId, ()> {
+    /// Open a [`crate::Connection`] with an url
+    ///
+    /// # Raw AMQP connection
+    ///
+    /// ```rust
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    /// # TLS
+    ///
+    /// TLS is not supported unless one and only one of the following feature must be enabled
+    /// 
+    /// 1. "rustls"
+    /// 2. "native-tls"
+    /// 
+    /// # SASL
+    ///
+    /// ```rust, ignore
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .client_config(config)
+    ///     .open("amqp://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    ///
+    /// // Or you can supply the SASL profile to the builder
+    /// let profile = SaslProfile::Plain {
+    ///     username: "guest".to_string(),
+    ///     password: "guest".to_string()
+    /// };
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .sasl_profile(profile)
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    pub async fn open(
+        mut self,
+        url: impl TryInto<Url, Error = url::ParseError>,
+    ) -> Result<ConnectionHandle, OpenError> {
+        let url: Url = url.try_into()?;
+
+        // Url info will override the builder fields
+        self.hostname = url.host_str().map(Into::into);
+        self.scheme = url.scheme().into();
+        self.domain = url.domain().map(Into::into);
+        if let Ok(profile) = SaslProfile::try_from(&url) {
+            self.sasl_profile = Some(profile);
+        }
+
+        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        
+        self.open_with_stream(stream).await
+    }
+
+    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    pub async fn open_with_stream<Io>(
+        self,
+        stream: Io,
+    ) -> Result<ConnectionHandle, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.scheme {
+            "amqp" => self.connect_with_stream(stream).await,
+            "amqps" => {
+                return Err(OpenError::TlsConnectorNotFound)
+            }
+            _ => Err(OpenError::InvalidScheme),
+        }
+    }
+}
+
+#[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
+    /// Open a [`crate::Connection`] with an url
+    ///
+    /// # Raw AMQP connection
+    ///
+    /// ```rust
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    /// # TLS
+    ///
+    /// TLS is supported with either `tokio-rustls` or `tokio-native-tls` by choosing the 
+    /// corresponding feature flag.
+    ///
+    /// ## TLS with feature `"rustls"` enabled
+    /// 
+    /// ```rust, ignore
+    /// let config = rustls::ClientConfig::builder()
+    ///     .with_safe_defaults()
+    ///     .with_root_certificates(root_cert_store)
+    ///     .with_no_client_auth(); // i guess this was previously the default?
+    /// let connector = TlsConnector::from(Arc::new(config));
+    /// 
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .tls_connector(connector)
+    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    /// 
+    /// ## TLS with feature `"native-tls"` enabled
+    /// 
+    /// ```rust,ignore
+    /// let cx = native_tls::TlsConnector::new();
+    /// let connector = tokio_native_tls::TlsConnector::from(cx);
+    /// 
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .tls_connector(connector)
+    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    /// # SASL
+    ///
+    /// ```rust, ignore
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .client_config(config)
+    ///     .open("amqp://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    ///
+    /// // Or you can supply the SASL profile to the builder
+    /// let profile = SaslProfile::Plain {
+    ///     username: "guest".to_string(),
+    ///     password: "guest".to_string()
+    /// };
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .sasl_profile(profile)
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    pub async fn open(
+        mut self,
+        url: impl TryInto<Url, Error = url::ParseError>,
+    ) -> Result<ConnectionHandle, OpenError> {
+        let url: Url = url.try_into()?;
+
+        // Url info will override the builder fields
+        self.hostname = url.host_str().map(Into::into);
+        self.scheme = url.scheme().into();
+        self.domain = url.domain().map(Into::into);
+        if let Ok(profile) = SaslProfile::try_from(&url) {
+            self.sasl_profile = Some(profile);
+        }
+
+        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        
+        self.open_with_stream(stream).await
+    }
+
+    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    pub async fn open_with_stream<Io>(
+        self,
+        stream: Io,
+    ) -> Result<ConnectionHandle, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.scheme {
+            "amqp" => self.connect_with_stream(stream).await,
+            "amqps" => {
+                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let tls_stream = Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
+                self.connect_with_stream(tls_stream).await
+            }
+            _ => Err(OpenError::InvalidScheme),
+        }
+    }
+}
+
+
+#[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
+    /// Open a [`crate::Connection`] with an url
+    ///
+    /// # Raw AMQP connection
+    ///
+    /// ```rust
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    /// # TLS
+    ///
+    /// TLS is supported with either `tokio-rustls` or `tokio-native-tls` by choosing the 
+    /// corresponding feature flag.
+    ///
+    /// ## TLS with feature `"rustls"` enabled
+    /// 
+    /// ```rust, ignore
+    /// let config = rustls::ClientConfig::builder()
+    ///     .with_safe_defaults()
+    ///     .with_root_certificates(root_cert_store)
+    ///     .with_no_client_auth(); // i guess this was previously the default?
+    /// let connector = TlsConnector::from(Arc::new(config));
+    /// 
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .tls_connector(connector)
+    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    /// 
+    /// ## TLS with feature `"native-tls"` enabled
+    /// 
+    /// ```rust,ignore
+    /// let cx = native_tls::TlsConnector::new();
+    /// let connector = tokio_native_tls::TlsConnector::from(cx);
+    /// 
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .tls_connector(connector)
+    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    /// # SASL
+    ///
+    /// ```rust, ignore
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .client_config(config)
+    ///     .open("amqp://guest:guest@localhost:5672")
+    ///     .await.unwrap();
+    ///
+    /// // Or you can supply the SASL profile to the builder
+    /// let profile = SaslProfile::Plain {
+    ///     username: "guest".to_string(),
+    ///     password: "guest".to_string()
+    /// };
+    /// let connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .sasl_profile(profile)
+    ///     .open("amqp://localhost:5672")
+    ///     .await.unwrap();
+    /// ```
+    ///
+    pub async fn open(
+        mut self,
+        url: impl TryInto<Url, Error = url::ParseError>,
+    ) -> Result<ConnectionHandle, OpenError> {
+        let url: Url = url.try_into()?;
+
+        // Url info will override the builder fields
+        self.hostname = url.host_str().map(Into::into);
+        self.scheme = url.scheme().into();
+        self.domain = url.domain().map(Into::into);
+        if let Ok(profile) = SaslProfile::try_from(&url) {
+            self.sasl_profile = Some(profile);
+        }
+
+        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        
+        self.open_with_stream(stream).await
+    }
+
+    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    pub async fn open_with_stream<Io>(
+        self,
+        stream: Io,
+    ) -> Result<ConnectionHandle, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.scheme {
+            "amqp" => self.connect_with_stream(stream).await,
+            "amqps" => {
+                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let tls_stream = Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector).await?;
+                self.connect_with_stream(tls_stream).await
+            }
+            _ => Err(OpenError::InvalidScheme),
+        }
     }
 }
 

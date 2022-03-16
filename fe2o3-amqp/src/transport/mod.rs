@@ -14,7 +14,6 @@ use fe2o3_amqp_types::{
     definitions::{AmqpError, MIN_MAX_FRAME_SIZE},
     sasl::SaslCode, states::ConnectionState,
 };
-use tokio_rustls::{client::TlsStream, TlsConnector};
 use tracing::{event, instrument, span, trace, Level};
 
 /* -------------------------------- Transport ------------------------------- */
@@ -38,6 +37,12 @@ use crate::{
 use protocol_header::ProtocolHeader;
 
 use self::error::NegotiationError;
+
+// #[cfg(featrue = "rustls")]
+// use tokio_rustls::{TlsConnector};
+
+// #[cfg(feature = "native-tls")]
+// use tokio_native_tls::{TlsConnector};
 
 pin_project! {
     /// Frame transport
@@ -91,50 +96,52 @@ impl<Io> Transport<Io, amqp::Frame>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Perform TLS negotiation
-    #[instrument(skip_all, fields(domain = %domain))]
-    pub async fn connect_tls(
+
+    /// Perform TLS negotiation with `tokio-rustls`
+    #[cfg(feature = "rustls")]
+    pub async fn connect_tls_with_rustls(
         mut stream: Io,
         domain: &str,
-        config: rustls::ClientConfig,
-    ) -> Result<TlsStream<Io>, NegotiationError> {
-        use rustls::ServerName;
-        use std::sync::Arc;
+        connector: &tokio_rustls::TlsConnector,
+    ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
+        use librustls::ServerName;
 
-        let span = span!(Level::TRACE, "SEND");
-        // Exchange TLS proto header
-        let proto_header = ProtocolHeader::tls();
-        event!(parent: &span, Level::TRACE, ?proto_header);
+        send_tls_proto_header(&mut stream).await?;
+        let incoming_header = recv_tls_proto_header(&mut stream).await?;
 
-        let mut buf: [u8; 8] = proto_header.clone().into();
-        stream.write_all(&buf).await?;
-        stream.read_exact(&mut buf).await?;
-
-        let span = span!(Level::TRACE, "RECV");
-        let incoming_header = match ProtocolHeader::try_from(buf) {
-            Ok(header) => {
-                event!(parent: &span, Level::TRACE, proto_header = ?header);
-                header
-            }
-            Err(buf) => {
-                event!(parent: &span, Level::ERROR, ?buf);
-                return Err(NegotiationError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Invalid protocol header",
-                )));
-            }
-        };
-        if proto_header != incoming_header {
+        if !incoming_header.is_tls() {
             return Err(NegotiationError::ProtocolHeaderMismatch(
                 incoming_header.into(),
-            ));
+            ))
         }
 
         // TLS negotiation
-        let connector = TlsConnector::from(Arc::new(config));
         let domain = ServerName::try_from(domain).map_err(|_| NegotiationError::InvalidDomain)?;
         let tls = connector.connect(domain, stream).await?;
         Ok(tls)
+    }
+
+    /// Perform TLS negotiation with `tokio-native-tls`
+    #[cfg(feature = "native-tls")]
+    pub async fn connect_tls_with_native_tls(
+        mut stream: Io,
+        domain: &str,
+        connector: &tokio_native_tls::TlsConnector
+    ) -> Result<tokio_native_tls::TlsStream<Io>, NegotiationError> {
+        send_tls_proto_header(&mut stream).await?;
+        let incoming_header = recv_tls_proto_header(&mut stream).await?;
+
+        if !incoming_header.is_tls() {
+            return Err(NegotiationError::ProtocolHeaderMismatch(
+                incoming_header.into(),
+            ))
+        }
+
+        connector.connect(domain, stream).await
+            .map_err(|e| NegotiationError::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{:?}", e)
+            )))
     }
 
     /// Performs SASL negotiation
@@ -206,8 +213,8 @@ where
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
     ) -> Result<ProtocolHeader, NegotiationError> {
-        send_proto_header(io, local_state, proto_header.clone()).await?;
-        let incoming_header = recv_proto_header(io, local_state, proto_header).await?;
+        send_amqp_proto_header(io, local_state, proto_header.clone()).await?;
+        let incoming_header = recv_amqp_proto_header(io, local_state, proto_header).await?;
 
         Ok(incoming_header)
     }
@@ -231,7 +238,7 @@ where
 }
 
 #[instrument(name = "SEND", skip_all)]
-async fn send_proto_header<Io>(
+async fn send_amqp_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
@@ -256,7 +263,7 @@ where
 }
 
 #[instrument(name = "RECV", skip_all)]
-async fn recv_proto_header<Io>(
+async fn recv_amqp_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
@@ -268,13 +275,13 @@ where
     let proto_header = match local_state {
         ConnectionState::Start => {
             let incoming_header =
-                read_and_compare_proto_header(io, local_state, &proto_header).await?;
+                read_and_compare_amqp_proto_header(io, local_state, &proto_header).await?;
             *local_state = ConnectionState::HeaderReceived;
             incoming_header
         }
         ConnectionState::HeaderSent => {
             let incoming_header =
-                read_and_compare_proto_header(io, local_state, &proto_header).await?;
+                read_and_compare_amqp_proto_header(io, local_state, &proto_header).await?;
             *local_state = ConnectionState::HeaderExchange;
             incoming_header
         }
@@ -285,7 +292,35 @@ where
     Ok(proto_header)
 }
 
-async fn read_and_compare_proto_header<Io>(
+#[instrument(name = "SEND", skip_all)]
+async fn send_tls_proto_header<Io>(
+    stream: &mut Io,
+) -> Result<(), io::Error> 
+where
+    Io: AsyncWrite + Unpin,
+{
+    let proto_header = ProtocolHeader::tls();
+    let buf: [u8; 8] = proto_header.into();
+    stream.write_all(&buf).await
+}
+
+#[instrument(name = "RECV", skip_all)]
+async fn recv_tls_proto_header<Io>(
+    stream: &mut Io,
+) -> Result<ProtocolHeader, NegotiationError> 
+where
+    Io: AsyncRead + Unpin,
+{
+    let mut buf = [0u8; 8];
+    stream.read_exact(&mut buf).await?;
+    ProtocolHeader::try_from(buf)
+        .map_err(|buf| NegotiationError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Invalid protocol header",
+        )))
+}
+
+async fn read_and_compare_amqp_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: &ProtocolHeader,

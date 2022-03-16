@@ -120,9 +120,9 @@ pub enum OpenError {
     #[error("Invalid domain")]
     InvalidDomain,
 
-    // /// Missing client config for TLS connection
-    // #[error("TLS client config is not found")]
-    // TlsClientConfigNotFound,
+    /// Missing client config for TLS connection
+    #[error("TLS connector is not found")]
+    TlsConnectorNotFound,
 
     /// Scheme is invalid or not found
     #[error(r#"Invalid scheme. Only "amqp" and "amqps" are supported."#)]

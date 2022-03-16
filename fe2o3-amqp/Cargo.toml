@@ -12,6 +12,13 @@ readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+
+default = []
+
+rustls = ["tokio-rustls", "librustls", "webpki-roots"]
+native-tls = ["tokio-native-tls"]
+
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-test = { version = "0.4" }
@@ -36,7 +43,11 @@ slab = "0.4"
 tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 crossbeam = "0.8"
-tokio-rustls = "0.23"
-rustls = "0.20"
 serde_bytes = "0.11"
 tracing = "0.1"
+
+# Optional deps
+tokio-rustls = { version = "0.23", optional = true }
+tokio-native-tls = { version = "0.3", optional = true }
+librustls = { package = "rustls", version = "0.20", optional = true }
+webpki-roots = { version = "0.22.2", optional = true }
