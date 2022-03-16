@@ -316,7 +316,7 @@ where
     ProtocolHeader::try_from(buf)
         .map_err(|buf| NegotiationError::Io(std::io::Error::new(
             std::io::ErrorKind::Other,
-            "Invalid protocol header",
+            format!("Invalid protocol header {:?}", buf),
         )))
 }
 
