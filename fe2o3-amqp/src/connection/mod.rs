@@ -187,9 +187,6 @@ impl ConnectionHandle {
 /// ## TLS
 ///
 /// TLS is supported with `rustls` by setting the url scheme to `"amqps"`. 
-/// The user must use the builder to supply a custom `ClientConfig` for the TLS connection. 
-/// If there is no custom `ClientConfig`, the TLS handshake will use the the following
-/// config.
 /// 
 /// ```rust, ignore
 /// ClientConfig::builder()
@@ -210,7 +207,6 @@ impl ConnectionHandle {
 /// // Set custom `ClientConfig`
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
-///     .client_config(config)
 ///     .open("amqps://localhost:5672")
 ///     .await.unwrap();
 /// ```

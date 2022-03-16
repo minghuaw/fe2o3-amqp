@@ -14,10 +14,10 @@ readme = "Readme.md"
 
 [features]
 
-default = []
+default = ["rustls"]
 
 rustls = ["tokio-rustls", "librustls", "webpki-roots"]
-native-tls = ["tokio-native-tls"]
+native-tls = ["tokio-native-tls", "libnative-tls"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
@@ -48,6 +48,7 @@ tracing = "0.1"
 
 # Optional deps
 tokio-rustls = { version = "0.23", optional = true }
-tokio-native-tls = { version = "0.3", optional = true }
 librustls = { package = "rustls", version = "0.20", optional = true }
 webpki-roots = { version = "0.22.2", optional = true }
+tokio-native-tls = { version = "0.3", optional = true }
+libnative-tls = { package = "native-tls", version = "0.2.8", optional = true }

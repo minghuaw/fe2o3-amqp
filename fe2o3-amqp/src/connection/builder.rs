@@ -404,12 +404,6 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
         self
     }
 
-    // /// TLS client config
-    // pub fn client_config(mut self, client_config: Option<ClientConfig>) -> Self {
-    //     self.client_config = client_config;
-    //     self
-    // }
-
     /// Connection properties
     pub fn properties(mut self, properties: Fields) -> Self {
         self.properties = Some(properties);
@@ -535,7 +529,6 @@ impl<'a> Builder<'a, WithContainerId, ()> {
     /// ```rust, ignore
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
-    ///     .client_config(config)
     ///     .open("amqp://guest:guest@localhost:5672")
     ///     .await.unwrap();
     ///
@@ -572,6 +565,7 @@ impl<'a> Builder<'a, WithContainerId, ()> {
     }
 
     /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    #[allow(unreachable_code)]
     pub async fn open_with_stream<Io>(
         self,
         stream: Io,
@@ -582,12 +576,70 @@ impl<'a> Builder<'a, WithContainerId, ()> {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
-                return Err(OpenError::TlsConnectorNotFound)
+                #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self.connect_tls_with_rustls_default(stream, domain).await
+                }
+
+                #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self.connect_tls_with_native_tls_default(stream, domain).await
+                }
+
+                Err(OpenError::TlsConnectorNotFound)
             }
             _ => Err(OpenError::InvalidScheme),
         }
     }
+
+    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+    async fn connect_tls_with_rustls_default<Io>(self, stream: Io, domain: &str) -> Result<ConnectionHandle, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        use std::sync::Arc;
+        use librustls::{ClientConfig, RootCertStore, OwnedTrustAnchor};
+        use tokio_rustls::TlsConnector;
+
+        let mut root_cert_store = RootCertStore::empty();
+        root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+            |ta| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            },
+        ));
+        let config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth(); 
+        let connector = TlsConnector::from(Arc::new(config));
+        let tls_stream = Transport::connect_tls_with_rustls(stream, domain, &connector).await?;
+        self.connect_with_stream(tls_stream).await
+    }
+    
+    #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+    async fn connect_tls_with_native_tls_default<Io>(self, stream: Io, domain: &str) -> Result<ConnectionHandle, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        use std::io;
+
+        let connector = libnative_tls::TlsConnector::new()
+            .map_err(|e| OpenError::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{:?}", e)
+            )))?;
+        let connector = tokio_native_tls::TlsConnector::from(connector);
+        let tls_stream = Transport::connect_tls_with_native_tls(stream, domain, &connector).await?;
+        self.connect_with_stream(tls_stream).await
+    }
 }
+
 
 #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
 impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
@@ -641,7 +693,6 @@ impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
     /// ```rust, ignore
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
-    ///     .client_config(config)
     ///     .open("amqp://guest:guest@localhost:5672")
     ///     .await.unwrap();
     ///
@@ -750,7 +801,6 @@ impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
     /// ```rust, ignore
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
-    ///     .client_config(config)
     ///     .open("amqp://guest:guest@localhost:5672")
     ///     .await.unwrap();
     ///
