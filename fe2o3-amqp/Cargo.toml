@@ -12,9 +12,14 @@ readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
-default = ["rustls"]
+[features]
+default = []
+# default = ["rustls"]
+# default = ["native-tls"]
 
 rustls = ["tokio-rustls", "librustls", "webpki-roots"]
 native-tls = ["tokio-native-tls", "libnative-tls"]

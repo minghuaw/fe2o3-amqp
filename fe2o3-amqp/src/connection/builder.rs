@@ -79,7 +79,13 @@ pub struct Builder<'a, Mode, Tls> {
     /// Connection properties
     pub properties: Option<Fields>,
 
-    /// TLS client config
+    /// TLS connector.
+    /// 
+    /// If `"rustls"` is enabled, this field will be [`tokio_rustls::TlsConnector`].
+    /// 
+    /// If `"native-tls"` is enabled, this field will be [`tokio_native_tls::TlsConnector`].
+    /// 
+    /// If none of the above conditions were true, this will default to unit type `()`.
     pub tls_connector: Tls,
 
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions
@@ -231,9 +237,19 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
         }
     }
 
-    /// Set the TLS connector with `tokio-rustls`
-    #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+    /// Alias for [`rustls_connector`](#method.rustls_connector) if only `"rustls"` is enabled
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", not(feature = "native-tls")))))]
+    #[cfg(any(docsrs, all(feature = "rustls", not(feature = "native-tls"))))]
     pub fn tls_connector(self, tls_connector: tokio_rustls::TlsConnector) -> Builder<'a, Mode, tokio_rustls::TlsConnector> {
+        self.rustls_connector(tls_connector)
+    }
+
+    /// Set the TLS connector with `tokio-rustls`
+    /// 
+    /// If only one of `"rustls"` or `"native-tls"` is enabled, a convenience alias function `tls_connector()` is provided.
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+    #[cfg(all(feature = "rustls"))]
+    pub fn rustls_connector(self, tls_connector: tokio_rustls::TlsConnector) -> Builder<'a, Mode, tokio_rustls::TlsConnector> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
@@ -260,9 +276,20 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
         }
     }
 
-    /// Set the TLS connector with `tokio-native-tls`
-    #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+    /// Alias for [`native_tls_connector`](#method.native_tls_connector) if only `"native-tls"` is 
+    /// enabled.
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", not(feature = "rustls")))))]
+    #[cfg(any(docsrs, all(feature = "native-tls", not(feature = "rustls"))))]
     pub fn tls_connector(self, tls_connector: tokio_native_tls::TlsConnector) -> Builder<'a, Mode, tokio_native_tls::TlsConnector> {
+        self.native_tls_connector(tls_connector)
+    }
+
+    /// Set the TLS connector with `tokio-native-tls`
+    /// 
+    /// If only one of `"rustls"` or `"native-tls"` is enabled, a convenience alias function `tls_connector()` is provided.
+    #[cfg_attr(docsrs, doc(cfg(feature = "native-tls")))]
+    #[cfg(feature = "native-tls")]
+    pub fn native_tls_connector(self, tls_connector: tokio_native_tls::TlsConnector) -> Builder<'a, Mode, tokio_native_tls::TlsConnector> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
@@ -603,7 +630,7 @@ impl<'a> Builder<'a, WithContainerId, ()> {
     /// # Alternative TLS establishment
     /// 
     /// This can be used for alternative connection establishment over a TLS stream
-    /// **without** exchanging the TLS protocol header (['A', 'M', 'Q', 'P', 1, 2, 0, 0]).
+    /// **without** exchanging the TLS protocol header (['A', 'M', 'Q', 'P', 2, 1, 0, 0]).
     /// 
     /// An example of establishing connection on a `tokio_native_tls::TlsStream` is shown below. 
     /// The `tls_stream` can be replaced with a `tokio_rustls::client::TlsStream`.
@@ -702,8 +729,7 @@ impl<'a> Builder<'a, WithContainerId, ()> {
     }
 }
 
-
-#[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+#[cfg(all(feature = "rustls"))]
 impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
     ///
@@ -817,7 +843,7 @@ impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
 }
 
 
-#[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+#[cfg(all(feature = "native-tls"))]
 impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
     ///

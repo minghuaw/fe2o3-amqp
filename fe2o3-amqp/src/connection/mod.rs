@@ -195,7 +195,7 @@ impl ConnectionHandle {
 /// # TLS
 ///
 /// If "amqps" is found in url's scheme, the connection will start with exchanging TLS 
-/// protocol header (['A', 'M', 'Q', 'P', 1, 2, 0, 0]).
+/// protocol header (['A', 'M', 'Q', 'P', 2, 1, 0, 0]).
 /// TLS support is only enabled by selecting one and only one of the following feature flags
 /// 
 /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
