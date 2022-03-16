@@ -524,6 +524,35 @@ impl<'a> Builder<'a, WithContainerId, ()> {
     /// 1. "rustls"
     /// 2. "native-tls"
     /// 
+    /// If no custom `TlsConnector` is supplied, the following default connector will be used.
+    /// 
+    /// ## Default TLS connector with `"rustls"` enabled
+    /// 
+    /// ```rust,ignore
+    /// let mut root_cert_store = RootCertStore::empty();
+    /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+    ///     |ta| {
+    ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
+    ///             ta.subject,
+    ///             ta.spki,
+    ///             ta.name_constraints,
+    ///         )
+    ///     },
+    /// ));
+    /// let config = ClientConfig::builder()
+    ///     .with_safe_defaults()
+    ///     .with_root_certificates(root_cert_store)
+    ///     .with_no_client_auth(); 
+    /// let connector = TlsConnector::from(Arc::new(config));
+    /// ```
+    /// 
+    /// ## Default TLS connector with `"native-tls"` enabled
+    /// 
+    /// ```rust,ignore
+    /// let connector = native_tls::TlsConnector::new().unwrap();
+    /// let connector = tokio_native_tls::TlsConnector::from(connector);
+    /// ```
+    /// 
     /// # SASL
     ///
     /// ```rust, ignore
@@ -565,6 +594,39 @@ impl<'a> Builder<'a, WithContainerId, ()> {
     }
 
     /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    /// 
+    /// # TLS
+    /// 
+    /// If the `scheme` field is `"amqps"`, the builder will attempt to start with
+    /// exchanging TLS protocol header.
+    /// 
+    /// # Alternative TLS establishment
+    /// 
+    /// This can be used for alternative connection establishment over a TLS stream
+    /// **without** exchanging the TLS protocol header (['A', 'M', 'Q', 'P', 1, 2, 0, 0]).
+    /// 
+    /// An example of establishing connection on a `tokio_native_tls::TlsStream` is shown below. 
+    /// The `tls_stream` can be replaced with a `tokio_rustls::client::TlsStream`.
+    /// 
+    /// ```rust,ignore
+    /// let addr = "localhost:5671";
+    /// let domain = "localhost";
+    /// let stream = TcpStream::connect(addr).await.unwrap();
+    /// let connector = native_tls::TlsConnector::new();
+    /// let connector = tokio_native_tls::TlsConnector::from(connector);
+    /// let tls_stream = connector.connect(domain, stream).await.unwrap();
+    /// 
+    /// let mut connection = Connection::builder()
+    ///     .container_id("connection-1")
+    ///     .scheme("amqp")
+    ///     .sasl_profile(SaslProfile::Plain {
+    ///         username: "guest".into(),
+    ///         password: "guest".into()
+    ///     })
+    ///     .open_with_stream(tls_stream)
+    ///     .await
+    ///     .unwrap();
+    /// ```
     #[allow(unreachable_code)]
     pub async fn open_with_stream<Io>(
         self,
@@ -671,7 +733,7 @@ impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
     ///     .tls_connector(connector)
-    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .open("amqps://guest:guest@localhost:5671")
     ///     .await.unwrap();
     /// ```
     /// 
@@ -684,7 +746,7 @@ impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
     ///     .tls_connector(connector)
-    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .open("amqps://guest:guest@localhost:5671")
     ///     .await.unwrap();
     /// ```
     ///
@@ -779,7 +841,7 @@ impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
     ///     .tls_connector(connector)
-    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .open("amqps://guest:guest@localhost:5671")
     ///     .await.unwrap();
     /// ```
     /// 
@@ -792,7 +854,7 @@ impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
     /// let connection = Connection::builder()
     ///     .container_id("connection-1")
     ///     .tls_connector(connector)
-    ///     .open("amqps://guest:guest@localhost:5672")
+    ///     .open("amqps://guest:guest@localhost:5671")
     ///     .await.unwrap();
     /// ```
     ///

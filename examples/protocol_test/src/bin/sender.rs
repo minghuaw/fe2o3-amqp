@@ -49,6 +49,7 @@ async fn main() {
     //     .unwrap();
     let mut connection = Connection::builder()
         .container_id("connection-1")
+        .scheme("amqp")
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)

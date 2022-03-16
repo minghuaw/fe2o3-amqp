@@ -169,7 +169,15 @@ impl ConnectionHandle {
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
 /// 
-/// ## Customize configuration with [`Builder`]
+/// # Order of negotiation
+/// 
+/// The order of negotiation follows the priority below
+/// 
+/// 1. TLS
+/// 2. SASL
+/// 3. AMQP
+/// 
+/// # Customize configuration with [`Builder`]
 ///
 /// The example above creates a connection with the default configuration. If the user needs to customize the
 /// configuration, the connection [`Builder`] should be used.
@@ -184,34 +192,111 @@ impl ConnectionHandle {
 ///     .await.unwrap();
 /// ```
 ///
-/// ## TLS
+/// # TLS
 ///
-/// TLS is supported with `rustls` by setting the url scheme to `"amqps"`. 
+/// If "amqps" is found in url's scheme, the connection will start with exchanging TLS 
+/// protocol header (['A', 'M', 'Q', 'P', 1, 2, 0, 0]).
+/// TLS support is only enabled by selecting one and only one of the following feature flags
 /// 
-/// ```rust, ignore
-/// ClientConfig::builder()
+/// 1. `"rustls"`: enables TLS support with `tokio-rustls`
+/// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
+/// 
+/// ## Alternative Establishment
+/// 
+/// The specification allows establishing `Connection` on a pure TLS stream without exchanging the 
+/// TLS protocol header, and this can be accomplished using `Builder`'s `open_with_stream`. 
+/// An example of establishing connection on a `tokio_native_tls::TlsStream` is shown below. 
+/// The `tls_stream` can be replaced with a `tokio_rustls::client::TlsStream`.
+/// 
+/// ```rust,ignore
+/// let addr = "localhost:5671";
+/// let domain = "localhost";
+/// let stream = TcpStream::connect(addr).await.unwrap();
+/// let connector = native_tls::TlsConnector::new();
+/// let connector = tokio_native_tls::TlsConnector::from(connector);
+/// let tls_stream = connector.connect(domain, stream).await.unwrap();
+/// 
+/// let mut connection = Connection::builder()
+///     .container_id("connection-1")
+///     .scheme("amqp")
+///     .sasl_profile(SaslProfile::Plain {
+///         username: "guest".into(),
+///         password: "guest".into()
+///     })
+///     .open_with_stream(tls_stream)
+///     .await
+///     .unwrap();
+/// ```
+/// 
+/// ## TLS with feature `"rustls"` enabled
+/// 
+/// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
+/// The following connector is used unless a custom connector is supplied to the builder.
+/// 
+/// ```rust,ignore
+/// let mut root_cert_store = RootCertStore::empty();
+/// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+///     |ta| {
+///         OwnedTrustAnchor::from_subject_spki_name_constraints(
+///             ta.subject,
+///             ta.spki,
+///             ta.name_constraints,
+///         )
+///     },
+/// ));
+/// let config = ClientConfig::builder()
 ///     .with_safe_defaults()
-///     .with_root_certificates(RootCertStore::empty())
-///     .with_no_client_auth()
+///     .with_root_certificates(root_cert_store)
+///     .with_no_client_auth(); 
+/// let connector = TlsConnector::from(Arc::new(config));
 /// ```
 /// 
-/// The code example below shows TLS connection without supplying a custom `ClientConfig`
+/// Start TLS connection negotiation with default TLS connector
 /// 
-/// ```rust, ignore
-/// let connection = Connection::open("connection-1", "amqps://localhost:5672").await.unwrap();
+/// ```rust,ignore
+/// let connector = Connection::open("amqps://guest:guest@localhost:5671").await.unwrap();
 /// ```
 /// 
-/// The code example below shows how a user can supply a custom `ClientConfig` using builder.
-///
+/// Below shows how to use a custom `tokio_rustls::TlsConnector` for TLS.
+/// 
 /// ```rust, ignore
-/// // Set custom `ClientConfig`
+/// let config = rustls::ClientConfig::builder()
+///     .with_safe_defaults()
+///     .with_root_certificates(root_cert_store)
+///     .with_no_client_auth(); // i guess this was previously the default?
+/// let connector = TlsConnector::from(Arc::new(config));
+/// 
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
-///     .open("amqps://localhost:5672")
+///     .tls_connector(connector)
+///     .open("amqps://guest:guest@localhost:5671")
+///     .await.unwrap();
+/// ```
+/// 
+/// ## TLS with feature `"native-tls"` enabled
+/// 
+/// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
+/// The following connector is used unless a custom connector is supplied to the builder.
+/// 
+/// ```rust,ignore
+/// let connector = native_tls::TlsConnector::new().unwrap();
+/// let connector = tokio_native_tls::TlsConnector::from(connector);
+/// ```
+/// 
+/// Below shows how to use a custom `tokio_native_tls::TlsConnector`.
+/// 
+/// ```rust,ignore
+/// let connector = native_tls::TlsConnector::new();
+/// let connector = tokio_native_tls::TlsConnector::from(connector);
+/// 
+/// let connection = Connection::builder()
+///     .container_id("connection-1")
+///     .tls_connector(connector)
+///     .open("amqps://guest:guest@localhost:5671")
 ///     .await.unwrap();
 /// ```
 ///
-/// ## SASL
+/// # SASL
 ///
 /// If `username` and `password` are supplied with the url, the connection negotiation will start with
 /// SASL PLAIN negotiation. Other than filling `username` and `password` in the url, one could also
@@ -292,19 +377,47 @@ impl Connection {
     /// 
     /// # TLS
     /// 
-    /// This will start TLS negotiation with the following `ClientConfig`
+    /// TLS support is enabled by selecting one and only one of the following feature flags
+    /// 
+    /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
+    /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
     /// 
     /// ```rust, ignore
-    /// ClientConfig::builder()
+    /// let connection = Connection::open("connection-1", "amqps://localhost:5671").await.unwrap();
+    /// ```
+    /// ## TLS with feature `"rustls"` enabled
+    /// 
+    /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
+    /// The following connector is used unless a custom connector is supplied to the builder.
+    /// 
+    /// ```rust,ignore
+    /// let mut root_cert_store = RootCertStore::empty();
+    /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+    ///     |ta| {
+    ///         OwnedTrustAnchor::from_subject_spki_name_constraints(
+    ///             ta.subject,
+    ///             ta.spki,
+    ///             ta.name_constraints,
+    ///         )
+    ///     },
+    /// ));
+    /// let config = ClientConfig::builder()
     ///     .with_safe_defaults()
-    ///     .with_root_certificates(RootCertStore::empty())
-    ///     .with_no_client_auth()
+    ///     .with_root_certificates(root_cert_store)
+    ///     .with_no_client_auth(); 
+    /// let connector = TlsConnector::from(Arc::new(config));
     /// ```
     /// 
-    /// ```rust, ignore
-    /// let connection = Connection::open("connection-1", "amqps://localhost:5672").await.unwrap();
+    /// ### TLS with feature `"native-tls"` enabled
+    /// 
+    /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
+    /// The following connector is used unless a custom connector is supplied to the builder.
+    /// 
+    /// ```rust,ignore
+    /// let connector = native_tls::TlsConnector::new().unwrap();
+    /// let connector = tokio_native_tls::TlsConnector::from(connector);
     /// ```
-    ///
+    /// 
     /// # SASL
     ///
     /// Start SASL negotiation with SASL PLAIN profile extracted from the url
