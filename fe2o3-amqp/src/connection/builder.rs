@@ -335,27 +335,6 @@ impl<'a, Mode> Builder<'a, Mode> {
 }
 
 impl<'a> Builder<'a, WithContainerId> {
-    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
-    pub async fn open_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        match self.sasl_profile.take() {
-            Some(profile) => {
-                let hostname = self.hostname;
-                let scheme = self.scheme;
-                let domain = self.domain;
-                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
-                self.connect_with_stream(stream, scheme, domain).await
-            }
-            None => {
-                let scheme = self.scheme;
-                let domain = self.domain;
-                self.connect_with_stream(stream, scheme, domain).await
-            }
-        }
-    }
-
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection
@@ -417,6 +396,7 @@ impl<'a> Builder<'a, WithContainerId> {
 
         let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
         let stream = TcpStream::connect(&*addr).await?; // std::io::Error
+        
         self.open_with_stream(stream).await
     }
 
@@ -434,19 +414,18 @@ impl<'a> Builder<'a, WithContainerId> {
     //     todo!()
     // }
 
-    async fn connect_with_stream<Io>(
+    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`
+    pub async fn open_with_stream<Io>(
         mut self,
         stream: Io,
-        scheme: &str,
-        domain: Option<&str>,
     ) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        match scheme {
-            "amqp" => self.connect_with_stream_inner(stream).await,
+        match self.scheme {
+            "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
-                let domain = domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
                 let config = self
                     .client_config
                     .take()
@@ -458,9 +437,26 @@ impl<'a> Builder<'a, WithContainerId> {
                             .with_no_client_auth()
                 );
                 let tls_stream = Transport::connect_tls(stream, domain, config).await?;
-                self.connect_with_stream_inner(tls_stream).await
+                self.connect_with_stream(tls_stream).await
             }
             _ => Err(OpenError::InvalidScheme),
+        }
+    }
+
+        
+    async fn connect_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                let hostname = self.hostname;
+                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
+                self.connect_with_stream_inner(stream).await
+            }
+            None => {
+                self.connect_with_stream_inner(stream).await
+            }
         }
     }
 
