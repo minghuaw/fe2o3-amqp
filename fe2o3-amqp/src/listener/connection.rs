@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use fe2o3_amqp_types::{performatives::MaxFrameSize, definitions::{Milliseconds, MIN_MAX_FRAME_SIZE}};
 use futures_util::sink::With;
 use tokio::io::AsyncReadExt;
 
@@ -12,12 +13,12 @@ use super::Listener;
 type ConnectionBuilder<'a, Tls> = crate::connection::Builder<'a, WithContainerId, Tls>;
 
 /// Listener for incoming connections
-pub struct ConnectionListener<'a, L: Listener, Tls> {
-    builder: ConnectionBuilder<'a, Tls>,
+pub struct ConnectionListener<L: Listener> {
+    idle_time_out: Option<Milliseconds>,
     listener: L
 }
 
-impl<'a, L: Listener, Tls> std::fmt::Debug for ConnectionListener<'a, L, Tls> {
+impl<L: Listener> std::fmt::Debug for ConnectionListener<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionListener")
             // .field("builder", &self.builder)
@@ -26,7 +27,7 @@ impl<'a, L: Listener, Tls> std::fmt::Debug for ConnectionListener<'a, L, Tls> {
     }
 }
 
-impl<'a, L> ConnectionListener<'a, L, ()> 
+impl<L> ConnectionListener<L> 
 where
     L: Listener
 {
@@ -55,10 +56,9 @@ where
 
         match header.id {
             ProtocolId::Amqp => {
-                let max_frame_size = self.builder.max_frame_size.0 as usize;
-                let idle_time_out = self.builder.idle_time_out
+                let idle_time_out = self.idle_time_out
                     .map(|millis| Duration::from_millis(millis as u64));
-                let transport = Transport::<_, amqp::Frame>::bind(stream, max_frame_size, idle_time_out);
+                let transport = Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
             },
             ProtocolId::Tls => todo!(),
             ProtocolId::Sasl => todo!(),
@@ -72,5 +72,5 @@ where
 /// A connection on the listener side
 #[derive(Debug)]
 pub struct ListenerConnection { 
-
+    
 }
