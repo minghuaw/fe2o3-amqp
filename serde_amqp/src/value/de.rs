@@ -1304,11 +1304,27 @@ mod tests {
         let foo = Foo(Some(true), Some(3));
         let buf = to_vec(&foo).unwrap();
         let value: Value = from_slice(&buf).unwrap();
-        let expected = Value::Described(Described {
+        let expected_foo = Value::Described(Described {
             descriptor: Descriptor::Code(0x13),
             value: Box::new(Value::List(vec![Value::Bool(true), Value::Int(3)])),
         });
-        assert_eq!(value, expected);
+        assert_eq!(value, expected_foo);
+
+        #[derive(Debug, SerializeComposite, DeserializeComposite)]
+        #[amqp_contract(code = 0x31, encoding = "list")]
+        struct Bar(i32, Foo);
+
+        let bar = Bar(13, foo);
+        let buf = to_vec(&bar).unwrap();
+        let value: Value = from_slice(&buf).unwrap();
+        let expected_bar = Value::Described(Described {
+            descriptor: Descriptor::Code(0x31),
+            value: Box::new(Value::List(vec![
+                Value::Int(13),
+                expected_foo
+            ]))
+        });
+        assert_eq!(value, expected_bar);
     }
 
     // #[test]
