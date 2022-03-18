@@ -38,6 +38,7 @@ pub struct WithoutContainerId {}
 pub struct WithContainerId {}
 
 /// Builder for [`crate::Connection`]
+#[derive(Clone)]
 pub struct Builder<'a, Mode, Tls> {
     /// The id of the source container
     pub container_id: String,
