@@ -109,9 +109,9 @@ impl<'de> de::Deserialize<'de> for Field {
     }
 }
 
-struct Visitor {}
+struct ValueVisitor {}
 
-impl<'de> de::Visitor<'de> for Visitor {
+impl<'de> de::Visitor<'de> for ValueVisitor {
     type Value = Value;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -235,34 +235,35 @@ impl<'de> de::Deserialize<'de> for Value {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
-            "Described",
-            "Null",
-            "Bool",
-            "UByte",
-            "UShort",
-            "UInt",
-            "ULong",
-            "Byte",
-            "Short",
-            "Int",
-            "Long",
-            "Float",
-            "Double",
-            "Decimal32",
-            "Decimal64",
-            "Decimal128",
-            "Char",
-            "Timestamp",
-            "Uuid",
-            "Binary",
-            "String",
-            "Symbol",
-            "List",
-            "Map",
-            "Array",
-        ];
-        deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
+        // const VARIANTS: &'static [&'static str] = &[
+        //     "Described",
+        //     "Null",
+        //     "Bool",
+        //     "UByte",
+        //     "UShort",
+        //     "UInt",
+        //     "ULong",
+        //     "Byte",
+        //     "Short",
+        //     "Int",
+        //     "Long",
+        //     "Float",
+        //     "Double",
+        //     "Decimal32",
+        //     "Decimal64",
+        //     "Decimal128",
+        //     "Char",
+        //     "Timestamp",
+        //     "Uuid",
+        //     "Binary",
+        //     "String",
+        //     "Symbol",
+        //     "List",
+        //     "Map",
+        //     "Array",
+        // ];
+        // deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
+        deserializer.deserialize_any(ValueVisitor {})
     }
 }
 
@@ -1082,4 +1083,13 @@ mod tests {
         });
         assert_eq!(value, expected);
     }
+
+    // #[test]
+    // fn test_json() {
+    //     let value = Value::Bool(true);
+    //     let json = serde_json::to_string(&value).unwrap();
+    //     println!("{:?}", json);
+    //     let value2: Value = serde_json::from_str(&json).unwrap();
+    //     println!("{:?}", value2);
+    // }
 }
