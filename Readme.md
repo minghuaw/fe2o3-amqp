@@ -80,3 +80,4 @@ async fn main() {
 - [ ] Listeners
 - [ ] Link re-attachment
 - [ ] Message batch disposition
+- [ ] qpid interoperability test
