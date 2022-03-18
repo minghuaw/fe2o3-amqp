@@ -5,9 +5,11 @@ use std::{net::SocketAddr, io};
 use async_trait::async_trait;
 use tokio::{io::{AsyncRead, AsyncWrite}, net::{TcpStream, TcpListener}};
 
-pub mod connection;
-pub mod session;
-pub mod link;
+pub(crate) mod connection;
+pub(crate) mod session;
+pub(crate) mod link;
+
+pub use self::connection::{ConnectionListener, ConnectionHandle};
 
 /// Trait for listeners
 #[async_trait]

@@ -71,6 +71,12 @@ where
 
 /// A connection on the listener side
 #[derive(Debug)]
-pub struct ListenerConnection { 
+pub struct ConnectionHandle { 
     
+}
+
+/// Connection event loop on the listener side
+#[derive(Debug)]
+pub struct ConnectionEngine {
+
 }
