@@ -1438,7 +1438,7 @@ mod test {
     use crate::{
         descriptor::Descriptor,
         format_code::EncodingCodes,
-        primitives::{Array, Dec128, Dec32, Dec64, Timestamp, Uuid, Symbol},
+        primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
     };
 
     use super::*;

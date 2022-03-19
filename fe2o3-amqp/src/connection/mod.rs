@@ -168,15 +168,15 @@ impl ConnectionHandle {
 /// |`offered_capabilities`| `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
-/// 
+///
 /// # Order of negotiation
-/// 
+///
 /// The order of negotiation follows the priority below
-/// 
+///
 /// 1. TLS
 /// 2. SASL
 /// 3. AMQP
-/// 
+///
 /// # Customize configuration with [`Builder`]
 ///
 /// The example above creates a connection with the default configuration. If the user needs to customize the
@@ -194,20 +194,20 @@ impl ConnectionHandle {
 ///
 /// # TLS
 ///
-/// If "amqps" is found in url's scheme, the connection will start with exchanging TLS 
+/// If "amqps" is found in url's scheme, the connection will start with exchanging TLS
 /// protocol header (['A', 'M', 'Q', 'P', 2, 1, 0, 0]).
 /// TLS support is only enabled by selecting one and only one of the following feature flags
-/// 
+///
 /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
 /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
-/// 
+///
 /// ## Alternative Establishment
-/// 
-/// The specification allows establishing `Connection` on a pure TLS stream without exchanging the 
-/// TLS protocol header, and this can be accomplished using `Builder`'s `open_with_stream`. 
-/// An example of establishing connection on a `tokio_native_tls::TlsStream` is shown below. 
+///
+/// The specification allows establishing `Connection` on a pure TLS stream without exchanging the
+/// TLS protocol header, and this can be accomplished using `Builder`'s `open_with_stream`.
+/// An example of establishing connection on a `tokio_native_tls::TlsStream` is shown below.
 /// The `tls_stream` can be replaced with a `tokio_rustls::client::TlsStream`.
-/// 
+///
 /// ```rust,ignore
 /// let addr = "localhost:5671";
 /// let domain = "localhost";
@@ -215,7 +215,7 @@ impl ConnectionHandle {
 /// let connector = native_tls::TlsConnector::new();
 /// let connector = tokio_native_tls::TlsConnector::from(connector);
 /// let tls_stream = connector.connect(domain, stream).await.unwrap();
-/// 
+///
 /// let mut connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .scheme("amqp")
@@ -227,12 +227,12 @@ impl ConnectionHandle {
 ///     .await
 ///     .unwrap();
 /// ```
-/// 
+///
 /// ## TLS with feature `"rustls"` enabled
-/// 
+///
 /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
 /// The following connector is used unless a custom connector is supplied to the builder.
-/// 
+///
 /// ```rust,ignore
 /// let mut root_cert_store = RootCertStore::empty();
 /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
@@ -247,48 +247,48 @@ impl ConnectionHandle {
 /// let config = ClientConfig::builder()
 ///     .with_safe_defaults()
 ///     .with_root_certificates(root_cert_store)
-///     .with_no_client_auth(); 
+///     .with_no_client_auth();
 /// let connector = TlsConnector::from(Arc::new(config));
 /// ```
-/// 
+///
 /// Start TLS connection negotiation with default TLS connector
-/// 
+///
 /// ```rust,ignore
 /// let connector = Connection::open("amqps://guest:guest@localhost:5671").await.unwrap();
 /// ```
-/// 
+///
 /// Below shows how to use a custom `tokio_rustls::TlsConnector` for TLS.
-/// 
+///
 /// ```rust, ignore
 /// let config = rustls::ClientConfig::builder()
 ///     .with_safe_defaults()
 ///     .with_root_certificates(root_cert_store)
 ///     .with_no_client_auth(); // i guess this was previously the default?
 /// let connector = TlsConnector::from(Arc::new(config));
-/// 
+///
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .tls_connector(connector)
 ///     .open("amqps://guest:guest@localhost:5671")
 ///     .await.unwrap();
 /// ```
-/// 
+///
 /// ## TLS with feature `"native-tls"` enabled
-/// 
+///
 /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
 /// The following connector is used unless a custom connector is supplied to the builder.
-/// 
+///
 /// ```rust,ignore
 /// let connector = native_tls::TlsConnector::new().unwrap();
 /// let connector = tokio_native_tls::TlsConnector::from(connector);
 /// ```
-/// 
+///
 /// Below shows how to use a custom `tokio_native_tls::TlsConnector`.
-/// 
+///
 /// ```rust,ignore
 /// let connector = native_tls::TlsConnector::new();
 /// let connector = tokio_native_tls::TlsConnector::from(connector);
-/// 
+///
 /// let connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .tls_connector(connector)
@@ -304,16 +304,16 @@ impl ConnectionHandle {
 /// found in the url will override whatever `SaslProfile` supplied to the [`Builder`].
 ///
 /// The examples below shows two ways of starting the connection with SASL negotiation.
-/// 
+///
 /// 1. Start SASL negotiation with SASL PLAIN profile extracted from the url
 ///
 ///     ```rust,ignore
 ///     let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
 ///     ```
-/// 
-/// 2. Start SASL negotiation with the builder. Please note that tf the url contains `username` and `password`, 
+///
+/// 2. Start SASL negotiation with the builder. Please note that tf the url contains `username` and `password`,
 /// the profile supplied to the builder will be overriden.
-/// 
+///
 ///     ```
 ///     // This is equivalent to the line above
 ///     let profile = SaslProfile::Plain {
@@ -374,22 +374,22 @@ impl Connection {
     /// ```rust, ignore
     /// let connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
     /// ```
-    /// 
+    ///
     /// # TLS
-    /// 
+    ///
     /// TLS support is enabled by selecting one and only one of the following feature flags
-    /// 
+    ///
     /// 1. `"rustls"`: enables TLS support with `tokio-rustls`
     /// 2. `"native-tls"`: enables TLS support with `tokio-native-tls`
-    /// 
+    ///
     /// ```rust, ignore
     /// let connection = Connection::open("connection-1", "amqps://localhost:5671").await.unwrap();
     /// ```
     /// ## TLS with feature `"rustls"` enabled
-    /// 
+    ///
     /// TLS connection can be established with a default connector or a custom `tokio_rustls::TlsConnector`.
     /// The following connector is used unless a custom connector is supplied to the builder.
-    /// 
+    ///
     /// ```rust,ignore
     /// let mut root_cert_store = RootCertStore::empty();
     /// root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
@@ -404,24 +404,24 @@ impl Connection {
     /// let config = ClientConfig::builder()
     ///     .with_safe_defaults()
     ///     .with_root_certificates(root_cert_store)
-    ///     .with_no_client_auth(); 
+    ///     .with_no_client_auth();
     /// let connector = TlsConnector::from(Arc::new(config));
     /// ```
-    /// 
+    ///
     /// ### TLS with feature `"native-tls"` enabled
-    /// 
+    ///
     /// TLS connection can be established with a default connector or a custom `tokio_native_tls::TlsConnector`.
     /// The following connector is used unless a custom connector is supplied to the builder.
-    /// 
+    ///
     /// ```rust,ignore
     /// let connector = native_tls::TlsConnector::new().unwrap();
     /// let connector = tokio_native_tls::TlsConnector::from(connector);
     /// ```
-    /// 
+    ///
     /// # SASL
     ///
     /// Start SASL negotiation with SASL PLAIN profile extracted from the url
-    /// 
+    ///
     /// ```rust, ignore
     /// let connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672").await.unwrap();
     /// ```
@@ -535,32 +535,11 @@ impl endpoint::Connection for Connection {
     #[instrument(name = "RECV", skip_all)]
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
         trace!(channel, frame = ?begin);
-        match &self.local_state {
-            ConnectionState::Opened => {}
-            // TODO: what about pipelined
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // TODO: what to do?
-        }
-
-        match begin.remote_channel {
-            Some(outgoing_channel) => {
-                let session_id = self
-                    .session_by_outgoing_channel
-                    .get(&outgoing_channel)
-                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?; // Close with error NotFound
-
-                if self.session_by_incoming_channel.contains_key(&channel) {
-                    return Err(Error::amqp_error(AmqpError::NotAllowed, None)); // TODO: this is probably not how not allowed should be used?
-                }
-                self.session_by_incoming_channel
-                    .insert(channel, *session_id);
-
+        match self.on_incoming_begin_inner(channel, &begin)? {
+            Some(session_id) => {
                 // forward begin to session
-                let tx = self
-                    .local_sessions
-                    .get_mut(*session_id)
-                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
-                tx.send(sframe).await?;
+                self.send_to_session(session_id, sframe).await?;
             }
             None => {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
@@ -703,5 +682,61 @@ impl endpoint::Connection for Connection {
     ) -> Option<&mut Sender<SessionIncomingItem>> {
         let session_id = self.session_by_outgoing_channel.get(&channel)?;
         self.local_sessions.get_mut(*session_id)
+    }
+}
+
+impl Connection {
+    pub(crate) async fn send_to_session(
+        &mut self,
+        session_id: usize,
+        frame: SessionFrame,
+    ) -> Result<(), Error> {
+        let tx = self
+            .local_sessions
+            .get_mut(session_id)
+            .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
+        tx.send(frame).await?;
+        Ok(())
+    }
+
+    pub(crate) fn on_incoming_begin_inner(
+        &mut self,
+        channel: u16,
+        begin: &Begin,
+    ) -> Result<Option<usize>, Error> {
+        match &self.local_state {
+            ConnectionState::Opened => {}
+            // TODO: what about pipelined
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // TODO: what to do?
+        }
+
+        match begin.remote_channel {
+            // This corresponds a locally initiated session
+            Some(outgoing_channel) => {
+                let session_id = self
+                    .session_by_outgoing_channel
+                    .get(&outgoing_channel)
+                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?; // Close with error NotFound
+
+                if self.session_by_incoming_channel.contains_key(&channel) {
+                    return Err(Error::amqp_error(AmqpError::NotAllowed, None)); // TODO: this is probably not how not allowed should be used?
+                }
+                self.session_by_incoming_channel
+                    .insert(channel, *session_id);
+                Ok(Some(*session_id))
+            }
+            // This corresponds to remotely initated session
+            None => {
+                // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
+                // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
+                // remote session sent the begin.
+                // TODO: allow remotely initiated session
+                // return Err(Error::amqp_error(
+                //     AmqpError::NotImplemented,
+                //     Some("Remotely initiazted session is not supported yet".to_string()),
+                // )); // Close with error NotImplemented
+                Ok(None)
+            }
+        }
     }
 }

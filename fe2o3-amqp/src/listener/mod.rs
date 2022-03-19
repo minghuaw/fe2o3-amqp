@@ -1,15 +1,18 @@
 //! Listeners
 
-use std::{net::SocketAddr, io};
+use std::{io, net::SocketAddr};
 
 use async_trait::async_trait;
-use tokio::{io::{AsyncRead, AsyncWrite}, net::{TcpStream, TcpListener}};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::{TcpListener, TcpStream},
+};
 
 pub(crate) mod connection;
-pub(crate) mod session;
 pub(crate) mod link;
+pub(crate) mod session;
 
-pub use self::connection::{ConnectionListener, ConnectionHandle};
+pub use self::connection::ConnectionListener;
 
 /// Trait for listeners
 #[async_trait]
@@ -38,8 +41,7 @@ impl Listener for TcpListener {
     }
 
     async fn accept(&self) -> Result<Self::Stream, io::Error> {
-        self.accept().await
-            .map(|(socket, _)| socket)
+        self.accept().await.map(|(socket, _)| socket)
     }
 }
 

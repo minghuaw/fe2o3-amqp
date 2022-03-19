@@ -48,9 +48,9 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 ///     "q1"                    // Target address
 /// ).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`name`|`String::default()`|
@@ -65,9 +65,9 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 /// |`Properties`| `None` |
 /// |`buffer_size`| `u16::MAX` |
 /// |`role`| `role::Sender` |
-/// 
+///
 /// # Customize configuration with [`builder::Builder`]
-/// 
+///
 /// ```rust, ignore
 /// let mut sender = Sender::builder()
 ///     .name("rust-sender-link-1")
@@ -161,7 +161,7 @@ impl Sender<Detached> {
     /// Attach the sender link to a session with default configuration
     ///
     /// ## Default configuration
-    /// 
+    ///
     /// | Field | Default Value |
     /// |-------|---------------|
     /// |`name`|`String::default()`|

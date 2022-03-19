@@ -144,7 +144,7 @@ impl Builder {
     ///     .begin(&mut connection)
     ///     .await.unwrap();
     /// ```
-    /// 
+    ///
     pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
         use super::Session;
 

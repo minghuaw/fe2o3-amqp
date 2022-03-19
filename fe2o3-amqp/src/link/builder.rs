@@ -115,15 +115,13 @@ impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
 
 impl Builder<role::Sender, WithoutName, WithoutTarget> {
     pub(crate) fn new() -> Self {
-        Self::default()
-            .source(Source::builder().build())
+        Self::default().source(Source::builder().build())
     }
 }
 
 impl Builder<role::Receiver, WithoutName, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::default()
-            .target(Target::builder().build())
+        Builder::default().target(Target::builder().build())
     }
 }
 
@@ -329,7 +327,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
     /// Attach the link as a sender
     ///
     /// # Example
-    /// 
+    ///
     /// ```rust, ignore
     /// let mut sender = Sender::builder()
     ///     .name("rust-sender-link-1")

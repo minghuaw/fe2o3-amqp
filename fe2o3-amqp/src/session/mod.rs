@@ -9,7 +9,8 @@ use fe2o3_amqp_types::{
         SessionError, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol, states::SessionState,
+    primitives::Symbol,
+    states::SessionState,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -40,9 +41,7 @@ pub use error::Error;
 mod builder;
 pub use builder::*;
 
-use self::{
-    frame::{SessionFrame, SessionFrameBody},
-};
+use self::frame::{SessionFrame, SessionFrameBody};
 
 /// A handle to the [`Session`] event loop
 ///
@@ -156,12 +155,12 @@ pub(crate) async fn allocate_link(
 ///
 /// ```rust,ignore
 /// use fe2o3_amqp::Session;
-/// 
+///
 /// let session = Session::begin(&mut connection).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`next_outgoing_id`| 0 |
@@ -171,19 +170,19 @@ pub(crate) async fn allocate_link(
 /// |`offered_capabilities` | `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
-/// 
+///
 /// # Customize configuration with [`Builder`]
-/// 
+///
 /// The builder should be used if the user would like to customize the configuration
 /// for the session.
-/// 
+///
 /// ```rust, ignore
 /// let session = Session::builder()
 ///     .handle_max(128)
 ///     .begin(&mut connection)
 ///     .await.unwrap();
 /// ```
-/// 
+///
 #[derive(Debug)]
 pub struct Session {
     control: mpsc::Sender<SessionControl>,
@@ -230,9 +229,9 @@ impl Session {
     }
 
     /// Begins a new session with the default configurations
-    /// 
+    ///
     /// # Default configuration
-    /// 
+    ///
     /// | Field | Default Value |
     /// |-------|---------------|
     /// |`next_outgoing_id`| 0 |
@@ -242,12 +241,12 @@ impl Session {
     /// |`offered_capabilities` | `None` |
     /// |`desired_capabilities`| `None` |
     /// |`Properties`| `None` |
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust,ignore
     /// use fe2o3_amqp::Session;
-    /// 
+    ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
     pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
@@ -367,7 +366,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
         // Handle session flow control
-        // 
+        //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
         // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
         // window directly from the outgoing-window of the frame.

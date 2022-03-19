@@ -4,7 +4,7 @@
 //! An rust implementation of ASMQP 1.0 protocol based on serde and tokio.
 //!
 //! [![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
-//! 
+//!
 //! # Quick start
 //!
 //! Below is an example with a local broker (
@@ -74,10 +74,10 @@ pub mod connection;
 pub mod endpoint;
 pub mod frames;
 pub mod link;
+pub mod listener;
 pub mod sasl_profile;
 pub mod session;
 pub mod transport;
-pub mod listener;
 
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`

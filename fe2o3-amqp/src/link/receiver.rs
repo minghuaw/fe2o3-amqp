@@ -168,7 +168,7 @@ impl Default for CreditMode {
 /// An AMQP1.0 receiver
 ///
 /// # Attach a new receiver with default configurations
-/// 
+///
 /// ```rust, ignore
 /// let mut receiver = Receiver::attach(
 ///     &mut session,           // mutable reference to SessionHandle
@@ -176,9 +176,9 @@ impl Default for CreditMode {
 ///     "q1"                    // Source address
 /// ).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`name`|`String::default()`|
@@ -195,7 +195,7 @@ impl Default for CreditMode {
 /// |`role`| `role::Sender` |
 ///
 /// # Customize configuration with [`builder::Builder`]
-/// 
+///
 /// ```rust, ignore
 /// let mut receiver = Receiver::builder()
 ///     .name("rust-receiver-link-1")
@@ -233,7 +233,7 @@ impl Receiver<Detached> {
     /// Attach the receiver link to a session with the default configuration
     ///
     /// # Default configuration
-    /// 
+    ///
     /// | Field | Default Value |
     /// |-------|---------------|
     /// |`name`|`String::default()`|
@@ -248,10 +248,10 @@ impl Receiver<Detached> {
     /// |`Properties`| `None` |
     /// |`buffer_size`| `u16::MAX` |
     /// |`role`| `role::Sender` |
-    /// 
+    ///
     ///  
     /// # Example
-    /// 
+    ///
     /// ```rust, ignore
     /// let mut receiver = Receiver::attach(
     ///     &mut session,           // mutable reference to SessionHandle

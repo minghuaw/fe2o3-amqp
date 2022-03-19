@@ -2,6 +2,4 @@
 
 /// Listener for incoming link
 #[derive(Debug)]
-pub struct LinkListener {
-
-}
+pub struct LinkListener {}

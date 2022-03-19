@@ -2,6 +2,4 @@
 
 /// Listener for incoming session
 #[derive(Debug)]
-pub struct SessionListener {
-
-}
+pub struct SessionListener {}
