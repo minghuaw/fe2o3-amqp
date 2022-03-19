@@ -4,6 +4,7 @@ use std::{collections::BTreeMap, convert::TryInto};
 
 use ordered_float::OrderedFloat;
 use serde::de::{self};
+use serde_bytes::ByteBuf;
 
 use crate::{
     __constants::{
@@ -16,10 +17,38 @@ use crate::{
         // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR,
         EnumType,
         NewType,
-    },
+    }, primitives::Array,
 };
 
 use super::Value;
+
+const VARIANTS: &'static [&'static str] = &[
+    "Described",
+    "Null",
+    "Bool",
+    "UByte",
+    "UShort",
+    "UInt",
+    "ULong",
+    "Byte",
+    "Short",
+    "Int",
+    "Long",
+    "Float",
+    "Double",
+    "Decimal32",
+    "Decimal64",
+    "Decimal128",
+    "Char",
+    "Timestamp",
+    "Uuid",
+    "Binary",
+    "String",
+    "Symbol",
+    "List",
+    "Map",
+    "Array",
+];
 
 enum Field {
     Described,
@@ -109,9 +138,47 @@ impl<'de> de::Deserialize<'de> for Field {
     }
 }
 
-struct Visitor {}
+struct SeqValueSeed<'a> {
+    visitor_type: &'a mut SeqVisitorType
+}
 
-impl<'de> de::Visitor<'de> for Visitor {
+impl<'a> SeqValueSeed<'a> {
+    pub fn new(visitor_type: &'a mut SeqVisitorType) -> Self {
+        Self {
+            visitor_type
+        }
+    }
+}
+
+impl<'a, 'de: 'a> de::DeserializeSeed<'de> for SeqValueSeed<'a> {
+    type Value = Value;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de> 
+    {
+        let value = deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
+            visitor_type: SeqVisitorType::Sequence
+        })?;
+
+        if let Value::Described(_) = &value {
+            *self.visitor_type = SeqVisitorType::Described;
+        }
+
+        Ok(value)
+    }
+}
+
+enum SeqVisitorType {
+    Described,
+    Sequence,
+}
+
+struct ValueVisitor {
+    visitor_type: SeqVisitorType
+}
+
+impl<'de> de::Visitor<'de> for ValueVisitor {
     type Value = Value;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -228,6 +295,191 @@ impl<'de> de::Visitor<'de> for Visitor {
             }
         }
     }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Bool(v))
+    }
+
+    fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Byte(v))
+    }
+
+    fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Short(v))
+    }
+
+    fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Long(v))
+    }
+
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::UByte(v))
+    }
+
+    fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::UShort(v))
+    }
+
+    fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::UInt(v))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::ULong(v))
+    }
+
+    fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Float(OrderedFloat(v)))
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Double(OrderedFloat(v)))
+    }
+
+    fn visit_char<E>(self, v: char) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Char(v))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        // TODO: what about symbols?
+        Ok(Value::String(v.into()))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::String(v))
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Binary(ByteBuf::from(v)))
+    }
+
+    fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Binary(ByteBuf::from(v)))
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Null)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_option(self)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Null)
+    }
+
+    fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_enum(VALUE, VARIANTS, self)
+    }
+
+    fn visit_seq<A>(mut self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        // The first value could be descriptor
+        let seed = SeqValueSeed::new(&mut self.visitor_type);
+        let value = seq.next_element_seed(seed)?;
+        let value = match value {
+            Some(value) => value, 
+            None => return Ok(Value::List(Vec::with_capacity(0)))
+        };
+
+        // Test whether we are dealing with a Described value
+        match self.visitor_type {
+            SeqVisitorType::Described => return Ok(value),
+            SeqVisitorType::Sequence => {}
+        }
+
+        let first_code = value.format_code();
+        let mut all_the_same_type = true;
+        let mut buf = vec![value];
+
+        while let Some(value) = seq.next_element_seed(SeqValueSeed::new(&mut self.visitor_type))? {
+            all_the_same_type = all_the_same_type && (value.format_code() == first_code);
+            buf.push(value);
+        }
+
+        match all_the_same_type {
+            true => Ok(Value::Array(Array(buf))),
+            false => Ok(Value::List(buf))
+        }
+    }
+
+    fn visit_map<A>(self, mut map_accessor: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut map = BTreeMap::new();
+        while let Some((key, val)) = map_accessor.next_entry()? {
+            map.insert(key, val);
+        }
+        Ok(Value::Map(map))
+    }
 }
 
 impl<'de> de::Deserialize<'de> for Value {
@@ -235,34 +487,25 @@ impl<'de> de::Deserialize<'de> for Value {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
-            "Described",
-            "Null",
-            "Bool",
-            "UByte",
-            "UShort",
-            "UInt",
-            "ULong",
-            "Byte",
-            "Short",
-            "Int",
-            "Long",
-            "Float",
-            "Double",
-            "Decimal32",
-            "Decimal64",
-            "Decimal128",
-            "Char",
-            "Timestamp",
-            "Uuid",
-            "Binary",
-            "String",
-            "Symbol",
-            "List",
-            "Map",
-            "Array",
-        ];
-        deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
+        #[cfg(not(feature = "json"))]
+        {
+            deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
+                visitor_type: SeqVisitorType::Sequence,
+            })
+        }
+
+        #[cfg(feature = "json")]
+        {
+            if deserializer.is_human_readable() {
+                deserializer.deserialize_any(ValueVisitor {
+                    visitor_type: SeqVisitorType::Sequence
+                })
+            } else {
+                deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
+                    visitor_type: SeqVisitorType::Sequence,
+                })
+            }
+        }
     }
 }
 
@@ -1076,10 +1319,47 @@ mod tests {
         let foo = Foo(Some(true), Some(3));
         let buf = to_vec(&foo).unwrap();
         let value: Value = from_slice(&buf).unwrap();
-        let expected = Value::Described(Described {
+        let expected_foo = Value::Described(Described {
             descriptor: Descriptor::Code(0x13),
             value: Box::new(Value::List(vec![Value::Bool(true), Value::Int(3)])),
         });
-        assert_eq!(value, expected);
+        assert_eq!(value, expected_foo);
+
+        #[derive(Debug, SerializeComposite, DeserializeComposite)]
+        #[amqp_contract(code = 0x31, encoding = "list")]
+        struct Bar(i32, Foo);
+
+        let bar = Bar(13, foo);
+        let buf = to_vec(&bar).unwrap();
+        let value: Value = from_slice(&buf).unwrap();
+        let expected_bar = Value::Described(Described {
+            descriptor: Descriptor::Code(0x31),
+            value: Box::new(Value::List(vec![
+                Value::Int(13),
+                expected_foo
+            ]))
+        });
+        assert_eq!(value, expected_bar);
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn test_json_bool() {
+        let value = Value::Bool(true);
+        let json = serde_json::to_string(&value).unwrap();
+        let value2: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value, value2);
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn test_json_array() {
+        use crate::primitives::Array;
+        
+        let value = Value::Array(Array(vec![Value::Bool(true), Value::Bool(false)]));
+        let json = serde_json::to_string(&value).unwrap();
+        println!("{:?}", json);
+        let value2: Array<Value> = serde_json::from_str(&json).unwrap();
+        println!("{:?}", value2);
     }
 }

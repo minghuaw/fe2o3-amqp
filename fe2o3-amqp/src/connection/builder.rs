@@ -38,6 +38,7 @@ pub struct WithoutContainerId {}
 pub struct WithContainerId {}
 
 /// Builder for [`crate::Connection`]
+#[derive(Clone)]
 pub struct Builder<'a, Mode, Tls> {
     /// The id of the source container
     pub container_id: String,
@@ -488,8 +489,10 @@ impl<'a, Tls> Builder<'a, WithContainerId, Tls> {
         let idle_timeout = self
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
+        // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
+        // channel number is 0
         let transport =
-            Transport::<_, amqp::Frame>::bind(stream, self.max_frame_size.0 as usize, idle_timeout);
+            Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_timeout);
 
         // spawn Connection Mux
         let local_open = Open {
