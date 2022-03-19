@@ -373,13 +373,41 @@ impl<T: Serialize> TryFromSerializable<T> for Value {
     }
 }
 
+#[cfg(feature = "json")]
+impl From<serde_json::Value> for Value {
+    fn from(value: serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Null => Value::Null,
+            serde_json::Value::Bool(b) => Value::Bool(b),
+            serde_json::Value::Number(n) => {
+                if n.is_i64() {
+                    Value::Long(n.as_i64().expect("serde_json guaranteed this to be i64"))
+                } else if n.is_u64() {
+                    Value::ULong(n.as_u64().expect("serde_json guaranteed this to be u64"))
+                } else {
+                    Value::Double(OrderedFloat(n.as_f64().expect("serde_json guaranteed this to be f64")))
+                }
+            },
+            serde_json::Value::String(s) => Value::String(s),
+            serde_json::Value::Array(a) => {
+                let v: Vec<Value> = a.into_iter().map(|value| Value::from(value)).collect();
+                Value::List(v)
+            },
+            serde_json::Value::Object(o) => Value::Map(
+                o.into_iter().map(|(key, value)| {
+                    (Value::String(key), Value::from(value))
+                }).collect()
+            ),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ordered_float::OrderedFloat;
     use serde::de::DeserializeOwned;
 
     use crate::de::from_reader;
-    use crate::from_slice;
     use crate::ser::to_vec;
 
     use super::Value;

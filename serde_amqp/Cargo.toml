@@ -22,6 +22,11 @@ default = []
 
 derive = ["serde_amqp_derive"]
 
+# Provide conversion from json::Value to amqp::Value
+# and the value will use deserialize any instead of deserialize enum
+# which has some hacky impl for amqp
+json = ["serde_json"]
+
 [dev-dependencies]
 serde_json = "1"
 
@@ -38,5 +43,6 @@ thiserror = "1"
 bytes = "1"
 
 # Optinal dependencies
+serde_json = { version = "1", optional = true }
 chrono = { version = "0.4", features = ["serde"], optional = true }
 uuid = { version = "0.8", features = ["serde"], optional = true }

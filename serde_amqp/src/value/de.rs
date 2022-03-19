@@ -487,10 +487,25 @@ impl<'de> de::Deserialize<'de> for Value {
     where
         D: serde::Deserializer<'de>,
     {
-        // deserializer.deserialize_enum(VALUE, VARIANTS, Visitor {})
-        deserializer.deserialize_any(ValueVisitor {
-            visitor_type: SeqVisitorType::Sequence
-        })
+        #[cfg(not(feature = "json"))]
+        {
+            deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
+                visitor_type: SeqVisitorType::Sequence,
+            })
+        }
+
+        #[cfg(feature = "json")]
+        {
+            if deserializer.is_human_readable() {
+                deserializer.deserialize_any(ValueVisitor {
+                    visitor_type: SeqVisitorType::Sequence
+                })
+            } else {
+                deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
+                    visitor_type: SeqVisitorType::Sequence,
+                })
+            }
+        }
     }
 }
 
@@ -1327,12 +1342,24 @@ mod tests {
         assert_eq!(value, expected_bar);
     }
 
-    // #[test]
-    // fn test_json() {
-    //     let value = Value::Bool(true);
-    //     let json = serde_json::to_string(&value).unwrap();
-    //     println!("{:?}", json);
-    //     let value2: Value = serde_json::from_str(&json).unwrap();
-    //     println!("{:?}", value2);
-    // }
+    #[cfg(feature = "json")]
+    #[test]
+    fn test_json_bool() {
+        let value = Value::Bool(true);
+        let json = serde_json::to_string(&value).unwrap();
+        let value2: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value, value2);
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn test_json_array() {
+        use crate::primitives::Array;
+        
+        let value = Value::Array(Array(vec![Value::Bool(true), Value::Bool(false)]));
+        let json = serde_json::to_string(&value).unwrap();
+        println!("{:?}", json);
+        let value2: Array<Value> = serde_json::from_str(&json).unwrap();
+        println!("{:?}", value2);
+    }
 }
