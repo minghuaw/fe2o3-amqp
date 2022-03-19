@@ -262,7 +262,7 @@ impl<'de> de::Deserialize<'de> for Field {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_ignored_any(FieldVisitor {})
+        deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
 
@@ -656,7 +656,7 @@ mod body_section {
         where
             D: serde::Deserializer<'de>,
         {
-            deserializer.deserialize_ignored_any(FieldVisitor {})
+            deserializer.deserialize_identifier(FieldVisitor {})
         }
     }
 
