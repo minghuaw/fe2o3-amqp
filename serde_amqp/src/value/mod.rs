@@ -379,6 +379,7 @@ mod tests {
     use serde::de::DeserializeOwned;
 
     use crate::de::from_reader;
+    use crate::from_slice;
     use crate::ser::to_vec;
 
     use super::Value;
@@ -632,11 +633,17 @@ mod tests {
             .map(|val| Value::Int(*val))
             .collect();
         let arr = Array::from(vec);
+        let buf = to_vec(&arr).unwrap();
+        // println!("{:#x?}", &buf);
+
         let expected = Value::Array(arr);
         let buf = to_vec(&expected).unwrap();
-        println!("{:x?}", &buf);
+        // println!("{:#x?}", &buf);
 
-        assert_eq_from_reader_vs_expected(buf, expected);
+        let value: Array<Value> = from_slice(&buf).unwrap();
+        println!("{:?}", value);
+
+        // assert_eq_from_reader_vs_expected(buf, expected);
     }
 
     #[cfg(feature = "serde_amqp_derive")]
