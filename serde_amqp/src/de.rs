@@ -394,7 +394,8 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.reader.peek()?.try_into()? {
+        // match self.reader.peek()?.try_into()? {
+        match self.get_elem_code_or_peek_byte()?.try_into()? {
             EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
                 self.deserialize_bool(visitor)
             }
