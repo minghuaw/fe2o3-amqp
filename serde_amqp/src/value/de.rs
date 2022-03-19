@@ -14,10 +14,9 @@ use crate::{
     error::Error,
     format_code::EncodingCodes,
     util::{
-        // AMQP_ERROR, CONNECTION_ERROR, LINK_ERROR, SESSION_ERROR,
         EnumType,
         NewType,
-    }, primitives::Array,
+    }, 
 };
 
 use super::Value;
@@ -138,10 +137,12 @@ impl<'de> de::Deserialize<'de> for Field {
     }
 }
 
+#[cfg(feature = "json")]
 struct SeqValueSeed<'a> {
     visitor_type: &'a mut SeqVisitorType
 }
 
+#[cfg(feature = "json")]
 impl<'a> SeqValueSeed<'a> {
     pub fn new(visitor_type: &'a mut SeqVisitorType) -> Self {
         Self {
@@ -150,6 +151,7 @@ impl<'a> SeqValueSeed<'a> {
     }
 }
 
+#[cfg(feature = "json")]
 impl<'a, 'de: 'a> de::DeserializeSeed<'de> for SeqValueSeed<'a> {
     type Value = Value;
 
@@ -158,6 +160,7 @@ impl<'a, 'de: 'a> de::DeserializeSeed<'de> for SeqValueSeed<'a> {
         D: serde::Deserializer<'de> 
     {
         let value = deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
+            #[cfg(feature = "json")]
             visitor_type: SeqVisitorType::Sequence
         })?;
 
@@ -169,12 +172,14 @@ impl<'a, 'de: 'a> de::DeserializeSeed<'de> for SeqValueSeed<'a> {
     }
 }
 
+#[cfg(feature = "json")]
 enum SeqVisitorType {
     Described,
     Sequence,
 }
 
 struct ValueVisitor {
+    #[cfg(feature = "json")]
     visitor_type: SeqVisitorType
 }
 
@@ -437,6 +442,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
         deserializer.deserialize_enum(VALUE, VARIANTS, self)
     }
 
+    #[cfg(feature = "json")]
     fn visit_seq<A>(mut self, mut seq: A) -> Result<Self::Value, A::Error>
     where
         A: de::SeqAccess<'de>,
@@ -465,7 +471,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
         }
 
         match all_the_same_type {
-            true => Ok(Value::Array(Array(buf))),
+            true => Ok(Value::Array(crate::primitives::Array(buf))),
             false => Ok(Value::List(buf))
         }
     }
@@ -489,9 +495,7 @@ impl<'de> de::Deserialize<'de> for Value {
     {
         #[cfg(not(feature = "json"))]
         {
-            deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
-                visitor_type: SeqVisitorType::Sequence,
-            })
+            deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor { })
         }
 
         #[cfg(feature = "json")]
