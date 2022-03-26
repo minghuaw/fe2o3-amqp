@@ -286,7 +286,7 @@ impl ConnectionHandle {
 /// Below shows how to use a custom `tokio_native_tls::TlsConnector`.
 ///
 /// ```rust,ignore
-/// let connector = native_tls::TlsConnector::new();
+/// let connector = native_tls::TlsConnector::new().unwrap();
 /// let connector = tokio_native_tls::TlsConnector::from(connector);
 ///
 /// let connection = Connection::builder()
