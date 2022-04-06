@@ -26,7 +26,7 @@ use crate::{
     session::Session,
 };
 
-use self::{builder::WithoutContainerId, engine::SessionId};
+use self::{engine::SessionId};
 
 mod builder;
 pub use builder::*;
@@ -348,7 +348,7 @@ pub struct Connection {
 /* ------------------------------- Public API ------------------------------- */
 impl Connection {
     /// Creates a Builder for [`Connection`]
-    pub fn builder<'a>() -> builder::Builder<'a, WithoutContainerId, ()> {
+    pub fn builder<'a>() -> builder::Builder<'a, mode::WithoutContainerId, ()> {
         builder::Builder::new()
     }
 

@@ -21,8 +21,12 @@ default = []
 # default = ["rustls"]
 # default = ["native-tls"]
 
+# TLS related features
 rustls = ["tokio-rustls", "librustls", "webpki-roots"]
 native-tls = ["tokio-native-tls", "libnative-tls"]
+
+# Listener implementation
+listener = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }

@@ -17,8 +17,8 @@ use crate::{
     connection::{Connection, ConnectionState},
     frames::amqp,
     sasl_profile::SaslProfile,
-    transport::protocol_header::ProtocolHeader,
     transport::Transport,
+    transport::{error::NegotiationError, protocol_header::ProtocolHeader},
 };
 
 use super::{
@@ -29,13 +29,17 @@ use super::{
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
 
-/// Type state for connection [`Builder`] representing state where a valid container id is not present
-#[derive(Debug)]
-pub struct WithoutContainerId {}
+pub mod mode {
+    //! Type states for [`crate::connection::Builder`]
 
-/// Type state for connection [`Builder`] representing state where a valid container id is present
-#[derive(Debug)]
-pub struct WithContainerId {}
+    /// Type state for [`crate::connection::Builder`] representing state where a valid container id is not present
+    #[derive(Debug)]
+    pub struct WithoutContainerId {}
+
+    /// Type state for [`crate::connection::Builder`] representing state where a valid container id is present
+    #[derive(Debug)]
+    pub struct WithContainerId {}
+}
 
 /// Builder for [`crate::Connection`]
 #[derive(Clone)]
@@ -108,6 +112,24 @@ pub struct Builder<'a, Mode, Tls> {
 
     // type state marker
     marker: PhantomData<Mode>,
+}
+
+impl<'a, Tls> From<Builder<'a, mode::WithContainerId, Tls>> for Open{
+    fn from(builder: Builder<'a, mode::WithContainerId, Tls>) -> Self {
+        Open {
+            container_id: builder.container_id,
+            hostname: builder.hostname.map(Into::into),
+            max_frame_size: builder.max_frame_size,
+            channel_max: builder.channel_max,
+            // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
+            idle_time_out: builder.idle_time_out.map(|v| v / 2),
+            outgoing_locales: builder.outgoing_locales,
+            incoming_locales: builder.incoming_locales,
+            offered_capabilities: builder.offered_capabilities,
+            desired_capabilities: builder.desired_capabilities,
+            properties: builder.properties,
+        }
+    }
 }
 
 impl<'a, Mode: std::fmt::Debug> std::fmt::Debug for Builder<'a, Mode, ()> {
@@ -183,7 +205,7 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug
     }
 }
 
-impl<'a> Builder<'a, WithoutContainerId, ()> {
+impl<'a> Builder<'a, mode::WithoutContainerId, ()> {
     /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
@@ -213,7 +235,7 @@ impl<'a> Builder<'a, WithoutContainerId, ()> {
 
 impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// The id of the source container
-    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, WithContainerId, Tls> {
+    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, mode::WithContainerId, Tls> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
@@ -470,7 +492,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
     }
 }
 
-impl<'a, Tls> Builder<'a, WithContainerId, Tls> {
+impl<'a, Tls> Builder<'a, mode::WithContainerId, Tls> {
     async fn connect_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -487,7 +509,7 @@ impl<'a, Tls> Builder<'a, WithContainerId, Tls> {
 
     async fn connect_with_stream_inner<Io>(
         self,
-        mut stream: Io,
+        stream: Io,
     ) -> Result<ConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -496,36 +518,18 @@ impl<'a, Tls> Builder<'a, WithContainerId, Tls> {
 
         // exchange header
         let mut local_state = ConnectionState::Start;
-        let _remote_header =
-            Transport::negotiate(&mut stream, &mut local_state, ProtocolHeader::amqp()).await?;
-        let idle_timeout = self
-            .idle_time_out
-            .map(|millis| Duration::from_millis(millis as u64));
-        // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
-        // channel number is 0
-        let transport = Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_timeout);
-
+        let buffer_size = self.buffer_size;
+        let transport = self.negotiate_amqp_with_stream(stream, &mut local_state).await?;
+        
         // spawn Connection Mux
-        let local_open = Open {
-            container_id: self.container_id,
-            hostname: self.hostname.map(Into::into),
-            max_frame_size: self.max_frame_size,
-            channel_max: self.channel_max,
-            // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
-            idle_time_out: self.idle_time_out.map(|v| v / 2),
-            outgoing_locales: self.outgoing_locales,
-            incoming_locales: self.incoming_locales,
-            offered_capabilities: self.offered_capabilities,
-            desired_capabilities: self.desired_capabilities,
-            properties: self.properties,
-        };
+        let local_open = Open::from(self);
 
         // create channels
         let (connection_control_tx, connection_control_rx) =
             mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
-        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
         let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
+
         let engine = ConnectionEngine::open(
             transport,
             connection,
@@ -544,9 +548,25 @@ impl<'a, Tls> Builder<'a, WithContainerId, Tls> {
 
         Ok(connection_handle)
     }
+
+    #[inline]
+    async fn negotiate_amqp_with_stream<Io>(&self, mut stream: Io, local_state: &mut ConnectionState) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let _remote_header =
+            Transport::negotiate(&mut stream, local_state, ProtocolHeader::amqp()).await?;
+        let idle_timeout = self
+            .idle_time_out
+            .map(|millis| Duration::from_millis(millis as u64));
+        // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
+        // channel number is 0
+        let transport = Transport::<Io, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_timeout);
+        Ok(transport)
+    }
 }
 
-impl<'a> Builder<'a, WithContainerId, ()> {
+impl<'a> Builder<'a, mode::WithContainerId, ()> {
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection
@@ -748,7 +768,7 @@ impl<'a> Builder<'a, WithContainerId, ()> {
 }
 
 #[cfg(all(feature = "rustls"))]
-impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
+impl<'a> Builder<'a, mode::WithContainerId, tokio_rustls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection
@@ -859,7 +879,7 @@ impl<'a> Builder<'a, WithContainerId, tokio_rustls::TlsConnector> {
 }
 
 #[cfg(all(feature = "native-tls"))]
-impl<'a> Builder<'a, WithContainerId, tokio_native_tls::TlsConnector> {
+impl<'a> Builder<'a, mode::WithContainerId, tokio_native_tls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection

@@ -12,7 +12,7 @@ use futures_util::{sink::With, Sink};
 use tokio::{io::AsyncReadExt, sync::mpsc};
 
 use crate::{
-    connection::{AllocSessionError, Error, OpenError, WithContainerId},
+    connection::{AllocSessionError, Error, OpenError, Builder, mode, self},
     endpoint,
     frames::amqp::{self, Frame},
     session::frame::{SessionFrame, SessionFrameBody},
@@ -20,12 +20,11 @@ use crate::{
         protocol_header::{ProtocolHeader, ProtocolId},
         Transport,
     },
-    Connection,
 };
 
 use super::Listener;
 
-type ConnectionBuilder<'a, Tls> = crate::connection::Builder<'a, WithContainerId, Tls>;
+type ConnectionBuilder<'a, Tls> = crate::connection::Builder<'a, mode::WithContainerId, Tls>;
 
 /// Listener for incoming connections
 pub struct ConnectionListener<L: Listener> {
@@ -54,54 +53,62 @@ where
     //     }
     // }
 
-    /// Accepts incoming connection
-    pub async fn accept(&mut self) -> Result<(), OpenError> {
-        let mut stream = self.listener.accept().await?;
+    // /// Accepts incoming connection
+    // pub async fn accept(&mut self) -> Result<(), OpenError> {
+    //     let mut stream = self.listener.accept().await?;
 
-        // Read protocol header
-        let mut buf = [0u8; 8];
-        stream.read_exact(&mut buf).await?;
+    //     // Read protocol header
+    //     let mut buf = [0u8; 8];
+    //     stream.read_exact(&mut buf).await?;
 
-        let header = match ProtocolHeader::try_from(buf) {
-            Ok(header) => header,
-            Err(buf) => {
-                // Write protocol header and then disconnect the stream
-                todo!()
-            }
-        };
+    //     let header = match ProtocolHeader::try_from(buf) {
+    //         Ok(header) => header,
+    //         Err(buf) => {
+    //             // Write protocol header and then disconnect the stream
+    //             todo!()
+    //         }
+    //     };
 
-        match header.id {
-            ProtocolId::Amqp => {
-                let idle_time_out = self
-                    .idle_time_out
-                    .map(|millis| Duration::from_millis(millis as u64));
-                let transport =
-                    Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
-            }
-            ProtocolId::Tls => todo!(),
-            ProtocolId::Sasl => todo!(),
-        }
+    //     match header.id {
+    //         ProtocolId::Amqp => {
+    //             let idle_time_out = self
+    //                 .idle_time_out
+    //                 .map(|millis| Duration::from_millis(millis as u64));
+    //             let transport =
+    //                 Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
+    //         }
+    //         ProtocolId::Tls => todo!(),
+    //         ProtocolId::Sasl => todo!(),
+    //     }
 
-        todo!()
-    }
+    //     todo!()
+    // }
+
+    // pub async fn accept_with_builder<'a, Tls>(&mut self, builder: connection::Builder<'a, )
+}
+
+#[derive(Debug)]
+pub struct ConnectionHandle {
+
 }
 
 /// A connection on the listener side
 #[derive(Debug)]
-pub struct ListenerConnection {
-    connection: Connection,
+pub struct Connection {
+    connection: connection::Connection,
     session_listener: mpsc::Sender<Begin>,
 }
 
 #[async_trait]
-impl endpoint::Connection for ListenerConnection {
-    type AllocError = <Connection as endpoint::Connection>::AllocError;
+impl endpoint::Connection for Connection {
+    type AllocError = <connection::Connection as endpoint::Connection>::AllocError;
 
-    type Error = <Connection as endpoint::Connection>::Error;
+    type Error = <connection::Connection as endpoint::Connection>::Error;
 
-    type State = <Connection as endpoint::Connection>::State;
+    type State = <connection::Connection as endpoint::Connection>::State;
 
-    type Session = <Connection as endpoint::Connection>::Session;
+    type Session = <connection::Connection as endpoint::Connection>::Session;
+
     #[inline]
     fn local_state(&self) -> &Self::State {
         self.connection.local_state()
@@ -232,5 +239,20 @@ impl endpoint::Connection for ListenerConnection {
         channel: u16,
     ) -> Option<&mut mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
         self.connection.session_tx_by_outgoing_channel(channel)
+    }
+}
+
+// =============================================================================
+// Building listener connection
+// =============================================================================
+
+impl<'a> Builder<'a, mode::WithContainerId, ()> {
+    // pub async fn open_listener_connection(self)
+
+    /// Opens a new ['crate::listener::Connection`] with the supplied stream.
+    /// 
+    /// TODO
+    pub async fn open_listener_connection_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle, OpenError> {
+        todo!()
     }
 }
