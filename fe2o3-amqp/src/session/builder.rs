@@ -145,7 +145,7 @@ impl Builder {
     ///     .await.unwrap();
     /// ```
     ///
-    pub async fn begin(self, conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
+    pub async fn begin(self, conn: &mut ConnectionHandle<()>) -> Result<SessionHandle, Error> {
         use super::Session;
 
         let local_state = SessionState::Unmapped;

@@ -4,19 +4,22 @@ use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
-    performatives::{ChannelMax, MaxFrameSize, Open},
+    performatives::{ChannelMax, MaxFrameSize, Open, Begin},
 };
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
+    sync::mpsc::{self, Receiver},
 };
 use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
     frames::amqp,
+    listener::{self, ListenerConnection},
     sasl_profile::SaslProfile,
+    session::frame::SessionFrame,
     transport::Transport,
     transport::{error::NegotiationError, protocol_header::ProtocolHeader},
 };
@@ -32,13 +35,20 @@ pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
 pub mod mode {
     //! Type states for [`crate::connection::Builder`]
 
-    /// Type state for [`crate::connection::Builder`] representing state where a valid container id is not present
-    #[derive(Debug)]
-    pub struct WithoutContainerId {}
+    // /// Type state for [`crate::connection::Builder`] representing state where a valid container id is not present
+    // #[derive(Debug)]
+    // pub struct WithoutContainerId {}
 
-    /// Type state for [`crate::connection::Builder`] representing state where a valid container id is present
+    // /// Type state for [`crate::connection::Builder`] representing state where a valid container id is present
+    // #[derive(Debug)]
+    // pub struct WithContainerId {}
+
+    /// Type state for [`crate::connection::Builder`]
     #[derive(Debug)]
-    pub struct WithContainerId {}
+    pub struct ConnectorWithId {}
+    /// Type state for [`crate::connection::Builder`]
+    #[derive(Debug)]
+    pub struct ConnectorNoId {}
 }
 
 /// Builder for [`crate::Connection`]
@@ -114,8 +124,8 @@ pub struct Builder<'a, Mode, Tls> {
     marker: PhantomData<Mode>,
 }
 
-impl<'a, Tls> From<Builder<'a, mode::WithContainerId, Tls>> for Open{
-    fn from(builder: Builder<'a, mode::WithContainerId, Tls>) -> Self {
+impl<'a, Tls> From<Builder<'a, mode::ConnectorWithId, Tls>> for Open {
+    fn from(builder: Builder<'a, mode::ConnectorWithId, Tls>) -> Self {
         Open {
             container_id: builder.container_id,
             hostname: builder.hostname.map(Into::into),
@@ -205,7 +215,7 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug
     }
 }
 
-impl<'a> Builder<'a, mode::WithoutContainerId, ()> {
+impl<'a, Mode> Builder<'a, Mode, ()> {
     /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
@@ -233,9 +243,9 @@ impl<'a> Builder<'a, mode::WithoutContainerId, ()> {
     }
 }
 
-impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
+impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
     /// The id of the source container
-    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, mode::WithContainerId, Tls> {
+    pub fn container_id(self, id: impl Into<String>) -> Builder<'a, mode::ConnectorWithId, Tls> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
@@ -261,7 +271,9 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
             marker: PhantomData,
         }
     }
+}
 
+impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// Alias for [`rustls_connector`](#method.rustls_connector) if only `"rustls"` is enabled
     #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", not(feature = "native-tls")))))]
     #[cfg(any(docsrs, all(feature = "rustls", not(feature = "native-tls"))))]
@@ -492,65 +504,13 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
     }
 }
 
-impl<'a, Tls> Builder<'a, mode::WithContainerId, Tls> {
-    async fn connect_with_stream<Io>(mut self, stream: Io) -> Result<ConnectionHandle, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        match self.sasl_profile.take() {
-            Some(profile) => {
-                let hostname = self.hostname;
-                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
-                self.connect_with_stream_inner(stream).await
-            }
-            None => self.connect_with_stream_inner(stream).await,
-        }
-    }
-
-    async fn connect_with_stream_inner<Io>(
-        self,
-        stream: Io,
-    ) -> Result<ConnectionHandle, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        use tokio::sync::mpsc;
-
-        // exchange header
-        let mut local_state = ConnectionState::Start;
-        let buffer_size = self.buffer_size;
-        let transport = self.negotiate_amqp_with_stream(stream, &mut local_state).await?;
-        
-        // spawn Connection Mux
-        let local_open = Open::from(self);
-
-        // create channels
-        let (connection_control_tx, connection_control_rx) =
-            mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
-        let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
-        let connection = Connection::new(connection_control_tx.clone(), local_state, local_open);
-
-        let engine = ConnectionEngine::open(
-            transport,
-            connection,
-            connection_control_rx,
-            outgoing_rx,
-            // session_control_rx
-        )
-        .await?;
-        let handle = engine.spawn();
-
-        let connection_handle = ConnectionHandle {
-            control: connection_control_tx,
-            handle,
-            outgoing: outgoing_tx, // session_control: session_control_tx
-        };
-
-        Ok(connection_handle)
-    }
-
+impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     #[inline]
-    async fn negotiate_amqp_with_stream<Io>(&self, mut stream: Io, local_state: &mut ConnectionState) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
+    async fn negotiate_amqp_with_stream<Io>(
+        &self,
+        mut stream: Io,
+        local_state: &mut ConnectionState,
+    ) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -561,12 +521,73 @@ impl<'a, Tls> Builder<'a, mode::WithContainerId, Tls> {
             .map(|millis| Duration::from_millis(millis as u64));
         // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
         // channel number is 0
-        let transport = Transport::<Io, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_timeout);
+        let transport =
+            Transport::<Io, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_timeout);
         Ok(transport)
+    }
+
+    async fn connect_with_stream<Io>(
+        mut self,
+        stream: Io,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                let hostname = self.hostname;
+                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
+                self.connect_amqp_with_stream(stream).await
+            }
+            None => self.connect_amqp_with_stream(stream).await,
+        }
+    }
+
+    async fn connect_amqp_with_stream<Io>(
+        self,
+        stream: Io,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        // exchange header
+        let mut local_state = ConnectionState::Start;
+        let buffer_size = self.buffer_size;
+        let transport = self
+            .negotiate_amqp_with_stream(stream, &mut local_state)
+            .await?;
+
+        // spawn Connection Mux
+        let local_open = Open::from(self);
+
+        // create channels
+        let (control_tx, control_rx) =
+            mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
+        let connection = Connection::new(control_tx.clone(), local_state, local_open);
+
+        let engine = ConnectionEngine::open(
+            transport,
+            connection,
+            control_rx,
+            outgoing_rx,
+            // session_control_rx
+        )
+        .await?;
+        let handle = engine.spawn();
+
+        let connection_handle = ConnectionHandle {
+            control: control_tx,
+            handle,
+            outgoing: outgoing_tx, // session_control: session_control_tx
+            session_listener: (),
+        };
+
+        Ok(connection_handle)
     }
 }
 
-impl<'a> Builder<'a, mode::WithContainerId, ()> {
+impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection
@@ -637,7 +658,7 @@ impl<'a> Builder<'a, mode::WithContainerId, ()> {
     pub async fn open(
         mut self,
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, OpenError> {
+    ) -> Result<ConnectionHandle<()>, OpenError> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
@@ -689,7 +710,7 @@ impl<'a> Builder<'a, mode::WithContainerId, ()> {
     ///     .unwrap();
     /// ```
     #[allow(unreachable_code)]
-    pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle, OpenError>
+    pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -768,7 +789,7 @@ impl<'a> Builder<'a, mode::WithContainerId, ()> {
 }
 
 #[cfg(all(feature = "rustls"))]
-impl<'a> Builder<'a, mode::WithContainerId, tokio_rustls::TlsConnector> {
+impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection
@@ -837,7 +858,7 @@ impl<'a> Builder<'a, mode::WithContainerId, tokio_rustls::TlsConnector> {
     pub async fn open(
         mut self,
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, OpenError> {
+    ) -> Result<ConnectionHandle<()>, OpenError> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
@@ -861,7 +882,7 @@ impl<'a> Builder<'a, mode::WithContainerId, tokio_rustls::TlsConnector> {
     /// If the `scheme` field is `"amqps"`, the builder will attempt to start with
     /// exchanging TLS protocol header and establish TLS stream using the user-supplied
     /// `tokio_rustls::TlsConnector`.
-    pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle, OpenError>
+    pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -879,7 +900,7 @@ impl<'a> Builder<'a, mode::WithContainerId, tokio_rustls::TlsConnector> {
 }
 
 #[cfg(all(feature = "native-tls"))]
-impl<'a> Builder<'a, mode::WithContainerId, tokio_native_tls::TlsConnector> {
+impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     /// Open a [`crate::Connection`] with an url
     ///
     /// # Raw AMQP connection
@@ -948,7 +969,7 @@ impl<'a> Builder<'a, mode::WithContainerId, tokio_native_tls::TlsConnector> {
     pub async fn open(
         mut self,
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, OpenError> {
+    ) -> Result<ConnectionHandle<()>, OpenError> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
@@ -972,7 +993,7 @@ impl<'a> Builder<'a, mode::WithContainerId, tokio_native_tls::TlsConnector> {
     /// If the `scheme` field is `"amqps"`, the builder will attempt to start with
     /// exchanging TLS protocol header and establish TLS stream using the user-supplied
     /// `tokio_rustls::TlsConnector`.
-    pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle, OpenError>
+    pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -989,6 +1010,53 @@ impl<'a> Builder<'a, mode::WithContainerId, tokio_native_tls::TlsConnector> {
         }
     }
 }
+
+// =============================================================================
+// Building listener connection
+// =============================================================================
+
+// #[cfg(feature = "listener")]
+// impl<'a> Builder<'a, mode::ListenerWithId, ()> {
+//     /// Just do a pipelined open?
+//     pub(crate) async fn connect_amqp_with_stream<Io>(
+//         self,
+//         stream: Io,
+//     ) -> Result<ConnectionHandle<Receiver<Begin>>, OpenError>
+//     where
+//         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+//     {
+//         let mut local_state = ConnectionState::Start;
+//         let buffer_size = self.buffer_size;
+//         let transport = self
+//             .negotiate_amqp_with_stream(stream, &mut local_state)
+//             .await?;
+
+//         let local_open = Open::from(self);
+
+//         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+//         let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
+//         let (session_listener_tx, session_listener_rx) = mpsc::channel(buffer_size);
+
+//         let connection = crate::Connection::new(control_tx.clone(), local_state, local_open);
+//         let listener_connection = ListenerConnection {
+//             connection,
+//             session_listener: session_listener_tx,
+//         };
+
+//         let engine =
+//             ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx).await?;
+//         let handle = engine.spawn();
+
+//         let connection_handle = ConnectionHandle {
+//             control: control_tx,
+//             handle,
+//             outgoing: outgoing_tx,
+//             session_listener: session_listener_rx
+//         };
+
+//         Ok(connection_handle)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

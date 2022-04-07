@@ -47,21 +47,22 @@ pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 ///
 /// Dropping the handle will also stop the [`Connection`] event loop
 #[derive(Debug)]
-pub struct ConnectionHandle {
+pub struct ConnectionHandle<R> {
     pub(crate) control: Sender<ConnectionControl>,
-    handle: JoinHandle<Result<(), Error>>,
+    pub(crate) handle: JoinHandle<Result<(), Error>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
+    pub(crate) session_listener: R,
 }
 
-impl Drop for ConnectionHandle {
+impl<R> Drop for ConnectionHandle<R> {
     fn drop(&mut self) {
         let _ = self.control.try_send(ConnectionControl::Close(None));
     }
 }
 
-impl ConnectionHandle {
+impl<R> ConnectionHandle<R> {
     /// Checks if the underlying event loop has stopped
     pub fn is_closed(&self) -> bool {
         self.control.is_closed()
@@ -348,7 +349,7 @@ pub struct Connection {
 /* ------------------------------- Public API ------------------------------- */
 impl Connection {
     /// Creates a Builder for [`Connection`]
-    pub fn builder<'a>() -> builder::Builder<'a, mode::WithoutContainerId, ()> {
+    pub fn builder<'a>() -> builder::Builder<'a, mode::ConnectorNoId, ()> {
         builder::Builder::new()
     }
 
@@ -429,7 +430,7 @@ impl Connection {
     pub async fn open(
         container_id: impl Into<String>, // TODO: default container id? random uuid-ish
         url: impl TryInto<Url, Error = url::ParseError>,
-    ) -> Result<ConnectionHandle, OpenError> {
+    ) -> Result<ConnectionHandle<()>, OpenError> {
         Connection::builder()
             .container_id(container_id)
             .open(url)
@@ -439,7 +440,7 @@ impl Connection {
 
 /* ------------------------------- Private API ------------------------------ */
 impl Connection {
-    fn new(
+    pub(crate) fn new(
         control: Sender<ConnectionControl>,
         local_state: ConnectionState,
         local_open: Open,

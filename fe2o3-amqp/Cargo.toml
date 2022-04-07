@@ -17,7 +17,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
+default = ["listener"]
 # default = ["rustls"]
 # default = ["native-tls"]
 

@@ -73,3 +73,7 @@ impl<T> Deref for Constant<T> {
 /// Shared type state for builders
 #[derive(Debug)]
 pub struct Uninitialized {}
+
+/// Shared type state for builders
+#[derive(Debug)]
+pub struct Initialized {}

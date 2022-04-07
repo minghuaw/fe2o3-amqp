@@ -219,7 +219,7 @@ pub struct Session {
 
 impl Session {
     /// Alias for `begin`
-    pub async fn new(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
+    pub async fn new(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle, Error> {
         Self::begin(conn).await
     }
 
@@ -249,7 +249,7 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
+    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle, Error> {
         Session::builder().begin(conn).await
     }
 }

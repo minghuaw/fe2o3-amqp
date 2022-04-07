@@ -9,22 +9,19 @@ use fe2o3_amqp_types::{
     states::ConnectionState,
 };
 use futures_util::{sink::With, Sink};
-use tokio::{io::AsyncReadExt, sync::mpsc};
+use tokio::{io::{AsyncReadExt, AsyncRead, AsyncWrite}, sync::mpsc::{self, Receiver}, net::TcpListener};
 
 use crate::{
-    connection::{AllocSessionError, Error, OpenError, Builder, mode, self},
+    connection::{Error, self, ConnectionHandle, OpenError, DEFAULT_CONTROL_CHAN_BUF, engine::ConnectionEngine},
     endpoint,
     frames::amqp::{self, Frame},
-    session::frame::{SessionFrame, SessionFrameBody},
-    transport::{
-        protocol_header::{ProtocolHeader, ProtocolId},
-        Transport,
-    },
+    session::frame::{SessionFrame, SessionFrameBody}, transport::{protocol_header::{ProtocolHeader, ProtocolId}, Transport, send_amqp_proto_header},
 };
 
-use super::Listener;
+use super::{Listener, sasl::{Mechanism, self}};
 
-type ConnectionBuilder<'a, Tls> = crate::connection::Builder<'a, mode::WithContainerId, Tls>;
+/// Type alias for listener connection
+pub type ListenerConnectionHandle = ConnectionHandle<Receiver<Begin>>;
 
 /// Listener for incoming connections
 pub struct ConnectionListener<L: Listener> {
@@ -41,15 +38,12 @@ impl<L: Listener> std::fmt::Debug for ConnectionListener<L> {
     }
 }
 
-impl<L> ConnectionListener<L>
-where
-    L: Listener,
-{
+impl ConnectionListener<TcpListener> {
     // /// Bind to a stream listener
     // pub fn bind(listener: L) -> Self {
     //     Self {
 
-    //         listener
+    //         listener 
     //     }
     // }
 
@@ -83,24 +77,94 @@ where
 
     //     todo!()
     // }
-
-    // pub async fn accept_with_builder<'a, Tls>(&mut self, builder: connection::Builder<'a, )
 }
 
+/// Acceptor for an incoming connection
 #[derive(Debug)]
-pub struct ConnectionHandle {
+pub struct ConnectionAcceptor<Tls> {
+    pub(crate) local_open: Open,
+    pub(crate) tls_acceptor: Tls,
+    pub(crate) sasl_mechanisms: Vec<sasl::Mechanism>,
+    pub(crate) buffer_size: usize,
+}
 
+impl ConnectionAcceptor<()> {
+    async fn connect_amqp_with_stream<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let mut local_state = ConnectionState::HeaderReceived;
+        let idle_time_out = self.local_open
+            .idle_time_out
+            .map(|millis| Duration::from_millis(millis as u64));
+        let protocol_header = ProtocolHeader::amqp();
+        if incoming_header != protocol_header {
+            return Err(OpenError::LocalError(definitions::Error::new(
+                AmqpError::NotImplemented, None, None
+            )))
+        }
+        send_amqp_proto_header(&mut stream, &mut local_state, protocol_header).await?;
+        let transport =
+            Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
+
+        let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+        let (begin_tx, begin_rx) = mpsc::channel(self.buffer_size);
+        
+        let connection = connection::Connection::new(control_tx.clone(), local_state, self.local_open.clone());
+        let listener_connection = ListenerConnection {
+            connection,
+            session_listener: begin_tx
+        };
+
+        let engine = ConnectionEngine::open(
+            transport,
+            listener_connection,
+            control_rx,
+            outgoing_rx
+        ).await?;
+        let handle = engine.spawn();
+
+        let connection_handle = ConnectionHandle {
+            control: control_tx,
+            handle,
+            outgoing: outgoing_tx,
+            session_listener: begin_rx
+        };
+        Ok(connection_handle)
+    }
+
+    /// Accepts an incoming connection
+    pub async fn accept<Io>(&self, mut stream: Io) -> Result<ListenerConnectionHandle, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        // Read protocol header
+        let mut buf = [0u8; 8];
+        stream.read_exact(&mut buf).await?;
+
+        let header = ProtocolHeader::try_from(buf)
+            .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+
+        match header.id {
+            ProtocolId::Amqp => {
+                self.connect_amqp_with_stream(stream, header).await
+            }
+            ProtocolId::Tls => todo!(),
+            ProtocolId::Sasl => todo!(),
+        }
+    }
 }
 
 /// A connection on the listener side
 #[derive(Debug)]
-pub struct Connection {
-    connection: connection::Connection,
-    session_listener: mpsc::Sender<Begin>,
+pub struct ListenerConnection {
+    pub(crate) connection: connection::Connection,
+    pub(crate) session_listener: mpsc::Sender<Begin>,
 }
 
 #[async_trait]
-impl endpoint::Connection for Connection {
+impl endpoint::Connection for ListenerConnection {
     type AllocError = <connection::Connection as endpoint::Connection>::AllocError;
 
     type Error = <connection::Connection as endpoint::Connection>::Error;
@@ -242,17 +306,3 @@ impl endpoint::Connection for Connection {
     }
 }
 
-// =============================================================================
-// Building listener connection
-// =============================================================================
-
-impl<'a> Builder<'a, mode::WithContainerId, ()> {
-    // pub async fn open_listener_connection(self)
-
-    /// Opens a new ['crate::listener::Connection`] with the supplied stream.
-    /// 
-    /// TODO
-    pub async fn open_listener_connection_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle, OpenError> {
-        todo!()
-    }
-}

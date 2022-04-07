@@ -8,17 +8,19 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-pub(crate) mod connection;
-pub(crate) mod link;
-pub(crate) mod session;
+pub mod connection;
+pub mod link;
+pub mod session;
+pub mod builder;
+pub mod sasl;
 
-pub use self::connection::ConnectionListener;
+pub use self::connection::*;
 
 /// Trait for listeners
 #[async_trait]
 pub trait Listener {
     /// Type of accepted IO stream
-    type Stream: AsyncRead + AsyncWrite + Send + Unpin + 'static;
+    type Stream: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static;
     // type Stream;
 
     /// Type for local addr

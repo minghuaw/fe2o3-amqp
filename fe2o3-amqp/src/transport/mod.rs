@@ -236,7 +236,7 @@ where
 }
 
 #[instrument(name = "SEND", skip_all)]
-async fn send_amqp_proto_header<Io>(
+pub(crate) async fn send_amqp_proto_header<Io>(
     io: &mut Io,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
