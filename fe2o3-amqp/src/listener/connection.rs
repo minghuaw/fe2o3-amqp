@@ -1,6 +1,6 @@
 //! Connection Listener
 
-use std::time::Duration;
+use std::{time::Duration, io};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
     states::ConnectionState,
 };
 use futures_util::{sink::With, Sink};
-use tokio::{io::{AsyncReadExt, AsyncRead, AsyncWrite}, sync::mpsc::{self, Receiver}, net::TcpListener};
+use tokio::{io::{AsyncReadExt, AsyncRead, AsyncWrite, AsyncWriteExt}, sync::mpsc::{self, Receiver}, net::TcpListener};
 
 use crate::{
     connection::{Error, self, ConnectionHandle, OpenError, DEFAULT_CONTROL_CHAN_BUF, engine::ConnectionEngine},
@@ -88,7 +88,7 @@ pub struct ConnectionAcceptor<Tls> {
     pub(crate) buffer_size: usize,
 }
 
-impl ConnectionAcceptor<()> {
+impl<Tls> ConnectionAcceptor<Tls> {
     async fn connect_amqp_with_stream<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError> 
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -106,7 +106,7 @@ impl ConnectionAcceptor<()> {
         send_amqp_proto_header(&mut stream, &mut local_state, protocol_header).await?;
         let transport =
             Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
-
+    
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
         let (begin_tx, begin_rx) = mpsc::channel(self.buffer_size);
@@ -116,7 +116,7 @@ impl ConnectionAcceptor<()> {
             connection,
             session_listener: begin_tx
         };
-
+    
         let engine = ConnectionEngine::open(
             transport,
             listener_connection,
@@ -124,7 +124,7 @@ impl ConnectionAcceptor<()> {
             outgoing_rx
         ).await?;
         let handle = engine.spawn();
-
+    
         let connection_handle = ConnectionHandle {
             control: control_tx,
             handle,
@@ -133,7 +133,9 @@ impl ConnectionAcceptor<()> {
         };
         Ok(connection_handle)
     }
+}
 
+impl ConnectionAcceptor<()> {
     /// Accepts an incoming connection
     pub async fn accept<Io>(&self, mut stream: Io) -> Result<ListenerConnectionHandle, OpenError> 
     where
@@ -143,17 +145,127 @@ impl ConnectionAcceptor<()> {
         let mut buf = [0u8; 8];
         stream.read_exact(&mut buf).await?;
 
-        let header = ProtocolHeader::try_from(buf)
+        let incoming_header = ProtocolHeader::try_from(buf)
             .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
-        match header.id {
+        match incoming_header.id {
             ProtocolId::Amqp => {
-                self.connect_amqp_with_stream(stream, header).await
+                self.connect_amqp_with_stream(stream, incoming_header).await
             }
-            ProtocolId::Tls => todo!(),
+            ProtocolId::Tls => {
+                self.tls_not_implemented(stream).await?;
+                // TODO: return a local error?
+                Err(OpenError::ProtocolHeaderMismatch(incoming_header.into())) 
+            },
             ProtocolId::Sasl => todo!(),
         }
     }
+
+    async fn tls_not_implemented<Io>(&self, mut stream: Io) -> Result<(), OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        // Send back supported protocol header: AMQP or SASL
+        let header = if self.sasl_mechanisms.len() == 0 {
+            ProtocolHeader::amqp()
+        } else {
+            ProtocolHeader::sasl()
+        };
+        let buf: [u8; 8] = header.into();
+        stream.write_all(&buf).await?;
+
+        Ok(())
+    }
+}
+
+// A macro is used instead of blanked impl with trait to avoid heap allocated future
+macro_rules! connect_tls {
+    ($fn_ident:ident) => {
+        async fn $fn_ident<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError> 
+        where
+            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        {
+            let tls_header = ProtocolHeader::tls();
+            if tls_header != incoming_header {
+                return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
+            }
+            
+            // Send protocol header
+            let mut buf: [u8; 8] = tls_header.into();
+            stream.write_all(&buf).await?;
+
+            let mut tls_stream = self.tls_acceptor.accept(stream).await.map_err(|e| {
+                OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
+            })?;
+
+            // Read AMQP header
+            tls_stream.read_exact(&mut buf).await?;
+            let incoming_header = ProtocolHeader::try_from(buf)
+                .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+
+            match incoming_header.id {
+                ProtocolId::Amqp => self.connect_amqp_with_stream(tls_stream, incoming_header).await,
+                ProtocolId::Tls => Err(OpenError::ProtocolHeaderMismatch(incoming_header.into())),
+                ProtocolId::Sasl => todo!(),
+            }
+        }
+    };
+}
+
+#[cfg(feature = "native-tls")]
+impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor> {
+    /// Accepts an incoming connection
+    pub async fn accept<Io>(&self, mut stream: Io) -> Result<ListenerConnectionHandle, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        // Read protocol header
+        let mut buf = [0u8; 8];
+        stream.read_exact(&mut buf).await?;
+
+        let incoming_header = ProtocolHeader::try_from(buf)
+            .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+
+        match incoming_header.id {
+            ProtocolId::Amqp => {
+                self.connect_amqp_with_stream(stream, incoming_header).await
+            }
+            ProtocolId::Tls => {
+                self.connect_tls_with_native_tls(stream, incoming_header).await
+            },
+            ProtocolId::Sasl => todo!(),
+        }
+    }
+
+    connect_tls!(connect_tls_with_native_tls);
+}
+
+#[cfg(feature = "rustls")]
+impl ConnectionAcceptor<tokio_rustls::TlsAcceptor> {
+    /// Accepts an incoming connection
+    pub async fn accept<Io>(&self, mut stream: Io) -> Result<ListenerConnectionHandle, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        // Read protocol header
+        let mut buf = [0u8; 8];
+        stream.read_exact(&mut buf).await?;
+
+        let incoming_header = ProtocolHeader::try_from(buf)
+            .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+
+        match incoming_header.id {
+            ProtocolId::Amqp => {
+                self.connect_amqp_with_stream(stream, incoming_header).await
+            }
+            ProtocolId::Tls => {
+                self.connect_tls_with_rustls(stream, incoming_header).await
+            },
+            ProtocolId::Sasl => todo!(),
+        }
+    }
+
+    connect_tls!(connect_tls_with_rustls);
 }
 
 /// A connection on the listener side
