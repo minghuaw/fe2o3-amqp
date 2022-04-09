@@ -1,8 +1,9 @@
 //! Supported SASL mechanisms
 
-use std::collections::BTreeMap;
-
-use fe2o3_amqp_types::{sasl::{SaslChallenge, SaslOutcome, SaslInit, SaslResponse, SaslCode}, primitives::Symbol};
+use fe2o3_amqp_types::{
+    primitives::Symbol,
+    sasl::{SaslChallenge, SaslCode, SaslInit, SaslOutcome, SaslResponse},
+};
 
 use crate::sasl_profile::PLAIN;
 
@@ -44,16 +45,15 @@ pub struct SaslPlainMechanism {
 
 impl SaslPlainMechanism {
     fn validate_init(&self, init: SaslInit) -> Option<SaslCode> {
-        let response = init.initial_response?
-            .into_vec();
-        
+        let response = init.initial_response?.into_vec();
+
         let mut split = response.split(|b| *b == 0u8);
         let _authzid = split.next()?;
         let authcid = split.next()?;
         let passwd = split.next()?;
         Some(self.validate_credential(authcid, passwd))
     }
-    
+
     fn validate_credential(&self, authcid: &[u8], passwd: &[u8]) -> SaslCode {
         if self.username.as_bytes() == authcid && self.password.as_bytes() == passwd {
             SaslCode::Ok
@@ -69,8 +69,7 @@ impl SaslAcceptor for SaslPlainMechanism {
     }
 
     fn on_init(&self, init: SaslInit) -> SaslServerFrame {
-        let code = self.validate_init(init)
-            .unwrap_or(SaslCode::Auth);
+        let code = self.validate_init(init).unwrap_or(SaslCode::Auth);
         let outcome = SaslOutcome {
             code,
             additional_data: None,

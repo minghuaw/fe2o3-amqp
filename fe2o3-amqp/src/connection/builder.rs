@@ -4,22 +4,20 @@ use std::{convert::TryInto, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
-    performatives::{ChannelMax, MaxFrameSize, Open, Begin},
+    performatives::{ChannelMax, MaxFrameSize, Open},
 };
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::{self, Receiver},
+    sync::mpsc::{self},
 };
 use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
     frames::amqp,
-    listener::{self, ListenerConnection},
     sasl_profile::SaslProfile,
-    session::frame::SessionFrame,
     transport::Transport,
     transport::{error::NegotiationError, protocol_header::ProtocolHeader},
 };
@@ -561,8 +559,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         let local_open = Open::from(self);
 
         // create channels
-        let (control_tx, control_rx) =
-            mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
+        let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
         let connection = Connection::new(control_tx.clone(), local_state, local_open);
 
@@ -1010,53 +1007,6 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
         }
     }
 }
-
-// =============================================================================
-// Building listener connection
-// =============================================================================
-
-// #[cfg(feature = "listener")]
-// impl<'a> Builder<'a, mode::ListenerWithId, ()> {
-//     /// Just do a pipelined open?
-//     pub(crate) async fn connect_amqp_with_stream<Io>(
-//         self,
-//         stream: Io,
-//     ) -> Result<ConnectionHandle<Receiver<Begin>>, OpenError>
-//     where
-//         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-//     {
-//         let mut local_state = ConnectionState::Start;
-//         let buffer_size = self.buffer_size;
-//         let transport = self
-//             .negotiate_amqp_with_stream(stream, &mut local_state)
-//             .await?;
-
-//         let local_open = Open::from(self);
-
-//         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
-//         let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
-//         let (session_listener_tx, session_listener_rx) = mpsc::channel(buffer_size);
-
-//         let connection = crate::Connection::new(control_tx.clone(), local_state, local_open);
-//         let listener_connection = ListenerConnection {
-//             connection,
-//             session_listener: session_listener_tx,
-//         };
-
-//         let engine =
-//             ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx).await?;
-//         let handle = engine.spawn();
-
-//         let connection_handle = ConnectionHandle {
-//             control: control_tx,
-//             handle,
-//             outgoing: outgoing_tx,
-//             session_listener: session_listener_rx
-//         };
-
-//         Ok(connection_handle)
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

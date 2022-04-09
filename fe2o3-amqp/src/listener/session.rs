@@ -6,6 +6,4 @@
 
 /// Accepts incoming session
 #[derive(Debug)]
-pub struct SessionAcceptor {
-
-}
+pub struct SessionAcceptor {}

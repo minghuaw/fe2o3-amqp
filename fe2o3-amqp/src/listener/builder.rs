@@ -2,9 +2,16 @@
 
 use std::marker::PhantomData;
 
-use fe2o3_amqp_types::{performatives::{Open, MaxFrameSize, ChannelMax}, definitions::{MIN_MAX_FRAME_SIZE, Milliseconds, IetfLanguageTag, Fields}, primitives::Symbol};
+use fe2o3_amqp_types::{
+    definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
+    performatives::{ChannelMax, MaxFrameSize, Open},
+    primitives::Symbol,
+};
 
-use crate::{util::{Uninitialized, Initialized}, connection::DEFAULT_OUTGOING_BUFFER_SIZE};
+use crate::{
+    connection::DEFAULT_OUTGOING_BUFFER_SIZE,
+    util::{Initialized, Uninitialized},
+};
 
 use super::ConnectionAcceptor;
 
@@ -47,7 +54,10 @@ impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
 
 impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     /// The id of the source container
-    pub fn container_id(self, id: impl Into<String>) -> Builder<ConnectionAcceptor<Tls, Sasl>, Initialized> {
+    pub fn container_id(
+        self,
+        id: impl Into<String>,
+    ) -> Builder<ConnectionAcceptor<Tls, Sasl>, Initialized> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
@@ -68,18 +78,20 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
             local_open,
             tls_acceptor: self.inner.tls_acceptor,
             sasl_acceptor: self.inner.sasl_acceptor,
-            buffer_size: self.inner.buffer_size
+            buffer_size: self.inner.buffer_size,
         };
 
-        Builder { inner, marker: PhantomData }
+        Builder {
+            inner,
+            marker: PhantomData,
+        }
     }
 
     /// Proposed maximum frame size
     pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
         let max_frame_size = max_frame_size.into();
         let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE as u32, max_frame_size.0);
-        self.inner.local_open
-            .max_frame_size = MaxFrameSize::from(max_frame_size);
+        self.inner.local_open.max_frame_size = MaxFrameSize::from(max_frame_size);
         self
     }
 
@@ -89,8 +101,7 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     /// value plus one is the maximum number of sessions that can be simultaneously active on the
     /// connection
     pub fn channel_max(mut self, channel_max: impl Into<ChannelMax>) -> Self {
-        self.inner.local_open
-            .channel_max = channel_max.into();
+        self.inner.local_open.channel_max = channel_max.into();
         self
     }
 
@@ -101,76 +112,64 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     pub fn session_max(mut self, session_max: impl Into<ChannelMax>) -> Self {
         let mut channel_max = session_max.into();
         channel_max.0 -= 1;
-        self.inner.local_open
-            .channel_max = channel_max;
+        self.inner.local_open.channel_max = channel_max;
         self
     }
 
     /// Idle time-out
     pub fn idle_time_out(mut self, idle_time_out: impl Into<Milliseconds>) -> Self {
-        self.inner.local_open
-            .idle_time_out = Some(idle_time_out.into());
+        self.inner.local_open.idle_time_out = Some(idle_time_out.into());
         self
     }
 
     /// Add one locales available for outgoing text
     pub fn add_outgoing_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
-        match &mut self.inner.local_open
-            .outgoing_locales {
+        match &mut self.inner.local_open.outgoing_locales {
             Some(locales) => locales.push(locale.into()),
-            None => self.inner.local_open
-                .outgoing_locales = Some(vec![locale.into()]),
+            None => self.inner.local_open.outgoing_locales = Some(vec![locale.into()]),
         }
         self
     }
 
     /// Set the locales available for outgoing text
     pub fn set_outgoing_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
-        self.inner.local_open
-            .outgoing_locales = Some(locales);
+        self.inner.local_open.outgoing_locales = Some(locales);
         self
     }
 
     /// Add one desired locales for incoming text in decreasing level of preference
     pub fn add_incoming_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
-        match &mut self.inner.local_open
-            .incoming_locales {
+        match &mut self.inner.local_open.incoming_locales {
             Some(locales) => locales.push(locale.into()),
-            None => self.inner.local_open
-                .incoming_locales = Some(vec![locale.into()]),
+            None => self.inner.local_open.incoming_locales = Some(vec![locale.into()]),
         }
         self
     }
 
     /// Set the desired locales for incoming text in decreasing level of preference
     pub fn set_incoming_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
-        self.inner.local_open
-            .incoming_locales = Some(locales);
+        self.inner.local_open.incoming_locales = Some(locales);
         self
     }
 
     /// Add one extension capabilities the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
-        match &mut self.inner.local_open
-            .offered_capabilities {
+        match &mut self.inner.local_open.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
-            None => self.inner.local_open
-                .offered_capabilities = Some(vec![capability.into()]),
+            None => self.inner.local_open.offered_capabilities = Some(vec![capability.into()]),
         }
         self
     }
 
     /// Set the extension capabilities the sender supports
     pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.inner.local_open
-            .offered_capabilities = Some(capabilities);
+        self.inner.local_open.offered_capabilities = Some(capabilities);
         self
     }
 
     /// Add one extension capabilities the sender can use if the receiver supports them
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
-        match &mut self.inner.local_open
-            .desired_capabilities {
+        match &mut self.inner.local_open.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
             None => self.inner.local_open.desired_capabilities = Some(vec![capability.into()]),
         }
@@ -179,15 +178,13 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
 
     /// Set the extension capabilities the sender can use if the receiver supports them
     pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.inner.local_open
-            .desired_capabilities = Some(capabilities);
+        self.inner.local_open.desired_capabilities = Some(capabilities);
         self
     }
 
     /// Connection properties
     pub fn properties(mut self, properties: Fields) -> Self {
-        self.inner.local_open
-            .properties = Some(properties);
+        self.inner.local_open.properties = Some(properties);
         self
     }
 
@@ -199,7 +196,10 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
             sasl_acceptor: self.inner.sasl_acceptor,
             buffer_size: self.inner.buffer_size,
         };
-        Builder { inner, marker: PhantomData }
+        Builder {
+            inner,
+            marker: PhantomData,
+        }
     }
 
     /// Sets the SASL acceptor
@@ -210,7 +210,10 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
             sasl_acceptor,
             buffer_size: self.inner.buffer_size,
         };
-        Builder { inner, marker: PhantomData }
+        Builder {
+            inner,
+            marker: PhantomData,
+        }
     }
 
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions

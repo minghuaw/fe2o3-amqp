@@ -1,24 +1,41 @@
 //! Connection Listener
 
-use std::{time::Duration, io, marker::PhantomData};
+use std::{io, marker::PhantomData, time::Duration};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, MIN_MAX_FRAME_SIZE},
     performatives::{Begin, Close, End, Open},
-    states::ConnectionState, sasl::{SaslMechanisms, SaslOutcome, SaslCode}, primitives::Symbol,
+    primitives::Symbol,
+    sasl::{SaslCode, SaslMechanisms, SaslOutcome},
+    states::ConnectionState,
 };
 use futures_util::{Sink, SinkExt, StreamExt};
-use tokio::{io::{AsyncReadExt, AsyncRead, AsyncWrite, AsyncWriteExt}, sync::mpsc::{self, Receiver}};
-
-use crate::{
-    connection::{Error, self, ConnectionHandle, OpenError, DEFAULT_CONTROL_CHAN_BUF, engine::ConnectionEngine},
-    endpoint,
-    frames::{amqp::{self, Frame}, sasl},
-    session::frame::{SessionFrame, SessionFrameBody}, transport::{protocol_header::{ProtocolHeader, ProtocolId}, Transport, send_amqp_proto_header}, listener::sasl_acceptor::SaslServerFrame, util::Initialized,
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    sync::mpsc::{self, Receiver},
 };
 
-use super::{sasl_acceptor::{SaslAcceptor}, builder::Builder};
+use crate::{
+    connection::{
+        self, engine::ConnectionEngine, ConnectionHandle, Error, OpenError,
+        DEFAULT_CONTROL_CHAN_BUF,
+    },
+    endpoint,
+    frames::{
+        amqp::{self, Frame},
+        sasl,
+    },
+    listener::sasl_acceptor::SaslServerFrame,
+    session::frame::{SessionFrame, SessionFrameBody},
+    transport::{
+        protocol_header::{ProtocolHeader, ProtocolId},
+        send_amqp_proto_header, Transport,
+    },
+    util::Initialized,
+};
+
+use super::{builder::Builder, sasl_acceptor::SaslAcceptor};
 
 /// Type alias for listener connection
 pub type ListenerConnectionHandle = ConnectionHandle<Receiver<Begin>>;
@@ -54,54 +71,56 @@ pub struct ConnectionAcceptor<Tls, Sasl> {
 impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
     /// Convert the acceptor into a connection acceptor builder. This allows users changing
     /// particular field of the acceptor.
-    pub fn into_builder(self) -> Builder<ConnectionAcceptor<Tls,Sasl>, Initialized> {
+    pub fn into_builder(self) -> Builder<ConnectionAcceptor<Tls, Sasl>, Initialized> {
         Builder {
             inner: self,
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 
-    async fn negotiate_amqp_with_stream<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError> 
+    async fn negotiate_amqp_with_stream<Io>(
+        &self,
+        mut stream: Io,
+        incoming_header: ProtocolHeader,
+    ) -> Result<ListenerConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         let mut local_state = ConnectionState::HeaderReceived;
-        let idle_time_out = self.local_open
+        let idle_time_out = self
+            .local_open
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
         let local_header = ProtocolHeader::amqp();
         if incoming_header != local_header {
             let buf: [u8; 8] = local_header.into();
             stream.write_all(&buf).await?;
-            return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
+            return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()));
         }
         send_amqp_proto_header(&mut stream, &mut local_state, local_header).await?;
         let transport =
             Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
-    
+
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
         let (begin_tx, begin_rx) = mpsc::channel(self.buffer_size);
-        
-        let connection = connection::Connection::new(control_tx.clone(), local_state, self.local_open.clone());
+
+        let connection =
+            connection::Connection::new(control_tx.clone(), local_state, self.local_open.clone());
         let listener_connection = ListenerConnection {
             connection,
-            session_listener: begin_tx
+            session_listener: begin_tx,
         };
-    
-        let engine = ConnectionEngine::open(
-            transport,
-            listener_connection,
-            control_rx,
-            outgoing_rx
-        ).await?;
+
+        let engine =
+            ConnectionEngine::open(transport, listener_connection, control_rx, outgoing_rx).await?;
         let handle = engine.spawn();
-    
+
         let connection_handle = ConnectionHandle {
             control: control_tx,
             handle,
             outgoing: outgoing_tx,
-            session_listener: begin_rx
+            session_listener: begin_rx,
         };
         Ok(connection_handle)
     }
@@ -109,14 +128,18 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
 
 macro_rules! sasl_not_impled {
     ($header:expr) => {
-        async fn sasl_not_implemented<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError>
+        async fn sasl_not_implemented<Io>(
+            &self,
+            mut stream: Io,
+            incoming_header: ProtocolHeader,
+        ) -> Result<ListenerConnectionHandle, OpenError>
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
             let header = $header;
             let buf: [u8; 8] = header.into();
             stream.write_all(&buf).await?;
-            Err(OpenError::ProtocolHeaderMismatch(incoming_header.into())) 
+            Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
         }
     };
 }
@@ -137,7 +160,11 @@ impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
 
 macro_rules! tls_not_impled {
     ($header:expr) => {
-        async fn tls_not_implemented<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError>
+        async fn tls_not_implemented<Io>(
+            &self,
+            mut stream: Io,
+            incoming_header: ProtocolHeader,
+        ) -> Result<ListenerConnectionHandle, OpenError>
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
@@ -145,12 +172,12 @@ macro_rules! tls_not_impled {
             let header = $header;
             let buf: [u8; 8] = header.into();
             stream.write_all(&buf).await?;
-            Err(OpenError::ProtocolHeaderMismatch(incoming_header.into())) 
+            Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
         }
     };
 }
 
-impl<Sasl> ConnectionAcceptor<(), Sasl> 
+impl<Sasl> ConnectionAcceptor<(), Sasl>
 where
     Sasl: SaslAcceptor,
 {
@@ -165,7 +192,11 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    async fn negotiate_sasl_with_stream<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError> 
+    async fn negotiate_sasl_with_stream<Io>(
+        &self,
+        mut stream: Io,
+        incoming_header: ProtocolHeader,
+    ) -> Result<ListenerConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -173,7 +204,7 @@ where
         if incoming_header != local_header {
             let buf: [u8; 8] = local_header.into();
             stream.write_all(&buf).await?;
-            return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
+            return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()));
         }
 
         let mut buf: [u8; 8] = local_header.into();
@@ -183,13 +214,16 @@ where
 
         // Send mechanisms
         let mechanisms = SaslMechanisms {
-            sasl_server_mechanisms: self.sasl_acceptor.mechanisms()
+            sasl_server_mechanisms: self
+                .sasl_acceptor
+                .mechanisms()
                 .into_iter()
-                .map(|s| Symbol::from(s)).collect(),
+                .map(|s| Symbol::from(s))
+                .collect(),
         };
         transport.send(sasl::Frame::Mechanisms(mechanisms)).await?;
 
-        // Wait for Init 
+        // Wait for Init
         let next = if let Some(frame) = transport.next().await {
             match frame? {
                 sasl::Frame::Init(init) => self.sasl_acceptor.on_init(init),
@@ -199,21 +233,24 @@ where
                         additional_data: None,
                     };
                     transport.send(sasl::Frame::Outcome(outcome)).await?;
-                    return Err(OpenError::SaslError { code: SaslCode::Sys, additional_data: None })
+                    return Err(OpenError::SaslError {
+                        code: SaslCode::Sys,
+                        additional_data: None,
+                    });
                 }
             }
         } else {
             return Err(OpenError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
-                "Expecting SASL Init frame"
-            )))
+                "Expecting SASL Init frame",
+            )));
         };
 
         let outcome: SaslOutcome = match next {
             SaslServerFrame::Challenge(challenge) => {
                 transport.send(sasl::Frame::Challenge(challenge)).await?;
                 self.negotiate_sasl_challenge(&mut transport).await?
-            },
+            }
             SaslServerFrame::Outcome(outcome) => outcome,
         };
 
@@ -221,16 +258,17 @@ where
 
         let mut stream = transport.into_inner_io();
         stream.read_exact(&mut buf).await?;
-        let incoming_header = ProtocolHeader::try_from(buf)
-            .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+        let incoming_header =
+            ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
-        self.negotiate_amqp_with_stream(stream, incoming_header).await
+        self.negotiate_amqp_with_stream(stream, incoming_header)
+            .await
     }
 
     async fn negotiate_sasl_challenge<Io>(
         &self,
         transport: &mut Transport<Io, sasl::Frame>,
-    ) -> Result<SaslOutcome, OpenError> 
+    ) -> Result<SaslOutcome, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -241,36 +279,42 @@ where
                     match self.sasl_acceptor.on_response(response) {
                         SaslServerFrame::Challenge(challenge) => {
                             transport.send(sasl::Frame::Challenge(challenge)).await?;
-                        },
+                        }
                         SaslServerFrame::Outcome(outcome) => {
                             // The Ok result will be sent by the outer function
-                            return Ok(outcome)
-                        },
+                            return Ok(outcome);
+                        }
                     }
-                },
+                }
                 _ => {
                     let outcome = SaslOutcome {
                         code: SaslCode::Sys,
                         additional_data: None,
                     };
                     transport.send(sasl::Frame::Outcome(outcome)).await?;
-                    return Err(OpenError::SaslError { code: SaslCode::Sys, additional_data: None })
+                    return Err(OpenError::SaslError {
+                        code: SaslCode::Sys,
+                        additional_data: None,
+                    });
                 }
             }
         }
 
         Err(OpenError::Io(io::Error::new(
             io::ErrorKind::UnexpectedEof,
-            "Expecting SASL response"
+            "Expecting SASL response",
         )))
     }
 }
 
-
 // A macro is used instead of blanked impl with trait to avoid heap allocated future
 macro_rules! connect_tls {
     ($fn_ident:ident, $sasl_handler:ident) => {
-        async fn $fn_ident<Io>(&self, mut stream: Io, incoming_header: ProtocolHeader) -> Result<ListenerConnectionHandle, OpenError> 
+        async fn $fn_ident<Io>(
+            &self,
+            mut stream: Io,
+            incoming_header: ProtocolHeader,
+        ) -> Result<ListenerConnectionHandle, OpenError>
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
@@ -278,9 +322,9 @@ macro_rules! connect_tls {
             if tls_header != incoming_header {
                 let buf: [u8; 8] = tls_header.into();
                 stream.write_all(&buf).await?;
-                return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
+                return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()));
             }
-            
+
             // Send protocol header
             let mut buf: [u8; 8] = tls_header.into();
             stream.write_all(&buf).await?;
@@ -291,11 +335,14 @@ macro_rules! connect_tls {
 
             // Read AMQP header
             tls_stream.read_exact(&mut buf).await?;
-            let incoming_header = ProtocolHeader::try_from(buf)
-                .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+            let incoming_header =
+                ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
             match incoming_header.id {
-                ProtocolId::Amqp => self.negotiate_amqp_with_stream(tls_stream, incoming_header).await,
+                ProtocolId::Amqp => {
+                    self.negotiate_amqp_with_stream(tls_stream, incoming_header)
+                        .await
+                }
                 ProtocolId::Tls => Err(OpenError::ProtocolHeaderMismatch(incoming_header.into())),
                 ProtocolId::Sasl => self.$sasl_handler(tls_stream, incoming_header).await,
             }
@@ -309,7 +356,7 @@ impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
 }
 
 #[cfg(feature = "native-tls")]
-impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl> 
+impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
 where
     Sasl: SaslAcceptor,
 {
@@ -322,7 +369,7 @@ impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
 }
 
 #[cfg(feature = "rustls")]
-impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl> 
+impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
 where
     Sasl: SaslAcceptor,
 {
@@ -332,7 +379,10 @@ where
 macro_rules! impl_accept {
     (<$tls:ty, $sasl:ty>, $tls_handler:ident, $sasl_handler:ident) => {
         /// Accepts an incoming connection
-        pub async fn accept<Io>(&self, mut stream: Io) -> Result<ListenerConnectionHandle, OpenError> 
+        pub async fn accept<Io>(
+            &self,
+            mut stream: Io,
+        ) -> Result<ListenerConnectionHandle, OpenError>
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
@@ -340,16 +390,15 @@ macro_rules! impl_accept {
             let mut buf = [0u8; 8];
             stream.read_exact(&mut buf).await?;
 
-            let incoming_header = ProtocolHeader::try_from(buf)
-                .map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
+            let incoming_header =
+                ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
             match incoming_header.id {
                 ProtocolId::Amqp => {
-                    self.negotiate_amqp_with_stream(stream, incoming_header).await
+                    self.negotiate_amqp_with_stream(stream, incoming_header)
+                        .await
                 }
-                ProtocolId::Tls => {
-                    self.$tls_handler(stream, incoming_header).await
-                },
+                ProtocolId::Tls => self.$tls_handler(stream, incoming_header).await,
                 ProtocolId::Sasl => self.$sasl_handler(stream, incoming_header).await,
             }
         }
@@ -542,4 +591,3 @@ impl endpoint::Connection for ListenerConnection {
         self.connection.session_tx_by_outgoing_channel(channel)
     }
 }
-

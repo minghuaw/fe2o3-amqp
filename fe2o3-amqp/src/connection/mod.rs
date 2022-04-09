@@ -26,7 +26,7 @@ use crate::{
     session::Session,
 };
 
-use self::{engine::SessionId};
+use self::engine::SessionId;
 
 mod builder;
 pub use builder::*;

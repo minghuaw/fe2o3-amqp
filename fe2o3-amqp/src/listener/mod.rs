@@ -1,18 +1,10 @@
 //! Listeners
 
-use std::{io, net::SocketAddr};
-
-use async_trait::async_trait;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
-};
-
+pub mod builder;
 pub mod connection;
 pub mod link;
-pub mod session;
-pub mod builder;
 pub mod sasl_acceptor;
+pub mod session;
 
 pub use self::connection::*;
 
