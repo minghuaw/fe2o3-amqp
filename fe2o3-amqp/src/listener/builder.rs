@@ -15,7 +15,7 @@ pub struct Builder<T, M> {
     marker: PhantomData<M>,
 }
 
-impl Builder<ConnectionAcceptor<()>, Uninitialized> {
+impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
     /// Creates a new Builder for [`ConnectionAccptor`]
     pub fn new() -> Self {
         let local_open = Open {
@@ -34,7 +34,7 @@ impl Builder<ConnectionAcceptor<()>, Uninitialized> {
         let inner = ConnectionAcceptor {
             local_open,
             tls_acceptor: (),
-            sasl_mechanisms: Vec::new(),
+            sasl: (),
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
         };
 
@@ -45,9 +45,9 @@ impl Builder<ConnectionAcceptor<()>, Uninitialized> {
     }
 }
 
-impl<M, Tls> Builder<ConnectionAcceptor<Tls>, M> {
+impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     /// The id of the source container
-    pub fn container_id(self, id: impl Into<String>) -> Builder<ConnectionAcceptor<Tls>, Initialized> {
+    pub fn container_id(self, id: impl Into<String>) -> Builder<ConnectionAcceptor<Tls, Sasl>, Initialized> {
         // In Rust, it’s more common to pass slices as arguments
         // rather than vectors when you just want to provide read access.
         // The same goes for String and &str.
@@ -67,7 +67,7 @@ impl<M, Tls> Builder<ConnectionAcceptor<Tls>, M> {
         let inner = ConnectionAcceptor {
             local_open,
             tls_acceptor: self.inner.tls_acceptor,
-            sasl_mechanisms: self.inner.sasl_mechanisms,
+            sasl: self.inner.sasl,
             buffer_size: self.inner.buffer_size
         };
 
@@ -198,9 +198,9 @@ impl<M, Tls> Builder<ConnectionAcceptor<Tls>, M> {
     }
 }
 
-impl<Tls> Builder<ConnectionAcceptor<Tls>, Initialized> {
+impl<T, S> Builder<ConnectionAcceptor<T, S>, Initialized> {
     /// Build [`ConnectionAcceptor`]
-    pub fn build(self) -> ConnectionAcceptor<Tls> {
+    pub fn build(self) -> ConnectionAcceptor<T, S> {
         self.inner
     }
 }

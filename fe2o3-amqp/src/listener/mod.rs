@@ -14,6 +14,8 @@ pub mod session;
 pub mod builder;
 pub mod sasl;
 
+use crate::{connection::OpenError, transport::error::NegotiationError};
+
 pub use self::connection::*;
 
 /// Trait for listeners
