@@ -11,8 +11,8 @@ use super::ConnectionAcceptor;
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
 pub struct Builder<T, M> {
-    inner: T,
-    marker: PhantomData<M>,
+    pub(crate) inner: T,
+    pub(crate) marker: PhantomData<M>,
 }
 
 impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
@@ -34,7 +34,7 @@ impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
         let inner = ConnectionAcceptor {
             local_open,
             tls_acceptor: (),
-            sasl: (),
+            sasl_acceptor: (),
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
         };
 
@@ -67,7 +67,7 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
         let inner = ConnectionAcceptor {
             local_open,
             tls_acceptor: self.inner.tls_acceptor,
-            sasl: self.inner.sasl,
+            sasl_acceptor: self.inner.sasl_acceptor,
             buffer_size: self.inner.buffer_size
         };
 
@@ -189,6 +189,28 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
         self.inner.local_open
             .properties = Some(properties);
         self
+    }
+
+    /// Sets the TLS Acceptor
+    pub fn tls_acceptor<T>(self, tls_acceptor: T) -> Builder<ConnectionAcceptor<T, Sasl>, M> {
+        let inner = ConnectionAcceptor {
+            local_open: self.inner.local_open,
+            tls_acceptor,
+            sasl_acceptor: self.inner.sasl_acceptor,
+            buffer_size: self.inner.buffer_size,
+        };
+        Builder { inner, marker: PhantomData }
+    }
+
+    /// Sets the SASL acceptor
+    pub fn sasl_acceptor<S>(self, sasl_acceptor: S) -> Builder<ConnectionAcceptor<Tls, S>, M> {
+        let inner = ConnectionAcceptor {
+            local_open: self.inner.local_open,
+            tls_acceptor: self.inner.tls_acceptor,
+            sasl_acceptor,
+            buffer_size: self.inner.buffer_size,
+        };
+        Builder { inner, marker: PhantomData }
     }
 
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`] that are used by the sessions

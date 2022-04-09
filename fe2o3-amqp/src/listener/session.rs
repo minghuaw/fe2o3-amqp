@@ -1,5 +1,11 @@
 //! Session Listener
 
-/// Listener for incoming session
+// /// Listener for incoming session
+// #[derive(Debug)]
+// pub struct SessionListener {}
+
+/// Accepts incoming session
 #[derive(Debug)]
-pub struct SessionListener {}
+pub struct SessionAcceptor {
+
+}
