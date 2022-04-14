@@ -92,7 +92,6 @@ where
         engine
             .session
             .on_incoming_begin(channel, remote_begin)
-            .await
             .map_err(Into::into)?;
         Ok(engine)
     }
@@ -109,7 +108,6 @@ where
             SessionFrameBody::Begin(begin) => {
                 self.session
                     .on_incoming_begin(channel, begin)
-                    .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Attach(attach) => {

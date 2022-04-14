@@ -128,7 +128,7 @@ pub(crate) trait Session {
     ) -> Result<Handle, Self::AllocError>;
     fn deallocate_link(&mut self, link_name: String);
 
-    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
+    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
     async fn on_incoming_attach(&mut self, channel: u16, attach: Attach)
         -> Result<(), Self::Error>;
     async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error>;

@@ -10,6 +10,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
+    session::{DEFAULT_SESSION_MUX_BUFFER_SIZE, DEFAULT_WINDOW},
     util::{Initialized, Uninitialized},
 };
 
@@ -21,6 +22,10 @@ pub struct Builder<T, M> {
     pub(crate) inner: T,
     pub(crate) marker: PhantomData<M>,
 }
+
+// =============================================================================
+// ConnectionAccpetor builder
+// =============================================================================
 
 impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
     /// Creates a new Builder for [`ConnectionAccptor`]
@@ -229,3 +234,26 @@ impl<T, S> Builder<ConnectionAcceptor<T, S>, Initialized> {
         self.inner
     }
 }
+
+// // =============================================================================
+// // SessionAcceptor builder
+// // =============================================================================
+
+// impl Builder<SessionAcceptor, Uninitialized> {
+//     pub fn new() -> Self {
+//         let inner = SessionAcceptor {
+//             next_outgoing_id: 0,
+//             incoming_window: DEFAULT_WINDOW,
+//             outgoing_window: DEFAULT_WINDOW,
+//             handle_max: Default::default(),
+//             offered_capabilities: None,
+//             desired_capabilities: None,
+//             properties: None,
+//             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
+//         };
+//         Self {
+//             inner,
+//             marker: PhantomData
+//         }
+//     }
+// }

@@ -44,7 +44,7 @@ pub struct WithoutTarget;
 pub struct WithTarget;
 
 /// Builder for a Link
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Builder<Role, NameState, Addr> {
     /// The name of the link
     pub name: String,
@@ -337,9 +337,9 @@ impl Builder<role::Sender, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach(
+    pub async fn attach<R>(
         mut self,
-        session: &mut SessionHandle,
+        session: &mut SessionHandle<R>,
     ) -> Result<Sender<Attached>, AttachError> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
@@ -411,9 +411,9 @@ impl Builder<role::Receiver, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach(
+    pub async fn attach<R>(
         mut self,
-        session: &mut SessionHandle,
+        session: &mut SessionHandle<R>,
     ) -> Result<Receiver<Attached>, AttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size.clone();

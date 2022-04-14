@@ -259,8 +259,8 @@ impl Receiver<Detached> {
     ///     "q1"                    // Source address
     /// ).await.unwrap();
     /// ```
-    pub async fn attach(
-        session: &mut SessionHandle,
+    pub async fn attach<R>(
+        session: &mut SessionHandle<R>,
         name: impl Into<String>,
         addr: impl Into<Address>,
     ) -> Result<Receiver<Attached>, AttachError> {

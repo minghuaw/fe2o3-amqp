@@ -32,12 +32,12 @@ use crate::{
         protocol_header::{ProtocolHeader, ProtocolId},
         send_amqp_proto_header, Transport,
     },
-    util::Initialized,
+    util::{Initialized, Uninitialized},
 };
 
 use super::{builder::Builder, sasl_acceptor::SaslAcceptor};
 
-/// Type alias for listener connection
+/// Type alias for listener connection handle
 pub type ListenerConnectionHandle = ConnectionHandle<Receiver<Begin>>;
 
 // /// Listener for incoming connections
@@ -66,6 +66,13 @@ pub struct ConnectionAcceptor<Tls, Sasl> {
     pub(crate) tls_acceptor: Tls,
     pub(crate) sasl_acceptor: Sasl,
     pub(crate) buffer_size: usize,
+}
+
+impl ConnectionAcceptor<(), ()> {
+    /// Creates a builder for [`ConnectionAcceptor`]
+    pub fn builder() -> Builder<Self, Uninitialized> {
+        Builder::<Self, Uninitialized>::new()
+    }
 }
 
 impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {

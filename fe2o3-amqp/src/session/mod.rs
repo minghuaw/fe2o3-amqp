@@ -47,21 +47,22 @@ use self::frame::{SessionFrame, SessionFrameBody};
 ///
 /// Dropping the handle will also stop the [`Session`] event loop
 #[derive(Debug)]
-pub struct SessionHandle {
+pub struct SessionHandle<R> {
     pub(crate) control: mpsc::Sender<SessionControl>,
-    engine_handle: JoinHandle<Result<(), Error>>,
+    pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) link_listener: R,
 }
 
-impl Drop for SessionHandle {
+impl<R> Drop for SessionHandle<R> {
     fn drop(&mut self) {
         let _ = self.control.try_send(SessionControl::End(None));
     }
 }
 
-impl SessionHandle {
+impl<R> SessionHandle<R> {
     /// Checks if the underlying event loop has stopped
     pub fn is_ended(&self) -> bool {
         self.control.is_closed()
@@ -219,7 +220,7 @@ pub struct Session {
 
 impl Session {
     /// Alias for `begin`
-    pub async fn new(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle, Error> {
+    pub async fn new(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
         Self::begin(conn).await
     }
 
@@ -249,7 +250,7 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle, Error> {
+    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
         Session::builder().begin(conn).await
     }
 }
@@ -309,7 +310,7 @@ impl endpoint::Session for Session {
         }
     }
 
-    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
