@@ -38,7 +38,7 @@ use crate::{
 use super::{builder::Builder, sasl_acceptor::SaslAcceptor};
 
 /// Type alias for listener connection handle
-pub type ListenerConnectionHandle = ConnectionHandle<Receiver<Begin>>;
+pub type ListenerConnectionHandle = ConnectionHandle<Receiver<(u16, Begin)>>;
 
 // /// Listener for incoming connections
 // pub struct ConnectionListener<L: Listener> {
@@ -69,6 +69,13 @@ pub struct ConnectionAcceptor<Tls, Sasl> {
 }
 
 impl ConnectionAcceptor<(), ()> {
+    /// Creates a default [`ConnectionAcceptor`] with the supplied container id
+    pub fn new(container_id: impl Into<String>) -> Self {
+        Self::builder()
+            .container_id(container_id)
+            .build()
+    }
+
     /// Creates a builder for [`ConnectionAcceptor`]
     pub fn builder() -> Builder<Self, Uninitialized> {
         Builder::<Self, Uninitialized>::new()
@@ -453,7 +460,7 @@ where
 #[derive(Debug)]
 pub struct ListenerConnection {
     pub(crate) connection: connection::Connection,
-    pub(crate) session_listener: mpsc::Sender<Begin>,
+    pub(crate) session_listener: mpsc::Sender<(u16, Begin)>,
 }
 
 #[async_trait]
@@ -520,7 +527,7 @@ impl endpoint::Connection for ListenerConnection {
                 // remotely initiated session
 
                 // Here we will send the begin frame out to get processed
-                self.session_listener.send(begin).await.map_err(|_| {
+                self.session_listener.send((channel, begin)).await.map_err(|_| {
                     Error::amqp_error(
                         AmqpError::NotImplemented,
                         Some("Remotely initiazted session is not supported".to_string()),

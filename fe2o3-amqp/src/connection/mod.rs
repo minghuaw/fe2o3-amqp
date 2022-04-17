@@ -624,14 +624,21 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error> {
-        // TODO: the engine already checks that
-        // match &self.local_state {
-        //     ConnectionState::Opened => {}
-        //     _ => return Err(Error::Message("Illegal local connection state")),
-        // }
+    fn on_outgoing_begin(&mut self, outgoing_channel: u16, begin: Begin) -> Result<Frame, Self::Error> {
+        // TODO: check states?
+        
+        if let Some(remote_channel) = begin.remote_channel {
+            let session_id = self.session_by_outgoing_channel
+                .get(&outgoing_channel)
+                .ok_or_else(|| Error::amqp_error(
+                    AmqpError::InternalError, 
+                    "Outgoing channel is not found".to_string()
+                ))?;
 
-        let frame = Frame::new(channel, FrameBody::Begin(begin));
+            self.session_by_incoming_channel.insert(remote_channel, *session_id);
+        }
+
+        let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
         Ok(frame)
     }
 

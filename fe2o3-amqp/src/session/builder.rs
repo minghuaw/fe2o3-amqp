@@ -197,7 +197,7 @@ impl Builder {
         let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
 
         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
-        let engine = SessionEngine::begin(
+        let engine = SessionEngine::<crate::Session>::begin(
             connection.control.clone(),
             session,
             session_id,

@@ -23,25 +23,20 @@ use super::{
 };
 
 pub(crate) struct SessionEngine<S: Session> {
-    conn: mpsc::Sender<ConnectionControl>,
-    session: S,
-    session_id: SessionId,
-    control: mpsc::Receiver<SessionControl>,
-    incoming: mpsc::Receiver<SessionIncomingItem>,
-    outgoing: PollSender<SessionFrame>,
+    pub conn: mpsc::Sender<ConnectionControl>,
+    pub session: S,
+    pub session_id: SessionId,
+    pub control: mpsc::Receiver<SessionControl>,
+    pub incoming: mpsc::Receiver<SessionIncomingItem>,
+    pub outgoing: PollSender<SessionFrame>,
 
-    outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl<S> SessionEngine<S>
-where
-    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
-    S::Error: Into<Error> + Debug,
-    S::AllocError: Into<AllocLinkError>,
-{
+impl SessionEngine<super::Session> {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
-        session: S,
+        session: super::Session,
         session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
@@ -62,8 +57,7 @@ where
         engine
             .session
             .send_begin(&mut engine.outgoing)
-            .await
-            .map_err(|e| e.into())?;
+            .await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
@@ -91,11 +85,17 @@ where
         };
         engine
             .session
-            .on_incoming_begin(channel, remote_begin)
-            .map_err(Into::into)?;
+            .on_incoming_begin(channel, remote_begin)?;
         Ok(engine)
     }
+}
 
+impl<S> SessionEngine<S>
+where
+    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
+    S::Error: Into<Error> + Debug,
+    S::AllocError: Into<AllocLinkError>,
+{
     pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
@@ -158,6 +158,7 @@ where
     }
 
     #[inline]
+    #[tracing::instrument(skip_all)]
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
         match control {
             SessionControl::End(error) => {

@@ -8,6 +8,13 @@ pub mod session;
 
 pub use self::connection::*;
 
+// /// A half established session
+// #[derive(Debug)]
+// pub struct IncomingSession {
+//     remote_begin: Begin,
+//     local_state: 
+// }
+
 // /// Trait for listeners
 // #[async_trait]
 // pub trait Listener {

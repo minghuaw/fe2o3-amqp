@@ -12,7 +12,6 @@ use fe2o3_amqp_types::{
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    session::{DEFAULT_SESSION_MUX_BUFFER_SIZE, DEFAULT_WINDOW},
     util::{Initialized, Uninitialized},
 };
 

@@ -1,29 +1,29 @@
-use fe2o3_amqp::{listener::ConnectionAcceptor, Connection};
+use fe2o3_amqp::{listener::{ConnectionAcceptor, session::SessionAcceptor}};
 use tokio::net::TcpListener;
-use tracing::Level;
+use tracing::{Level, instrument};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5671";
 
-async fn listener_main() {
+#[instrument]
+async fn connection_main() {
     let tcp_listener = TcpListener::bind(BASE_ADDR).await.unwrap();
-    let connection_acceptor = ConnectionAcceptor::builder()
-        .container_id("test_listener")
-        .build();
+    let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
+    let session_acceptor = SessionAcceptor::default();
 
     loop {
         let (stream, addr) = tcp_listener.accept().await.unwrap();
         println!("Incoming connection from {:?}", addr);
         let mut connection = connection_acceptor.accept(stream).await.unwrap();
-        let result = connection.close().await;
-        println!("{:?}", result);
-    }
-}
+        let mut session = session_acceptor.accept(&mut connection).await.unwrap();
+        
 
-async fn client_main() {
-    let url = format!("amqp://{}", BASE_ADDR);
-    let mut connection = Connection::open("connection-1", &url[..]).await.unwrap();
-    connection.close().await.unwrap();
+        
+        let result = session.close().await;
+        println!("Session close result: {:?}", result);
+        let result = connection.close().await;
+        println!("Connection close result: {:?}", result);
+    }
 }
 
 #[tokio::main]
@@ -33,9 +33,7 @@ async fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let handle = tokio::spawn(listener_main());
-    client_main().await;
+    let handle = tokio::spawn(connection_main());
 
-    handle.abort();
-    let _ = handle.await;
+    handle.await.unwrap();
 }
