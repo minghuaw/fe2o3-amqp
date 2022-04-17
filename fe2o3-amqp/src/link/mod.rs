@@ -161,7 +161,7 @@ where
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
         // attach frames could be in conflict.
         match remote_attach.role {
-            // Remote attach is from sender
+            // Remote attach is from sender, local is receiver
             Role::Sender => {
                 // In this case, the sender is considered to hold the authoritative version of the
                 self.source = remote_attach.source;
@@ -610,7 +610,7 @@ where
         true => {
             if let Err(e) = link.on_incoming_attach(remote_attach).await {
                 // Should any error happen handling remote
-                panic!("{:?}", e);
+                tracing::error!("{:?}", e);
             }
         }
         false => {

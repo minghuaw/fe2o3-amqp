@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions,
+    definitions::{self, AmqpError, SessionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
 };
@@ -19,15 +19,14 @@ use crate::{
     endpoint::{self, LinkFlow},
     session::{
         self, engine::SessionEngine, frame::SessionFrame, SessionHandle,
-        DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
+        DEFAULT_SESSION_CONTROL_BUFFER_SIZE, Error,
     },
-    Payload, util::Initialized,
+    Payload, util::Initialized, link::{LinkHandle, LinkFrame},
 };
 
 use super::{ListenerConnectionHandle, builder::Builder};
 
 type SessionBuilder = crate::session::Builder;
-type SessionError = crate::session::Error;
 
 /// Type alias for listener session handle
 pub type ListenerSessionHandle = SessionHandle<mpsc::Receiver<Attach>>;
@@ -81,7 +80,7 @@ impl SessionAcceptor {
     pub async fn accept(
         &self,
         connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, SessionError> {
+    ) -> Result<ListenerSessionHandle, Error> {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
@@ -222,10 +221,62 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_attach(
         &mut self,
-        channel: u16,
+        _channel: u16,
         attach: Attach,
     ) -> Result<(), Self::Error> {
-        todo!()
+        // Look up link handle by link name
+        match self.session.link_by_name.get(&attach.name) {
+            Some(output_handle) => match self.session.local_links.get_mut(output_handle.0 as usize) {
+                Some(link) => {
+                    // Only Sender need to update the receiver settle mode
+                    // because the sender needs to echo a disposition if
+                    // rcv-settle-mode is 1
+                    if let LinkHandle::Sender {
+                        receiver_settle_mode,
+                        ..
+                    } = link
+                    {
+                        *receiver_settle_mode = attach.rcv_settle_mode.clone();
+                    }
+
+                    let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
+                    self.session.link_by_input_handle
+                        .insert(input_handle, output_handle.clone());
+                    match link.send(LinkFrame::Attach(attach)).await {
+                        Ok(_) => Ok(()),
+                        Err(_) => {
+                            // TODO: how should this error be handled?
+                            // End with UnattachedHandle?
+                            return Err(Error::session_error(SessionError::UnattachedHandle, None));
+                            // End session with unattached handle?
+                        }
+                    }
+                }
+                None => {
+                    // TODO: Resuming link
+                    return Err(Error::amqp_error(
+                        AmqpError::NotImplemented,
+                        "Link resumption is not supported yet".to_string()
+                    ))
+                }
+            },
+            None => {
+                // If no such terminus exists, the application MAY
+                // choose to create one using the properties supplied by the 
+                // remote link endpoint. The link endpoint is then mapped
+                // to an unused handle, and an attach frame is issued carrying 
+                // the state of the newly created endpoint.
+                self.link_listener.send(attach).await
+                    .map_err(|_| {
+                        // SessionHandle must have been dropped
+                        Error::amqp_error(
+                            AmqpError::IllegalState,
+                            Some("Listener session handle must have been dropped".to_string()),
+                        )
+                    })?;
+                Ok(())
+            },
+        }
     }
 
     async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {

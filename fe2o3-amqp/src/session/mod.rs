@@ -186,36 +186,36 @@ pub(crate) async fn allocate_link(
 ///
 #[derive(Debug)]
 pub struct Session {
-    control: mpsc::Sender<SessionControl>,
+    pub(crate) control: mpsc::Sender<SessionControl>,
     // session_id: usize,
     pub(crate) outgoing_channel: u16,
 
     // local amqp states
-    local_state: SessionState,
-    initial_outgoing_id: Constant<TransferNumber>,
-    next_outgoing_id: TransferNumber,
-    incoming_window: TransferNumber,
-    outgoing_window: TransferNumber,
-    handle_max: Handle,
+    pub(crate) local_state: SessionState,
+    pub(crate) initial_outgoing_id: Constant<TransferNumber>,
+    pub(crate) next_outgoing_id: TransferNumber,
+    pub(crate) incoming_window: TransferNumber,
+    pub(crate) outgoing_window: TransferNumber,
+    pub(crate) handle_max: Handle,
 
     // remote amqp states
-    incoming_channel: Option<u16>,
+    pub(crate) incoming_channel: Option<u16>,
     // initialize with 0 first and change after receiving the remote Begin
-    next_incoming_id: TransferNumber,
-    remote_incoming_window: SequenceNo,
-    remote_outgoing_window: SequenceNo,
+    pub(crate) next_incoming_id: TransferNumber,
+    pub(crate) remote_incoming_window: SequenceNo,
+    pub(crate) remote_outgoing_window: SequenceNo,
 
     // capabilities
-    offered_capabilities: Option<Vec<Symbol>>,
-    desired_capabilities: Option<Vec<Symbol>>,
-    properties: Option<Fields>,
+    pub(crate) offered_capabilities: Option<Vec<Symbol>>,
+    pub(crate) desired_capabilities: Option<Vec<Symbol>>,
+    pub(crate) properties: Option<Fields>,
 
     /// local links by output handle
-    local_links: Slab<LinkHandle>,
-    link_by_name: BTreeMap<String, Handle>,
-    link_by_input_handle: BTreeMap<Handle, Handle>,
+    pub(crate) local_links: Slab<LinkHandle>,
+    pub(crate) link_by_name: BTreeMap<String, Handle>,
+    pub(crate) link_by_input_handle: BTreeMap<Handle, Handle>,
     // Maps from DeliveryId to link.DeliveryCount
-    delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
+    pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
 }
 
 impl Session {
@@ -335,7 +335,8 @@ impl endpoint::Session for Session {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link) => {
                     // Only Sender need to update the receiver settle mode
-                    // link.receiver_settle_mode = attach.rcv_settle_mode.clone();
+                    // because the sender needs to echo a disposition if
+                    // rcv-settle-mode is 1
                     if let LinkHandle::Sender {
                         receiver_settle_mode,
                         ..
