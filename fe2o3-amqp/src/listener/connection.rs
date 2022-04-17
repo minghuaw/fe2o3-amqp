@@ -574,10 +574,21 @@ impl endpoint::Connection for ListenerConnection {
     #[inline]
     fn on_outgoing_begin(
         &mut self,
-        channel: u16,
+        outgoing_channel: u16,
         begin: Begin,
     ) -> Result<amqp::Frame, Self::Error> {
-        self.connection.on_outgoing_begin(channel, begin)
+        if let Some(remote_channel) = begin.remote_channel {
+            let session_id = self.connection.session_by_outgoing_channel
+                .get(&outgoing_channel)
+                .ok_or_else(|| Error::amqp_error(
+                    AmqpError::InternalError, 
+                    "Outgoing channel is not found".to_string()
+                ))?;
+
+            self.connection.session_by_incoming_channel.insert(remote_channel, *session_id);
+        }
+        
+        self.connection.on_outgoing_begin(outgoing_channel, begin)
     }
 
     #[inline]

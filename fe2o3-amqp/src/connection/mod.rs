@@ -330,20 +330,20 @@ impl<R> ConnectionHandle<R> {
 ///
 #[derive(Debug)]
 pub struct Connection {
-    control: Sender<ConnectionControl>,
+    pub(crate) control: Sender<ConnectionControl>,
 
     // local
-    local_state: ConnectionState,
-    local_open: Open,
-    local_sessions: Slab<Sender<SessionIncomingItem>>,
-    session_by_incoming_channel: BTreeMap<u16, usize>,
-    session_by_outgoing_channel: BTreeMap<u16, usize>,
+    pub(crate) local_state: ConnectionState,
+    pub(crate) local_open: Open,
+    pub(crate) local_sessions: Slab<Sender<SessionIncomingItem>>,
+    pub(crate) session_by_incoming_channel: BTreeMap<u16, usize>,
+    pub(crate) session_by_outgoing_channel: BTreeMap<u16, usize>,
 
     // remote
-    remote_open: Option<Open>,
+    pub(crate) remote_open: Option<Open>,
 
     // mutually agreed channel max
-    agreed_channel_max: u16,
+    pub(crate) agreed_channel_max: u16,
 }
 
 /* ------------------------------- Public API ------------------------------- */
@@ -626,18 +626,6 @@ impl endpoint::Connection for Connection {
 
     fn on_outgoing_begin(&mut self, outgoing_channel: u16, begin: Begin) -> Result<Frame, Self::Error> {
         // TODO: check states?
-        
-        if let Some(remote_channel) = begin.remote_channel {
-            let session_id = self.session_by_outgoing_channel
-                .get(&outgoing_channel)
-                .ok_or_else(|| Error::amqp_error(
-                    AmqpError::InternalError, 
-                    "Outgoing channel is not found".to_string()
-                ))?;
-
-            self.session_by_incoming_channel.insert(remote_channel, *session_id);
-        }
-
         let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
         Ok(frame)
     }
