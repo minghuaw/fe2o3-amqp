@@ -3,7 +3,9 @@
 use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
+    definitions::{
+        Fields, Handle, IetfLanguageTag, Milliseconds, TransferNumber, MIN_MAX_FRAME_SIZE,
+    },
     performatives::{ChannelMax, MaxFrameSize, Open},
     primitives::Symbol,
 };
@@ -14,7 +16,7 @@ use crate::{
     util::{Initialized, Uninitialized},
 };
 
-use super::ConnectionAcceptor;
+use super::{session::SessionAcceptor, ConnectionAcceptor};
 
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
@@ -235,25 +237,85 @@ impl<T, S> Builder<ConnectionAcceptor<T, S>, Initialized> {
     }
 }
 
-// // =============================================================================
-// // SessionAcceptor builder
-// // =============================================================================
+// =============================================================================
+// SessionAcceptor builder
+// =============================================================================
 
-// impl Builder<SessionAcceptor, Uninitialized> {
-//     pub fn new() -> Self {
-//         let inner = SessionAcceptor {
-//             next_outgoing_id: 0,
-//             incoming_window: DEFAULT_WINDOW,
-//             outgoing_window: DEFAULT_WINDOW,
-//             handle_max: Default::default(),
-//             offered_capabilities: None,
-//             desired_capabilities: None,
-//             properties: None,
-//             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
-//         };
-//         Self {
-//             inner,
-//             marker: PhantomData
-//         }
-//     }
-// }
+impl Builder<SessionAcceptor, Initialized> {
+    /// Creates a builder for [`SessionAcceptor`]
+    pub fn new() -> Self {
+        let session_builder = crate::session::Builder::new();
+        let inner = SessionAcceptor(session_builder);
+        Self {
+            inner,
+            marker: PhantomData,
+        }
+    }
+
+    /// The transfer-id of the first transfer id the sender will send
+    pub fn next_outgoing_id(mut self, value: TransferNumber) -> Self {
+        self.inner.0.next_outgoing_id = value;
+        self
+    }
+
+    /// The initial incoming-window of the sender
+    pub fn incoming_window(mut self, value: TransferNumber) -> Self {
+        self.inner.0.incoming_window = value;
+        self
+    }
+
+    /// The initial outgoing-window of the sender
+    pub fn outgoing_widnow(mut self, value: TransferNumber) -> Self {
+        self.inner.0.outgoing_window = value;
+        self
+    }
+
+    /// The maximum handle value that can be used on the session
+    pub fn handle_max(mut self, value: impl Into<Handle>) -> Self {
+        self.inner.0.handle_max = value.into();
+        self
+    }
+
+    /// Add one extension capabilities the sender supports
+    pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
+        match &mut self.inner.0.offered_capabilities {
+            Some(capabilities) => capabilities.push(capability.into()),
+            None => self.inner.0.offered_capabilities = Some(vec![capability.into()]),
+        }
+        self
+    }
+
+    /// Set the extension capabilities the sender supports
+    pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
+        self.inner.0.offered_capabilities = Some(capabilities);
+        self
+    }
+
+    /// Add one extension capabilities the sender can use if the receiver supports them
+    pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
+        match &mut self.inner.0.desired_capabilities {
+            Some(capabilities) => capabilities.push(capability.into()),
+            None => self.inner.0.desired_capabilities = Some(vec![capability.into()]),
+        }
+        self
+    }
+
+    /// Set the extension capabilities the sender can use if the receiver supports them
+    pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
+        self.inner.0.desired_capabilities = Some(capabilities);
+        self
+    }
+
+    /// Session properties
+    pub fn properties(mut self, properties: Fields) -> Self {
+        self.inner.0.properties = Some(properties);
+        self
+    }
+
+    /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
+    /// that are used by links attached to the session
+    pub fn buffer_size(mut self, buffer_size: usize) -> Self {
+        self.inner.0.buffer_size = buffer_size;
+        self
+    }
+}

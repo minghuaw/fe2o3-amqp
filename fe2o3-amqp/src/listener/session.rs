@@ -21,10 +21,10 @@ use crate::{
         self, engine::SessionEngine, frame::SessionFrame, SessionHandle,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
-    Payload, Session,
+    Payload, util::Initialized,
 };
 
-use super::{ListenerConnectionHandle};
+use super::{ListenerConnectionHandle, builder::Builder};
 
 type SessionBuilder = crate::session::Builder;
 type SessionError = crate::session::Error;
@@ -32,38 +32,67 @@ type SessionError = crate::session::Error;
 /// Type alias for listener session handle
 pub type ListenerSessionHandle = SessionHandle<mpsc::Receiver<Attach>>;
 
-impl Session {
-    /// Accepts a remotely initiated session with default configuration
-    pub async fn accept(
-        connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, SessionError> {
-        Session::builder().accept_inner(connection).await
+// /// An acceptor for incoming session
+// #[derive(Debug)]
+// pub struct SessionAcceptor {
+//     /// The transfer-id of the first transfer id the sender will send
+//     pub next_outgoing_id: TransferNumber,
+
+//     /// The initial incoming-window of the sender
+//     pub incoming_window: TransferNumber,
+
+//     /// The initial outgoing-window of the sender
+//     pub outgoing_window: TransferNumber,
+
+//     /// The maximum handle value that can be used on the session
+//     pub handle_max: Handle,
+
+//     /// The extension capabilities the sender supports
+//     pub offered_capabilities: Option<Vec<Symbol>>,
+
+//     /// The extension capabilities the sender can use if the receiver supports them
+//     pub desired_capabilities: Option<Vec<Symbol>>,
+
+//     /// Session properties
+//     pub properties: Option<Fields>,
+
+//     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
+//     /// that are used by links attached to the session
+//     pub buffer_size: usize,
+// }
+
+/// An acceptor for incoming session
+#[derive(Debug)]
+pub struct SessionAcceptor(pub(crate) SessionBuilder);
+
+impl Default for SessionAcceptor {
+    fn default() -> Self {
+        Self(Default::default())
     }
 }
 
-impl SessionBuilder {
-    /// Accepts a remotely initiated session
-    pub async fn accept(
-        &self,
-        connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, SessionError> {
-        self.clone().accept_inner(connection).await
+impl SessionAcceptor {
+    /// Creates a new builder for [`SessionAcceptor`]
+    pub fn builder() -> Builder<Self, Initialized> {
+        Builder::<Self, Initialized>::new()
     }
 
-    async fn accept_inner(
-        self,
+    /// Accepts an incoming session
+    pub async fn accept(
+        &self,
         connection: &mut ListenerConnectionHandle,
     ) -> Result<ListenerSessionHandle, SessionError> {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
-        let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
-        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-        let (link_listener_tx, link_listener_rx) = mpsc::channel(self.buffer_size);
+        let (incoming_tx, incoming_rx) = mpsc::channel(self.0.buffer_size);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(self.0.buffer_size);
+        let (link_listener_tx, link_listener_rx) = mpsc::channel(self.0.buffer_size);
 
         // create session in connection::Engine
         let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
-        let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+        let session = self.0.clone()
+            .into_session(session_control_tx.clone(), outgoing_channel, local_state);
         let listener_session = ListenerSession {
             session,
             link_listener: link_listener_tx,
@@ -88,6 +117,63 @@ impl SessionBuilder {
         Ok(handle)
     }
 }
+
+// impl Session {
+//     /// Accepts a remotely initiated session with default configuration
+//     pub async fn accept(
+//         connection: &mut ListenerConnectionHandle,
+//     ) -> Result<ListenerSessionHandle, SessionError> {
+//         Session::builder().accept_inner(connection).await
+//     }
+// }
+
+// impl SessionBuilder {
+//     /// Accepts a remotely initiated session
+//     pub async fn accept(
+//         &self,
+//         connection: &mut ListenerConnectionHandle,
+//     ) -> Result<ListenerSessionHandle, SessionError> {
+//         self.clone().accept_inner(connection).await
+//     }
+
+//     async fn accept_inner(
+//         self,
+//         connection: &mut ListenerConnectionHandle,
+//     ) -> Result<ListenerSessionHandle, SessionError> {
+//         let local_state = SessionState::Unmapped;
+//         let (session_control_tx, session_control_rx) =
+//             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
+//         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
+//         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
+//         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.buffer_size);
+
+//         // create session in connection::Engine
+//         let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
+//         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+//         let listener_session = ListenerSession {
+//             session,
+//             link_listener: link_listener_tx,
+//         };
+//         let engine = SessionEngine::begin(
+//             connection.control.clone(),
+//             listener_session,
+//             session_id,
+//             session_control_rx,
+//             incoming_rx,
+//             PollSender::new(connection.outgoing.clone()),
+//             outgoing_rx,
+//         )
+//         .await?;
+//         let engine_handle = engine.spawn();
+//         let handle = SessionHandle {
+//             control: session_control_tx,
+//             engine_handle,
+//             outgoing: outgoing_tx,
+//             link_listener: link_listener_rx,
+//         };
+//         Ok(handle)
+//     }
+// }
 
 /// A session on the listener side
 #[derive(Debug)]

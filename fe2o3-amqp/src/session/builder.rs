@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    connection::{ConnectionHandle, DEFAULT_OUTGOING_BUFFER_SIZE},
+    connection::{ConnectionHandle},
     control::SessionControl,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
@@ -53,9 +53,8 @@ pub struct Builder {
     pub buffer_size: usize,
 }
 
-impl Builder {
-    /// Creates a new builder for [`crate::Session`]
-    pub fn new() -> Self {
+impl Default for Builder {
+    fn default() -> Self {
         Self {
             next_outgoing_id: 0,
             incoming_window: DEFAULT_WINDOW,
@@ -66,6 +65,13 @@ impl Builder {
             properties: None,
             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
         }
+    }
+}
+
+impl Builder {
+    /// Creates a new builder for [`crate::Session`]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub(crate) fn into_session(
