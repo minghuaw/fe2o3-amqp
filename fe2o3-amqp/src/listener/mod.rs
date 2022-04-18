@@ -6,11 +6,11 @@ pub mod link;
 pub mod sasl_acceptor;
 pub mod session;
 
-use fe2o3_amqp_types::performatives::Begin;
+use fe2o3_amqp_types::performatives::{Begin, Attach};
 
 pub use self::connection::*;
 
-/// A half established session
+/// A half established session that is initiated by the remote peer
 #[derive(Debug)]
 pub struct IncomingSession {
     channel: u16,
@@ -27,6 +27,12 @@ impl IncomingSession {
     pub fn channel(&self) -> u16 {
         self.channel
     }
+}
+
+/// A half established link that is initiated by the remote peer
+#[derive(Debug)]
+pub struct IncomingLink {
+    attach: Attach,
 }
 
 // /// Trait for listeners

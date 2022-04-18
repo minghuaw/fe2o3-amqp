@@ -15,7 +15,7 @@ use crate::{
     util::{Initialized, Uninitialized},
 };
 
-use super::{session::SessionAcceptor, ConnectionAcceptor};
+use super::{session::SessionAcceptor, ConnectionAcceptor, link::LinkAcceptor};
 
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
@@ -316,5 +316,22 @@ impl Builder<SessionAcceptor, Initialized> {
     pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.inner.0.buffer_size = buffer_size;
         self
+    }
+}
+
+// =============================================================================
+// LinkAcceptor builder
+// =============================================================================
+
+impl Builder<LinkAcceptor, Uninitialized> {
+    /// Creates a new builder for [`LinkAcceptor`]
+    pub fn new() -> Self {
+        // let inner = LinkAcceptor {};
+        // Self {
+        //     inner, 
+        //     marker: PhantomData,
+        // }
+
+        todo!()
     }
 }

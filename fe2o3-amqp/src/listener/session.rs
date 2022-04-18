@@ -27,12 +27,19 @@ use crate::{
     Payload, util::Initialized, link::{LinkHandle, LinkFrame}, connection::engine::SessionId,
 };
 
-use super::{ListenerConnectionHandle, builder::Builder, IncomingSession};
+use super::{ListenerConnectionHandle, builder::Builder, IncomingSession, IncomingLink};
 
 type SessionBuilder = crate::session::Builder;
 
 /// Type alias for listener session handle
-pub type ListenerSessionHandle = SessionHandle<mpsc::Receiver<Attach>>;
+pub type ListenerSessionHandle = SessionHandle<mpsc::Receiver<IncomingLink>>;
+
+impl ListenerSessionHandle {
+    /// Waits for the next incoming link
+    pub async fn next_incoming_link(&mut self) -> io::Result<IncomingLink> {
+        todo!()
+    }
+}
 
 // /// An acceptor for incoming session
 // #[derive(Debug)]
@@ -224,7 +231,7 @@ impl SessionEngine<ListenerSession> {
 #[derive(Debug)]
 pub struct ListenerSession {
     pub(crate) session: session::Session,
-    pub(crate) link_listener: mpsc::Sender<Attach>,
+    pub(crate) link_listener: mpsc::Sender<IncomingLink>,
 }
 
 #[async_trait]
@@ -312,7 +319,10 @@ impl endpoint::Session for ListenerSession {
                 // remote link endpoint. The link endpoint is then mapped
                 // to an unused handle, and an attach frame is issued carrying 
                 // the state of the newly created endpoint.
-                self.link_listener.send(attach).await
+                let incoming_link = IncomingLink {
+                    attach
+                };
+                self.link_listener.send(incoming_link).await
                     .map_err(|_| {
                         // SessionHandle must have been dropped
                         Error::amqp_error(
