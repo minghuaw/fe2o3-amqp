@@ -6,14 +6,28 @@ pub mod link;
 pub mod sasl_acceptor;
 pub mod session;
 
+use fe2o3_amqp_types::performatives::Begin;
+
 pub use self::connection::*;
 
-// /// A half established session
-// #[derive(Debug)]
-// pub struct IncomingSession {
-//     remote_begin: Begin,
-//     local_state: 
-// }
+/// A half established session
+#[derive(Debug)]
+pub struct IncomingSession {
+    channel: u16,
+    begin: Begin,
+}
+
+impl IncomingSession {
+    /// Get a reference to the received Begin performative
+    pub fn begin(&self) -> &Begin {
+        &self.begin
+    }
+
+    /// Gets the incoming channel for the incoming session
+    pub fn channel(&self) -> u16 {
+        self.channel
+    }
+}
 
 // /// Trait for listeners
 // #[async_trait]

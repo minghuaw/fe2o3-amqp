@@ -267,7 +267,7 @@ where
     #[inline]
     #[instrument(skip_all)]
     async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
-        debug!(?control);
+        debug!("{}", control);
         match control {
             ConnectionControl::Close(error) => {
                 self.connection

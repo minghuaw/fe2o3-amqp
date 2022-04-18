@@ -35,10 +35,22 @@ use crate::{
     util::{Initialized, Uninitialized},
 };
 
-use super::{builder::Builder, sasl_acceptor::SaslAcceptor};
+use super::{builder::Builder, sasl_acceptor::SaslAcceptor, IncomingSession};
 
 /// Type alias for listener connection handle
-pub type ListenerConnectionHandle = ConnectionHandle<Receiver<(u16, Begin)>>;
+pub type ListenerConnectionHandle = ConnectionHandle<Receiver<IncomingSession>>;
+
+impl ListenerConnectionHandle {
+    /// Waits for the next incoming session asynchronously
+    pub async fn next_incoming_session(&mut self) -> io::Result<IncomingSession> {
+        let incoming_session = self.session_listener.recv().await
+        .ok_or_else(|| io::Error::new(
+            io::ErrorKind::Other,
+            "Connection must have been dropped"
+        ))?;
+        Ok(incoming_session)
+    }
+}
 
 // /// Listener for incoming connections
 // pub struct ConnectionListener<L: Listener> {
@@ -460,7 +472,7 @@ where
 #[derive(Debug)]
 pub struct ListenerConnection {
     pub(crate) connection: connection::Connection,
-    pub(crate) session_listener: mpsc::Sender<(u16, Begin)>,
+    pub(crate) session_listener: mpsc::Sender<IncomingSession>,
 }
 
 #[async_trait]
@@ -527,7 +539,11 @@ impl endpoint::Connection for ListenerConnection {
                 // remotely initiated session
 
                 // Here we will send the begin frame out to get processed
-                self.session_listener.send((channel, begin)).await.map_err(|_| {
+                let incoming_session = IncomingSession {
+                    channel,
+                    begin,
+                };
+                self.session_listener.send(incoming_session).await.map_err(|_| {
                     Error::amqp_error(
                         AmqpError::NotImplemented,
                         Some("Remotely initiazted session is not supported".to_string()),

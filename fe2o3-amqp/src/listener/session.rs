@@ -27,7 +27,7 @@ use crate::{
     Payload, util::Initialized, link::{LinkHandle, LinkFrame}, connection::engine::SessionId,
 };
 
-use super::{ListenerConnectionHandle, builder::Builder};
+use super::{ListenerConnectionHandle, builder::Builder, IncomingSession};
 
 type SessionBuilder = crate::session::Builder;
 
@@ -79,17 +79,12 @@ impl SessionAcceptor {
         Builder::<Self, Initialized>::new()
     }
 
-    /// Accepts an incoming session
-    #[instrument]
-    pub async fn accept(
+    /// Accept an incoming session
+    pub async fn accept_incoming_session(
         &self,
+        incoming_session: IncomingSession,
         connection: &mut ListenerConnectionHandle,
     ) -> Result<ListenerSessionHandle, Error> {
-        let (incoming_channel, remote_begin) = connection.session_listener.recv().await
-            .ok_or_else(|| Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "Connection must have been dropped"
-            )))?;
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
@@ -101,7 +96,7 @@ impl SessionAcceptor {
         let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
         let mut session = self.0.clone()
             .into_session(session_control_tx.clone(), outgoing_channel, local_state);
-        session.on_incoming_begin(incoming_channel, remote_begin)?;
+        session.on_incoming_begin(incoming_session.channel, incoming_session.begin)?;
 
         let listener_session = ListenerSession {
             session,
@@ -126,6 +121,16 @@ impl SessionAcceptor {
         };
         Ok(handle)
     }
+
+    /// Waits for incoming session'e Begin performative and then accepts an incoming session
+    #[instrument]
+    pub async fn accept(
+        &self,
+        connection: &mut ListenerConnectionHandle,
+    ) -> Result<ListenerSessionHandle, Error> {
+        let incoming_session = connection.next_incoming_session().await?;
+        self.accept_incoming_session(incoming_session, connection).await
+    }
 }
 
 impl SessionEngine<ListenerSession> {
@@ -148,37 +153,6 @@ impl SessionEngine<ListenerSession> {
             outgoing,
             outgoing_link_frames,
         };
-
-        // // wait for an incoming begin
-        // let frame = match engine.incoming.recv().await {
-        //     Some(frame) => frame,
-        //     None => {
-        //         // Connection sender must have dropped
-        //         return Err(Error::Io(io::Error::new(
-        //             io::ErrorKind::UnexpectedEof,
-        //             "Connection sender must have dropped",
-        //         )));
-        //     }
-        // };
-        // tracing::trace!("Found remote frame");
-
-        // let SessionFrame { channel, body } = frame;
-        // let remote_begin = match body {
-        //     SessionFrameBody::Begin(begin) => begin,
-        //     SessionFrameBody::End(end) => {
-        //         return Err(Error::Remote(end.error.unwrap_or_else(|| {
-        //             definitions::Error::new(
-        //                 AmqpError::InternalError,
-        //                 Some("Remote closed session wihtout explanation".into()),
-        //                 None,
-        //             )
-        //         })))
-        //     }
-        //     _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
-        // };
-        // engine
-        //     .session
-        //     .on_incoming_begin(channel, remote_begin)?;
 
         // send a begin
         engine

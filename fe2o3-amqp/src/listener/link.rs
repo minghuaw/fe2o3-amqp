@@ -1,5 +1,11 @@
 //! Link Listener
 
-/// Listener for incoming link
+// /// Listener for incoming link
+// #[derive(Debug)]
+// pub struct LinkListener {}
+
+/// An acceptor for incoming links
 #[derive(Debug)]
-pub struct LinkListener {}
+pub struct LinkAcceptor {
+
+}
