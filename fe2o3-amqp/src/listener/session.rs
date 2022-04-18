@@ -21,7 +21,7 @@ use crate::{
     control::{SessionControl, ConnectionControl},
     endpoint::{self, LinkFlow, Session},
     session::{
-        self, engine::SessionEngine, frame::{SessionFrame, SessionIncomingItem, SessionFrameBody}, SessionHandle,
+        self, engine::SessionEngine, frame::{SessionFrame, SessionIncomingItem}, SessionHandle,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE, Error,
     },
     Payload, util::Initialized, link::{LinkHandle, LinkFrame}, connection::engine::SessionId,
