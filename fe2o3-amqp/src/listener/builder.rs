@@ -4,10 +4,10 @@ use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
     definitions::{
-        Fields, Handle, IetfLanguageTag, Milliseconds, TransferNumber, MIN_MAX_FRAME_SIZE,
+        Fields, Handle, IetfLanguageTag, Milliseconds, TransferNumber, MIN_MAX_FRAME_SIZE, SenderSettleMode, ReceiverSettleMode, SequenceNo,
     },
     performatives::{ChannelMax, MaxFrameSize, Open},
-    primitives::Symbol,
+    primitives::{Symbol, ULong},
 };
 
 use crate::{
@@ -15,13 +15,20 @@ use crate::{
     util::{Initialized, Uninitialized},
 };
 
-use super::{session::SessionAcceptor, ConnectionAcceptor, link::LinkAcceptor};
+use super::{session::SessionAcceptor, ConnectionAcceptor, link::LinkAcceptor, SupportedSenderSettleModes, SupportedReceiverSettleModes};
 
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
 pub struct Builder<T, M> {
     pub(crate) inner: T,
     pub(crate) marker: PhantomData<M>,
+}
+
+impl<T> Builder<T, Initialized> {
+    /// Build the instance
+    pub fn build(self) -> T {
+        self.inner
+    }
 }
 
 // =============================================================================
@@ -229,12 +236,12 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     }
 }
 
-impl<T, S> Builder<ConnectionAcceptor<T, S>, Initialized> {
-    /// Build [`ConnectionAcceptor`]
-    pub fn build(self) -> ConnectionAcceptor<T, S> {
-        self.inner
-    }
-}
+// impl<T, S> Builder<ConnectionAcceptor<T, S>, Initialized> {
+//     /// Build [`ConnectionAcceptor`]
+//     pub fn build(self) -> ConnectionAcceptor<T, S> {
+//         self.inner
+//     }
+// }
 
 // =============================================================================
 // SessionAcceptor builder
@@ -323,15 +330,87 @@ impl Builder<SessionAcceptor, Initialized> {
 // LinkAcceptor builder
 // =============================================================================
 
-impl Builder<LinkAcceptor, Uninitialized> {
+impl Builder<LinkAcceptor, Initialized> {
     /// Creates a new builder for [`LinkAcceptor`]
     pub fn new() -> Self {
-        // let inner = LinkAcceptor {};
-        // Self {
-        //     inner, 
-        //     marker: PhantomData,
-        // }
+        let inner = LinkAcceptor {
+            sup_snd_settle_modes: Default::default(),
+            sup_rcv_settle_modes: Default::default(),
+            initial_delivery_count: Default::default(),
+            max_message_size: Default::default(),
+            offered_capabilities: Default::default(),
+            desired_capabilities: Default::default(),
+            properties: Default::default(),
+            buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
+            credit_mode: Default::default(),
+        };
 
-        todo!()
+        Self {
+            inner, 
+            marker: PhantomData,
+        }
+    }
+
+    /// Settlement policy for the sender
+    pub fn supported_sender_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
+        self.inner.sup_snd_settle_modes = modes;
+        self
+    }
+
+    /// The settlement policy of the receiver
+    pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
+        self.inner.sup_rcv_settle_modes = modes;
+        self
+    }
+
+    /// This MUST NOT be null if role is sender,
+    /// and it is ignored if the role is receiver.
+    /// See subsection 2.6.7.
+    pub fn initial_delivery_count(mut self, count: SequenceNo) -> Self {
+        self.inner.initial_delivery_count = count;
+        self
+    }
+
+    /// The maximum message size supported by the link endpoint
+    pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
+        self.inner.max_message_size = Some(max_size.into());
+        self
+    }
+
+    
+    /// Add one extension capability the sender supports
+    pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
+        match &mut self.inner.offered_capabilities {
+            Some(capabilities) => capabilities.push(capability.into()),
+            None => self.inner.offered_capabilities = Some(vec![capability.into()]),
+        }
+        self
+    }
+
+    /// Set the extension capabilities the sender supports
+    pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
+        self.inner.offered_capabilities = Some(capabilities);
+        self
+    }
+
+    /// Add one extension capability the sender can use if the receiver supports
+    pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
+        match &mut self.inner.desired_capabilities {
+            Some(capabilities) => capabilities.push(capability.into()),
+            None => self.inner.desired_capabilities = Some(vec![capability.into()]),
+        }
+        self
+    }
+
+    /// Set the extension capabilities the sender can use if the receiver supports them
+    pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
+        self.inner.desired_capabilities = Some(capabilities);
+        self
+    }
+
+    /// Link properties
+    pub fn properties(mut self, properties: Fields) -> Self {
+        self.inner.properties = Some(properties);
+        self
     }
 }

@@ -105,7 +105,7 @@ impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
             properties: Default::default(),
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
-            credit_mode: CreditMode::default(),
+            credit_mode: Default::default(),
             role: PhantomData,
             name_state: PhantomData,
             addr_state: PhantomData,
@@ -274,7 +274,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    fn create_link<C, M>(
+    pub(crate) fn create_link<C, M>(
         self,
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
@@ -287,7 +287,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             None => 0,
         };
 
-        // Create a SenderLink instance
+        // Create a link
         Link::<Role, C, M> {
             role: PhantomData,
             local_state,

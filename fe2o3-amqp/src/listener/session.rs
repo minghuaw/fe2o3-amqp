@@ -71,12 +71,15 @@ impl ListenerSessionHandle {
 // }
 
 /// An acceptor for incoming session
+/// 
+/// This is simply a wrapper around the session builder since there is not
+/// much else that you can configure. The wrapper is here for consistency in terms of API design.
 #[derive(Debug)]
-pub struct SessionAcceptor(pub(crate) SessionBuilder);
+pub struct SessionAcceptor(pub SessionBuilder);
 
 impl Default for SessionAcceptor {
     fn default() -> Self {
-        Self(Default::default())
+        Self::builder().build()
     }
 }
 
@@ -319,10 +322,8 @@ impl endpoint::Session for ListenerSession {
                 // remote link endpoint. The link endpoint is then mapped
                 // to an unused handle, and an attach frame is issued carrying 
                 // the state of the newly created endpoint.
-                let incoming_link = IncomingLink {
-                    attach
-                };
-                self.link_listener.send(incoming_link).await
+                
+                self.link_listener.send(attach).await
                     .map_err(|_| {
                         // SessionHandle must have been dropped
                         Error::amqp_error(

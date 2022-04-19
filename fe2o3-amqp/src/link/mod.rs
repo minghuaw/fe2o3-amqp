@@ -47,8 +47,8 @@ use self::{
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
 
-type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
-type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
+pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
+pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 pub mod type_state {
     //! Type states for link
@@ -163,7 +163,8 @@ where
         match remote_attach.role {
             // Remote attach is from sender, local is receiver
             Role::Sender => {
-                // In this case, the sender is considered to hold the authoritative version of the
+                // In this case, the sender is considered to hold the authoritative version of the  
+                // version of the source properties
                 self.source = remote_attach.source;
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
                 // initiates the attach exchange and the receiver supports the desired mode.

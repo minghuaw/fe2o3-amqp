@@ -74,10 +74,17 @@ impl ListenerConnectionHandle {
 /// Acceptor for an incoming connection
 #[derive(Debug)]
 pub struct ConnectionAcceptor<Tls, Sasl> {
-    pub(crate) local_open: Open,
-    pub(crate) tls_acceptor: Tls,
-    pub(crate) sasl_acceptor: Sasl,
-    pub(crate) buffer_size: usize,
+    /// Local Open performative that holds the majority of configurable fields
+    pub local_open: Open,
+
+    /// TLS acceptor that handles TLS negotiation
+    pub tls_acceptor: Tls,
+
+    /// SASL acceptor that handles SASL negotiation
+    pub sasl_acceptor: Sasl,
+
+    /// Buffer size for the underlying channel
+    pub buffer_size: usize,
 }
 
 impl ConnectionAcceptor<(), ()> {

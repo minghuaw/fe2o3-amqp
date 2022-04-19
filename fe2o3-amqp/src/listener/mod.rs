@@ -29,10 +29,57 @@ impl IncomingSession {
     }
 }
 
-/// A half established link that is initiated by the remote peer
+// /// A half established link that is initiated by the remote peer
+// #[derive(Debug)]
+// pub struct IncomingLink {
+//     attach: Attach,
+// }
+
+/// An alias that represents a half connected incoming link
+pub type IncomingLink = Attach;
+
+/// The supported sender-settle-modes for the link acceptor
 #[derive(Debug)]
-pub struct IncomingLink {
-    attach: Attach,
+pub enum SupportedSenderSettleModes {
+    /// Only supports `SenderSettleMode::Unsettled`
+    Unsettled,
+    /// Only supports `SenderSettleMode::Settled`
+    Settled,
+    /// Only supports `SenderSettleMode::Mixed`
+    Mixed,
+    /// Supports `SenderSettleMode::Unsettled` and `SenderSettleMode::Settled`
+    UnsettledAndSettled,
+    /// Supports `SenderSettleMode::Unsettled` and `SenderSettleMode::Mixed`
+    UnsettledAndMixed,
+    /// Supports `SenderSettleMode::Settled` and `SenderSettleMode::Mixed`
+    SettledAndMixed,
+    /// Supports all three variants of `SenderSettleMode`
+    All,
+}
+
+/// TODO: defaults to `All`
+impl Default for SupportedSenderSettleModes {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+/// The supported receiver-settle-modes for the link acceptor
+#[derive(Debug)]
+pub enum SupportedReceiverSettleModes {
+    /// Only supports `ReceiverSettleMode::First`
+    First,
+    /// Only supports `ReceiverSettleMode::Second`
+    Second,
+    /// Supports both variants of `ReceiverSettleMode`
+    Both,
+}
+
+/// TODO: defaults to `Both`
+impl Default for SupportedReceiverSettleModes {
+    fn default() -> Self {
+        Self::Both
+    }
 }
 
 // /// Trait for listeners
