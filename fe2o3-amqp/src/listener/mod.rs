@@ -6,7 +6,7 @@ pub mod link;
 pub mod sasl_acceptor;
 pub mod session;
 
-use fe2o3_amqp_types::performatives::{Begin, Attach};
+use fe2o3_amqp_types::{performatives::{Begin, Attach}, definitions::{SenderSettleMode, ReceiverSettleMode}};
 
 pub use self::connection::*;
 
@@ -64,6 +64,41 @@ impl Default for SupportedSenderSettleModes {
     }
 }
 
+impl SupportedSenderSettleModes {
+    /// Determines whether a mode is supported or not
+    pub fn supports(&self, mode: &SenderSettleMode) -> bool {
+        match mode {
+            SenderSettleMode::Unsettled => match self {
+                SupportedSenderSettleModes::Unsettled => true,
+                SupportedSenderSettleModes::Settled => false,
+                SupportedSenderSettleModes::Mixed => false,
+                SupportedSenderSettleModes::UnsettledAndSettled => true,
+                SupportedSenderSettleModes::UnsettledAndMixed => true,
+                SupportedSenderSettleModes::SettledAndMixed => false,
+                SupportedSenderSettleModes::All => true,
+            },
+            SenderSettleMode::Settled => match self {
+                SupportedSenderSettleModes::Unsettled => false,
+                SupportedSenderSettleModes::Settled => true,
+                SupportedSenderSettleModes::Mixed => false,
+                SupportedSenderSettleModes::UnsettledAndSettled => true,
+                SupportedSenderSettleModes::UnsettledAndMixed => false,
+                SupportedSenderSettleModes::SettledAndMixed => true,
+                SupportedSenderSettleModes::All => true,
+            },
+            SenderSettleMode::Mixed => match self {
+                SupportedSenderSettleModes::Unsettled => false,
+                SupportedSenderSettleModes::Settled => false,
+                SupportedSenderSettleModes::Mixed => true,
+                SupportedSenderSettleModes::UnsettledAndSettled => false,
+                SupportedSenderSettleModes::UnsettledAndMixed => true,
+                SupportedSenderSettleModes::SettledAndMixed => true,
+                SupportedSenderSettleModes::All => true,
+            },
+        }
+    }
+}
+
 /// The supported receiver-settle-modes for the link acceptor
 #[derive(Debug)]
 pub enum SupportedReceiverSettleModes {
@@ -79,6 +114,24 @@ pub enum SupportedReceiverSettleModes {
 impl Default for SupportedReceiverSettleModes {
     fn default() -> Self {
         Self::Both
+    }
+}
+
+impl SupportedReceiverSettleModes {
+    /// Determines whether a receiver settle mode is supported or not
+    pub fn supports(&self, mode: &ReceiverSettleMode) -> bool {
+        match mode {
+            ReceiverSettleMode::First => match self {
+                SupportedReceiverSettleModes::First => true,
+                SupportedReceiverSettleModes::Second => false,
+                SupportedReceiverSettleModes::Both => true,
+            },
+            ReceiverSettleMode::Second => match self {
+                SupportedReceiverSettleModes::First => false,
+                SupportedReceiverSettleModes::Second => true,
+                SupportedReceiverSettleModes::Both => true,
+            },
+        }
     }
 }
 

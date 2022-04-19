@@ -8,20 +8,32 @@ use std::marker::PhantomData;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo, MessageFormat, DeliveryNumber, DeliveryTag, Role},
+    definitions::{
+        DeliveryNumber, DeliveryTag, Fields, MessageFormat, ReceiverSettleMode, Role,
+        SenderSettleMode, SequenceNo,
+    },
     messaging::DeliveryState,
-    primitives::{Symbol, ULong}, performatives::{Attach, Detach, Transfer},
+    performatives::{Attach, Detach, Transfer},
+    primitives::{Symbol, ULong},
 };
-use futures_util::{Sink, Future};
+use futures_util::{Future, Sink};
 
 use crate::{
     endpoint::{self, Settlement},
-    link::{receiver::CreditMode, role, state::LinkFlowState, LinkFrame, self, delivery::UnsettledMessage, SenderFlowState, ReceiverFlowState}, util::Initialized, Payload, Delivery,
+    link::{
+        self, delivery::UnsettledMessage, receiver::CreditMode, role, state::LinkFlowState,
+        LinkFrame, ReceiverFlowState, SenderFlowState,
+    },
+    util::Initialized,
+    Delivery, Payload,
 };
 
-use super::{builder::Builder, IncomingLink, session::ListenerSessionHandle, SupportedSenderSettleModes, SupportedReceiverSettleModes};
+use super::{
+    builder::Builder, session::ListenerSessionHandle, IncomingLink, SupportedReceiverSettleModes,
+    SupportedSenderSettleModes,
+};
 
-/// 
+///
 #[derive(Debug)]
 pub enum LinkEndpoint {
     /// Sender
@@ -35,10 +47,18 @@ pub enum LinkEndpoint {
 #[derive(Debug)]
 pub struct LinkAcceptor {
     /// Supported sender settle mode
-    pub sup_snd_settle_modes: SupportedSenderSettleModes,
+    pub supported_snd_settle_modes: SupportedSenderSettleModes,
+
+    /// The sender settle mode to fallback to when the mode desired 
+    /// by the remote peer is not supported
+    pub fallback_snd_settle_mode: SenderSettleMode,
 
     /// Supported receiver settle mode
-    pub sup_rcv_settle_modes: SupportedReceiverSettleModes,
+    pub supported_rcv_settle_modes: SupportedReceiverSettleModes,
+
+    /// The receiver settle mode to fallback to when the mode desired 
+    /// by the remote peer is not supported
+    pub fallback_rcv_settle_mode: ReceiverSettleMode,
 
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
@@ -64,6 +84,12 @@ pub struct LinkAcceptor {
     pub credit_mode: CreditMode,
 }
 
+impl std::fmt::Display for LinkAcceptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("LinkAcceptor"))
+    }
+}
+
 impl LinkAcceptor {
     /// Creates a default LinkAcceptor
     pub fn new() -> Self {
@@ -78,29 +104,39 @@ impl LinkAcceptor {
     /// Convert the acceptor into a link acceptor builder. This allows users to configure
     /// particular field using the builder pattern
     pub fn into_builder(self) -> Builder<Self, Initialized> {
-        Builder { inner: self, marker: PhantomData }
+        Builder {
+            inner: self,
+            marker: PhantomData,
+        }
     }
 
     /// Accept incoming link with an explicit Attach performative
-    pub async fn accept_with_incoming_attach(&self, remote_attach: Attach, session: &mut ListenerSessionHandle) -> Result<LinkEndpoint, link::Error> {
+    pub async fn accept_with_incoming_attach(
+        &self,
+        remote_attach: Attach,
+        session: &mut ListenerSessionHandle,
+    ) -> Result<LinkEndpoint, link::Error> {
         match remote_attach.role {
-            Role::Sender => {
-                
-            },
-            Role::Receiver => {
-
-            },
+            Role::Sender => {}
+            Role::Receiver => {}
         }
         todo!()
     }
 
     /// An alias for [`accept_with_incoming_attach`] for consistency
-    pub async fn accept_incoming_link(&self, incoming_link: IncomingLink, session: &mut ListenerSessionHandle) -> Result<LinkEndpoint, link::Error> {
+    pub async fn accept_incoming_link(
+        &self,
+        incoming_link: IncomingLink,
+        session: &mut ListenerSessionHandle,
+    ) -> Result<LinkEndpoint, link::Error> {
         todo!()
     }
 
     /// Accept incoming link by waiting for an incoming Attach performative
-    pub async fn accept(&self, session: &mut ListenerSessionHandle) -> Result<LinkEndpoint, link::Error> {
+    pub async fn accept(
+        &self,
+        session: &mut ListenerSessionHandle,
+    ) -> Result<LinkEndpoint, link::Error> {
         todo!()
     }
 }

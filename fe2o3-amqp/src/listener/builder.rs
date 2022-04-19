@@ -334,8 +334,10 @@ impl Builder<LinkAcceptor, Initialized> {
     /// Creates a new builder for [`LinkAcceptor`]
     pub fn new() -> Self {
         let inner = LinkAcceptor {
-            sup_snd_settle_modes: Default::default(),
-            sup_rcv_settle_modes: Default::default(),
+            supported_snd_settle_modes: Default::default(),
+            fallback_snd_settle_mode: Default::default(),
+            supported_rcv_settle_modes: Default::default(),
+            fallback_rcv_settle_mode: Default::default(),
             initial_delivery_count: Default::default(),
             max_message_size: Default::default(),
             offered_capabilities: Default::default(),
@@ -352,14 +354,28 @@ impl Builder<LinkAcceptor, Initialized> {
     }
 
     /// Settlement policy for the sender
-    pub fn supported_sender_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
-        self.inner.sup_snd_settle_modes = modes;
+    pub fn supported_snd_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
+        self.inner.supported_snd_settle_modes = modes;
+        self
+    }
+
+    /// The sender settle mode to fallback to when the mode desired 
+    /// by the remote peer is not supported
+    pub fn fallback_snd_settle_mode(mut self, mode: SenderSettleMode) -> Self {
+        self.inner.fallback_snd_settle_mode = mode;
         self
     }
 
     /// The settlement policy of the receiver
-    pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
-        self.inner.sup_rcv_settle_modes = modes;
+    pub fn supported_rcv_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
+        self.inner.supported_rcv_settle_modes = modes;
+        self
+    }
+
+    /// The receiver settle mode to fallback to when the mode desired 
+    /// by the remote peer is not supported
+    pub fn fallback_rcv_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
+        self.inner.fallback_rcv_settle_mode = mode;
         self
     }
 
