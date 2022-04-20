@@ -209,7 +209,7 @@ pub struct Receiver<S> {
     pub(crate) link: ReceiverLink,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
-    pub(crate) flow_threshold: SequenceNo,
+    // pub(crate) flow_threshold: SequenceNo,
     pub(crate) processed: SequenceNo,
 
     // Control sender to the session
@@ -317,7 +317,6 @@ impl Receiver<Detached> {
             link: self.link,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            flow_threshold: self.flow_threshold,
             processed: self.processed,
             session: self.session,
             outgoing: self.outgoing,
@@ -334,7 +333,6 @@ impl Receiver<Attached> {
             link: self.link,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            flow_threshold: self.flow_threshold,
             processed: self.processed,
             session: self.session,
             outgoing: self.outgoing,
@@ -501,7 +499,7 @@ impl Receiver<Attached> {
         use crate::endpoint::ReceiverLink;
 
         self.processed = 0;
-        self.flow_threshold = credit / 2;
+        let flow_threshold = credit / 2;
 
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -542,7 +540,6 @@ impl Receiver<Attached> {
             link: self.link,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode,
-            flow_threshold: self.flow_threshold,
             processed: self.processed,
             session: self.session,
             outgoing: self.outgoing,
@@ -723,7 +720,7 @@ impl Receiver<Attached> {
 
         self.processed += 1;
         if let CreditMode::Auto(max_credit) = self.credit_mode {
-            if self.processed >= self.flow_threshold {
+            if self.processed >= max_credit/2 {
                 // self.processed will be set to zero when setting link credit
                 self.set_credit(max_credit).await?;
             }

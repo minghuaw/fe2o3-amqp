@@ -476,18 +476,12 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader)
-            .await
-            .map_err(|value| match AttachError::try_from(value) {
-                Ok(error) => error,
-                Err(_) => unreachable!(),
-            })?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
         let mut receiver = Receiver::<Attached> {
             link,
             buffer_size,
             credit_mode,
-            flow_threshold: 0, // TODO: 0 or MAX?
             processed: 0,
             session: session.control.clone(),
             outgoing,
@@ -497,8 +491,8 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         };
 
         if let CreditMode::Auto(credit) = receiver.credit_mode {
-            receiver.set_credit(credit).await.map_err(|value| {
-                match AttachError::try_from(value) {
+            receiver.set_credit(credit).await.map_err(|error| {
+                match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
                 }

@@ -223,9 +223,25 @@ pub enum AttachError {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
-    /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
-    #[error("Initial delivery count MUST NOT be null if role is sender,")]
-    InitialDeliveryCountIsNull,
+    // /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
+    // #[error("Initial delivery count MUST NOT be null if role is sender,")]
+    // InitialDeliveryCountIsNull,
+
+    /// Source field in Attach is Null
+    #[error("Source is None")]
+    SourceIsNone,
+
+    /// Target field in Attach is Null
+    #[error("Target is None")]
+    TargetIsNone,
+
+    /// The desired mode is not supported
+    #[error("Desired receiver settle mode is not supported")]
+    ReceiverSettleModeNotSupported,
+
+    /// The desired mode is not supported
+    #[error("Desired sender settle mode is not supported")]
+    SenderSettleModeNotSupported,
 
     /// A local error
     #[error("Local error: {:?}", .0)]

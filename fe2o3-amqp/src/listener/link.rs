@@ -18,13 +18,14 @@ use fe2o3_amqp_types::{
 };
 use futures_util::{Future, Sink};
 use tokio::sync::{RwLock, mpsc};
+use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
     endpoint::{self, Settlement, Link},
     link::{
         self, delivery::UnsettledMessage, receiver::CreditMode, role, state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        LinkFrame, ReceiverFlowState, SenderFlowState, AttachError, LinkHandle, LinkIncomingItem,
+        LinkFrame, ReceiverFlowState, SenderFlowState, AttachError, LinkHandle, LinkIncomingItem, type_state::Attached,
     },
     util::Initialized,
     Delivery, Payload, Receiver,
@@ -39,10 +40,10 @@ use super::{
 #[derive(Debug)]
 pub enum LinkEndpoint {
     /// Sender
-    Sender,
+    Sender(crate::link::Sender<Attached>),
 
     /// Receiver
-    Receiver,
+    Receiver(crate::link::Receiver<Attached>),
 }
 
 /// An acceptor for incoming links
@@ -147,21 +148,29 @@ impl LinkAcceptor {
         remote_attach: Attach,
         session: &mut ListenerSessionHandle,
     ) -> Result<LinkEndpoint, AttachError> {
+        match (&remote_attach.source.is_none(), &remote_attach.target.is_none()) {
+            (true, _) => {
+                self.reject_incoming_attach(remote_attach, session).await?;
+                return Err(AttachError::SourceIsNone)
+            },
+            (_, true) => {
+                self.reject_incoming_attach(remote_attach, session).await?;
+                return Err(AttachError::TargetIsNone)
+            },
+            _ => { }
+        }
+
         // In this case, the sender is considered to hold the authoritative version of the
         // source properties, the receiver is considered to hold the authoritative version of the target properties.
-        let link = match remote_attach.role {
+        match remote_attach.role {
             Role::Sender => {
                 // Remote is sender -> local is receiver
                 self.accept_as_new_receiver(remote_attach, session).await
-
-                // let builder = Receiver::builder()
-                //     .name(remote_attach.name);
             }
             Role::Receiver => {
                 self.accept_as_new_sender(remote_attach, session).await
             }
-        };
-        todo!()
+        }
     }
 
     async fn accept_as_new_receiver(
@@ -171,74 +180,87 @@ impl LinkAcceptor {
     ) -> Result<LinkEndpoint, AttachError> {
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
-        if self.supported_rcv_settle_modes.supports(&remote_attach.rcv_settle_mode) {
-            let buffer_size = self.buffer_size.clone();
-            let credit_mode = self.credit_mode.clone();
-            let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-            let outgoing = PollSender::new(session.outgoing.clone());
+        let rcv_settle_mode = if self.supported_rcv_settle_modes.supports(&remote_attach.rcv_settle_mode) {
+            remote_attach.rcv_settle_mode.clone()
+        } else {
+            self.fallback_rcv_settle_mode.clone()
+                .ok_or_else(|| AttachError::ReceiverSettleModeNotSupported)?
+        };
 
-            // let initial_delivery_count = match remote_attach.initial_delivery_count {
-            //     Some(val) => val,
-            //     None => {
-            //         // This MUST NOT be null if role is sender, and it is ignored if the role is receiver.
-            //         self.reject_incoming_attach(remote_attach, session).await?;
-            //         return Err(AttachError::InitialDeliveryCountIsNull)
-            //     }
-            // };
-            
-            // Create shared flow state
-            let flow_state_inner = LinkFlowStateInner {
-                initial_delivery_count: 0, // This will be set in `on_incoming_attach`
-                delivery_count: 0,
-                link_credit: 0, // The link-credit and available variables are initialized to zero.
-                available: 0,
-                drain: false, // The drain flag is initialized to false.
-                properties: None, // Will be set in `on_incoming_attach`
-            };
-            let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
+        let buffer_size = self.buffer_size.clone();
+        let credit_mode = self.credit_mode.clone();
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let mut outgoing = PollSender::new(session.outgoing.clone());
+        
+        // Create shared flow state
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: 0, // This will be set in `on_incoming_attach`
+            delivery_count: 0,
+            link_credit: 0, // The link-credit and available variables are initialized to zero.
+            available: 0,
+            drain: false, // The drain flag is initialized to false.
+            properties: None, // Will be set in `on_incoming_attach`
+        };
+        let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
 
-            // TODO: 
-            // let unsettled = match remote_attach.unsettled {
-            //     Some(map) => Arc::new(RwLock::new(map)),
-            //     None => Arc::new(RwLock::new(BTreeMap::new()))
-            // };
-            let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-            let flow_state_producer = flow_state.clone();
-            let flow_state_consumer = flow_state;
-            let link_handle = LinkHandle::Receiver {
-                tx: incoming_tx,
-                flow_state: flow_state_producer,
-                unsettled: unsettled.clone(),
-                receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),
-                more: false,
-            };
+        // Comparing unsettled should be taken care of in `on_incoming_attach`
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let flow_state_producer = flow_state.clone();
+        let flow_state_consumer = flow_state;
+        let link_handle = LinkHandle::Receiver {
+            tx: incoming_tx,
+            flow_state: flow_state_producer,
+            unsettled: unsettled.clone(),
+            receiver_settle_mode: rcv_settle_mode.clone(),
+            more: false,
+        };
 
-            // Allocate link in session
-            let output_handle = 
-                crate::session::allocate_link(&mut session.control, remote_attach.name.clone(), link_handle).await?;
+        // Allocate link in session
+        let output_handle = 
+            crate::session::allocate_link(&mut session.control, remote_attach.name.clone(), link_handle).await?;
 
-            let mut link = link::Link::<role::Receiver, ReceiverFlowState, DeliveryState> {
-                role: PhantomData,
-                local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
-                name: remote_attach.name.clone(),
-                output_handle: Some(output_handle),
-                input_handle: None, // will be set in `on_incoming_attach`
-                snd_settle_mode: remote_attach.snd_settle_mode.clone(),
-                rcv_settle_mode: remote_attach.rcv_settle_mode.clone(),
-                source: remote_attach.source.clone(),
-                target: remote_attach.target.clone(),
-                max_message_size: self.max_message_size.unwrap_or_else(|| 0),
-                offered_capabilities: self.offered_capabilities.clone(),
-                desired_capabilities: self.desired_capabilities.clone(),
-                flow_state: flow_state_consumer,
-                unsettled,
-            };
+        let mut link = link::Link::<role::Receiver, ReceiverFlowState, DeliveryState> {
+            role: PhantomData,
+            local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
+            name: remote_attach.name.clone(),
+            output_handle: Some(output_handle),
+            input_handle: None, // will be set in `on_incoming_attach`
+            snd_settle_mode: remote_attach.snd_settle_mode.clone(),
+            rcv_settle_mode: rcv_settle_mode,
+            source: remote_attach.source.clone(),
+            target: remote_attach.target.clone(),
+            max_message_size: self.max_message_size.unwrap_or_else(|| 0),
+            offered_capabilities: self.offered_capabilities.clone(),
+            desired_capabilities: self.desired_capabilities.clone(),
+            flow_state: flow_state_consumer,
+            unsettled,
+        };
 
-            link.on_incoming_attach(remote_attach).await?;
+        link.on_incoming_attach(remote_attach).await?;
+        link.send_attach(&mut outgoing).await?;
 
+        let mut receiver = Receiver::<Attached> {
+            link,
+            buffer_size,
+            credit_mode,
+            processed: 0,
+            session: session.control.clone(),
+            outgoing,
+            incoming: ReceiverStream::new(incoming_rx),
+            marker: PhantomData,
+            incomplete_transfer: None,
+        };
+
+        if let CreditMode::Auto(credit) = receiver.credit_mode {
+            receiver.set_credit(credit).await.map_err(|error| {
+                match AttachError::try_from(error) {
+                    Ok(error) => error,
+                    Err(_) => unreachable!(),
+                }
+            })?;
         }
 
-        todo!()
+        Ok(LinkEndpoint::Receiver(receiver))
     }
 
     async fn accept_as_new_sender(

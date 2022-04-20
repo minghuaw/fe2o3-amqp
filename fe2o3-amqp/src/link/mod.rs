@@ -624,19 +624,19 @@ where
     // an attach indicating that the link endpoint has no associated
     // local terminus. In this case, the session endpoint MUST immediately
     // detach the newly created link endpoint.
-    match remote_attach.target.is_some() || remote_attach.source.is_some() {
+    match remote_attach.target.is_none() || remote_attach.source.is_none() {
         true => {
-            if let Err(e) = link.on_incoming_attach(remote_attach).await {
-                // Should any error happen handling remote
-                tracing::error!("{:?}", e);
-            }
-        }
-        false => {
             // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
             tracing::error!("Found null source or target");
             expect_detach_then_detach(link, writer, reader).await
                 .map_err(|_| AttachError::illegal_state("Expecting detach".to_string()))?;
+        }
+        false => {
+            if let Err(e) = link.on_incoming_attach(remote_attach).await {
+                // Should any error happen handling remote
+                tracing::error!("{:?}", e);
+            }
         }
     }
 
