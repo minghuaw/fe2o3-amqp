@@ -8,7 +8,7 @@ use std::io;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SessionError},
+    definitions::{self, AmqpError, SessionError, Handle},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
 };
@@ -27,17 +27,17 @@ use crate::{
     Payload, util::Initialized, link::{LinkHandle, LinkFrame}, connection::engine::SessionId,
 };
 
-use super::{ListenerConnectionHandle, builder::Builder, IncomingSession, IncomingLink};
+use super::{ListenerConnectionHandle, builder::Builder, IncomingSession};
 
 type SessionBuilder = crate::session::Builder;
 
 /// Type alias for listener session handle
-pub type ListenerSessionHandle = SessionHandle<mpsc::Receiver<IncomingLink>>;
+pub type ListenerSessionHandle = SessionHandle<mpsc::Receiver<Attach>>;
 
 impl ListenerSessionHandle {
     /// Waits for the next incoming link
-    pub async fn next_incoming_link(&mut self) -> io::Result<IncomingLink> {
-        todo!()
+    pub async fn next_incoming_attach(&mut self) -> Option<Attach> {
+        self.link_listener.recv().await
     }
 }
 
@@ -73,7 +73,7 @@ impl ListenerSessionHandle {
 /// An acceptor for incoming session
 /// 
 /// This is simply a wrapper around the session builder since there is not
-/// much else that you can configure. The wrapper is here for consistency in terms of API design.
+/// much else that you can configure. The wrapper is here for consistency in terms of API desgin.
 #[derive(Debug)]
 pub struct SessionAcceptor(pub SessionBuilder);
 
@@ -138,7 +138,11 @@ impl SessionAcceptor {
         &self,
         connection: &mut ListenerConnectionHandle,
     ) -> Result<ListenerSessionHandle, Error> {
-        let incoming_session = connection.next_incoming_session().await?;
+        let incoming_session = connection.next_incoming_session().await
+            .ok_or_else(|| io::Error::new(
+                io::ErrorKind::Other,
+                "Connection must have been dropped"
+            ))?;
         self.accept_incoming_session(incoming_session, connection).await
     }
 }
@@ -234,7 +238,7 @@ impl SessionEngine<ListenerSession> {
 #[derive(Debug)]
 pub struct ListenerSession {
     pub(crate) session: session::Session,
-    pub(crate) link_listener: mpsc::Sender<IncomingLink>,
+    pub(crate) link_listener: mpsc::Sender<Attach>,
 }
 
 #[async_trait]
@@ -265,6 +269,15 @@ impl endpoint::Session for ListenerSession {
         link_handle: Self::LinkHandle,
     ) -> Result<fe2o3_amqp_types::definitions::Handle, Self::AllocError> {
         self.session.allocate_link(link_name, link_handle)
+    }
+
+    fn allocate_incoming_link(
+        &mut self,
+        link_name: String,
+        link_handle: LinkHandle,
+        input_handle: Handle,
+    ) -> Result<Handle, Self::AllocError> {
+        self.session.allocate_incoming_link(link_name, link_handle, input_handle)
     }
 
     fn deallocate_link(&mut self, link_name: String) {

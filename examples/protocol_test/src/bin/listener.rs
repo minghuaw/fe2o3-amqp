@@ -1,37 +1,33 @@
 use std::vec;
 
-use fe2o3_amqp::{listener::{ConnectionAcceptor, session::SessionAcceptor}};
+use fe2o3_amqp::{listener::{ConnectionAcceptor, session::{SessionAcceptor, ListenerSessionHandle}, link::{LinkAcceptor, LinkEndpoint}, ListenerConnectionHandle}};
 use tokio::net::TcpListener;
 use tracing::{Level, instrument};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5671";
 
-#[instrument]
-async fn connection_main() {
-    let tcp_listener = TcpListener::bind(BASE_ADDR).await.unwrap();
-    let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
-    let session_acceptor = SessionAcceptor::default();
-    let mut sessions = Vec::new();
+#[instrument(skip_all)]
+async fn session_main(mut session: ListenerSessionHandle) {
+    let link_acceptor = LinkAcceptor::new();
 
     loop {
-        let (stream, addr) = tcp_listener.accept().await.unwrap();
-        println!("Incoming connection from {:?}", addr);
-        let mut connection = connection_acceptor.accept(stream).await.unwrap();
-
-        for _ in 0..2 {
-            if let Ok(session) = session_acceptor.accept(&mut connection).await {
-                sessions.push(session);
-            }
+        let link = link_acceptor.accept(&mut session).await.unwrap();
+        match link {
+            LinkEndpoint::Sender(sender) => sender.close().await.unwrap(),
+            LinkEndpoint::Receiver(recver) => recver.close().await.unwrap(),
         }
-        
-        for mut session in sessions.drain(..) {
-            let result = session.close().await;
-            println!("Session close result: {:?}", result);
-        }
+    }
+}
 
-        let result = connection.close().await;
-        println!("Connection close result: {:?}", result);
+#[instrument(skip_all)]
+async fn connection_main(mut connection: ListenerConnectionHandle) {
+    let session_acceptor = SessionAcceptor::default();
+
+    loop {
+        if let Ok(session) = session_acceptor.accept(&mut connection).await {
+            let _handle = tokio::spawn(session_main(session));
+        }
     }
 }
 
@@ -42,7 +38,14 @@ async fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let handle = tokio::spawn(connection_main());
+    let tcp_listener = TcpListener::bind(BASE_ADDR).await.unwrap();
+    let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
+    
+    loop {
+        let (stream, addr) = tcp_listener.accept().await.unwrap();
+        println!("Incoming connection from {:?}", addr);
+        let connection = connection_acceptor.accept(stream).await.unwrap();
 
-    handle.await.unwrap();
+        let _handle = tokio::spawn(connection_main(connection));
+    }
 }

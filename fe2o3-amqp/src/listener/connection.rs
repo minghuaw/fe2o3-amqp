@@ -42,13 +42,8 @@ pub type ListenerConnectionHandle = ConnectionHandle<Receiver<IncomingSession>>;
 
 impl ListenerConnectionHandle {
     /// Waits for the next incoming session asynchronously
-    pub async fn next_incoming_session(&mut self) -> io::Result<IncomingSession> {
-        let incoming_session = self.session_listener.recv().await
-        .ok_or_else(|| io::Error::new(
-            io::ErrorKind::Other,
-            "Connection must have been dropped"
-        ))?;
-        Ok(incoming_session)
+    pub async fn next_incoming_session(&mut self) -> Option<IncomingSession> {
+        self.session_listener.recv().await
     }
 }
 

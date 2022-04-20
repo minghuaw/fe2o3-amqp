@@ -150,6 +150,36 @@ pub(crate) async fn allocate_link(
     result
 }
 
+pub(crate) async fn allocate_incoming_link(
+    control: &mut mpsc::Sender<SessionControl>,
+    link_name: String,
+    link_handle: LinkHandle,
+    input_handle: Handle,
+) -> Result<Handle, AllocLinkError> {
+    let (responder, resp_rx) = oneshot::channel();
+
+    control
+        .send(SessionControl::AllocateIncomingLink {
+            link_name,
+            link_handle,
+            input_handle,
+            responder,
+        })
+        .await
+        // The `SendError` could only happen when the receiving half is
+        // dropped, meaning the `SessionEngine::event_loop` has stopped.
+        // This would also mean the `Session` is Unmapped, and thus it
+        // may be treated as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    let result = resp_rx
+        .await
+        // The error could only occur when the sending half is dropped,
+        // indicating the `SessionEngine::even_loop` has stopped or
+        // unmapped. Thus it could be considered as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    result
+}
+
 /// AMQP1.0 Session
 ///
 /// # Begin a new Session with default configuration
@@ -301,6 +331,21 @@ impl endpoint::Session for Session {
             self.link_by_name.insert(link_name, handle.clone());
             // TODO: how to know which link to send the Flow frames to?
             Ok(handle)
+        }
+    }
+
+    fn allocate_incoming_link(
+        &mut self,
+        link_name: String,
+        link_handle: LinkHandle,
+        input_handle: Handle,
+    ) -> Result<Handle, Self::AllocError> {
+        match self.allocate_link(link_name, link_handle) {
+            Ok(output_handle) => {
+                self.link_by_input_handle.insert(input_handle, output_handle.clone());
+                Ok(output_handle)
+            },
+            Err(err) => Err(err)
         }
     }
 
@@ -657,6 +702,38 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    async fn send_end<W>(
+        &mut self,
+        writer: &mut W,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<SessionFrame> + Send + Unpin,
+    {
+        match self.local_state {
+            SessionState::Mapped => match error.is_some() {
+                true => self.local_state = SessionState::Discarding,
+                false => self.local_state = SessionState::EndSent,
+            },
+            SessionState::EndReceived => self.local_state = SessionState::Unmapped,
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
+        }
+
+        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
+        writer
+            .send(frame)
+            .await
+            // The receiving half must have dropped, and thus the `Connection`
+            // event loop has stopped. It should be treated as an io error
+            .map_err(|_| {
+                Self::Error::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Connection event loop has dropped",
+                ))
+            })?;
+        Ok(())
+    }
+
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
         // TODO: is state checking redundant?
 
@@ -746,37 +823,5 @@ impl endpoint::Session for Session {
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
-    }
-
-    async fn send_end<W>(
-        &mut self,
-        writer: &mut W,
-        error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin,
-    {
-        match self.local_state {
-            SessionState::Mapped => match error.is_some() {
-                true => self.local_state = SessionState::Discarding,
-                false => self.local_state = SessionState::EndSent,
-            },
-            SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
-        }
-
-        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer
-            .send(frame)
-            .await
-            // The receiving half must have dropped, and thus the `Connection`
-            // event loop has stopped. It should be treated as an io error
-            .map_err(|_| {
-                Self::Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Connection event loop has dropped",
-                ))
-            })?;
-        Ok(())
     }
 }

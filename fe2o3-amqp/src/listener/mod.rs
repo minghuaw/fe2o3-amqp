@@ -35,8 +35,8 @@ impl IncomingSession {
 //     attach: Attach,
 // }
 
-/// An alias that represents a half connected incoming link
-pub type IncomingLink = Attach;
+// /// An alias that represents a half connected incoming link
+// pub type IncomingLink = Attach;
 
 /// The supported sender-settle-modes for the link acceptor
 #[derive(Debug)]

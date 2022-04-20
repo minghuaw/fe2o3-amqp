@@ -32,7 +32,7 @@ use crate::{
 };
 
 use super::{
-    builder::Builder, session::ListenerSessionHandle, IncomingLink, SupportedReceiverSettleModes,
+    builder::Builder, session::ListenerSessionHandle, SupportedReceiverSettleModes,
     SupportedSenderSettleModes,
 };
 
@@ -216,8 +216,9 @@ impl LinkAcceptor {
         };
 
         // Allocate link in session
+        let input_handle = remote_attach.handle.clone();
         let output_handle = 
-            crate::session::allocate_link(&mut session.control, remote_attach.name.clone(), link_handle).await?;
+            crate::session::allocate_incoming_link(&mut session.control, remote_attach.name.clone(), link_handle, input_handle).await?;
 
         let mut link = link::Link::<role::Receiver, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
@@ -252,6 +253,7 @@ impl LinkAcceptor {
         };
 
         if let CreditMode::Auto(credit) = receiver.credit_mode {
+            tracing::debug!("Setting credits");
             receiver.set_credit(credit).await.map_err(|error| {
                 match AttachError::try_from(error) {
                     Ok(error) => error,
@@ -284,8 +286,10 @@ impl LinkAcceptor {
     pub async fn accept(
         &self,
         session: &mut ListenerSessionHandle,
-    ) -> Result<LinkEndpoint, link::Error> {
-        todo!()
+    ) -> Result<LinkEndpoint, AttachError> {
+        let remote_attach = session.next_incoming_attach().await
+            .ok_or_else(|| AttachError::IllegalSessionState)?;
+        self.accept_incoming_attach(remote_attach, session).await
     }
 }
 

@@ -179,6 +179,15 @@ where
                         "SessionHandle is dropped",
                     ))
                 })?;
+            },
+            SessionControl::AllocateIncomingLink { link_name, link_handle, input_handle, responder } => {
+                let result = self.session.allocate_incoming_link(link_name, link_handle, input_handle);
+                responder.send(result.map_err(Into::into)).map_err(|_| {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SessionHandle is dropped",
+                    ))
+                })?;
             }
             SessionControl::DeallocateLink(link_name) => {
                 self.session.deallocate_link(link_name);

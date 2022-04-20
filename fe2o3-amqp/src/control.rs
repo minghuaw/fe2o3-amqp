@@ -45,6 +45,12 @@ pub(crate) enum SessionControl {
         link_handle: LinkHandle,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },
+    AllocateIncomingLink {
+        link_name: String,
+        link_handle: LinkHandle,
+        input_handle: Handle,
+        responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
+    },
     DeallocateLink(String),
     LinkFlow(LinkFlow),
     Disposition(Disposition),
