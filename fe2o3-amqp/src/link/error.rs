@@ -11,13 +11,16 @@ use crate::session::AllocLinkError;
 /// Error associated with detaching a link
 #[derive(Debug)]
 pub struct DetachError<L> {
+    /// The link which encountered error while detaching
     pub link: Option<L>,
-    pub(crate) is_closed_by_remote: bool,
-    pub(crate) error: Option<definitions::Error>,
+    /// Whether the remote is closing
+    pub is_closed_by_remote: bool,
+    /// The error associated with detachment
+    pub error: Option<definitions::Error>,
 }
 
 impl<L> DetachError<L> {
-    pub fn new(link: Option<L>, is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
+    pub(crate) fn new(link: Option<L>, is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
         Self {
             link,
             is_closed_by_remote,
@@ -25,10 +28,12 @@ impl<L> DetachError<L> {
         }
     }
 
+    /// Whether the remote decided to close
     pub fn is_closed_by_remote(&self) -> bool {
         self.is_closed_by_remote
     }
 
+    /// The error condition 
     pub fn error_condition(&self) -> Option<&ErrorCondition> {
         match &self.error {
             Some(e) => Some(&e.condition),
@@ -36,16 +41,9 @@ impl<L> DetachError<L> {
         }
     }
 
+    /// Convert into the inner error
     pub fn into_error(self) -> Option<definitions::Error> {
         self.error
-    }
-
-    pub(crate) fn empty() -> Self {
-        Self {
-            link: None,
-            is_closed_by_remote: false,
-            error: None,
-        }
     }
 }
 

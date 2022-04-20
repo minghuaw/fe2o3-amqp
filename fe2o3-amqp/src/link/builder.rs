@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target},
-    primitives::{Symbol, ULong}, performatives::Attach,
+    primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
