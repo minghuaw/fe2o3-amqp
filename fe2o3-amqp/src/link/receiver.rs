@@ -306,13 +306,11 @@ impl Receiver<Detached> {
             self.link.output_handle = Some(handle);
         }
 
-        if let Err(err) =
+        if let Err(_err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(match DetachError::try_from((self, err.into())) {
-                Ok(err) => err,
-                Err(_) => unreachable!(),
-            });
+            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            return Err(DetachError::new(Some(self), false, Some(err)))
         }
 
         Ok(Receiver::<Attached> {
@@ -554,15 +552,12 @@ impl Receiver<Attached> {
         };
 
         // Send a non-closing detach
-        if let Err(err) = detaching
+        if let Err(e) = detaching
             .link
             .send_detach(&mut detaching.outgoing, false, None)
             .await
         {
-            match DetachError::try_from((detaching, err)) {
-                Ok(error) => return Err(error),
-                Err(_) => unreachable!(),
-            }
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         }
 
         // Wait for remote detach
@@ -596,31 +591,25 @@ impl Receiver<Attached> {
                 error: None,
             });
         } else {
-            match detaching.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(DetachError {
-                        link: Some(detaching),
-                        is_closed_by_remote: false,
-                        error: Some(e),
-                    })
-                }
+            if let Err(e) = detaching.link.on_incoming_detach(remote_detach).await {
+                return Err(DetachError::new(Some(detaching), false, Some(e)))
             }
         }
 
-        match detaching
+        let link_name = detaching.link.name.clone();
+        if let Err(_) = detaching
             .session
-            .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
+            .send(SessionControl::DeallocateLink(link_name))
             .await
         {
-            Ok(_) => Ok(detaching),
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            let err = DetachError::new(
+                Some(detaching),
+                false,
+                Some(definitions::Error::new(AmqpError::IllegalState, "Session must have been dropped".to_string(), None))
+            );
+            return Err(err)
         }
+        Ok(detaching)
     }
 
     /// Close the link.
@@ -632,18 +621,12 @@ impl Receiver<Attached> {
 
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        match detaching
+        if let Err(e) = detaching
             .link
             .send_detach(&mut detaching.outgoing, true, None)
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         }
 
         // Wait for remote detach
@@ -661,13 +644,7 @@ impl Receiver<Attached> {
             // back by `on_incoming_detach`
             match detaching.link.on_incoming_detach(remote_detach).await {
                 Ok(_) => detaching,
-                Err(e) => {
-                    return Err(DetachError {
-                        link: Some(detaching),
-                        is_closed_by_remote: false,
-                        error: Some(e),
-                    })
-                }
+                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e)))
             }
         } else {
             // Note that one peer MAY send a closing detach while its partner is
@@ -700,28 +677,18 @@ impl Receiver<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(e) => {
-                    return Err(match DetachError::try_from((detaching, e.into())) {
-                        Ok(err) => err,
-                        Err(_) => unreachable!(),
-                    })
-                }
+                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e)))
             }
         };
 
         // TODO: de-allocate link from session
-        match detaching
+        if let Err(_) = detaching
             .session
             .send(SessionControl::DeallocateLink(link_name))
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            let e = definitions::Error::new(AmqpError::IllegalState, "Session must have dropped".to_string(), None);
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         }
 
         Ok(())

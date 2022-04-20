@@ -139,13 +139,11 @@ impl Sender<Detached> {
             self.link.output_handle = Some(handle);
         }
 
-        if let Err(err) =
+        if let Err(_err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(match DetachError::try_from((self, err.into())) {
-                Ok(err) => err,
-                Err(_) => unreachable!(),
-            });
+            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            return Err(DetachError::new(Some(self), false, Some(err)))
         }
 
         Ok(Sender::<Attached> {
@@ -348,18 +346,12 @@ impl Sender<Attached> {
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        match detaching
+        if let Err(e) = detaching
             .link
             .send_detach(&mut detaching.outgoing, false, None)
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         };
 
         // Wait for remote detach
@@ -406,18 +398,13 @@ impl Sender<Attached> {
         }
 
         // The local outgoing handle must have been dropped, de-allocate link from session
-        match detaching
+        if let Err(_) = detaching
             .session
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            let e = definitions::Error::new(AmqpError::IllegalState, "Session must have dropped".to_string(), None);
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         }
 
         Ok(detaching)
@@ -446,18 +433,12 @@ impl Sender<Attached> {
 
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        match detaching
+        if let Err(e) = detaching
             .link
             .send_detach(&mut detaching.outgoing, true, None)
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         }
 
         // Wait for remote detach
@@ -514,28 +495,18 @@ impl Sender<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(e) => {
-                    return Err(match DetachError::try_from((detaching, e.into())) {
-                        Ok(err) => err,
-                        Err(_) => unreachable!(),
-                    })
-                }
+                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e)))
             }
         };
 
         // de-allocate link from session
-        match detaching
+        if let Err(_) = detaching
             .session
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            let e = definitions::Error::new(AmqpError::IllegalState, "Session must have dropped".to_string(), None);
+            return Err(DetachError::new(Some(detaching), false, Some(e)))
         }
 
         Ok(())

@@ -7,6 +7,8 @@ use super::*;
 
 #[async_trait]
 impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
+    type Error = link::Error;
+
     /// Set and send flow state
     async fn send_flow<W>(
         &mut self,
@@ -107,7 +109,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
-    ) -> Result<Settlement, <Self as endpoint::Link>::Error>
+    ) -> Result<Settlement, Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send,
@@ -130,7 +132,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     Some(LinkFrame::Detach(detach)) => {
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
-                        self.send_detach(writer, closed, None).await?;
+                        self.send_detach(writer, closed, None).await
+                            .map_err(|e| Self::Error::Local(e))?;
 
                         let detach_err = match result {
                             Ok(_) => DetachError::<()> {

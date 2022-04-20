@@ -18,6 +18,8 @@ const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
 impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
+    type Error = link::Error;
+
     /// Set and send flow state
     async fn send_flow<W>(
         &mut self,

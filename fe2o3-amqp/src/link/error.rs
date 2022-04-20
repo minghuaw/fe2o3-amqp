@@ -17,6 +17,14 @@ pub struct DetachError<L> {
 }
 
 impl<L> DetachError<L> {
+    pub fn new(link: Option<L>, is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
+        Self {
+            link,
+            is_closed_by_remote,
+            error
+        }
+    }
+
     pub fn is_closed_by_remote(&self) -> bool {
         self.is_closed_by_remote
     }
@@ -217,9 +225,13 @@ pub enum AttachError {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
+    /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
+    #[error("Initial delivery count MUST NOT be null if role is sender,")]
+    InitialDeliveryCountIsNull,
+
     /// A local error
     #[error("Local error: {:?}", .0)]
-    LocalError(definitions::Error),
+    Local(definitions::Error),
 }
 
 impl From<AllocLinkError> for AttachError {
@@ -237,10 +249,20 @@ impl TryFrom<Error> for AttachError {
 
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
-            Error::Local(error) => Ok(AttachError::LocalError(error)),
+            Error::Local(error) => Ok(AttachError::Local(error)),
             Error::Rejected(_) | Error::Released(_) | Error::Modified(_) | Error::Detached(_) => {
                 Err(value)
             }
         }
+    }
+}
+
+impl AttachError {
+    pub(crate) fn illegal_state(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            description.into(),
+            None,
+        ))
     }
 }

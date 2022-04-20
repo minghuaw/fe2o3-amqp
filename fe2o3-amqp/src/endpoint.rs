@@ -177,14 +177,14 @@ pub(crate) trait Session {
 
 #[async_trait]
 pub(crate) trait Link {
+    type AttachError: Send;
     type DetachError: Send;
-    type Error: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
-    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where
         W: Sink<LinkFrame> + Send + Unpin;
 
@@ -193,7 +193,7 @@ pub(crate) trait Link {
         writer: &mut W,
         closed: bool,
         error: Option<Self::DetachError>,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), Self::DetachError>
     where
         W: Sink<LinkFrame> + Send + Unpin;
 }
@@ -250,6 +250,8 @@ pub(crate) enum Settlement {
 
 #[async_trait]
 pub(crate) trait SenderLink: Link {
+    type Error: Send;
+
     const ROLE: Role = Role::Sender;
 
     /// Set and send flow state
@@ -272,7 +274,7 @@ pub(crate) trait SenderLink: Link {
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
-    ) -> Result<Settlement, <Self as Link>::Error>
+    ) -> Result<Settlement, Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send;
@@ -303,6 +305,8 @@ pub(crate) trait SenderLink: Link {
 
 #[async_trait]
 pub(crate) trait ReceiverLink: Link {
+    type Error: Send;
+
     const ROLE: Role = Role::Receiver;
 
     /// Set and send flow state
@@ -334,7 +338,7 @@ pub(crate) trait ReceiverLink: Link {
             Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
-        <Self as Link>::Error,
+        Self::Error,
     >
     where
         T: for<'de> serde::Deserialize<'de> + Send;

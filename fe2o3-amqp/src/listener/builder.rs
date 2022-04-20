@@ -354,27 +354,27 @@ impl Builder<LinkAcceptor, Initialized> {
     }
 
     /// Settlement policy for the sender
-    pub fn supported_snd_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
+    pub fn supported_sender_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
         self.inner.supported_snd_settle_modes = modes;
         self
     }
 
     /// The sender settle mode to fallback to when the mode desired 
     /// by the remote peer is not supported
-    pub fn fallback_snd_settle_mode(mut self, mode: SenderSettleMode) -> Self {
+    pub fn fallback_sender_settle_mode(mut self, mode: Option<SenderSettleMode>) -> Self {
         self.inner.fallback_snd_settle_mode = mode;
         self
     }
 
     /// The settlement policy of the receiver
-    pub fn supported_rcv_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
+    pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
         self.inner.supported_rcv_settle_modes = modes;
         self
     }
 
     /// The receiver settle mode to fallback to when the mode desired 
     /// by the remote peer is not supported
-    pub fn fallback_rcv_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
+    pub fn fallback_receiver_settle_mode(mut self, mode: Option<ReceiverSettleMode>) -> Self {
         self.inner.fallback_rcv_settle_mode = mode;
         self
     }
@@ -392,7 +392,6 @@ impl Builder<LinkAcceptor, Initialized> {
         self.inner.max_message_size = Some(max_size.into());
         self
     }
-
     
     /// Add one extension capability the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {

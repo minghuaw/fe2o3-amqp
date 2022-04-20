@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target},
-    primitives::{Symbol, ULong},
+    primitives::{Symbol, ULong}, performatives::Attach,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
@@ -89,6 +89,28 @@ pub struct Builder<Role, NameState, Addr> {
     name_state: PhantomData<NameState>,
     addr_state: PhantomData<Addr>,
 }
+
+// impl<Role, Addr> From<Attach> for Builder<Role, WithName, Addr> {
+//     fn from(attach: Attach) -> Self {
+//         Self {
+//             name: attach.name,
+//             snd_settle_mode: attach.snd_settle_mode,
+//             rcv_settle_mode: attach.rcv_settle_mode,
+//             source: attach.source,
+//             target: attach.target,
+//             initial_delivery_count: attach.initial_delivery_count,
+//             max_message_size: attach.max_message_size,
+//             offered_capabilities: attach.offered_capabilities,
+//             desired_capabilities: attach.desired_capabilities,
+//             properties: attach.properties,
+//             buffer_size: todo!(),
+//             credit_mode: todo!(),
+//             role: todo!(),
+//             name_state: todo!(),
+//             addr_state: todo!(),
+//         }
+//     }
+// }
 
 impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
     fn default() -> Self {
