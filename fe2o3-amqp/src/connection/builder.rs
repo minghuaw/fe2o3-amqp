@@ -94,9 +94,9 @@ pub struct Builder<'a, Mode, Tls> {
 
     /// TLS connector.
     ///
-    /// If `"rustls"` is enabled, this field will be [`tokio_rustls::TlsConnector`].
+    /// If `"rustls"` is enabled, this field will be `tokio_rustls::TlsConnector`.
     ///
-    /// If `"native-tls"` is enabled, this field will be [`tokio_native_tls::TlsConnector`].
+    /// If `"native-tls"` is enabled, this field will be `tokio_native_tls::TlsConnector`.
     ///
     /// If none of the above conditions were true, this will default to unit type `()`.
     pub tls_connector: Tls,

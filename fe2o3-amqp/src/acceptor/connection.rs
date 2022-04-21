@@ -47,26 +47,94 @@ impl ListenerConnectionHandle {
     }
 }
 
-// /// Listener for incoming connections
-// pub struct ConnectionListener<L: Listener> {
-//     idle_time_out: Option<Milliseconds>,
-//     listener: L,
-// }
-
-// impl<L: Listener> std::fmt::Debug for ConnectionListener<L> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("ConnectionListener")
-//             // .field("builder", &self.builder)
-//             // .field("listener", &self.listener)
-//             .finish()
-//     }
-// }
-
-// impl ConnectionListener<TcpListener> {
-
-// }
-
 /// Acceptor for an incoming connection
+/// 
+/// # Accepts incoming connection with the default configuration.
+/// 
+/// ```rust, ignore
+/// use tokio::net::TcpListener;
+/// use crate::acceptor::ConnectionAcceptor;
+/// 
+/// let tcp_listener = TcpListener::bind("localhost:5672").await.unwrap();
+/// let connection_acceptor = ConnectionAcceptor::new("example-listener");
+/// 
+/// if let Ok((stream, addr)) = tcp_listener.accept().await {
+///     // Any type that implements `AsyncRead` and `AsyncWrite` can be used
+///     let connection = connection_acceptor.accept(stream).await.unwrap();
+/// }
+/// ```
+/// 
+/// ## Default configuration
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`max_frame_size`| [`crate::connection::DEFAULT_MAX_FRAME_SIZE`] |
+/// |`channel_max`| [`crate::connection::DEFAULT_CHANNEL_MAX`] |
+/// |`idle_time_out`| `None` |
+/// |`outgoing_locales`| `None` |
+/// |`incoming_locales`| `None` |
+/// |`offered_capabilities`| `None` |
+/// |`desired_capabilities`| `None` |
+/// |`Properties`| `None` |
+/// 
+/// # Customize configuration
+/// 
+/// The [`ConnectionAcceptor`] can be configured either using the builder pattern
+/// or modifying particular field after the acceptor is built.
+/// 
+/// ```rust
+/// use crate::acceptor::ConnectionAcceptor;
+/// 
+/// let connection_acceptor = ConnectionAcceptor::builder()
+///     .container_id("example-listener")
+///     .max_frame_size(4096) // Customize max frame size
+///     .build();
+/// ```
+/// 
+/// # TLS Acceptor
+/// 
+/// TLS acceptor can be added to handle TLS negotiation.
+/// 
+/// ## `tokio-native-tls` (requires `"native-tls"` feature)
+/// 
+/// ```rust
+/// use crate::acceptor::ConnectionAcceptor;
+/// 
+/// let tls_acceptor =
+///     tokio_native_tls::TlsAcceptor::from(native_tls::TlsAcceptor::builder(cert).build()?);
+/// let connection_acceptor = ConnectionAcceptor::builder()
+///     .container_id("example-listener")
+///     .tls_acceptor(tls_acceptor)
+///     .build();
+/// ```
+/// 
+/// ## `tokio-rustls` (requires `"rustls"` feature)
+/// 
+/// ```rust
+/// use crate::acceptor::ConnectionAcceptor;
+/// 
+/// let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));;
+/// let connection_acceptor = ConnectionAcceptor::builder()
+///     .container_id("example-listener")
+///     .tls_acceptor(tls_acceptor)
+///     .build();
+/// ```
+/// 
+/// # SASL Acceptor
+/// 
+/// Currently there is only one naive SASL acceptor implemented. Any type that 
+/// implements the [`SaslAcceptor`] trait would work.
+/// 
+/// ## Simple PLAIN SASL Acceptor
+/// 
+/// ```rust,ignore
+/// use crate::acceptor::{ConnectionAcceptor, SaslPlainMechanism};
+/// 
+/// let connection_acceptor = ConnectionAcceptor::builder()
+///     .container_id("example-listener")
+///     .sasl_acceptor(SaslPlainMechanism::new("guest", "guest"))
+///     .build();
+/// ```
 #[derive(Debug)]
 pub struct ConnectionAcceptor<Tls, Sasl> {
     /// Local Open performative that holds the majority of configurable fields

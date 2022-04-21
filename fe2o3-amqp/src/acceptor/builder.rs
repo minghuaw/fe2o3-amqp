@@ -12,7 +12,7 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    connection::DEFAULT_OUTGOING_BUFFER_SIZE,
+    connection::{DEFAULT_OUTGOING_BUFFER_SIZE, DEFAULT_MAX_FRAME_SIZE, DEFAULT_CHANNEL_MAX},
     util::{Initialized, Uninitialized},
 };
 
@@ -40,13 +40,13 @@ impl<T> Builder<T, Initialized> {
 // =============================================================================
 
 impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
-    /// Creates a new Builder for [`ConnectionAccptor`]
+    /// Creates a new Builder for `ConnectionAccptor`
     pub fn new() -> Self {
         let local_open = Open {
             container_id: String::with_capacity(0), // This is going to be changed
             hostname: None,
-            max_frame_size: Default::default(),
-            channel_max: Default::default(),
+            max_frame_size: MaxFrameSize(DEFAULT_MAX_FRAME_SIZE),
+            channel_max: ChannelMax(DEFAULT_CHANNEL_MAX),
             idle_time_out: None,
             outgoing_locales: None,
             incoming_locales: None,
@@ -72,36 +72,21 @@ impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
 impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     /// The id of the source container
     pub fn container_id(
-        self,
+        mut self,
         id: impl Into<String>,
     ) -> Builder<ConnectionAcceptor<Tls, Sasl>, Initialized> {
-        // In Rust, it’s more common to pass slices as arguments
-        // rather than vectors when you just want to provide read access.
-        // The same goes for String and &str.
-        let local_open = Open {
-            container_id: id.into(),
-            hostname: self.inner.local_open.hostname,
-            max_frame_size: self.inner.local_open.max_frame_size,
-            channel_max: self.inner.local_open.channel_max,
-            idle_time_out: self.inner.local_open.idle_time_out,
-            outgoing_locales: self.inner.local_open.outgoing_locales,
-            incoming_locales: self.inner.local_open.incoming_locales,
-            offered_capabilities: self.inner.local_open.offered_capabilities,
-            desired_capabilities: self.inner.local_open.desired_capabilities,
-            properties: self.inner.local_open.properties,
-        };
-
-        let inner = ConnectionAcceptor {
-            local_open,
-            tls_acceptor: self.inner.tls_acceptor,
-            sasl_acceptor: self.inner.sasl_acceptor,
-            buffer_size: self.inner.buffer_size,
-        };
+        self.inner.local_open.container_id = id.into();
 
         Builder {
-            inner,
+            inner: self.inner,
             marker: PhantomData,
         }
+    }
+
+    /// The name of the target host
+    pub fn hostname(mut self, hostname: impl Into<Option<String>>) -> Self {
+        self.inner.local_open.hostname = hostname.into();
+        self
     }
 
     /// Proposed maximum frame size

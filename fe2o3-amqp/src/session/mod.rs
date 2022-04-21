@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
         SessionError, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol,
+    primitives::{Symbol, UInt},
     states::SessionState,
 };
 use futures_util::{Sink, SinkExt};
@@ -43,6 +43,9 @@ mod builder;
 pub use builder::*;
 
 use self::frame::{SessionFrame, SessionFrameBody};
+
+/// Default incoming_window and outgoing_window
+pub const DEFAULT_WINDOW: UInt = 2048;
 
 /// A handle to the [`Session`] event loop
 ///

@@ -46,39 +46,47 @@ impl ListenerSessionHandle {
     }
 }
 
-// /// An acceptor for incoming session
-// #[derive(Debug)]
-// pub struct SessionAcceptor {
-//     /// The transfer-id of the first transfer id the sender will send
-//     pub next_outgoing_id: TransferNumber,
-
-//     /// The initial incoming-window of the sender
-//     pub incoming_window: TransferNumber,
-
-//     /// The initial outgoing-window of the sender
-//     pub outgoing_window: TransferNumber,
-
-//     /// The maximum handle value that can be used on the session
-//     pub handle_max: Handle,
-
-//     /// The extension capabilities the sender supports
-//     pub offered_capabilities: Option<Vec<Symbol>>,
-
-//     /// The extension capabilities the sender can use if the receiver supports them
-//     pub desired_capabilities: Option<Vec<Symbol>>,
-
-//     /// Session properties
-//     pub properties: Option<Fields>,
-
-//     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
-//     /// that are used by links attached to the session
-//     pub buffer_size: usize,
-// }
-
 /// An acceptor for incoming session
 ///
 /// This is simply a wrapper around the session builder since there is not
 /// much else that you can configure. The wrapper is here for consistency in terms of API desgin.
+/// 
+/// # Accepts incoming session with default configuration
+/// 
+/// ```rust,ignore
+/// use crate::acceptor::SessionAcceptor;
+/// 
+/// let mut connection: ListenerConnectionHandle = connection_acceptor.accept(stream).await.unwrap();
+/// let session_acceptor = SessionAcceptor::new();
+/// let session = session_acceptor.accept(&mut connection).await.unwrap();
+/// ```
+/// 
+/// ## Default configuration
+/// 
+/// The default configuration is the same as that of `crate::Session`.
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`next_outgoing_id`| 0 |
+/// |`incoming_window`| [`crate::session::DEFAULT_WINDOW`] |
+/// |`outgoing_window`| [`crate::session::DEFAULT_WINDOW`] |
+/// |`handle_max`| `u32::MAX` |
+/// |`offered_capabilities` | `None` |
+/// |`desired_capabilities`| `None` |
+/// |`Properties`| `None` |
+/// 
+/// # Customize the acceptor
+/// 
+/// The acceptor can be customized using the builder pattern or by modifying the field
+/// directly after the acceptor is built.
+/// 
+/// ```rust
+/// use crate::acceptor::SessionAcceptor;
+/// 
+/// let session_acceptor = SessionAcceptor::builder()
+///     .handle_max(16)
+///     .build();
+/// ```
 #[derive(Debug)]
 pub struct SessionAcceptor(pub SessionBuilder);
 
@@ -89,6 +97,11 @@ impl Default for SessionAcceptor {
 }
 
 impl SessionAcceptor {
+    /// Creates a new acceptor with default configuration
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Creates a new builder for [`SessionAcceptor`]
     pub fn builder() -> Builder<Self, Initialized> {
         Builder::<Self, Initialized>::new()
@@ -179,63 +192,6 @@ impl SessionEngine<ListenerSession> {
         Ok(engine)
     }
 }
-
-// impl Session {
-//     /// Accepts a remotely initiated session with default configuration
-//     pub async fn accept(
-//         connection: &mut ListenerConnectionHandle,
-//     ) -> Result<ListenerSessionHandle, SessionError> {
-//         Session::builder().accept_inner(connection).await
-//     }
-// }
-
-// impl SessionBuilder {
-//     /// Accepts a remotely initiated session
-//     pub async fn accept(
-//         &self,
-//         connection: &mut ListenerConnectionHandle,
-//     ) -> Result<ListenerSessionHandle, SessionError> {
-//         self.clone().accept_inner(connection).await
-//     }
-
-//     async fn accept_inner(
-//         self,
-//         connection: &mut ListenerConnectionHandle,
-//     ) -> Result<ListenerSessionHandle, SessionError> {
-//         let local_state = SessionState::Unmapped;
-//         let (session_control_tx, session_control_rx) =
-//             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
-//         let (incoming_tx, incoming_rx) = mpsc::channel(self.buffer_size);
-//         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
-//         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.buffer_size);
-
-//         // create session in connection::Engine
-//         let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
-//         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
-//         let listener_session = ListenerSession {
-//             session,
-//             link_listener: link_listener_tx,
-//         };
-//         let engine = SessionEngine::begin(
-//             connection.control.clone(),
-//             listener_session,
-//             session_id,
-//             session_control_rx,
-//             incoming_rx,
-//             PollSender::new(connection.outgoing.clone()),
-//             outgoing_rx,
-//         )
-//         .await?;
-//         let engine_handle = engine.spawn();
-//         let handle = SessionHandle {
-//             control: session_control_tx,
-//             engine_handle,
-//             outgoing: outgoing_tx,
-//             link_listener: link_listener_rx,
-//         };
-//         Ok(handle)
-//     }
-// }
 
 /// A session on the listener side
 #[derive(Debug)]

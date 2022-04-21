@@ -16,13 +16,10 @@ use crate::{
     Session,
 };
 
-use super::{Error, SessionHandle};
+use super::{Error, SessionHandle, DEFAULT_WINDOW};
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
-
-/// Default incoming_window and outgoing_window
-pub const DEFAULT_WINDOW: UInt = 2048;
 
 /// Builder for [`crate::Session`]
 #[derive(Debug, Clone)]

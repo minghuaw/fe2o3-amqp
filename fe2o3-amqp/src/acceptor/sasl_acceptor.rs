@@ -29,18 +29,28 @@ pub trait SaslAcceptor {
     fn on_response(&self, response: SaslResponse) -> SaslServerFrame;
 }
 
-/// Supported SASL mechanism
-#[derive(Debug)]
-pub enum Mechanism {
-    /// SASL PLAIN mechanism
-    Plain,
-}
+// /// Supported SASL mechanism
+// #[derive(Debug)]
+// pub enum Mechanism {
+//     /// SASL PLAIN mechanism
+//     Plain,
+// }
 
 /// A naive acceptor for SASL PLAIN mechanism
 #[derive(Debug)]
 pub struct SaslPlainMechanism {
     username: String,
     password: String,
+}
+
+impl SaslPlainMechanism {
+    /// Creates a new PLAIN mechanism acceptor
+    pub fn new(username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self {
+            username: username.into(),
+            password: password.into(),
+        }
+    }
 }
 
 impl SaslPlainMechanism {

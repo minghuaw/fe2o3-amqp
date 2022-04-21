@@ -46,6 +46,46 @@ pub enum LinkEndpoint {
 }
 
 /// An acceptor for incoming links
+/// 
+/// # Accepts incoming link with default configuration
+/// 
+/// ```rust,ignore
+/// use crate::acceptor::{ListenerSessionHandle, LinkAcceptor, LinkEndpoint};
+/// 
+/// let mut session: ListenerSessionHandle = session_acceptor.accept(&mut connection).await.unwrap();
+/// let link_acceptor = LinkAcceptor::new();
+/// let link: LinkEndpoint = link_acceptor.accept(&mut session).await.unwrap();
+/// ```
+/// 
+/// ## Default configuration
+/// 
+/// | Field | Default Value |
+/// |-------|---------------|
+/// |`supported_snd_settle_modes`|[`SupportedSenderSettleModes::All`]|
+/// |`fallback_snd_settle_mode`| `None` |
+/// |`supported_rcv_settle_modes`|[`SupportedReceiverSettleModes::Both`]|
+/// |`fallback_rcv_settle_mode`| `None` |
+/// |`initial_delivery_count`| `0` |
+/// |`max_message_size`| `None` |
+/// |`offered_capabilities`| `None` |
+/// |`desired_capabilities`| `None` |
+/// |`properties`| `None` |
+/// |`buffer_size`| [`u16::MAX`] |
+/// |`credit_mode`| [`CreditMode::Auto(DEFAULT_CREDIT)`] |
+/// 
+/// # Customize acceptor
+/// 
+/// The acceptor can be customized using the builder pattern or by directly
+/// modifying the field after the acceptor is built.
+/// 
+/// ```rust
+/// use crate::acceptor::{LinkAcceptor, SupportedSenderSettleModes};
+/// 
+/// let link_acceptor = LinkAcceptor::builder()
+///     .supported_sender_settle_modes(SupportedSenderSettleModes::Settled)
+///     .build();
+/// ```
+/// 
 #[derive(Debug)]
 pub struct LinkAcceptor {
     /// Supported sender settle mode
