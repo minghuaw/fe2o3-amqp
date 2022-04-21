@@ -18,8 +18,8 @@ async fn session_main(mut session: ListenerSessionHandle) {
 
     while let Ok(link) = link_acceptor.accept(&mut session).await {
         match link {
-            LinkEndpoint::Sender(sender) => {
-                let handle = tokio::spawn(async {
+            LinkEndpoint::Sender(mut sender) => {
+                let handle = tokio::spawn(async move {
                     tracing::info!("Incoming link is connected (remote: receiver, local: sender)");
                     if let Err(e) = sender.close().await {
                         // The remote may close the session

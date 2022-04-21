@@ -40,7 +40,7 @@ use super::{
 #[derive(Debug)]
 pub enum LinkEndpoint {
     /// Sender
-    Sender(crate::link::Sender<Attached>),
+    Sender(crate::link::Sender),
 
     /// Receiver
     Receiver(crate::link::Receiver<Attached>),
@@ -347,13 +347,13 @@ impl LinkAcceptor {
         link.on_incoming_attach(remote_attach).await?;
         link.send_attach(&mut outgoing).await?;
 
-        let sender = Sender::<Attached> {
+        let sender = Sender {
             link,
             buffer_size: self.buffer_size,
             session: session.control.clone(),
             outgoing,
             incoming: ReceiverStream::new(incoming_rx),
-            marker: PhantomData,
+            // marker: PhantomData,
         };
         Ok(LinkEndpoint::Sender(sender))
     }

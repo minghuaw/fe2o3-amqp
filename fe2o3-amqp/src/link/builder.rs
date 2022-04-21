@@ -362,7 +362,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
     pub async fn attach<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Sender<Attached>, AttachError> {
+    ) -> Result<Sender, AttachError> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
@@ -408,13 +408,13 @@ impl Builder<role::Sender, WithName, WithTarget> {
             })?;
 
         // Attach completed, return Sender
-        let sender = Sender::<Attached> {
+        let sender = Sender {
             link,
             buffer_size,
             session: session.control.clone(),
             outgoing,
             incoming: reader,
-            marker: PhantomData,
+            // marker: PhantomData,
         };
         Ok(sender)
     }
