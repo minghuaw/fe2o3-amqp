@@ -122,7 +122,7 @@ impl Sender {
     async fn reattach_inner(
         &mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, DetachError<()>> {
+    ) -> Result<&mut Self, DetachError> {
         // May need to re-allocate output handle
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
@@ -144,7 +144,6 @@ impl Sender {
                 Ok(handle) => handle,
                 Err(err) => {
                     return Err(DetachError {
-                        link: None,
                         is_closed_by_remote: false,
                         error: Some(definitions::Error::from(err)),
                     });
@@ -157,7 +156,7 @@ impl Sender {
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
             let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(None, false, Some(err)));
+            return Err(DetachError::new(false, Some(err)));
         }
 
         Ok(self)
@@ -346,7 +345,7 @@ impl Sender {
     ///
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
-    pub async fn detach(&mut self) -> Result<(), DetachError<()>> {
+    pub async fn detach(&mut self) -> Result<(), DetachError> {
         // let mut detaching = self.into_detached();
 
         // TODO: how should disposition be handled?
@@ -354,18 +353,18 @@ impl Sender {
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
         if let Err(e) = self.link.send_detach(&mut self.outgoing, false, None).await {
-            return Err(DetachError::new(None, false, Some(e)));
+            return Err(DetachError::new(false, Some(e)));
         };
 
         // Wait for remote detach
         let frame = match self.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(())),
+            None => return Err(detach_error_expecting_frame()),
         };
 
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(())),
+            _ => return Err(detach_error_expecting_frame()),
         };
 
         if remote_detach.closed {
@@ -383,7 +382,6 @@ impl Sender {
             // the corresponding link endpoint, and reply with its own detach frame with
             // the closed flag set to true.
             return Err(DetachError {
-                link: None,
                 is_closed_by_remote: true,
                 error: None,
             });
@@ -392,7 +390,6 @@ impl Sender {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(DetachError {
-                        link: None,
                         is_closed_by_remote: false,
                         error: Some(e),
                     })
@@ -411,7 +408,7 @@ impl Sender {
                 "Session must have dropped".to_string(),
                 None,
             );
-            return Err(DetachError::new(None, false, Some(e)));
+            return Err(DetachError::new(false, Some(e)));
         }
 
         Ok(())
@@ -421,14 +418,14 @@ impl Sender {
     pub async fn detach_with_timeout(
         &mut self,
         duration: impl Into<Duration>,
-    ) -> Result<Result<(), DetachError<()>>, Elapsed> {
+    ) -> Result<Result<(), DetachError>, Elapsed> {
         timeout(duration.into(), self.detach()).await
     }
 
     /// Close the link.
     ///
     /// This will set the `closed` field in the Detach performative to true
-    pub async fn close(&mut self) -> Result<(), DetachError<()>> {
+    pub async fn close(&mut self) -> Result<(), DetachError> {
         // let mut detaching = Sender {
         //     link: self.link,
         //     buffer_size: self.buffer_size,
@@ -441,17 +438,17 @@ impl Sender {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
         if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
-            return Err(DetachError::new(None, false, Some(e)));
+            return Err(DetachError::new(false, Some(e)));
         }
 
         // Wait for remote detach
         let frame = match self.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(())),
+            None => return Err(detach_error_expecting_frame()),
         };
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(())),
+            _ => return Err(detach_error_expecting_frame()),
         };
 
         let detaching = if remote_detach.closed {
@@ -461,7 +458,6 @@ impl Sender {
                 Ok(_) => self,
                 Err(e) => {
                     return Err(DetachError {
-                        link: None,
                         is_closed_by_remote: false,
                         error: Some(e),
                     })
@@ -483,17 +479,17 @@ impl Sender {
             self.reattach_inner(session_control).await?;
             let frame = match self.incoming.next().await {
                 Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame(())),
+                None => return Err(detach_error_expecting_frame()),
             };
 
             // TODO: is checking closing still necessary?
             let _remote_detach = match frame {
                 LinkFrame::Detach(detach) => detach,
-                _ => return Err(detach_error_expecting_frame(())),
+                _ => return Err(detach_error_expecting_frame()),
             };
             match self.link.send_detach(&mut self.outgoing, true, None).await {
                 Ok(_) => self,
-                Err(e) => return Err(DetachError::new(None, false, Some(e))),
+                Err(e) => return Err(DetachError::new(false, Some(e))),
             }
         };
 
@@ -508,7 +504,7 @@ impl Sender {
                 "Session must have dropped".to_string(),
                 None,
             );
-            return Err(DetachError::new(None, false, Some(e)));
+            return Err(DetachError::new(false, Some(e)));
         }
 
         Ok(())

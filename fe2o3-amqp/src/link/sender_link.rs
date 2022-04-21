@@ -136,13 +136,11 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                             .map_err(|e| Self::Error::Local(e))?;
 
                         let detach_err = match result {
-                            Ok(_) => DetachError::<()> {
-                                link: None,
+                            Ok(_) => DetachError {
                                 is_closed_by_remote: closed,
                                 error: None
                             },
-                            Err(err) => DetachError::<()> {
-                                link: None,
+                            Err(err) => DetachError {
                                 is_closed_by_remote: closed,
                                 error: Some(err)
                             }
