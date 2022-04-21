@@ -343,10 +343,11 @@ impl endpoint::Session for Session {
     ) -> Result<Handle, Self::AllocError> {
         match self.allocate_link(link_name, link_handle) {
             Ok(output_handle) => {
-                self.link_by_input_handle.insert(input_handle, output_handle.clone());
+                self.link_by_input_handle
+                    .insert(input_handle, output_handle.clone());
                 Ok(output_handle)
-            },
-            Err(err) => Err(err)
+            }
+            Err(err) => Err(err),
         }
     }
 

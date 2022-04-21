@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
-use tracing::{debug, error, instrument, trace, info};
+use tracing::{debug, error, instrument, trace};
 
 use crate::{
     connection::engine::SessionId,
@@ -54,10 +54,7 @@ impl SessionEngine<super::Session> {
         };
 
         // send a begin
-        engine
-            .session
-            .send_begin(&mut engine.outgoing)
-            .await?;
+        engine.session.send_begin(&mut engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
@@ -83,9 +80,7 @@ impl SessionEngine<super::Session> {
             }
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         };
-        engine
-            .session
-            .on_incoming_begin(channel, remote_begin)?;
+        engine.session.on_incoming_begin(channel, remote_begin)?;
         Ok(engine)
     }
 }
@@ -187,9 +182,16 @@ where
                         "SessionHandle is dropped",
                     ))
                 })?;
-            },
-            SessionControl::AllocateIncomingLink { link_name, link_handle, input_handle, responder } => {
-                let result = self.session.allocate_incoming_link(link_name, link_handle, input_handle);
+            }
+            SessionControl::AllocateIncomingLink {
+                link_name,
+                link_handle,
+                input_handle,
+                responder,
+            } => {
+                let result =
+                    self.session
+                        .allocate_incoming_link(link_name, link_handle, input_handle);
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -376,7 +378,7 @@ where
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
                             // All Links and SessionHandle are dropped
-                            // 
+                            //
                             // Upon ending, all link-to-session channels will be closed
                             // first while the session is still waitint for remote end frame.
                             Ok(Running::Continue)

@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
     definitions::{
-        Fields, Handle, IetfLanguageTag, Milliseconds, TransferNumber, MIN_MAX_FRAME_SIZE, SenderSettleMode, ReceiverSettleMode, SequenceNo,
+        Fields, Handle, IetfLanguageTag, Milliseconds, ReceiverSettleMode, SenderSettleMode,
+        SequenceNo, TransferNumber, MIN_MAX_FRAME_SIZE,
     },
     performatives::{ChannelMax, MaxFrameSize, Open},
     primitives::{Symbol, ULong},
@@ -15,7 +16,10 @@ use crate::{
     util::{Initialized, Uninitialized},
 };
 
-use super::{session::SessionAcceptor, ConnectionAcceptor, link::LinkAcceptor, SupportedSenderSettleModes, SupportedReceiverSettleModes};
+use super::{
+    link::LinkAcceptor, session::SessionAcceptor, ConnectionAcceptor, SupportedReceiverSettleModes,
+    SupportedSenderSettleModes,
+};
 
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
@@ -348,7 +352,7 @@ impl Builder<LinkAcceptor, Initialized> {
         };
 
         Self {
-            inner, 
+            inner,
             marker: PhantomData,
         }
     }
@@ -359,7 +363,7 @@ impl Builder<LinkAcceptor, Initialized> {
         self
     }
 
-    /// The sender settle mode to fallback to when the mode desired 
+    /// The sender settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
     pub fn fallback_sender_settle_mode(mut self, mode: Option<SenderSettleMode>) -> Self {
         self.inner.fallback_snd_settle_mode = mode;
@@ -372,7 +376,7 @@ impl Builder<LinkAcceptor, Initialized> {
         self
     }
 
-    /// The receiver settle mode to fallback to when the mode desired 
+    /// The receiver settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
     pub fn fallback_receiver_settle_mode(mut self, mode: Option<ReceiverSettleMode>) -> Self {
         self.inner.fallback_rcv_settle_mode = mode;
@@ -392,7 +396,7 @@ impl Builder<LinkAcceptor, Initialized> {
         self.inner.max_message_size = Some(max_size.into());
         self
     }
-    
+
     /// Add one extension capability the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.offered_capabilities {

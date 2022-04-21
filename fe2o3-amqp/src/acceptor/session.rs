@@ -8,26 +8,31 @@ use std::io;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SessionError, Handle},
+    definitions::{self, AmqpError, Handle, SessionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
 };
-use futures_util::{Sink};
+use futures_util::Sink;
 use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 use tracing::instrument;
 
 use crate::{
-    control::{SessionControl, ConnectionControl},
+    connection::engine::SessionId,
+    control::{ConnectionControl, SessionControl},
     endpoint::{self, LinkFlow, Session},
+    link::{LinkFrame, LinkHandle},
     session::{
-        self, engine::SessionEngine, frame::{SessionFrame, SessionIncomingItem}, SessionHandle,
-        DEFAULT_SESSION_CONTROL_BUFFER_SIZE, Error,
+        self,
+        engine::SessionEngine,
+        frame::{SessionFrame, SessionIncomingItem},
+        Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
-    Payload, util::Initialized, link::{LinkHandle, LinkFrame}, connection::engine::SessionId,
+    util::Initialized,
+    Payload,
 };
 
-use super::{ListenerConnectionHandle, builder::Builder, IncomingSession};
+use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
 type SessionBuilder = crate::session::Builder;
 
@@ -71,7 +76,7 @@ impl ListenerSessionHandle {
 // }
 
 /// An acceptor for incoming session
-/// 
+///
 /// This is simply a wrapper around the session builder since there is not
 /// much else that you can configure. The wrapper is here for consistency in terms of API desgin.
 #[derive(Debug)]
@@ -104,8 +109,10 @@ impl SessionAcceptor {
 
         // create session in connection::Engine
         let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
-        let mut session = self.0.clone()
-            .into_session(session_control_tx.clone(), outgoing_channel, local_state);
+        let mut session =
+            self.0
+                .clone()
+                .into_session(session_control_tx.clone(), outgoing_channel, local_state);
         session.on_incoming_begin(incoming_session.channel, incoming_session.begin)?;
 
         let listener_session = ListenerSession {
@@ -138,12 +145,11 @@ impl SessionAcceptor {
         &self,
         connection: &mut ListenerConnectionHandle,
     ) -> Result<ListenerSessionHandle, Error> {
-        let incoming_session = connection.next_incoming_session().await
-            .ok_or_else(|| io::Error::new(
-                io::ErrorKind::Other,
-                "Connection must have been dropped"
-            ))?;
-        self.accept_incoming_session(incoming_session, connection).await
+        let incoming_session = connection.next_incoming_session().await.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::Other, "Connection must have been dropped")
+        })?;
+        self.accept_incoming_session(incoming_session, connection)
+            .await
     }
 }
 
@@ -169,10 +175,7 @@ impl SessionEngine<ListenerSession> {
         };
 
         // send a begin
-        engine
-            .session
-            .send_begin(&mut engine.outgoing)
-            .await?;
+        engine.session.send_begin(&mut engine.outgoing).await?;
         Ok(engine)
     }
 }
@@ -277,7 +280,8 @@ impl endpoint::Session for ListenerSession {
         link_handle: LinkHandle,
         input_handle: Handle,
     ) -> Result<Handle, Self::AllocError> {
-        self.session.allocate_incoming_link(link_name, link_handle, input_handle)
+        self.session
+            .allocate_incoming_link(link_name, link_handle, input_handle)
     }
 
     fn deallocate_link(&mut self, link_name: String) {
@@ -295,7 +299,8 @@ impl endpoint::Session for ListenerSession {
     ) -> Result<(), Self::Error> {
         // Look up link handle by link name
         match self.session.link_by_name.get(&attach.name) {
-            Some(output_handle) => match self.session.local_links.get_mut(output_handle.0 as usize) {
+            Some(output_handle) => match self.session.local_links.get_mut(output_handle.0 as usize)
+            {
                 Some(link) => {
                     // Only Sender need to update the receiver settle mode
                     // because the sender needs to echo a disposition if
@@ -309,7 +314,8 @@ impl endpoint::Session for ListenerSession {
                     }
 
                     let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
-                    self.session.link_by_input_handle
+                    self.session
+                        .link_by_input_handle
                         .insert(input_handle, output_handle.clone());
                     match link.send(LinkFrame::Attach(attach)).await {
                         Ok(_) => Ok(()),
@@ -325,27 +331,26 @@ impl endpoint::Session for ListenerSession {
                     // TODO: Resuming link
                     return Err(Error::amqp_error(
                         AmqpError::NotImplemented,
-                        "Link resumption is not supported yet".to_string()
-                    ))
+                        "Link resumption is not supported yet".to_string(),
+                    ));
                 }
             },
             None => {
                 // If no such terminus exists, the application MAY
-                // choose to create one using the properties supplied by the 
+                // choose to create one using the properties supplied by the
                 // remote link endpoint. The link endpoint is then mapped
-                // to an unused handle, and an attach frame is issued carrying 
+                // to an unused handle, and an attach frame is issued carrying
                 // the state of the newly created endpoint.
-                
-                self.link_listener.send(attach).await
-                    .map_err(|_| {
-                        // SessionHandle must have been dropped
-                        Error::amqp_error(
-                            AmqpError::IllegalState,
-                            Some("Listener session handle must have been dropped".to_string()),
-                        )
-                    })?;
+
+                self.link_listener.send(attach).await.map_err(|_| {
+                    // SessionHandle must have been dropped
+                    Error::amqp_error(
+                        AmqpError::IllegalState,
+                        Some("Listener session handle must have been dropped".to_string()),
+                    )
+                })?;
                 Ok(())
-            },
+            }
         }
     }
 

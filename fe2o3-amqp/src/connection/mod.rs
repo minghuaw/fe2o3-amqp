@@ -624,7 +624,11 @@ impl endpoint::Connection for Connection {
         Ok(())
     }
 
-    fn on_outgoing_begin(&mut self, outgoing_channel: u16, begin: Begin) -> Result<Frame, Self::Error> {
+    fn on_outgoing_begin(
+        &mut self,
+        outgoing_channel: u16,
+        begin: Begin,
+    ) -> Result<Frame, Self::Error> {
         // TODO: check states?
         let frame = Frame::new(outgoing_channel, FrameBody::Begin(begin));
         Ok(frame)

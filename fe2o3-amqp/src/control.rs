@@ -60,8 +60,17 @@ impl std::fmt::Display for SessionControl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SessionControl::End(_) => write!(f, "End"),
-            SessionControl::AllocateLink { link_name, link_handle, responder } => write!(f, "AllocateLink"),
-            SessionControl::AllocateIncomingLink { link_name, link_handle, input_handle, responder } => write!(f, "AllocateIncomingLink"),
+            SessionControl::AllocateLink {
+                link_name: _,
+                link_handle: _,
+                responder: _,
+            } => write!(f, "AllocateLink"),
+            SessionControl::AllocateIncomingLink {
+                link_name: _,
+                link_handle: _,
+                input_handle: _,
+                responder: _,
+            } => write!(f, "AllocateIncomingLink"),
             SessionControl::DeallocateLink(_) => write!(f, "DeallocateLink"),
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),

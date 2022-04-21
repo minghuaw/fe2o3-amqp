@@ -78,8 +78,8 @@ pub mod sasl_profile;
 pub mod session;
 pub mod transport;
 
-#[cfg(feature = "listener")]
-pub mod listener;
+#[cfg(feature = "acceptor")]
+pub mod acceptor;
 
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`

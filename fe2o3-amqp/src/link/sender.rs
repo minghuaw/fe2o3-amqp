@@ -143,7 +143,7 @@ impl Sender<Detached> {
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
             let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(Some(self), false, Some(err)))
+            return Err(DetachError::new(Some(self), false, Some(err)));
         }
 
         Ok(Sender::<Attached> {
@@ -351,7 +351,7 @@ impl Sender<Attached> {
             .send_detach(&mut detaching.outgoing, false, None)
             .await
         {
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         };
 
         // Wait for remote detach
@@ -403,8 +403,12 @@ impl Sender<Attached> {
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
             .await
         {
-            let e = definitions::Error::new(AmqpError::IllegalState, "Session must have dropped".to_string(), None);
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            let e = definitions::Error::new(
+                AmqpError::IllegalState,
+                "Session must have dropped".to_string(),
+                None,
+            );
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         }
 
         Ok(detaching)
@@ -438,7 +442,7 @@ impl Sender<Attached> {
             .send_detach(&mut detaching.outgoing, true, None)
             .await
         {
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         }
 
         // Wait for remote detach
@@ -495,7 +499,7 @@ impl Sender<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e)))
+                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e))),
             }
         };
 
@@ -505,8 +509,12 @@ impl Sender<Attached> {
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
             .await
         {
-            let e = definitions::Error::new(AmqpError::IllegalState, "Session must have dropped".to_string(), None);
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            let e = definitions::Error::new(
+                AmqpError::IllegalState,
+                "Session must have dropped".to_string(),
+                None,
+            );
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         }
 
         Ok(())

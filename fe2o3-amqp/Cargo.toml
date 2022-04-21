@@ -26,12 +26,13 @@ rustls = ["tokio-rustls", "librustls", "webpki-roots"]
 native-tls = ["tokio-native-tls", "libnative-tls"]
 
 # Listener implementation
-listener = []
+listener = ["acceptor"]
+acceptor = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-test = { version = "0.4" }
-testcontainers = "0.12"
+testcontainers = "0.13.0"
 
 [dependencies]
 serde_amqp = "0.0.6"
@@ -53,7 +54,6 @@ tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 serde_bytes = "0.11"
 tracing = "0.1"
-
 
 # Optional deps
 tokio-rustls = { version = "0.23", optional = true }

@@ -31,7 +31,7 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use serde_amqp::from_reader;
 use tokio::sync::{mpsc, oneshot, RwLock};
-use tracing::{instrument, debug, trace};
+use tracing::{debug, instrument, trace};
 
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
@@ -153,11 +153,13 @@ where
                 // remote peer is attempting to re-attach
                 self.local_state = LinkState::AttachReceived
             }
-            _ => return Err(AttachError::Local(definitions::Error::new(
-                AmqpError::IllegalState,
-                None, 
-                None
-            ))),
+            _ => {
+                return Err(AttachError::Local(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    None,
+                    None,
+                )))
+            }
         };
 
         self.input_handle = Some(remote_attach.handle);
@@ -168,7 +170,7 @@ where
         match remote_attach.role {
             // Remote attach is from sender, local is receiver
             Role::Sender => {
-                // In this case, the sender is considered to hold the authoritative version of the  
+                // In this case, the sender is considered to hold the authoritative version of the
                 // version of the source properties
                 self.source = remote_attach.source;
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
@@ -179,11 +181,13 @@ where
                 // created, and is incre- mented whenever a message is sent
                 let initial_delivery_count = match remote_attach.initial_delivery_count {
                     Some(val) => val,
-                    None => return Err(AttachError::Local(definitions::Error::new(
-                        AmqpError::NotAllowed,
-                        None,
-                        None
-                    ))),
+                    None => {
+                        return Err(AttachError::Local(definitions::Error::new(
+                            AmqpError::NotAllowed,
+                            None,
+                            None,
+                        )))
+                    }
                 };
                 self.flow_state
                     .as_ref()
@@ -206,7 +210,8 @@ where
 
         // set max message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        self.max_message_size = max_message_size(self.max_message_size, remote_attach.max_message_size);
+        self.max_message_size =
+            max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         // TODO: what to do with the unattached
 
@@ -356,22 +361,17 @@ where
                 };
 
                 debug!("Sending detach: {:?}", detach);
-                
-                writer
-                    .send(LinkFrame::Detach(detach))
-                    .await
-                    .map_err(|_| definitions::Error::new(
+
+                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
+                    definitions::Error::new(
                         AmqpError::IllegalState,
                         Some("Session must have dropped".to_string()),
                         None,
-                    ))?;
+                    )
+                })?;
                 remove_handle
             }
-            None => return Err(definitions::Error::new(
-                AmqpError::IllegalState,
-                None,
-                None
-            )),
+            None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
         };
 
         if remove_handle {
@@ -636,7 +636,8 @@ where
             // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
             tracing::error!("Found null source or target");
-            expect_detach_then_detach(link, writer, reader).await
+            expect_detach_then_detach(link, writer, reader)
+                .await
                 .map_err(|_| AttachError::illegal_state("Expecting detach".to_string()))?;
         }
         false => {
@@ -672,7 +673,8 @@ where
         _ => return Err(Error::expecting_frame("Detach")),
     };
 
-    link.send_detach(writer, false, None).await
+    link.send_detach(writer, false, None)
+        .await
         .map_err(|e| Error::Local(e))?;
     Ok(())
 }

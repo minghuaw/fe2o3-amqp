@@ -1,8 +1,12 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{listener::{ConnectionAcceptor, session::{SessionAcceptor, ListenerSessionHandle}, link::{LinkAcceptor, LinkEndpoint}, ListenerConnectionHandle}};
+use fe2o3_amqp::acceptor::{
+    link::{LinkAcceptor, LinkEndpoint},
+    session::{ListenerSessionHandle, SessionAcceptor},
+    ConnectionAcceptor, ListenerConnectionHandle,
+};
 use tokio::net::TcpListener;
-use tracing::{Level, instrument};
+use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5672";
@@ -20,7 +24,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
                     sender.close().await.unwrap();
                 });
                 handle.await.unwrap();
-            },
+            }
             LinkEndpoint::Receiver(recver) => {
                 let handle = tokio::spawn(async {
                     tracing::info!("Incoming link is connected (remote: sender, local: receiver");
@@ -28,7 +32,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
                     recver.close().await.unwrap();
                 });
                 handle.await.unwrap();
-            },
+            }
         }
     }
     session.on_end().await.unwrap();
@@ -53,7 +57,7 @@ async fn main() {
 
     let tcp_listener = TcpListener::bind(BASE_ADDR).await.unwrap();
     let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
-    
+
     while let Ok((stream, addr)) = tcp_listener.accept().await {
         println!("Incoming connection from {:?}", addr);
         let connection = connection_acceptor.accept(stream).await.unwrap();

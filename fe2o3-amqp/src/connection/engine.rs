@@ -179,7 +179,7 @@ where
     #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
         let frame = incoming?;
-        
+
         let Frame { channel, body } = frame;
 
         match body {
@@ -446,7 +446,6 @@ where
                         },
                     };
 
-                    tracing::info!(task = "on_incoming", result = ?result);
                     result
                 },
                 control = self.control.recv() => {
@@ -458,7 +457,6 @@ where
                         }
                     };
 
-                    tracing::info!(task = "on_control", result = ?result);
                     result
                 },
                 frame = self.outgoing_session_frames.recv() => {
@@ -472,7 +470,6 @@ where
                         }
                     };
 
-                    tracing::info!(task = "on_outgoing_session_frames", result = ?result);
                     result
                 }
             };

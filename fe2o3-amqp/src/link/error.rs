@@ -20,11 +20,15 @@ pub struct DetachError<L> {
 }
 
 impl<L> DetachError<L> {
-    pub(crate) fn new(link: Option<L>, is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
+    pub(crate) fn new(
+        link: Option<L>,
+        is_closed_by_remote: bool,
+        error: Option<definitions::Error>,
+    ) -> Self {
         Self {
             link,
             is_closed_by_remote,
-            error
+            error,
         }
     }
 
@@ -33,7 +37,7 @@ impl<L> DetachError<L> {
         self.is_closed_by_remote
     }
 
-    /// The error condition 
+    /// The error condition
     pub fn error_condition(&self) -> Option<&ErrorCondition> {
         match &self.error {
             Some(e) => Some(&e.condition),
@@ -226,7 +230,6 @@ pub enum AttachError {
     // /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
     // #[error("Initial delivery count MUST NOT be null if role is sender,")]
     // InitialDeliveryCountIsNull,
-
     /// Source field in Attach is Null
     #[error("Source is None")]
     SourceIsNone,

@@ -310,7 +310,7 @@ impl Receiver<Detached> {
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
             let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(Some(self), false, Some(err)))
+            return Err(DetachError::new(Some(self), false, Some(err)));
         }
 
         Ok(Receiver::<Attached> {
@@ -552,7 +552,7 @@ impl Receiver<Attached> {
             .send_detach(&mut detaching.outgoing, false, None)
             .await
         {
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         }
 
         // Wait for remote detach
@@ -587,7 +587,7 @@ impl Receiver<Attached> {
             });
         } else {
             if let Err(e) = detaching.link.on_incoming_detach(remote_detach).await {
-                return Err(DetachError::new(Some(detaching), false, Some(e)))
+                return Err(DetachError::new(Some(detaching), false, Some(e)));
             }
         }
 
@@ -600,9 +600,13 @@ impl Receiver<Attached> {
             let err = DetachError::new(
                 Some(detaching),
                 false,
-                Some(definitions::Error::new(AmqpError::IllegalState, "Session must have been dropped".to_string(), None))
+                Some(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    "Session must have been dropped".to_string(),
+                    None,
+                )),
             );
-            return Err(err)
+            return Err(err);
         }
         Ok(detaching)
     }
@@ -621,7 +625,7 @@ impl Receiver<Attached> {
             .send_detach(&mut detaching.outgoing, true, None)
             .await
         {
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         }
 
         // Wait for remote detach
@@ -639,7 +643,7 @@ impl Receiver<Attached> {
             // back by `on_incoming_detach`
             match detaching.link.on_incoming_detach(remote_detach).await {
                 Ok(_) => detaching,
-                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e)))
+                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e))),
             }
         } else {
             // Note that one peer MAY send a closing detach while its partner is
@@ -672,7 +676,7 @@ impl Receiver<Attached> {
                 .await
             {
                 Ok(_) => detaching,
-                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e)))
+                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e))),
             }
         };
 
@@ -682,8 +686,12 @@ impl Receiver<Attached> {
             .send(SessionControl::DeallocateLink(link_name))
             .await
         {
-            let e = definitions::Error::new(AmqpError::IllegalState, "Session must have dropped".to_string(), None);
-            return Err(DetachError::new(Some(detaching), false, Some(e)))
+            let e = definitions::Error::new(
+                AmqpError::IllegalState,
+                "Session must have dropped".to_string(),
+                None,
+            );
+            return Err(DetachError::new(Some(detaching), false, Some(e)));
         }
 
         Ok(())
@@ -718,7 +726,7 @@ impl Receiver<Attached> {
 
         self.processed += 1;
         if let CreditMode::Auto(max_credit) = self.credit_mode {
-            if self.processed >= max_credit/2 {
+            if self.processed >= max_credit / 2 {
                 // self.processed will be set to zero when setting link credit
                 self.set_credit(max_credit).await?;
             }

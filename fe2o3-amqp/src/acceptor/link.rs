@@ -7,12 +7,9 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{
-        Fields, ReceiverSettleMode, Role,
-        SenderSettleMode, SequenceNo,
-    },
+    definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo},
     messaging::DeliveryState,
-    performatives::{Attach},
+    performatives::Attach,
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
@@ -20,7 +17,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::{Link},
+    endpoint::Link,
     link::{
         self,
         delivery::UnsettledMessage,

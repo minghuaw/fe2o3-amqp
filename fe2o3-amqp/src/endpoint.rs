@@ -130,7 +130,7 @@ pub(crate) trait Session {
         &mut self,
         link_name: String,
         link_handle: Self::LinkHandle,
-        input_handle: Handle
+        input_handle: Handle,
     ) -> Result<Handle, Self::AllocError>;
     fn deallocate_link(&mut self, link_name: String);
 

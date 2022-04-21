@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    connection::{ConnectionHandle},
+    connection::ConnectionHandle,
     control::SessionControl,
     session::{engine::SessionEngine, SessionState},
     util::Constant,

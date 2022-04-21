@@ -17,6 +17,7 @@ use tokio::{
 };
 
 use crate::{
+    acceptor::sasl_acceptor::SaslServerFrame,
     connection::{
         self, engine::ConnectionEngine, ConnectionHandle, Error, OpenError,
         DEFAULT_CONTROL_CHAN_BUF,
@@ -26,7 +27,6 @@ use crate::{
         amqp::{self, Frame},
         sasl,
     },
-    listener::sasl_acceptor::SaslServerFrame,
     session::frame::{SessionFrame, SessionFrameBody},
     transport::{
         protocol_header::{ProtocolHeader, ProtocolId},
@@ -85,9 +85,7 @@ pub struct ConnectionAcceptor<Tls, Sasl> {
 impl ConnectionAcceptor<(), ()> {
     /// Creates a default [`ConnectionAcceptor`] with the supplied container id
     pub fn new(container_id: impl Into<String>) -> Self {
-        Self::builder()
-            .container_id(container_id)
-            .build()
+        Self::builder().container_id(container_id).build()
     }
 
     /// Creates a builder for [`ConnectionAcceptor`]
@@ -336,6 +334,7 @@ where
 }
 
 // A macro is used instead of blanked impl with trait to avoid heap allocated future
+#[cfg(any(feature = "rustls", feature = "native-tls"))]
 macro_rules! connect_tls {
     ($fn_ident:ident, $sasl_handler:ident) => {
         async fn $fn_ident<Io>(
@@ -541,16 +540,16 @@ impl endpoint::Connection for ListenerConnection {
                 // remotely initiated session
 
                 // Here we will send the begin frame out to get processed
-                let incoming_session = IncomingSession {
-                    channel,
-                    begin,
-                };
-                self.session_listener.send(incoming_session).await.map_err(|_| {
-                    Error::amqp_error(
-                        AmqpError::NotImplemented,
-                        Some("Remotely initiazted session is not supported".to_string()),
-                    )
-                })?;
+                let incoming_session = IncomingSession { channel, begin };
+                self.session_listener
+                    .send(incoming_session)
+                    .await
+                    .map_err(|_| {
+                        Error::amqp_error(
+                            AmqpError::NotImplemented,
+                            Some("Remotely initiazted session is not supported".to_string()),
+                        )
+                    })?;
             }
         }
 
@@ -596,16 +595,22 @@ impl endpoint::Connection for ListenerConnection {
         begin: Begin,
     ) -> Result<amqp::Frame, Self::Error> {
         if let Some(remote_channel) = begin.remote_channel {
-            let session_id = self.connection.session_by_outgoing_channel
+            let session_id = self
+                .connection
+                .session_by_outgoing_channel
                 .get(&outgoing_channel)
-                .ok_or_else(|| Error::amqp_error(
-                    AmqpError::InternalError, 
-                    "Outgoing channel is not found".to_string()
-                ))?;
+                .ok_or_else(|| {
+                    Error::amqp_error(
+                        AmqpError::InternalError,
+                        "Outgoing channel is not found".to_string(),
+                    )
+                })?;
 
-            self.connection.session_by_incoming_channel.insert(remote_channel, *session_id);
+            self.connection
+                .session_by_incoming_channel
+                .insert(remote_channel, *session_id);
         }
-        
+
         self.connection.on_outgoing_begin(outgoing_channel, begin)
     }
 

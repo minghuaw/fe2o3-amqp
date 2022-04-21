@@ -1,8 +1,8 @@
 use std::time::Duration;
 
+use fe2o3_amqp::{Connection, Receiver, Sender, Session};
+use tracing::{info, instrument, Level};
 use tracing_subscriber::FmtSubscriber;
-use tracing::{Level, instrument, info};
-use fe2o3_amqp::{Connection, Session, Sender, Receiver};
 
 const BASE_ADDR: &str = "localhost:5672";
 
@@ -18,7 +18,7 @@ async fn client_main() {
     // let receiver = Receiver::attach(&mut session, "receiver-1", "q1").await.unwrap();
 
     // session2.end().await.unwrap();
-    
+
     // sender.close().await.unwrap();
     // receiver.close().await.unwrap();
     // tokio::time::sleep(Duration::from_millis(1000)).await;
