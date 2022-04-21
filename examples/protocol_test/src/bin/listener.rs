@@ -1,10 +1,8 @@
-use std::time::Duration;
-
-use fe2o3_amqp::acceptor::{
+use fe2o3_amqp::{acceptor::{
     link::{LinkAcceptor, LinkEndpoint},
     session::{ListenerSessionHandle, SessionAcceptor},
     ConnectionAcceptor, ListenerConnectionHandle,
-};
+}, types::primitives::Value};
 use tokio::net::TcpListener;
 use tracing::{error, info, instrument, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -21,6 +19,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
             LinkEndpoint::Sender(mut sender) => {
                 let handle = tokio::spawn(async move {
                     tracing::info!("Incoming link is connected (remote: receiver, local: sender)");
+                    sender.send("world").await.unwrap();
                     if let Err(e) = sender.close().await {
                         // The remote may close the session
                         error!(link="sender", error=?e);
@@ -31,6 +30,9 @@ async fn session_main(mut session: ListenerSessionHandle) {
             LinkEndpoint::Receiver(mut recver) => {
                 let handle = tokio::spawn(async move {
                     tracing::info!("Incoming link is connected (remote: sender, local: receiver");
+                    let delivery = recver.recv::<Value>().await.unwrap();
+                    tracing::info!(message = ?delivery.message());
+                    recver.accept(&delivery).await.unwrap();
                     if let Err(e) = recver.close().await {
                         // The remote may close the session
                         error!(link="receiver", error=?e);

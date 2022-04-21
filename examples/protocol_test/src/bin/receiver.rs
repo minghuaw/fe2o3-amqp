@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    connection::Connection, link::Receiver, session::Session, types::primitives::Value, Delivery,
+    connection::Connection, link::Receiver, session::Session, Delivery,
 };
 
 #[tokio::main]

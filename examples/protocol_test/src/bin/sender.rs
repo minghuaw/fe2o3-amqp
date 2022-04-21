@@ -1,11 +1,6 @@
-use std::sync::Arc;
 use std::time::Duration;
 
-// use fe2o3_amqp::transport::connection::Connection;
-// use fe2o3_amqp::transport::session::Session;
-
 use fe2o3_amqp::sasl_profile::SaslProfile;
-use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::message::BodySection;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::Connection;

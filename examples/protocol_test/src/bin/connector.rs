@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{Connection, Receiver, Sender, Session};
-use tracing::{info, instrument, Level};
+use fe2o3_amqp::{Connection, Receiver, Sender, Session, Delivery, types::primitives::Value};
+use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5672";
@@ -17,15 +17,19 @@ async fn client_main() {
     let mut sender = Sender::attach(&mut session, "sender-1", "q1")
         .await
         .unwrap();
+    sender.send("hello").await.unwrap();
+
     let mut receiver = Receiver::attach(&mut session, "receiver-1", "q1")
         .await
         .unwrap();
+    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    tracing::info!(message = ?delivery.message());
+    receiver.accept(&delivery).await.unwrap();
 
     // session2.end().await.unwrap();
 
     sender.close().await.unwrap();
     receiver.close().await.unwrap();
-    info!(">>> link is closed");
     // Add a small sleep to avoid spuriously ending the session
     // before the Detach are received
     tokio::time::sleep(Duration::from_millis(500)).await;
