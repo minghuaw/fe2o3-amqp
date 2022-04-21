@@ -89,8 +89,6 @@ pub struct Sender {
     // Outgoing mpsc channel to send the Link frames
     pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: ReceiverStream<LinkFrame>,
-    // Type state marker
-    // pub(crate) marker: PhantomData<S>,
 }
 
 impl Drop for Sender {
@@ -205,17 +203,6 @@ impl Sender {
 }
 
 impl Sender {
-    // fn into_detached(self) -> Sender<Detached> {
-    //     Sender::<Detached> {
-    //         link: self.link,
-    //         buffer_size: self.buffer_size,
-    //         session: self.session,
-    //         outgoing: self.outgoing,
-    //         incoming: self.incoming,
-    //         marker: PhantomData,
-    //     }
-    // }
-
     async fn send_inner<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
     where
         T: serde::Serialize,
@@ -426,15 +413,6 @@ impl Sender {
     ///
     /// This will set the `closed` field in the Detach performative to true
     pub async fn close(&mut self) -> Result<(), DetachError> {
-        // let mut detaching = Sender {
-        //     link: self.link,
-        //     buffer_size: self.buffer_size,
-        //     session: self.session,
-        //     outgoing: self.outgoing,
-        //     incoming: self.incoming,
-        //     // marker: PhantomData,
-        // };
-
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
         if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {

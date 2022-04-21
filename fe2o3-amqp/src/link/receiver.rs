@@ -330,20 +330,6 @@ impl Receiver {
 }
 
 impl Receiver {
-    // fn into_detached(self) -> Receiver {
-    //     Receiver::<Detached> {
-    //         link: self.link,
-    //         buffer_size: self.buffer_size,
-    //         credit_mode: self.credit_mode,
-    //         processed: self.processed,
-    //         session: self.session,
-    //         outgoing: self.outgoing,
-    //         incoming: self.incoming,
-    //         marker: PhantomData,
-    //         incomplete_transfer: self.incomplete_transfer,
-    //     }
-    // }
-
     /// Receive a message from the link
     ///
     /// # Example
@@ -670,16 +656,6 @@ impl Receiver {
         Ok(())
     }
 }
-
-// impl<State> Receiver<State> {
-//     pub fn is_credit_mode_auto(&self) -> bool {
-//         if let CreditMode::Auto(_) = self.credit_mode {
-//             true
-//         } else {
-//             false
-//         }
-//     }
-// }
 
 // TODO: Use type state to differentiate Mode First and Mode Second?
 impl Receiver {
