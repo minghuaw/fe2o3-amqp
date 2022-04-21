@@ -130,6 +130,7 @@ impl Sender {
                 // TODO: what else to do during re-attaching
                 unsettled: self.link.unsettled.clone(),
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
+                state_code: self.link.state_code.clone(),
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle = match session::allocate_link(

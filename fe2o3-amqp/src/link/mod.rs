@@ -1,7 +1,7 @@
 //! Implements AMQP1.0 Link
 
 mod frame;
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::{AtomicU8, Ordering}}};
 
 use async_trait::async_trait;
 use bytes::Buf;
@@ -51,6 +51,9 @@ pub const DEFAULT_CREDIT: SequenceNo = 200;
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
+const CLOSED: u8 = 0b0000_0100;
+const DETACHED: u8 = 0b0000_0010;
+
 pub mod role {
     //! Type state definition of link role
 
@@ -93,6 +96,7 @@ pub struct Link<R, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
+    pub(crate) state_code: Arc<AtomicU8>,
 
     pub(crate) name: String,
 
@@ -122,6 +126,25 @@ pub struct Link<R, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
+impl<R, F, M> Link<R, F, M> {
+    pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error> 
+    where
+        R: role::IntoRole + Send + Sync,
+        F: AsRef<LinkFlowState<R>> + Send + Sync,
+        M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+    {
+        if endpoint::Link::is_closed(self) {
+            return Err(definitions::Error::new(
+                AmqpError::NotAllowed,
+                "Link is permanently closed".to_string(),
+                None
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
 #[async_trait]
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
 impl<R, F, M> endpoint::Link for Link<R, F, M>
@@ -132,6 +155,18 @@ where
 {
     type AttachError = link::AttachError;
     type DetachError = definitions::Error;
+
+    fn is_detached_or_closed(&self) -> bool {
+        let cur = self.state_code.load(Ordering::Acquire);
+        let is_detached = (cur & DETACHED) == DETACHED;
+        let is_closed = (cur & CLOSED) == CLOSED;
+        is_detached | is_closed
+    }
+
+    fn is_closed(&self) -> bool {
+        let cur = self.state_code.load(Ordering::Acquire);
+        (cur & CLOSED) == CLOSED
+    }
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
         match self.local_state {
@@ -237,6 +272,8 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| AttachError::Local(e))?;
+
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
@@ -324,6 +361,8 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed()?;
+
         // Detach may fail and may try re-attach
         // The local output handle is not removed from the session
         // until `deallocate_link`. The outgoing detach will not remove
@@ -357,6 +396,12 @@ where
                         None,
                     )
                 })?;
+                
+                self.state_code.fetch_or(DETACHED, Ordering::Release);
+                if closed {
+                    self.state_code.fetch_or(CLOSED, Ordering::Release);
+                }
+
                 remove_handle
             }
             None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
@@ -379,12 +424,14 @@ pub(crate) enum LinkHandle {
         flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
         unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
         receiver_settle_mode: ReceiverSettleMode,
+        state_code: Arc<AtomicU8>,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
         flow_state: ReceiverFlowState,
         unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
         receiver_settle_mode: ReceiverSettleMode,
+        state_code: Arc<AtomicU8>,
         more: bool,
     },
 }
@@ -569,6 +616,26 @@ impl LinkHandle {
                 Ok(None)
             }
         }
+    }
+
+    pub async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+        match self {
+            LinkHandle::Sender { tx, state_code,  .. } => {
+                state_code.fetch_or(DETACHED, Ordering::Release);
+                if detach.closed {
+                    state_code.fetch_or(CLOSED, Ordering::Release);
+                }
+                tx.send(LinkFrame::Detach(detach)).await?;
+            },
+            LinkHandle::Receiver { tx, state_code, .. } => {
+                state_code.fetch_or(DETACHED, Ordering::Release);
+                if detach.closed {
+                    state_code.fetch_or(CLOSED, Ordering::Release);
+                }
+                tx.send(LinkFrame::Detach(detach)).await?;
+            },
+        }
+        Ok(())
     }
 }
 

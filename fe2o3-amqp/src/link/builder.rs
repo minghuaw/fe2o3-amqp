@@ -1,6 +1,6 @@
 //! Implements the builder for a link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::AtomicU8}};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -300,6 +300,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
         flow_state_consumer: C,
+        state_code: Arc<AtomicU8>,
     ) -> Link<Role, C, M> {
         let local_state = LinkState::Unattached;
 
@@ -312,6 +313,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         Link::<Role, C, M> {
             role: PhantomData,
             local_state,
+            state_code,
             name: self.name,
             output_handle: Some(output_handle.clone()),
             input_handle: None,
@@ -381,18 +383,20 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let flow_state_consumer = Consumer::new(notifier, flow_state);
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach in session
+            state_code: state_code.clone()
         };
 
         // Create Link in Session
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer, state_code);
 
         // Get writer to session
         let writer = session.outgoing.clone();
@@ -456,11 +460,13 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let flow_state_producer = flow_state.clone();
         let flow_state_consumer = flow_state;
+        let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach
+            state_code: state_code.clone(),
             more: false,
         };
 
@@ -468,7 +474,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer, state_code);
 
         // Get writer to session
         let writer = session.outgoing.clone();

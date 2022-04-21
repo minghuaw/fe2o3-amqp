@@ -618,7 +618,7 @@ impl endpoint::Session for Session {
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
                 // TODO:
-                match link.send(LinkFrame::Detach(detach)).await {
+                match link.on_incoming_detach(detach).await {
                     Ok(_) => {}
                     Err(_) => {
                         return Err(Error::session_error(SessionError::UnattachedHandle, None))

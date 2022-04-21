@@ -186,6 +186,10 @@ pub(crate) trait Link {
     type AttachError: Send;
     type DetachError: Send;
 
+    fn is_detached_or_closed(&self) -> bool;
+
+    fn is_closed(&self) -> bool;
+
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;

@@ -20,6 +20,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+
         let handle = self
             .output_handle
             .clone()
@@ -116,6 +118,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     {
         use crate::endpoint::Link;
         use crate::util::Consume;
+
+        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
 
         tokio::select! {
             _ = self.flow_state.consume(1) => {
@@ -305,6 +309,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| Error::Local(e))?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
@@ -336,6 +341,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| Error::Local(e))?;
+        
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
