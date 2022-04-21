@@ -23,7 +23,6 @@ use super::{
     receiver::CreditMode,
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    type_state::Attached,
     Receiver, Sender,
 };
 
@@ -436,7 +435,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
     pub async fn attach<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Receiver<Attached>, AttachError> {
+    ) -> Result<Receiver, AttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size.clone();
         let credit_mode = self.credit_mode.clone();
@@ -478,7 +477,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         // Send an Attach frame
         super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
-        let mut receiver = Receiver::<Attached> {
+        let mut receiver = Receiver {
             link,
             buffer_size,
             credit_mode,
@@ -486,7 +485,6 @@ impl Builder<role::Receiver, WithName, WithTarget> {
             session: session.control.clone(),
             outgoing,
             incoming: reader,
-            marker: PhantomData,
             incomplete_transfer: None,
         };
 

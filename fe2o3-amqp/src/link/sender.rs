@@ -11,7 +11,8 @@ use tokio::{
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{message::__private::Serializable, Address, DeliveryState}, performatives::Detach,
+    messaging::{message::__private::Serializable, Address, DeliveryState},
+    performatives::Detach,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -88,7 +89,6 @@ pub struct Sender {
     // Outgoing mpsc channel to send the Link frames
     pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: ReceiverStream<LinkFrame>,
-
     // Type state marker
     // pub(crate) marker: PhantomData<S>,
 }
@@ -353,11 +353,7 @@ impl Sender {
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        if let Err(e) = self
-            .link
-            .send_detach(&mut self.outgoing, false, None)
-            .await
-        {
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, None).await {
             return Err(DetachError::new(None, false, Some(e)));
         };
 
@@ -444,11 +440,7 @@ impl Sender {
 
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        if let Err(e) = self
-            .link
-            .send_detach(&mut self.outgoing, true, None)
-            .await
-        {
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
             return Err(DetachError::new(None, false, Some(e)));
         }
 
@@ -499,11 +491,7 @@ impl Sender {
                 LinkFrame::Detach(detach) => detach,
                 _ => return Err(detach_error_expecting_frame(())),
             };
-            match self
-                .link
-                .send_detach(&mut self.outgoing, true, None)
-                .await
-            {
+            match self.link.send_detach(&mut self.outgoing, true, None).await {
                 Ok(_) => self,
                 Err(e) => return Err(DetachError::new(None, false, Some(e))),
             }

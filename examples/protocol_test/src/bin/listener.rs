@@ -6,7 +6,7 @@ use fe2o3_amqp::acceptor::{
     ConnectionAcceptor, ListenerConnectionHandle,
 };
 use tokio::net::TcpListener;
-use tracing::{instrument, Level, info, error};
+use tracing::{error, info, instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5672";
@@ -28,8 +28,8 @@ async fn session_main(mut session: ListenerSessionHandle) {
                 });
                 handles.push(handle);
             }
-            LinkEndpoint::Receiver(recver) => {
-                let handle = tokio::spawn(async {
+            LinkEndpoint::Receiver(mut recver) => {
+                let handle = tokio::spawn(async move {
                     tracing::info!("Incoming link is connected (remote: sender, local: receiver");
                     if let Err(e) = recver.close().await {
                         // The remote may close the session

@@ -24,7 +24,6 @@ use crate::{
         receiver::CreditMode,
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        type_state::Attached,
         AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
@@ -43,7 +42,7 @@ pub enum LinkEndpoint {
     Sender(crate::link::Sender),
 
     /// Receiver
-    Receiver(crate::link::Receiver<Attached>),
+    Receiver(crate::link::Receiver),
 }
 
 /// An acceptor for incoming links
@@ -252,7 +251,7 @@ impl LinkAcceptor {
         link.on_incoming_attach(remote_attach).await?;
         link.send_attach(&mut outgoing).await?;
 
-        let mut receiver = Receiver::<Attached> {
+        let mut receiver = Receiver {
             link,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode.clone(),
@@ -260,7 +259,6 @@ impl LinkAcceptor {
             session: session.control.clone(),
             outgoing,
             incoming: ReceiverStream::new(incoming_rx),
-            marker: PhantomData,
             incomplete_transfer: None,
         };
 

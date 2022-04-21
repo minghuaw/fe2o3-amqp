@@ -1,12 +1,12 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released},
-    performatives::Transfer,
+    performatives::{Detach, Transfer},
 };
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
@@ -28,7 +28,6 @@ use super::{
     receiver_link::section_number_and_offset,
     role,
     state::LinkFlowState,
-    type_state::{Attached, Detached},
     Error, LinkFrame, LinkHandle, DEFAULT_CREDIT,
 };
 
@@ -205,7 +204,7 @@ impl Default for CreditMode {
 ///     .unwrap();
 /// ```
 #[derive(Debug)]
-pub struct Receiver<S> {
+pub struct Receiver {
     pub(crate) link: ReceiverLink,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
@@ -219,12 +218,26 @@ pub struct Receiver<S> {
     pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: ReceiverStream<LinkFrame>,
 
-    pub(crate) marker: PhantomData<S>,
-
+    // pub(crate) marker: PhantomData<S>,
     pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
 }
 
-impl Receiver<Detached> {
+impl Drop for Receiver {
+    fn drop(&mut self) {
+        if let Some(handle) = self.link.output_handle.clone() {
+            if let Some(sender) = self.outgoing.get_ref() {
+                let detach = Detach {
+                    handle,
+                    closed: true,
+                    error: None,
+                };
+                let _ = sender.try_send(LinkFrame::Detach(detach));
+            }
+        }
+    }
+}
+
+impl Receiver {
     /// Creates a builder for the [`Receiver`]
     pub fn builder() -> builder::Builder<role::Receiver, WithoutName, WithTarget> {
         builder::Builder::<role::Receiver, _, _>::new()
@@ -263,7 +276,7 @@ impl Receiver<Detached> {
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Receiver<Attached>, AttachError> {
+    ) -> Result<Receiver, AttachError> {
         Self::builder()
             .name(name)
             .source(addr)
@@ -272,9 +285,9 @@ impl Receiver<Detached> {
     }
 
     async fn reattach_inner(
-        mut self,
+        &mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<Receiver<Attached>, DetachError<Self>> {
+    ) -> Result<&mut Self, DetachError<()>> {
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
             let link_handle = LinkHandle::Receiver {
@@ -297,7 +310,7 @@ impl Receiver<Detached> {
                 Ok(handle) => handle,
                 Err(err) => {
                     return Err(DetachError {
-                        link: Some(self),
+                        link: None,
                         is_closed_by_remote: false,
                         error: Some(definitions::Error::from(err)),
                     })
@@ -310,37 +323,27 @@ impl Receiver<Detached> {
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
             let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(Some(self), false, Some(err)));
+            return Err(DetachError::new(None, false, Some(err)));
         }
 
-        Ok(Receiver::<Attached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            credit_mode: self.credit_mode,
-            processed: self.processed,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-            incomplete_transfer: None,
-        })
+        Ok(self)
     }
 }
 
-impl Receiver<Attached> {
-    fn into_detached(self) -> Receiver<Detached> {
-        Receiver::<Detached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            credit_mode: self.credit_mode,
-            processed: self.processed,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-            incomplete_transfer: self.incomplete_transfer,
-        }
-    }
+impl Receiver {
+    // fn into_detached(self) -> Receiver {
+    //     Receiver::<Detached> {
+    //         link: self.link,
+    //         buffer_size: self.buffer_size,
+    //         credit_mode: self.credit_mode,
+    //         processed: self.processed,
+    //         session: self.session,
+    //         outgoing: self.outgoing,
+    //         incoming: self.incoming,
+    //         marker: PhantomData,
+    //         incomplete_transfer: self.incomplete_transfer,
+    //     }
+    // }
 
     /// Receive a message from the link
     ///
@@ -533,37 +536,21 @@ impl Receiver<Attached> {
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach(self) -> Result<Receiver<Detached>, DetachError<Receiver<Detached>>> {
-        let mut detaching = Receiver::<Detached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            credit_mode: self.credit_mode,
-            processed: self.processed,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-            incomplete_transfer: self.incomplete_transfer,
-        };
-
+    pub async fn detach(&mut self) -> Result<(), DetachError<()>> {
         // Send a non-closing detach
-        if let Err(e) = detaching
-            .link
-            .send_detach(&mut detaching.outgoing, false, None)
-            .await
-        {
-            return Err(DetachError::new(Some(detaching), false, Some(e)));
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, None).await {
+            return Err(DetachError::new(None, false, Some(e)));
         }
 
         // Wait for remote detach
-        let frame = match detaching.incoming.next().await {
+        let frame = match self.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(detaching)),
+            None => return Err(detach_error_expecting_frame(())),
         };
 
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(detaching)),
+            _ => return Err(detach_error_expecting_frame(())),
         };
 
         if remote_detach.closed {
@@ -571,10 +558,10 @@ impl Receiver<Attached> {
             // sending a non-closing detach. In this case, the partner MUST
             // signal that it has closed the link by reattaching and then sending
             // a closing detach.
-            let session_control = detaching.session.clone();
-            let reattached = detaching.reattach_inner(session_control).await?;
+            let session_control = self.session.clone();
+            self.reattach_inner(session_control).await?;
 
-            reattached.close().await?;
+            self.close().await?;
 
             // A peer closes a link by sending the detach frame with the handle for the
             // specified link, and the closed flag set to true. The partner will destroy
@@ -586,19 +573,19 @@ impl Receiver<Attached> {
                 error: None,
             });
         } else {
-            if let Err(e) = detaching.link.on_incoming_detach(remote_detach).await {
-                return Err(DetachError::new(Some(detaching), false, Some(e)));
+            if let Err(e) = self.link.on_incoming_detach(remote_detach).await {
+                return Err(DetachError::new(None, false, Some(e)));
             }
         }
 
-        let link_name = detaching.link.name.clone();
-        if let Err(_) = detaching
+        let link_name = self.link.name.clone();
+        if let Err(_) = self
             .session
             .send(SessionControl::DeallocateLink(link_name))
             .await
         {
             let err = DetachError::new(
-                Some(detaching),
+                None,
                 false,
                 Some(definitions::Error::new(
                     AmqpError::IllegalState,
@@ -608,42 +595,37 @@ impl Receiver<Attached> {
             );
             return Err(err);
         }
-        Ok(detaching)
+        Ok(())
     }
 
     /// Close the link.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close(self) -> Result<(), DetachError<Receiver<Detached>>> {
-        let mut detaching = self.into_detached();
-        let link_name = detaching.link.name.clone();
+    pub async fn close(&mut self) -> Result<(), DetachError<()>> {
+        let link_name = self.link.name.clone();
 
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        if let Err(e) = detaching
-            .link
-            .send_detach(&mut detaching.outgoing, true, None)
-            .await
-        {
-            return Err(DetachError::new(Some(detaching), false, Some(e)));
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
+            return Err(DetachError::new(None, false, Some(e)));
         }
 
         // Wait for remote detach
-        let frame = match detaching.incoming.next().await {
+        let frame = match self.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(detaching)),
+            None => return Err(detach_error_expecting_frame(())),
         };
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(detaching)),
+            _ => return Err(detach_error_expecting_frame(())),
         };
 
-        let detaching = if remote_detach.closed {
+        if remote_detach.closed {
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
-            match detaching.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => detaching,
-                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e))),
+            match self.link.on_incoming_detach(remote_detach).await {
+                Ok(_) => {}
+                Err(e) => return Err(DetachError::new(None, false, Some(e))),
             }
         } else {
             // Note that one peer MAY send a closing detach while its partner is
@@ -657,31 +639,26 @@ impl Receiver<Attached> {
             // 3. wait for incoming closing detach
             // 4. detach
 
-            let session_control = detaching.session.clone();
-            let reattached = detaching.reattach_inner(session_control).await?;
-            let mut detaching = reattached.into_detached();
-            let frame = match detaching.incoming.next().await {
+            let session_control = self.session.clone();
+            self.reattach_inner(session_control).await?;
+            let frame = match self.incoming.next().await {
                 Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame(detaching)),
+                None => return Err(detach_error_expecting_frame(())),
             };
 
             // TODO: is checking closing still necessary?
             let _remote_detach = match frame {
                 LinkFrame::Detach(detach) => detach,
-                _ => return Err(detach_error_expecting_frame(detaching)),
+                _ => return Err(detach_error_expecting_frame(())),
             };
-            match detaching
-                .link
-                .send_detach(&mut detaching.outgoing, true, None)
-                .await
-            {
-                Ok(_) => detaching,
-                Err(e) => return Err(DetachError::new(Some(detaching), false, Some(e))),
+            match self.link.send_detach(&mut self.outgoing, true, None).await {
+                Ok(_) => {}
+                Err(e) => return Err(DetachError::new(None, false, Some(e))),
             }
         };
 
         // TODO: de-allocate link from session
-        if let Err(_) = detaching
+        if let Err(_) = self
             .session
             .send(SessionControl::DeallocateLink(link_name))
             .await
@@ -691,7 +668,7 @@ impl Receiver<Attached> {
                 "Session must have dropped".to_string(),
                 None,
             );
-            return Err(DetachError::new(Some(detaching), false, Some(e)));
+            return Err(DetachError::new(None, false, Some(e)));
         }
 
         Ok(())
@@ -709,7 +686,7 @@ impl Receiver<Attached> {
 // }
 
 // TODO: Use type state to differentiate Mode First and Mode Second?
-impl Receiver<Attached> {
+impl Receiver {
     // TODO: batch disposition
     async fn dispose(
         &mut self,

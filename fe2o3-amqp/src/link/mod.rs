@@ -51,17 +51,17 @@ pub const DEFAULT_CREDIT: SequenceNo = 200;
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
-pub mod type_state {
-    //! Type states for link
+// pub mod type_state {
+//     //! Type states for link
 
-    /// Type state showing that a link is attached
-    #[derive(Debug)]
-    pub struct Attached {}
+//     /// Type state showing that a link is attached
+//     #[derive(Debug)]
+//     pub struct Attached {}
 
-    /// Type state showing that a link is not attached
-    #[derive(Debug)]
-    pub struct Detached {}
-}
+//     /// Type state showing that a link is not attached
+//     #[derive(Debug)]
+//     pub struct Detached {}
+// }
 
 pub mod role {
     //! Type state definition of link role

@@ -14,8 +14,12 @@ async fn client_main() {
     let mut session = Session::begin(&mut connection).await.unwrap();
     // let mut session2 = Session::begin(&mut connection).await.unwrap();
 
-    let mut sender = Sender::attach(&mut session, "sender-1", "q1").await.unwrap();
-    let receiver = Receiver::attach(&mut session, "receiver-1", "q1").await.unwrap();
+    let mut sender = Sender::attach(&mut session, "sender-1", "q1")
+        .await
+        .unwrap();
+    let mut receiver = Receiver::attach(&mut session, "receiver-1", "q1")
+        .await
+        .unwrap();
 
     // session2.end().await.unwrap();
 
