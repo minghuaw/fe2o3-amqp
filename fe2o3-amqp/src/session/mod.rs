@@ -630,7 +630,9 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
+        trace!(end = ?end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;

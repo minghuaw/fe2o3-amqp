@@ -31,7 +31,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
             },
         }
     }
-    session.close().await.unwrap();
+    session.on_end().await.unwrap();
 }
 
 #[instrument(skip_all)]
@@ -41,7 +41,7 @@ async fn connection_main(mut connection: ListenerConnectionHandle) {
     while let Ok(session) = session_acceptor.accept(&mut connection).await {
         let _handle = tokio::spawn(session_main(session));
     }
-    connection.close().await.unwrap();
+    connection.on_close().await.unwrap();
 }
 
 #[tokio::main]

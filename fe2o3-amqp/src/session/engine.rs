@@ -164,6 +164,12 @@ where
         trace!("control: {}", control);
         match control {
             SessionControl::End(error) => {
+                // if control is closing, finish sending all buffered messages before closing
+                self.outgoing_link_frames.close();
+                while let Some(frame) = self.outgoing_link_frames.recv().await {
+                    self.on_outgoing_link_frames(frame).await?;
+                }
+
                 self.session
                     .send_end(&mut self.outgoing, error)
                     .await
@@ -339,19 +345,12 @@ where
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
                             // Check local state
-                            match self.session.local_state() {
-                                SessionState::BeginSent
-                                | SessionState::BeginReceived
-                                | SessionState::Mapped
-                                | SessionState::EndSent
-                                | SessionState::EndReceived => {
-                                    Err(Error::Io(io::Error::new(
-                                        io::ErrorKind::UnexpectedEof,
-                                        "Connection has stopped before session is ended"
-                                    )))
-                                },
-                                SessionState::Unmapped
-                                | SessionState::Discarding => Ok(Running::Stop),
+                            match self.continue_or_stop_by_state() {
+                                Running::Continue => Err(Error::Io(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "Connection has stopped before session is ended"
+                                ))),
+                                Running::Stop => Ok(Running::Stop),
                             }
 
                         }
@@ -361,7 +360,9 @@ where
                 },
                 control = self.control.recv() => {
                     let result = match control {
-                        Some(control) => self.on_control(control).await,
+                        Some(control) => {
+                            self.on_control(control).await
+                        },
                         None => {
                             // all Links and SessionHandle are dropped
                             Ok(Running::Stop)
@@ -374,8 +375,11 @@ where
                     let result = match frame {
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
-                            // all Links and SessionHandle are dropped
-                            Ok(Running::Stop)
+                            // All Links and SessionHandle are dropped
+                            // 
+                            // Upon ending, all link-to-session channels will be closed
+                            // first while the session is still waitint for remote end frame.
+                            Ok(Running::Continue)
                         }
                     };
 
