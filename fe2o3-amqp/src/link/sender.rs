@@ -11,7 +11,7 @@ use tokio::{
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{message::__private::Serializable, Address, DeliveryState},
+    messaging::{message::__private::Serializable, Address, DeliveryState}, performatives::Detach,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -93,6 +93,21 @@ pub struct Sender<S> {
     // Type state marker
     pub(crate) marker: PhantomData<S>,
 }
+
+// impl<S> Drop for Sender<S> {
+//     fn drop(&mut self) {
+//         if let Some(handle) = self.link.output_handle {
+//             if let Some(sender) = self.outgoing.get_ref() {
+//                 let detach = Detach {
+//                     handle,
+//                     closed: true,
+//                     error: None,
+//                 };
+//                 let _ = sender.try_send(LinkFrame::Detach(detach));
+//             }
+//         }
+//     }
+// }
 
 impl Sender<Detached> {
     /// Creates a builder for [`Sender`] link

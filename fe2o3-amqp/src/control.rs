@@ -71,7 +71,7 @@ impl std::fmt::Display for SessionControl {
                 input_handle: _,
                 responder: _,
             } => write!(f, "AllocateIncomingLink"),
-            SessionControl::DeallocateLink(_) => write!(f, "DeallocateLink"),
+            SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({})", name),
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
         }

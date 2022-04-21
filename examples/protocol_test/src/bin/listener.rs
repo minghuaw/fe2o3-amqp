@@ -6,7 +6,7 @@ use fe2o3_amqp::acceptor::{
     ConnectionAcceptor, ListenerConnectionHandle,
 };
 use tokio::net::TcpListener;
-use tracing::{instrument, Level};
+use tracing::{instrument, Level, info, error};
 use tracing_subscriber::FmtSubscriber;
 
 const BASE_ADDR: &str = "localhost:5672";
@@ -14,26 +14,34 @@ const BASE_ADDR: &str = "localhost:5672";
 #[instrument(skip_all)]
 async fn session_main(mut session: ListenerSessionHandle) {
     let link_acceptor = LinkAcceptor::new();
+    let mut handles = Vec::new();
 
     while let Ok(link) = link_acceptor.accept(&mut session).await {
         match link {
             LinkEndpoint::Sender(sender) => {
                 let handle = tokio::spawn(async {
                     tracing::info!("Incoming link is connected (remote: receiver, local: sender)");
-                    // tokio::time::sleep(Duration::from_millis(1000)).await;
-                    sender.close().await.unwrap();
+                    if let Err(e) = sender.close().await {
+                        // The remote may close the session
+                        // error!(error=?e);
+                    }
                 });
-                handle.await.unwrap();
+                handles.push(handle);
             }
             LinkEndpoint::Receiver(recver) => {
                 let handle = tokio::spawn(async {
                     tracing::info!("Incoming link is connected (remote: sender, local: receiver");
-                    // tokio::time::sleep(Duration::from_millis(1000)).await;
-                    recver.close().await.unwrap();
+                    if let Err(e) = recver.close().await {
+                        // The remote may close the session
+                        // error!(error=?e);
+                    }
                 });
-                handle.await.unwrap();
+                handles.push(handle);
             }
         }
+    }
+    for handle in handles.drain(..) {
+        info!("{:?}", handle.await);
     }
     session.on_end().await.unwrap();
 }
