@@ -1,8 +1,11 @@
-use fe2o3_amqp::{acceptor::{
-    link::{LinkAcceptor, LinkEndpoint},
-    session::{ListenerSessionHandle, SessionAcceptor},
-    ConnectionAcceptor, ListenerConnectionHandle,
-}, types::primitives::Value};
+use fe2o3_amqp::{
+    acceptor::{
+        link::{LinkAcceptor, LinkEndpoint},
+        session::{ListenerSessionHandle, SessionAcceptor},
+        ConnectionAcceptor, ListenerConnectionHandle,
+    },
+    types::primitives::Value,
+};
 use tokio::net::TcpListener;
 use tracing::{error, info, instrument, Level};
 use tracing_subscriber::FmtSubscriber;

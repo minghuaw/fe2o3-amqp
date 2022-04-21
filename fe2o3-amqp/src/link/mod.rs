@@ -1,7 +1,14 @@
 //! Implements AMQP1.0 Link
 
 mod frame;
-use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::{AtomicU8, Ordering}}};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc,
+    },
+};
 
 use async_trait::async_trait;
 use bytes::Buf;
@@ -127,7 +134,7 @@ pub struct Link<R, F, M> {
 }
 
 impl<R, F, M> Link<R, F, M> {
-    pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error> 
+    pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
     where
         R: role::IntoRole + Send + Sync,
         F: AsRef<LinkFlowState<R>> + Send + Sync,
@@ -137,8 +144,8 @@ impl<R, F, M> Link<R, F, M> {
             return Err(definitions::Error::new(
                 AmqpError::NotAllowed,
                 "Link is permanently closed".to_string(),
-                None
-            ))
+                None,
+            ));
         } else {
             Ok(())
         }
@@ -171,7 +178,7 @@ where
             LinkState::AttachSent => {
                 self.state_code.fetch_and(0b0000_0000, Ordering::Release);
                 self.local_state = LinkState::Attached
-            },
+            }
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
             LinkState::Detached => {
                 // remote peer is attempting to re-attach
@@ -399,7 +406,7 @@ where
                         None,
                     )
                 })?;
-                
+
                 self.state_code.fetch_or(DETACHED, Ordering::Release);
                 if closed {
                     self.state_code.fetch_or(CLOSED, Ordering::Release);
@@ -621,22 +628,25 @@ impl LinkHandle {
         }
     }
 
-    pub async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+    pub async fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender { tx, state_code,  .. } => {
+            LinkHandle::Sender { tx, state_code, .. } => {
                 state_code.fetch_or(DETACHED, Ordering::Release);
                 if detach.closed {
                     state_code.fetch_or(CLOSED, Ordering::Release);
                 }
                 tx.send(LinkFrame::Detach(detach)).await?;
-            },
+            }
             LinkHandle::Receiver { tx, state_code, .. } => {
                 state_code.fetch_or(DETACHED, Ordering::Release);
                 if detach.closed {
                     state_code.fetch_or(CLOSED, Ordering::Release);
                 }
                 tx.send(LinkFrame::Detach(detach)).await?;
-            },
+            }
         }
         Ok(())
     }

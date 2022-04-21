@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
-use serde_amqp::primitives::{Symbol, UInt};
+use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::sync::mpsc;
 use tokio_util::sync::PollSender;

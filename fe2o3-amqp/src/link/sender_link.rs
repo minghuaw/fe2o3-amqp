@@ -342,7 +342,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         W: Sink<LinkFrame> + Send + Unpin,
     {
         self.error_if_closed().map_err(|e| Error::Local(e))?;
-        
+
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }

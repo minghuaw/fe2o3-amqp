@@ -4,7 +4,11 @@
 // #[derive(Debug)]
 // pub struct LinkListener {}
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::AtomicU8}};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{atomic::AtomicU8, Arc},
+};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo},
@@ -46,19 +50,19 @@ pub enum LinkEndpoint {
 }
 
 /// An acceptor for incoming links
-/// 
+///
 /// # Accepts incoming link with default configuration
-/// 
+///
 /// ```rust,ignore
 /// use crate::acceptor::{ListenerSessionHandle, LinkAcceptor, LinkEndpoint};
-/// 
+///
 /// let mut session: ListenerSessionHandle = session_acceptor.accept(&mut connection).await.unwrap();
 /// let link_acceptor = LinkAcceptor::new();
 /// let link: LinkEndpoint = link_acceptor.accept(&mut session).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`supported_snd_settle_modes`|[`SupportedSenderSettleModes::All`]|
@@ -72,20 +76,20 @@ pub enum LinkEndpoint {
 /// |`properties`| `None` |
 /// |`buffer_size`| [`u16::MAX`] |
 /// |`credit_mode`| [`CreditMode::Auto(DEFAULT_CREDIT)`] |
-/// 
+///
 /// # Customize acceptor
-/// 
+///
 /// The acceptor can be customized using the builder pattern or by directly
 /// modifying the field after the acceptor is built.
-/// 
+///
 /// ```rust
 /// use crate::acceptor::{LinkAcceptor, SupportedSenderSettleModes};
-/// 
+///
 /// let link_acceptor = LinkAcceptor::builder()
 ///     .supported_sender_settle_modes(SupportedSenderSettleModes::Settled)
 ///     .build();
 /// ```
-/// 
+///
 #[derive(Debug)]
 pub struct LinkAcceptor {
     /// Supported sender settle mode
@@ -356,7 +360,7 @@ impl LinkAcceptor {
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),
-            state_code: state_code.clone()
+            state_code: state_code.clone(),
         };
 
         // Allocate link in session

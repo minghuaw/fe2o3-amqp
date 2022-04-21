@@ -12,7 +12,7 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    connection::{DEFAULT_OUTGOING_BUFFER_SIZE, DEFAULT_MAX_FRAME_SIZE, DEFAULT_CHANNEL_MAX},
+    connection::{DEFAULT_CHANNEL_MAX, DEFAULT_MAX_FRAME_SIZE, DEFAULT_OUTGOING_BUFFER_SIZE},
     util::{Initialized, Uninitialized},
 };
 

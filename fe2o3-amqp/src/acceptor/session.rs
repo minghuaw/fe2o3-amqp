@@ -50,21 +50,21 @@ impl ListenerSessionHandle {
 ///
 /// This is simply a wrapper around the session builder since there is not
 /// much else that you can configure. The wrapper is here for consistency in terms of API desgin.
-/// 
+///
 /// # Accepts incoming session with default configuration
-/// 
+///
 /// ```rust,ignore
 /// use crate::acceptor::SessionAcceptor;
-/// 
+///
 /// let mut connection: ListenerConnectionHandle = connection_acceptor.accept(stream).await.unwrap();
 /// let session_acceptor = SessionAcceptor::new();
 /// let session = session_acceptor.accept(&mut connection).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// The default configuration is the same as that of `crate::Session`.
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`next_outgoing_id`| 0 |
@@ -74,15 +74,15 @@ impl ListenerSessionHandle {
 /// |`offered_capabilities` | `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
-/// 
+///
 /// # Customize the acceptor
-/// 
+///
 /// The acceptor can be customized using the builder pattern or by modifying the field
 /// directly after the acceptor is built.
-/// 
+///
 /// ```rust
 /// use crate::acceptor::SessionAcceptor;
-/// 
+///
 /// let session_acceptor = SessionAcceptor::builder()
 ///     .handle_max(16)
 ///     .build();

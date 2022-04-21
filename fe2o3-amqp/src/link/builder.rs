@@ -1,6 +1,10 @@
 //! Implements the builder for a link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::{Arc, atomic::AtomicU8}};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{atomic::AtomicU8, Arc},
+};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -389,7 +393,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach in session
-            state_code: state_code.clone()
+            state_code: state_code.clone(),
         };
 
         // Create Link in Session

@@ -20,10 +20,7 @@ pub struct DetachError {
 }
 
 impl DetachError {
-    pub(crate) fn new(
-        is_closed_by_remote: bool,
-        error: Option<definitions::Error>,
-    ) -> Self {
+    pub(crate) fn new(is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
         Self {
             is_closed_by_remote,
             error,

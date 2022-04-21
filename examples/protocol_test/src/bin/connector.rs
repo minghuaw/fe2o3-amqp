@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{Connection, Receiver, Sender, Session, Delivery, types::primitives::Value};
+use fe2o3_amqp::{types::primitives::Value, Connection, Delivery, Receiver, Sender, Session};
 use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 

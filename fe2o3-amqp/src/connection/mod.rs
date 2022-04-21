@@ -37,14 +37,14 @@ mod error;
 pub mod heartbeat;
 pub use error::*;
 
-/// Default max-frame-size. 
-/// 
+/// Default max-frame-size.
+///
 /// Please note that this is different from `MaxFrameSize::default()`.
 /// This value is taken from `AmqpNetLite`
 pub const DEFAULT_MAX_FRAME_SIZE: u32 = 256 * 1024;
 
 /// Default channel-max
-/// 
+///
 /// This value is taken from `AmqpNetLite`
 pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 
