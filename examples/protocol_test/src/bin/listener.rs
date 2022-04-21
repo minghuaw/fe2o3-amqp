@@ -23,7 +23,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
                     tracing::info!("Incoming link is connected (remote: receiver, local: sender)");
                     if let Err(e) = sender.close().await {
                         // The remote may close the session
-                        // error!(error=?e);
+                        error!(link="sender", error=?e);
                     }
                 });
                 handles.push(handle);
@@ -33,7 +33,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
                     tracing::info!("Incoming link is connected (remote: sender, local: receiver");
                     if let Err(e) = recver.close().await {
                         // The remote may close the session
-                        // error!(error=?e);
+                        error!(link="receiver", error=?e);
                     }
                 });
                 handles.push(handle);

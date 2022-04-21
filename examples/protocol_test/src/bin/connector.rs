@@ -23,10 +23,12 @@ async fn client_main() {
 
     // session2.end().await.unwrap();
 
+    sender.close().await.unwrap();
     receiver.close().await.unwrap();
-    // sender.close().await.unwrap();
-    // tokio::time::sleep(Duration::from_millis(1000)).await;
     info!(">>> link is closed");
+    // Add a small sleep to avoid spuriously ending the session
+    // before the Detach are received
+    tokio::time::sleep(Duration::from_millis(500)).await;
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

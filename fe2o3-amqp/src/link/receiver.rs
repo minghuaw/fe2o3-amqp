@@ -648,7 +648,7 @@ impl Receiver {
         {
             let e = definitions::Error::new(
                 AmqpError::IllegalState,
-                "Session must have dropped".to_string(),
+                "Session must have dropped while deallocating link".to_string(),
                 None,
             );
             return Err(DetachError::new(false, Some(e)));

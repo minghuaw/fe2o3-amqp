@@ -156,11 +156,9 @@ where
     type AttachError = link::AttachError;
     type DetachError = definitions::Error;
 
-    fn is_detached_or_closed(&self) -> bool {
+    fn is_detached(&self) -> bool {
         let cur = self.state_code.load(Ordering::Acquire);
-        let is_detached = (cur & DETACHED) == DETACHED;
-        let is_closed = (cur & CLOSED) == CLOSED;
-        is_detached | is_closed
+        (cur & DETACHED) == DETACHED
     }
 
     fn is_closed(&self) -> bool {
@@ -170,7 +168,10 @@ where
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
         match self.local_state {
-            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::AttachSent => {
+                self.state_code.fetch_and(0b0000_0000, Ordering::Release);
+                self.local_state = LinkState::Attached
+            },
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
             LinkState::Detached => {
                 // remote peer is attempting to re-attach
@@ -339,6 +340,7 @@ where
             LinkState::AttachReceived => {
                 writer.send(frame).await
                     .map_err(|_| AttachError::IllegalSessionState)?;
+                self.state_code.fetch_and(0b0000_0000, Ordering::Release);
                 self.local_state = LinkState::Attached
             }
             _ => return Err(AttachError::Local(definitions::Error::new(
@@ -361,7 +363,8 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed()?;
+        // This doesn't check the `state_code` because it will be set when
+        // there is incoming Detach in the session's event loop.
 
         // Detach may fail and may try re-attach
         // The local output handle is not removed from the session
