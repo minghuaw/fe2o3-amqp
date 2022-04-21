@@ -12,6 +12,7 @@ mod producer;
 pub use consumer::*;
 pub use producer::*;
 
+#[derive(Debug)]
 pub(crate) enum Running {
     Continue,
     Stop,

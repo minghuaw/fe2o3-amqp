@@ -499,8 +499,6 @@ impl Receiver<Attached> {
         use crate::endpoint::ReceiverLink;
 
         self.processed = 0;
-        let flow_threshold = credit / 2;
-
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
         }

@@ -1,10 +1,10 @@
 use std::time::Duration;
 
 use tracing_subscriber::FmtSubscriber;
-use tracing::{Level, instrument};
-use fe2o3_amqp::{Connection, Session, Sender};
+use tracing::{Level, instrument, info};
+use fe2o3_amqp::{Connection, Session, Sender, Receiver};
 
-const BASE_ADDR: &str = "localhost:5671";
+const BASE_ADDR: &str = "localhost:5672";
 
 #[instrument]
 async fn client_main() {
@@ -14,12 +14,15 @@ async fn client_main() {
     let mut session = Session::begin(&mut connection).await.unwrap();
     // let mut session2 = Session::begin(&mut connection).await.unwrap();
 
-    let sender = Sender::attach(&mut session, "sender-1", "q1").await.unwrap();
+    // let sender = Sender::attach(&mut session, "sender-1", "q1").await.unwrap();
+    let receiver = Receiver::attach(&mut session, "receiver-1", "q1").await.unwrap();
 
     // session2.end().await.unwrap();
     
+    // sender.close().await.unwrap();
+    receiver.close().await.unwrap();
     // tokio::time::sleep(Duration::from_millis(1000)).await;
-    sender.close().await.unwrap();
+    info!(">>> link is closed");
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

@@ -377,16 +377,16 @@ impl Builder<role::Sender, WithName, WithTarget> {
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
-
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let notifier = Arc::new(Notify::new());
         let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
         let flow_state_consumer = Consumer::new(notifier, flow_state);
+
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let link_handle = LinkHandle::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach
+            receiver_settle_mode: Default::default(), // Update this on incoming attach in session
         };
 
         // Create Link in Session

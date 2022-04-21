@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, trace, info};
 
 use crate::{
     connection::engine::SessionId,
@@ -101,6 +101,7 @@ where
     }
 
     #[inline]
+    #[instrument(skip_all)]
     async fn on_incoming(&mut self, incoming: SessionIncomingItem) -> Result<Running, Error> {
         let SessionFrame { channel, body } = incoming;
 
@@ -158,8 +159,9 @@ where
     }
 
     #[inline]
-    #[tracing::instrument(skip_all)]
+    #[instrument(skip_all)]
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
+        trace!("control: {}", control);
         match control {
             SessionControl::End(error) => {
                 self.session
@@ -222,7 +224,9 @@ where
     }
 
     #[inline]
+    #[instrument(skip_all)]
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
+        trace!(state = ?self.session.local_state(), frame = ?frame);
         match self.session.local_state() {
             SessionState::Mapped => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
@@ -331,7 +335,7 @@ where
         loop {
             let result = tokio::select! {
                 incoming = self.incoming.recv() => {
-                    match incoming {
+                    let result = match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
                             // Check local state
@@ -351,25 +355,31 @@ where
                             }
 
                         }
-                    }
+                    };
+
+                    result
                 },
                 control = self.control.recv() => {
-                    match control {
+                    let result = match control {
                         Some(control) => self.on_control(control).await,
                         None => {
                             // all Links and SessionHandle are dropped
                             Ok(Running::Stop)
                         }
-                    }
+                    };
+
+                    result
                 },
                 frame = self.outgoing_link_frames.recv() => {
-                    match frame {
+                    let result = match frame {
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
                             // all Links and SessionHandle are dropped
                             Ok(Running::Stop)
                         }
-                    }
+                    };
+
+                    result
                 }
             };
 

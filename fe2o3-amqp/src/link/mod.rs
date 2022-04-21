@@ -31,6 +31,7 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use serde_amqp::from_reader;
 use tokio::sync::{mpsc, oneshot, RwLock};
+use tracing::{instrument, debug, trace};
 
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
@@ -213,7 +214,9 @@ where
     }
 
     /// Closing or not isn't taken care of here but outside
+    #[instrument(skip_all)]
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        trace!(detach = ?detach);
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => {
@@ -318,6 +321,7 @@ where
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn send_detach<W>(
         &mut self,
         writer: &mut W,
@@ -350,6 +354,9 @@ where
                     closed,
                     error,
                 };
+
+                debug!("Sending detach: {:?}", detach);
+                
                 writer
                     .send(LinkFrame::Detach(detach))
                     .await

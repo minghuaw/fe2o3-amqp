@@ -21,6 +21,7 @@ use tokio::{
     },
     task::JoinHandle,
 };
+use tracing::{instrument, trace};
 
 use crate::{
     connection::ConnectionHandle,
@@ -601,11 +602,13 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn on_incoming_detach(
         &mut self,
         _channel: u16,
         detach: Detach,
     ) -> Result<(), Self::Error> {
+        trace!(channel = ?_channel, frame = ?detach);
         // Remove the link by input handle
         let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
             Some(handle) => handle,

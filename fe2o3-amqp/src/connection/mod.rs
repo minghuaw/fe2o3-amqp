@@ -515,7 +515,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Open frame
-    #[instrument(name = "RECV", skip_all)]
+    #[instrument(skip_all)]
     async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error> {
         trace!(channel, frame = ?open);
         match &self.local_state {
@@ -533,7 +533,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Begin frame
-    #[instrument(name = "RECV", skip_all)]
+    #[instrument(skip_all)]
     async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
         trace!(channel, frame = ?begin);
         match self.on_incoming_begin_inner(channel, &begin)? {
@@ -558,7 +558,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote End frame
-    #[instrument(name = "RECV", skip_all)]
+    #[instrument(skip_all)]
     async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
         trace!(channel, frame = ?end);
         match &self.local_state {
@@ -583,7 +583,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Close frame
-    #[instrument(name = "RECV", skip_all)]
+    #[instrument(skip_all)]
     async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error> {
         trace!(channel, frame=?close);
 

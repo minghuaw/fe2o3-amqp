@@ -6,7 +6,7 @@ pub mod link;
 pub mod sasl_acceptor;
 pub mod session;
 
-use fe2o3_amqp_types::{performatives::{Begin, Attach}, definitions::{SenderSettleMode, ReceiverSettleMode}};
+use fe2o3_amqp_types::{performatives::{Begin}, definitions::{SenderSettleMode, ReceiverSettleMode}};
 
 pub use self::connection::*;
 

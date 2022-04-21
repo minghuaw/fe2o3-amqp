@@ -161,7 +161,9 @@ where
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
 {
+    #[instrument(skip_all)]
     async fn forward_to_session(&mut self, channel: u16, frame: SessionFrame) -> Result<(), Error> {
+        trace!(frame = ?frame);
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
@@ -174,10 +176,10 @@ where
         Ok(())
     }
 
-    // #[instrument(name = "RECV", skip_all)]
+    #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
         let frame = incoming?;
-
+        
         let Frame { channel, body } = frame;
 
         match body {
