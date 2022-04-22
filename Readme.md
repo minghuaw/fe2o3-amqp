@@ -131,7 +131,7 @@ The items below are listed in the order of priority.
   - [x] Naive PLAIN SASL acceptor
   - [ ] Listener that provide coarse control
 - [ ] Transaction
-- [ ] qpid interoperability test
+- [ ] qpid interoperability test (this will be 0.1.0 release)
 - [ ] Link re-attachment
 - [ ] Message batch disposition
 - [ ] Pipelined open
