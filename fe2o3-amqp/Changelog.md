@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.7
+
+1. Added `ConnectionAcceptor`, `SessionAcceptor` and `LinkAcceptor`
+2. Added, naive listener side PLAIN SASL mechanism.
+3. Removed type state from `Sender` and `Receiver`. Whether link is closed by remote is check at runtime.
+
 ## 0.0.6
 
 1. Fixed errors in documentation about TLS protocol header
