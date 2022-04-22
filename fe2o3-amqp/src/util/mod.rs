@@ -12,6 +12,7 @@ mod producer;
 pub use consumer::*;
 pub use producer::*;
 
+#[derive(Debug)]
 pub(crate) enum Running {
     Continue,
     Stop,
@@ -73,3 +74,7 @@ impl<T> Deref for Constant<T> {
 /// Shared type state for builders
 #[derive(Debug)]
 pub struct Uninitialized {}
+
+/// Shared type state for builders
+#[derive(Debug)]
+pub struct Initialized {}

@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 sender
 
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
@@ -12,6 +12,7 @@ use tokio::{
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
     messaging::{message::__private::Serializable, Address, DeliveryState},
+    performatives::Detach,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
@@ -30,7 +31,6 @@ use super::{
     error::{AttachError, DetachError},
     role,
     state::LinkFlowState,
-    type_state::{Attached, Detached},
     Error, LinkFrame, LinkHandle,
 };
 
@@ -48,9 +48,9 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 ///     "q1"                    // Target address
 /// ).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`name`|`String::default()`|
@@ -65,9 +65,9 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 /// |`Properties`| `None` |
 /// |`buffer_size`| `u16::MAX` |
 /// |`role`| `role::Sender` |
-/// 
+///
 /// # Customize configuration with [`builder::Builder`]
-/// 
+///
 /// ```rust, ignore
 /// let mut sender = Sender::builder()
 ///     .name("rust-sender-link-1")
@@ -78,7 +78,7 @@ type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, Unse
 ///     .unwrap();
 /// ```
 #[derive(Debug)]
-pub struct Sender<S> {
+pub struct Sender {
     // The SenderLink manages the state
     pub(crate) link: SenderLink,
     pub(crate) buffer_size: usize,
@@ -89,12 +89,24 @@ pub struct Sender<S> {
     // Outgoing mpsc channel to send the Link frames
     pub(crate) outgoing: PollSender<LinkFrame>,
     pub(crate) incoming: ReceiverStream<LinkFrame>,
-
-    // Type state marker
-    pub(crate) marker: PhantomData<S>,
 }
 
-impl Sender<Detached> {
+impl Drop for Sender {
+    fn drop(&mut self) {
+        if let Some(handle) = self.link.output_handle.clone() {
+            if let Some(sender) = self.outgoing.get_ref() {
+                let detach = Detach {
+                    handle,
+                    closed: true,
+                    error: None,
+                };
+                let _ = sender.try_send(LinkFrame::Detach(detach));
+            }
+        }
+    }
+}
+
+impl Sender {
     /// Creates a builder for [`Sender`] link
     pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
         builder::Builder::<role::Sender, _, _>::new()
@@ -106,9 +118,9 @@ impl Sender<Detached> {
     // }
 
     async fn reattach_inner(
-        mut self,
+        &mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<Sender<Attached>, DetachError<Self>> {
+    ) -> Result<&mut Self, DetachError> {
         // May need to re-allocate output handle
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
@@ -118,6 +130,7 @@ impl Sender<Detached> {
                 // TODO: what else to do during re-attaching
                 unsettled: self.link.unsettled.clone(),
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
+                state_code: self.link.state_code.clone(),
             };
             self.incoming = ReceiverStream::new(incoming);
             let handle = match session::allocate_link(
@@ -130,7 +143,6 @@ impl Sender<Detached> {
                 Ok(handle) => handle,
                 Err(err) => {
                     return Err(DetachError {
-                        link: Some(self),
                         is_closed_by_remote: false,
                         error: Some(definitions::Error::from(err)),
                     });
@@ -139,29 +151,20 @@ impl Sender<Detached> {
             self.link.output_handle = Some(handle);
         }
 
-        if let Err(err) =
+        if let Err(_err) =
             super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
         {
-            return Err(match DetachError::try_from((self, err.into())) {
-                Ok(err) => err,
-                Err(_) => unreachable!(),
-            });
+            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            return Err(DetachError::new(false, Some(err)));
         }
 
-        Ok(Sender::<Attached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-        })
+        Ok(self)
     }
 
     /// Attach the sender link to a session with default configuration
     ///
     /// ## Default configuration
-    /// 
+    ///
     /// | Field | Default Value |
     /// |-------|---------------|
     /// |`name`|`String::default()`|
@@ -187,11 +190,11 @@ impl Sender<Detached> {
     /// ).await.unwrap();
     /// ```
     ///
-    pub async fn attach(
-        session: &mut SessionHandle,
+    pub async fn attach<R>(
+        session: &mut SessionHandle<R>,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Sender<Attached>, AttachError> {
+    ) -> Result<Sender, AttachError> {
         Self::builder()
             .name(name)
             .target(addr)
@@ -200,18 +203,7 @@ impl Sender<Detached> {
     }
 }
 
-impl Sender<Attached> {
-    fn into_detached(self) -> Sender<Detached> {
-        Sender::<Detached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-        }
-    }
-
+impl Sender {
     async fn send_inner<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
     where
         T: serde::Serialize,
@@ -341,36 +333,26 @@ impl Sender<Attached> {
     ///
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
-    pub async fn detach(self) -> Result<Sender<Detached>, DetachError<Sender<Detached>>> {
-        let mut detaching = self.into_detached();
+    pub async fn detach(&mut self) -> Result<(), DetachError> {
+        // let mut detaching = self.into_detached();
 
         // TODO: how should disposition be handled?
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        match detaching
-            .link
-            .send_detach(&mut detaching.outgoing, false, None)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, None).await {
+            return Err(DetachError::new(false, Some(e)));
         };
 
         // Wait for remote detach
-        let frame = match detaching.incoming.next().await {
+        let frame = match self.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(detaching)),
+            None => return Err(detach_error_expecting_frame()),
         };
 
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(detaching)),
+            _ => return Err(detach_error_expecting_frame()),
         };
 
         if remote_detach.closed {
@@ -378,26 +360,24 @@ impl Sender<Attached> {
             // sending a non-closing detach. In this case, the partner MUST
             // signal that it has closed the link by reattaching and then sending
             // a closing detach.
-            let session_control = detaching.session.clone();
-            let reattached = detaching.reattach_inner(session_control).await?;
+            let session_control = self.session.clone();
+            self.reattach_inner(session_control).await?;
 
-            reattached.close().await?;
+            self.close().await?;
 
             // A peer closes a link by sending the detach frame with the handle for the
             // specified link, and the closed flag set to true. The partner will destroy
             // the corresponding link endpoint, and reply with its own detach frame with
             // the closed flag set to true.
             return Err(DetachError {
-                link: None,
                 is_closed_by_remote: true,
                 error: None,
             });
         } else {
-            match detaching.link.on_incoming_detach(remote_detach).await {
+            match self.link.on_incoming_detach(remote_detach).await {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(DetachError {
-                        link: Some(detaching),
                         is_closed_by_remote: false,
                         error: Some(e),
                     })
@@ -406,78 +386,57 @@ impl Sender<Attached> {
         }
 
         // The local outgoing handle must have been dropped, de-allocate link from session
-        match detaching
+        if let Err(_) = self
             .session
-            .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
+            .send(SessionControl::DeallocateLink(self.link.name.clone()))
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            let e = definitions::Error::new(
+                AmqpError::IllegalState,
+                "Session must have dropped".to_string(),
+                None,
+            );
+            return Err(DetachError::new(false, Some(e)));
         }
 
-        Ok(detaching)
+        Ok(())
     }
 
     /// Detach the link with a timeout
     pub async fn detach_with_timeout(
-        self,
+        &mut self,
         duration: impl Into<Duration>,
-    ) -> Result<Result<Sender<Detached>, DetachError<Sender<Detached>>>, Elapsed> {
+    ) -> Result<Result<(), DetachError>, Elapsed> {
         timeout(duration.into(), self.detach()).await
     }
 
     /// Close the link.
     ///
     /// This will set the `closed` field in the Detach performative to true
-    pub async fn close(self) -> Result<(), DetachError<Sender<Detached>>> {
-        let mut detaching = Sender::<Detached> {
-            link: self.link,
-            buffer_size: self.buffer_size,
-            session: self.session,
-            outgoing: self.outgoing,
-            incoming: self.incoming,
-            marker: PhantomData,
-        };
-
+    pub async fn close(&mut self) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        match detaching
-            .link
-            .send_detach(&mut detaching.outgoing, true, None)
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
+            return Err(DetachError::new(false, Some(e)));
         }
 
         // Wait for remote detach
-        let frame = match detaching.incoming.next().await {
+        let frame = match self.incoming.next().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame(detaching)),
+            None => return Err(detach_error_expecting_frame()),
         };
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame(detaching)),
+            _ => return Err(detach_error_expecting_frame()),
         };
 
         let detaching = if remote_detach.closed {
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
-            match detaching.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => detaching,
+            match self.link.on_incoming_detach(remote_detach).await {
+                Ok(_) => self,
                 Err(e) => {
                     return Err(DetachError {
-                        link: Some(detaching),
                         is_closed_by_remote: false,
                         error: Some(e),
                     })
@@ -495,47 +454,36 @@ impl Sender<Attached> {
             // 3. wait for incoming closing detach
             // 4. detach
 
-            let session_control = detaching.session.clone();
-            let reattached = detaching.reattach_inner(session_control).await?;
-            let mut detaching = reattached.into_detached();
-            let frame = match detaching.incoming.next().await {
+            let session_control = self.session.clone();
+            self.reattach_inner(session_control).await?;
+            let frame = match self.incoming.next().await {
                 Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame(detaching)),
+                None => return Err(detach_error_expecting_frame()),
             };
 
             // TODO: is checking closing still necessary?
             let _remote_detach = match frame {
                 LinkFrame::Detach(detach) => detach,
-                _ => return Err(detach_error_expecting_frame(detaching)),
+                _ => return Err(detach_error_expecting_frame()),
             };
-            match detaching
-                .link
-                .send_detach(&mut detaching.outgoing, true, None)
-                .await
-            {
-                Ok(_) => detaching,
-                Err(e) => {
-                    return Err(match DetachError::try_from((detaching, e.into())) {
-                        Ok(err) => err,
-                        Err(_) => unreachable!(),
-                    })
-                }
+            match self.link.send_detach(&mut self.outgoing, true, None).await {
+                Ok(_) => self,
+                Err(e) => return Err(DetachError::new(false, Some(e))),
             }
         };
 
         // de-allocate link from session
-        match detaching
+        if let Err(_) = detaching
             .session
             .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
             .await
         {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(match DetachError::try_from((detaching, e.into())) {
-                    Ok(err) => err,
-                    Err(_) => unreachable!(),
-                })
-            }
+            let e = definitions::Error::new(
+                AmqpError::IllegalState,
+                "Session must have dropped while deallocating link".to_string(),
+                None,
+            );
+            return Err(DetachError::new(false, Some(e)));
         }
 
         Ok(())

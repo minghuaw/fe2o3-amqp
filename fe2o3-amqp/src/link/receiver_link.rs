@@ -18,6 +18,8 @@ const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
 impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
+    type Error = link::Error;
+
     /// Set and send flow state
     async fn send_flow<W>(
         &mut self,
@@ -29,6 +31,8 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
+
         let handle = self
             .output_handle
             .clone()
@@ -294,6 +298,8 @@ impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
+
         let settled = match self.rcv_settle_mode {
             ReceiverSettleMode::First => {
                 // If first, this indicates that the receiver MUST settle

@@ -43,7 +43,7 @@ pub struct Deserializer<R> {
 }
 
 impl<'de, R: Read<'de>> Deserializer<R> {
-    /// Creates a new AMQP1.0 (crate)deserializer 
+    /// Creates a new AMQP1.0 (crate)deserializer
     pub fn new(reader: R) -> Self {
         Self {
             reader,
@@ -1043,11 +1043,7 @@ pub struct ArrayAccess<'a, R> {
 }
 
 impl<'a, R> ArrayAccess<'a, R> {
-    pub(crate) fn new(
-        de: &'a mut Deserializer<R>,
-        size: usize,
-        count: usize,
-    ) -> Self {
+    pub(crate) fn new(de: &'a mut Deserializer<R>, size: usize, count: usize) -> Self {
         Self {
             de,
             _size: size,

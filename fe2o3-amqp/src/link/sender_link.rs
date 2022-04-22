@@ -7,6 +7,8 @@ use super::*;
 
 #[async_trait]
 impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
+    type Error = link::Error;
+
     /// Set and send flow state
     async fn send_flow<W>(
         &mut self,
@@ -18,6 +20,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+
         let handle = self
             .output_handle
             .clone()
@@ -107,13 +111,15 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         message_format: MessageFormat,
         settled: Option<bool>,
         batchable: bool,
-    ) -> Result<Settlement, <Self as endpoint::Link>::Error>
+    ) -> Result<Settlement, Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
         use crate::endpoint::Link;
         use crate::util::Consume;
+
+        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
 
         tokio::select! {
             _ = self.flow_state.consume(1) => {
@@ -130,16 +136,15 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
                     Some(LinkFrame::Detach(detach)) => {
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
-                        self.send_detach(writer, closed, None).await?;
+                        self.send_detach(writer, closed, None).await
+                            .map_err(|e| Self::Error::Local(e))?;
 
                         let detach_err = match result {
-                            Ok(_) => DetachError::<()> {
-                                link: None,
+                            Ok(_) => DetachError {
                                 is_closed_by_remote: closed,
                                 error: None
                             },
-                            Err(err) => DetachError::<()> {
-                                link: None,
+                            Err(err) => DetachError {
                                 is_closed_by_remote: closed,
                                 error: Some(err)
                             }
@@ -304,6 +309,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| Error::Local(e))?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
@@ -335,6 +341,8 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| Error::Local(e))?;
+
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }

@@ -1,6 +1,5 @@
 //! Definition of connection state and session state
 
-
 /// Connection states as defined in the AMQP 1.0 Protocol Part 2.4.6
 #[derive(Debug, Clone)]
 pub enum ConnectionState {

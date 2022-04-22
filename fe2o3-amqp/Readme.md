@@ -4,7 +4,21 @@ An rust implementation of ASMQP 1.0 protocol based on serde and tokio.
 
 [![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
 
+## Feature flags
+
+default: `[]`
+
+- `"rustls"`: enables TLS integration with `tokio-rustls` and `rustls`
+- `"native-tls"`: enables TLS integration with `tokio-native-tls` and `native-tls`
+- `"acceptor"`: enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`
+- `"listener"`: TODO
+
 ## Quick start
+
+1. [Client](#client)
+2. [Listener](#listener)
+
+### Client
 
 Below is an example with a local broker (
 [`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
@@ -61,9 +75,38 @@ async fn main() {
 }
 ```
 
-## Examples
+### Listener
 
-Examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
+```rust
+use tokio::net::TcpListener;
+use fe2o3_amqp::acceptor::{ConnectionAcceptor, SessionAcceptor, LinkAcceptor, LinkEndpoint};
+
+#[tokio::main]
+async fn main() {
+    let tcp_listener = TcpListener::bind("localhost:5672").await.unwrap();
+    let connection_acceptor = ConnectionAcceptor::new("example-listener");
+
+    while let Ok((stream, addr)) = tcp_listener.accept().await {
+        let mut connection = connection_acceptor.accept(stream).await.unwrap();
+        let handle = tokio::spawn(async move {
+            let session_acceptor = SessionAcceptor::new();
+            while let Ok(mut session) = session_acceptor.accept(&mut connection).await{
+                let handle = tokio::spawn(async move {
+                    let link_acceptor = LinkAcceptor::new();
+                    match link_acceptor.accept(&mut session).await.unwrap() {
+                        LinkEndpoint::Sender(sender) => { },
+                        LinkEndpoint::Receiver(recver) => { },
+                    }
+                });
+            }
+        });
+    }
+}
+```
+
+## More examples
+
+More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
 The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 
 License: MIT/Apache-2.0

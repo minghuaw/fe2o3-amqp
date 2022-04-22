@@ -10,7 +10,7 @@ use crate::{
     connection::{engine::SessionId, AllocSessionError},
     endpoint::LinkFlow,
     link::LinkHandle,
-    session::{AllocLinkError, frame::SessionIncomingItem},
+    session::{frame::SessionIncomingItem, AllocLinkError},
 };
 
 #[derive(Debug)]
@@ -45,7 +45,35 @@ pub(crate) enum SessionControl {
         link_handle: LinkHandle,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },
+    AllocateIncomingLink {
+        link_name: String,
+        link_handle: LinkHandle,
+        input_handle: Handle,
+        responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
+    },
     DeallocateLink(String),
     LinkFlow(LinkFlow),
     Disposition(Disposition),
+}
+
+impl std::fmt::Display for SessionControl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SessionControl::End(_) => write!(f, "End"),
+            SessionControl::AllocateLink {
+                link_name: _,
+                link_handle: _,
+                responder: _,
+            } => write!(f, "AllocateLink"),
+            SessionControl::AllocateIncomingLink {
+                link_name: _,
+                link_handle: _,
+                input_handle: _,
+                responder: _,
+            } => write!(f, "AllocateIncomingLink"),
+            SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({})", name),
+            SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
+            SessionControl::Disposition(_) => write!(f, "Disposition"),
+        }
+    }
 }

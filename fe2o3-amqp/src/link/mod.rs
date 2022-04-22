@@ -1,7 +1,14 @@
 //! Implements AMQP1.0 Link
 
 mod frame;
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc,
+    },
+};
 
 use async_trait::async_trait;
 use bytes::Buf;
@@ -31,10 +38,11 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 use serde_amqp::from_reader;
 use tokio::sync::{mpsc, oneshot, RwLock};
+use tracing::{debug, instrument, trace};
 
 use crate::{
     endpoint::{self, LinkFlow, ReceiverLink, Settlement},
-    link::{self, delivery::UnsettledMessage, error::DetachError},
+    link::{self, delivery::UnsettledMessage},
     util::{Consumer, Producer},
     Payload,
 };
@@ -47,20 +55,11 @@ use self::{
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
 
-type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
-type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
+pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
+pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
-pub mod type_state {
-    //! Type states for link
-
-    /// Type state showing that a link is attached
-    #[derive(Debug)]
-    pub struct Attached {}
-
-    /// Type state showing that a link is not attached
-    #[derive(Debug)]
-    pub struct Detached {}
-}
+const CLOSED: u8 = 0b0000_0100;
+const DETACHED: u8 = 0b0000_0010;
 
 pub mod role {
     //! Type state definition of link role
@@ -104,6 +103,7 @@ pub struct Link<R, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
+    pub(crate) state_code: Arc<AtomicU8>,
 
     pub(crate) name: String,
 
@@ -133,6 +133,25 @@ pub struct Link<R, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
+impl<R, F, M> Link<R, F, M> {
+    pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
+    where
+        R: role::IntoRole + Send + Sync,
+        F: AsRef<LinkFlowState<R>> + Send + Sync,
+        M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+    {
+        if endpoint::Link::is_closed(self) {
+            return Err(definitions::Error::new(
+                AmqpError::NotAllowed,
+                "Link is permanently closed".to_string(),
+                None,
+            ));
+        } else {
+            Ok(())
+        }
+    }
+}
+
 #[async_trait]
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
 impl<R, F, M> endpoint::Link for Link<R, F, M>
@@ -141,18 +160,37 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
+    type AttachError = link::AttachError;
     type DetachError = definitions::Error;
-    type Error = link::Error;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::Error> {
+    fn is_detached(&self) -> bool {
+        let cur = self.state_code.load(Ordering::Acquire);
+        (cur & DETACHED) == DETACHED
+    }
+
+    fn is_closed(&self) -> bool {
+        let cur = self.state_code.load(Ordering::Acquire);
+        (cur & CLOSED) == CLOSED
+    }
+
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
         match self.local_state {
-            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::AttachSent => {
+                self.state_code.fetch_and(0b0000_0000, Ordering::Release);
+                self.local_state = LinkState::Attached
+            }
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
             LinkState::Detached => {
                 // remote peer is attempting to re-attach
                 self.local_state = LinkState::AttachReceived
             }
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => {
+                return Err(AttachError::Local(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    None,
+                    None,
+                )))
+            }
         };
 
         self.input_handle = Some(remote_attach.handle);
@@ -161,9 +199,10 @@ where
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
         // attach frames could be in conflict.
         match remote_attach.role {
-            // Remote attach is from sender
+            // Remote attach is from sender, local is receiver
             Role::Sender => {
                 // In this case, the sender is considered to hold the authoritative version of the
+                // version of the source properties
                 self.source = remote_attach.source;
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
                 // initiates the attach exchange and the receiver supports the desired mode.
@@ -173,7 +212,13 @@ where
                 // created, and is incre- mented whenever a message is sent
                 let initial_delivery_count = match remote_attach.initial_delivery_count {
                     Some(val) => val,
-                    None => return Err(AmqpError::NotAllowed.into()),
+                    None => {
+                        return Err(AttachError::Local(definitions::Error::new(
+                            AmqpError::NotAllowed,
+                            None,
+                            None,
+                        )))
+                    }
                 };
                 self.flow_state
                     .as_ref()
@@ -196,10 +241,8 @@ where
 
         // set max message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        let remote_max_msg_size = remote_attach.max_message_size.unwrap_or_else(|| 0);
-        if remote_max_msg_size < self.max_message_size {
-            self.max_message_size = remote_max_msg_size;
-        }
+        self.max_message_size =
+            max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         // TODO: what to do with the unattached
 
@@ -207,7 +250,9 @@ where
     }
 
     /// Closing or not isn't taken care of here but outside
+    #[instrument(skip_all)]
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        trace!(detach = ?detach);
         match self.local_state {
             LinkState::Attached => self.local_state = LinkState::DetachReceived,
             LinkState::DetachSent => {
@@ -231,15 +276,17 @@ where
         Ok(())
     }
 
-    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        self.error_if_closed().map_err(|e| AttachError::Local(e))?;
+
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
             None => {
-                return Err(link::Error::Local(definitions::Error::new(
+                return Err(AttachError::Local(definitions::Error::new(
                     AmqpError::InvalidField,
                     Some("Output handle is None".into()),
                     None,
@@ -294,29 +341,38 @@ where
             | LinkState::Detached // May attempt to re-attach
             | LinkState::DetachSent => {
                 writer.send(frame).await
-                    .map_err(|_| Self::Error::sending_to_session())?;
+                    .map_err(|_| AttachError::IllegalSessionState)?;
                 self.local_state = LinkState::AttachSent
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
-                    .map_err(|_| Self::Error::sending_to_session())?;
+                    .map_err(|_| AttachError::IllegalSessionState)?;
+                self.state_code.fetch_and(0b0000_0000, Ordering::Release);
                 self.local_state = LinkState::Attached
             }
-            _ => return Err(AmqpError::IllegalState.into()),
+            _ => return Err(AttachError::Local(definitions::Error::new(
+                AmqpError::IllegalState,
+                None,
+                None
+            ))),
         }
 
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn send_detach<W>(
         &mut self,
         writer: &mut W,
         closed: bool,
         error: Option<Self::DetachError>,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), Self::DetachError>
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
+        // This doesn't check the `state_code` because it will be set when
+        // there is incoming Detach in the session's event loop.
+
         // Detach may fail and may try re-attach
         // The local output handle is not removed from the session
         // until `deallocate_link`. The outgoing detach will not remove
@@ -340,13 +396,25 @@ where
                     closed,
                     error,
                 };
-                writer
-                    .send(LinkFrame::Detach(detach))
-                    .await
-                    .map_err(|_| link::Error::sending_to_session())?;
+
+                debug!("Sending detach: {:?}", detach);
+
+                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
+                    definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Session must have dropped".to_string()),
+                        None,
+                    )
+                })?;
+
+                self.state_code.fetch_or(DETACHED, Ordering::Release);
+                if closed {
+                    self.state_code.fetch_or(CLOSED, Ordering::Release);
+                }
+
                 remove_handle
             }
-            None => return Err(link::Error::not_attached()),
+            None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
         };
 
         if remove_handle {
@@ -366,12 +434,14 @@ pub(crate) enum LinkHandle {
         flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
         unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
         receiver_settle_mode: ReceiverSettleMode,
+        state_code: Arc<AtomicU8>,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
         flow_state: ReceiverFlowState,
         unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
         receiver_settle_mode: ReceiverSettleMode,
+        state_code: Arc<AtomicU8>,
         more: bool,
     },
 }
@@ -557,6 +627,29 @@ impl LinkHandle {
             }
         }
     }
+
+    pub async fn on_incoming_detach(
+        &mut self,
+        detach: Detach,
+    ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
+        match self {
+            LinkHandle::Sender { tx, state_code, .. } => {
+                state_code.fetch_or(DETACHED, Ordering::Release);
+                if detach.closed {
+                    state_code.fetch_or(CLOSED, Ordering::Release);
+                }
+                tx.send(LinkFrame::Detach(detach)).await?;
+            }
+            LinkHandle::Receiver { tx, state_code, .. } => {
+                state_code.fetch_or(DETACHED, Ordering::Release);
+                if detach.closed {
+                    state_code.fetch_or(CLOSED, Ordering::Release);
+                }
+                tx.send(LinkFrame::Detach(detach)).await?;
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(crate) async fn remove_from_unsettled<M>(
@@ -571,9 +664,9 @@ pub(crate) async fn do_attach<L, W, R>(
     link: &mut L,
     writer: &mut W,
     reader: &mut R,
-) -> Result<(), Error>
+) -> Result<(), AttachError>
 where
-    L: endpoint::Link<Error = Error>,
+    L: endpoint::Link<AttachError = AttachError, DetachError = definitions::Error>,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
@@ -586,19 +679,19 @@ where
     let frame = reader
         .next()
         .await
-        .ok_or_else(|| Error::Detached(DetachError::empty()))?;
+        .ok_or_else(|| AttachError::illegal_state(None))?;
 
     let remote_attach = match frame {
         LinkFrame::Attach(attach) => attach,
-        LinkFrame::Detach(detach) => {
-            return Err(Error::Detached(DetachError {
-                link: None,
-                is_closed_by_remote: detach.closed,
-                error: detach.error,
-            }))
-        }
+        // LinkFrame::Detach(detach) => {
+        //     return Err(Error::Detached(DetachError {
+        //         link: None,
+        //         is_closed_by_remote: detach.closed,
+        //         error: detach.error,
+        //     }))
+        // }
         // TODO: how to handle this?
-        _ => return Err(Error::expecting_frame("Attach")),
+        _ => return Err(AttachError::illegal_state("expecting Attach".to_string())),
     };
 
     // Note that if the application chooses not to create a terminus,
@@ -606,17 +699,20 @@ where
     // an attach indicating that the link endpoint has no associated
     // local terminus. In this case, the session endpoint MUST immediately
     // detach the newly created link endpoint.
-    match remote_attach.target.is_some() || remote_attach.source.is_some() {
+    match remote_attach.target.is_none() || remote_attach.source.is_none() {
         true => {
-            if let Err(e) = link.on_incoming_attach(remote_attach).await {
-                // Should any error happen handling remote
-                panic!("{:?}", e);
-            }
-        }
-        false => {
             // If no target or source is supplied with the remote attach frame,
             // an immediate detach should be expected
-            expect_detach_then_detach(link, writer, reader).await?
+            tracing::error!("Found null source or target");
+            expect_detach_then_detach(link, writer, reader)
+                .await
+                .map_err(|_| AttachError::illegal_state("Expecting detach".to_string()))?;
+        }
+        false => {
+            if let Err(e) = link.on_incoming_attach(remote_attach).await {
+                // Should any error happen handling remote
+                tracing::error!("{:?}", e);
+            }
         }
     }
 
@@ -629,7 +725,7 @@ pub(crate) async fn expect_detach_then_detach<L, W, R>(
     reader: &mut R,
 ) -> Result<(), Error>
 where
-    L: endpoint::Link<Error = Error>,
+    L: endpoint::Link<AttachError = AttachError, DetachError = definitions::Error>,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
@@ -645,8 +741,24 @@ where
         _ => return Err(Error::expecting_frame("Detach")),
     };
 
-    link.send_detach(writer, false, None).await?;
+    link.send_detach(writer, false, None)
+        .await
+        .map_err(|e| Error::Local(e))?;
     Ok(())
+}
+
+fn max_message_size(local: u64, remote: Option<u64>) -> u64 {
+    let remote_max_msg_size = remote.unwrap_or_else(|| 0);
+    match local {
+        0 => remote_max_msg_size,
+        val => {
+            if remote_max_msg_size == 0 {
+                val
+            } else {
+                u64::min(val, remote_max_msg_size)
+            }
+        }
+    }
 }
 
 #[cfg(test)]

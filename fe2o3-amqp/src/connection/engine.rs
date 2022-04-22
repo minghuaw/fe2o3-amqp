@@ -161,7 +161,9 @@ where
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
 {
+    #[instrument(skip_all)]
     async fn forward_to_session(&mut self, channel: u16, frame: SessionFrame) -> Result<(), Error> {
+        trace!(frame = ?frame);
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
@@ -174,7 +176,7 @@ where
         Ok(())
     }
 
-    // #[instrument(name = "RECV", skip_all)]
+    #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
         let frame = incoming?;
 
@@ -267,9 +269,14 @@ where
     #[inline]
     #[instrument(skip_all)]
     async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
-        debug!(?control);
+        debug!("{}", control);
         match control {
             ConnectionControl::Close(error) => {
+                self.outgoing_session_frames.close();
+                while let Some(frame) = self.outgoing_session_frames.recv().await {
+                    self.on_outgoing_session_frames(frame).await?;
+                }
+
                 self.connection
                     .send_close(&mut self.transport, error)
                     .await
@@ -412,7 +419,7 @@ where
             let result = tokio::select! {
                 _ = self.heartbeat.next() => self.on_heartbeat().await,
                 incoming = self.transport.next() => {
-                    match incoming {
+                    let result = match incoming {
                         Some(incoming) => self.on_incoming(incoming.map_err(Into::into)).await,
                         None => {
                             // Incoming stream is closed
@@ -437,25 +444,33 @@ where
                                 | ConnectionState::End => Ok(Running::Stop),
                             }
                         },
-                    }
+                    };
+
+                    result
                 },
                 control = self.control.recv() => {
-                    match control {
+                    let result = match control {
                         Some(control) => self.on_control(control).await,
                         None => {
                             // All control channel are dropped (which is impossible)
                             Ok(Running::Stop)
                         }
-                    }
+                    };
+
+                    result
                 },
                 frame = self.outgoing_session_frames.recv() => {
-                    match frame {
+                    let result = match frame {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
                         None => {
-                            // all sessions are dropped
-                            Ok(Running::Stop)
+                            // Upon closing, the outgoing_session_frames channel will be closed
+                            // first while the connection may still be waiting for remote
+                            // close frame.
+                            Ok(Running::Continue)
                         }
-                    }
+                    };
+
+                    result
                 }
             };
 

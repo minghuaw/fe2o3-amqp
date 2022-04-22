@@ -31,6 +31,7 @@ pub enum Error {
     #[error("Remote error {:?}", .0)]
     Remote(definitions::Error),
 
+    /// TODO: hide this from public API
     /// Link handle error should be handled differently. Link handle is only local
     #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
     LinkHandleError {

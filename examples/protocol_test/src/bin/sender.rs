@@ -1,17 +1,12 @@
-use std::sync::Arc;
 use std::time::Duration;
 
-// use fe2o3_amqp::transport::connection::Connection;
-// use fe2o3_amqp::transport::session::Session;
-
+use fe2o3_amqp::sasl_profile::SaslProfile;
+use fe2o3_amqp::types::messaging::message::BodySection;
+use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sendable;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
-use fe2o3_amqp::sasl_profile::SaslProfile;
-use fe2o3_amqp::types::definitions::SenderSettleMode;
-use fe2o3_amqp::types::messaging::message::BodySection;
-use fe2o3_amqp::types::messaging::Message;
 use tokio::net::TcpStream;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -55,7 +50,7 @@ async fn main() {
         .idle_time_out(50_000 as u32)
         .sasl_profile(SaslProfile::Plain {
             username: "guest".into(),
-            password: "guest".into()
+            password: "guest".into(),
         })
         .open_with_stream(tls_stream)
         // .open("amqp://localhost:5672")
@@ -67,7 +62,8 @@ async fn main() {
     let mut session = Session::builder()
         .handle_max(128)
         .begin(&mut connection)
-        .await.unwrap();
+        .await
+        .unwrap();
 
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await

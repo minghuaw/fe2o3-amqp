@@ -9,7 +9,8 @@ use fe2o3_amqp_types::{
         SessionError, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol, states::SessionState,
+    primitives::{Symbol, UInt},
+    states::SessionState,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -20,6 +21,7 @@ use tokio::{
     },
     task::JoinHandle,
 };
+use tracing::{instrument, trace};
 
 use crate::{
     connection::ConnectionHandle,
@@ -40,29 +42,31 @@ pub use error::Error;
 mod builder;
 pub use builder::*;
 
-use self::{
-    frame::{SessionFrame, SessionFrameBody},
-};
+use self::frame::{SessionFrame, SessionFrameBody};
+
+/// Default incoming_window and outgoing_window
+pub const DEFAULT_WINDOW: UInt = 2048;
 
 /// A handle to the [`Session`] event loop
 ///
 /// Dropping the handle will also stop the [`Session`] event loop
 #[derive(Debug)]
-pub struct SessionHandle {
+pub struct SessionHandle<R> {
     pub(crate) control: mpsc::Sender<SessionControl>,
-    engine_handle: JoinHandle<Result<(), Error>>,
+    pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) link_listener: R,
 }
 
-impl Drop for SessionHandle {
+impl<R> Drop for SessionHandle<R> {
     fn drop(&mut self) {
         let _ = self.control.try_send(SessionControl::End(None));
     }
 }
 
-impl SessionHandle {
+impl<R> SessionHandle<R> {
     /// Checks if the underlying event loop has stopped
     pub fn is_ended(&self) -> bool {
         self.control.is_closed()
@@ -150,18 +154,48 @@ pub(crate) async fn allocate_link(
     result
 }
 
+pub(crate) async fn allocate_incoming_link(
+    control: &mut mpsc::Sender<SessionControl>,
+    link_name: String,
+    link_handle: LinkHandle,
+    input_handle: Handle,
+) -> Result<Handle, AllocLinkError> {
+    let (responder, resp_rx) = oneshot::channel();
+
+    control
+        .send(SessionControl::AllocateIncomingLink {
+            link_name,
+            link_handle,
+            input_handle,
+            responder,
+        })
+        .await
+        // The `SendError` could only happen when the receiving half is
+        // dropped, meaning the `SessionEngine::event_loop` has stopped.
+        // This would also mean the `Session` is Unmapped, and thus it
+        // may be treated as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    let result = resp_rx
+        .await
+        // The error could only occur when the sending half is dropped,
+        // indicating the `SessionEngine::even_loop` has stopped or
+        // unmapped. Thus it could be considered as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    result
+}
+
 /// AMQP1.0 Session
 ///
 /// # Begin a new Session with default configuration
 ///
 /// ```rust,ignore
 /// use fe2o3_amqp::Session;
-/// 
+///
 /// let session = Session::begin(&mut connection).await.unwrap();
 /// ```
-/// 
+///
 /// ## Default configuration
-/// 
+///
 /// | Field | Default Value |
 /// |-------|---------------|
 /// |`next_outgoing_id`| 0 |
@@ -171,56 +205,56 @@ pub(crate) async fn allocate_link(
 /// |`offered_capabilities` | `None` |
 /// |`desired_capabilities`| `None` |
 /// |`Properties`| `None` |
-/// 
+///
 /// # Customize configuration with [`Builder`]
-/// 
+///
 /// The builder should be used if the user would like to customize the configuration
 /// for the session.
-/// 
+///
 /// ```rust, ignore
 /// let session = Session::builder()
 ///     .handle_max(128)
 ///     .begin(&mut connection)
 ///     .await.unwrap();
 /// ```
-/// 
+///
 #[derive(Debug)]
 pub struct Session {
-    control: mpsc::Sender<SessionControl>,
+    pub(crate) control: mpsc::Sender<SessionControl>,
     // session_id: usize,
     pub(crate) outgoing_channel: u16,
 
     // local amqp states
-    local_state: SessionState,
-    initial_outgoing_id: Constant<TransferNumber>,
-    next_outgoing_id: TransferNumber,
-    incoming_window: TransferNumber,
-    outgoing_window: TransferNumber,
-    handle_max: Handle,
+    pub(crate) local_state: SessionState,
+    pub(crate) initial_outgoing_id: Constant<TransferNumber>,
+    pub(crate) next_outgoing_id: TransferNumber,
+    pub(crate) incoming_window: TransferNumber,
+    pub(crate) outgoing_window: TransferNumber,
+    pub(crate) handle_max: Handle,
 
     // remote amqp states
-    incoming_channel: Option<u16>,
+    pub(crate) incoming_channel: Option<u16>,
     // initialize with 0 first and change after receiving the remote Begin
-    next_incoming_id: TransferNumber,
-    remote_incoming_window: SequenceNo,
-    remote_outgoing_window: SequenceNo,
+    pub(crate) next_incoming_id: TransferNumber,
+    pub(crate) remote_incoming_window: SequenceNo,
+    pub(crate) remote_outgoing_window: SequenceNo,
 
     // capabilities
-    offered_capabilities: Option<Vec<Symbol>>,
-    desired_capabilities: Option<Vec<Symbol>>,
-    properties: Option<Fields>,
+    pub(crate) offered_capabilities: Option<Vec<Symbol>>,
+    pub(crate) desired_capabilities: Option<Vec<Symbol>>,
+    pub(crate) properties: Option<Fields>,
 
     /// local links by output handle
-    local_links: Slab<LinkHandle>,
-    link_by_name: BTreeMap<String, Handle>,
-    link_by_input_handle: BTreeMap<Handle, Handle>,
+    pub(crate) local_links: Slab<LinkHandle>,
+    pub(crate) link_by_name: BTreeMap<String, Handle>,
+    pub(crate) link_by_input_handle: BTreeMap<Handle, Handle>,
     // Maps from DeliveryId to link.DeliveryCount
-    delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
+    pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
 }
 
 impl Session {
     /// Alias for `begin`
-    pub async fn new(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
+    pub async fn new(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
         Self::begin(conn).await
     }
 
@@ -230,9 +264,9 @@ impl Session {
     }
 
     /// Begins a new session with the default configurations
-    /// 
+    ///
     /// # Default configuration
-    /// 
+    ///
     /// | Field | Default Value |
     /// |-------|---------------|
     /// |`next_outgoing_id`| 0 |
@@ -242,15 +276,15 @@ impl Session {
     /// |`offered_capabilities` | `None` |
     /// |`desired_capabilities`| `None` |
     /// |`Properties`| `None` |
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust,ignore
     /// use fe2o3_amqp::Session;
-    /// 
+    ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle) -> Result<SessionHandle, Error> {
+    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
         Session::builder().begin(conn).await
     }
 }
@@ -304,13 +338,29 @@ impl endpoint::Session for Session {
         }
     }
 
+    fn allocate_incoming_link(
+        &mut self,
+        link_name: String,
+        link_handle: LinkHandle,
+        input_handle: Handle,
+    ) -> Result<Handle, Self::AllocError> {
+        match self.allocate_link(link_name, link_handle) {
+            Ok(output_handle) => {
+                self.link_by_input_handle
+                    .insert(input_handle, output_handle.clone());
+                Ok(output_handle)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     fn deallocate_link(&mut self, link_name: String) {
         if let Some(handle) = self.link_by_name.remove(&link_name) {
             self.local_links.remove(handle.0 as usize);
         }
     }
 
-    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
@@ -335,7 +385,8 @@ impl endpoint::Session for Session {
             Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
                 Some(link) => {
                     // Only Sender need to update the receiver settle mode
-                    // link.receiver_settle_mode = attach.rcv_settle_mode.clone();
+                    // because the sender needs to echo a disposition if
+                    // rcv-settle-mode is 1
                     if let LinkHandle::Sender {
                         receiver_settle_mode,
                         ..
@@ -367,7 +418,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
         // Handle session flow control
-        // 
+        //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
         // directly from the next-outgoing-id of the frame, and it MUST update the remote-outgoing-
         // window directly from the outgoing-window of the frame.
@@ -555,11 +606,13 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn on_incoming_detach(
         &mut self,
         _channel: u16,
         detach: Detach,
     ) -> Result<(), Self::Error> {
+        trace!(channel = ?_channel, frame = ?detach);
         // Remove the link by input handle
         let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
             Some(handle) => handle,
@@ -568,7 +621,7 @@ impl endpoint::Session for Session {
         match self.local_links.get_mut(output_handle.0 as usize) {
             Some(link) => {
                 // TODO:
-                match link.send(LinkFrame::Detach(detach)).await {
+                match link.on_incoming_detach(detach).await {
                     Ok(_) => {}
                     Err(_) => {
                         return Err(Error::session_error(SessionError::UnattachedHandle, None))
@@ -581,7 +634,9 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
+        trace!(end = ?end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
@@ -653,6 +708,38 @@ impl endpoint::Session for Session {
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         }
 
+        Ok(())
+    }
+
+    async fn send_end<W>(
+        &mut self,
+        writer: &mut W,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::Error>
+    where
+        W: Sink<SessionFrame> + Send + Unpin,
+    {
+        match self.local_state {
+            SessionState::Mapped => match error.is_some() {
+                true => self.local_state = SessionState::Discarding,
+                false => self.local_state = SessionState::EndSent,
+            },
+            SessionState::EndReceived => self.local_state = SessionState::Unmapped,
+            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
+        }
+
+        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
+        writer
+            .send(frame)
+            .await
+            // The receiving half must have dropped, and thus the `Connection`
+            // event loop has stopped. It should be treated as an io error
+            .map_err(|_| {
+                Self::Error::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Connection event loop has dropped",
+                ))
+            })?;
         Ok(())
     }
 
@@ -745,37 +832,5 @@ impl endpoint::Session for Session {
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
-    }
-
-    async fn send_end<W>(
-        &mut self,
-        writer: &mut W,
-        error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin,
-    {
-        match self.local_state {
-            SessionState::Mapped => match error.is_some() {
-                true => self.local_state = SessionState::Discarding,
-                false => self.local_state = SessionState::EndSent,
-            },
-            SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
-        }
-
-        let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
-        writer
-            .send(frame)
-            .await
-            // The receiving half must have dropped, and thus the `Connection`
-            // event loop has stopped. It should be treated as an io error
-            .map_err(|_| {
-                Self::Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Connection event loop has dropped",
-                ))
-            })?;
-        Ok(())
     }
 }

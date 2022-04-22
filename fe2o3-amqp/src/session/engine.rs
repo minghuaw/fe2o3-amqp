@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 use futures_util::SinkExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, trace};
 
 use crate::{
     connection::engine::SessionId,
@@ -23,25 +23,20 @@ use super::{
 };
 
 pub(crate) struct SessionEngine<S: Session> {
-    conn: mpsc::Sender<ConnectionControl>,
-    session: S,
-    session_id: SessionId,
-    control: mpsc::Receiver<SessionControl>,
-    incoming: mpsc::Receiver<SessionIncomingItem>,
-    outgoing: PollSender<SessionFrame>,
+    pub conn: mpsc::Sender<ConnectionControl>,
+    pub session: S,
+    pub session_id: SessionId,
+    pub control: mpsc::Receiver<SessionControl>,
+    pub incoming: mpsc::Receiver<SessionIncomingItem>,
+    pub outgoing: PollSender<SessionFrame>,
 
-    outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl<S> SessionEngine<S>
-where
-    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
-    S::Error: Into<Error> + Debug,
-    S::AllocError: Into<AllocLinkError>,
-{
+impl SessionEngine<super::Session> {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
-        session: S,
+        session: super::Session,
         session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
@@ -59,11 +54,7 @@ where
         };
 
         // send a begin
-        engine
-            .session
-            .send_begin(&mut engine.outgoing)
-            .await
-            .map_err(|e| e.into())?;
+        engine.session.send_begin(&mut engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
@@ -89,19 +80,23 @@ where
             }
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
         };
-        engine
-            .session
-            .on_incoming_begin(channel, remote_begin)
-            .await
-            .map_err(Into::into)?;
+        engine.session.on_incoming_begin(channel, remote_begin)?;
         Ok(engine)
     }
+}
 
+impl<S> SessionEngine<S>
+where
+    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
+    S::Error: Into<Error> + Debug,
+    S::AllocError: Into<AllocLinkError>,
+{
     pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
 
     #[inline]
+    #[instrument(skip_all)]
     async fn on_incoming(&mut self, incoming: SessionIncomingItem) -> Result<Running, Error> {
         let SessionFrame { channel, body } = incoming;
 
@@ -109,7 +104,6 @@ where
             SessionFrameBody::Begin(begin) => {
                 self.session
                     .on_incoming_begin(channel, begin)
-                    .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Attach(attach) => {
@@ -160,9 +154,17 @@ where
     }
 
     #[inline]
+    #[instrument(skip_all)]
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
+        trace!("control: {}", control);
         match control {
             SessionControl::End(error) => {
+                // if control is closing, finish sending all buffered messages before closing
+                self.outgoing_link_frames.close();
+                while let Some(frame) = self.outgoing_link_frames.recv().await {
+                    self.on_outgoing_link_frames(frame).await?;
+                }
+
                 self.session
                     .send_end(&mut self.outgoing, error)
                     .await
@@ -174,6 +176,22 @@ where
                 responder,
             } => {
                 let result = self.session.allocate_link(link_name, link_handle);
+                responder.send(result.map_err(Into::into)).map_err(|_| {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SessionHandle is dropped",
+                    ))
+                })?;
+            }
+            SessionControl::AllocateIncomingLink {
+                link_name,
+                link_handle,
+                input_handle,
+                responder,
+            } => {
+                let result =
+                    self.session
+                        .allocate_incoming_link(link_name, link_handle, input_handle);
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -214,7 +232,9 @@ where
     }
 
     #[inline]
+    #[instrument(skip_all)]
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
+        trace!(state = ?self.session.local_state(), frame = ?frame);
         match self.session.local_state() {
             SessionState::Mapped => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
@@ -323,45 +343,49 @@ where
         loop {
             let result = tokio::select! {
                 incoming = self.incoming.recv() => {
-                    match incoming {
+                    let result = match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
                             // Check local state
-                            match self.session.local_state() {
-                                SessionState::BeginSent
-                                | SessionState::BeginReceived
-                                | SessionState::Mapped
-                                | SessionState::EndSent
-                                | SessionState::EndReceived => {
-                                    Err(Error::Io(io::Error::new(
-                                        io::ErrorKind::UnexpectedEof,
-                                        "Connection has stopped before session is ended"
-                                    )))
-                                },
-                                SessionState::Unmapped
-                                | SessionState::Discarding => Ok(Running::Stop),
+                            match self.continue_or_stop_by_state() {
+                                Running::Continue => Err(Error::Io(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "Connection has stopped before session is ended"
+                                ))),
+                                Running::Stop => Ok(Running::Stop),
                             }
 
                         }
-                    }
+                    };
+                    // tracing::info!(task="on_incoming", result = ?result);
+                    result
                 },
                 control = self.control.recv() => {
-                    match control {
-                        Some(control) => self.on_control(control).await,
+                    let result = match control {
+                        Some(control) => {
+                            self.on_control(control).await
+                        },
                         None => {
                             // all Links and SessionHandle are dropped
                             Ok(Running::Stop)
                         }
-                    }
+                    };
+                    // tracing::info!(task="on_control", result = ?result);
+                    result
                 },
                 frame = self.outgoing_link_frames.recv() => {
-                    match frame {
+                    let result = match frame {
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
-                            // all Links and SessionHandle are dropped
-                            Ok(Running::Stop)
+                            // All Links and SessionHandle are dropped
+                            //
+                            // Upon ending, all link-to-session channels will be closed
+                            // first while the session is still waitint for remote end frame.
+                            Ok(Running::Continue)
                         }
-                    }
+                    };
+                    // tracing::info!(task="on_outgoing_link_frames", result = ?result);
+                    result
                 }
             };
 

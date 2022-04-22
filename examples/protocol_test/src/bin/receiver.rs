@@ -1,6 +1,4 @@
-use fe2o3_amqp::{
-    connection::Connection, link::Receiver, session::Session, types::primitives::Value, Delivery,
-};
+use fe2o3_amqp::{connection::Connection, link::Receiver, session::Session, Delivery};
 
 #[tokio::main]
 async fn main() {

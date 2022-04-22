@@ -1,6 +1,10 @@
 //! Implements the builder for a link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{atomic::AtomicU8, Arc},
+};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -23,7 +27,6 @@ use super::{
     receiver::CreditMode,
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    type_state::Attached,
     Receiver, Sender,
 };
 
@@ -44,7 +47,7 @@ pub struct WithoutTarget;
 pub struct WithTarget;
 
 /// Builder for a Link
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Builder<Role, NameState, Addr> {
     /// The name of the link
     pub name: String,
@@ -90,6 +93,28 @@ pub struct Builder<Role, NameState, Addr> {
     addr_state: PhantomData<Addr>,
 }
 
+// impl<Role, Addr> From<Attach> for Builder<Role, WithName, Addr> {
+//     fn from(attach: Attach) -> Self {
+//         Self {
+//             name: attach.name,
+//             snd_settle_mode: attach.snd_settle_mode,
+//             rcv_settle_mode: attach.rcv_settle_mode,
+//             source: attach.source,
+//             target: attach.target,
+//             initial_delivery_count: attach.initial_delivery_count,
+//             max_message_size: attach.max_message_size,
+//             offered_capabilities: attach.offered_capabilities,
+//             desired_capabilities: attach.desired_capabilities,
+//             properties: attach.properties,
+//             buffer_size: todo!(),
+//             credit_mode: todo!(),
+//             role: todo!(),
+//             name_state: todo!(),
+//             addr_state: todo!(),
+//         }
+//     }
+// }
+
 impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
     fn default() -> Self {
         Self {
@@ -105,7 +130,7 @@ impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
             properties: Default::default(),
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
-            credit_mode: CreditMode::default(),
+            credit_mode: Default::default(),
             role: PhantomData,
             name_state: PhantomData,
             addr_state: PhantomData,
@@ -115,15 +140,13 @@ impl<Role> Default for Builder<Role, WithoutName, WithoutTarget> {
 
 impl Builder<role::Sender, WithoutName, WithoutTarget> {
     pub(crate) fn new() -> Self {
-        Self::default()
-            .source(Source::builder().build())
+        Self::default().source(Source::builder().build())
     }
 }
 
 impl Builder<role::Receiver, WithoutName, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::default()
-            .target(Target::builder().build())
+        Builder::default().target(Target::builder().build())
     }
 }
 
@@ -276,11 +299,12 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         self
     }
 
-    fn create_link<C, M>(
+    pub(crate) fn create_link<C, M>(
         self,
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
         flow_state_consumer: C,
+        state_code: Arc<AtomicU8>,
     ) -> Link<Role, C, M> {
         let local_state = LinkState::Unattached;
 
@@ -289,10 +313,11 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
             None => 0,
         };
 
-        // Create a SenderLink instance
+        // Create a link
         Link::<Role, C, M> {
             role: PhantomData,
             local_state,
+            state_code,
             name: self.name,
             output_handle: Some(output_handle.clone()),
             input_handle: None,
@@ -329,7 +354,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
     /// Attach the link as a sender
     ///
     /// # Example
-    /// 
+    ///
     /// ```rust, ignore
     /// let mut sender = Sender::builder()
     ///     .name("rust-sender-link-1")
@@ -339,10 +364,10 @@ impl Builder<role::Sender, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach(
+    pub async fn attach<R>(
         mut self,
-        session: &mut SessionHandle,
-    ) -> Result<Sender<Attached>, AttachError> {
+        session: &mut SessionHandle<R>,
+    ) -> Result<Sender, AttachError> {
         let buffer_size = self.buffer_size.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
@@ -357,23 +382,25 @@ impl Builder<role::Sender, WithName, WithTarget> {
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
-
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let notifier = Arc::new(Notify::new());
         let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
         let flow_state_consumer = Consumer::new(notifier, flow_state);
+
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach
+            receiver_settle_mode: Default::default(), // Update this on incoming attach in session
+            state_code: state_code.clone(),
         };
 
         // Create Link in Session
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer, state_code);
 
         // Get writer to session
         let writer = session.outgoing.clone();
@@ -388,13 +415,13 @@ impl Builder<role::Sender, WithName, WithTarget> {
             })?;
 
         // Attach completed, return Sender
-        let sender = Sender::<Attached> {
+        let sender = Sender {
             link,
             buffer_size,
             session: session.control.clone(),
             outgoing,
             incoming: reader,
-            marker: PhantomData,
+            // marker: PhantomData,
         };
         Ok(sender)
     }
@@ -413,10 +440,10 @@ impl Builder<role::Receiver, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach(
+    pub async fn attach<R>(
         mut self,
-        session: &mut SessionHandle,
-    ) -> Result<Receiver<Attached>, AttachError> {
+        session: &mut SessionHandle<R>,
+    ) -> Result<Receiver, AttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size.clone();
         let credit_mode = self.credit_mode.clone();
@@ -437,11 +464,13 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let flow_state_producer = flow_state.clone();
         let flow_state_consumer = flow_state;
+        let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach
+            state_code: state_code.clone(),
             more: false,
         };
 
@@ -449,36 +478,29 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer, state_code);
 
         // Get writer to session
         let writer = session.outgoing.clone();
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader)
-            .await
-            .map_err(|value| match AttachError::try_from(value) {
-                Ok(error) => error,
-                Err(_) => unreachable!(),
-            })?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
-        let mut receiver = Receiver::<Attached> {
+        let mut receiver = Receiver {
             link,
             buffer_size,
             credit_mode,
-            flow_threshold: 0, // TODO: 0 or MAX?
             processed: 0,
             session: session.control.clone(),
             outgoing,
             incoming: reader,
-            marker: PhantomData,
             incomplete_transfer: None,
         };
 
         if let CreditMode::Auto(credit) = receiver.credit_mode {
-            receiver.set_credit(credit).await.map_err(|value| {
-                match AttachError::try_from(value) {
+            receiver.set_credit(credit).await.map_err(|error| {
+                match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
                 }

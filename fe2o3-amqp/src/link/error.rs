@@ -10,17 +10,29 @@ use crate::session::AllocLinkError;
 
 /// Error associated with detaching a link
 #[derive(Debug)]
-pub struct DetachError<L> {
-    pub link: Option<L>,
-    pub(crate) is_closed_by_remote: bool,
-    pub(crate) error: Option<definitions::Error>,
+pub struct DetachError {
+    // /// The link which encountered error while detaching
+    // pub link: Option<L>,
+    /// Whether the remote is closing
+    pub is_closed_by_remote: bool,
+    /// The error associated with detachment
+    pub error: Option<definitions::Error>,
 }
 
-impl<L> DetachError<L> {
+impl DetachError {
+    pub(crate) fn new(is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
+        Self {
+            is_closed_by_remote,
+            error,
+        }
+    }
+
+    /// Whether the remote decided to close
     pub fn is_closed_by_remote(&self) -> bool {
         self.is_closed_by_remote
     }
 
+    /// The error condition
     pub fn error_condition(&self) -> Option<&ErrorCondition> {
         match &self.error {
             Some(e) => Some(&e.condition),
@@ -28,39 +40,30 @@ impl<L> DetachError<L> {
         }
     }
 
+    /// Convert into the inner error
     pub fn into_error(self) -> Option<definitions::Error> {
         self.error
     }
-
-    pub(crate) fn empty() -> Self {
-        Self {
-            link: None,
-            is_closed_by_remote: false,
-            error: None,
-        }
-    }
 }
 
-impl<L> fmt::Display for DetachError<L> {
+impl fmt::Display for DetachError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DetachError")
-            .field("link", &"")
             .field("is_closed_by_remote", &self.is_closed_by_remote)
             .field("error", &self.error)
             .finish()
     }
 }
 
-impl<L: fmt::Debug> std::error::Error for DetachError<L> {}
+impl std::error::Error for DetachError {}
 
-impl<L> TryFrom<Error> for DetachError<L> {
+impl TryFrom<Error> for DetachError {
     type Error = Error;
 
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
             Error::Local(error) => {
                 let err = Self {
-                    link: None,
                     is_closed_by_remote: false,
                     error: Some(error),
                 };
@@ -68,33 +71,6 @@ impl<L> TryFrom<Error> for DetachError<L> {
             }
             Error::Detached(err) => {
                 let error = DetachError {
-                    link: None,
-                    is_closed_by_remote: err.is_closed_by_remote,
-                    error: err.error,
-                };
-                Ok(error)
-            }
-            Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
-        }
-    }
-}
-
-impl<L> TryFrom<(L, Error)> for DetachError<L> {
-    type Error = Error;
-
-    fn try_from((link, value): (L, Error)) -> Result<Self, Self::Error> {
-        match value {
-            Error::Local(error) => {
-                let err = Self {
-                    link: Some(link),
-                    is_closed_by_remote: false,
-                    error: Some(error),
-                };
-                Ok(err)
-            }
-            Error::Detached(err) => {
-                let error = DetachError {
-                    link: Some(link),
                     is_closed_by_remote: err.is_closed_by_remote,
                     error: err.error,
                 };
@@ -114,7 +90,7 @@ pub enum Error {
 
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
-    Detached(DetachError<()>),
+    Detached(DetachError),
 
     /// The message was rejected
     #[error("Outcome Rejected: {:?}", .0)]
@@ -188,7 +164,7 @@ impl From<serde_amqp::Error> for Error {
     }
 }
 
-pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
+pub(crate) fn detach_error_expecting_frame() -> DetachError {
     let error = definitions::Error::new(
         AmqpError::IllegalState,
         Some("Expecting remote detach frame".to_string()),
@@ -196,7 +172,6 @@ pub(crate) fn detach_error_expecting_frame<L>(link: L) -> DetachError<L> {
     );
 
     DetachError {
-        link: Some(link),
         is_closed_by_remote: false,
         error: Some(error),
     }
@@ -217,9 +192,28 @@ pub enum AttachError {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
+    // /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
+    // #[error("Initial delivery count MUST NOT be null if role is sender,")]
+    // InitialDeliveryCountIsNull,
+    /// Source field in Attach is Null
+    #[error("Source is None")]
+    SourceIsNone,
+
+    /// Target field in Attach is Null
+    #[error("Target is None")]
+    TargetIsNone,
+
+    /// The desired mode is not supported
+    #[error("Desired receiver settle mode is not supported")]
+    ReceiverSettleModeNotSupported,
+
+    /// The desired mode is not supported
+    #[error("Desired sender settle mode is not supported")]
+    SenderSettleModeNotSupported,
+
     /// A local error
     #[error("Local error: {:?}", .0)]
-    LocalError(definitions::Error),
+    Local(definitions::Error),
 }
 
 impl From<AllocLinkError> for AttachError {
@@ -237,10 +231,20 @@ impl TryFrom<Error> for AttachError {
 
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
-            Error::Local(error) => Ok(AttachError::LocalError(error)),
+            Error::Local(error) => Ok(AttachError::Local(error)),
             Error::Rejected(_) | Error::Released(_) | Error::Modified(_) | Error::Detached(_) => {
                 Err(value)
             }
         }
+    }
+}
+
+impl AttachError {
+    pub(crate) fn illegal_state(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            description.into(),
+            None,
+        ))
     }
 }
