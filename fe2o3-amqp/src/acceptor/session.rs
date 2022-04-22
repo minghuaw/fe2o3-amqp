@@ -13,7 +13,7 @@ use fe2o3_amqp_types::{
     states::SessionState,
 };
 use futures_util::Sink;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::PollSender;
 use tracing::instrument;
 
@@ -26,7 +26,7 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem},
-        Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
+        Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE, AllocLinkError,
     },
     util::Initialized,
     Payload,
@@ -44,6 +44,36 @@ impl ListenerSessionHandle {
     pub async fn next_incoming_attach(&mut self) -> Option<Attach> {
         self.link_listener.recv().await
     }
+}
+
+pub(crate) async fn allocate_incoming_link(
+    control: &mut mpsc::Sender<SessionControl>,
+    link_name: String,
+    link_handle: LinkHandle,
+    input_handle: Handle,
+) -> Result<Handle, AllocLinkError> {
+    let (responder, resp_rx) = oneshot::channel();
+
+    control
+        .send(SessionControl::AllocateIncomingLink {
+            link_name,
+            link_handle,
+            input_handle,
+            responder,
+        })
+        .await
+        // The `SendError` could only happen when the receiving half is
+        // dropped, meaning the `SessionEngine::event_loop` has stopped.
+        // This would also mean the `Session` is Unmapped, and thus it
+        // may be treated as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    let result = resp_rx
+        .await
+        // The error could only occur when the sending half is dropped,
+        // indicating the `SessionEngine::even_loop` has stopped or
+        // unmapped. Thus it could be considered as illegal state
+        .map_err(|_| AllocLinkError::IllegalState)?;
+    result
 }
 
 /// An acceptor for incoming session

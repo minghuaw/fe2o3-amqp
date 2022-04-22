@@ -38,6 +38,7 @@ impl std::fmt::Display for ConnectionControl {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) enum SessionControl {
     End(Option<definitions::Error>),
     AllocateLink {

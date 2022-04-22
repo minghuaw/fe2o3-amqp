@@ -51,7 +51,7 @@ pub const DEFAULT_CHANNEL_MAX: u16 = 255;
 /// A handle to the [`Connection`] event loop.
 ///
 /// Dropping the handle will also stop the [`Connection`] event loop.
-#[derive(Debug)]
+#[allow(dead_code)]
 pub struct ConnectionHandle<R> {
     pub(crate) control: Sender<ConnectionControl>,
     pub(crate) handle: JoinHandle<Result<(), Error>>,
@@ -59,6 +59,13 @@ pub struct ConnectionHandle<R> {
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
     pub(crate) session_listener: R,
+}
+
+impl<R> std::fmt::Debug for ConnectionHandle<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectionHandle")
+            .finish()
+    }
 }
 
 impl<R> Drop for ConnectionHandle<R> {

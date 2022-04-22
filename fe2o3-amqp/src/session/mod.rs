@@ -50,7 +50,7 @@ pub const DEFAULT_WINDOW: UInt = 2048;
 /// A handle to the [`Session`] event loop
 ///
 /// Dropping the handle will also stop the [`Session`] event loop
-#[derive(Debug)]
+#[allow(dead_code)]
 pub struct SessionHandle<R> {
     pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
@@ -58,6 +58,13 @@ pub struct SessionHandle<R> {
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     pub(crate) link_listener: R,
+}
+
+impl<R> std::fmt::Debug for SessionHandle<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionHandle")
+            .finish()
+    }
 }
 
 impl<R> Drop for SessionHandle<R> {
@@ -137,36 +144,6 @@ pub(crate) async fn allocate_link(
         .send(SessionControl::AllocateLink {
             link_name,
             link_handle,
-            responder,
-        })
-        .await
-        // The `SendError` could only happen when the receiving half is
-        // dropped, meaning the `SessionEngine::event_loop` has stopped.
-        // This would also mean the `Session` is Unmapped, and thus it
-        // may be treated as illegal state
-        .map_err(|_| AllocLinkError::IllegalState)?;
-    let result = resp_rx
-        .await
-        // The error could only occur when the sending half is dropped,
-        // indicating the `SessionEngine::even_loop` has stopped or
-        // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalState)?;
-    result
-}
-
-pub(crate) async fn allocate_incoming_link(
-    control: &mut mpsc::Sender<SessionControl>,
-    link_name: String,
-    link_handle: LinkHandle,
-    input_handle: Handle,
-) -> Result<Handle, AllocLinkError> {
-    let (responder, resp_rx) = oneshot::channel();
-
-    control
-        .send(SessionControl::AllocateIncomingLink {
-            link_name,
-            link_handle,
-            input_handle,
             responder,
         })
         .await
