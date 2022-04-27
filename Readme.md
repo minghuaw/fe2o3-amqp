@@ -124,12 +124,12 @@ The example has been used for testing with a local [TestAmqpBroker](https://azur
 The items below are listed in the order of priority.
 
 - [x] Proper error handling (more or less)
-- [ ] Listeners
+- [x] Listeners
   - [x] Acceptor that provide fine control over each incoming endpoint
   - [x] TLS acceptor integration with `tokio-rustls`
   - [x] TLS acceptor integration with `tokio-native-tls`
   - [x] Naive PLAIN SASL acceptor
-  - [ ] Listener that provide coarse control
+  - [ ] ~~Listener that provide coarse control~~
 - [ ] Transaction
 - [ ] qpid interoperability test (this will be 0.1.0 release)
 - [ ] Link re-attachment
