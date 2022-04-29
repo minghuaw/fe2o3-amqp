@@ -21,7 +21,7 @@ mod source;
 pub use source::Source;
 
 mod target;
-pub use target::Target;
+pub use target::{Target, TargetArchetype};
 
 mod terminus_durability;
 pub use terminus_durability::TerminusDurability;

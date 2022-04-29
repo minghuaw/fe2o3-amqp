@@ -33,6 +33,12 @@ pub struct Coordinator {
     pub capabilities: Option<Vec<TxnCapability>>,
 }
 
+impl From<Coordinator> for TargetArchetype {
+    fn from(coordinator: Coordinator) -> Self {
+        Self::Coordinator(coordinator)
+    }
+}
+
 /// 4.5.2 Declare
 /// 
 /// Message body for declaring a transaction id.
@@ -154,3 +160,5 @@ pub use txn_capability::TxnCapability;
 
 // 4.5.8 Transaction Error
 pub use txn_error::TransactionError;
+
+use crate::messaging::TargetArchetype;
