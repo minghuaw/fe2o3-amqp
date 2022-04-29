@@ -15,11 +15,11 @@ readme = "Readme.md"
 [features]
 
 default = [
-    # "primitive",
-    # "transport",
-    # "messaging",
-    # "transaction",
-    # "security",
+    "primitive",
+    "transport",
+    "messaging",
+    "transaction",
+    "security",
 ]
 
 primitive = []

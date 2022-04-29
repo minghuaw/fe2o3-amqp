@@ -5,6 +5,9 @@ use serde_amqp::primitives::{Boolean, UInt, ULong};
 
 use crate::definitions::{Error, Fields};
 
+#[cfg(feature = "transaction")]
+use crate::transaction::Declared;
+
 /// 3.4 Delivery State
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -14,6 +17,9 @@ pub enum DeliveryState {
     Released(Released),
     Modified(Modified),
     Received(Received),
+    
+    #[cfg(feature = "transaction")]
+    Declared(Declared),
 }
 
 impl DeliveryState {
@@ -24,6 +30,8 @@ impl DeliveryState {
             | DeliveryState::Rejected(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_) => true,
+            #[cfg(feature = "transaction")]
+            DeliveryState::Declared(_) => true,
             DeliveryState::Received(_) => false,
         }
     }
@@ -50,6 +58,8 @@ pub enum Outcome {
     Rejected(Rejected),
     Released(Released),
     Modified(Modified),
+    #[cfg(feature = "transaction")]
+    Declared(Declared),
 }
 
 mod outcome_impl;
