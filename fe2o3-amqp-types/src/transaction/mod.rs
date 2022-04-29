@@ -39,6 +39,26 @@ impl From<Coordinator> for TargetArchetype {
     }
 }
 
+/// ```rust
+/// Coordinator {
+///     capabilities: None,
+/// }
+/// ```
+impl Default for Coordinator {
+    fn default() -> Self {
+        Self { capabilities: None }
+    }
+}
+
+impl Coordinator {
+    /// Creates a new coordinator
+    pub fn new(capabilities: impl Into<Option<Vec<TxnCapability>>>) -> Self {
+        Self {
+            capabilities: capabilities.into()
+        }
+    }
+}
+
 /// 4.5.2 Declare
 /// 
 /// Message body for declaring a transaction id.
@@ -68,6 +88,15 @@ pub struct Declare {
     /// Note that the details of distributed transactions within AMQP 1.0 will be provided in a separate 
     /// specification.
     pub global_id: TransactionId,
+}
+
+impl Declare {
+    /// Creates a new [`Declare`]
+    pub fn new(global_id: impl Into<TransactionId>) -> Self {
+        Self {
+            global_id: global_id.into()
+        }
+    }
 }
 
 /// 4.5.3 Discharge

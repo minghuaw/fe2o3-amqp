@@ -267,7 +267,25 @@ impl Builder {
 
 #[cfg(test)]
 mod tests {
-    fn test_target_archetype() {
+    use serde_amqp::{to_vec, from_slice};
 
+    
+    use super::{Target, TargetArchetype};
+    
+    #[test]
+    fn test_target_archetype_variant_target() {
+        let target = Target::default();
+        let buf = to_vec(&target).unwrap();
+        let archetype: TargetArchetype = from_slice(&buf).unwrap();
+        println!("{:?}", archetype);
+    }
+    
+    #[test]
+    fn test_target_archetype_variant_coordinator() {
+        use crate::transaction::Coordinator;
+        let coordinator = Coordinator::new(None);
+        let buf = to_vec(&coordinator).unwrap();
+        let archetype: TargetArchetype = from_slice(&buf).unwrap();
+        println!("{:?}", archetype);
     }
 }
