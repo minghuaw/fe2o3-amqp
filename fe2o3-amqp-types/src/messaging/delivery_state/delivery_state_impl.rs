@@ -16,8 +16,12 @@ impl ser::Serialize for DeliveryState {
             DeliveryState::Released(value) => value.serialize(serializer),
             DeliveryState::Modified(value) => value.serialize(serializer),
             DeliveryState::Received(value) => value.serialize(serializer),
+
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(value) => value.serialize(serializer),
+
+            #[cfg(feature = "transaction")]
+            DeliveryState::TransactionalState(value) => value.serialize(serializer),
         }
     }
 }
@@ -28,8 +32,12 @@ enum Field {
     Released,
     Modified,
     Received,
+    
     #[cfg(feature = "transaction")]
     Declared,
+
+    #[cfg(feature = "transaction")]
+    TransactionalState,
 }
 
 struct FieldVisitor {}
@@ -51,8 +59,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:released:list" => Field::Released,
             "amqp:modified:list" => Field::Modified,
             "amqp:received:list" => Field::Received,
+            
             #[cfg(feature = "transaction")]
             "amqp:declared:list" => Field::Declared,
+            
+            #[cfg(feature = "transaction")]
+            "amqp:transactional-state:list" => Field::TransactionalState,
+            
             _ => return Err(de::Error::custom("Wrong symbol value for descriptor")),
         };
 
@@ -69,8 +82,13 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0025 => Field::Rejected,
             0x0000_0000_0000_0026 => Field::Released,
             0x0000_0000_0000_0027 => Field::Modified,
+            
             #[cfg(feature = "transaction")]
             0x0000_0000_0000_0033 => Field::Declared,
+            
+            #[cfg(feature = "transaction")]
+            0x0000_0000_0000_0034 => Field::TransactionalState,
+            
             _ => {
                 return Err(de::Error::custom(format!(
                     "Wrong code value for descriptor, found {:#x?}",
@@ -127,10 +145,17 @@ impl<'de> de::Visitor<'de> for Visitor {
                 let value = variant.newtype_variant()?;
                 Ok(DeliveryState::Received(value))
             }
+            
             #[cfg(feature = "transaction")]
             Field::Declared => {
                 let value = variant.newtype_variant()?;
                 Ok(DeliveryState::Declared(value))
+            }
+
+            #[cfg(feature = "transaction")]
+            Field::TransactionalState => {
+                let value = variant.newtype_variant()?;
+                Ok(DeliveryState::TransactionalState(value))
             }
         }
     }

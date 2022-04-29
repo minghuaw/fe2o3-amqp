@@ -7,6 +7,8 @@ use crate::definitions::{Error, Fields};
 
 #[cfg(feature = "transaction")]
 use crate::transaction::Declared;
+#[cfg(feature = "transaction")]
+use crate::transaction::TransactionalState;
 
 /// 3.4 Delivery State
 #[derive(Debug, Clone)]
@@ -17,9 +19,12 @@ pub enum DeliveryState {
     Released(Released),
     Modified(Modified),
     Received(Received),
-    
+
     #[cfg(feature = "transaction")]
     Declared(Declared),
+    
+    #[cfg(feature = "transaction")]
+    TransactionalState(TransactionalState),
 }
 
 impl DeliveryState {
@@ -30,9 +35,13 @@ impl DeliveryState {
             | DeliveryState::Rejected(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_) => true,
+            DeliveryState::Received(_) => false,
+
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) => true,
-            DeliveryState::Received(_) => false,
+
+            #[cfg(feature = "transaction")]
+            DeliveryState::TransactionalState(_) => false,
         }
     }
 }
