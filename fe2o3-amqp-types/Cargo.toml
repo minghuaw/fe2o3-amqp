@@ -14,7 +14,19 @@ readme = "Readme.md"
 
 [features]
 
-transaction = []
+default = [
+    # "primitive",
+    # "transport",
+    # "messaging",
+    # "transaction",
+    # "security",
+]
+
+primitive = []
+transport = ["primitive"]
+messaging = ["primitive", "transport"]
+transaction = ["primitive", "messaging"]
+security = ["primitive"]
 
 [dependencies]
 # serde_amqp = { version = "0.0.1", path = "../serde_amqp", features = ["derive"] }
