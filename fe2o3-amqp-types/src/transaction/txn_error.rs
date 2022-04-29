@@ -12,7 +12,7 @@ use serde_amqp::primitives::Symbol;
 ///     <choice name="transaction-rollback" value="amqp:transaction:rollback"/>
 ///     <choice name="transaction-timeout" value="amqp:transaction:timeout"/>
 /// </type>
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransactionError {
     /// amqp:transaction:unknown-id
     /// The specified txn-id does not exist.

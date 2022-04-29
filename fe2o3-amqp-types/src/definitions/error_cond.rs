@@ -4,6 +4,9 @@ use serde::{de, ser};
 
 use serde_amqp::primitives::Symbol;
 
+#[cfg(feature = "transaction")]
+use crate::transaction::TransactionError;
+
 use super::{AmqpError, ConnectionError, LinkError, SessionError};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,6 +17,9 @@ pub enum ErrorCondition {
     SessionError(SessionError),
     LinkError(LinkError),
     Custom(Symbol),
+
+    #[cfg(feature = "transaction")]
+    TransactionError(TransactionError),
 }
 
 impl ser::Serialize for ErrorCondition {
@@ -27,6 +33,9 @@ impl ser::Serialize for ErrorCondition {
             Self::SessionError(err) => err.serialize(serializer),
             Self::LinkError(err) => err.serialize(serializer),
             Self::Custom(err) => err.serialize(serializer),
+            
+            #[cfg(feature = "transaction")]
+            Self::TransactionError(err) => err.serialize(serializer),
         }
     }
 }
@@ -92,6 +101,11 @@ impl<'de> de::Deserialize<'de> for ErrorCondition {
         };
         let v = match LinkError::try_from(v) {
             Ok(val) => return Ok(ErrorCondition::LinkError(val)),
+            Err(e) => e,
+        };
+        #[cfg(feature = "transaction")]
+        let v = match TransactionError::try_from(v) {
+            Ok(val) => return Ok(ErrorCondition::TransactionError(val)),
             Err(e) => e,
         };
         Ok(ErrorCondition::Custom(Symbol::from(v)))
