@@ -124,6 +124,9 @@ pub mod transport;
 #[cfg(feature = "acceptor")]
 pub mod acceptor;
 
+#[cfg(feature = "transaction")]
+pub mod transaction;
+
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`
     pub use fe2o3_amqp_types::*;

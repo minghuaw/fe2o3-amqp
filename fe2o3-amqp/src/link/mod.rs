@@ -98,6 +98,8 @@ pub mod role {
 /// R: role
 ///
 /// F: link flow state
+/// 
+/// M: unsettledMessage type
 #[derive(Debug)]
 pub struct Link<R, F, M> {
     pub(crate) role: PhantomData<R>,
