@@ -17,7 +17,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
+    messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -232,7 +232,14 @@ where
             // Remote attach is from receiver
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
-                self.target = remote_attach.target;
+                match remote_attach.target {
+                    Some(TargetArchetype::Target(target)) => self.target = Some(target),
+                    #[cfg(feature = "transaction")]
+                    Some(TargetArchetype::Coordinator(_)) => return Err(AttachError::Local(
+                        definitions::Error::new(AmqpError::NotImplemented, "Coordinator is not implemented".to_string(), None)
+                    )),
+                    None => return Err(AttachError::TargetIsNone)
+                }
                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
                 // initiates the attach exchange and the sender supports the desired mode
                 self.rcv_settle_mode = remote_attach.rcv_settle_mode;
@@ -320,7 +327,7 @@ where
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
             source: self.source.clone(),
-            target: self.target.clone(),
+            target: self.target.clone().map(Into::into),
             unsettled,
             incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?
 

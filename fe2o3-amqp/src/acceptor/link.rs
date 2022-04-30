@@ -12,7 +12,7 @@ use std::{
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo},
-    messaging::DeliveryState,
+    messaging::{DeliveryState},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -276,6 +276,14 @@ impl LinkAcceptor {
         )
         .await?;
 
+        // let target = match &remote_attach.target {
+        //     Some(TargetArchetype::Target(target)) => Some(target.clone()),
+        //     Some(TargetArchetype::Coordinator(_)) => return Err(AttachError::Local(
+        //         definitions::Error::new(AmqpError::NotImplemented, "Coordinator is not implemented".to_string(), None)
+        //     )),
+        //     None => return Err(AttachError::TargetIsNone)
+        // };
+
         let mut link = link::Link::<role::Receiver, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
@@ -283,10 +291,10 @@ impl LinkAcceptor {
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // will be set in `on_incoming_attach`
-            snd_settle_mode: remote_attach.snd_settle_mode.clone(),
+            snd_settle_mode: Default::default(), // Will take value from incoming attach
             rcv_settle_mode,
-            source: remote_attach.source.clone(),
-            target: remote_attach.target.clone(),
+            source: None, // Will take value from incoming attach
+            target: None, // Will take value from incoming attach
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
@@ -381,9 +389,9 @@ impl LinkAcceptor {
             output_handle: Some(output_handle),
             input_handle: None, // this will be set in `on_incoming_attach`
             snd_settle_mode,
-            rcv_settle_mode: remote_attach.rcv_settle_mode.clone(),
-            source: remote_attach.source.clone(),
-            target: remote_attach.target.clone(),
+            rcv_settle_mode: Default::default(), // Will take value from incoming attach
+            source: None, // Will take value from incoming attach
+            target: None, // Will take value from incoming attach
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),

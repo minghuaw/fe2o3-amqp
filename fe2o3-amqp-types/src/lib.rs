@@ -2,7 +2,7 @@
 
 //! Implements AMQP1.0 data types as defined in the core [specification](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-overview-v1.0-os.html).
 //! 
-//! Feature flags
+//! # Feature flags
 //! 
 //! Please note that `Performative` will require both `"transport"` and `"messaging"` feature flags 
 //! enabled.

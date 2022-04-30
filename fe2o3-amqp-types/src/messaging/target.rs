@@ -280,6 +280,7 @@ mod tests {
         println!("{:?}", archetype);
     }
     
+    #[cfg(feature = "transaction")]
     #[test]
     fn test_target_archetype_variant_coordinator() {
         use crate::transaction::Coordinator;

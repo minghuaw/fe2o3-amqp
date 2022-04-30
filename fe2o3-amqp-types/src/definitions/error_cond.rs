@@ -116,7 +116,7 @@ impl<'de> de::Deserialize<'de> for ErrorCondition {
 mod tests {
     use serde_amqp::{format_code::EncodingCodes, from_slice};
 
-    use crate::definitions::AmqpError;
+    use crate::{definitions::AmqpError};
 
     use super::ErrorCondition;
 
@@ -129,5 +129,14 @@ mod tests {
 
         let deserialized: ErrorCondition = from_slice(&buf).unwrap();
         assert_eq!(expected, deserialized);
+    }
+
+    #[cfg(feature = "transaction")]
+    #[test]
+    fn test_transaction_error_condition() {
+        use crate::transaction::TransactionError;
+        
+        let err = TransactionError::Timeout;
+        let err = ErrorCondition::TransactionError(err);
     }
 }
