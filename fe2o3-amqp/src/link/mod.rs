@@ -41,7 +41,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
 use crate::{
-    endpoint::{self, LinkFlow, ReceiverLink, Settlement},
+    endpoint::{self, LinkFlow, Settlement},
     link::{self, delivery::UnsettledMessage},
     util::{Consumer, Producer},
     Payload,
@@ -57,6 +57,12 @@ pub const DEFAULT_CREDIT: SequenceNo = 200;
 
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
+
+/// Type alias for sender link that ONLY represents the inner state of a Sender
+pub(crate) type SenderLink = Link<role::Sender, Target, SenderFlowState, UnsettledMessage>;
+
+/// Type alias for receiver link that ONLY represents the inner state of receiver
+pub(crate) type ReceiverLink = Link<role::Receiver, Target, ReceiverFlowState, DeliveryState>;
 
 const CLOSED: u8 = 0b0000_0100;
 const DETACHED: u8 = 0b0000_0010;
@@ -96,12 +102,14 @@ pub mod role {
 /// # Type Parameters
 ///
 /// R: role
+/// 
+/// T: target
 ///
 /// F: link flow state
 /// 
 /// M: unsettledMessage type
 #[derive(Debug)]
-pub struct Link<R, F, M> {
+pub struct Link<R, T, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
@@ -117,7 +125,7 @@ pub struct Link<R, F, M> {
     pub(crate) rcv_settle_mode: ReceiverSettleMode,
 
     pub(crate) source: Option<Source>, // TODO: Option?
-    pub(crate) target: Option<Target>, // TODO: Option?
+    pub(crate) target: Option<T>, // TODO: Option?
 
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
@@ -135,7 +143,7 @@ pub struct Link<R, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
-impl<R, F, M> Link<R, F, M> {
+impl<R, F, M> Link<R, Target, F, M> {
     pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
     where
         R: role::IntoRole + Send + Sync,
@@ -156,7 +164,7 @@ impl<R, F, M> Link<R, F, M> {
 
 #[async_trait]
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
-impl<R, F, M> endpoint::Link for Link<R, F, M>
+impl<R, F, M> endpoint::Link for Link<R, Target, F, M>
 where
     R: role::IntoRole + Send + Sync,
     F: AsRef<LinkFlowState<R>> + Send + Sync,

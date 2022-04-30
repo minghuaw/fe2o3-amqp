@@ -305,7 +305,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         output_handle: Handle,
         flow_state_consumer: C,
         state_code: Arc<AtomicU8>,
-    ) -> Link<Role, C, M> {
+    ) -> Link<Role, Target, C, M> {
         let local_state = LinkState::Unattached;
 
         let max_message_size = match self.max_message_size {
@@ -314,7 +314,7 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         };
 
         // Create a link
-        Link::<Role, C, M> {
+        Link::<Role, Target, C, M> {
             role: PhantomData,
             local_state,
             state_code,

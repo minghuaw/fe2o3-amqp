@@ -17,7 +17,7 @@ const AMQP_VAL_CODE: u8 = 0x77;
 const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
-impl ReceiverLink for Link<role::Receiver, ReceiverFlowState, DeliveryState> {
+impl endpoint::ReceiverLink for ReceiverLink {
     type Error = link::Error;
 
     /// Set and send flow state

@@ -12,7 +12,7 @@ use std::{
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo},
-    messaging::{DeliveryState},
+    messaging::{DeliveryState, Target},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -284,7 +284,7 @@ impl LinkAcceptor {
         //     None => return Err(AttachError::TargetIsNone)
         // };
 
-        let mut link = link::Link::<role::Receiver, ReceiverFlowState, DeliveryState> {
+        let mut link = link::Link::<role::Receiver, Target, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
             state_code,
@@ -381,7 +381,7 @@ impl LinkAcceptor {
         )
         .await?;
 
-        let mut link = link::Link::<role::Sender, SenderFlowState, UnsettledMessage> {
+        let mut link = link::Link::<role::Sender, Target, SenderFlowState, UnsettledMessage> {
             role: PhantomData,
             local_state: LinkState::Unattached, // will be set in `on_incoming_attach`
             state_code,

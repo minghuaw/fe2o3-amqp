@@ -6,7 +6,7 @@ use crate::link::error::DetachError;
 use super::*;
 
 #[async_trait]
-impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
+impl endpoint::SenderLink for SenderLink {
     type Error = link::Error;
 
     /// Set and send flow state

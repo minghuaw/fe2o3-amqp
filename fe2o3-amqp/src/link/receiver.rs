@@ -1,7 +1,5 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::sync::Arc;
-
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
@@ -25,10 +23,9 @@ use super::{
     builder::{self, WithTarget, WithoutName},
     delivery::Delivery,
     error::{AttachError, DetachError},
-    receiver_link::section_number_and_offset,
+    receiver_link::{section_number_and_offset},
     role,
-    state::LinkFlowState,
-    Error, LinkFrame, LinkHandle, DEFAULT_CREDIT,
+    Error, LinkFrame, LinkHandle, DEFAULT_CREDIT, ReceiverLink,
 };
 
 macro_rules! or_assign {
@@ -142,9 +139,6 @@ impl IncompleteTransfer {
         self.buffer.extend(other);
     }
 }
-
-type ReceiverFlowState = LinkFlowState<role::Receiver>;
-type ReceiverLink = super::Link<role::Receiver, Arc<ReceiverFlowState>, DeliveryState>;
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]

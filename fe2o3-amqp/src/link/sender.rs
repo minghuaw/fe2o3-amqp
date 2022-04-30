@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 sender
 
-use std::{sync::Arc, time::Duration};
+use std::{time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
@@ -22,20 +22,15 @@ use crate::{
     endpoint::{Link, Settlement},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
-    util::Consumer,
 };
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
-    delivery::{DeliveryFut, Sendable, UnsettledMessage},
+    delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
     role,
-    state::LinkFlowState,
-    Error, LinkFrame, LinkHandle,
+    Error, LinkFrame, LinkHandle, SenderLink,
 };
-
-type SenderFlowState = LinkFlowState<role::Sender>;
-type SenderLink = super::Link<role::Sender, Consumer<Arc<SenderFlowState>>, UnsettledMessage>;
 
 /// An AMQP1.0 sender
 ///
