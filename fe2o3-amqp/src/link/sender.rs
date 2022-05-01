@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{Link, Settlement, self},
+    endpoint::{self, Link, Settlement},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };
@@ -72,7 +72,7 @@ use super::{
 ///     .unwrap();
 /// ```
 pub struct Sender {
-    pub(crate) inner: SenderInner<SenderLink>
+    pub(crate) inner: SenderInner<SenderLink>,
 }
 
 impl std::fmt::Debug for Sender {
@@ -190,12 +190,13 @@ impl Sender {
                     DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
                     DeliveryState::Released(released) => Err(Error::Released(released)),
                     DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
-                    DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => Err(Error::not_implemented()),
+                    DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+                        Err(Error::not_implemented())
+                    }
                 }
             }
         }
     }
-
 
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
     ///
@@ -471,7 +472,7 @@ impl SenderInner<SenderLink> {
     }
 }
 
-impl<L> SenderInner<L> 
+impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<Error = Error>,
 {

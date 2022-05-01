@@ -26,8 +26,9 @@ use super::{
     error::AttachError,
     receiver::CreditMode,
     role,
+    sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender, sender::SenderInner,
+    Receiver, Sender,
 };
 
 /// Type state for link::builder::Builder;

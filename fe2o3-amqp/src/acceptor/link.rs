@@ -387,7 +387,8 @@ impl LinkAcceptor {
         )
         .await?;
 
-        let source = *(&remote_attach).source
+        let source = *(&remote_attach)
+            .source
             .clone()
             .ok_or(AttachError::SourceIsNone)?;
 

@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
-use std::{future::Future, task::Poll, marker::PhantomData};
+use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{endpoint::Settlement, util::Uninitialized};
@@ -270,7 +270,10 @@ pin_project! {
 
 impl<O> From<Settlement> for DeliveryFut<O> {
     fn from(settlement: Settlement) -> Self {
-        Self { settlement, outcome_marker: PhantomData }
+        Self {
+            settlement,
+            outcome_marker: PhantomData,
+        }
     }
 }
 
@@ -307,24 +310,18 @@ impl FromSettled for NonTransactionalResult {
 impl FromDeliveryState for NonTransactionalResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
-            DeliveryState::Accepted(_) | DeliveryState::Received(_) => {
-                Ok(())
+            DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+            DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
+            DeliveryState::Released(released) => Err(link::Error::Released(released)),
+            DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
+            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+                Err(link::Error::not_implemented())
             }
-            DeliveryState::Rejected(rejected) => {
-                Err(link::Error::Rejected(rejected))
-            }
-            DeliveryState::Released(released) => {
-                Err(link::Error::Released(released))
-            }
-            DeliveryState::Modified(modified) => {
-                Err(link::Error::Modified(modified))
-            }
-            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => Err(link::Error::not_implemented()),
         }
     }
 }
 
-impl<O> Future for DeliveryFut<O> 
+impl<O> Future for DeliveryFut<O>
 where
     O: FromSettled + FromDeliveryState + FromRecvError,
 {
@@ -347,9 +344,7 @@ where
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(result) => {
                         match result {
-                            Ok(state) => {
-                                Poll::Ready(O::from_delivery_state(state))
-                            }
+                            Ok(state) => Poll::Ready(O::from_delivery_state(state)),
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user

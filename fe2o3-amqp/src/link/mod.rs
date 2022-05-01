@@ -218,8 +218,7 @@ where
                 // In this case, the sender is considered to hold the authoritative version of the
                 // version of the source properties
 
-                let source = *remote_attach.source
-                    .ok_or(AttachError::SourceIsNone)?;
+                let source = *remote_attach.source.ok_or(AttachError::SourceIsNone)?;
                 self.source = Some(source);
 
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
@@ -252,12 +251,12 @@ where
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 let target = match remote_attach.target {
                     Some(t) => Target::try_from(*t).map_err(|_| {
-                            AttachError::Local(definitions::Error::new(
-                                AmqpError::NotImplemented,
-                                "Coordinator is not implemented".to_string(),
-                                None,
-                            ))
-                        })?,
+                        AttachError::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            "Coordinator is not implemented".to_string(),
+                            None,
+                        ))
+                    })?,
                     None => return Err(AttachError::TargetIsNone),
                 };
                 self.target = Some(target);
