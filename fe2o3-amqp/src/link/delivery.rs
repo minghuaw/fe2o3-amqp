@@ -286,6 +286,16 @@ trait FromRecvError {
     fn from_recv_error(err: RecvError) -> Self;
 }
 
+impl<T> FromRecvError for Result<T, link::Error> {
+    fn from_recv_error(_: RecvError) -> Self {
+        Err(link::Error::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Outcome sender is dropped".into()),
+            None,
+        )))
+    }
+}
+
 type NonTransactionalResult = Result<(), link::Error>;
 
 impl FromSettled for NonTransactionalResult {
@@ -311,16 +321,6 @@ impl FromDeliveryState for NonTransactionalResult {
             }
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => Err(link::Error::not_implemented()),
         }
-    }
-}
-
-impl FromRecvError for NonTransactionalResult {
-    fn from_recv_error(_: RecvError) -> Self {
-        Err(link::Error::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Outcome sender is dropped".into()),
-            None,
-        )))
     }
 }
 
