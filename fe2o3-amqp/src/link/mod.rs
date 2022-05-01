@@ -17,7 +17,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
+    messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
