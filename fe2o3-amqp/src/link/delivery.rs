@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::BodySection, DeliveryState, Message, Received},
+    messaging::{message::BodySection, DeliveryState, Message, Received}, transaction::TransactionId,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -299,15 +299,15 @@ impl<T> FromRecvError for Result<T, link::Error> {
     }
 }
 
-type NonTransactionalResult = Result<(), link::Error>;
+type NonTxnResult = Result<(), link::Error>;
 
-impl FromSettled for NonTransactionalResult {
+impl FromSettled for NonTxnResult {
     fn from_settled() -> Self {
         Ok(())
     }
 }
 
-impl FromDeliveryState for NonTransactionalResult {
+impl FromDeliveryState for NonTxnResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
@@ -320,6 +320,10 @@ impl FromDeliveryState for NonTransactionalResult {
         }
     }
 }
+
+// type TxnDeclareResult = Result<TransactionId, link::Error>;
+
+type TxnResult = Result<TransactionId, link::Error>;
 
 impl<O> Future for DeliveryFut<O>
 where
