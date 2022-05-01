@@ -26,7 +26,7 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem},
-        Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE, AllocLinkError,
+        AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
     Payload,

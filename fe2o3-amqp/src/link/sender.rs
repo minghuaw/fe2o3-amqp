@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 sender
 
-use std::{time::Duration};
+use std::time::Duration;
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
@@ -28,8 +28,7 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role,
-    Error, LinkFrame, LinkHandle, SenderLink,
+    role, Error, LinkFrame, LinkHandle, SenderLink,
 };
 
 /// An AMQP1.0 sender

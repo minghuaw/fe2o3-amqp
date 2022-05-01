@@ -23,9 +23,8 @@ use super::{
     builder::{self, WithTarget, WithoutName},
     delivery::Delivery,
     error::{AttachError, DetachError},
-    receiver_link::{section_number_and_offset},
-    role,
-    Error, LinkFrame, LinkHandle, DEFAULT_CREDIT, ReceiverLink,
+    receiver_link::section_number_and_offset,
+    role, Error, LinkFrame, LinkHandle, ReceiverLink, DEFAULT_CREDIT,
 };
 
 macro_rules! or_assign {

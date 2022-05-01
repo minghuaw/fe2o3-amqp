@@ -62,8 +62,7 @@ pub struct SessionHandle<R> {
 
 impl<R> std::fmt::Debug for SessionHandle<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SessionHandle")
-            .finish()
+        f.debug_struct("SessionHandle").finish()
     }
 }
 

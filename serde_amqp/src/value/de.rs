@@ -13,10 +13,7 @@ use crate::{
     },
     error::Error,
     format_code::EncodingCodes,
-    util::{
-        EnumType,
-        NewType,
-    }, 
+    util::{EnumType, NewType},
 };
 
 use super::Value;
@@ -139,15 +136,13 @@ impl<'de> de::Deserialize<'de> for Field {
 
 #[cfg(feature = "json")]
 struct SeqValueSeed<'a> {
-    visitor_type: &'a mut SeqVisitorType
+    visitor_type: &'a mut SeqVisitorType,
 }
 
 #[cfg(feature = "json")]
 impl<'a> SeqValueSeed<'a> {
     pub fn new(visitor_type: &'a mut SeqVisitorType) -> Self {
-        Self {
-            visitor_type
-        }
+        Self { visitor_type }
     }
 }
 
@@ -157,12 +152,16 @@ impl<'a, 'de: 'a> de::DeserializeSeed<'de> for SeqValueSeed<'a> {
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        let value = deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
-            #[cfg(feature = "json")]
-            visitor_type: SeqVisitorType::Sequence
-        })?;
+        let value = deserializer.deserialize_enum(
+            VALUE,
+            VARIANTS,
+            ValueVisitor {
+                #[cfg(feature = "json")]
+                visitor_type: SeqVisitorType::Sequence,
+            },
+        )?;
 
         if let Value::Described(_) = &value {
             *self.visitor_type = SeqVisitorType::Described;
@@ -180,7 +179,7 @@ enum SeqVisitorType {
 
 struct ValueVisitor {
     #[cfg(feature = "json")]
-    visitor_type: SeqVisitorType
+    visitor_type: SeqVisitorType,
 }
 
 impl<'de> de::Visitor<'de> for ValueVisitor {
@@ -451,8 +450,8 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
         let seed = SeqValueSeed::new(&mut self.visitor_type);
         let value = seq.next_element_seed(seed)?;
         let value = match value {
-            Some(value) => value, 
-            None => return Ok(Value::List(Vec::with_capacity(0)))
+            Some(value) => value,
+            None => return Ok(Value::List(Vec::with_capacity(0))),
         };
 
         // Test whether we are dealing with a Described value
@@ -472,7 +471,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
 
         match all_the_same_type {
             true => Ok(Value::Array(crate::primitives::Array(buf))),
-            false => Ok(Value::List(buf))
+            false => Ok(Value::List(buf)),
         }
     }
 
@@ -495,19 +494,23 @@ impl<'de> de::Deserialize<'de> for Value {
     {
         #[cfg(not(feature = "json"))]
         {
-            deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor { })
+            deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {})
         }
 
         #[cfg(feature = "json")]
         {
             if deserializer.is_human_readable() {
                 deserializer.deserialize_any(ValueVisitor {
-                    visitor_type: SeqVisitorType::Sequence
-                })
-            } else {
-                deserializer.deserialize_enum(VALUE, VARIANTS, ValueVisitor {
                     visitor_type: SeqVisitorType::Sequence,
                 })
+            } else {
+                deserializer.deserialize_enum(
+                    VALUE,
+                    VARIANTS,
+                    ValueVisitor {
+                        visitor_type: SeqVisitorType::Sequence,
+                    },
+                )
             }
         }
     }
@@ -1338,10 +1341,7 @@ mod tests {
         let value: Value = from_slice(&buf).unwrap();
         let expected_bar = Value::Described(Described {
             descriptor: Descriptor::Code(0x31),
-            value: Box::new(Value::List(vec![
-                Value::Int(13),
-                expected_foo
-            ]))
+            value: Box::new(Value::List(vec![Value::Int(13), expected_foo])),
         });
         assert_eq!(value, expected_bar);
     }
@@ -1359,7 +1359,7 @@ mod tests {
     #[test]
     fn test_json_array() {
         use crate::primitives::Array;
-        
+
         let value = Value::Array(Array(vec![Value::Bool(true), Value::Bool(false)]));
         let json = serde_json::to_string(&value).unwrap();
         println!("{:?}", json);

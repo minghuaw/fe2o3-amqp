@@ -385,18 +385,20 @@ impl From<serde_json::Value> for Value {
                 } else if n.is_u64() {
                     Value::ULong(n.as_u64().expect("serde_json guaranteed this to be u64"))
                 } else {
-                    Value::Double(OrderedFloat(n.as_f64().expect("serde_json guaranteed this to be f64")))
+                    Value::Double(OrderedFloat(
+                        n.as_f64().expect("serde_json guaranteed this to be f64"),
+                    ))
                 }
-            },
+            }
             serde_json::Value::String(s) => Value::String(s),
             serde_json::Value::Array(a) => {
                 let v: Vec<Value> = a.into_iter().map(|value| Value::from(value)).collect();
                 Value::List(v)
-            },
+            }
             serde_json::Value::Object(o) => Value::Map(
-                o.into_iter().map(|(key, value)| {
-                    (Value::String(key), Value::from(value))
-                }).collect()
+                o.into_iter()
+                    .map(|(key, value)| (Value::String(key), Value::from(value)))
+                    .collect(),
             ),
         }
     }

@@ -63,8 +63,7 @@ pub struct ConnectionHandle<R> {
 
 impl<R> std::fmt::Debug for ConnectionHandle<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConnectionHandle")
-            .finish()
+        f.debug_struct("ConnectionHandle").finish()
     }
 }
 

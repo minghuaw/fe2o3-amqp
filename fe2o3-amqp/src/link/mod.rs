@@ -102,11 +102,11 @@ pub mod role {
 /// # Type Parameters
 ///
 /// R: role
-/// 
+///
 /// T: target
 ///
 /// F: link flow state
-/// 
+///
 /// M: unsettledMessage type
 #[derive(Debug)]
 pub struct Link<R, T, F, M> {
@@ -125,7 +125,7 @@ pub struct Link<R, T, F, M> {
     pub(crate) rcv_settle_mode: ReceiverSettleMode,
 
     pub(crate) source: Option<Source>, // TODO: Option?
-    pub(crate) target: Option<T>, // TODO: Option?
+    pub(crate) target: Option<T>,      // TODO: Option?
 
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
@@ -245,10 +245,14 @@ where
                 match remote_attach.target {
                     Some(TargetArchetype::Target(target)) => self.target = Some(target),
                     #[cfg(feature = "transaction")]
-                    Some(TargetArchetype::Coordinator(_)) => return Err(AttachError::Local(
-                        definitions::Error::new(AmqpError::NotImplemented, "Coordinator is not implemented".to_string(), None)
-                    )),
-                    None => return Err(AttachError::TargetIsNone)
+                    Some(TargetArchetype::Coordinator(_)) => {
+                        return Err(AttachError::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            "Coordinator is not implemented".to_string(),
+                            None,
+                        )))
+                    }
+                    None => return Err(AttachError::TargetIsNone),
                 }
                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
                 // initiates the attach exchange and the sender supports the desired mode

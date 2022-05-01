@@ -390,8 +390,8 @@ impl LinkAcceptor {
             input_handle: None, // this will be set in `on_incoming_attach`
             snd_settle_mode,
             rcv_settle_mode: Default::default(), // Will take value from incoming attach
-            source: None, // Will take value from incoming attach
-            target: None, // Will take value from incoming attach
+            source: None,                        // Will take value from incoming attach
+            target: None,                        // Will take value from incoming attach
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
