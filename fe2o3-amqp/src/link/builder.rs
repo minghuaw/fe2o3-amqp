@@ -27,7 +27,7 @@ use super::{
     receiver::CreditMode,
     role,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender,
+    Receiver, Sender, sender::SenderInner,
 };
 
 /// Type state for link::builder::Builder;
@@ -415,7 +415,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             })?;
 
         // Attach completed, return Sender
-        let sender = Sender {
+        let inner = SenderInner {
             link,
             buffer_size,
             session: session.control.clone(),
@@ -423,7 +423,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             incoming: reader,
             // marker: PhantomData,
         };
-        Ok(sender)
+        Ok(Sender { inner })
     }
 }
 

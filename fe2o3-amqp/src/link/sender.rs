@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{Link, Settlement},
+    endpoint::{Link, Settlement, self},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };
@@ -71,10 +71,181 @@ use super::{
 ///     .await
 ///     .unwrap();
 /// ```
-#[derive(Debug)]
 pub struct Sender {
+    pub(crate) inner: SenderInner<SenderLink>
+}
+
+impl std::fmt::Debug for Sender {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sender")
+            // .field("inner", &self.inner)
+            .finish()
+    }
+}
+
+impl Sender {
+    /// Creates a builder for [`Sender`] link
+    pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
+        builder::Builder::<role::Sender, _, _>::new()
+    }
+
+    /// Attach the sender link to a session with default configuration
+    ///
+    /// ## Default configuration
+    ///
+    /// | Field | Default Value |
+    /// |-------|---------------|
+    /// |`name`|`String::default()`|
+    /// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
+    /// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
+    /// |`source`|`Some(Source)` |
+    /// |`target`| `None` |
+    /// |`initial_delivery_count`| `0` |
+    /// |`max_message_size`| `None` |
+    /// |`offered_capabilities`| `None` |
+    /// |`desired_capabilities`| `None` |
+    /// |`Properties`| `None` |
+    /// |`buffer_size`| `u16::MAX` |
+    /// |`role`| `role::Sender` |
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let sender = Sender::attach(
+    ///     &mut session,           // mutable reference to SessionHandle
+    ///     "rust-sender-link-1",   // link name
+    ///     "q1"                    // Target address
+    /// ).await.unwrap();
+    /// ```
+    ///
+    pub async fn attach<R>(
+        session: &mut SessionHandle<R>,
+        name: impl Into<String>,
+        addr: impl Into<Address>,
+    ) -> Result<Sender, AttachError> {
+        Self::builder()
+            .name(name)
+            .target(addr)
+            .attach(session)
+            .await
+    }
+
+    /// Detach the link
+    ///
+    /// The Sender will send a detach frame with closed field set to false,
+    /// and wait for a detach with closed field set to false from the remote peer.
+    ///
+    /// # Error
+    ///
+    /// If the remote peer sends a detach frame with closed field set to true,
+    /// the Sender will re-attach and send a closing detach
+    pub async fn detach(&mut self) -> Result<(), DetachError> {
+        self.inner.detach().await
+    }
+
+    /// Detach the link with a timeout
+    pub async fn detach_with_timeout(
+        &mut self,
+        duration: impl Into<Duration>,
+    ) -> Result<Result<(), DetachError>, Elapsed> {
+        timeout(duration.into(), self.detach()).await
+    }
+
+    /// Close the link.
+    ///
+    /// This will set the `closed` field in the Detach performative to true
+    pub async fn close(&mut self) -> Result<(), DetachError> {
+        self.inner.close().await
+    }
+
+    /// Send a message and wait for acknowledgement (disposition)
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// sender.send("hello").await.unwrap();
+    /// ```
+    pub async fn send<T: serde::Serialize>(
+        &mut self,
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<(), Error> {
+        let settlement = self.inner.send(sendable.into()).await?;
+
+        // If not settled, must wait for outcome
+        match settlement {
+            Settlement::Settled => Ok(()),
+            Settlement::Unsettled {
+                _delivery_tag: _,
+                outcome,
+            } => {
+                let state = outcome.await.map_err(|_| {
+                    Error::Local(definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Delivery outcome sender has dropped".into()),
+                        None,
+                    ))
+                })?;
+                match state {
+                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+                    DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
+                    DeliveryState::Released(released) => Err(Error::Released(released)),
+                    DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
+                }
+            }
+        }
+    }
+
+
+    /// Send a message and wait for acknowledgement (disposition) with a timeout.
+    ///
+    /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
+    pub async fn send_with_timeout<T: serde::Serialize>(
+        &mut self,
+        sendable: impl Into<Sendable<T>>,
+        duration: impl Into<Duration>,
+    ) -> Result<Result<(), Error>, Elapsed> {
+        timeout(duration.into(), self.send(sendable)).await
+    }
+
+    /// Send a message without waiting for the acknowledgement.
+    ///
+    /// This will set the batchable field of the `Transfer` performative to true.
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
+    /// let result = fut.await;
+    /// println!("fut {:?}", result);
+    /// ```
+    pub async fn send_batchable<T: serde::Serialize>(
+        &mut self,
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<DeliveryFut, Error> {
+        let settlement = self.inner.send(sendable.into()).await?;
+
+        Ok(DeliveryFut::from(settlement))
+    }
+
+    /// Send a message without waiting for the acknowledgement with a timeout.
+    ///
+    /// This will set the batchable field of the `Transfer` performative to true.
+    pub async fn send_batchable_with_timeout<T: serde::Serialize>(
+        &mut self,
+        sendable: impl Into<Sendable<T>>,
+        duration: impl Into<Duration>,
+    ) -> Result<Timeout<DeliveryFut>, Error> {
+        let fut = self.send_batchable(sendable).await?;
+        Ok(timeout(duration.into(), fut))
+    }
+}
+
+/// This is so that the transaction controller can re-use
+/// the sender
+#[derive(Debug)]
+pub(crate) struct SenderInner<L: endpoint::SenderLink> {
     // The SenderLink manages the state
-    pub(crate) link: SenderLink,
+    pub(crate) link: L,
     pub(crate) buffer_size: usize,
 
     // Control sender to the session
@@ -85,12 +256,12 @@ pub struct Sender {
     pub(crate) incoming: ReceiverStream<LinkFrame>,
 }
 
-impl Drop for Sender {
+impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle.clone() {
+        if let Some(handle) = self.link.output_handle() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
-                    handle,
+                    handle: handle.clone(),
                     closed: true,
                     error: None,
                 };
@@ -100,12 +271,7 @@ impl Drop for Sender {
     }
 }
 
-impl Sender {
-    /// Creates a builder for [`Sender`] link
-    pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
-        builder::Builder::<role::Sender, _, _>::new()
-    }
-
+impl SenderInner<SenderLink> {
     // // Re-attach the link
     // pub async fn reattach(self, session: &mut SessionHandle) -> Result<Sender<Attached>, Error> {
     //     self.reattach_inner(session.control.clone()).await
@@ -155,178 +321,6 @@ impl Sender {
         Ok(self)
     }
 
-    /// Attach the sender link to a session with default configuration
-    ///
-    /// ## Default configuration
-    ///
-    /// | Field | Default Value |
-    /// |-------|---------------|
-    /// |`name`|`String::default()`|
-    /// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
-    /// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
-    /// |`source`|`Some(Source)` |
-    /// |`target`| `None` |
-    /// |`initial_delivery_count`| `0` |
-    /// |`max_message_size`| `None` |
-    /// |`offered_capabilities`| `None` |
-    /// |`desired_capabilities`| `None` |
-    /// |`Properties`| `None` |
-    /// |`buffer_size`| `u16::MAX` |
-    /// |`role`| `role::Sender` |
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// let sender = Sender::attach(
-    ///     &mut session,           // mutable reference to SessionHandle
-    ///     "rust-sender-link-1",   // link name
-    ///     "q1"                    // Target address
-    /// ).await.unwrap();
-    /// ```
-    ///
-    pub async fn attach<R>(
-        session: &mut SessionHandle<R>,
-        name: impl Into<String>,
-        addr: impl Into<Address>,
-    ) -> Result<Sender, AttachError> {
-        Self::builder()
-            .name(name)
-            .target(addr)
-            .attach(session)
-            .await
-    }
-}
-
-impl Sender {
-    async fn send_inner<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
-    where
-        T: serde::Serialize,
-    {
-        use bytes::BufMut;
-        use serde::Serialize;
-        use serde_amqp::ser::Serializer;
-
-        use crate::endpoint::SenderLink;
-
-        let Sendable {
-            message,
-            message_format,
-            settled,
-        } = sendable.into();
-        // .try_into().map_err(Into::into)?;
-
-        // serialize message
-        let mut payload = BytesMut::new();
-        let mut serializer = Serializer::from((&mut payload).writer());
-        Serializable(message).serialize(&mut serializer)?;
-        // let payload = BytesMut::from(payload);
-        let payload = payload.freeze();
-
-        // send a transfer, checking state will be implemented in SenderLink
-        let detached_fut = self.incoming.next();
-        let settlement = self
-            .link
-            .send_transfer(
-                &mut self.outgoing,
-                detached_fut,
-                payload,
-                message_format,
-                settled,
-                false,
-            )
-            .await?;
-        Ok(settlement)
-    }
-
-    /// Send a message and wait for acknowledgement (disposition)
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// sender.send("hello").await.unwrap();
-    /// ```
-    pub async fn send<T: serde::Serialize>(
-        &mut self,
-        sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), Error> {
-        let settlement = self.send_inner(sendable.into()).await?;
-
-        // If not settled, must wait for outcome
-        match settlement {
-            Settlement::Settled => Ok(()),
-            Settlement::Unsettled {
-                _delivery_tag: _,
-                outcome,
-            } => {
-                let state = outcome.await.map_err(|_| {
-                    Error::Local(definitions::Error::new(
-                        AmqpError::IllegalState,
-                        Some("Delivery outcome sender has dropped".into()),
-                        None,
-                    ))
-                })?;
-                match state {
-                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-                    DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
-                    DeliveryState::Released(released) => Err(Error::Released(released)),
-                    DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
-                }
-            }
-        }
-    }
-
-    /// Send a message and wait for acknowledgement (disposition) with a timeout.
-    ///
-    /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
-    pub async fn send_with_timeout<T: serde::Serialize>(
-        &mut self,
-        sendable: impl Into<Sendable<T>>,
-        duration: impl Into<Duration>,
-    ) -> Result<Result<(), Error>, Elapsed> {
-        timeout(duration.into(), self.send(sendable)).await
-    }
-
-    /// Send a message without waiting for the acknowledgement.
-    ///
-    /// This will set the batchable field of the `Transfer` performative to true.
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
-    /// let result = fut.await;
-    /// println!("fut {:?}", result);
-    /// ```
-    pub async fn send_batchable<T: serde::Serialize>(
-        &mut self,
-        sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut, Error> {
-        let settlement = self.send_inner(sendable.into()).await?;
-
-        Ok(DeliveryFut::from(settlement))
-    }
-
-    /// Send a message without waiting for the acknowledgement with a timeout.
-    ///
-    /// This will set the batchable field of the `Transfer` performative to true.
-    pub async fn send_batchable_with_timeout<T: serde::Serialize>(
-        &mut self,
-        sendable: impl Into<Sendable<T>>,
-        duration: impl Into<Duration>,
-    ) -> Result<Timeout<DeliveryFut>, Error> {
-        let fut = self.send_batchable(sendable).await?;
-        Ok(timeout(duration.into(), fut))
-    }
-
-    /// Detach the link
-    ///
-    /// The Sender will send a detach frame with closed field set to false,
-    /// and wait for a detach with closed field set to false from the remote peer.
-    ///
-    /// # Error
-    ///
-    /// If the remote peer sends a detach frame with closed field set to true,
-    /// the Sender will re-attach and send a closing detach
     pub async fn detach(&mut self) -> Result<(), DetachError> {
         // let mut detaching = self.into_detached();
 
@@ -394,14 +388,6 @@ impl Sender {
         }
 
         Ok(())
-    }
-
-    /// Detach the link with a timeout
-    pub async fn detach_with_timeout(
-        &mut self,
-        duration: impl Into<Duration>,
-    ) -> Result<Result<(), DetachError>, Elapsed> {
-        timeout(duration.into(), self.detach()).await
     }
 
     /// Close the link.
@@ -481,5 +467,48 @@ impl Sender {
         }
 
         Ok(())
+    }
+}
+
+impl<L> SenderInner<L> 
+where
+    L: endpoint::SenderLink<Error = Error>,
+{
+    async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
+    where
+        T: serde::Serialize,
+    {
+        use bytes::BufMut;
+        use serde::Serialize;
+        use serde_amqp::ser::Serializer;
+
+        let Sendable {
+            message,
+            message_format,
+            settled,
+        } = sendable.into();
+        // .try_into().map_err(Into::into)?;
+
+        // serialize message
+        let mut payload = BytesMut::new();
+        let mut serializer = Serializer::from((&mut payload).writer());
+        Serializable(message).serialize(&mut serializer)?;
+        // let payload = BytesMut::from(payload);
+        let payload = payload.freeze();
+
+        // send a transfer, checking state will be implemented in SenderLink
+        let detached_fut = self.incoming.next();
+        let settlement = self
+            .link
+            .send_transfer(
+                &mut self.outgoing,
+                detached_fut,
+                payload,
+                message_format,
+                settled,
+                false,
+            )
+            .await?;
+        Ok(settlement)
     }
 }

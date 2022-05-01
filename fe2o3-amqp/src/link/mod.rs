@@ -183,6 +183,10 @@ where
         (cur & CLOSED) == CLOSED
     }
 
+    fn output_handle(&self) -> Option<&Handle> {
+        self.output_handle.as_ref()
+    }
+
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
         match self.local_state {
             LinkState::AttachSent => {

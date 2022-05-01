@@ -28,7 +28,7 @@ use crate::{
         receiver::CreditMode,
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
+        AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState, sender::SenderInner,
     },
     util::{Consumer, Initialized, Producer},
     Receiver, Sender,
@@ -403,7 +403,7 @@ impl LinkAcceptor {
         link.on_incoming_attach(remote_attach).await?;
         link.send_attach(&mut outgoing).await?;
 
-        let sender = Sender {
+        let inner = SenderInner {
             link,
             buffer_size: self.buffer_size,
             session: session.control.clone(),
@@ -411,7 +411,7 @@ impl LinkAcceptor {
             incoming: ReceiverStream::new(incoming_rx),
             // marker: PhantomData,
         };
-        Ok(LinkEndpoint::Sender(sender))
+        Ok(LinkEndpoint::Sender(Sender {inner}))
     }
 
     /// Accept incoming link by waiting for an incoming Attach performative

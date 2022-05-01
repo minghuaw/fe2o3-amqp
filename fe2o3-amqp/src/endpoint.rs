@@ -190,6 +190,10 @@ pub(crate) trait Link {
 
     fn is_closed(&self) -> bool;
 
+    fn output_handle(&self) -> Option<&Handle>;
+
+    // fn name(&self) -> &str;
+
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
