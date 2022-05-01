@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs, missing_debug_implementations)]
 
 //! Implements AMQP1.0 data types as defined in the core [specification](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-overview-v1.0-os.html).
