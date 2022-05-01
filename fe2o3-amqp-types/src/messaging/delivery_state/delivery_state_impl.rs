@@ -166,7 +166,7 @@ impl<'de> de::Deserialize<'de> for DeliveryState {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
+        const VARIANTS: &[&str] = &[
             "amqp:accepted:list",
             "amqp:rejected:list",
             "amqp:released:list",

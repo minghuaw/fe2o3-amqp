@@ -355,7 +355,7 @@ mod tests {
                         })
                     }
                 }
-                const FIELDS: &'static [&'static str] = &[
+                const FIELDS: &[&str] = &[
                     serde_amqp::__constants::DESCRIPTOR,
                     "role",
                     "first",

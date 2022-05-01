@@ -138,10 +138,9 @@ mod target_archetype_impl {
             D: serde::Deserializer<'de>,
         {
             #[cfg(not(feature = "transaction"))]
-            const VARIANTS: &'static [&'static str] = &["amqp:target:list"];
+            const VARIANTS: &[&str] = &["amqp:target:list"];
             #[cfg(feature = "transaction")]
-            const VARIANTS: &'static [&'static str] =
-                &["amqp:target:list", "amqp:coordinator:list"];
+            const VARIANTS: &[&str] = &["amqp:target:list", "amqp:coordinator:list"];
             deserializer.deserialize_enum("TargetArchetype", VARIANTS, Visitor {})
         }
     }
@@ -211,7 +210,7 @@ impl<T: Into<Target>> From<T> for TargetArchetype {
 }
 
 /// [`Target`] builder
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Builder {
     /// The [`Target`] instance being built
     pub target: Target,
@@ -285,6 +284,8 @@ mod tests {
         let buf = to_vec(&target).unwrap();
         let archetype: TargetArchetype = from_slice(&buf).unwrap();
         println!("{:?}", archetype);
+
+        // println!("{:?}", std::mem::size_of::<Target>());
     }
 
     #[cfg(feature = "transaction")]
@@ -295,5 +296,7 @@ mod tests {
         let buf = to_vec(&coordinator).unwrap();
         let archetype: TargetArchetype = from_slice(&buf).unwrap();
         println!("{:?}", archetype);
+
+        // println!("{:?}", std::mem::size_of::<Coordinator>());
     }
 }

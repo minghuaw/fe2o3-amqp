@@ -147,9 +147,17 @@ mod tests {
     #[cfg(feature = "transaction")]
     #[test]
     fn test_transaction_error_condition() {
+        use serde_amqp::to_vec;
+
         use crate::transaction::TransactionError;
 
         let err = TransactionError::Timeout;
-        let err = ErrorCondition::TransactionError(err);
+        let buf = to_vec(&err).unwrap();
+        let err: ErrorCondition = from_slice(&buf).unwrap();
+
+        match err {
+            ErrorCondition::TransactionError(_) => {}
+            _ => panic!(),
+        }
     }
 }

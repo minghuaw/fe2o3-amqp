@@ -72,13 +72,21 @@ pub struct Attach {
     ///
     /// If no source is specified on an outgoing link, then there is no source currently
     /// attached to the link. A link with no source will never produce outgoing messages
-    pub source: Option<Source>,
+    ///
+    /// This is put inside a `Box` to reduce the variant size of `Performative`.
+    /// The use of `Attach` frame and access to this field should be fairly infrequent,
+    /// and thus the performance penalty should be negligible (not tested yet).
+    pub source: Option<Box<Source>>,
 
     /// <field name="target" type="*" requires="target"/>
     ///
     /// If no target is specified on an incoming link, then there is no target currently
     /// attached to the link. A link with no target will never permit incoming messages.
-    pub target: Option<TargetArchetype>,
+    ///
+    /// This is put inside a `Box` to reduce the variant size of `Performative`.
+    /// The use of `Attach` frame and access to this field should be fairly infrequent,
+    /// and thus the performance penalty should be negligible (not tested yet).
+    pub target: Option<Box<TargetArchetype>>,
 
     /// <field name="unsettled" type="map"/>
     pub unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>>,
@@ -133,8 +141,8 @@ mod tests {
             role: Role::Sender,
             snd_settle_mode: SenderSettleMode::Unsettled,
             rcv_settle_mode: ReceiverSettleMode::First,
-            source: Some(Source::default()),
-            target: Some("q1".into()),
+            source: Some(Box::new(Source::default())),
+            target: Some(Box::new("q1".into())),
             unsettled: None,
             incomplete_unsettled: false,
             initial_delivery_count: Some(0),
@@ -148,5 +156,54 @@ mod tests {
         println!("{:#x?}", buf);
         let deserialized: Attach = from_slice(&buf).unwrap();
         println!("{:?}", deserialized);
+    }
+
+    #[test]
+    fn test_size_of_attach() {
+        use super::*;
+        let s = std::mem::size_of::<Attach>();
+        println!("Attach {:?}", s);
+
+        let s = std::mem::size_of::<String>();
+        println!("name {:?}", s);
+
+        let s = std::mem::size_of::<Handle>();
+        println!("handle {:?}", s);
+
+        let s = std::mem::size_of::<Role>();
+        println!("role {:?}", s);
+
+        let s = std::mem::size_of::<SenderSettleMode>();
+        println!("snd_settle_mode {:?}", s);
+
+        let s = std::mem::size_of::<ReceiverSettleMode>();
+        println!("rcv_settle_mode {:?}", s);
+
+        let s = std::mem::size_of::<Option<Box<Source>>>();
+        println!("source {:?}", s);
+
+        let s = std::mem::size_of::<Option<Box<TargetArchetype>>>();
+        println!("target {:?}", s);
+
+        let s = std::mem::size_of::<Option<BTreeMap<DeliveryTag, DeliveryState>>>();
+        println!("unsettled {:?}", s);
+
+        let s = std::mem::size_of::<Boolean>();
+        println!("incomplete_unsettled {:?}", s);
+
+        let s = std::mem::size_of::<Option<SequenceNo>>();
+        println!("initial_delivery_count {:?}", s);
+
+        let s = std::mem::size_of::<Option<ULong>>();
+        println!("max_message_size {:?}", s);
+
+        let s = std::mem::size_of::<Option<Vec<Symbol>>>();
+        println!("offered_capabilities {:?}", s);
+
+        let s = std::mem::size_of::<Option<Vec<Symbol>>>();
+        println!("desired_capabilities {:?}", s);
+
+        let s = std::mem::size_of::<Option<Fields>>();
+        println!("properties {:?}", s);
     }
 }

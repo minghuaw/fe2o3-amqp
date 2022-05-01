@@ -41,10 +41,10 @@ impl From<SessionError> for ErrorCondition {
 impl From<&SessionError> for Symbol {
     fn from(value: &SessionError) -> Self {
         let val = match value {
-            &SessionError::WindowViolation => "amqp:session:window-violation",
-            &SessionError::ErrantLink => "amqp:session:errant-link",
-            &SessionError::HandleInUse => "amqp:session:handle-in-use",
-            &SessionError::UnattachedHandle => "amqp:session:unattached-handle",
+            SessionError::WindowViolation => "amqp:session:window-violation",
+            SessionError::ErrantLink => "amqp:session:errant-link",
+            SessionError::HandleInUse => "amqp:session:handle-in-use",
+            SessionError::UnattachedHandle => "amqp:session:unattached-handle",
         };
         Symbol::from(val)
     }

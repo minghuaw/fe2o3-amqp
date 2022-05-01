@@ -34,10 +34,10 @@ impl Default for TerminusExpiryPolicy {
 impl From<&TerminusExpiryPolicy> for Symbol {
     fn from(value: &TerminusExpiryPolicy) -> Self {
         let val = match value {
-            &TerminusExpiryPolicy::LinkDetach => "link-detach",
-            &TerminusExpiryPolicy::SessionEnd => "session-end",
-            &TerminusExpiryPolicy::ConnectionClose => "connection-close",
-            &TerminusExpiryPolicy::Never => "never",
+            TerminusExpiryPolicy::LinkDetach => "link-detach",
+            TerminusExpiryPolicy::SessionEnd => "session-end",
+            TerminusExpiryPolicy::ConnectionClose => "connection-close",
+            TerminusExpiryPolicy::Never => "never",
         };
         Symbol::from(val)
     }

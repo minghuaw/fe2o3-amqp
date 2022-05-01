@@ -634,7 +634,7 @@ mod body_section {
                 "amqp:data:binary" => Ok(Field::Data),
                 "amqp:amqp-sequence:list" => Ok(Field::Sequence),
                 "amqp:amqp-value:*" => Ok(Field::Value),
-                _ => return Err(de::Error::custom("Invalid descriptor code")),
+                _ => Err(de::Error::custom("Invalid descriptor code")),
             }
         }
 
@@ -646,7 +646,7 @@ mod body_section {
                 0x0000_0000_0000_0075 => Ok(Field::Data),
                 0x0000_0000_0000_0076 => Ok(Field::Sequence),
                 0x0000_0000_0000_0077 => Ok(Field::Value),
-                _ => return Err(de::Error::custom("Invalid descriptor code")),
+                _ => Err(de::Error::custom("Invalid descriptor code")),
             }
         }
     }

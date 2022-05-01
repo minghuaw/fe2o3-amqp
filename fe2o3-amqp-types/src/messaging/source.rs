@@ -72,6 +72,12 @@ pub struct Builder {
     source: Source,
 }
 
+impl Default for Builder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Builder {
     /// Creates a [`Source`] builder
     pub fn new() -> Self {
@@ -130,7 +136,7 @@ impl Builder {
 
     /// Set the "default-outcome" field
     pub fn default_outcome(mut self, outcome: Outcome) -> Self {
-        self.source.default_outcome = Some(outcome.into());
+        self.source.default_outcome = Some(outcome);
         self
     }
 
