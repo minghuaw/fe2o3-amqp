@@ -130,6 +130,14 @@ impl Error {
             None,
         ))
     }
+
+    pub(crate) fn not_implemented() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            None,
+            None,
+        ))
+    }
 }
 
 impl From<AmqpError> for Error {

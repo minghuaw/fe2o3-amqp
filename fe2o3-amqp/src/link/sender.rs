@@ -190,6 +190,7 @@ impl Sender {
                     DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
                     DeliveryState::Released(released) => Err(Error::Released(released)),
                     DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
+                    DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => Err(Error::not_implemented()),
                 }
             }
         }
@@ -221,7 +222,7 @@ impl Sender {
     pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut, Error> {
+    ) -> Result<DeliveryFut<Result<(), Error>>, Error> {
         let settlement = self.inner.send(sendable.into()).await?;
 
         Ok(DeliveryFut::from(settlement))
@@ -234,7 +235,7 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
         duration: impl Into<Duration>,
-    ) -> Result<Timeout<DeliveryFut>, Error> {
+    ) -> Result<Timeout<DeliveryFut<Result<(), Error>>>, Error> {
         let fut = self.send_batchable(sendable).await?;
         Ok(timeout(duration.into(), fut))
     }
