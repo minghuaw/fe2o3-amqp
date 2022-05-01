@@ -19,6 +19,7 @@ pub enum TargetArchetype {
     Target(Target),
 
     /// 4.5.1 Coordinator
+    #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
     #[cfg(feature = "transaction")]
     Coordinator(Coordinator),
 }

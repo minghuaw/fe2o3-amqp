@@ -83,23 +83,30 @@
 // 41. "sasl-code"
 // 
 
+#[cfg_attr(docsrs, doc(cfg(feature = "primitive")))]
 #[cfg(feature = "primitive")]
 pub mod primitives;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 #[cfg(feature = "transport")]
 pub mod definitions;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "messaging")))]
 #[cfg(feature = "messaging")]
 pub mod messaging;
 
+#[cfg_attr(docsrs, doc(cfg(all(feature = "transport", feature = "messaging"))))]
 #[cfg(all(feature = "transport", feature = "messaging"))]
 pub mod performatives;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "security")))]
 #[cfg(feature = "security")]
 pub mod sasl;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 #[cfg(feature = "transport")]
 pub mod states;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
 #[cfg(feature = "transaction")]
 pub mod transaction;

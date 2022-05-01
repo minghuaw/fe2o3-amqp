@@ -9,15 +9,28 @@ use crate::transaction::TransactionError;
 
 use super::{AmqpError, ConnectionError, LinkError, SessionError};
 
+/// Archetype error-condition
 #[derive(Debug, Clone, PartialEq)]
-#[allow(missing_docs)]
 pub enum ErrorCondition {
+    /// 2.8.15 AMQP Error
     AmqpError(AmqpError),
+
+    /// 2.8.16 Connection Error
     ConnectionError(ConnectionError),
+
+    /// 2.8.17 Session Error
     SessionError(SessionError),
+
+    /// 2.8.18 Link Error
     LinkError(LinkError),
+
+    /// Customized error condition (**NOT** recommended)
+    /// 
+    /// This variant may get removed in the future
     Custom(Symbol),
 
+    /// 4.5.8 Transaction Error
+    #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
     #[cfg(feature = "transaction")]
     TransactionError(TransactionError),
 }
