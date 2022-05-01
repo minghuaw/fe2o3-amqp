@@ -126,13 +126,6 @@ mod tests {
 
     use super::Attach;
 
-    // use crate::{
-    //     definitions::{ReceiverSettleMode, Role, SenderSettleMode},
-    //     messaging::{DeliveryState, Source, TargetArchetype},
-    // };
-    // use serde_amqp::primitives::{Boolean, Symbol, ULong};
-    // use std::collections::BTreeMap;
-
     #[test]
     fn test_serialize_deserialize_attach() {
         let attach = Attach {
