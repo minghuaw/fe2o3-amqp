@@ -11,7 +11,9 @@ use std::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo},
+    definitions::{
+        self, AmqpError, Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
+    },
     messaging::{DeliveryState, Target},
     performatives::Attach,
     primitives::{Symbol, ULong},
@@ -27,8 +29,9 @@ use crate::{
         delivery::UnsettledMessage,
         receiver::CreditMode,
         role,
+        sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState, sender::SenderInner,
+        AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
     Receiver, Sender,
@@ -276,13 +279,16 @@ impl LinkAcceptor {
         )
         .await?;
 
-        // let target = match &remote_attach.target {
-        //     Some(TargetArchetype::Target(target)) => Some(target.clone()),
-        //     Some(TargetArchetype::Coordinator(_)) => return Err(AttachError::Local(
-        //         definitions::Error::new(AmqpError::NotImplemented, "Coordinator is not implemented".to_string(), None)
-        //     )),
-        //     None => return Err(AttachError::TargetIsNone)
-        // };
+        let target = match &remote_attach.target {
+            Some(t) => Target::try_from(*t.clone()).map_err(|_| {
+                AttachError::Local(definitions::Error::new(
+                    AmqpError::NotImplemented,
+                    "Coordinator is not implemented".to_string(),
+                    None,
+                ))
+            })?,
+            None => return Err(AttachError::TargetIsNone),
+        };
 
         let mut link = link::Link::<role::Receiver, Target, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
@@ -294,7 +300,7 @@ impl LinkAcceptor {
             snd_settle_mode: Default::default(), // Will take value from incoming attach
             rcv_settle_mode,
             source: None, // Will take value from incoming attach
-            target: None, // Will take value from incoming attach
+            target: Some(target),
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
@@ -381,6 +387,10 @@ impl LinkAcceptor {
         )
         .await?;
 
+        let source = *(&remote_attach).source
+            .clone()
+            .ok_or(AttachError::SourceIsNone)?;
+
         let mut link = link::Link::<role::Sender, Target, SenderFlowState, UnsettledMessage> {
             role: PhantomData,
             local_state: LinkState::Unattached, // will be set in `on_incoming_attach`
@@ -390,7 +400,7 @@ impl LinkAcceptor {
             input_handle: None, // this will be set in `on_incoming_attach`
             snd_settle_mode,
             rcv_settle_mode: Default::default(), // Will take value from incoming attach
-            source: None,                        // Will take value from incoming attach
+            source: Some(source),                // Will take value from incoming attach
             target: None,                        // Will take value from incoming attach
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
@@ -411,7 +421,7 @@ impl LinkAcceptor {
             incoming: ReceiverStream::new(incoming_rx),
             // marker: PhantomData,
         };
-        Ok(LinkEndpoint::Sender(Sender {inner}))
+        Ok(LinkEndpoint::Sender(Sender { inner }))
     }
 
     /// Accept incoming link by waiting for an incoming Attach performative

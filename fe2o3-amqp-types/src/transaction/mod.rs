@@ -39,6 +39,17 @@ impl From<Coordinator> for TargetArchetype {
     }
 }
 
+impl TryFrom<TargetArchetype> for Coordinator {
+    type Error = TargetArchetype;
+
+    fn try_from(value: TargetArchetype) -> Result<Self, Self::Error> {
+        match value {
+            TargetArchetype::Coordinator(coord) => Ok(coord),
+            _ => return Err(value)
+        }
+    }
+}
+
 /// ```rust
 /// Coordinator {
 ///     capabilities: None,

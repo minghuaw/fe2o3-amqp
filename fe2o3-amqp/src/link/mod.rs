@@ -217,10 +217,11 @@ where
             Role::Sender => {
                 // In this case, the sender is considered to hold the authoritative version of the
                 // version of the source properties
-                self.source = match remote_attach.source {
-                    Some(source) => Some(*source),
-                    None => return Err(AttachError::SourceIsNone)
-                };
+
+                let source = *remote_attach.source
+                    .ok_or(AttachError::SourceIsNone)?;
+                self.source = Some(source);
+
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
                 // initiates the attach exchange and the receiver supports the desired mode.
                 self.snd_settle_mode = remote_attach.snd_settle_mode;
@@ -249,25 +250,18 @@ where
             // Remote attach is from receiver
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
-                match remote_attach.target {
-                    Some(t) => {
-                        match *t {
-                            TargetArchetype::Target(target) => {
-                                self.target = Some(target)
-                            },
-                            #[cfg(feature = "transaction")]
-                            TargetArchetype::Coordinator(_) => {
-                                return Err(AttachError::Local(definitions::Error::new(
-                                    AmqpError::NotImplemented,
-                                    "Coordinator is not implemented".to_string(),
-                                    None,
-                                )))
-                            }
-                        }
-
-                    },
+                let target = match remote_attach.target {
+                    Some(t) => Target::try_from(*t).map_err(|_| {
+                            AttachError::Local(definitions::Error::new(
+                                AmqpError::NotImplemented,
+                                "Coordinator is not implemented".to_string(),
+                                None,
+                            ))
+                        })?,
                     None => return Err(AttachError::TargetIsNone),
-                }
+                };
+                self.target = Some(target);
+
                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
                 // initiates the attach exchange and the sender supports the desired mode
                 self.rcv_settle_mode = remote_attach.rcv_settle_mode;

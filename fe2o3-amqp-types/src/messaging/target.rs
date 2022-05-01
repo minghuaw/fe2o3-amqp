@@ -23,7 +23,7 @@ pub enum TargetArchetype {
     Coordinator(Coordinator),
 }
 
-mod target_archetype_impl {
+mod target_archetype_serde_impl {
     use serde::{
         de::{self, VariantAccess},
         ser,
@@ -189,6 +189,18 @@ impl Target {
     /// Creates a Builder for Target
     pub fn builder() -> Builder {
         Builder::new()
+    }
+}
+
+impl TryFrom<TargetArchetype> for Target {
+    type Error = TargetArchetype;
+
+    fn try_from(value: TargetArchetype) -> Result<Self, Self::Error> {
+        match value {
+            TargetArchetype::Target(target) => Ok(target),
+            #[cfg(feature = "transaction")]
+            _ => Err(value)
+        }
     }
 }
 
