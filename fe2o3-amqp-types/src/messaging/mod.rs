@@ -46,7 +46,7 @@ pub use dist_mode::DistributionMode;
 /// Filter types are a defined extension point. The filter types that a given
 /// source supports will be indicated by the capabilities of the source.
 /// A registry of commonly defined filter types and their capabilities is
-/// maintained [AMQPFILTERS].
+/// maintained \[AMQPFILTERS\].
 ///
 pub type FilterSet = BTreeMap<Symbol, Option<Described<Value>>>;
 

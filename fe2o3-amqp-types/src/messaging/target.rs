@@ -5,7 +5,6 @@ use crate::definitions::{Fields, Seconds};
 
 use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
 
-
 #[cfg(feature = "transaction")]
 use crate::transaction::Coordinator;
 
@@ -62,24 +61,34 @@ mod target_archetype_impl {
 
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
         where
-                E: de::Error, {
+            E: de::Error,
+        {
             let val = match v {
                 "amqp:target:list" => Field::Target,
                 #[cfg(feature = "transaction")]
                 "amqp:coordinator:list" => Field::Coordinator,
-                _ => return Err(de::Error::custom("Wrong descriptor symbol value for Target archetype"))
+                _ => {
+                    return Err(de::Error::custom(
+                        "Wrong descriptor symbol value for Target archetype",
+                    ))
+                }
             };
             Ok(val)
         }
 
         fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
         where
-                E: de::Error, {
+            E: de::Error,
+        {
             let val = match v {
                 0x0000_0000_0000_0029 => Field::Target,
                 #[cfg(feature = "transaction")]
                 0x0000_0000_0000_0030 => Field::Coordinator,
-                _ => return Err(de::Error::custom("Wrong descriptor code value for Target archetype"))
+                _ => {
+                    return Err(de::Error::custom(
+                        "Wrong descriptor code value for Target archetype",
+                    ))
+                }
             };
             Ok(val)
         }
@@ -88,7 +97,8 @@ mod target_archetype_impl {
     impl<'de> de::Deserialize<'de> for Field {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-                D: serde::Deserializer<'de> {
+            D: serde::Deserializer<'de>,
+        {
             deserializer.deserialize_identifier(FieldVisitor {})
         }
     }
@@ -104,14 +114,15 @@ mod target_archetype_impl {
 
         fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
         where
-                A: de::EnumAccess<'de>, {
+            A: de::EnumAccess<'de>,
+        {
             let (val, variant) = data.variant()?;
 
             match val {
                 Field::Target => {
                     let value = variant.newtype_variant()?;
                     Ok(TargetArchetype::Target(value))
-                },
+                }
                 #[cfg(feature = "transaction")]
                 Field::Coordinator => {
                     let value = variant.newtype_variant()?;
@@ -124,16 +135,13 @@ mod target_archetype_impl {
     impl<'de> de::Deserialize<'de> for TargetArchetype {
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
-                D: serde::Deserializer<'de> {
+            D: serde::Deserializer<'de>,
+        {
             #[cfg(not(feature = "transaction"))]
-            const VARIANTS: &'static [&'static str] = &[
-                "amqp:target:list",
-            ];
+            const VARIANTS: &'static [&'static str] = &["amqp:target:list"];
             #[cfg(feature = "transaction")]
-            const VARIANTS: &'static [&'static str] = &[
-                "amqp:target:list",
-                "amqp:coordinator:list"
-            ];
+            const VARIANTS: &'static [&'static str] =
+                &["amqp:target:list", "amqp:coordinator:list"];
             deserializer.deserialize_enum("TargetArchetype", VARIANTS, Visitor {})
         }
     }
@@ -265,14 +273,12 @@ impl Builder {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{to_vec, from_slice};
+    use serde_amqp::{from_slice, to_vec};
 
-    
     use super::{Target, TargetArchetype};
-    
+
     #[test]
     fn test_target_archetype_variant_target() {
         let target = Target::default();
@@ -280,7 +286,7 @@ mod tests {
         let archetype: TargetArchetype = from_slice(&buf).unwrap();
         println!("{:?}", archetype);
     }
-    
+
     #[cfg(feature = "transaction")]
     #[test]
     fn test_target_archetype_variant_coordinator() {

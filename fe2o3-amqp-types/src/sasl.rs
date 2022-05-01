@@ -70,7 +70,7 @@ pub struct SaslInit {
     /// This field can be used by AMQP proxies to determine the correct back-end service to connect the
     /// client to, and to determine the domain to validate the client’s credentials against.
     /// This field might already have been specified by the server name indication extension as described
-    /// in RFC-4366 [RFC4366], if a TLS layer is used, in which case this field SHOULD either be null or
+    /// in RFC-4366 \[RFC4366\], if a TLS layer is used, in which case this field SHOULD either be null or
     /// contain the same value. It is undefined what a different value to those already specified means.
     pub hostname: Option<String>,
 }

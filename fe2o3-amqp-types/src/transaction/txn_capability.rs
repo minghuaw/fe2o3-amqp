@@ -1,12 +1,12 @@
 //! 4.5.7 Transaction Capability
 
-use serde::{ser, de};
+use serde::{de, ser};
 use serde_amqp::primitives::Symbol;
 
 /// 4.5.7 Transaction Capability
-/// 
+///
 /// Symbols indicating (desired/available) capabilities of a transaction coordinator.
-/// 
+///
 /// <type name="txn-capability" class="restricted" source="symbol" provides="txn-capability">
 ///     <choice name="local-transactions" value="amqp:local-transactions"/>
 ///     <choice name="distributed-transactions" value="amqp:distributed-transactions"/>
@@ -57,7 +57,7 @@ impl TryFrom<Symbol> for TxnCapability {
     fn try_from(value: Symbol) -> Result<Self, Self::Error> {
         match value.as_str().try_into() {
             Ok(val) => Ok(val),
-            Err(_) => Err(value)
+            Err(_) => Err(value),
         }
     }
 }
@@ -72,7 +72,7 @@ impl<'a> TryFrom<&'a str> for TxnCapability {
             "amqp:promotable-transactions" => Self::PromotableTransactions,
             "amqp:multi-txns-per-ssn" => Self::MultiTxnsPerSsn,
             "amqp:multi-ssns-per-txn" => Self::MultiSsnsPerTxn,
-            _ => return Err(value)
+            _ => return Err(value),
         };
 
         Ok(val)
@@ -82,7 +82,8 @@ impl<'a> TryFrom<&'a str> for TxnCapability {
 impl ser::Serialize for TxnCapability {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         let val = Symbol::from(self);
         val.serialize(serializer)
     }
@@ -91,7 +92,8 @@ impl ser::Serialize for TxnCapability {
 impl<'de> de::Deserialize<'de> for TxnCapability {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         Symbol::deserialize(deserializer)?
             .try_into()
             .map_err(|_| de::Error::custom("Invalid symbol value for TxnCapability"))

@@ -1,18 +1,18 @@
 #![deny(missing_docs, missing_debug_implementations)]
 
 //! Implements AMQP1.0 data types as defined in the core [specification](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-overview-v1.0-os.html).
-//! 
+//!
 //! # Feature flags
-//! 
-//! Please note that `Performative` will require both `"transport"` and `"messaging"` feature flags 
+//!
+//! Please note that `Performative` will require both `"transport"` and `"messaging"` feature flags
 //! enabled.
-//! 
+//!
 //! - `"primitive"`: enables the primitive types defined in part 1.6 in the core specification.
 //! - `"transport"`: enables most of the types defined in part 2.4, 2.5, and 2.8 of the core specifiction.
 //! - `"messaging"`: enables the types defined in part 2.7 and part 3 defined in the core specification
 //! - `"transaction"`: enables the types defined in part 4.5 of the core specification
 //! - `"security"`: enables the types defined in part 5 of the core specifiction.
-//! 
+//!
 //! ```toml
 //! default = [
 //!     "primitive",
@@ -23,7 +23,7 @@
 //! ```
 
 // List of archetypes:
-// 
+//
 // 1. "frame"
 // 2. "error-condition"
 // 3. "section"
@@ -38,10 +38,10 @@
 // 12. "txn-id"
 // 13. "txn-capability"
 // 14. "sasl-frame"
-// 15. 
-// 
+// 15.
+//
 // List of restricted types:
-// 
+//
 // 1. "role"
 // 2. "sender-settle-mode"
 // 3. "receiver-settle-mode"
@@ -81,7 +81,7 @@
 // 39. "txn-capability"
 // 40. "transaction-error"
 // 41. "sasl-code"
-// 
+//
 
 #[cfg_attr(docsrs, doc(cfg(feature = "primitive")))]
 #[cfg(feature = "primitive")]

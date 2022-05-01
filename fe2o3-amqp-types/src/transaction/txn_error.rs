@@ -1,12 +1,12 @@
 //! 4.5.8 Transaction Error
 
-use serde::{ser, de};
+use serde::{de, ser};
 use serde_amqp::primitives::Symbol;
 
 /// 4.5.8 Transaction Error
-/// 
+///
 /// Symbols used to indicate transaction errors.
-/// 
+///
 /// <type name="transaction-error" class="restricted" source="symbol" provides="error-condition">
 ///     <choice name="unknown-id" value="amqp:transaction:unknown-id"/>
 ///     <choice name="transaction-rollback" value="amqp:transaction:rollback"/>
@@ -17,7 +17,7 @@ pub enum TransactionError {
     /// amqp:transaction:unknown-id
     /// The specified txn-id does not exist.
     UnknownId,
-    
+
     /// amqp:transaction:rollback
     /// The transaction was rolled back for an unspecified reason.
     Rollback,
@@ -47,7 +47,7 @@ impl<'a> TryFrom<&'a str> for TransactionError {
             "amqp:transaction:unknown-id" => Self::UnknownId,
             "amqp:transaction:rollback" => Self::Rollback,
             "amqp:transaction:timeout" => Self::Timeout,
-            _ => return Err(value)
+            _ => return Err(value),
         };
 
         Ok(val)
@@ -60,7 +60,7 @@ impl TryFrom<Symbol> for TransactionError {
     fn try_from(value: Symbol) -> Result<Self, Self::Error> {
         match value.as_str().try_into() {
             Ok(val) => Ok(val),
-            Err(_) => Err(value)
+            Err(_) => Err(value),
         }
     }
 }
@@ -68,7 +68,8 @@ impl TryFrom<Symbol> for TransactionError {
 impl ser::Serialize for TransactionError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         let val = Symbol::from(self);
         val.serialize(serializer)
     }
@@ -77,7 +78,8 @@ impl ser::Serialize for TransactionError {
 impl<'de> de::Deserialize<'de> for TransactionError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         Symbol::deserialize(deserializer)?
             .try_into()
             .map_err(|_| de::Error::custom("Invalid symbol value for TransactionError"))

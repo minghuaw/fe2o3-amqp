@@ -32,7 +32,7 @@ pub enum DeliveryState {
     #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
     #[cfg(feature = "transaction")]
     Declared(Declared),
-    
+
     /// 4.5.6 Transactional State
     #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
     #[cfg(feature = "transaction")]
