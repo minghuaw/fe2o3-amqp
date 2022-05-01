@@ -213,7 +213,10 @@ where
             Role::Sender => {
                 // In this case, the sender is considered to hold the authoritative version of the
                 // version of the source properties
-                self.source = remote_attach.source;
+                self.source = match remote_attach.source {
+                    Some(source) => Some(*source),
+                    None => return Err(AttachError::SourceIsNone)
+                };
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
                 // initiates the attach exchange and the receiver supports the desired mode.
                 self.snd_settle_mode = remote_attach.snd_settle_mode;
@@ -243,15 +246,22 @@ where
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 match remote_attach.target {
-                    Some(TargetArchetype::Target(target)) => self.target = Some(target),
-                    #[cfg(feature = "transaction")]
-                    Some(TargetArchetype::Coordinator(_)) => {
-                        return Err(AttachError::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            "Coordinator is not implemented".to_string(),
-                            None,
-                        )))
-                    }
+                    Some(t) => {
+                        match *t {
+                            TargetArchetype::Target(target) => {
+                                self.target = Some(target)
+                            },
+                            #[cfg(feature = "transaction")]
+                            TargetArchetype::Coordinator(_) => {
+                                return Err(AttachError::Local(definitions::Error::new(
+                                    AmqpError::NotImplemented,
+                                    "Coordinator is not implemented".to_string(),
+                                    None,
+                                )))
+                            }
+                        }
+
+                    },
                     None => return Err(AttachError::TargetIsNone),
                 }
                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
@@ -340,8 +350,8 @@ where
             role: R::into_role(),
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
-            source: self.source.clone(),
-            target: self.target.clone().map(Into::into),
+            source: self.source.clone().map(Box::new),
+            target: self.target.clone().map(Into::into).map(Box::new),
             unsettled,
             incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?
 
