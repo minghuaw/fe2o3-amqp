@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
+    messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -135,7 +135,7 @@ pub struct Link<R, T, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
-impl<R, F, M> Link<R, Target, F, M> {
+impl<R, T, F, M> Link<R, T, F, M> {
     pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
     where
         R: role::IntoRole + Send + Sync,
@@ -186,9 +186,10 @@ where
 }
 
 #[async_trait]
-impl<R, F, M> endpoint::LinkAttach for Link<R, Target, F, M>
+impl<R, T, F, M> endpoint::LinkAttach for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
@@ -257,14 +258,16 @@ where
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 let target = match remote_attach.target {
-                    Some(t) => Target::try_from(*t).map_err(|_| {
-                        AttachError::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            "Coordinator is not implemented".to_string(),
-                            None,
-                        ))
-                    })?,
-                    None => return Err(AttachError::TargetIsNone),
+                    Some(t) => {
+                        T::try_from(*t).map_err(|_| {
+                                AttachError::Local(definitions::Error::new(
+                                    AmqpError::NotImplemented,
+                                    None,
+                                    None,
+                                ))
+                            })?
+                    },
+                    None => return Err(AttachError::TargetIsNone)
                 };
                 self.target = Some(target);
 

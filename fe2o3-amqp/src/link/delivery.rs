@@ -319,7 +319,7 @@ impl FromDeliveryState for NonTxnResult {
             DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                Err(link::Error::not_implemented())
+                Err(link::Error::not_implemented(None))
             }
         }
     }

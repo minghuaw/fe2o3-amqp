@@ -6,7 +6,10 @@ use crate::link::error::DetachError;
 use super::*;
 
 #[async_trait]
-impl endpoint::SenderLink for SenderLink {
+impl<T> endpoint::SenderLink for Link<role::Sender, T, SenderFlowState, UnsettledMessage> 
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+{
     type Error = link::Error;
 
     /// Set and send flow state

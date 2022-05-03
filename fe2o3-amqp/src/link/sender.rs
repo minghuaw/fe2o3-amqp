@@ -192,7 +192,7 @@ impl Sender {
                     DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
                     #[cfg(feature = "transaction")]
                     DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                        Err(Error::not_implemented())
+                        Err(Error::not_implemented(None))
                     }
                 }
             }

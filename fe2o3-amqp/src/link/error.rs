@@ -146,13 +146,14 @@ impl Error {
         ))
     }
 
-    // pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
-    //     Self::Local(definitions::Error::new(
-    //         AmqpError::NotImplemented,
-    //         description.into(),
-    //         None,
-    //     ))
-    // }
+    #[cfg(feature = "transaction")]
+    pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            description.into(),
+            None,
+        ))
+    }
 }
 
 impl From<AmqpError> for Error {
