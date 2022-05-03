@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.8
+
+1. Changed internal LinkState
+2. Fixed a bug where link may send detach twice when dropping
+3. Updated dependency `fe2o3-amqp-types` for upcoming transaction implementation
+
 ## 0.0.7
 
 1. Added `ConnectionAcceptor`, `SessionAcceptor` and `LinkAcceptor`
