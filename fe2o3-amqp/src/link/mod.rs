@@ -150,7 +150,7 @@ impl<R, F, M> Link<R, Target, F, M> {
         F: AsRef<LinkFlowState<R>> + Send + Sync,
         M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
     {
-        if endpoint::Link::is_closed(self) {
+        if endpoint::LinkState::is_closed(self) {
             return Err(definitions::Error::new(
                 AmqpError::NotAllowed,
                 "Link is permanently closed".to_string(),
@@ -164,15 +164,12 @@ impl<R, F, M> Link<R, Target, F, M> {
 
 #[async_trait]
 // impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
-impl<R, F, M> endpoint::Link for Link<R, Target, F, M>
+impl<R, F, M> endpoint::LinkState for Link<R, Target, F, M>
 where
     R: role::IntoRole + Send + Sync,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    type AttachError = link::AttachError;
-    type DetachError = definitions::Error;
-
     fn is_detached(&self) -> bool {
         let cur = self.state_code.load(Ordering::Acquire);
         (cur & DETACHED) == DETACHED
@@ -186,6 +183,17 @@ where
     fn output_handle(&self) -> Option<&Handle> {
         self.output_handle.as_ref()
     }
+
+}
+
+#[async_trait]
+impl<R, F, M> endpoint::LinkAttach for Link<R, Target, F, M> 
+where 
+    R: role::IntoRole + Send + Sync,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+{
+    type AttachError = link::AttachError;
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
         match self.local_state {
@@ -277,33 +285,6 @@ where
         Ok(())
     }
 
-    /// Closing or not isn't taken care of here but outside
-    #[instrument(skip_all)]
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-        trace!(detach = ?detach);
-        match self.local_state {
-            LinkState::Attached => self.local_state = LinkState::DetachReceived,
-            LinkState::DetachSent => {
-                self.local_state = LinkState::Detached;
-                // Dropping output handle as it is already detached
-                let _ = self.output_handle.take();
-            }
-            _ => {
-                return Err(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Illegal local state".into()),
-                    None,
-                )
-                .into())
-            }
-        };
-
-        if let Some(err) = detach.error {
-            return Err(err.into());
-        }
-        Ok(())
-    }
-
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where
         W: Sink<LinkFrame> + Send + Unpin,
@@ -385,6 +366,43 @@ where
             ))),
         }
 
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<R, F, M> endpoint::LinkDetach for Link<R, Target, F, M> 
+where 
+    R: role::IntoRole + Send + Sync,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+{
+    type DetachError = definitions::Error;
+
+    /// Closing or not isn't taken care of here but outside
+    #[instrument(skip_all)]
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+        trace!(detach = ?detach);
+        match self.local_state {
+            LinkState::Attached => self.local_state = LinkState::DetachReceived,
+            LinkState::DetachSent => {
+                self.local_state = LinkState::Detached;
+                // Dropping output handle as it is already detached
+                let _ = self.output_handle.take();
+            }
+            _ => {
+                return Err(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    Some("Illegal local state".into()),
+                    None,
+                )
+                .into())
+            }
+        };
+
+        if let Some(err) = detach.error {
+            return Err(err.into());
+        }
         Ok(())
     }
 
@@ -694,14 +712,14 @@ pub(crate) async fn do_attach<L, W, R>(
     reader: &mut R,
 ) -> Result<(), AttachError>
 where
-    L: endpoint::Link<AttachError = AttachError, DetachError = definitions::Error>,
+    L: endpoint::LinkAttach<AttachError = AttachError>  + endpoint::LinkDetach<DetachError = definitions::Error>,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
     use futures_util::StreamExt;
 
     // Send an Attach frame
-    endpoint::Link::send_attach(link, writer).await?;
+    endpoint::LinkAttach::send_attach(link, writer).await?;
 
     // Wait for an Attach frame
     let frame = reader
@@ -753,7 +771,7 @@ pub(crate) async fn expect_detach_then_detach<L, W, R>(
     reader: &mut R,
 ) -> Result<(), Error>
 where
-    L: endpoint::Link<AttachError = AttachError, DetachError = definitions::Error>,
+    L: endpoint::LinkAttach<AttachError = AttachError> + endpoint::LinkDetach<DetachError = definitions::Error>,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {

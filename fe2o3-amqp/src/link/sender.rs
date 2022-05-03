@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, Link, Settlement},
+    endpoint::{self, LinkAttach, LinkDetach, Settlement},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };
@@ -190,6 +190,7 @@ impl Sender {
                     DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
                     DeliveryState::Released(released) => Err(Error::Released(released)),
                     DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
+                    #[cfg(feature = "transaction")]
                     DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
                         Err(Error::not_implemented())
                     }

@@ -1,12 +1,9 @@
 //! Transaction
 
-use crate::{Sender, Receiver};
+use crate::{Sender, Receiver, link::sender::SenderInner};
 
-/// Transaction controller
-#[derive(Debug)]
-pub struct Controller {
-    // sender: SenderInner,
-}
+mod controller;
+pub use controller::*;
 
 /// A transaction scope
 #[derive(Debug)]

@@ -13,7 +13,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::Link,
+    endpoint::{LinkDetach},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
     Payload,

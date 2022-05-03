@@ -116,7 +116,7 @@ impl endpoint::SenderLink for SenderLink {
         W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        use crate::endpoint::Link;
+        use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
         self.error_if_closed().map_err(|e| Self::Error::Local(e))?;

@@ -23,7 +23,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::Link,
     link::{
         self,
         delivery::UnsettledMessage,
@@ -34,7 +33,7 @@ use crate::{
         AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
-    Receiver, Sender,
+    Receiver, Sender, endpoint::LinkAttach,
 };
 
 use super::{

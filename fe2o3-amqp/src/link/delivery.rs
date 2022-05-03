@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::BodySection, DeliveryState, Message, Received}, transaction::TransactionId,
+    messaging::{message::BodySection, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -11,6 +11,9 @@ use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::TransactionId;
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -314,6 +317,7 @@ impl FromDeliveryState for NonTxnResult {
             DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
             DeliveryState::Released(released) => Err(link::Error::Released(released)),
             DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
+            #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
                 Err(link::Error::not_implemented())
             }
@@ -323,6 +327,7 @@ impl FromDeliveryState for NonTxnResult {
 
 // type TxnDeclareResult = Result<TransactionId, link::Error>;
 
+#[cfg(feature = "transaction")]
 type TxnResult = Result<TransactionId, link::Error>;
 
 impl<O> Future for DeliveryFut<O>
