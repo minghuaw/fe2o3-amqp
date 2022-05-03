@@ -163,8 +163,7 @@ impl<R, F, M> Link<R, Target, F, M> {
 }
 
 #[async_trait]
-// impl endpoint::Link for Link<role::Sender, Consumer<Arc<LinkFlowState>>> {
-impl<R, F, M> endpoint::LinkState for Link<R, Target, F, M>
+impl<R, T, F, M> endpoint::LinkState for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
@@ -371,9 +370,10 @@ where
 }
 
 #[async_trait]
-impl<R, F, M> endpoint::LinkDetach for Link<R, Target, F, M> 
+impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
 where 
     R: role::IntoRole + Send + Sync,
+    T: Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
