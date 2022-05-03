@@ -186,9 +186,9 @@ pub(crate) trait LinkState {
     // type AttachError: Send;
     // type DetachError: Send;
 
-    fn is_detached(&self) -> bool;
+    // fn is_detached(&self) -> bool;
 
-    fn is_closed(&self) -> bool;
+    // fn is_closed(&self) -> bool;
 
     fn output_handle(&self) -> Option<&Handle>;
 

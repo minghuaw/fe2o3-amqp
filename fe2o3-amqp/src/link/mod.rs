@@ -1,14 +1,7 @@
 //! Implements AMQP1.0 Link
 
 mod frame;
-use std::{
-    collections::BTreeMap,
-    marker::PhantomData,
-    sync::{
-        atomic::{AtomicU8, Ordering},
-        Arc,
-    },
-};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Buf;
@@ -64,8 +57,8 @@ pub(crate) type SenderLink = Link<role::Sender, Target, SenderFlowState, Unsettl
 /// Type alias for receiver link that ONLY represents the inner state of receiver
 pub(crate) type ReceiverLink = Link<role::Receiver, Target, ReceiverFlowState, DeliveryState>;
 
-const CLOSED: u8 = 0b0000_0100;
-const DETACHED: u8 = 0b0000_0010;
+// const CLOSED: u8 = 0b0000_0100;
+// const DETACHED: u8 = 0b0000_0010;
 
 pub mod role {
     //! Type state definition of link role
@@ -113,8 +106,7 @@ pub struct Link<R, T, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
-    pub(crate) state_code: Arc<AtomicU8>,
-
+    // pub(crate) state_code: Arc<AtomicU8>,
     pub(crate) name: String,
 
     pub(crate) output_handle: Option<Handle>, // local handle
@@ -150,14 +142,23 @@ impl<R, F, M> Link<R, Target, F, M> {
         F: AsRef<LinkFlowState<R>> + Send + Sync,
         M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
     {
-        if endpoint::LinkState::is_closed(self) {
-            return Err(definitions::Error::new(
-                AmqpError::NotAllowed,
-                "Link is permanently closed".to_string(),
-                None,
-            ));
-        } else {
-            Ok(())
+        match self.local_state {
+            LinkState::Unattached
+            | LinkState::AttachSent
+            | LinkState::AttachReceived
+            | LinkState::Attached
+            | LinkState::DetachSent
+            | LinkState::DetachReceived
+            | LinkState::Detached
+            | LinkState::CloseSent
+            | LinkState::CloseReceived => Ok(()),
+            LinkState::Closed => {
+                return Err(definitions::Error::new(
+                    AmqpError::NotAllowed,
+                    "Link is permanently closed".to_string(),
+                    None,
+                ))
+            }
         }
     }
 }
@@ -169,25 +170,24 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    fn is_detached(&self) -> bool {
-        let cur = self.state_code.load(Ordering::Acquire);
-        (cur & DETACHED) == DETACHED
-    }
+    // fn is_detached(&self) -> bool {
+    //     let cur = self.state_code.load(Ordering::Acquire);
+    //     (cur & DETACHED) == DETACHED
+    // }
 
-    fn is_closed(&self) -> bool {
-        let cur = self.state_code.load(Ordering::Acquire);
-        (cur & CLOSED) == CLOSED
-    }
+    // fn is_closed(&self) -> bool {
+    //     let cur = self.state_code.load(Ordering::Acquire);
+    //     (cur & CLOSED) == CLOSED
+    // }
 
     fn output_handle(&self) -> Option<&Handle> {
         self.output_handle.as_ref()
     }
-
 }
 
 #[async_trait]
-impl<R, F, M> endpoint::LinkAttach for Link<R, Target, F, M> 
-where 
+impl<R, F, M> endpoint::LinkAttach for Link<R, Target, F, M>
+where
     R: role::IntoRole + Send + Sync,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
@@ -197,7 +197,7 @@ where
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
         match self.local_state {
             LinkState::AttachSent => {
-                self.state_code.fetch_and(0b0000_0000, Ordering::Release);
+                // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
                 self.local_state = LinkState::Attached
             }
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
@@ -355,7 +355,7 @@ where
             LinkState::AttachReceived => {
                 writer.send(frame).await
                     .map_err(|_| AttachError::IllegalSessionState)?;
-                self.state_code.fetch_and(0b0000_0000, Ordering::Release);
+                // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
                 self.local_state = LinkState::Attached
             }
             _ => return Err(AttachError::Local(definitions::Error::new(
@@ -371,7 +371,7 @@ where
 
 #[async_trait]
 impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
-where 
+where
     R: role::IntoRole + Send + Sync,
     T: Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
@@ -383,22 +383,44 @@ where
     #[instrument(skip_all)]
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         trace!(detach = ?detach);
-        match self.local_state {
-            LinkState::Attached => self.local_state = LinkState::DetachReceived,
-            LinkState::DetachSent => {
-                self.local_state = LinkState::Detached;
-                // Dropping output handle as it is already detached
-                let _ = self.output_handle.take();
-            }
-            _ => {
-                return Err(definitions::Error::new(
+
+        match detach.closed {
+            true => match self.local_state {
+                LinkState::Attached 
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::DetachSent 
+                | LinkState::DetachReceived => self.local_state = LinkState::CloseReceived,
+                LinkState::CloseSent => {
+                    self.local_state = LinkState::Closed;
+                    let _ = self.output_handle.take();
+                },
+                _ => return Err(definitions::Error::new(
                     AmqpError::IllegalState,
                     Some("Illegal local state".into()),
                     None,
                 )
                 .into())
+            },
+            false => {
+                match self.local_state {
+                    LinkState::Attached => self.local_state = LinkState::DetachReceived,
+                    LinkState::DetachSent => {
+                        self.local_state = LinkState::Detached;
+                        // Dropping output handle as it is already detached
+                        let _ = self.output_handle.take();
+                    }
+                    _ => {
+                        return Err(definitions::Error::new(
+                            AmqpError::IllegalState,
+                            Some("Illegal local state".into()),
+                            None,
+                        )
+                        .into())
+                    }
+                }
             }
-        };
+        }
 
         if let Some(err) = detach.error {
             return Err(err.into());
@@ -453,10 +475,10 @@ where
                     )
                 })?;
 
-                self.state_code.fetch_or(DETACHED, Ordering::Release);
-                if closed {
-                    self.state_code.fetch_or(CLOSED, Ordering::Release);
-                }
+                // self.state_code.fetch_or(DETACHED, Ordering::Release);
+                // if closed {
+                //     self.state_code.fetch_or(CLOSED, Ordering::Release);
+                // }
 
                 remove_handle
             }
@@ -480,14 +502,14 @@ pub(crate) enum LinkHandle {
         flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
         unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
         receiver_settle_mode: ReceiverSettleMode,
-        state_code: Arc<AtomicU8>,
+        // state_code: Arc<AtomicU8>,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
         flow_state: ReceiverFlowState,
         unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
         receiver_settle_mode: ReceiverSettleMode,
-        state_code: Arc<AtomicU8>,
+        // state_code: Arc<AtomicU8>,
         more: bool,
     },
 }
@@ -679,18 +701,18 @@ impl LinkHandle {
         detach: Detach,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender { tx, state_code, .. } => {
-                state_code.fetch_or(DETACHED, Ordering::Release);
-                if detach.closed {
-                    state_code.fetch_or(CLOSED, Ordering::Release);
-                }
+            LinkHandle::Sender { tx, .. } => {
+                // state_code.fetch_or(DETACHED, Ordering::Release);
+                // if detach.closed {
+                //     state_code.fetch_or(CLOSED, Ordering::Release);
+                // }
                 tx.send(LinkFrame::Detach(detach)).await?;
             }
-            LinkHandle::Receiver { tx, state_code, .. } => {
-                state_code.fetch_or(DETACHED, Ordering::Release);
-                if detach.closed {
-                    state_code.fetch_or(CLOSED, Ordering::Release);
-                }
+            LinkHandle::Receiver { tx, .. } => {
+                // state_code.fetch_or(DETACHED, Ordering::Release);
+                // if detach.closed {
+                //     state_code.fetch_or(CLOSED, Ordering::Release);
+                // }
                 tx.send(LinkFrame::Detach(detach)).await?;
             }
         }
@@ -712,7 +734,8 @@ pub(crate) async fn do_attach<L, W, R>(
     reader: &mut R,
 ) -> Result<(), AttachError>
 where
-    L: endpoint::LinkAttach<AttachError = AttachError>  + endpoint::LinkDetach<DetachError = definitions::Error>,
+    L: endpoint::LinkAttach<AttachError = AttachError>
+        + endpoint::LinkDetach<DetachError = definitions::Error>,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {
@@ -771,7 +794,8 @@ pub(crate) async fn expect_detach_then_detach<L, W, R>(
     reader: &mut R,
 ) -> Result<(), Error>
 where
-    L: endpoint::LinkAttach<AttachError = AttachError> + endpoint::LinkDetach<DetachError = definitions::Error>,
+    L: endpoint::LinkAttach<AttachError = AttachError>
+        + endpoint::LinkDetach<DetachError = definitions::Error>,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {

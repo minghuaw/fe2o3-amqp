@@ -7,7 +7,7 @@
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
-    sync::{atomic::AtomicU8, Arc},
+    sync::{Arc},
 };
 
 use fe2o3_amqp_types::{
@@ -258,13 +258,13 @@ impl LinkAcceptor {
 
         // Comparing unsettled should be taken care of in `on_incoming_attach`
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let state_code = Arc::new(AtomicU8::new(0));
+        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: rcv_settle_mode.clone(),
-            state_code: state_code.clone(),
+            // state_code: state_code.clone(),
             more: false,
         };
 
@@ -292,7 +292,7 @@ impl LinkAcceptor {
         let mut link = link::Link::<role::Receiver, Target, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
-            state_code,
+            // state_code,
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // will be set in `on_incoming_attach`
@@ -367,13 +367,13 @@ impl LinkAcceptor {
         let flow_state_consumer = Consumer::new(notifier, flow_state);
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let state_code = Arc::new(AtomicU8::new(0));
+        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),
-            state_code: state_code.clone(),
+            // state_code: state_code.clone(),
         };
 
         // Allocate link in session
@@ -394,7 +394,7 @@ impl LinkAcceptor {
         let mut link = link::Link::<role::Sender, Target, SenderFlowState, UnsettledMessage> {
             role: PhantomData,
             local_state: LinkState::Unattached, // will be set in `on_incoming_attach`
-            state_code,
+            // state_code,
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // this will be set in `on_incoming_attach`

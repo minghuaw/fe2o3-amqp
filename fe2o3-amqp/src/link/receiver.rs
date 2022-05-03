@@ -288,7 +288,7 @@ impl Receiver {
                 flow_state: self.link.flow_state.clone(),
                 unsettled: self.link.unsettled.clone(),
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
-                state_code: self.link.state_code.clone(),
+                // state_code: self.link.state_code.clone(),
                 // This only controls whether a multi-transfer delivery id
                 // will be added to sessions map
                 more: false,
