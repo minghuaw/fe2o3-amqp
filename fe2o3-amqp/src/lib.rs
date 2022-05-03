@@ -121,9 +121,11 @@ pub mod sasl_profile;
 pub mod session;
 pub mod transport;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
 pub mod acceptor;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
 #[cfg(feature = "transaction")]
 pub mod transaction;
 
