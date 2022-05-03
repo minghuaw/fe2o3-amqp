@@ -376,19 +376,7 @@ impl SenderInner<SenderLink> {
             }
         }
 
-        // The local outgoing handle must have been dropped, de-allocate link from session
-        if let Err(_) = self
-            .session
-            .send(SessionControl::DeallocateLink(self.link.name.clone()))
-            .await
-        {
-            let e = definitions::Error::new(
-                AmqpError::IllegalState,
-                "Session must have dropped".to_string(),
-                None,
-            );
-            return Err(DetachError::new(false, Some(e)));
-        }
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
 
         Ok(())
     }
@@ -413,11 +401,11 @@ impl SenderInner<SenderLink> {
             _ => return Err(detach_error_expecting_frame()),
         };
 
-        let detaching = if remote_detach.closed {
+        if remote_detach.closed {
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
             match self.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => self,
+                Ok(_) => {},
                 Err(e) => {
                     return Err(DetachError {
                         is_closed_by_remote: false,
@@ -450,24 +438,12 @@ impl SenderInner<SenderLink> {
                 _ => return Err(detach_error_expecting_frame()),
             };
             match self.link.send_detach(&mut self.outgoing, true, None).await {
-                Ok(_) => self,
+                Ok(_) => {},
                 Err(e) => return Err(DetachError::new(false, Some(e))),
             }
         };
 
-        // de-allocate link from session
-        if let Err(_) = detaching
-            .session
-            .send(SessionControl::DeallocateLink(detaching.link.name.clone()))
-            .await
-        {
-            let e = definitions::Error::new(
-                AmqpError::IllegalState,
-                "Session must have dropped while deallocating link".to_string(),
-                None,
-            );
-            return Err(DetachError::new(false, Some(e)));
-        }
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
 
         Ok(())
     }

@@ -36,13 +36,13 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 mod error;
-pub(crate) use error::AllocLinkError;
+pub(crate) use error::{AllocLinkError, DeallocLinkError};
 pub use error::Error;
 
 mod builder;
 pub use builder::*;
 
-use self::frame::{SessionFrame, SessionFrameBody};
+use self::{frame::{SessionFrame, SessionFrameBody}};
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 2048;
@@ -158,6 +158,15 @@ pub(crate) async fn allocate_link(
         // unmapped. Thus it could be considered as illegal state
         .map_err(|_| AllocLinkError::IllegalState)?;
     result
+}
+
+pub(crate) async fn deallocate_link(
+    control: &mut mpsc::Sender<SessionControl>,
+    link_name: String,
+) -> Result<(), DeallocLinkError> 
+{
+    control.send(SessionControl::DeallocateLink(link_name)).await
+        .map_err(|_| DeallocLinkError::IllegalState)
 }
 
 /// AMQP1.0 Session

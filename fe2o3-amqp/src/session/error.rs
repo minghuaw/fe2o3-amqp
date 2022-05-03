@@ -113,3 +113,9 @@ impl From<AllocLinkError> for definitions::Error {
         }
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum DeallocLinkError {
+    #[error("Illegal session state")]
+    IllegalState,
+}

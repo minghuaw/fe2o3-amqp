@@ -555,22 +555,8 @@ impl Receiver {
             }
         }
 
-        let link_name = self.link.name.clone();
-        if let Err(_) = self
-            .session
-            .send(SessionControl::DeallocateLink(link_name))
-            .await
-        {
-            let err = DetachError::new(
-                false,
-                Some(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    "Session must have been dropped".to_string(),
-                    None,
-                )),
-            );
-            return Err(err);
-        }
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
+        
         Ok(())
     }
 
@@ -578,8 +564,6 @@ impl Receiver {
     ///
     /// This will send a Detach performative with the `closed` field set to true.
     pub async fn close(&mut self) -> Result<(), DetachError> {
-        let link_name = self.link.name.clone();
-
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
         if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
@@ -633,19 +617,7 @@ impl Receiver {
             }
         };
 
-        // TODO: de-allocate link from session
-        if let Err(_) = self
-            .session
-            .send(SessionControl::DeallocateLink(link_name))
-            .await
-        {
-            let e = definitions::Error::new(
-                AmqpError::IllegalState,
-                "Session must have dropped while deallocating link".to_string(),
-                None,
-            );
-            return Err(DetachError::new(false, Some(e)));
-        }
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
 
         Ok(())
     }

@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::mpsc;
 
-use crate::session::AllocLinkError;
+use crate::session::{AllocLinkError, DeallocLinkError};
 
 /// Error associated with detaching a link
 #[derive(Debug)]
@@ -77,6 +77,21 @@ impl TryFrom<Error> for DetachError {
                 Ok(error)
             }
             Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
+        }
+    }
+}
+
+impl From<DeallocLinkError> for DetachError {
+    fn from(err: DeallocLinkError) -> Self {
+        match err {
+            DeallocLinkError::IllegalState => DetachError::new(
+                false,
+                Some(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    "Session must have been dropped".to_string(),
+                    None,
+                )),
+            ),
         }
     }
 }
