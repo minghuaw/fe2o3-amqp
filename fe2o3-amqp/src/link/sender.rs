@@ -11,7 +11,7 @@ use tokio::{
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{message::__private::Serializable, Address, DeliveryState},
+    messaging::{message::__private::Serializable, Address, DeliveryState, Target},
     performatives::Detach,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -85,8 +85,8 @@ impl std::fmt::Debug for Sender {
 
 impl Sender {
     /// Creates a builder for [`Sender`] link
-    pub fn builder() -> builder::Builder<role::Sender, WithoutName, WithoutTarget> {
-        builder::Builder::<role::Sender, _, _>::new()
+    pub fn builder() -> builder::Builder<role::Sender, Target, WithoutName, WithoutTarget> {
+        builder::Builder::<role::Sender, Target, _, _>::new()
     }
 
     /// Attach the sender link to a session with default configuration

@@ -3,7 +3,7 @@
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
-    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released},
+    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
 use futures_util::StreamExt;
@@ -232,8 +232,8 @@ impl Drop for Receiver {
 
 impl Receiver {
     /// Creates a builder for the [`Receiver`]
-    pub fn builder() -> builder::Builder<role::Receiver, WithoutName, WithTarget> {
-        builder::Builder::<role::Receiver, _, _>::new()
+    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithTarget> {
+        builder::Builder::<role::Receiver, Target, _, _>::new()
     }
 
     /// Attach the receiver link to a session with the default configuration

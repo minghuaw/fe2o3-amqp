@@ -73,6 +73,11 @@ pub mod role {
     #[derive(Debug)]
     pub struct Receiver {}
 
+    // /// Type state for link::builder::Builder
+    // #[cfg(feature = "transaction")]
+    // #[derive(Debug)]
+    // pub struct Controller {}
+
     pub(crate) trait IntoRole {
         fn into_role() -> Role;
     }
@@ -88,6 +93,13 @@ pub mod role {
             Role::Receiver
         }
     }
+
+    // #[cfg(feature = "transaction")]
+    // impl IntoRole for Controller {
+    //     fn into_role() -> Role {
+    //         Role::Sender
+    //     }
+    // }
 }
 
 /// Manages the link state
