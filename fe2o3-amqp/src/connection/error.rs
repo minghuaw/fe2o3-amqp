@@ -175,3 +175,7 @@ impl From<NegotiationError> for OpenError {
         }
     }
 }
+
+pub(crate) enum DeallcoSessionError {
+    IllegalState,
+}

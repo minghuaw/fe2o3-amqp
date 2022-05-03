@@ -10,7 +10,7 @@ use tokio_util::sync::PollSender;
 use tracing::{debug, error, instrument, trace};
 
 use crate::{
-    connection::engine::SessionId,
+    connection::{engine::SessionId, self},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, Session},
     link::{LinkFrame, LinkHandle},
@@ -406,14 +406,7 @@ where
         }
 
         debug!("Stopped");
-        // The `SendError` could only occur when the receiving side has been dropped,
-        // meaning the `ConnectionEngine::event_loop` has already stopped. There, then,
-        // is no need to remove the channel from `ConnectionEngine`, and we could thus
-        // ignore this error
-        let _ = self
-            .conn
-            .send(ConnectionControl::DeallocateSession(self.session_id))
-            .await;
+        let _ = connection::deallocate_session(&mut self.conn, self.session_id).await;
         outcome
     }
 }
