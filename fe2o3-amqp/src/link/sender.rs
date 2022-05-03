@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkAttach, LinkDetach, Settlement},
+    endpoint::{self, LinkDetach, Settlement},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };

@@ -131,13 +131,13 @@ impl Error {
         ))
     }
 
-    pub(crate) fn not_implemented() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            None,
-            None,
-        ))
-    }
+    // pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
+    //     Self::Local(definitions::Error::new(
+    //         AmqpError::NotImplemented,
+    //         description.into(),
+    //         None,
+    //     ))
+    // }
 }
 
 impl From<AmqpError> for Error {
@@ -200,9 +200,9 @@ pub enum AttachError {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
-    // /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
-    // #[error("Initial delivery count MUST NOT be null if role is sender,")]
-    // InitialDeliveryCountIsNull,
+    /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
+    /// #[error("Initial delivery count MUST NOT be null if role is sender,")]
+    /// InitialDeliveryCountIsNull,
     /// Source field in Attach is Null
     #[error("Source is None")]
     SourceIsNone,
