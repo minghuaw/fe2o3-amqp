@@ -217,7 +217,7 @@ pub struct Receiver {
 
 impl Drop for Receiver {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle.clone() {
+        if let Some(handle) = self.link.output_handle.take() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
                     handle,

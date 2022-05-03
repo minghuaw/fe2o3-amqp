@@ -438,33 +438,24 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        // This doesn't check the `state_code` because it will be set when
-        // there is incoming Detach in the session's event loop.
+        match self.local_state {
+            LinkState::Attached => {
+                self.local_state = LinkState::DetachSent;
+            }
+            LinkState::DetachReceived => {
+                self.local_state = LinkState::Detached;
+            }
+            _ => return Err(AmqpError::IllegalState.into()),
+        }
 
-        // Detach may fail and may try re-attach
-        // The local output handle is not removed from the session
-        // until `deallocate_link`. The outgoing detach will not remove
-        // local handle from session
-        let remove_handle = match &self.output_handle {
+        match self.output_handle.take() {
             Some(handle) => {
-                let remove_handle = match self.local_state {
-                    LinkState::Attached => {
-                        self.local_state = LinkState::DetachSent;
-                        false
-                    }
-                    LinkState::DetachReceived => {
-                        self.local_state = LinkState::Detached;
-                        true
-                    }
-                    _ => return Err(AmqpError::IllegalState.into()),
-                };
-
                 let detach = Detach {
-                    handle: handle.clone(),
+                    handle,
                     closed,
-                    error,
+                    error
                 };
-
+        
                 debug!("Sending detach: {:?}", detach);
 
                 writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
@@ -474,19 +465,8 @@ where
                         None,
                     )
                 })?;
-
-                // self.state_code.fetch_or(DETACHED, Ordering::Release);
-                // if closed {
-                //     self.state_code.fetch_or(CLOSED, Ordering::Release);
-                // }
-
-                remove_handle
-            }
+            },
             None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
-        };
-
-        if remove_handle {
-            let _ = self.output_handle.take();
         }
 
         Ok(())
