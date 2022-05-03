@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::mpsc;
 
-use crate::session::AllocLinkError;
+use crate::session::{AllocLinkError, DeallocLinkError};
 
 /// Error associated with detaching a link
 #[derive(Debug)]
@@ -81,6 +81,21 @@ impl TryFrom<Error> for DetachError {
     }
 }
 
+impl From<DeallocLinkError> for DetachError {
+    fn from(err: DeallocLinkError) -> Self {
+        match err {
+            DeallocLinkError::IllegalState => DetachError::new(
+                false,
+                Some(definitions::Error::new(
+                    AmqpError::IllegalState,
+                    "Session must have been dropped".to_string(),
+                    None,
+                )),
+            ),
+        }
+    }
+}
+
 /// Error associated with normal operations on a link
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -130,6 +145,14 @@ impl Error {
             None,
         ))
     }
+
+    // pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
+    //     Self::Local(definitions::Error::new(
+    //         AmqpError::NotImplemented,
+    //         description.into(),
+    //         None,
+    //     ))
+    // }
 }
 
 impl From<AmqpError> for Error {
@@ -192,9 +215,9 @@ pub enum AttachError {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 
-    // /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
-    // #[error("Initial delivery count MUST NOT be null if role is sender,")]
-    // InitialDeliveryCountIsNull,
+    /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
+    /// #[error("Initial delivery count MUST NOT be null if role is sender,")]
+    /// InitialDeliveryCountIsNull,
     /// Source field in Attach is Null
     #[error("Source is None")]
     SourceIsNone,

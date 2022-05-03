@@ -273,7 +273,7 @@ impl ser::Serialize for SimpleValue {
             SimpleValue::Timestamp(v) => v.serialize(serializer),
             SimpleValue::Uuid(v) => v.serialize(serializer),
             SimpleValue::Binary(v) => serializer.serialize_bytes(v.as_slice()),
-            SimpleValue::String(v) => serializer.serialize_str(&v),
+            SimpleValue::String(v) => serializer.serialize_str(v),
             SimpleValue::Symbol(v) => v.serialize(serializer),
         }
     }

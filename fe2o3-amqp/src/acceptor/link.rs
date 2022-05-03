@@ -7,12 +7,14 @@
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
-    sync::{atomic::AtomicU8, Arc},
+    sync::{Arc},
 };
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo},
-    messaging::DeliveryState,
+    definitions::{
+        self, AmqpError, Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
+    },
+    messaging::{DeliveryState, Target},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -21,17 +23,17 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::Link,
     link::{
         self,
         delivery::UnsettledMessage,
         receiver::CreditMode,
         role,
+        sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
-    Receiver, Sender,
+    Receiver, Sender, endpoint::LinkAttach,
 };
 
 use super::{
@@ -256,13 +258,13 @@ impl LinkAcceptor {
 
         // Comparing unsettled should be taken care of in `on_incoming_attach`
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let state_code = Arc::new(AtomicU8::new(0));
+        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: rcv_settle_mode.clone(),
-            state_code: state_code.clone(),
+            // state_code: state_code.clone(),
             more: false,
         };
 
@@ -276,17 +278,28 @@ impl LinkAcceptor {
         )
         .await?;
 
-        let mut link = link::Link::<role::Receiver, ReceiverFlowState, DeliveryState> {
+        let target = match &remote_attach.target {
+            Some(t) => Target::try_from(*t.clone()).map_err(|_| {
+                AttachError::Local(definitions::Error::new(
+                    AmqpError::NotImplemented,
+                    "Coordinator is not implemented".to_string(),
+                    None,
+                ))
+            })?,
+            None => return Err(AttachError::TargetIsNone),
+        };
+
+        let mut link = link::Link::<role::Receiver, Target, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
-            state_code,
+            // state_code,
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // will be set in `on_incoming_attach`
-            snd_settle_mode: remote_attach.snd_settle_mode.clone(),
+            snd_settle_mode: Default::default(), // Will take value from incoming attach
             rcv_settle_mode,
-            source: remote_attach.source.clone(),
-            target: remote_attach.target.clone(),
+            source: None, // Will take value from incoming attach
+            target: Some(target),
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
@@ -354,13 +367,13 @@ impl LinkAcceptor {
         let flow_state_consumer = Consumer::new(notifier, flow_state);
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let state_code = Arc::new(AtomicU8::new(0));
+        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),
-            state_code: state_code.clone(),
+            // state_code: state_code.clone(),
         };
 
         // Allocate link in session
@@ -373,17 +386,22 @@ impl LinkAcceptor {
         )
         .await?;
 
-        let mut link = link::Link::<role::Sender, SenderFlowState, UnsettledMessage> {
+        let source = *(&remote_attach)
+            .source
+            .clone()
+            .ok_or(AttachError::SourceIsNone)?;
+
+        let mut link = link::Link::<role::Sender, Target, SenderFlowState, UnsettledMessage> {
             role: PhantomData,
             local_state: LinkState::Unattached, // will be set in `on_incoming_attach`
-            state_code,
+            // state_code,
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // this will be set in `on_incoming_attach`
             snd_settle_mode,
-            rcv_settle_mode: remote_attach.rcv_settle_mode.clone(),
-            source: remote_attach.source.clone(),
-            target: remote_attach.target.clone(),
+            rcv_settle_mode: Default::default(), // Will take value from incoming attach
+            source: Some(source),                // Will take value from incoming attach
+            target: None,                        // Will take value from incoming attach
             max_message_size: self.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: self.offered_capabilities.clone(),
             desired_capabilities: self.desired_capabilities.clone(),
@@ -395,7 +413,7 @@ impl LinkAcceptor {
         link.on_incoming_attach(remote_attach).await?;
         link.send_attach(&mut outgoing).await?;
 
-        let sender = Sender {
+        let inner = SenderInner {
             link,
             buffer_size: self.buffer_size,
             session: session.control.clone(),
@@ -403,7 +421,7 @@ impl LinkAcceptor {
             incoming: ReceiverStream::new(incoming_rx),
             // marker: PhantomData,
         };
-        Ok(LinkEndpoint::Sender(sender))
+        Ok(LinkEndpoint::Sender(Sender { inner }))
     }
 
     /// Accept incoming link by waiting for an incoming Attach performative

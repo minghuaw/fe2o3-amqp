@@ -6,7 +6,7 @@ use crate::link::error::DetachError;
 use super::*;
 
 #[async_trait]
-impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessage> {
+impl endpoint::SenderLink for SenderLink {
     type Error = link::Error;
 
     /// Set and send flow state
@@ -116,7 +116,7 @@ impl endpoint::SenderLink for Link<role::Sender, SenderFlowState, UnsettledMessa
         W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
-        use crate::endpoint::Link;
+        use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
         self.error_if_closed().map_err(|e| Self::Error::Local(e))?;

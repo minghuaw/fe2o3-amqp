@@ -126,7 +126,7 @@ pub struct Flow {
     /// <field name="properties" type="fields"/>
     ///
     /// A registry of commonly defined link state properties and their meanings
-    /// is maintained [AMQPLINKSTATEPROP].
+    /// is maintained \[AMQPLINKSTATEPROP\].
     ///
     /// When the handle field is not set, this field MUST NOT be set.
     pub properties: Option<Fields>,

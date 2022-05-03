@@ -6,11 +6,14 @@ use fe2o3_amqp_types::{
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
-use std::{future::Future, task::Poll};
-use tokio::sync::oneshot;
+use std::{future::Future, marker::PhantomData, task::Poll};
+use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::TransactionId;
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -260,21 +263,78 @@ impl AsMut<DeliveryState> for UnsettledMessage {
 pin_project! {
     /// A future for delivery that can be `.await`ed for the settlement
     /// from receiver
-    pub struct DeliveryFut {
+    pub struct DeliveryFut<O> {
         #[pin]
         // Reserved for future use on actively sending disposition from Sender
         settlement: Settlement,
+        outcome_marker: PhantomData<O>
     }
 }
 
-impl From<Settlement> for DeliveryFut {
+impl<O> From<Settlement> for DeliveryFut<O> {
     fn from(settlement: Settlement) -> Self {
-        Self { settlement }
+        Self {
+            settlement,
+            outcome_marker: PhantomData,
+        }
     }
 }
 
-impl Future for DeliveryFut {
-    type Output = Result<(), link::Error>;
+trait FromSettled {
+    fn from_settled() -> Self;
+}
+
+trait FromDeliveryState {
+    fn from_delivery_state(state: DeliveryState) -> Self;
+}
+
+trait FromRecvError {
+    fn from_recv_error(err: RecvError) -> Self;
+}
+
+impl<T> FromRecvError for Result<T, link::Error> {
+    fn from_recv_error(_: RecvError) -> Self {
+        Err(link::Error::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Outcome sender is dropped".into()),
+            None,
+        )))
+    }
+}
+
+type NonTxnResult = Result<(), link::Error>;
+
+impl FromSettled for NonTxnResult {
+    fn from_settled() -> Self {
+        Ok(())
+    }
+}
+
+impl FromDeliveryState for NonTxnResult {
+    fn from_delivery_state(state: DeliveryState) -> Self {
+        match state {
+            DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+            DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
+            DeliveryState::Released(released) => Err(link::Error::Released(released)),
+            DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
+            #[cfg(feature = "transaction")]
+            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+                Err(link::Error::not_implemented())
+            }
+        }
+    }
+}
+
+// type TxnDeclareResult = Result<TransactionId, link::Error>;
+
+#[cfg(feature = "transaction")]
+type TxnResult = Result<TransactionId, link::Error>;
+
+impl<O> Future for DeliveryFut<O>
+where
+    O: FromSettled + FromDeliveryState + FromRecvError,
+{
+    type Output = O;
 
     fn poll(
         self: std::pin::Pin<&mut Self>,
@@ -284,7 +344,7 @@ impl Future for DeliveryFut {
         let mut settlement = this.settlement;
 
         match &mut *settlement {
-            Settlement::Settled => Poll::Ready(Ok(())),
+            Settlement::Settled => Poll::Ready(O::from_settled()),
             Settlement::Unsettled {
                 _delivery_tag: _,
                 outcome,
@@ -293,32 +353,12 @@ impl Future for DeliveryFut {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(result) => {
                         match result {
-                            Ok(state) => {
-                                let result = match state {
-                                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => {
-                                        Ok(())
-                                    }
-                                    DeliveryState::Rejected(rejected) => {
-                                        Err(link::Error::Rejected(rejected))
-                                    }
-                                    DeliveryState::Released(released) => {
-                                        Err(link::Error::Released(released))
-                                    }
-                                    DeliveryState::Modified(modified) => {
-                                        Err(link::Error::Modified(modified))
-                                    }
-                                };
-                                Poll::Ready(result)
-                            }
-                            Err(_) => {
+                            Ok(state) => Poll::Ready(O::from_delivery_state(state)),
+                            Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
 
-                                Poll::Ready(Err(link::Error::Local(definitions::Error::new(
-                                    AmqpError::IllegalState,
-                                    Some("Outcome sender is dropped".into()),
-                                    None,
-                                ))))
+                                Poll::Ready(O::from_recv_error(err))
                             }
                         }
                     }

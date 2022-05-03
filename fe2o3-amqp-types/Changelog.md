@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.9 ~ 0.0.12
+
+1. Added types defined in transactions
+
 ## 0.0.7
 
 1. Updated dependency `serde_amqp` to `"^0.0.5"`.

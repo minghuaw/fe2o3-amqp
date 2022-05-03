@@ -5,15 +5,38 @@ use serde_amqp::primitives::{Boolean, UInt, ULong};
 
 use crate::definitions::{Error, Fields};
 
+#[cfg(feature = "transaction")]
+use crate::transaction::Declared;
+#[cfg(feature = "transaction")]
+use crate::transaction::TransactionalState;
+
 /// 3.4 Delivery State
 #[derive(Debug, Clone)]
-#[allow(missing_docs)]
 pub enum DeliveryState {
-    Accepted(Accepted),
-    Rejected(Rejected),
-    Released(Released),
-    Modified(Modified),
+    /// 3.4.1 Received
     Received(Received),
+
+    /// 3.4.2 Accepted
+    Accepted(Accepted),
+
+    /// 3.4.2 Rejected
+    Rejected(Rejected),
+
+    /// 3.4.4 Released
+    Released(Released),
+
+    /// 3.4.5 Modified
+    Modified(Modified),
+
+    /// 4.5.5 Declared
+    #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
+    #[cfg(feature = "transaction")]
+    Declared(Declared),
+
+    /// 4.5.6 Transactional State
+    #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
+    #[cfg(feature = "transaction")]
+    TransactionalState(TransactionalState),
 }
 
 impl DeliveryState {
@@ -25,6 +48,12 @@ impl DeliveryState {
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_) => true,
             DeliveryState::Received(_) => false,
+
+            #[cfg(feature = "transaction")]
+            DeliveryState::Declared(_) => true,
+
+            #[cfg(feature = "transaction")]
+            DeliveryState::TransactionalState(_) => false,
         }
     }
 }
@@ -43,13 +72,25 @@ impl AsMut<DeliveryState> for DeliveryState {
 
 mod delivery_state_impl;
 
+/// A terminal delivery state is also referred to as Outcome
 #[derive(Debug, Clone)]
-#[allow(missing_docs)]
 pub enum Outcome {
+    /// 3.4.2 Accepted
     Accepted(Accepted),
+
+    /// 3.4.2 Rejected
     Rejected(Rejected),
+
+    /// 3.4.4 Released
     Released(Released),
+
+    /// 3.4.5 Modified
     Modified(Modified),
+
+    /// 4.5.5 Declared
+    #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
+    #[cfg(feature = "transaction")]
+    Declared(Declared),
 }
 
 mod outcome_impl;

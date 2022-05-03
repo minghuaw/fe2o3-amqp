@@ -1,7 +1,5 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::sync::Arc;
-
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
@@ -15,7 +13,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::Link,
+    endpoint::{LinkDetach},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
     Payload,
@@ -26,9 +24,7 @@ use super::{
     delivery::Delivery,
     error::{AttachError, DetachError},
     receiver_link::section_number_and_offset,
-    role,
-    state::LinkFlowState,
-    Error, LinkFrame, LinkHandle, DEFAULT_CREDIT,
+    role, Error, LinkFrame, LinkHandle, ReceiverLink, DEFAULT_CREDIT,
 };
 
 macro_rules! or_assign {
@@ -143,9 +139,6 @@ impl IncompleteTransfer {
     }
 }
 
-type ReceiverFlowState = LinkFlowState<role::Receiver>;
-type ReceiverLink = super::Link<role::Receiver, Arc<ReceiverFlowState>, DeliveryState>;
-
 /// Credit mode for the link
 #[derive(Debug, Clone)]
 pub enum CreditMode {
@@ -224,7 +217,7 @@ pub struct Receiver {
 
 impl Drop for Receiver {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle.clone() {
+        if let Some(handle) = self.link.output_handle.take() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
                     handle,
@@ -295,7 +288,7 @@ impl Receiver {
                 flow_state: self.link.flow_state.clone(),
                 unsettled: self.link.unsettled.clone(),
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
-                state_code: self.link.state_code.clone(),
+                // state_code: self.link.state_code.clone(),
                 // This only controls whether a multi-transfer delivery id
                 // will be added to sessions map
                 more: false,
@@ -562,22 +555,8 @@ impl Receiver {
             }
         }
 
-        let link_name = self.link.name.clone();
-        if let Err(_) = self
-            .session
-            .send(SessionControl::DeallocateLink(link_name))
-            .await
-        {
-            let err = DetachError::new(
-                false,
-                Some(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    "Session must have been dropped".to_string(),
-                    None,
-                )),
-            );
-            return Err(err);
-        }
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
+        
         Ok(())
     }
 
@@ -585,8 +564,6 @@ impl Receiver {
     ///
     /// This will send a Detach performative with the `closed` field set to true.
     pub async fn close(&mut self) -> Result<(), DetachError> {
-        let link_name = self.link.name.clone();
-
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
         if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
@@ -640,19 +617,7 @@ impl Receiver {
             }
         };
 
-        // TODO: de-allocate link from session
-        if let Err(_) = self
-            .session
-            .send(SessionControl::DeallocateLink(link_name))
-            .await
-        {
-            let e = definitions::Error::new(
-                AmqpError::IllegalState,
-                "Session must have dropped while deallocating link".to_string(),
-                None,
-            );
-            return Err(DetachError::new(false, Some(e)));
-        }
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
 
         Ok(())
     }

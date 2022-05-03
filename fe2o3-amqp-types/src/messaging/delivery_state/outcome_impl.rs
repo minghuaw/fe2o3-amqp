@@ -15,6 +15,8 @@ impl ser::Serialize for Outcome {
             Outcome::Rejected(value) => value.serialize(serializer),
             Outcome::Released(value) => value.serialize(serializer),
             Outcome::Modified(value) => value.serialize(serializer),
+            #[cfg(feature = "transaction")]
+            Outcome::Declared(value) => value.serialize(serializer),
         }
     }
 }
@@ -24,6 +26,8 @@ enum Field {
     Rejected,
     Released,
     Modified,
+    #[cfg(feature = "transaction")]
+    Declared,
 }
 
 struct FieldVisitor {}
@@ -44,6 +48,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:rejected:list" => Field::Rejected,
             "amqp:released:list" => Field::Released,
             "amqp:modified:list" => Field::Modified,
+            #[cfg(feature = "transaction")]
+            "amqp:declared:list" => Field::Declared,
             _ => return Err(de::Error::custom("Wrong symbol value for descriptor")),
         };
 
@@ -57,8 +63,10 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         let val = match v {
             0x0000_0000_0000_0024 => Field::Accepted,
             0x0000_0000_0000_0025 => Field::Rejected,
-            0x000_0000_0000_0026 => Field::Released,
+            0x0000_0000_0000_0026 => Field::Released,
             0x0000_0000_0000_0027 => Field::Modified,
+            #[cfg(feature = "transaction")]
+            0x0000_0000_0000_0033 => Field::Declared,
             _ => {
                 return Err(de::Error::custom(format!(
                     "Wrong code value for descriptor, found {:#x?}",
@@ -111,6 +119,11 @@ impl<'de> de::Visitor<'de> for Visitor {
                 let value = variant.newtype_variant()?;
                 Ok(Outcome::Modified(value))
             }
+            #[cfg(feature = "transaction")]
+            Field::Declared => {
+                let value = variant.newtype_variant()?;
+                Ok(Outcome::Declared(value))
+            }
         }
     }
 }
@@ -120,7 +133,7 @@ impl<'de> de::Deserialize<'de> for Outcome {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
+        const VARIANTS: &[&str] = &[
             "amqp:accepted:list",
             "amqp:rejected:list",
             "amqp:released:list",

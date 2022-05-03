@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-types"
-version = "0.0.8"
+version = "0.0.12"
 edition = "2021"
 description = "Implementation of AMQP1.0 data types"
 license = "MIT/Apache-2.0"
@@ -11,6 +11,25 @@ keywords = ["amqp", "serde"]
 readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+
+default = [
+    "primitive",
+    "transport",
+    "messaging",
+    "security",
+]
+
+primitive = []
+transport = ["primitive"]
+messaging = ["primitive", "transport"]
+transaction = ["primitive", "messaging"]
+security = ["primitive"]
 
 [dependencies]
 # serde_amqp = { version = "0.0.1", path = "../serde_amqp", features = ["derive"] }

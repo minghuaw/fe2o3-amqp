@@ -4,16 +4,35 @@ use serde::{de, ser};
 
 use serde_amqp::primitives::Symbol;
 
+#[cfg(feature = "transaction")]
+use crate::transaction::TransactionError;
+
 use super::{AmqpError, ConnectionError, LinkError, SessionError};
 
+/// Archetype error-condition
 #[derive(Debug, Clone, PartialEq)]
-#[allow(missing_docs)]
 pub enum ErrorCondition {
+    /// 2.8.15 AMQP Error
     AmqpError(AmqpError),
+
+    /// 2.8.16 Connection Error
     ConnectionError(ConnectionError),
+
+    /// 2.8.17 Session Error
     SessionError(SessionError),
+
+    /// 2.8.18 Link Error
     LinkError(LinkError),
+
+    /// Customized error condition (**NOT** recommended)
+    ///
+    /// This variant may get removed in the future
     Custom(Symbol),
+
+    /// 4.5.8 Transaction Error
+    #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
+    #[cfg(feature = "transaction")]
+    TransactionError(TransactionError),
 }
 
 impl ser::Serialize for ErrorCondition {
@@ -27,6 +46,9 @@ impl ser::Serialize for ErrorCondition {
             Self::SessionError(err) => err.serialize(serializer),
             Self::LinkError(err) => err.serialize(serializer),
             Self::Custom(err) => err.serialize(serializer),
+
+            #[cfg(feature = "transaction")]
+            Self::TransactionError(err) => err.serialize(serializer),
         }
     }
 }
@@ -94,6 +116,11 @@ impl<'de> de::Deserialize<'de> for ErrorCondition {
             Ok(val) => return Ok(ErrorCondition::LinkError(val)),
             Err(e) => e,
         };
+        #[cfg(feature = "transaction")]
+        let v = match TransactionError::try_from(v) {
+            Ok(val) => return Ok(ErrorCondition::TransactionError(val)),
+            Err(e) => e,
+        };
         Ok(ErrorCondition::Custom(Symbol::from(v)))
     }
 }
@@ -115,5 +142,22 @@ mod tests {
 
         let deserialized: ErrorCondition = from_slice(&buf).unwrap();
         assert_eq!(expected, deserialized);
+    }
+
+    #[cfg(feature = "transaction")]
+    #[test]
+    fn test_transaction_error_condition() {
+        use serde_amqp::to_vec;
+
+        use crate::transaction::TransactionError;
+
+        let err = TransactionError::Timeout;
+        let buf = to_vec(&err).unwrap();
+        let err: ErrorCondition = from_slice(&buf).unwrap();
+
+        match err {
+            ErrorCondition::TransactionError(_) => {}
+            _ => panic!(),
+        }
     }
 }

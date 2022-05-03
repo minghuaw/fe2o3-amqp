@@ -62,6 +62,13 @@ pub struct Properties {
     pub reply_to_group_id: Option<String>,
 }
 
+/// Every field is default to `None`
+impl Default for Properties {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Properties {
     /// Creates a new instance of [`Properties`]
     pub fn new() -> Self {
@@ -92,6 +99,12 @@ impl Properties {
 #[derive(Debug, Clone)]
 pub struct Builder {
     inner: Properties,
+}
+
+impl Default for Builder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Builder {

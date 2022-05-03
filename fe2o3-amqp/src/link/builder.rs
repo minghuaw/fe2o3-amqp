@@ -3,7 +3,7 @@
 use std::{
     collections::BTreeMap,
     marker::PhantomData,
-    sync::{atomic::AtomicU8, Arc},
+    sync::{Arc},
 };
 
 use fe2o3_amqp_types::{
@@ -26,6 +26,7 @@ use super::{
     error::AttachError,
     receiver::CreditMode,
     role,
+    sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     Receiver, Sender,
 };
@@ -304,8 +305,8 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
         output_handle: Handle,
         flow_state_consumer: C,
-        state_code: Arc<AtomicU8>,
-    ) -> Link<Role, C, M> {
+        // state_code: Arc<AtomicU8>,
+    ) -> Link<Role, Target, C, M> {
         let local_state = LinkState::Unattached;
 
         let max_message_size = match self.max_message_size {
@@ -314,10 +315,10 @@ impl<Role, NameState, Addr> Builder<Role, NameState, Addr> {
         };
 
         // Create a link
-        Link::<Role, C, M> {
+        Link::<Role, Target, C, M> {
             role: PhantomData,
             local_state,
-            state_code,
+            // state_code,
             name: self.name,
             output_handle: Some(output_handle.clone()),
             input_handle: None,
@@ -387,20 +388,20 @@ impl Builder<role::Sender, WithName, WithTarget> {
         let flow_state_consumer = Consumer::new(notifier, flow_state);
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let state_code = Arc::new(AtomicU8::new(0));
+        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach in session
-            state_code: state_code.clone(),
+            // state_code: state_code.clone(),
         };
 
         // Create Link in Session
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer, state_code);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();
@@ -415,7 +416,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             })?;
 
         // Attach completed, return Sender
-        let sender = Sender {
+        let inner = SenderInner {
             link,
             buffer_size,
             session: session.control.clone(),
@@ -423,7 +424,7 @@ impl Builder<role::Sender, WithName, WithTarget> {
             incoming: reader,
             // marker: PhantomData,
         };
-        Ok(sender)
+        Ok(Sender { inner })
     }
 }
 
@@ -464,13 +465,13 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         let flow_state_producer = flow_state.clone();
         let flow_state_consumer = flow_state;
-        let state_code = Arc::new(AtomicU8::new(0));
+        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkHandle::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach
-            state_code: state_code.clone(),
+            // state_code: state_code.clone(),
             more: false,
         };
 
@@ -478,7 +479,7 @@ impl Builder<role::Receiver, WithName, WithTarget> {
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer, state_code);
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();

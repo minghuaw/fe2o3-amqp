@@ -25,11 +25,11 @@ impl From<LinkError> for ErrorCondition {
 impl From<&LinkError> for Symbol {
     fn from(value: &LinkError) -> Self {
         let val = match value {
-            &LinkError::DetachForced => "amqp:link:detach-forced",
-            &LinkError::TransferLimitExceeded => "amqp:link:transfer-limit-exceeded",
-            &LinkError::MessageSizeExceeded => "amqp:link:message-size-exceeded",
-            &LinkError::Redirect => "amqp:link:redirect",
-            &LinkError::Stolen => "amqp:link:stolen",
+            LinkError::DetachForced => "amqp:link:detach-forced",
+            LinkError::TransferLimitExceeded => "amqp:link:transfer-limit-exceeded",
+            LinkError::MessageSizeExceeded => "amqp:link:message-size-exceeded",
+            LinkError::Redirect => "amqp:link:redirect",
+            LinkError::Stolen => "amqp:link:stolen",
         };
         Symbol::from(val)
     }

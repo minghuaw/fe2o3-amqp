@@ -214,7 +214,7 @@ mod performative_impl {
         where
             D: serde::Deserializer<'de>,
         {
-            const VARIANTS: &'static [&'static str] = &[
+            const VARIANTS: &[&str] = &[
                 "amqp:open:list",
                 "amqp:begin:list",
                 "amqp:attach:list",
@@ -245,5 +245,22 @@ mod tests {
         let end2: Result<Performative, _> = from_slice(&buf);
         println!("{:x?}", buf);
         println!("{:?}", end2);
+    }
+
+    #[test]
+    fn test_size_of_variants() {
+        use super::*;
+        use std::mem::size_of;
+
+        println!("Performative {:?}", size_of::<Performative>());
+        println!("Open {:?}", size_of::<Open>());
+        println!("Begin {:?}", size_of::<Begin>());
+        println!("Attach {:?}", size_of::<Attach>());
+        println!("Flow {:?}", size_of::<Flow>());
+        println!("Transfer {:?}", size_of::<Transfer>());
+        println!("Disposition {:?}", size_of::<Disposition>());
+        println!("Detach {:?}", size_of::<Detach>());
+        println!("End {:?}", size_of::<End>());
+        println!("Close {:?}", size_of::<Close>());
     }
 }

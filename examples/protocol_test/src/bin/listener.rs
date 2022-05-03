@@ -78,28 +78,3 @@ async fn main() {
         let _handle = tokio::spawn(connection_main(connection));
     }
 }
-
-// use tokio::net::TcpListener;
-// use fe2o3_amqp::acceptor::{ConnectionAcceptor, SessionAcceptor, LinkAcceptor, LinkEndpoint};
-
-// #[tokio::main]
-// async fn main() {
-//     let tcp_listener = TcpListener::bind("localhost:5672").await.unwrap();
-//     let connection_acceptor = ConnectionAcceptor::new("example-listener");
-
-//     while let Ok((stream, addr)) = tcp_listener.accept().await {
-//         let mut connection = connection_acceptor.accept(stream).await.unwrap();
-//         let handle = tokio::spawn(async move {
-//             let session_acceptor = SessionAcceptor::new();
-//             while let Ok(mut session) = session_acceptor.accept(&mut connection).await{
-//                 let handle = tokio::spawn(async move {
-//                     let link_acceptor = LinkAcceptor::new();
-//                     match link_acceptor.accept(&mut session).await.unwrap() {
-//                         LinkEndpoint::Sender(sender) => { },
-//                         LinkEndpoint::Receiver(recver) => { },
-//                     }
-//                 });
-//             }
-//         });
-//     }
-// }
