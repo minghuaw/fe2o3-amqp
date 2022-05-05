@@ -1,6 +1,7 @@
-use fe2o3_amqp_types::{transaction::{Coordinator, TransactionId, Declared, Declare}, definitions::SenderSettleMode, messaging::Message};
+use fe2o3_amqp_types::{transaction::{Coordinator, TransactionId, Declared, Declare}, definitions::{SenderSettleMode, self, AmqpError}, messaging::{Message, DeliveryState}};
+use futures_util::task::ArcWake;
 
-use crate::{link::{sender::SenderInner, SenderFlowState, delivery::UnsettledMessage, Link, role, AttachError, builder::{WithoutName, WithoutTarget}, self}, session::SessionHandle, util::{Uninitialized, Initialized}, Sendable};
+use crate::{link::{sender::SenderInner, SenderFlowState, delivery::UnsettledMessage, Link, role, AttachError, builder::{WithoutName, WithoutTarget}, self}, session::SessionHandle, util::{Uninitialized, Initialized}, Sendable, endpoint::Settlement};
 
 use super::DeclareError;
 
@@ -46,6 +47,12 @@ impl Controller<Undeclared> {
 
     /// Declare a transaction
     pub async fn declare(mut self, global_id: Option<TransactionId>) -> Result<Controller<Declared>, DeclareError> {
+        
+
+        todo!()
+    }
+
+    async fn declare_inner(&mut self, global_id: Option<TransactionId>) -> Result<(), link::Error> {
         // To begin transactional work, the transaction controller needs to obtain a transaction
         // identifier from the resource. It does this by sending a message to the coordinator whose
         // body consists of the declare type in a single amqp-value section. Other standard message
@@ -61,8 +68,28 @@ impl Controller<Undeclared> {
             .settled(false)
             .build();
 
-        let settlement = self.inner.send(sendable).await
-            .map_err(|err| DeclareError::new(self, err))?;
+        let outcome = match self.inner.send(sendable).await? {
+            Settlement::Settled => {
+                let err = link::Error::Local(definitions::Error::new(
+                    AmqpError::InternalError,
+                    "Declare cannot be sent settled".to_string(),
+                    None
+                ));
+                return Err(err)
+            },
+            Settlement::Unsettled { _delivery_tag, outcome } => outcome,
+        };
+        
+        match outcome.await? {
+            DeliveryState::Received(_) => todo!(),
+            DeliveryState::Accepted(_) => todo!(),
+            DeliveryState::Rejected(_) => todo!(),
+            DeliveryState::Released(_) => todo!(),
+            DeliveryState::Modified(_) => todo!(),
+            DeliveryState::Declared(_) => todo!(),
+            DeliveryState::TransactionalState(_) => todo!(),
+        }
+
         todo!()
     }
 }

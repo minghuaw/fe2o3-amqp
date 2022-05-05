@@ -4,7 +4,7 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot::error::RecvError};
 
 use crate::session::{AllocLinkError, DeallocLinkError};
 
@@ -183,6 +183,16 @@ impl From<serde_amqp::Error> for Error {
         Self::Local(definitions::Error::new(
             AmqpError::DecodeError,
             Some(format!("{:?}", err)),
+            None,
+        ))
+    }
+}
+
+impl From<RecvError> for Error {
+    fn from(_: RecvError) -> Self {
+        Error::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Delivery outcome sender has dropped".into()),
             None,
         ))
     }

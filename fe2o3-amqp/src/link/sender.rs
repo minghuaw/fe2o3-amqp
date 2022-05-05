@@ -177,23 +177,14 @@ impl Sender {
             Settlement::Unsettled {
                 _delivery_tag: _,
                 outcome,
-            } => {
-                let state = outcome.await.map_err(|_| {
-                    Error::Local(definitions::Error::new(
-                        AmqpError::IllegalState,
-                        Some("Delivery outcome sender has dropped".into()),
-                        None,
-                    ))
-                })?;
-                match state {
-                    DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-                    DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
-                    DeliveryState::Released(released) => Err(Error::Released(released)),
-                    DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
-                    #[cfg(feature = "transaction")]
-                    DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                        Err(Error::not_implemented(None))
-                    }
+            } => match outcome.await? {
+                DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+                DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
+                DeliveryState::Released(released) => Err(Error::Released(released)),
+                DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
+                #[cfg(feature = "transaction")]
+                DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+                    Err(Error::not_implemented(None))
                 }
             }
         }
