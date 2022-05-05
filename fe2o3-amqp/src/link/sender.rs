@@ -453,7 +453,7 @@ impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<Error = Error>,
 {
-    async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
+    pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
     where
         T: serde::Serialize,
     {
