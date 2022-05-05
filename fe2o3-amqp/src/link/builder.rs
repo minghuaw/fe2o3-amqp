@@ -8,7 +8,7 @@ use std::{
 
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{Source, Target},
+    messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong}, transaction::Coordinator,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
@@ -28,7 +28,7 @@ use super::{
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender,
+    Receiver, Sender, SenderFlowState, delivery::UnsettledMessage,
 };
 
 #[cfg(feature = "transaction")]
@@ -378,26 +378,38 @@ impl<T, NameState, Addr> Builder<role::Sender, T, NameState, Addr> {
 
 impl<T, NameState, Addr> Builder<role::Receiver, T, NameState, Addr> {}
 
-macro_rules! impl_attach_for_sender {
-    ($v:vis, $role:tt) => {
-        /// Attach the link as a sender
-        ///
-        /// # Example
-        ///
-        /// ```rust, ignore
-        /// let mut sender = Sender::builder()
-        ///     .name("rust-sender-link-1")
-        ///     .target("q1")
-        ///     .sender_settle_mode(SenderSettleMode::Mixed)
-        ///     .attach(&mut session)
-        ///     .await
-        ///     .unwrap();
-        /// ```
-        $v async fn attach<R>(
-            mut self,
-            session: &mut SessionHandle<R>,
-        ) -> Result<$role, AttachError> {
-            let buffer_size = self.buffer_size.clone();
+impl Builder<role::Sender, Target, WithName, WithTarget> {
+    /// Attach the link as a sender
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let mut sender = Sender::builder()
+    ///     .name("rust-sender-link-1")
+    ///     .target("q1")
+    ///     .sender_settle_mode(SenderSettleMode::Mixed)
+    ///     .attach(&mut session)
+    ///     .await
+    ///     .unwrap();
+    /// ```
+    pub async fn attach<R>(
+        self,
+        session: &mut SessionHandle<R>
+    ) -> Result<Sender, AttachError> {
+        self.attach_inner(session).await
+            .map(|inner| Sender { inner })
+    }
+}
+
+impl<T> Builder<role::Sender, T, WithName, WithTarget> 
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+{
+    async fn attach_inner<R>(
+        mut self,
+        session: &mut SessionHandle<R>
+    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError> {
+        let buffer_size = self.buffer_size.clone();
             let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
             let outgoing = PollSender::new(session.outgoing.clone());
     
@@ -452,13 +464,8 @@ macro_rules! impl_attach_for_sender {
                 incoming: reader,
                 // marker: PhantomData,
             };
-            Ok($role { inner })
-        }
-    };
-}
-
-impl Builder<role::Sender, Target, WithName, WithTarget> {
-    impl_attach_for_sender!(pub, Sender);
+            Ok(inner)
+    }
 }
 
 impl Builder<role::Receiver, Target, WithName, WithTarget> {
@@ -547,5 +554,14 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
 
 #[cfg(feature = "transaction")]
 impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
-    impl_attach_for_sender!(pub(crate), Controller);
+    /// Attach the link as a sender
+    pub async fn attach<R>(
+        self,
+        session: &mut SessionHandle<R>
+    ) -> Result<Controller, AttachError> {
+        self.attach_inner(session).await
+            .map(|inner| Controller {
+                inner
+            })
+    }
 }
