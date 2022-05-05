@@ -45,7 +45,7 @@ testcontainers = "0.13.0"
 serde_amqp = "0.0.6"
 # serde_amqp = { version = "0.0.5", path = "../serde_amqp" }
 # fe2o3-amqp-types = "0.0.12"
-fe2o3-amqp-types = { version = "0.0.12", path = "../fe2o3-amqp-types" }
+fe2o3-amqp-types = { version = "0.0.13", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio = { version = "1", features = ["io-util", "net", "rt", "macros"] }
