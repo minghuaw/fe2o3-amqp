@@ -1,6 +1,6 @@
 //! Transaction
 
-use crate::{link::{sender::SenderInner, self}, Receiver, Sender, Sendable, endpoint::Settlement};
+use crate::{link::{self}, Receiver, Sender, Sendable, endpoint::Settlement};
 use fe2o3_amqp_types::{transaction::{Declared, TransactionalState}, messaging::{DeliveryState, Outcome}};
 
 mod controller;
