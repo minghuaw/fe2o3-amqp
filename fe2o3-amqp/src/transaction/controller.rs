@@ -1,7 +1,7 @@
-use fe2o3_amqp_types::{transaction::{Coordinator, TransactionId, Declared, Declare, Discharge}, definitions::{SenderSettleMode, self, AmqpError}, messaging::{Message, DeliveryState}};
+use fe2o3_amqp_types::{transaction::{Coordinator, TransactionId, Declared, Declare, Discharge, TransactionError}, definitions::{SenderSettleMode, self, AmqpError}, messaging::{Message, DeliveryState, Rejected}};
 use tokio::sync::oneshot;
 
-use crate::{link::{sender::SenderInner, SenderFlowState, delivery::UnsettledMessage, Link, role, AttachError, builder::{WithoutName, WithoutTarget}, self}, session::SessionHandle, Sendable, endpoint::Settlement};
+use crate::{link::{sender::SenderInner, SenderFlowState, delivery::UnsettledMessage, Link, role, AttachError, builder::{WithoutName, WithoutTarget}, self}, session::SessionHandle, Sendable, endpoint::{Settlement, SenderLink}};
 
 use super::DeclareError;
 
@@ -118,19 +118,29 @@ impl Controller<Undeclared> {
 
 impl Controller<Declared> {
     /// Commit the transaction
-    pub async fn commit(self) -> Result<(), link::Error> {
+    /// 
+    /// This will send a [`Discharge`] with the `fail` field set to false.
+    /// 
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
+    /// error to the controller as a transaction-error
+    pub async fn commit(&mut self) -> Result<(), link::Error> {
         self.discharge(false).await
     }
 
-    /// Rollback
-    pub async fn rollback(self) -> Result<(), link::Error> {
+    /// Rollback the transaction
+    /// 
+    /// This will send a [`Discharge`] with the `fail` field set to true
+    /// 
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
+    /// error to the controller as a transaction-error
+    pub async fn rollback(&mut self) -> Result<(), link::Error> {
         self.discharge(true).await
     }
 
     /// Discharge
-    async fn discharge(mut self, fail: impl Into<Option<bool>>) -> Result<(), link::Error> {
+    async fn discharge(&mut self, fail: impl Into<Option<bool>>) -> Result<(), link::Error> {
         let discharge = Discharge {
-            txn_id: self.declared.txn_id,
+            txn_id: self.declared.txn_id.clone(),
             fail: fail.into(),
         };
         // As with the declare message, it is an error if the sender sends the transfer pre-settled.
