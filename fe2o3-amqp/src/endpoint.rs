@@ -182,37 +182,6 @@ pub(crate) trait Session {
 }
 
 #[async_trait]
-pub(crate) trait LinkState {
-    // type AttachError: Send;
-    // type DetachError: Send;
-
-    // fn is_detached(&self) -> bool;
-
-    // fn is_closed(&self) -> bool;
-
-    fn output_handle(&self) -> Option<&Handle>;
-
-    // fn name(&self) -> &str;
-
-    // async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
-
-    // async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
-
-    // async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
-    // where
-    //     W: Sink<LinkFrame> + Send + Unpin;
-
-    // async fn send_detach<W>(
-    //     &mut self,
-    //     writer: &mut W,
-    //     closed: bool,
-    //     error: Option<Self::DetachError>,
-    // ) -> Result<(), Self::DetachError>
-    // where
-    //     W: Sink<LinkFrame> + Send + Unpin;
-}
-
-#[async_trait]
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
@@ -237,6 +206,12 @@ pub(crate) trait LinkAttach {
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where
         W: Sink<LinkFrame> + Send + Unpin;
+}
+
+
+#[async_trait]
+pub(crate) trait Link: LinkAttach + LinkDetach {
+    fn output_handle(&self) -> Option<&Handle>;
 }
 
 /// A subset of the fields in the Flow performative
@@ -290,7 +265,7 @@ pub(crate) enum Settlement {
 }
 
 #[async_trait]
-pub(crate) trait SenderLink: LinkState + LinkAttach + LinkDetach {
+pub(crate) trait SenderLink: Link {
     type Error: Send;
 
     const ROLE: Role = Role::Sender;
@@ -345,7 +320,7 @@ pub(crate) trait SenderLink: LinkState + LinkAttach + LinkDetach {
 }
 
 #[async_trait]
-pub(crate) trait ReceiverLink: LinkState + LinkAttach + LinkDetach {
+pub(crate) trait ReceiverLink: Link {
     type Error: Send;
 
     const ROLE: Role = Role::Receiver;

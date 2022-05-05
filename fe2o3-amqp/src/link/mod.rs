@@ -176,22 +176,13 @@ impl<R, T, F, M> Link<R, T, F, M> {
 }
 
 #[async_trait]
-impl<R, T, F, M> endpoint::LinkState for Link<R, T, F, M>
+impl<R, T, F, M> endpoint::Link for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    // fn is_detached(&self) -> bool {
-    //     let cur = self.state_code.load(Ordering::Acquire);
-    //     (cur & DETACHED) == DETACHED
-    // }
-
-    // fn is_closed(&self) -> bool {
-    //     let cur = self.state_code.load(Ordering::Acquire);
-    //     (cur & CLOSED) == CLOSED
-    // }
-
     fn output_handle(&self) -> Option<&Handle> {
         self.output_handle.as_ref()
     }
