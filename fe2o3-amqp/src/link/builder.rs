@@ -32,7 +32,7 @@ use super::{
 };
 
 #[cfg(feature = "transaction")]
-use crate::transaction::Controller;
+use crate::transaction::{Controller, Undeclared};
 
 /// Type state for link::builder::Builder;
 #[derive(Debug)]
@@ -554,14 +554,15 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
 
 #[cfg(feature = "transaction")]
 impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
-    /// Attach the link as a sender
+    /// Attach the link as a transaction controller
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>
-    ) -> Result<Controller, AttachError> {
+    ) -> Result<Controller<Undeclared>, AttachError> {
         self.attach_inner(session).await
-            .map(|inner| Controller {
-                inner
+            .map(|inner| Controller::<Undeclared> {
+                inner,
+                declared: Undeclared {}
             })
     }
 }
