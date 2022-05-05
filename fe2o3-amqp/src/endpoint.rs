@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo,
+        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo, ReceiverSettleMode,
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
@@ -208,10 +208,23 @@ pub(crate) trait LinkAttach {
         W: Sink<LinkFrame> + Send + Unpin;
 }
 
+pub(crate) trait Link: LinkAttach + LinkDetach { }
 
-#[async_trait]
-pub(crate) trait Link: LinkAttach + LinkDetach {
-    fn output_handle(&self) -> Option<&Handle>;
+pub(crate) trait LinkExt: Link {
+    type FlowState;
+    type Unsettled;
+
+    fn name(&self) -> &str;
+    
+    fn output_handle(&self) -> &Option<Handle>;
+    
+    fn output_handle_mut(&mut self) -> &mut Option<Handle>;
+    
+    fn flow_state(&self) -> &Self::FlowState;
+
+    fn unsettled(&self) -> &Self::Unsettled;
+
+    fn rcv_settle_mode(&self) -> &ReceiverSettleMode;
 }
 
 /// A subset of the fields in the Flow performative
@@ -265,7 +278,7 @@ pub(crate) enum Settlement {
 }
 
 #[async_trait]
-pub(crate) trait SenderLink: Link {
+pub(crate) trait SenderLink: Link + LinkExt {
     type Error: Send;
 
     const ROLE: Role = Role::Sender;
@@ -320,7 +333,7 @@ pub(crate) trait SenderLink: Link {
 }
 
 #[async_trait]
-pub(crate) trait ReceiverLink: Link {
+pub(crate) trait ReceiverLink: Link + LinkExt {
     type Error: Send;
 
     const ROLE: Role = Role::Receiver;

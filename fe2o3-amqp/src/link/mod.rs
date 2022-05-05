@@ -57,6 +57,8 @@ pub(crate) type SenderLink = Link<role::Sender, Target, SenderFlowState, Unsettl
 /// Type alias for receiver link that ONLY represents the inner state of receiver
 pub(crate) type ReceiverLink = Link<role::Receiver, Target, ReceiverFlowState, DeliveryState>;
 
+pub(crate) type ArcSenderUnsettledMap = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
+
 // const CLOSED: u8 = 0b0000_0100;
 // const DETACHED: u8 = 0b0000_0010;
 
@@ -175,16 +177,46 @@ impl<R, T, F, M> Link<R, T, F, M> {
     }
 }
 
-#[async_trait]
 impl<R, T, F, M> endpoint::Link for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+{ }
+
+impl<R, T, F, M> endpoint::LinkExt for Link<R, T, F, M>
+where
+    R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    fn output_handle(&self) -> Option<&Handle> {
-        self.output_handle.as_ref()
+    type FlowState = F;
+    type Unsettled = Arc<RwLock<UnsettledMap<M>>>;
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn output_handle(&self) -> &Option<Handle> {
+        &self.output_handle
+    }
+
+    fn output_handle_mut(&mut self) -> &mut Option<Handle> {
+        &mut self.output_handle
+    }
+
+    fn flow_state(&self) -> &Self::FlowState {
+        &self.flow_state
+    }
+
+    fn unsettled(&self) -> &Self::Unsettled {
+        &self.unsettled
+    }
+
+    fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
+        &self.rcv_settle_mode
     }
 }
 

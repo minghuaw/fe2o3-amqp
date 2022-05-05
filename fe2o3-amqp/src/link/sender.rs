@@ -1,11 +1,11 @@
 //! Implementation of AMQP1.0 sender
 
-use std::time::Duration;
+use std::{time::Duration};
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
 use tokio::{
-    sync::mpsc,
+    sync::{mpsc},
     time::{error::Elapsed, timeout, Timeout},
 };
 
@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkDetach, Settlement},
+    endpoint::{self, LinkDetach, Settlement, LinkExt},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };
@@ -28,7 +28,7 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, Error, LinkFrame, LinkHandle, SenderLink,
+    role, Error, LinkFrame, LinkHandle, SenderLink, SenderFlowState, ArcSenderUnsettledMap,
 };
 
 /// An AMQP1.0 sender
@@ -140,7 +140,12 @@ impl Sender {
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
     pub async fn detach(&mut self) -> Result<(), DetachError> {
-        self.inner.detach().await
+        self.inner.detach_with_error(None).await
+    }
+
+    /// Detach the link with an error
+    pub async fn detach_with_error(&mut self, error: definitions::Error) -> Result<(), DetachError> {
+        self.inner.detach_with_error(Some(error)).await
     }
 
     /// Detach the link with a timeout
@@ -155,7 +160,12 @@ impl Sender {
     ///
     /// This will set the `closed` field in the Detach performative to true
     pub async fn close(&mut self) -> Result<(), DetachError> {
-        self.inner.close().await
+        self.inner.close_with_error(None).await
+    }
+
+    /// Detach the link with an error
+    pub async fn close_with_error(&mut self, error: definitions::Error) -> Result<(), DetachError> {
+        self.inner.close_with_error(Some(error)).await
     }
 
     /// Send a message and wait for acknowledgement (disposition)
@@ -266,63 +276,15 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
 }
 
 impl SenderInner<SenderLink> {
-    // // Re-attach the link
-    // pub async fn reattach(self, session: &mut SessionHandle) -> Result<Sender<Attached>, Error> {
-    //     self.reattach_inner(session.control.clone()).await
-    // }
-
-    async fn reattach_inner(
-        &mut self,
-        mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, DetachError> {
-        // May need to re-allocate output handle
-        if self.link.output_handle.is_none() {
-            let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkHandle::Sender {
-                tx,
-                flow_state: self.link.flow_state.producer(),
-                // TODO: what else to do during re-attaching
-                unsettled: self.link.unsettled.clone(),
-                receiver_settle_mode: self.link.rcv_settle_mode.clone(),
-                // state_code: self.link.state_code.clone(),
-            };
-            self.incoming = ReceiverStream::new(incoming);
-            let handle = match session::allocate_link(
-                &mut session_control,
-                self.link.name.clone(),
-                link_handle,
-            )
-            .await
-            {
-                Ok(handle) => handle,
-                Err(err) => {
-                    return Err(DetachError {
-                        is_closed_by_remote: false,
-                        error: Some(definitions::Error::from(err)),
-                    });
-                }
-            };
-            self.link.output_handle = Some(handle);
-        }
-
-        if let Err(_err) =
-            super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
-        {
-            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(false, Some(err)));
-        }
-
-        Ok(self)
-    }
-
-    pub async fn detach(&mut self) -> Result<(), DetachError> {
+    #[inline]
+    pub async fn detach_with_error(&mut self, error: Option<definitions::Error>) -> Result<(), DetachError> {
         // let mut detaching = self.into_detached();
 
         // TODO: how should disposition be handled?
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, None).await {
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, error).await {
             return Err(DetachError::new(false, Some(e)));
         };
 
@@ -345,7 +307,7 @@ impl SenderInner<SenderLink> {
             let session_control = self.session.clone();
             self.reattach_inner(session_control).await?;
 
-            self.close().await?;
+            self.close_with_error(None).await?;
 
             // A peer closes a link by sending the detach frame with the handle for the
             // specified link, and the closed flag set to true. The partner will destroy
@@ -371,14 +333,61 @@ impl SenderInner<SenderLink> {
 
         Ok(())
     }
+}
 
-    /// Close the link.
-    ///
-    /// This will set the `closed` field in the Detach performative to true
-    pub async fn close(&mut self) -> Result<(), DetachError> {
+impl<L> SenderInner<L>
+where
+    L: endpoint::SenderLink<Error = Error, AttachError = AttachError, DetachError = definitions::Error> 
+        + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>,
+{
+    async fn reattach_inner(
+        &mut self,
+        mut session_control: mpsc::Sender<SessionControl>,
+    ) -> Result<&mut Self, DetachError> {
+        // May need to re-allocate output handle
+        if self.link.output_handle().is_none() {
+            let (tx, incoming) = mpsc::channel(self.buffer_size);
+            let link_handle = LinkHandle::Sender {
+                tx,
+                flow_state: self.link.flow_state().producer(),
+                // TODO: what else to do during re-attaching
+                unsettled: self.link.unsettled().clone(),
+                receiver_settle_mode: self.link.rcv_settle_mode().clone(),
+                // state_code: self.link.state_code.clone(),
+            };
+            self.incoming = ReceiverStream::new(incoming);
+            let handle = match session::allocate_link(
+                &mut session_control,
+                self.link.name().into(),
+                link_handle,
+            )
+            .await
+            {
+                Ok(handle) => handle,
+                Err(err) => {
+                    return Err(DetachError {
+                        is_closed_by_remote: false,
+                        error: Some(definitions::Error::from(err)),
+                    });
+                }
+            };
+            *self.link.output_handle_mut() = Some(handle);
+        }
+
+        if let Err(_err) =
+            super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
+        {
+            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            return Err(DetachError::new(false, Some(err)));
+        }
+
+        Ok(self)
+    }
+
+    pub async fn close_with_error(&mut self, error: Option<definitions::Error>) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, error).await {
             return Err(DetachError::new(false, Some(e)));
         }
 
@@ -434,16 +443,11 @@ impl SenderInner<SenderLink> {
             }
         };
 
-        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
+        session::deallocate_link(&mut self.session, self.link.name().into()).await?;
 
         Ok(())
     }
-}
 
-impl<L> SenderInner<L>
-where
-    L: endpoint::SenderLink<Error = Error>,
-{
     pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
     where
         T: serde::Serialize,
