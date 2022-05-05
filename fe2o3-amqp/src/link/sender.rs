@@ -471,7 +471,11 @@ where
         self.send_with_state(sendable, None).await
     }
 
-    pub(crate) async fn send_with_state<T>(&mut self, sendable: Sendable<T>, state: Option<DeliveryState>) -> Result<Settlement, Error> 
+    pub(crate) async fn send_with_state<T>(
+        &mut self,
+        sendable: Sendable<T>,
+        state: Option<DeliveryState>,
+    ) -> Result<Settlement, Error>
     where
         T: serde::Serialize,
     {

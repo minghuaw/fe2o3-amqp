@@ -307,7 +307,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
         // 1. link resumption
         // 2. transaction
         // The delivery state should be attached on every transfer if specified
-        state: Option<DeliveryState>, 
+        state: Option<DeliveryState>,
         batchable: bool,
     ) -> Result<Settlement, Self::Error>
     where

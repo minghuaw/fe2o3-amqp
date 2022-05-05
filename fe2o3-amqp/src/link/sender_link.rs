@@ -115,7 +115,6 @@ where
         settled: Option<bool>,
         state: Option<DeliveryState>,
         batchable: bool,
-
     ) -> Result<Settlement, Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
