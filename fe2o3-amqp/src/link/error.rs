@@ -2,7 +2,7 @@ use std::fmt;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
-    messaging::{Modified, Rejected, Released},
+    messaging::{Modified, Rejected, Released}, transaction::TransactionId,
 };
 use tokio::sync::{mpsc, oneshot::error::RecvError};
 
@@ -146,12 +146,39 @@ impl Error {
         ))
     }
 
-    #[cfg(feature = "transaction")]
+}
+
+#[cfg(feature = "transaction")]
+impl Error {
     pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
         Self::Local(definitions::Error::new(
             AmqpError::NotImplemented,
             description.into(),
             None,
+        ))
+    }
+
+    pub(crate) fn not_allowed(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotAllowed,
+            description.into(),
+            None,
+        ))
+    }
+
+    pub(crate) fn mismatched_transaction_id(expecting: &TransactionId, found: &TransactionId) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            format!("Found mismatched transaction ID. Expecting: {:?}, found: {:?}", expecting, found),
+            None
+        ))
+    }
+
+    pub(crate) fn expecting_outcome() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            format!("Expecting an outcome, found None"),
+            None
         ))
     }
 }

@@ -296,13 +296,18 @@ pub(crate) trait SenderLink: Link + LinkExt {
         W: Sink<LinkFrame> + Send + Unpin;
 
     /// Send message via transfer frame and return whether the message is already settled
-    async fn send_transfer<W, Fut>(
+    async fn send_payload<W, Fut>(
         &mut self,
         writer: &mut W,
         detached: Fut,
         payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
+        // The delivery state from sender is useful for
+        // 1. link resumption
+        // 2. transaction
+        // The delivery state should be attached on every transfer if specified
+        state: Option<DeliveryState>, 
         batchable: bool,
     ) -> Result<Settlement, Self::Error>
     where

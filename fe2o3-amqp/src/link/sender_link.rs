@@ -106,14 +106,16 @@ where
             .map_err(|_| Error::sending_to_session())
     }
 
-    async fn send_transfer<W, Fut>(
+    async fn send_payload<W, Fut>(
         &mut self,
         writer: &mut W,
         detached: Fut,
         mut payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
+        state: Option<DeliveryState>,
         batchable: bool,
+
     ) -> Result<Settlement, Self::Error>
     where
         W: Sink<LinkFrame> + Send + Unpin,
@@ -179,9 +181,6 @@ where
             // delivery, then the settled flag MUST be interpreted as being false.
             SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
         };
-
-        // TODO: Expose API for resuming link?
-        let state: Option<DeliveryState> = None;
 
         // If true, the resume flag indicates that the transfer is being used to reassociate an
         // unsettled delivery from a dissociated link endpoint
@@ -272,7 +271,7 @@ where
                 settled: None,
                 more: false, // The
                 rcv_settle_mode: None,
-                state: state.clone(), // This is None for all transfers for now
+                state: state, // This is None for all transfers for now
                 resume: false,
                 aborted: false,
                 batchable,

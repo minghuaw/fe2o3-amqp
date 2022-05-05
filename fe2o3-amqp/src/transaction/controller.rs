@@ -150,6 +150,11 @@ impl Controller<Undeclared> {
 }
 
 impl Controller<Declared> {
+    /// Gets the transaction ID
+    pub fn transaction_id(&self) -> &TransactionId {
+        &self.declared.txn_id
+    }
+
     /// Commit the transaction
     ///
     /// This will send a [`Discharge`] with the `fail` field set to false.

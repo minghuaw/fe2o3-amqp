@@ -468,6 +468,13 @@ where
     where
         T: serde::Serialize,
     {
+        self.send_with_state(sendable, None).await
+    }
+
+    pub(crate) async fn send_with_state<T>(&mut self, sendable: Sendable<T>, state: Option<DeliveryState>) -> Result<Settlement, Error> 
+    where
+        T: serde::Serialize,
+    {
         use bytes::BufMut;
         use serde::Serialize;
         use serde_amqp::ser::Serializer;
@@ -490,12 +497,13 @@ where
         let detached_fut = self.incoming.next();
         let settlement = self
             .link
-            .send_transfer(
+            .send_payload(
                 &mut self.outgoing,
                 detached_fut,
                 payload,
                 message_format,
                 settled,
+                state,
                 false,
             )
             .await?;
