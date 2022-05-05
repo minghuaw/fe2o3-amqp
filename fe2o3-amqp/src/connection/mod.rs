@@ -149,8 +149,13 @@ impl<R> ConnectionHandle<R> {
     }
 }
 
-pub(crate) async fn deallocate_session(control: &mut Sender<ConnectionControl>, session_id: usize) -> Result<(), DeallcoSessionError> {
-    control.send(ConnectionControl::DeallocateSession(session_id)).await
+pub(crate) async fn deallocate_session(
+    control: &mut Sender<ConnectionControl>,
+    session_id: usize,
+) -> Result<(), DeallcoSessionError> {
+    control
+        .send(ConnectionControl::DeallocateSession(session_id))
+        .await
         .map_err(|_| DeallcoSessionError::IllegalState)
 }
 

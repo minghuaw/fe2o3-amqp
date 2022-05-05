@@ -1,11 +1,11 @@
 //! Implementation of AMQP1.0 sender
 
-use std::{time::Duration};
+use std::time::Duration;
 
 use bytes::BytesMut;
 use futures_util::StreamExt;
 use tokio::{
-    sync::{mpsc},
+    sync::mpsc,
     time::{error::Elapsed, timeout, Timeout},
 };
 
@@ -19,7 +19,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkDetach, Settlement, LinkExt},
+    endpoint::{self, LinkDetach, LinkExt, Settlement},
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };
@@ -28,7 +28,7 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, Error, LinkFrame, LinkHandle, SenderLink, SenderFlowState, ArcSenderUnsettledMap,
+    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkHandle, SenderFlowState, SenderLink,
 };
 
 /// An AMQP1.0 sender
@@ -144,7 +144,10 @@ impl Sender {
     }
 
     /// Detach the link with an error
-    pub async fn detach_with_error(&mut self, error: definitions::Error) -> Result<(), DetachError> {
+    pub async fn detach_with_error(
+        &mut self,
+        error: definitions::Error,
+    ) -> Result<(), DetachError> {
         self.inner.detach_with_error(Some(error)).await
     }
 
@@ -196,7 +199,7 @@ impl Sender {
                 DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
                     Err(Error::not_implemented(None))
                 }
-            }
+            },
         }
     }
 
@@ -277,14 +280,21 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
 
 impl SenderInner<SenderLink> {
     #[inline]
-    pub async fn detach_with_error(&mut self, error: Option<definitions::Error>) -> Result<(), DetachError> {
+    pub async fn detach_with_error(
+        &mut self,
+        error: Option<definitions::Error>,
+    ) -> Result<(), DetachError> {
         // let mut detaching = self.into_detached();
 
         // TODO: how should disposition be handled?
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, error).await {
+        if let Err(e) = self
+            .link
+            .send_detach(&mut self.outgoing, false, error)
+            .await
+        {
             return Err(DetachError::new(false, Some(e)));
         };
 
@@ -337,8 +347,11 @@ impl SenderInner<SenderLink> {
 
 impl<L> SenderInner<L>
 where
-    L: endpoint::SenderLink<Error = Error, AttachError = AttachError, DetachError = definitions::Error> 
-        + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>,
+    L: endpoint::SenderLink<
+            Error = Error,
+            AttachError = AttachError,
+            DetachError = definitions::Error,
+        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>,
 {
     async fn reattach_inner(
         &mut self,
@@ -384,7 +397,10 @@ where
         Ok(self)
     }
 
-    pub async fn close_with_error(&mut self, error: Option<definitions::Error>) -> Result<(), DetachError> {
+    pub async fn close_with_error(
+        &mut self,
+        error: Option<definitions::Error>,
+    ) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
         if let Err(e) = self.link.send_detach(&mut self.outgoing, true, error).await {
@@ -405,7 +421,7 @@ where
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
             match self.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     return Err(DetachError {
                         is_closed_by_remote: false,
@@ -438,7 +454,7 @@ where
                 _ => return Err(detach_error_expecting_frame()),
             };
             match self.link.send_detach(&mut self.outgoing, true, None).await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => return Err(DetachError::new(false, Some(e))),
             }
         };

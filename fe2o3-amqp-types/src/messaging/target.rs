@@ -199,7 +199,7 @@ impl TryFrom<TargetArchetype> for Target {
         match value {
             TargetArchetype::Target(target) => Ok(target),
             #[cfg(feature = "transaction")]
-            _ => Err(value)
+            _ => Err(value),
         }
     }
 }

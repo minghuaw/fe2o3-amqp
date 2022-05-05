@@ -1,15 +1,12 @@
 //! Implements the builder for a link
 
-use std::{
-    collections::BTreeMap,
-    marker::PhantomData,
-    sync::{Arc},
-};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target, TargetArchetype},
-    primitives::{Symbol, ULong}, transaction::Coordinator,
+    primitives::{Symbol, ULong},
+    transaction::Coordinator,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
@@ -23,12 +20,13 @@ use crate::{
 };
 
 use super::{
+    delivery::UnsettledMessage,
     error::AttachError,
     receiver::CreditMode,
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender, SenderFlowState, delivery::UnsettledMessage,
+    Receiver, Sender, SenderFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -264,7 +262,10 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
     /// Desired coordinator for transaction
     #[cfg(feature = "transaction")]
-    pub fn coordinator(self, coordinator: impl Into<Coordinator>) -> Builder<Role, Coordinator, NameState, WithTarget> {
+    pub fn coordinator(
+        self,
+        coordinator: impl Into<Coordinator>,
+    ) -> Builder<Role, Coordinator, NameState, WithTarget> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -392,79 +393,78 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(
-        self,
-        session: &mut SessionHandle<R>
-    ) -> Result<Sender, AttachError> {
-        self.attach_inner(session).await
+    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Sender, AttachError> {
+        self.attach_inner(session)
+            .await
             .map(|inner| Sender { inner })
     }
 }
 
-impl<T> Builder<role::Sender, T, WithName, WithTarget> 
+impl<T> Builder<role::Sender, T, WithName, WithTarget>
 where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
 {
     async fn attach_inner<R>(
         mut self,
-        session: &mut SessionHandle<R>
-    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError> {
+        session: &mut SessionHandle<R>,
+    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
+    {
         let buffer_size = self.buffer_size.clone();
-            let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-            let outgoing = PollSender::new(session.outgoing.clone());
-    
-            // Create shared link flow state
-            let flow_state_inner = LinkFlowStateInner {
-                initial_delivery_count: self.initial_delivery_count,
-                delivery_count: self.initial_delivery_count,
-                link_credit: 0, // The link-credit and available variables are initialized to zero.
-                available: 0,
-                drain: false, // The drain flag is initialized to false.
-                properties: self.properties.take(),
-            };
-            let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
-            let notifier = Arc::new(Notify::new());
-            let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
-            let flow_state_consumer = Consumer::new(notifier, flow_state);
-    
-            let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-            // let state_code = Arc::new(AtomicU8::new(0));
-            let link_handle = LinkHandle::Sender {
-                tx: incoming_tx,
-                flow_state: flow_state_producer,
-                unsettled: unsettled.clone(),
-                receiver_settle_mode: Default::default(), // Update this on incoming attach in session
-                // state_code: state_code.clone(),
-            };
-    
-            // Create Link in Session
-            let output_handle =
-                session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
-    
-            let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
-    
-            // Get writer to session
-            let writer = session.outgoing.clone();
-            let mut writer = PollSender::new(writer);
-            let mut reader = ReceiverStream::new(incoming_rx);
-            // Send an Attach frame
-            super::do_attach(&mut link, &mut writer, &mut reader)
-                .await
-                .map_err(|value| match AttachError::try_from(value) {
-                    Ok(error) => error,
-                    Err(_) => unreachable!(),
-                })?;
-    
-            // Attach completed, return Sender
-            let inner = SenderInner {
-                link,
-                buffer_size,
-                session: session.control.clone(),
-                outgoing,
-                incoming: reader,
-                // marker: PhantomData,
-            };
-            Ok(inner)
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = PollSender::new(session.outgoing.clone());
+
+        // Create shared link flow state
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: self.initial_delivery_count,
+            delivery_count: self.initial_delivery_count,
+            link_credit: 0, // The link-credit and available variables are initialized to zero.
+            available: 0,
+            drain: false, // The drain flag is initialized to false.
+            properties: self.properties.take(),
+        };
+        let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
+        let notifier = Arc::new(Notify::new());
+        let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
+        let flow_state_consumer = Consumer::new(notifier, flow_state);
+
+        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        // let state_code = Arc::new(AtomicU8::new(0));
+        let link_handle = LinkHandle::Sender {
+            tx: incoming_tx,
+            flow_state: flow_state_producer,
+            unsettled: unsettled.clone(),
+            receiver_settle_mode: Default::default(), // Update this on incoming attach in session
+                                                      // state_code: state_code.clone(),
+        };
+
+        // Create Link in Session
+        let output_handle =
+            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
+
+        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
+
+        // Get writer to session
+        let writer = session.outgoing.clone();
+        let mut writer = PollSender::new(writer);
+        let mut reader = ReceiverStream::new(incoming_rx);
+        // Send an Attach frame
+        super::do_attach(&mut link, &mut writer, &mut reader)
+            .await
+            .map_err(|value| match AttachError::try_from(value) {
+                Ok(error) => error,
+                Err(_) => unreachable!(),
+            })?;
+
+        // Attach completed, return Sender
+        let inner = SenderInner {
+            link,
+            buffer_size,
+            session: session.control.clone(),
+            outgoing,
+            incoming: reader,
+            // marker: PhantomData,
+        };
+        Ok(inner)
     }
 }
 
@@ -557,12 +557,13 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
     /// Attach the link as a transaction controller
     pub async fn attach<R>(
         self,
-        session: &mut SessionHandle<R>
+        session: &mut SessionHandle<R>,
     ) -> Result<Controller<Undeclared>, AttachError> {
-        self.attach_inner(session).await
+        self.attach_inner(session)
+            .await
             .map(|inner| Controller::<Undeclared> {
                 inner,
-                declared: Undeclared {}
+                declared: Undeclared {},
             })
     }
 }

@@ -45,7 +45,7 @@ impl TryFrom<TargetArchetype> for Coordinator {
     fn try_from(value: TargetArchetype) -> Result<Self, Self::Error> {
         match value {
             TargetArchetype::Coordinator(coord) => Ok(coord),
-            _ => return Err(value)
+            _ => return Err(value),
         }
     }
 }

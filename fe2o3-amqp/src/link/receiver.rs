@@ -13,7 +13,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{LinkDetach},
+    endpoint::LinkDetach,
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
     Payload,
@@ -556,7 +556,7 @@ impl Receiver {
         }
 
         session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
-        
+
         Ok(())
     }
 

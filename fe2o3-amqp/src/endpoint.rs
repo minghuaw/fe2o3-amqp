@@ -22,7 +22,8 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo, ReceiverSettleMode,
+        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, ReceiverSettleMode,
+        Role, SequenceNo,
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
@@ -208,18 +209,18 @@ pub(crate) trait LinkAttach {
         W: Sink<LinkFrame> + Send + Unpin;
 }
 
-pub(crate) trait Link: LinkAttach + LinkDetach { }
+pub(crate) trait Link: LinkAttach + LinkDetach {}
 
 pub(crate) trait LinkExt: Link {
     type FlowState;
     type Unsettled;
 
     fn name(&self) -> &str;
-    
+
     fn output_handle(&self) -> &Option<Handle>;
-    
+
     fn output_handle_mut(&mut self) -> &mut Option<Handle>;
-    
+
     fn flow_state(&self) -> &Self::FlowState;
 
     fn unsettled(&self) -> &Self::Unsettled;

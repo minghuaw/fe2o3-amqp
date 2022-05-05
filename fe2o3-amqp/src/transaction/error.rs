@@ -9,14 +9,11 @@ pub struct DeclareError {
     pub controller: Controller<Undeclared>,
 
     /// Error associated with the declaration
-    pub error: link::Error
+    pub error: link::Error,
 }
 
 impl DeclareError {
     pub(crate) fn new(controller: Controller<Undeclared>, error: link::Error) -> Self {
-        Self {
-            controller,
-            error
-        }
+        Self { controller, error }
     }
 }

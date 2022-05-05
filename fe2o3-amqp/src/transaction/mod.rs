@@ -1,6 +1,6 @@
 //! Transaction
 
-use crate::{Sender, Receiver, link::sender::SenderInner};
+use crate::{link::sender::SenderInner, Receiver, Sender};
 use fe2o3_amqp_types::transaction::Declared;
 
 mod controller;
@@ -12,7 +12,7 @@ pub use error::*;
 /// A transaction scope
 #[derive(Debug)]
 pub struct Transaction {
-    controller: Controller<Declared>
+    controller: Controller<Declared>,
 }
 
 impl Transaction {

@@ -183,7 +183,8 @@ where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
-{ }
+{
+}
 
 impl<R, T, F, M> endpoint::LinkExt for Link<R, T, F, M>
 where
@@ -293,16 +294,14 @@ where
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 let target = match remote_attach.target {
-                    Some(t) => {
-                        T::try_from(*t).map_err(|_| {
-                                AttachError::Local(definitions::Error::new(
-                                    AmqpError::NotImplemented,
-                                    None,
-                                    None,
-                                ))
-                            })?
-                    },
-                    None => return Err(AttachError::TargetIsNone)
+                    Some(t) => T::try_from(*t).map_err(|_| {
+                        AttachError::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            None,
+                            None,
+                        ))
+                    })?,
+                    None => return Err(AttachError::TargetIsNone),
                 };
                 self.target = Some(target);
 
@@ -424,21 +423,23 @@ where
 
         match detach.closed {
             true => match self.local_state {
-                LinkState::Attached 
+                LinkState::Attached
                 | LinkState::AttachSent
                 | LinkState::AttachReceived
-                | LinkState::DetachSent 
+                | LinkState::DetachSent
                 | LinkState::DetachReceived => self.local_state = LinkState::CloseReceived,
                 LinkState::CloseSent => {
                     self.local_state = LinkState::Closed;
                     let _ = self.output_handle.take();
-                },
-                _ => return Err(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Illegal local state".into()),
-                    None,
-                )
-                .into())
+                }
+                _ => {
+                    return Err(definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Illegal local state".into()),
+                        None,
+                    )
+                    .into())
+                }
             },
             false => {
                 match self.local_state {
@@ -491,9 +492,9 @@ where
                 let detach = Detach {
                     handle,
                     closed,
-                    error
+                    error,
                 };
-        
+
                 debug!("Sending detach: {:?}", detach);
 
                 writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
@@ -503,7 +504,7 @@ where
                         None,
                     )
                 })?;
-            },
+            }
             None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
         }
 
