@@ -357,7 +357,6 @@ where
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-
                                 Poll::Ready(O::from_recv_error(err))
                             }
                         }

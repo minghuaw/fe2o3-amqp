@@ -1,13 +1,13 @@
 //! Transaction
 
 use crate::{
-    endpoint::Settlement,
+    endpoint::{Settlement, ReceiverLink},
     link::{self},
     Receiver, Sendable, Sender, Delivery,
 };
 use fe2o3_amqp_types::{
     messaging::{DeliveryState, Outcome, Accepted, Modified, Rejected, Released},
-    transaction::{Declared, TransactionalState}, definitions,
+    transaction::{Declared, TransactionalState}, definitions::{self, AmqpError, Fields, SequenceNo}, primitives::Symbol,
 };
 
 mod controller;
@@ -15,6 +15,7 @@ pub use controller::*;
 
 mod error;
 pub use error::*;
+use serde_amqp::to_value;
 
 /// A transaction scope
 #[derive(Debug)]
@@ -113,6 +114,11 @@ impl Transaction {
     }
 
     /// Associate an outcome with a transaction
+    /// 
+    /// The delivery itself need not be associated with the same transaction as the outcome, or
+    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
+    /// different non-discharged transaction than the outcome. If this happens then the control link
+    /// MUST be terminated with a transaction-rollback error.
     pub async fn retire<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>, outcome: Outcome) -> Result<(), link::Error> {
         let txn_state = TransactionalState {
             txn_id: self.controller.transaction_id().clone(),
@@ -159,7 +165,50 @@ impl Transaction {
     }
 
     /// Acquire a transactional work
-    pub async fn acquire<T>(&mut self, recver: &mut Receiver) -> Result<T, ()> {
-        todo!()
+    /// 
+    /// This will send 
+    pub async fn acquire(&mut self, recver: &mut Receiver, credit: SequenceNo) -> Result<(), link::Error> {
+        {
+            let mut writer = recver.link.flow_state.lock.write().await;
+            match &mut writer.properties {
+                Some(fields) => {
+                    let key = Symbol::from("txn-id");
+                    if fields.contains_key(&key) {
+                        return Err(link::Error::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            "Link endpoint is already associated with a transaction".to_string(),
+                            None
+                        )))
+                    }
+                    let value = to_value(self.controller.transaction_id())?;
+                    fields.insert(key, value);
+                }
+                None => {
+                    let mut fields = Fields::new();
+                    let key = Symbol::from("txn-id");
+                    let value = to_value(self.controller.transaction_id())?;
+                    fields.insert(key, value);
+                },
+            }
+        }
+
+        recver.link.send_flow(&mut recver.outgoing, Some(credit), None, false).await?;
+        Ok(())
+    }
+
+    /// Clear txn-id from link
+    pub async fn end_acquisition(&mut self, recver: &mut Receiver) -> Result<(), link::Error> {
+        // clear txn-id 
+        {
+            let mut writer = recver.link.flow_state.lock.write().await;
+            let key = Symbol::from("txn-id");
+            writer.properties.as_mut()
+                .map(|map| map.remove(&key));
+        }
+
+        // set drain to true
+        recver.link.send_flow(&mut recver.outgoing, Some(0), Some(true), true).await?;
+        
+        Ok(())
     }
 }
