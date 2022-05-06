@@ -7,7 +7,7 @@ use crate::{
 };
 use fe2o3_amqp_types::{
     messaging::{DeliveryState, Outcome, Accepted, Modified, Rejected, Released},
-    transaction::{Declared, TransactionalState, Coordinator, TransactionId}, definitions::{self, AmqpError, Fields, SequenceNo}, primitives::Symbol,
+    transaction::{Declared, TransactionalState, Coordinator, TransactionId, TxnCapability}, definitions::{self, AmqpError, Fields, SequenceNo}, primitives::Symbol,
 };
 
 mod controller;
@@ -30,14 +30,32 @@ impl From<Controller<Declared>> for Transaction {
 }
 
 impl Transaction {
-    /// Daclares a transaction
+    /// Declares a transaction with a default controller
     /// 
     /// The user needs to supply a name for the underlying control link.
     pub async fn declare<R>(session: &mut SessionHandle<R>, name: impl Into<String>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
         let controller = Controller::attach(session, name, Coordinator::default()).await?
             .declare(global_id).await?;
-        let txn = Self { controller };
-        Ok(txn)
+        Ok(Self { controller })
+    }
+
+    /// Declares a transaction with a default controller
+    pub async fn declare_with_capabilities<R>(session: &mut SessionHandle<R>, name: impl Into<String>, capabiltiies: impl IntoIterator<Item = TxnCapability>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+        let coordinator = Coordinator {
+            capabilities: Some(capabiltiies.into_iter().collect()),
+        };
+        let controller = Controller::builder()
+            .name(name.into())
+            .coordinator(coordinator)
+            .attach(session).await?
+            .declare(global_id).await?;
+        Ok(Self { controller })
+    }
+
+    /// Declares a transaction with an undeclared controller
+    pub async fn declare_with_controller<R>(session: &mut SessionHandle<R>, controller: Controller<Undeclared>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+        let controller = controller.declare(global_id).await?;
+        Ok(Self { controller })
     }
 
     /// Rollback the transaction
