@@ -102,7 +102,8 @@ impl Transaction {
                     "Expecting a TransactionalState".to_string(),
                 )),
                 DeliveryState::TransactionalState(txn) => {
-                    // TODO: What if there are two separate transactions?
+                    // Interleaving transfer and disposition of different transactions
+                    // isn't implemented
                     if txn.txn_id != *self.controller.transaction_id() {
                         return Err(link::Error::mismatched_transaction_id(
                             self.controller.transaction_id(),
