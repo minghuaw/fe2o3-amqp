@@ -12,9 +12,6 @@ use tokio::sync::oneshot::{self, error::RecvError};
 use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::TransactionId;
-
 /// Reserved for receiver side
 #[derive(Debug)]
 pub struct Delivery<T> {
@@ -324,11 +321,6 @@ impl FromDeliveryState for NonTxnResult {
         }
     }
 }
-
-// type TxnDeclareResult = Result<TransactionId, link::Error>;
-
-#[cfg(feature = "transaction")]
-type TxnResult = Result<TransactionId, link::Error>;
 
 impl<O> Future for DeliveryFut<O>
 where

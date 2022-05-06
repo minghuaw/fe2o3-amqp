@@ -408,16 +408,13 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
 
 impl ReceiverLink {
     /// Set and send flow state
-    pub(crate) fn blocking_send_flow<W>(
+    pub(crate) fn blocking_send_flow(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), link::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
+    ) -> Result<(), link::Error> {
         self.error_if_closed().map_err(|e| link::Error::Local(e))?;
 
         let handle = self
@@ -504,7 +501,7 @@ impl ReceiverLink {
             }
         };
         writer
-            .try_send(LinkFrame::Flow(flow))
+            .blocking_send(LinkFrame::Flow(flow))
             .map_err(|_| Error::sending_to_session())
     }
 }

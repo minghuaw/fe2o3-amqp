@@ -214,8 +214,10 @@ impl Transaction {
 /// 4.4.3 Transactional Acquisition
 #[derive(Debug)]
 pub struct TxnAcquisition<'t, 'r> {
-    txn: &'t Transaction,
-    pub recver: &'r Receiver,
+    /// The transaction context of this acquisition
+    pub txn: &'t mut Transaction,
+    /// The receiver that is associated with the acquisition
+    pub recver: &'r mut Receiver,
     cleaned_up: bool,
 }
 
@@ -250,7 +252,11 @@ impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
             }
     
             // Set drain to true
-            self.recver.link.
+            if let Some(sender) = self.recver.outgoing.get_ref() {
+                if let Err(err) = (&mut self.recver.link).blocking_send_flow(sender, Some(0), Some(true), true) {
+                    tracing::error!("error {:?}", err)
+                }
+            }
         }
     }
 }
