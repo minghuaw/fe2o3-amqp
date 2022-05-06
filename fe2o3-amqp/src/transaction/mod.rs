@@ -36,13 +36,17 @@ impl Transaction {
     }
 
     /// Rollback the transaction
-    pub async fn rollback(self) -> Result<(), ()> {
-        todo!()
+    pub async fn rollback(mut self) -> Result<(), link::Error> {
+        self.controller.rollback().await?;
+        self.controller.close().await?;
+        Ok(())
     }
 
     /// Commit the transaction
-    pub async fn commit(self) -> Result<(), ()> {
-        todo!()
+    pub async fn commit(mut self) -> Result<(), link::Error> {
+        self.controller.commit().await?;
+        self.controller.close().await?;
+        Ok(())
     }
 
     /// Post a transactional work

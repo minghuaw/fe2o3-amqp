@@ -231,6 +231,12 @@ impl From<RecvError> for Error {
     }
 }
 
+impl From<DetachError> for Error {
+    fn from(error: DetachError) -> Self {
+        Self::Detached(error)
+    }
+}
+
 pub(crate) fn detach_error_expecting_frame() -> DetachError {
     let error = definitions::Error::new(
         AmqpError::IllegalState,
