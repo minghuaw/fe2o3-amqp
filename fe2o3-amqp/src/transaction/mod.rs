@@ -176,7 +176,7 @@ impl Transaction {
     /// Acquire a transactional work
     /// 
     /// This will send 
-    pub async fn acquire(&mut self, recver: &mut Receiver, credit: SequenceNo) -> Result<(), link::Error> {
+    pub async fn acquire<'t, 'r>(&'t mut self, recver: &'r mut Receiver, credit: SequenceNo) -> Result<TxnAcquisition<'t, 'r>, link::Error> {
         {
             let mut writer = recver.link.flow_state.lock.write().await;
             match &mut writer.properties {
@@ -202,11 +202,26 @@ impl Transaction {
         }
 
         recver.link.send_flow(&mut recver.outgoing, Some(credit), None, false).await?;
-        Ok(())
+        Ok(TxnAcquisition {
+            txn: self,
+            recver,
+            cleaned_up: false,
+        })
     }
 
-    /// Clear txn-id from link
-    pub async fn end_acquisition(&mut self, recver: &mut Receiver) -> Result<(), link::Error> {
+}
+
+/// 4.4.3 Transactional Acquisition
+#[derive(Debug)]
+pub struct TxnAcquisition<'t, 'r> {
+    txn: &'t Transaction,
+    pub recver: &'r Receiver,
+    cleaned_up: bool,
+}
+
+impl<'t, 'r> TxnAcquisition<'t, 'r> {
+    /// Clear txn-id from link and set link to drain
+    pub async fn cleanup(&mut self, recver: &mut Receiver) -> Result<(), link::Error> {
         // clear txn-id 
         {
             let mut writer = recver.link.flow_state.lock.write().await;
@@ -218,6 +233,24 @@ impl Transaction {
         // set drain to true
         recver.link.send_flow(&mut recver.outgoing, Some(0), Some(true), true).await?;
         
+        self.cleaned_up = true;
         Ok(())
+    }
+}
+
+impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
+    fn drop(&mut self) {
+        if !self.cleaned_up {
+            // clear txn-id from the link's properties
+            {
+                let mut writer = self.recver.link.flow_state.lock.blocking_write();
+                let key = Symbol::from("txn-id");
+                writer.properties.as_mut()
+                    .map(|fields| fields.remove(&key));
+            }
+    
+            // Set drain to true
+            self.recver.link.
+        }
     }
 }

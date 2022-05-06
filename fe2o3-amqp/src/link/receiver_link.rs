@@ -406,6 +406,109 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
     (section_numbers, offset as u64)
 }
 
+impl ReceiverLink {
+    /// Set and send flow state
+    pub(crate) fn blocking_send_flow<W>(
+        &mut self,
+        writer: &mut W,
+        link_credit: Option<u32>,
+        drain: Option<bool>,
+        echo: bool,
+    ) -> Result<(), link::Error>
+    where
+        W: Sink<LinkFrame> + Send + Unpin,
+    {
+        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+
+        let handle = self
+            .output_handle
+            .clone()
+            .ok_or_else(|| Error::not_attached())?;
+
+        let flow = match (link_credit, drain) {
+            (Some(link_credit), Some(drain)) => {
+                let mut writer = self.flow_state.lock.blocking_write();
+                writer.link_credit = link_credit;
+                writer.drain = drain;
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: writer.properties.clone(),
+                }
+            }
+            (Some(link_credit), None) => {
+                let mut writer = self.flow_state.lock.blocking_write();
+                writer.link_credit = link_credit;
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: writer.drain,
+                    echo,
+                    properties: writer.properties.clone(),
+                }
+            }
+            (None, Some(drain)) => {
+                let mut writer = self.flow_state.lock.blocking_write();
+                writer.drain = drain;
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(writer.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: writer.properties.clone(),
+                }
+            }
+            (None, None) => {
+                let reader = self.flow_state.lock.blocking_read();
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(reader.delivery_count.clone()),
+                    link_credit: Some(reader.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: reader.drain,
+                    echo,
+                    properties: reader.properties.clone(),
+                }
+            }
+        };
+        writer
+            .try_send(LinkFrame::Flow(flow))
+            .map_err(|_| Error::sending_to_session())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
