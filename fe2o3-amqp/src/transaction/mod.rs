@@ -39,7 +39,7 @@ impl Transaction {
         Ok(Self { controller })
     }
 
-    /// Declares a transaction with a default controller
+    /// Declares a transaction with a default controller and a list of desired transaction capabilities
     pub async fn declare_with_capabilities<R>(session: &mut SessionHandle<R>, name: impl Into<String>, capabiltiies: impl IntoIterator<Item = TxnCapability>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
         let coordinator = Coordinator {
             capabilities: Some(capabiltiies.into_iter().collect()),
