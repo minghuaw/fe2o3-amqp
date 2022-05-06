@@ -111,7 +111,7 @@ impl Controller<Undeclared> {
                 inner: self.inner,
                 declared,
             }),
-            Err(error) => Err(DeclareError::new(self, error)),
+            Err(error) => Err(DeclareError::from((self, error))),
         }
     }
 

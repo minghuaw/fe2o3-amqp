@@ -3,11 +3,11 @@
 use crate::{
     endpoint::{Settlement, ReceiverLink},
     link::{self},
-    Receiver, Sendable, Sender, Delivery,
+    Receiver, Sendable, Sender, Delivery, session::SessionHandle,
 };
 use fe2o3_amqp_types::{
     messaging::{DeliveryState, Outcome, Accepted, Modified, Rejected, Released},
-    transaction::{Declared, TransactionalState}, definitions::{self, AmqpError, Fields, SequenceNo}, primitives::Symbol,
+    transaction::{Declared, TransactionalState, Coordinator, TransactionId}, definitions::{self, AmqpError, Fields, SequenceNo}, primitives::Symbol,
 };
 
 mod controller;
@@ -31,8 +31,13 @@ impl From<Controller<Declared>> for Transaction {
 
 impl Transaction {
     /// Daclares a transaction
-    pub async fn declare() -> Result<Self, ()> {
-        todo!()
+    /// 
+    /// The user needs to supply a name for the underlying control link.
+    pub async fn declare<R>(session: &mut SessionHandle<R>, name: impl Into<String>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+        let controller = Controller::attach(session, name, Coordinator::default()).await?
+            .declare(global_id).await?;
+        let txn = Self { controller };
+        Ok(txn)
     }
 
     /// Rollback the transaction
