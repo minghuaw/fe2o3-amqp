@@ -33,6 +33,16 @@ impl<T> Delivery<T> {
         &self.message
     }
 
+    /// Get the delivery ID
+    pub fn delivery_id(&self) -> &DeliveryNumber {
+        &self.delivery_id
+    }
+
+    /// Get the delivery tag
+    pub fn delivery_tag(&self) -> &DeliveryTag {
+        &self.delivery_tag
+    }
+
     /// Consume the delivery into the message
     pub fn into_message(self) -> Message<T> {
         self.message
