@@ -626,7 +626,7 @@ impl Receiver {
 // TODO: Use type state to differentiate Mode First and Mode Second?
 impl Receiver {
     // TODO: batch disposition
-    async fn dispose(
+    pub(crate) async fn dispose(
         &mut self,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,

@@ -3,11 +3,11 @@
 use crate::{
     endpoint::Settlement,
     link::{self},
-    Receiver, Sendable, Sender,
+    Receiver, Sendable, Sender, Delivery,
 };
 use fe2o3_amqp_types::{
-    messaging::{DeliveryState, Outcome},
-    transaction::{Declared, TransactionalState},
+    messaging::{DeliveryState, Outcome, Accepted, Modified, Rejected, Released},
+    transaction::{Declared, TransactionalState}, definitions,
 };
 
 mod controller;
@@ -22,14 +22,15 @@ pub struct Transaction {
     controller: Controller<Declared>,
 }
 
+impl From<Controller<Declared>> for Transaction {
+    fn from(controller: Controller<Declared>) -> Self {
+        Self { controller }
+    }
+}
+
 impl Transaction {
     /// Daclares a transaction
     pub async fn declare() -> Result<Self, ()> {
-        todo!()
-    }
-
-    /// Declare a transaction with a customized controller
-    pub async fn declare_with_controller(controller: Controller<Undeclared>) -> Result<Self, ()> {
         todo!()
     }
 
@@ -111,10 +112,54 @@ impl Transaction {
         }
     }
 
+    /// Associate an outcome with a transaction
+    pub async fn retire<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>, outcome: Outcome) -> Result<(), link::Error> {
+        let txn_state = TransactionalState {
+            txn_id: self.controller.transaction_id().clone(),
+            outcome: Some(outcome),
+        };
+        let state = DeliveryState::TransactionalState(txn_state);
+        recver.dispose(delivery.delivery_id.clone(), delivery.delivery_tag.clone(), state).await
+    }
+
+    /// Associate an Accepted outcome with a transaction
+    pub async fn accept<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>) -> Result<(), link::Error> {
+        let outcome = Outcome::Accepted(Accepted {} );
+        self.retire(recver, delivery, outcome).await
+    }
+
+    /// Associate a Rejected outcome with a transaction
+    pub async fn reject<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), link::Error> {
+        let outcome = Outcome::Rejected(Rejected {
+            error: error.into(),
+        });
+        self.retire(recver, delivery, outcome).await
+    }
+
+    /// Associate a Released outcome with a transaction
+    pub async fn release<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>) -> Result<(), link::Error> {
+        let outcome = Outcome::Released(Released {});
+        self.retire(recver, delivery, outcome).await
+    }
+    
+    /// Associate a Modified outcome with a transaction
+    pub async fn modify<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        modified: impl Into<Modified>,
+    ) -> Result<(), link::Error> {
+        let outcome = Outcome::Modified(modified.into());
+        self.retire(recver, delivery, outcome).await
+    }
+
     /// Acquire a transactional work
     pub async fn acquire<T>(&mut self, recver: &mut Receiver) -> Result<T, ()> {
         todo!()
     }
-
-    // pub async fn retire<T>(&mut self, endpoint)
 }
