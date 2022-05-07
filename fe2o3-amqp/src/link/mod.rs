@@ -290,7 +290,7 @@ where
                     .delivery_count_mut(|_| initial_delivery_count)
                     .await;
             }
-            // Remote attach is from receiver
+            // Remote attach is from receiver, local is sender
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 let target = match remote_attach.target {

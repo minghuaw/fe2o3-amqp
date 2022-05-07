@@ -53,7 +53,7 @@ impl Transaction {
     }
 
     /// Declares a transaction with an undeclared controller
-    pub async fn declare_with_controller<R>(session: &mut SessionHandle<R>, controller: Controller<Undeclared>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+    pub async fn declare_with_controller<R>(controller: Controller<Undeclared>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
         let controller = controller.declare(global_id).await?;
         Ok(Self { controller })
     }
