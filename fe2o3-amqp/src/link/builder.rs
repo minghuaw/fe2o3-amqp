@@ -13,7 +13,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::{Link, LinkHandle, LinkIncomingItem},
+    link::{Link, LinkRelay, LinkIncomingItem},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -428,7 +428,7 @@ where
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Sender {
+        let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
@@ -501,7 +501,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
         let flow_state_producer = flow_state.clone();
         let flow_state_consumer = flow_state;
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Receiver {
+        let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),

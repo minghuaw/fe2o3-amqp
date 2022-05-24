@@ -13,7 +13,7 @@ use crate::{
     connection::{self},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, Session},
-    link::{LinkFrame, LinkHandle},
+    link::{LinkFrame, LinkRelay},
     util::Running,
 };
 
@@ -84,7 +84,7 @@ impl SessionEngine<super::Session> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + Sync + 'static,
+    S: endpoint::Session<State = SessionState, LinkRelay = LinkRelay> + Send + Sync + 'static,
     S::Error: Into<Error> + Debug,
     S::AllocError: Into<AllocLinkError>,
 {

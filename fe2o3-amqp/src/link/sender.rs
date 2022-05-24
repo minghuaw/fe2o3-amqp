@@ -28,7 +28,7 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkHandle, SenderFlowState, SenderLink,
+    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SenderFlowState, SenderLink,
 };
 
 /// An AMQP1.0 sender
@@ -360,7 +360,7 @@ where
         // May need to re-allocate output handle
         if self.link.output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkHandle::Sender {
+            let link_handle = LinkRelay::Sender {
                 tx,
                 flow_state: self.link.flow_state().producer(),
                 // TODO: what else to do during re-attaching

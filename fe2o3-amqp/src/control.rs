@@ -9,7 +9,7 @@ use tokio::sync::{mpsc::Sender, oneshot};
 use crate::{
     connection::{AllocSessionError},
     endpoint::{LinkFlow, OutgoingChannel},
-    link::LinkHandle,
+    link::LinkRelay,
     session::{frame::SessionIncomingItem, AllocLinkError},
 };
 
@@ -43,12 +43,12 @@ pub(crate) enum SessionControl {
     End(Option<definitions::Error>),
     AllocateLink {
         link_name: String,
-        link_handle: LinkHandle,
+        link_handle: LinkRelay,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },
     AllocateIncomingLink {
         link_name: String,
-        link_handle: LinkHandle,
+        link_handle: LinkRelay,
         input_handle: Handle,
         responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
     },

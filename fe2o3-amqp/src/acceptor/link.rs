@@ -27,7 +27,7 @@ use crate::{
         role,
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
+        AttachError, LinkFrame, LinkRelay, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
     Receiver, Sender,
@@ -256,7 +256,7 @@ impl LinkAcceptor {
         // Comparing unsettled should be taken care of in `on_incoming_attach`
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Receiver {
+        let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
@@ -365,7 +365,7 @@ impl LinkAcceptor {
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Sender {
+        let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),

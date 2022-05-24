@@ -27,7 +27,7 @@ use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
     endpoint::{self, LinkFlow, OutgoingChannel},
-    link::{LinkFrame, LinkHandle},
+    link::{LinkFrame, LinkRelay},
     util::Constant,
     Payload,
 };
@@ -135,7 +135,7 @@ impl<R> SessionHandle<R> {
 pub(crate) async fn allocate_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
-    link_handle: LinkHandle,
+    link_handle: LinkRelay,
 ) -> Result<Handle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
@@ -231,7 +231,7 @@ pub struct Session {
     pub(crate) properties: Option<Fields>,
 
     /// local links by output handle
-    pub(crate) local_links: Slab<LinkHandle>,
+    pub(crate) local_links: Slab<LinkRelay>,
     pub(crate) link_by_name: BTreeMap<String, Handle>,
     pub(crate) link_by_input_handle: BTreeMap<Handle, Handle>,
     // Maps from DeliveryId to link.DeliveryCount
@@ -275,7 +275,7 @@ impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
     type Error = Error;
     type State = SessionState;
-    type LinkHandle = LinkHandle;
+    type LinkRelay = LinkRelay;
 
     fn local_state(&self) -> &Self::State {
         &self.local_state
@@ -292,7 +292,7 @@ impl endpoint::Session for Session {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_handle: LinkHandle,
+        link_handle: LinkRelay,
     ) -> Result<Handle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
@@ -322,7 +322,7 @@ impl endpoint::Session for Session {
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_handle: LinkHandle,
+        link_handle: LinkRelay,
         input_handle: Handle,
     ) -> Result<Handle, Self::AllocError> {
         match self.allocate_link(link_name, link_handle) {
@@ -368,7 +368,7 @@ impl endpoint::Session for Session {
                     // Only Sender need to update the receiver settle mode
                     // because the sender needs to echo a disposition if
                     // rcv-settle-mode is 1
-                    if let LinkHandle::Sender {
+                    if let LinkRelay::Sender {
                         receiver_settle_mode,
                         ..
                     } = link

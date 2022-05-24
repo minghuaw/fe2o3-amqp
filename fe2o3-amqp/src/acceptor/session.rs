@@ -20,7 +20,7 @@ use tracing::instrument;
 use crate::{
     control::{ConnectionControl, SessionControl},
     endpoint::{self, LinkFlow, Session, OutgoingChannel},
-    link::{LinkFrame, LinkHandle},
+    link::{LinkFrame, LinkRelay},
     session::{
         self,
         engine::SessionEngine,
@@ -48,7 +48,7 @@ impl ListenerSessionHandle {
 pub(crate) async fn allocate_incoming_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
-    link_handle: LinkHandle,
+    link_handle: LinkRelay,
     input_handle: Handle,
 ) -> Result<Handle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
@@ -234,7 +234,7 @@ impl endpoint::Session for ListenerSession {
 
     type State = <session::Session as endpoint::Session>::State;
 
-    type LinkHandle = <session::Session as endpoint::Session>::LinkHandle;
+    type LinkRelay = <session::Session as endpoint::Session>::LinkRelay;
 
     fn local_state(&self) -> &Self::State {
         self.session.local_state()
@@ -251,7 +251,7 @@ impl endpoint::Session for ListenerSession {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_handle: Self::LinkHandle,
+        link_handle: Self::LinkRelay,
     ) -> Result<fe2o3_amqp_types::definitions::Handle, Self::AllocError> {
         self.session.allocate_link(link_name, link_handle)
     }
@@ -259,7 +259,7 @@ impl endpoint::Session for ListenerSession {
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_handle: LinkHandle,
+        link_handle: LinkRelay,
         input_handle: Handle,
     ) -> Result<Handle, Self::AllocError> {
         self.session
@@ -287,7 +287,7 @@ impl endpoint::Session for ListenerSession {
                     // Only Sender need to update the receiver settle mode
                     // because the sender needs to echo a disposition if
                     // rcv-settle-mode is 1
-                    if let LinkHandle::Sender {
+                    if let LinkRelay::Sender {
                         receiver_settle_mode,
                         ..
                     } = link

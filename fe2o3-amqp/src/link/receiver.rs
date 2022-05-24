@@ -24,7 +24,7 @@ use super::{
     delivery::Delivery,
     error::{AttachError, DetachError},
     receiver_link::section_number_and_offset,
-    role, Error, LinkFrame, LinkHandle, ReceiverLink, DEFAULT_CREDIT,
+    role, Error, LinkFrame, LinkRelay, ReceiverLink, DEFAULT_CREDIT,
 };
 
 macro_rules! or_assign {
@@ -283,7 +283,7 @@ impl Receiver {
     ) -> Result<&mut Self, DetachError> {
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkHandle::Receiver {
+            let link_handle = LinkRelay::Receiver {
                 tx,
                 flow_state: self.link.flow_state.clone(),
                 unsettled: self.link.unsettled.clone(),
@@ -377,7 +377,7 @@ impl Receiver {
                 )))
             }
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
-                // Flow and Disposition are handled by LinkHandle which runs
+                // Flow and Disposition are handled by LinkRelay which runs
                 // in the session loop
                 unreachable!()
             }

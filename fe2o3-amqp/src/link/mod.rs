@@ -511,7 +511,7 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) enum LinkHandle {
+pub(crate) enum LinkRelay {
     Sender {
         tx: mpsc::Sender<LinkIncomingItem>,
         // This should be wrapped inside a Producer because the SenderLink
@@ -531,14 +531,14 @@ pub(crate) enum LinkHandle {
     },
 }
 
-impl LinkHandle {
+impl LinkRelay {
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender { tx, .. } => tx.send(frame).await,
-            LinkHandle::Receiver { tx, .. } => tx.send(frame).await,
+            LinkRelay::Sender { tx, .. } => tx.send(frame).await,
+            LinkRelay::Receiver { tx, .. } => tx.send(frame).await,
         }
     }
 
@@ -548,10 +548,10 @@ impl LinkHandle {
         output_handle: Handle,
     ) -> Option<LinkFlow> {
         match self {
-            LinkHandle::Sender { flow_state, .. } => {
+            LinkRelay::Sender { flow_state, .. } => {
                 flow_state.on_incoming_flow(flow, output_handle).await
             }
-            LinkHandle::Receiver { flow_state, .. } => {
+            LinkRelay::Receiver { flow_state, .. } => {
                 flow_state.on_incoming_flow(flow, output_handle).await
             }
         }
@@ -568,7 +568,7 @@ impl LinkHandle {
         delivery_tag: DeliveryTag,
     ) -> bool {
         match self {
-            LinkHandle::Sender {
+            LinkRelay::Sender {
                 unsettled,
                 receiver_settle_mode,
                 ..
@@ -625,7 +625,7 @@ impl LinkHandle {
 
                 echo
             }
-            LinkHandle::Receiver { unsettled, .. } => {
+            LinkRelay::Receiver { unsettled, .. } => {
                 if settled {
                     let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
                 } else {
@@ -644,14 +644,14 @@ impl LinkHandle {
         }
     }
 
-    /// LinkHandle operates in session's event loop
+    /// LinkRelay operates in session's event loop
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, (bool, definitions::Error)> {
         match self {
-            LinkHandle::Sender { .. } => {
+            LinkRelay::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
                 Err((
                     true, // Closing the link
@@ -662,7 +662,7 @@ impl LinkHandle {
                     ),
                 ))
             }
-            LinkHandle::Receiver {
+            LinkRelay::Receiver {
                 tx,
                 receiver_settle_mode,
                 more,
@@ -716,14 +716,14 @@ impl LinkHandle {
         detach: Detach,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender { tx, .. } => {
+            LinkRelay::Sender { tx, .. } => {
                 // state_code.fetch_or(DETACHED, Ordering::Release);
                 // if detach.closed {
                 //     state_code.fetch_or(CLOSED, Ordering::Release);
                 // }
                 tx.send(LinkFrame::Detach(detach)).await?;
             }
-            LinkHandle::Receiver { tx, .. } => {
+            LinkRelay::Receiver { tx, .. } => {
                 // state_code.fetch_or(DETACHED, Ordering::Release);
                 // if detach.closed {
                 //     state_code.fetch_or(CLOSED, Ordering::Release);

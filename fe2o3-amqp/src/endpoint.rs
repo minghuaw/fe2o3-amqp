@@ -132,7 +132,7 @@ pub(crate) trait Session {
     type AllocError: Send;
     type Error: Send;
     type State;
-    type LinkHandle;
+    type LinkRelay;
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
@@ -142,12 +142,12 @@ pub(crate) trait Session {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_handle: Self::LinkHandle,
+        link_handle: Self::LinkRelay,
     ) -> Result<Handle, Self::AllocError>;
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_handle: Self::LinkHandle,
+        link_handle: Self::LinkRelay,
         input_handle: Handle,
     ) -> Result<Handle, Self::AllocError>;
     fn deallocate_link(&mut self, link_name: String);
