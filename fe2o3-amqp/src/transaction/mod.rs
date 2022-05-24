@@ -18,6 +18,14 @@ pub use error::*;
 use serde_amqp::to_value;
 
 /// A transaction scope for the client side
+/// 
+/// # Examples
+/// 
+/// ## Transactional posting
+/// 
+/// ## Transactional retiring
+/// 
+/// ## Transactional acquiring
 #[derive(Debug)]
 pub struct Transaction {
     controller: Controller<Declared>,
@@ -259,6 +267,22 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
         self.cleaned_up = true;
         Ok(())
     }
+
+    /// Transactionally acquire a message
+    pub async fn recv(&mut self) {
+        todo!()
+    }
+
+    /// Set the credit
+    pub async fn set_credit(&mut self, credit: SequenceNo){
+        todo!()
+    }
+
+    /// Commit the txn acquisition
+    pub async fn commit(self) {
+        todo!()
+    }
+    
 }
 
 impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
