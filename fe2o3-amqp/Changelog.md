@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.9
+
+1. Implemented client side transaction
+2. Removed redundant `impl Into<Type>` in the arguments when the `Type` itself doesn't really have anything to convert from
+3. Fixed most clippy warnings
+
 ## 0.0.8
 
 1. Changed internal LinkState
