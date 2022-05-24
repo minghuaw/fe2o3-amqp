@@ -144,13 +144,16 @@ impl Display for Data {
 )]
 pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
 
-impl<T> Display for AmqpSequence<T> where T: Display {
+impl<T> Display for AmqpSequence<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("AmqpSequence([")?;
         let len = self.0.len();
         for (i, val) in self.0.iter().enumerate() {
             write!(f, "{}", val)?;
-            if i < len-1 {
+            if i < len - 1 {
                 f.write_str(", ")?;
             }
         }
@@ -182,7 +185,10 @@ impl<T> Display for AmqpSequence<T> where T: Display {
 )]
 pub struct AmqpValue<T>(pub T);
 
-impl<T> Display for AmqpValue<T> where T: Display {
+impl<T> Display for AmqpValue<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "AmqpValue({})", self.0)
     }
@@ -247,7 +253,7 @@ pub const MESSAGE_FORMAT: u32 = 0; // FIXME: type of message format?
 mod tests {
     use serde_amqp::{primitives::Binary, to_vec};
 
-    use super::{Header, Priority, AmqpSequence};
+    use super::{AmqpSequence, Header, Priority};
 
     #[test]
     fn test_serialize_deserialize_header() {
