@@ -11,7 +11,8 @@ default: `[]`
 - `"rustls"`: enables TLS integration with `tokio-rustls` and `rustls`
 - `"native-tls"`: enables TLS integration with `tokio-native-tls` and `native-tls`
 - `"acceptor"`: enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`
-- `"listener"`: TODO
+- `"transaction"`: enables `Controller`, `Transaction`, `TxnAcquisition`
+(only the client side is implemented so far)
 
 ## Quick start
 
@@ -109,6 +110,8 @@ async fn main() {
 More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
 The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 
+License: MIT/Apache-2.0
+
 ## Components
 
 | Name | Description |
@@ -131,6 +134,12 @@ The items below are listed in the order of priority.
   - [x] Naive PLAIN SASL acceptor
   - [ ] ~~Listener that provide coarse control~~
 - [ ] Transaction
+  - [x] client side
+  - [ ] client side testing
+    - [x] posting
+    - [ ] retirement
+    - [ ] acquisition
+  - [ ] listener side
 - [ ] qpid interoperability test (this will be 0.1.0 release)
 - [ ] Link re-attachment
 - [ ] Message batch disposition
