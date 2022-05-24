@@ -17,7 +17,7 @@ mod error;
 pub use error::*;
 use serde_amqp::to_value;
 
-/// A transaction scope
+/// A transaction scope for the client side
 #[derive(Debug)]
 pub struct Transaction {
     controller: Controller<Declared>,
