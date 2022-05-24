@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, fmt::Display};
 
 use serde::{
     de::{self, VariantAccess},
@@ -534,6 +534,16 @@ pub enum BodySection<T> {
     Sequence(AmqpSequence<T>),
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
+}
+
+impl<T> Display for BodySection<T> where T: Display {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            BodySection::Data(data) => write!(f, "{}", data),
+            BodySection::Sequence(seq) => write!(f, "{}", seq),
+            BodySection::Value(val) => write!(f, "{}", val),
+        }
+    }
 }
 
 impl<T: Serialize> From<T> for BodySection<T> {

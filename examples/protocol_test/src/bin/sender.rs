@@ -72,7 +72,7 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    let body = BodySection::from("hello body_section");
+    let body = BodySection::from("hello");
     // let message = Message::from("hello");
     let message = Message::from(body);
     let message = Sendable::from(message);
@@ -83,7 +83,7 @@ async fn main() {
 
     sender.send(message).await.unwrap();
 
-    sender.send("hello").await.unwrap();
+    sender.send("world").await.unwrap();
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {

@@ -30,13 +30,13 @@ async fn main() {
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
     let delivery: Delivery<String> = receiver.recv().await.unwrap();
-    println!("<<< Message >>> {:?}", delivery);
+    println!("<<< Message >>> {}", delivery);
     receiver.accept(&delivery).await.unwrap();
 
     let delivery = receiver.recv::<String>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     let body = delivery.into_body();
-    println!("<<< Message >>> {:?}", body);
+    println!("<<< Message >>> {}", body);
 
     if let Err(err) = receiver.close().await {
         println!("{}", err);
