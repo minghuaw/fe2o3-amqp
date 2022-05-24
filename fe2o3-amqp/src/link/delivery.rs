@@ -151,6 +151,12 @@ pub struct Builder<T> {
     // pub batchable: bool,
 }
 
+impl Default for Builder<Uninitialized> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Builder<Uninitialized> {
     /// Creates a new builder for [`Sendable`]
     pub fn new() -> Self {
@@ -178,7 +184,7 @@ impl<State> Builder<State> {
     ///
     /// See 2.8.11 Message Format in the AMQP1.0 specification
     pub fn message_format(mut self, message_format: MessageFormat) -> Self {
-        self.message_format = message_format.into();
+        self.message_format = message_format;
         self
     }
 

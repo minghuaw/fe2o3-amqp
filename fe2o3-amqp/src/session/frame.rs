@@ -16,7 +16,7 @@ impl SessionFrame {
     pub fn new(channel: impl Into<u16>, body: SessionFrameBody) -> Self {
         Self {
             channel: channel.into(),
-            body: body,
+            body,
         }
     }
 }

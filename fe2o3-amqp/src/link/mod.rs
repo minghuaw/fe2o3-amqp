@@ -167,7 +167,7 @@ impl<R, T, F, M> Link<R, T, F, M> {
             | LinkState::CloseSent
             | LinkState::CloseReceived => Ok(()),
             LinkState::Closed => {
-                return Err(definitions::Error::new(
+                Err(definitions::Error::new(
                     AmqpError::NotAllowed,
                     "Link is permanently closed".to_string(),
                     None,
@@ -325,7 +325,7 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| AttachError::Local(e))?;
+        self.error_if_closed().map_err(AttachError::Local)?;
 
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -353,14 +353,14 @@ where
 
         let max_message_size = match self.max_message_size {
             0 => None,
-            val @ _ => Some(val as u64),
+            val => Some(val as u64),
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
         let properties = self.flow_state.as_ref().properties().await;
 
         let attach = Attach {
             name: self.name.clone(),
-            handle: handle,
+            handle,
             role: R::into_role(),
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
@@ -437,8 +437,7 @@ where
                         AmqpError::IllegalState,
                         Some("Illegal local state".into()),
                         None,
-                    )
-                    .into())
+                    ))
                 }
             },
             false => {
@@ -454,15 +453,14 @@ where
                             AmqpError::IllegalState,
                             Some("Illegal local state".into()),
                             None,
-                        )
-                        .into())
+                        ))
                     }
                 }
             }
         }
 
         if let Some(err) = detach.error {
-            return Err(err.into());
+            return Err(err);
         }
         Ok(())
     }
@@ -602,11 +600,9 @@ impl LinkHandle {
                             let _result = remove_from_unsettled(unsettled, &delivery_tag)
                                 .await
                                 .map(|msg| msg.settle_with_state(state));
-                        } else {
-                            if let Some(msg) = guard.get_mut(&delivery_tag) {
-                                if let Some(state) = state {
-                                    *msg.state_mut() = state;
-                                }
+                        } else if let Some(msg) = guard.get_mut(&delivery_tag) {
+                            if let Some(state) = state {
+                                *msg.state_mut() = state;
                             }
                         }
                     }
@@ -657,14 +653,14 @@ impl LinkHandle {
         match self {
             LinkHandle::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
-                return Err((
+                Err((
                     true, // Closing the link
                     definitions::Error::new(
                         AmqpError::NotAllowed,
                         Some("Sender should never receive a transfer".to_string()),
                         None,
                     ),
-                ));
+                ))
             }
             LinkHandle::Receiver {
                 tx,
@@ -672,7 +668,7 @@ impl LinkHandle {
                 more,
                 ..
             } => {
-                let settled = transfer.settled.unwrap_or_else(|| false);
+                let settled = transfer.settled.unwrap_or(false);
                 let delivery_id = transfer.delivery_id;
                 let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
@@ -694,7 +690,7 @@ impl LinkHandle {
                         // The delivery-id MUST be supplied on the first transfer of a
                         // multi-transfer delivery.
                         // And self.more should be false upon the first transfer
-                        if *more == false {
+                        if !(*more) {
                             // The same delivery ID should be used for a multi-transfer delivery
                             match (delivery_id, delivery_tag) {
                                 (Some(id), Some(tag)) => return Ok(Some((id, tag))),
@@ -832,12 +828,12 @@ where
 
     link.send_detach(writer, false, None)
         .await
-        .map_err(|e| Error::Local(e))?;
+        .map_err(Error::Local)?;
     Ok(())
 }
 
 fn max_message_size(local: u64, remote: Option<u64>) -> u64 {
-    let remote_max_msg_size = remote.unwrap_or_else(|| 0);
+    let remote_max_msg_size = remote.unwrap_or(0);
     match local {
         0 => remote_max_msg_size,
         val => {

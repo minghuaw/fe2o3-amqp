@@ -258,7 +258,7 @@ impl TryFrom<Flow> for LinkFlow {
 
     fn try_from(value: Flow) -> Result<Self, Self::Error> {
         let flow = LinkFlow {
-            handle: value.handle.ok_or_else(|| ())?,
+            handle: value.handle.ok_or(())?,
             delivery_count: value.delivery_count,
             link_credit: value.link_credit,
             available: value.available,

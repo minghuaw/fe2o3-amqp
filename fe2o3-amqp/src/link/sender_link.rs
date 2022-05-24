@@ -23,12 +23,12 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+        self.error_if_closed().map_err(link::Error::Local)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?;
+            .ok_or_else(Error::not_attached)?;
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -123,7 +123,7 @@ where
         use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
-        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
+        self.error_if_closed().map_err(Self::Error::Local)?;
 
         tokio::select! {
             _ = self.flow_state.consume(1) => {
@@ -141,7 +141,7 @@ where
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
                         self.send_detach(writer, closed, None).await
-                            .map_err(|e| Self::Error::Local(e))?;
+                            .map_err(Self::Error::Local)?;
 
                         let detach_err = match result {
                             Ok(_) => DetachError {
@@ -167,7 +167,7 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| AmqpError::IllegalState)?;
+            .ok_or(AmqpError::IllegalState)?;
 
         let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);
@@ -178,7 +178,7 @@ where
             SenderSettleMode::Unsettled => false,
             // If not set on the first (or only) transfer for a (multi-transfer)
             // delivery, then the settled flag MUST be interpreted as being false.
-            SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
+            SenderSettleMode::Mixed => settled.unwrap_or(false),
         };
 
         // If true, the resume flag indicates that the transfer is being used to reassociate an
@@ -270,7 +270,7 @@ where
                 settled: None,
                 more: false, // The
                 rcv_settle_mode: None,
-                state: state, // This is None for all transfers for now
+                state, // This is None for all transfers for now
                 resume: false,
                 aborted: false,
                 batchable,
@@ -310,7 +310,7 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| Error::Local(e))?;
+        self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
@@ -321,10 +321,8 @@ where
                 if let Some(msg) = lock.remove(&delivery_tag) {
                     let _ = msg.settle();
                 }
-            } else {
-                if let Some(msg) = lock.get_mut(&delivery_tag) {
-                    *msg.state_mut() = state.clone();
-                }
+            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
+                *msg.state_mut() = state.clone();
             }
         }
 
@@ -342,7 +340,7 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| Error::Local(e))?;
+        self.error_if_closed().map_err(Error::Local)?;
 
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
@@ -362,10 +360,8 @@ where
                 if let Some(msg) = lock.remove(&delivery_tag) {
                     let _ = msg.settle();
                 }
-            } else {
-                if let Some(msg) = lock.get_mut(&delivery_tag) {
-                    *msg.state_mut() = state.clone();
-                }
+            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
+                *msg.state_mut() = state.clone();
             }
 
             match (first, last) {
@@ -421,7 +417,7 @@ where
 {
     let frame = LinkFrame::Transfer {
         performative: transfer,
-        payload: payload,
+        payload,
     };
     writer
         .send(frame)

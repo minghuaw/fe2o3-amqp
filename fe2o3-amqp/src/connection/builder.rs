@@ -213,13 +213,19 @@ impl<'a, Mode: std::fmt::Debug> std::fmt::Debug
     }
 }
 
+impl<'a, Mode> Default for Builder<'a, Mode, ()> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a, Mode> Builder<'a, Mode, ()> {
     /// Creates a new builder for [`crate::Connection`]
     pub fn new() -> Self {
         Self {
             container_id: String::new(),
             hostname: None,
-            scheme: "amqp".into(), // Assume non-TLS by default
+            scheme: "amqp", // Assume non-TLS by default
             domain: None,
             // set to 512 before Open frame is sent
             max_frame_size: MaxFrameSize(DEFAULT_MAX_FRAME_SIZE),
@@ -373,7 +379,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
 
     /// URL scheme
     pub fn scheme(mut self, scheme: &'a str) -> Self {
-        self.scheme = scheme.into();
+        self.scheme = scheme;
         self
     }
 
@@ -660,7 +666,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
 
         // Url info will override the builder fields
         self.hostname = url.host_str().map(Into::into);
-        self.scheme = url.scheme().into();
+        self.scheme = url.scheme();
         self.domain = url.domain().map(Into::into);
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);

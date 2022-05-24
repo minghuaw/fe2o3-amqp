@@ -308,7 +308,7 @@ where
         // TODO: detach?
         let detach = Detach {
             handle: handle.clone(),
-            closed: closed.clone(),
+            closed: *closed,
             error: Some(error.clone()),
         };
         match self.session.on_outgoing_detach(detach) {

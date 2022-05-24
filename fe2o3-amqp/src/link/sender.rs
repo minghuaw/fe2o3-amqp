@@ -156,7 +156,7 @@ impl Sender {
         &mut self,
         duration: Duration,
     ) -> Result<Result<(), DetachError>, Elapsed> {
-        timeout(duration.into(), self.detach()).await
+        timeout(duration, self.detach()).await
     }
 
     /// Close the link.
@@ -211,7 +211,7 @@ impl Sender {
         sendable: impl Into<Sendable<T>>,
         duration: Duration,
     ) -> Result<Result<(), Error>, Elapsed> {
-        timeout(duration.into(), self.send(sendable)).await
+        timeout(duration, self.send(sendable)).await
     }
 
     /// Send a message without waiting for the acknowledgement.
@@ -243,7 +243,7 @@ impl Sender {
         duration: Duration,
     ) -> Result<Timeout<DeliveryFut<Result<(), Error>>>, Error> {
         let fut = self.send_batchable(sendable).await?;
-        Ok(timeout(duration.into(), fut))
+        Ok(timeout(duration, fut))
     }
 }
 
@@ -487,7 +487,7 @@ where
             message,
             message_format,
             settled,
-        } = sendable.into();
+        } = sendable;
         // .try_into().map_err(Into::into)?;
 
         // serialize message

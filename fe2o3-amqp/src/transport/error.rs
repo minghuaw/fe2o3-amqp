@@ -47,7 +47,7 @@ impl From<serde_amqp::Error> for Error {
     fn from(err: serde_amqp::Error) -> Self {
         match err {
             serde_amqp::Error::Io(e) => Self::Io(e),
-            e @ _ => {
+            e => {
                 let description = e.to_string();
                 Self::AmqpError {
                     condition: AmqpError::DecodeError,

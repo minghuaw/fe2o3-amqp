@@ -339,10 +339,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     ) -> Link<Role, T, C, M> {
         let local_state = LinkState::Unattached;
 
-        let max_message_size = match self.max_message_size {
-            Some(s) => s,
-            None => 0,
-        };
+        let max_message_size = self.max_message_size.unwrap_or(0);
 
         // Create a link
         Link::<Role, T, C, M> {
@@ -350,7 +347,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
             local_state,
             // state_code,
             name: self.name,
-            output_handle: Some(output_handle.clone()),
+            output_handle: Some(output_handle),
             input_handle: None,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
@@ -411,7 +408,7 @@ where
         session: &mut SessionHandle<R>,
     ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
     {
-        let buffer_size = self.buffer_size.clone();
+        let buffer_size = self.buffer_size;
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());
 
@@ -451,11 +448,7 @@ where
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
         super::do_attach(&mut link, &mut writer, &mut reader)
-            .await
-            .map_err(|value| match AttachError::try_from(value) {
-                Ok(error) => error,
-                Err(_) => unreachable!(),
-            })?;
+            .await?;
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -488,7 +481,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
         session: &mut SessionHandle<R>,
     ) -> Result<Receiver, AttachError> {
         // TODO: how to avoid clone?
-        let buffer_size = self.buffer_size.clone();
+        let buffer_size = self.buffer_size;
         let credit_mode = self.credit_mode.clone();
         let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = PollSender::new(session.outgoing.clone());

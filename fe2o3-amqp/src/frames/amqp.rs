@@ -188,7 +188,7 @@ impl Decoder for FrameBodyCodec {
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() == 0 {
+        if src.is_empty() {
             return Ok(Some(FrameBody::Empty));
         }
         let reader = IoReader::new(src.reader());

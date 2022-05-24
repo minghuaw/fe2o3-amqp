@@ -239,11 +239,6 @@ pub struct Session {
 }
 
 impl Session {
-    /// Alias for `begin`
-    pub async fn new(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
-        Self::begin(conn).await
-    }
-
     /// Creates a builder for [`Session`]
     pub fn builder() -> builder::Builder {
         builder::Builder::new()
@@ -507,7 +502,7 @@ impl endpoint::Session for Session {
         // and disposition only has delivery id?
 
         let first = disposition.first;
-        let last = disposition.last.unwrap_or_else(|| first);
+        let last = disposition.last.unwrap_or(first);
 
         // A disposition frame may refer to deliveries on multiple links, each may be running
         // in different mode. This counts the largest sections that can be echoed back together
@@ -552,12 +547,12 @@ impl endpoint::Session for Session {
                             )
                             .await;
 
-                        if echo == true {
-                            if prev == false {
+                        if echo {
+                            if !prev {
                                 first_echo = delivery_id;
                             }
                             last_echo = delivery_id
-                        } else if echo == false && prev == true {
+                        } else if !echo && prev {
                             let role = match disposition.role {
                                 Role::Sender => Role::Receiver,
                                 Role::Receiver => Role::Sender,

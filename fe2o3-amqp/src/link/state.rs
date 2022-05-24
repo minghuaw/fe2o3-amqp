@@ -128,14 +128,14 @@ impl LinkFlowState<role::Sender> {
         // MUST be set according to this formula when flow information is given by the
         // receiver:
         // link-credit_snd := delivery-count_rcv + link-credit_rcv - delivery-count_snd.
-        let delivery_count_rcv = flow.delivery_count.unwrap_or_else(|| {
+        let delivery_count_rcv = flow.delivery_count.unwrap_or(
             // In the event that the receiver does not yet know the delivery-count,
             // i.e., delivery-count_rcv is unspecified, the sender MUST assume that
             // the delivery-count_rcv is the first delivery-count_snd sent from sender
             // to receiver, i.e., the delivery-count_snd specified in the flow state
             // carried by the initial attach frame from the sender to the receiver.
             state.initial_delivery_count
-        });
+        );
 
         if let Some(link_credit_rcv) = flow.link_credit {
             let link_credit = delivery_count_rcv + link_credit_rcv - state.delivery_count;
@@ -267,7 +267,7 @@ impl LinkFlowState<role::Receiver> {
     pub async fn consume(&self, count: u32) -> Result<(), super::Error> {
         let mut state = self.lock.write().await;
         if state.link_credit < count {
-            return Err(LinkError::TransferLimitExceeded.into());
+            Err(LinkError::TransferLimitExceeded.into())
         } else {
             state.delivery_count += count;
             state.link_credit -= count;
