@@ -45,14 +45,16 @@ async fn main() {
         .await
         .unwrap();
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-
     // Transactionally retiring
-    let mut txn = Transaction::declare(&mut session, "controller-1", None)
+    let txn = Transaction::declare(&mut session, "controller-1", None)
         .await
         .unwrap();
-    txn.accept(&mut receiver, &delivery).await.unwrap();
-    txn.commit().await.unwrap();
+    let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
+    let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
+    let delivery2: Delivery<Value> = txn_acq.recv().await.unwrap();
+    txn_acq.accept(&delivery1).await.unwrap();
+    txn_acq.accept(&delivery2).await.unwrap();
+    txn_acq.commit().await.unwrap();
 
     session.close().await.unwrap();
     connection.close().await.unwrap();

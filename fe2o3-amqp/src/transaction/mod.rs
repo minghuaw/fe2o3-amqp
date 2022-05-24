@@ -27,11 +27,66 @@ pub use acquisition::*;
 ///
 /// # Examples
 ///
+/// Please note that only transactional posting has been tested.
+///
 /// ## Transactional posting
 ///
-/// ## Transactional retiring
+/// ```rust
+/// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
+///     .await
+///     .unwrap();
 ///
-/// ## Transactional acquiring
+/// // Commit
+/// let mut txn = Transaction::declare(&mut session, "controller-1", None)
+///     .await
+///     .unwrap();
+/// txn.post(&mut sender, "hello").await.unwrap();
+/// txn.post(&mut sender, "world").await.unwrap();
+/// txn.commit().await.unwrap();
+///
+/// // Rollback
+/// let mut txn = Transaction::declare(&mut session, "controller-2", None)
+///     .await
+///     .unwrap();
+/// txn.post(&mut sender, "foo").await.unwrap();
+/// txn.rollback().await.unwrap();
+/// ```
+///
+/// ## Transactional retirement
+///
+/// ```rust
+/// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
+///     .await
+///     .unwrap();
+///
+/// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+///
+/// // Transactionally retiring
+/// let mut txn = Transaction::declare(&mut session, "controller-1", None)
+///     .await
+///     .unwrap();
+/// txn.accept(&mut receiver, &delivery).await.unwrap();
+/// txn.commit().await.unwrap();
+/// ```
+///
+/// ## Transactional acquisition
+///
+/// ```rust
+/// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
+///     .await
+///     .unwrap();
+///
+/// // Transactionally retiring
+/// let txn = Transaction::declare(&mut session, "controller-1", None)
+///     .await
+///     .unwrap();
+/// let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
+/// let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
+/// let delivery2: Delivery<Value> = txn_acq.recv().await.unwrap();
+/// txn_acq.accept(&delivery1).await.unwrap();
+/// txn_acq.accept(&delivery2).await.unwrap();
+/// txn_acq.commit().await.unwrap();
+/// ```
 #[derive(Debug)]
 pub struct Transaction {
     controller: Controller<Declared>,

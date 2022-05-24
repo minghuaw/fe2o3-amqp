@@ -94,7 +94,7 @@ impl<'r> TxnAcquisition<'r> {
 
     /// Accept the message
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
-        self.recver.accept(delivery).await
+        self.txn.accept(self.recver, delivery).await
     }
 
     /// Reject the message
@@ -103,12 +103,12 @@ impl<'r> TxnAcquisition<'r> {
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), link::Error> {
-        self.recver.reject(delivery, error).await
+        self.txn.reject(self.recver, delivery, error).await
     }
 
     /// Release the message
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
-        self.recver.release(delivery).await
+        self.txn.release(self.recver, delivery).await
     }
 
     /// Modify the message
@@ -117,7 +117,7 @@ impl<'r> TxnAcquisition<'r> {
         delivery: &Delivery<T>,
         modified: Modified,
     ) -> Result<(), link::Error> {
-        self.recver.modify(delivery, modified).await
+        self.txn.modify(self.recver, delivery, modified).await
     }
 }
 
