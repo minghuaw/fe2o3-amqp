@@ -6,7 +6,6 @@ use fe2o3_amqp_types::{
     definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
-    transaction::Coordinator,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
@@ -31,6 +30,9 @@ use super::{
 
 #[cfg(feature = "transaction")]
 use crate::transaction::{Controller, Undeclared};
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::Coordinator;
 
 /// Type state for link::builder::Builder;
 #[derive(Debug)]

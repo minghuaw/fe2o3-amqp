@@ -3,11 +3,13 @@ use std::fmt;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
-    transaction::TransactionId,
 };
 use tokio::sync::{mpsc, oneshot::error::RecvError};
 
 use crate::session::{AllocLinkError, DeallocLinkError};
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::TransactionId;
 
 /// Error associated with detaching a link
 #[derive(Debug)]

@@ -408,6 +408,7 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
 
 impl ReceiverLink {
     /// Set and send flow state
+    #[cfg(feature = "transaction")]
     pub(crate) fn blocking_send_flow(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,

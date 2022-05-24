@@ -11,9 +11,8 @@ members = [
 
     # examples
     "examples/macro_expand",
-    "examples/protocol_test"
 ]
 
 exclude = [
-
+    "examples/protocol_test"
 ]
