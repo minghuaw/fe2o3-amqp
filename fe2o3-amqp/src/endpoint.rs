@@ -33,12 +33,29 @@ use futures_util::{Future, Sink};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    connection::engine::SessionId,
     frames::amqp::Frame,
     link::{delivery::Delivery, LinkFrame},
     session::frame::{SessionFrame, SessionIncomingItem},
     Payload,
 };
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub(crate) struct OutgoingChannel(pub u16);
+
+impl From<OutgoingChannel> for u16 {
+    fn from(channel: OutgoingChannel) -> Self {
+        channel.0
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub(crate) struct IncomingChannel(pub u16);
+
+impl From<IncomingChannel> for u16 {
+    fn from(channel: IncomingChannel) -> Self {
+        channel.0
+    }
+}
 
 #[async_trait]
 pub(crate) trait Connection {
@@ -55,25 +72,25 @@ pub(crate) trait Connection {
     fn allocate_session(
         &mut self,
         tx: mpsc::Sender<SessionIncomingItem>,
-    ) -> Result<(u16, SessionId), Self::AllocError>;
+    ) -> Result<OutgoingChannel, Self::AllocError>;
     // Remove outgoing id and session id association
-    fn deallocate_session(&mut self, session_id: usize);
+    fn deallocate_session(&mut self, outgoing_channel: OutgoingChannel);
 
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
 
     /// Reacting to remote Open frame
-    async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error>;
+    async fn on_incoming_open(&mut self, channel: IncomingChannel, open: Open) -> Result<(), Self::Error>;
 
     /// Reacting to remote Begin frame
     ///
     /// Do NOT forward to session here. Forwarding is handled elsewhere.
-    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
+    async fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error>;
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
+    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error>;
+    async fn on_incoming_close(&mut self, channel: IncomingChannel, close: Close) -> Result<(), Self::Error>;
 
     /// Sending out an Open frame
     ///
@@ -95,19 +112,19 @@ pub(crate) trait Connection {
         W::Error: Into<Self::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     /// Intercepting session frames
-    fn on_outgoing_begin(&mut self, channel: u16, begin: Begin) -> Result<Frame, Self::Error>;
+    fn on_outgoing_begin(&mut self, channel: OutgoingChannel, begin: Begin) -> Result<Frame, Self::Error>;
 
-    fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error>;
+    fn on_outgoing_end(&mut self, channel: OutgoingChannel, end: End) -> Result<Frame, Self::Error>;
 
     fn session_tx_by_incoming_channel(
         &mut self,
-        channel: u16,
-    ) -> Option<&mut mpsc::Sender<SessionIncomingItem>>;
+        incoming_channel: IncomingChannel,
+    ) -> Option<&mpsc::Sender<SessionIncomingItem>>;
 
     fn session_tx_by_outgoing_channel(
         &mut self,
-        channel: u16,
-    ) -> Option<&mut mpsc::Sender<SessionIncomingItem>>;
+        outgoing_channel: OutgoingChannel,
+    ) -> Option<&mpsc::Sender<SessionIncomingItem>>;
 }
 
 #[async_trait]
@@ -119,7 +136,7 @@ pub(crate) trait Session {
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
-    fn outgoing_channel(&self) -> u16;
+    fn outgoing_channel(&self) -> OutgoingChannel;
 
     // Allocate new local handle for new Link
     fn allocate_link(

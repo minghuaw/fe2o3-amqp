@@ -10,7 +10,7 @@ use tokio_util::sync::PollSender;
 use tracing::{debug, error, instrument, trace};
 
 use crate::{
-    connection::{self, engine::SessionId},
+    connection::{self},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, Session},
     link::{LinkFrame, LinkHandle},
@@ -25,7 +25,6 @@ use super::{
 pub(crate) struct SessionEngine<S: Session> {
     pub conn: mpsc::Sender<ConnectionControl>,
     pub session: S,
-    pub session_id: SessionId,
     pub control: mpsc::Receiver<SessionControl>,
     pub incoming: mpsc::Receiver<SessionIncomingItem>,
     pub outgoing: PollSender<SessionFrame>,
@@ -37,7 +36,6 @@ impl SessionEngine<super::Session> {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
         session: super::Session,
-        session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
@@ -46,7 +44,6 @@ impl SessionEngine<super::Session> {
         let mut engine = Self {
             conn,
             session,
-            session_id,
             control,
             incoming,
             outgoing,
@@ -87,7 +84,7 @@ impl SessionEngine<super::Session> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
+    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + Sync + 'static,
     S::Error: Into<Error> + Debug,
     S::AllocError: Into<AllocLinkError>,
 {
@@ -337,7 +334,7 @@ where
         }
     }
 
-    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel()))]
+    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0))]
     async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
@@ -406,7 +403,7 @@ where
         }
 
         debug!("Stopped");
-        let _ = connection::deallocate_session(&mut self.conn, self.session_id).await;
+        let _ = connection::deallocate_session(&mut self.conn, self.session.outgoing_channel()).await;
         outcome
     }
 }

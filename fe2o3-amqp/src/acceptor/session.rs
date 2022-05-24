@@ -18,9 +18,8 @@ use tokio_util::sync::PollSender;
 use tracing::instrument;
 
 use crate::{
-    connection::engine::SessionId,
     control::{ConnectionControl, SessionControl},
-    endpoint::{self, LinkFlow, Session},
+    endpoint::{self, LinkFlow, Session, OutgoingChannel},
     link::{LinkFrame, LinkHandle},
     session::{
         self,
@@ -151,7 +150,7 @@ impl SessionAcceptor {
         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.0.buffer_size);
 
         // create session in connection::Engine
-        let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
+        let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
         let mut session =
             self.0
                 .clone()
@@ -165,7 +164,6 @@ impl SessionAcceptor {
         let engine = SessionEngine::<ListenerSession>::begin(
             connection.control.clone(),
             listener_session,
-            session_id,
             session_control_rx,
             incoming_rx,
             PollSender::new(connection.outgoing.clone()),
@@ -200,7 +198,6 @@ impl SessionEngine<ListenerSession> {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
         session: ListenerSession,
-        session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
@@ -210,7 +207,6 @@ impl SessionEngine<ListenerSession> {
         let mut engine = Self {
             conn,
             session,
-            session_id,
             control,
             incoming,
             outgoing,
@@ -248,7 +244,7 @@ impl endpoint::Session for ListenerSession {
         self.session.local_state_mut()
     }
 
-    fn outgoing_channel(&self) -> u16 {
+    fn outgoing_channel(&self) -> OutgoingChannel {
         self.session.outgoing_channel()
     }
 

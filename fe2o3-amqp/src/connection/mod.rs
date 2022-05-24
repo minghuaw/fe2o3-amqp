@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::BTreeMap, convert::TryInto, io};
+use std::{cmp::min, collections::BTreeMap, convert::TryInto, io, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -20,13 +20,11 @@ use url::Url;
 
 use crate::{
     control::ConnectionControl,
-    endpoint,
+    endpoint::{self, OutgoingChannel, IncomingChannel},
     frames::amqp::{Frame, FrameBody},
     session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
     session::Session,
 };
-
-use self::engine::SessionId;
 
 mod builder;
 pub use builder::*;
@@ -47,6 +45,8 @@ pub const DEFAULT_MAX_FRAME_SIZE: u32 = 256 * 1024;
 ///
 /// This value is taken from `AmqpNetLite`
 pub const DEFAULT_CHANNEL_MAX: u16 = 255;
+
+type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 
 /// A handle to the [`Connection`] event loop.
 ///
@@ -131,7 +131,7 @@ impl<R> ConnectionHandle<R> {
     pub(crate) async fn allocate_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
-    ) -> Result<(u16, SessionId), AllocSessionError> {
+    ) -> Result<OutgoingChannel, AllocSessionError> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
             .send(ConnectionControl::AllocateSession { tx, responder })
@@ -151,10 +151,10 @@ impl<R> ConnectionHandle<R> {
 
 pub(crate) async fn deallocate_session(
     control: &mut Sender<ConnectionControl>,
-    session_id: usize,
+    channel: OutgoingChannel,
 ) -> Result<(), DeallcoSessionError> {
     control
-        .send(ConnectionControl::DeallocateSession(session_id))
+        .send(ConnectionControl::DeallocateSession(channel))
         .await
         .map_err(|_| DeallcoSessionError::IllegalState)
 }
@@ -356,9 +356,8 @@ pub struct Connection {
     // local
     pub(crate) local_state: ConnectionState,
     pub(crate) local_open: Open,
-    pub(crate) local_sessions: Slab<Sender<SessionIncomingItem>>,
-    pub(crate) session_by_incoming_channel: BTreeMap<u16, usize>,
-    pub(crate) session_by_outgoing_channel: BTreeMap<u16, usize>,
+    pub(crate) session_by_incoming_channel: BTreeMap<IncomingChannel, SessionRelay>,
+    pub(crate) session_by_outgoing_channel: Slab<SessionRelay>,
 
     // remote
     pub(crate) remote_open: Option<Open>,
@@ -471,9 +470,8 @@ impl Connection {
             control,
             local_state,
             local_open,
-            local_sessions: Slab::new(),
             session_by_incoming_channel: BTreeMap::new(),
-            session_by_outgoing_channel: BTreeMap::new(),
+            session_by_outgoing_channel: Slab::new(),
 
             remote_open: None,
             agreed_channel_max,
@@ -503,7 +501,7 @@ impl endpoint::Connection for Connection {
     fn allocate_session(
         &mut self,
         tx: Sender<SessionIncomingItem>,
-    ) -> Result<(u16, usize), Self::AllocError> {
+    ) -> Result<OutgoingChannel, Self::AllocError> {
         match &self.local_state {
             ConnectionState::Start
             | ConnectionState::HeaderSent
@@ -517,28 +515,26 @@ impl endpoint::Connection for Connection {
         };
 
         // get new entry index
-        let entry = self.local_sessions.vacant_entry();
-        let session_id = entry.key();
+        let entry = self.session_by_outgoing_channel.vacant_entry();
+        let outgoing_channel = entry.key();
 
         // check if there is enough
-        if session_id > self.agreed_channel_max as usize {
+        if outgoing_channel > self.agreed_channel_max as usize {
             Err(AllocSessionError::ChannelMaxReached)
         } else {
-            entry.insert(tx);
-            let channel = session_id as u16; // TODO: a different way of allocating session id?
-            self.session_by_outgoing_channel.insert(channel, session_id);
-            Ok((channel, session_id))
+            entry.insert(Arc::new(tx));
+            Ok(OutgoingChannel(outgoing_channel as u16))
         }
     }
 
-    fn deallocate_session(&mut self, session_id: usize) {
-        self.local_sessions.remove(session_id);
+    fn deallocate_session(&mut self, outgoing_channel: OutgoingChannel) {
+        self.session_by_outgoing_channel.remove(outgoing_channel.0 as usize);
     }
 
     /// Reacting to remote Open frame
     #[instrument(skip_all)]
-    async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error> {
-        trace!(channel, frame = ?open);
+    async fn on_incoming_open(&mut self, channel: IncomingChannel, open: Open) -> Result<(), Self::Error> {
+        trace!("channel = {}, frame = {:?}", channel.0, open);
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
@@ -555,13 +551,14 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote Begin frame
     #[instrument(skip_all)]
-    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
-        trace!(channel, frame = ?begin);
+    async fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error> {
+        trace!("channel = {}, frame = {:?}", channel.0, begin);
         match self.on_incoming_begin_inner(channel, &begin)? {
-            Some(session_id) => {
+            Some(relay) => {
                 // forward begin to session
-                let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
-                self.send_to_session(session_id, sframe).await?;
+                let sframe = SessionFrame::new(channel.0, SessionFrameBody::Begin(begin));
+                // self.send_to_session(session_id, sframe).await?;
+                relay.send(sframe).await?;
             }
             None => {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
@@ -580,8 +577,8 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote End frame
     #[instrument(skip_all)]
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
-        trace!(channel, frame = ?end);
+    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error> {
+        trace!("channel = {}, frame = {:?}", channel.0, end);
         match &self.local_state {
             ConnectionState::Opened => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
@@ -590,14 +587,11 @@ impl endpoint::Connection for Connection {
         // Forward to session
         let sframe = SessionFrame::new(channel, SessionFrameBody::End(end));
         // Drop incoming channel
-        let session_id = self
+        let relay = self
             .session_by_incoming_channel
             .remove(&channel)
             .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
-        self.local_sessions
-            .get_mut(session_id)
-            .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?
-            .send(sframe)
+        relay.send(sframe)
             .await?;
 
         Ok(())
@@ -605,8 +599,8 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote Close frame
     #[instrument(skip_all)]
-    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error> {
-        trace!(channel, frame=?close);
+    async fn on_incoming_close(&mut self, channel: IncomingChannel, close: Close) -> Result<(), Self::Error> {
+        trace!("channel = {}, frame = {:?}", channel.0, close);
 
         match &self.local_state {
             ConnectionState::Opened => {
@@ -647,7 +641,7 @@ impl endpoint::Connection for Connection {
 
     fn on_outgoing_begin(
         &mut self,
-        outgoing_channel: u16,
+        outgoing_channel: OutgoingChannel,
         begin: Begin,
     ) -> Result<Frame, Self::Error> {
         // TODO: check states?
@@ -656,9 +650,9 @@ impl endpoint::Connection for Connection {
     }
 
     #[instrument(skip_all)]
-    fn on_outgoing_end(&mut self, channel: u16, end: End) -> Result<Frame, Self::Error> {
+    fn on_outgoing_end(&mut self, channel: OutgoingChannel, end: End) -> Result<Frame, Self::Error> {
         self.session_by_outgoing_channel
-            .remove(&channel)
+            .try_remove(channel.0 as usize)
             .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
         let frame = Frame::new(channel, FrameBody::End(end));
         Ok(frame)
@@ -691,40 +685,40 @@ impl endpoint::Connection for Connection {
 
     fn session_tx_by_incoming_channel(
         &mut self,
-        channel: u16,
-    ) -> Option<&mut Sender<SessionIncomingItem>> {
-        let session_id = self.session_by_incoming_channel.get(&channel)?;
-        self.local_sessions.get_mut(*session_id)
+        incoming_channel: IncomingChannel,
+    ) -> Option<&Sender<SessionIncomingItem>> {
+        self.session_by_incoming_channel.get(&incoming_channel)
+            .map(AsRef::as_ref)
     }
 
     fn session_tx_by_outgoing_channel(
         &mut self,
-        channel: u16,
-    ) -> Option<&mut Sender<SessionIncomingItem>> {
-        let session_id = self.session_by_outgoing_channel.get(&channel)?;
-        self.local_sessions.get_mut(*session_id)
+        outgoing_channel: OutgoingChannel,
+    ) -> Option<&Sender<SessionIncomingItem>> {
+        self.session_by_outgoing_channel.get(outgoing_channel.0 as usize)
+            .map(AsRef::as_ref)
     }
 }
 
 impl Connection {
-    pub(crate) async fn send_to_session(
-        &mut self,
-        session_id: usize,
-        frame: SessionFrame,
-    ) -> Result<(), Error> {
-        let tx = self
-            .local_sessions
-            .get_mut(session_id)
-            .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
-        tx.send(frame).await?;
-        Ok(())
-    }
+    // pub(crate) async fn send_to_session(
+    //     &mut self,
+    //     session_id: usize,
+    //     frame: SessionFrame,
+    // ) -> Result<(), Error> {
+    //     let tx = self
+    //         .local_sessions
+    //         .get_mut(session_id)
+    //         .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
+    //     tx.send(frame).await?;
+    //     Ok(())
+    // }
 
     pub(crate) fn on_incoming_begin_inner(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         begin: &Begin,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<&SessionRelay>, Error> {
         match &self.local_state {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
@@ -734,17 +728,17 @@ impl Connection {
         match begin.remote_channel {
             // This corresponds a locally initiated session
             Some(outgoing_channel) => {
-                let session_id = self
+                let relay = self
                     .session_by_outgoing_channel
-                    .get(&outgoing_channel)
+                    .get(outgoing_channel as usize)
                     .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?; // Close with error NotFound
 
                 if self.session_by_incoming_channel.contains_key(&channel) {
                     return Err(Error::amqp_error(AmqpError::NotAllowed, None)); // TODO: this is probably not how not allowed should be used?
                 }
                 self.session_by_incoming_channel
-                    .insert(channel, *session_id);
-                Ok(Some(*session_id))
+                    .insert(channel, relay.clone());
+                Ok(Some(relay))
             }
             // This corresponds to remotely initated session
             None => {

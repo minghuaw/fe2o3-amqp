@@ -13,7 +13,7 @@ use crate::{
     control::SessionControl,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
-    Session,
+    Session, endpoint::OutgoingChannel,
 };
 
 use super::{Error, SessionHandle, DEFAULT_WINDOW};
@@ -74,12 +74,11 @@ impl Builder {
     pub(crate) fn into_session(
         self,
         control: mpsc::Sender<SessionControl>,
-        outgoing_channel: u16,
+        outgoing_channel: OutgoingChannel,
         local_state: SessionState,
     ) -> Session {
         Session {
             control,
-            // session_id,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -191,13 +190,12 @@ impl Builder {
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
 
         // create session in connection::Engine
-        let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
+        let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
 
         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
         let engine = SessionEngine::<crate::Session>::begin(
             connection.control.clone(),
             session,
-            session_id,
             session_control_rx,
             incoming_rx,
             PollSender::new(connection.outgoing.clone()),

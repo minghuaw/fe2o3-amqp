@@ -26,7 +26,7 @@ use tracing::{instrument, trace};
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
-    endpoint::{self, LinkFlow},
+    endpoint::{self, LinkFlow, OutgoingChannel},
     link::{LinkFrame, LinkHandle},
     util::Constant,
     Payload,
@@ -208,7 +208,7 @@ pub(crate) async fn deallocate_link(
 pub struct Session {
     pub(crate) control: mpsc::Sender<SessionControl>,
     // session_id: usize,
-    pub(crate) outgoing_channel: u16,
+    pub(crate) outgoing_channel: OutgoingChannel,
 
     // local amqp states
     pub(crate) local_state: SessionState,
@@ -285,7 +285,7 @@ impl endpoint::Session for Session {
         &mut self.local_state
     }
 
-    fn outgoing_channel(&self) -> u16 {
+    fn outgoing_channel(&self) -> OutgoingChannel {
         self.outgoing_channel
     }
 

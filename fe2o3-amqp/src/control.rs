@@ -7,8 +7,8 @@ use fe2o3_amqp_types::{
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
-    connection::{engine::SessionId, AllocSessionError},
-    endpoint::LinkFlow,
+    connection::{AllocSessionError},
+    endpoint::{LinkFlow, OutgoingChannel},
     link::LinkHandle,
     session::{frame::SessionIncomingItem, AllocLinkError},
 };
@@ -19,9 +19,9 @@ pub(crate) enum ConnectionControl {
     Close(Option<definitions::Error>),
     AllocateSession {
         tx: Sender<SessionIncomingItem>,
-        responder: oneshot::Sender<Result<(u16, SessionId), AllocSessionError>>,
+        responder: oneshot::Sender<Result<OutgoingChannel, AllocSessionError>>,
     },
-    DeallocateSession(SessionId),
+    DeallocateSession(OutgoingChannel),
 }
 
 impl std::fmt::Display for ConnectionControl {
@@ -33,7 +33,7 @@ impl std::fmt::Display for ConnectionControl {
                 tx: _,
                 responder: _,
             } => write!(f, "AllocateSession"),
-            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id),
+            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id.0),
         }
     }
 }

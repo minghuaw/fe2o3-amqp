@@ -13,6 +13,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, trace};
 
 use crate::control::ConnectionControl;
+use crate::endpoint::{IncomingChannel, OutgoingChannel};
 use crate::frames::amqp::{self, Frame, FrameBody};
 use crate::session::frame::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
@@ -102,6 +103,7 @@ where
             }
         };
         let Frame { channel, body } = frame;
+        let channel = endpoint::IncomingChannel(channel);
         let remote_open = match body {
             FrameBody::Open(open) => open,
             _ => {
@@ -162,7 +164,7 @@ where
     C::AllocError: Into<AllocSessionError>,
 {
     #[instrument(skip_all)]
-    async fn forward_to_session(&mut self, channel: u16, frame: SessionFrame) -> Result<(), Error> {
+    async fn forward_to_session(&mut self, channel: IncomingChannel, frame: SessionFrame) -> Result<(), Error> {
         trace!(frame = ?frame);
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
@@ -181,7 +183,7 @@ where
         let frame = incoming?;
 
         let Frame { channel, body } = frame;
-
+        let channel = IncomingChannel(channel);
         match body {
             FrameBody::Open(open) => {
                 let remote_max_frame_size = open.max_frame_size.0;
@@ -313,7 +315,7 @@ where
         }
 
         let SessionFrame { channel, body } = frame;
-
+        let channel = OutgoingChannel(channel);
         let frame = match body {
             SessionFrameBody::Begin(begin) => self
                 .connection
