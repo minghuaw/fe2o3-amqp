@@ -13,11 +13,6 @@ use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
-    // let (tx, mut rx) = mpsc::channel(1);
-    // rx.close();
-    // let result = tx.send(()).await;
-    // println!("{:?}", result);
-
     // a builder for `FmtSubscriber`.
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)

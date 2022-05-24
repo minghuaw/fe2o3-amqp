@@ -30,6 +30,11 @@ impl From<Controller<Declared>> for Transaction {
 }
 
 impl Transaction {
+    /// Get the transaction ID
+    pub fn transaction_id(&self) -> &TransactionId {
+        self.controller.transaction_id()
+    }
+
     /// Declares a transaction with a default controller
     /// 
     /// The user needs to supply a name for the underlying control link.
@@ -73,9 +78,6 @@ impl Transaction {
     }
 
     /// Post a transactional work
-    ///
-    /// Performing multiple works for different transactions on a single sender link
-    /// is not implemented yet.
     pub async fn post<T>(
         &mut self,
         sender: &mut Sender,
