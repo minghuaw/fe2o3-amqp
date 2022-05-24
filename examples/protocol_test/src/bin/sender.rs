@@ -13,11 +13,6 @@ use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
-    // let (tx, mut rx) = mpsc::channel(1);
-    // rx.close();
-    // let result = tx.send(()).await;
-    // println!("{:?}", result);
-
     // a builder for `FmtSubscriber`.
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
@@ -77,7 +72,7 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    let body = BodySection::from("hello body_section");
+    let body = BodySection::from("hello");
     // let message = Message::from("hello");
     let message = Message::from(body);
     let message = Sendable::from(message);
@@ -88,7 +83,7 @@ async fn main() {
 
     sender.send(message).await.unwrap();
 
-    sender.send("hello").await.unwrap();
+    sender.send("world").await.unwrap();
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {

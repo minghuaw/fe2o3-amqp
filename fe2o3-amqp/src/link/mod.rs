@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Received, Source, Target},
+    messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -57,6 +57,8 @@ pub(crate) type SenderLink = Link<role::Sender, Target, SenderFlowState, Unsettl
 /// Type alias for receiver link that ONLY represents the inner state of receiver
 pub(crate) type ReceiverLink = Link<role::Receiver, Target, ReceiverFlowState, DeliveryState>;
 
+pub(crate) type ArcSenderUnsettledMap = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
+
 // const CLOSED: u8 = 0b0000_0100;
 // const DETACHED: u8 = 0b0000_0010;
 
@@ -73,6 +75,11 @@ pub mod role {
     #[derive(Debug)]
     pub struct Receiver {}
 
+    // /// Type state for link::builder::Builder
+    // #[cfg(feature = "transaction")]
+    // #[derive(Debug)]
+    // pub struct Controller {}
+
     pub(crate) trait IntoRole {
         fn into_role() -> Role;
     }
@@ -88,6 +95,13 @@ pub mod role {
             Role::Receiver
         }
     }
+
+    // #[cfg(feature = "transaction")]
+    // impl IntoRole for Controller {
+    //     fn into_role() -> Role {
+    //         Role::Sender
+    //     }
+    // }
 }
 
 /// Manages the link state
@@ -135,7 +149,7 @@ pub struct Link<R, T, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
-impl<R, F, M> Link<R, Target, F, M> {
+impl<R, T, F, M> Link<R, T, F, M> {
     pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
     where
         R: role::IntoRole + Send + Sync,
@@ -153,7 +167,7 @@ impl<R, F, M> Link<R, Target, F, M> {
             | LinkState::CloseSent
             | LinkState::CloseReceived => Ok(()),
             LinkState::Closed => {
-                return Err(definitions::Error::new(
+                Err(definitions::Error::new(
                     AmqpError::NotAllowed,
                     "Link is permanently closed".to_string(),
                     None,
@@ -163,32 +177,55 @@ impl<R, F, M> Link<R, Target, F, M> {
     }
 }
 
-#[async_trait]
-impl<R, T, F, M> endpoint::LinkState for Link<R, T, F, M>
+impl<R, T, F, M> endpoint::Link for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    // fn is_detached(&self) -> bool {
-    //     let cur = self.state_code.load(Ordering::Acquire);
-    //     (cur & DETACHED) == DETACHED
-    // }
+}
 
-    // fn is_closed(&self) -> bool {
-    //     let cur = self.state_code.load(Ordering::Acquire);
-    //     (cur & CLOSED) == CLOSED
-    // }
+impl<R, T, F, M> endpoint::LinkExt for Link<R, T, F, M>
+where
+    R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+{
+    type FlowState = F;
+    type Unsettled = Arc<RwLock<UnsettledMap<M>>>;
 
-    fn output_handle(&self) -> Option<&Handle> {
-        self.output_handle.as_ref()
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn output_handle(&self) -> &Option<Handle> {
+        &self.output_handle
+    }
+
+    fn output_handle_mut(&mut self) -> &mut Option<Handle> {
+        &mut self.output_handle
+    }
+
+    fn flow_state(&self) -> &Self::FlowState {
+        &self.flow_state
+    }
+
+    fn unsettled(&self) -> &Self::Unsettled {
+        &self.unsettled
+    }
+
+    fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
+        &self.rcv_settle_mode
     }
 }
 
 #[async_trait]
-impl<R, F, M> endpoint::LinkAttach for Link<R, Target, F, M>
+impl<R, T, F, M> endpoint::LinkAttach for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
@@ -253,14 +290,14 @@ where
                     .delivery_count_mut(|_| initial_delivery_count)
                     .await;
             }
-            // Remote attach is from receiver
+            // Remote attach is from receiver, local is sender
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 let target = match remote_attach.target {
-                    Some(t) => Target::try_from(*t).map_err(|_| {
+                    Some(t) => T::try_from(*t).map_err(|_| {
                         AttachError::Local(definitions::Error::new(
                             AmqpError::NotImplemented,
-                            "Coordinator is not implemented".to_string(),
+                            None,
                             None,
                         ))
                     })?,
@@ -288,7 +325,7 @@ where
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| AttachError::Local(e))?;
+        self.error_if_closed().map_err(AttachError::Local)?;
 
         // Create Attach frame
         let handle = match &self.output_handle {
@@ -316,14 +353,14 @@ where
 
         let max_message_size = match self.max_message_size {
             0 => None,
-            val @ _ => Some(val as u64),
+            val => Some(val as u64),
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
         let properties = self.flow_state.as_ref().properties().await;
 
         let attach = Attach {
             name: self.name.clone(),
-            handle: handle,
+            handle,
             role: R::into_role(),
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
@@ -386,21 +423,22 @@ where
 
         match detach.closed {
             true => match self.local_state {
-                LinkState::Attached 
+                LinkState::Attached
                 | LinkState::AttachSent
                 | LinkState::AttachReceived
-                | LinkState::DetachSent 
+                | LinkState::DetachSent
                 | LinkState::DetachReceived => self.local_state = LinkState::CloseReceived,
                 LinkState::CloseSent => {
                     self.local_state = LinkState::Closed;
                     let _ = self.output_handle.take();
-                },
-                _ => return Err(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Illegal local state".into()),
-                    None,
-                )
-                .into())
+                }
+                _ => {
+                    return Err(definitions::Error::new(
+                        AmqpError::IllegalState,
+                        Some("Illegal local state".into()),
+                        None,
+                    ))
+                }
             },
             false => {
                 match self.local_state {
@@ -415,15 +453,14 @@ where
                             AmqpError::IllegalState,
                             Some("Illegal local state".into()),
                             None,
-                        )
-                        .into())
+                        ))
                     }
                 }
             }
         }
 
         if let Some(err) = detach.error {
-            return Err(err.into());
+            return Err(err);
         }
         Ok(())
     }
@@ -453,9 +490,9 @@ where
                 let detach = Detach {
                     handle,
                     closed,
-                    error
+                    error,
                 };
-        
+
                 debug!("Sending detach: {:?}", detach);
 
                 writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
@@ -465,7 +502,7 @@ where
                         None,
                     )
                 })?;
-            },
+            }
             None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
         }
 
@@ -563,11 +600,9 @@ impl LinkHandle {
                             let _result = remove_from_unsettled(unsettled, &delivery_tag)
                                 .await
                                 .map(|msg| msg.settle_with_state(state));
-                        } else {
-                            if let Some(msg) = guard.get_mut(&delivery_tag) {
-                                if let Some(state) = state {
-                                    *msg.state_mut() = state;
-                                }
+                        } else if let Some(msg) = guard.get_mut(&delivery_tag) {
+                            if let Some(state) = state {
+                                *msg.state_mut() = state;
                             }
                         }
                     }
@@ -618,14 +653,14 @@ impl LinkHandle {
         match self {
             LinkHandle::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
-                return Err((
+                Err((
                     true, // Closing the link
                     definitions::Error::new(
                         AmqpError::NotAllowed,
                         Some("Sender should never receive a transfer".to_string()),
                         None,
                     ),
-                ));
+                ))
             }
             LinkHandle::Receiver {
                 tx,
@@ -633,7 +668,7 @@ impl LinkHandle {
                 more,
                 ..
             } => {
-                let settled = transfer.settled.unwrap_or_else(|| false);
+                let settled = transfer.settled.unwrap_or(false);
                 let delivery_id = transfer.delivery_id;
                 let delivery_tag = transfer.delivery_tag.clone();
                 let transfer_more = transfer.more;
@@ -655,7 +690,7 @@ impl LinkHandle {
                         // The delivery-id MUST be supplied on the first transfer of a
                         // multi-transfer delivery.
                         // And self.more should be false upon the first transfer
-                        if *more == false {
+                        if !(*more) {
                             // The same delivery ID should be used for a multi-transfer delivery
                             match (delivery_id, delivery_tag) {
                                 (Some(id), Some(tag)) => return Ok(Some((id, tag))),
@@ -793,12 +828,12 @@ where
 
     link.send_detach(writer, false, None)
         .await
-        .map_err(|e| Error::Local(e))?;
+        .map_err(Error::Local)?;
     Ok(())
 }
 
 fn max_message_size(local: u64, remote: Option<u64>) -> u64 {
-    let remote_max_msg_size = remote.unwrap_or_else(|| 0);
+    let remote_max_msg_size = remote.unwrap_or(0);
     match local {
         0 => remote_max_msg_size,
         val => {

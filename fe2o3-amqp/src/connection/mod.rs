@@ -149,8 +149,13 @@ impl<R> ConnectionHandle<R> {
     }
 }
 
-pub(crate) async fn deallocate_session(control: &mut Sender<ConnectionControl>, session_id: usize) -> Result<(), DeallcoSessionError> {
-    control.send(ConnectionControl::DeallocateSession(session_id)).await
+pub(crate) async fn deallocate_session(
+    control: &mut Sender<ConnectionControl>,
+    session_id: usize,
+) -> Result<(), DeallcoSessionError> {
+    control
+        .send(ConnectionControl::DeallocateSession(session_id))
+        .await
         .map_err(|_| DeallcoSessionError::IllegalState)
 }
 
@@ -517,7 +522,7 @@ impl endpoint::Connection for Connection {
 
         // check if there is enough
         if session_id > self.agreed_channel_max as usize {
-            return Err(AllocSessionError::ChannelMaxReached);
+            Err(AllocSessionError::ChannelMaxReached)
         } else {
             entry.insert(tx);
             let channel = session_id as u16; // TODO: a different way of allocating session id?

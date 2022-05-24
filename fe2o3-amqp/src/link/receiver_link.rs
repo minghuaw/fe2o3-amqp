@@ -31,12 +31,12 @@ impl endpoint::ReceiverLink for ReceiverLink {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
+        self.error_if_closed().map_err(Self::Error::Local)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?;
+            .ok_or_else(Error::not_attached)?;
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
@@ -49,7 +49,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count.clone()),
+                    delivery_count: Some(writer.delivery_count),
                     link_credit: Some(link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
@@ -68,7 +68,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count.clone()),
+                    delivery_count: Some(writer.delivery_count),
                     link_credit: Some(link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
@@ -87,7 +87,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count.clone()),
+                    delivery_count: Some(writer.delivery_count),
                     link_credit: Some(writer.link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
@@ -105,7 +105,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(reader.delivery_count.clone()),
+                    delivery_count: Some(reader.delivery_count),
                     link_credit: Some(reader.link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
@@ -172,7 +172,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
 
         // This only takes care of whether the message is considered
         // sett
-        let settled_by_sender = transfer.settled.unwrap_or_else(|| false);
+        let settled_by_sender = transfer.settled.unwrap_or(false);
         let delivery_id = transfer.delivery_id.ok_or_else(|| {
             Error::Local(definitions::Error::new(
                 AmqpError::NotAllowed,
@@ -241,7 +241,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(payload.as_ref())
-                        .ok_or_else(|| AmqpError::DecodeError)?;
+                        .ok_or(AmqpError::DecodeError)?;
                     let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
                     let message = message.0;
                     let section_number = message.sections();
@@ -271,7 +271,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?;
+            .ok_or_else(Error::not_attached)?;
 
         let delivery = Delivery {
             link_output_handle,
@@ -298,7 +298,7 @@ impl endpoint::ReceiverLink for ReceiverLink {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
+        self.error_if_closed().map_err(Self::Error::Local)?;
 
         let settled = match self.rcv_settle_mode {
             ReceiverSettleMode::First => {
@@ -350,7 +350,8 @@ fn rfind_offset_of_complete_message(bytes: &[u8]) -> Option<u64> {
         .zip(bytes.iter().skip(1).zip(bytes.iter().skip(2)));
 
     iter.rposition(|(&b0, (&b1, &b2))| {
-        match (b0, b1, b2) {
+        matches!(
+            (b0, b1, b2), 
             (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
             | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
             | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
@@ -359,9 +360,8 @@ fn rfind_offset_of_complete_message(bytes: &[u8]) -> Option<u64> {
             | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
             | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
             | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE) => true,
-            _ => false
-        }
+            | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE)
+        )
     })
     .map(|val| (len - val) as u64)
 }
@@ -404,6 +404,107 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
 
     let offset = bytes.len() - last_pos;
     (section_numbers, offset as u64)
+}
+
+impl ReceiverLink {
+    /// Set and send flow state
+    #[cfg(feature = "transaction")]
+    pub(crate) fn blocking_send_flow(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        link_credit: Option<u32>,
+        drain: Option<bool>,
+        echo: bool,
+    ) -> Result<(), link::Error> {
+        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+
+        let handle = self
+            .output_handle
+            .clone()
+            .ok_or_else(|| Error::not_attached())?;
+
+        let flow = match (link_credit, drain) {
+            (Some(link_credit), Some(drain)) => {
+                let mut writer = self.flow_state.lock.blocking_write();
+                writer.link_credit = link_credit;
+                writer.drain = drain;
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: writer.properties.clone(),
+                }
+            }
+            (Some(link_credit), None) => {
+                let mut writer = self.flow_state.lock.blocking_write();
+                writer.link_credit = link_credit;
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: writer.drain,
+                    echo,
+                    properties: writer.properties.clone(),
+                }
+            }
+            (None, Some(drain)) => {
+                let mut writer = self.flow_state.lock.blocking_write();
+                writer.drain = drain;
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(writer.delivery_count.clone()),
+                    link_credit: Some(writer.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: writer.properties.clone(),
+                }
+            }
+            (None, None) => {
+                let reader = self.flow_state.lock.blocking_read();
+                LinkFlow {
+                    handle,
+                    // TODO: "last known value"???
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(reader.delivery_count.clone()),
+                    link_credit: Some(reader.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: reader.drain,
+                    echo,
+                    properties: reader.properties.clone(),
+                }
+            }
+        };
+        writer
+            .blocking_send(LinkFrame::Flow(flow))
+            .map_err(|_| Error::sending_to_session())
+    }
 }
 
 #[cfg(test)]

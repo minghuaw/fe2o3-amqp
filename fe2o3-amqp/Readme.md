@@ -11,7 +11,8 @@ default: `[]`
 - `"rustls"`: enables TLS integration with `tokio-rustls` and `rustls`
 - `"native-tls"`: enables TLS integration with `tokio-native-tls` and `native-tls`
 - `"acceptor"`: enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`
-- `"listener"`: TODO
+- `"transaction"`: enables `Controller`, `Transaction`, `TxnAcquisition`
+(only the client side is implemented so far)
 
 ## Quick start
 

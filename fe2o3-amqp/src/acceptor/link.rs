@@ -4,11 +4,7 @@
 // #[derive(Debug)]
 // pub struct LinkListener {}
 
-use std::{
-    collections::BTreeMap,
-    marker::PhantomData,
-    sync::{Arc},
-};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{
@@ -23,6 +19,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
+    endpoint::LinkAttach,
     link::{
         self,
         delivery::UnsettledMessage,
@@ -33,7 +30,7 @@ use crate::{
         AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
-    Receiver, Sender, endpoint::LinkAttach,
+    Receiver, Sender,
 };
 
 use super::{

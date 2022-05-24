@@ -13,10 +13,10 @@ pub(crate) struct SessionFrame {
 }
 
 impl SessionFrame {
-    pub fn new(channel: impl Into<u16>, body: impl Into<SessionFrameBody>) -> Self {
+    pub fn new(channel: impl Into<u16>, body: SessionFrameBody) -> Self {
         Self {
             channel: channel.into(),
-            body: body.into(),
+            body,
         }
     }
 }

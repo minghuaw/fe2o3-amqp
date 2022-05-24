@@ -105,7 +105,7 @@ impl Builder {
     }
 
     /// Set the "timeout" field
-    pub fn timeout(mut self, timeout: impl Into<Seconds>) -> Self {
+    pub fn timeout(mut self, timeout: Seconds) -> Self {
         self.source.timeout = timeout.into();
         self
     }
@@ -129,7 +129,7 @@ impl Builder {
     }
 
     /// Set the "filter" field
-    pub fn filter(mut self, filter_set: impl Into<FilterSet>) -> Self {
+    pub fn filter(mut self, filter_set: FilterSet) -> Self {
         self.source.filter = Some(filter_set.into());
         self
     }

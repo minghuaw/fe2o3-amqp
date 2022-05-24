@@ -206,7 +206,7 @@ impl<'de> de::Deserialize<'de> for Frame {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &'static [&'static str] = &[
+        const VARIANTS: &[&str] = &[
             "amqp:sasl-mechanisms:list",
             "amqp:sasl-init:list",
             "amqp:sasl-challenge:list",

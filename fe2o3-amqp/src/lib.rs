@@ -12,7 +12,8 @@
 //! - `"rustls"`: enables TLS integration with `tokio-rustls` and `rustls`
 //! - `"native-tls"`: enables TLS integration with `tokio-native-tls` and `native-tls`
 //! - `"acceptor"`: enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`
-//! - `"listener"`: TODO
+//! - `"transaction"`: enables `Controller`, `Transaction`, `TxnAcquisition` 
+//! (only the client side is implemented so far)
 //!
 //! # Quick start
 //!
@@ -121,9 +122,11 @@ pub mod sasl_profile;
 pub mod session;
 pub mod transport;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
 pub mod acceptor;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
 #[cfg(feature = "transaction")]
 pub mod transaction;
 

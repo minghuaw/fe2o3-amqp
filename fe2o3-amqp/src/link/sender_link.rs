@@ -6,7 +6,10 @@ use crate::link::error::DetachError;
 use super::*;
 
 #[async_trait]
-impl endpoint::SenderLink for SenderLink {
+impl<T> endpoint::SenderLink for Link<role::Sender, T, SenderFlowState, UnsettledMessage>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+{
     type Error = link::Error;
 
     /// Set and send flow state
@@ -20,12 +23,12 @@ impl endpoint::SenderLink for SenderLink {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+        self.error_if_closed().map_err(link::Error::Local)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?;
+            .ok_or_else(Error::not_attached)?;
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -103,13 +106,14 @@ impl endpoint::SenderLink for SenderLink {
             .map_err(|_| Error::sending_to_session())
     }
 
-    async fn send_transfer<W, Fut>(
+    async fn send_payload<W, Fut>(
         &mut self,
         writer: &mut W,
         detached: Fut,
         mut payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
+        state: Option<DeliveryState>,
         batchable: bool,
     ) -> Result<Settlement, Self::Error>
     where
@@ -119,7 +123,7 @@ impl endpoint::SenderLink for SenderLink {
         use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
-        self.error_if_closed().map_err(|e| Self::Error::Local(e))?;
+        self.error_if_closed().map_err(Self::Error::Local)?;
 
         tokio::select! {
             _ = self.flow_state.consume(1) => {
@@ -137,7 +141,7 @@ impl endpoint::SenderLink for SenderLink {
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
                         self.send_detach(writer, closed, None).await
-                            .map_err(|e| Self::Error::Local(e))?;
+                            .map_err(Self::Error::Local)?;
 
                         let detach_err = match result {
                             Ok(_) => DetachError {
@@ -163,7 +167,7 @@ impl endpoint::SenderLink for SenderLink {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| AmqpError::IllegalState)?;
+            .ok_or(AmqpError::IllegalState)?;
 
         let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);
@@ -174,11 +178,8 @@ impl endpoint::SenderLink for SenderLink {
             SenderSettleMode::Unsettled => false,
             // If not set on the first (or only) transfer for a (multi-transfer)
             // delivery, then the settled flag MUST be interpreted as being false.
-            SenderSettleMode::Mixed => settled.unwrap_or_else(|| false),
+            SenderSettleMode::Mixed => settled.unwrap_or(false),
         };
-
-        // TODO: Expose API for resuming link?
-        let state: Option<DeliveryState> = None;
 
         // If true, the resume flag indicates that the transfer is being used to reassociate an
         // unsettled delivery from a dissociated link endpoint
@@ -269,7 +270,7 @@ impl endpoint::SenderLink for SenderLink {
                 settled: None,
                 more: false, // The
                 rcv_settle_mode: None,
-                state: state.clone(), // This is None for all transfers for now
+                state, // This is None for all transfers for now
                 resume: false,
                 aborted: false,
                 batchable,
@@ -309,7 +310,7 @@ impl endpoint::SenderLink for SenderLink {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| Error::Local(e))?;
+        self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
@@ -320,10 +321,8 @@ impl endpoint::SenderLink for SenderLink {
                 if let Some(msg) = lock.remove(&delivery_tag) {
                     let _ = msg.settle();
                 }
-            } else {
-                if let Some(msg) = lock.get_mut(&delivery_tag) {
-                    *msg.state_mut() = state.clone();
-                }
+            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
+                *msg.state_mut() = state.clone();
             }
         }
 
@@ -341,7 +340,7 @@ impl endpoint::SenderLink for SenderLink {
     where
         W: Sink<LinkFrame> + Send + Unpin,
     {
-        self.error_if_closed().map_err(|e| Error::Local(e))?;
+        self.error_if_closed().map_err(Error::Local)?;
 
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
@@ -361,10 +360,8 @@ impl endpoint::SenderLink for SenderLink {
                 if let Some(msg) = lock.remove(&delivery_tag) {
                     let _ = msg.settle();
                 }
-            } else {
-                if let Some(msg) = lock.get_mut(&delivery_tag) {
-                    *msg.state_mut() = state.clone();
-                }
+            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
+                *msg.state_mut() = state.clone();
             }
 
             match (first, last) {
@@ -420,7 +417,7 @@ where
 {
     let frame = LinkFrame::Transfer {
         performative: transfer,
-        payload: payload,
+        payload,
     };
     writer
         .send(frame)

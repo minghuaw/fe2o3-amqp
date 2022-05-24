@@ -36,13 +36,13 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 mod error;
-pub(crate) use error::{AllocLinkError, DeallocLinkError};
 pub use error::Error;
+pub(crate) use error::{AllocLinkError, DeallocLinkError};
 
 mod builder;
 pub use builder::*;
 
-use self::{frame::{SessionFrame, SessionFrameBody}};
+use self::frame::{SessionFrame, SessionFrameBody};
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 2048;
@@ -163,9 +163,10 @@ pub(crate) async fn allocate_link(
 pub(crate) async fn deallocate_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
-) -> Result<(), DeallocLinkError> 
-{
-    control.send(SessionControl::DeallocateLink(link_name)).await
+) -> Result<(), DeallocLinkError> {
+    control
+        .send(SessionControl::DeallocateLink(link_name))
+        .await
         .map_err(|_| DeallocLinkError::IllegalState)
 }
 
@@ -238,11 +239,6 @@ pub struct Session {
 }
 
 impl Session {
-    /// Alias for `begin`
-    pub async fn new(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
-        Self::begin(conn).await
-    }
-
     /// Creates a builder for [`Session`]
     pub fn builder() -> builder::Builder {
         builder::Builder::new()
@@ -506,7 +502,7 @@ impl endpoint::Session for Session {
         // and disposition only has delivery id?
 
         let first = disposition.first;
-        let last = disposition.last.unwrap_or_else(|| first);
+        let last = disposition.last.unwrap_or(first);
 
         // A disposition frame may refer to deliveries on multiple links, each may be running
         // in different mode. This counts the largest sections that can be echoed back together
@@ -551,12 +547,12 @@ impl endpoint::Session for Session {
                             )
                             .await;
 
-                        if echo == true {
-                            if prev == false {
+                        if echo {
+                            if !prev {
                                 first_echo = delivery_id;
                             }
                             last_echo = delivery_id
-                        } else if echo == false && prev == true {
+                        } else if !echo && prev {
                             let role = match disposition.role {
                                 Role::Sender => Role::Receiver,
                                 Role::Receiver => Role::Sender,

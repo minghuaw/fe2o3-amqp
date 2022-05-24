@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.0.14
+
+1. Added `Display` impl for some message format types
+
+## 0.0.13
+
+1. Fixed a bug where field `global_id` of `Declare` should be and `Option`
+
 ## 0.0.9 ~ 0.0.12
 
 1. Added types defined in transactions

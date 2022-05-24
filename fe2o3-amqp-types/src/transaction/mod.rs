@@ -45,7 +45,7 @@ impl TryFrom<TargetArchetype> for Coordinator {
     fn try_from(value: TargetArchetype) -> Result<Self, Self::Error> {
         match value {
             TargetArchetype::Coordinator(coord) => Ok(coord),
-            _ => return Err(value)
+            _ => return Err(value),
         }
     }
 }
@@ -98,12 +98,12 @@ pub struct Declare {
     /// field MUST NOT be set if the coordinator does not have the distributed-transactions capability.
     /// Note that the details of distributed transactions within AMQP 1.0 will be provided in a separate
     /// specification.
-    pub global_id: TransactionId,
+    pub global_id: Option<TransactionId>,
 }
 
 impl Declare {
     /// Creates a new [`Declare`]
-    pub fn new(global_id: impl Into<TransactionId>) -> Self {
+    pub fn new(global_id: impl Into<Option<TransactionId>>) -> Self {
         Self {
             global_id: global_id.into(),
         }

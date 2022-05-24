@@ -10,7 +10,7 @@ use tokio_util::sync::PollSender;
 use tracing::{debug, error, instrument, trace};
 
 use crate::{
-    connection::{engine::SessionId, self},
+    connection::{self, engine::SessionId},
     control::{ConnectionControl, SessionControl},
     endpoint::{self, Session},
     link::{LinkFrame, LinkHandle},
@@ -308,7 +308,7 @@ where
         // TODO: detach?
         let detach = Detach {
             handle: handle.clone(),
-            closed: closed.clone(),
+            closed: *closed,
             error: Some(error.clone()),
         };
         match self.session.on_outgoing_detach(detach) {

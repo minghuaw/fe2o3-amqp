@@ -189,7 +189,7 @@ where
                 }
                 Negotiation::Outcome(outcome) => match outcome.code {
                     SaslCode::Ok => return Ok(transport.into_inner_io()),
-                    code @ _ => {
+                    code => {
                         return Err(NegotiationError::SaslError {
                             code,
                             additional_data: outcome.additional_data,

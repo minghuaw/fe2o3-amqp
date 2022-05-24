@@ -22,7 +22,8 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, Role, SequenceNo,
+        DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, ReceiverSettleMode,
+        Role, SequenceNo,
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
@@ -182,37 +183,6 @@ pub(crate) trait Session {
 }
 
 #[async_trait]
-pub(crate) trait LinkState {
-    // type AttachError: Send;
-    // type DetachError: Send;
-
-    // fn is_detached(&self) -> bool;
-
-    // fn is_closed(&self) -> bool;
-
-    fn output_handle(&self) -> Option<&Handle>;
-
-    // fn name(&self) -> &str;
-
-    // async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
-
-    // async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
-
-    // async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
-    // where
-    //     W: Sink<LinkFrame> + Send + Unpin;
-
-    // async fn send_detach<W>(
-    //     &mut self,
-    //     writer: &mut W,
-    //     closed: bool,
-    //     error: Option<Self::DetachError>,
-    // ) -> Result<(), Self::DetachError>
-    // where
-    //     W: Sink<LinkFrame> + Send + Unpin;
-}
-
-#[async_trait]
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
@@ -237,6 +207,25 @@ pub(crate) trait LinkAttach {
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where
         W: Sink<LinkFrame> + Send + Unpin;
+}
+
+pub(crate) trait Link: LinkAttach + LinkDetach {}
+
+pub(crate) trait LinkExt: Link {
+    type FlowState;
+    type Unsettled;
+
+    fn name(&self) -> &str;
+
+    fn output_handle(&self) -> &Option<Handle>;
+
+    fn output_handle_mut(&mut self) -> &mut Option<Handle>;
+
+    fn flow_state(&self) -> &Self::FlowState;
+
+    fn unsettled(&self) -> &Self::Unsettled;
+
+    fn rcv_settle_mode(&self) -> &ReceiverSettleMode;
 }
 
 /// A subset of the fields in the Flow performative
@@ -269,7 +258,7 @@ impl TryFrom<Flow> for LinkFlow {
 
     fn try_from(value: Flow) -> Result<Self, Self::Error> {
         let flow = LinkFlow {
-            handle: value.handle.ok_or_else(|| ())?,
+            handle: value.handle.ok_or(())?,
             delivery_count: value.delivery_count,
             link_credit: value.link_credit,
             available: value.available,
@@ -290,7 +279,7 @@ pub(crate) enum Settlement {
 }
 
 #[async_trait]
-pub(crate) trait SenderLink: LinkState + LinkAttach + LinkDetach {
+pub(crate) trait SenderLink: Link + LinkExt {
     type Error: Send;
 
     const ROLE: Role = Role::Sender;
@@ -307,13 +296,18 @@ pub(crate) trait SenderLink: LinkState + LinkAttach + LinkDetach {
         W: Sink<LinkFrame> + Send + Unpin;
 
     /// Send message via transfer frame and return whether the message is already settled
-    async fn send_transfer<W, Fut>(
+    async fn send_payload<W, Fut>(
         &mut self,
         writer: &mut W,
         detached: Fut,
         payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
+        // The delivery state from sender is useful for
+        // 1. link resumption
+        // 2. transaction
+        // The delivery state should be attached on every transfer if specified
+        state: Option<DeliveryState>,
         batchable: bool,
     ) -> Result<Settlement, Self::Error>
     where
@@ -345,7 +339,7 @@ pub(crate) trait SenderLink: LinkState + LinkAttach + LinkDetach {
 }
 
 #[async_trait]
-pub(crate) trait ReceiverLink: LinkState + LinkAttach + LinkDetach {
+pub(crate) trait ReceiverLink: Link + LinkExt {
     type Error: Send;
 
     const ROLE: Role = Role::Receiver;

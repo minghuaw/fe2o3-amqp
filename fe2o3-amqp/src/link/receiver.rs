@@ -3,7 +3,7 @@
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
-    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released},
+    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
 use futures_util::StreamExt;
@@ -13,7 +13,7 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
-    endpoint::{LinkDetach},
+    endpoint::LinkDetach,
     link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
     Payload,
@@ -232,8 +232,8 @@ impl Drop for Receiver {
 
 impl Receiver {
     /// Creates a builder for the [`Receiver`]
-    pub fn builder() -> builder::Builder<role::Receiver, WithoutName, WithTarget> {
-        builder::Builder::<role::Receiver, _, _>::new()
+    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithTarget> {
+        builder::Builder::<role::Receiver, Target, _, _>::new()
     }
 
     /// Attach the receiver link to a session with the default configuration
@@ -363,14 +363,14 @@ impl Receiver {
                     is_closed_by_remote: detach.closed,
                     error: detach.error,
                 };
-                return Err(Error::Detached(err));
+                Err(Error::Detached(err))
             }
             LinkFrame::Transfer {
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
             LinkFrame::Attach(_) => {
-                return Err(Error::Local(definitions::Error::new(
+                Err(Error::Local(definitions::Error::new(
                     AmqpError::IllegalState,
                     Some("Received Attach on an attached link".into()),
                     None,
@@ -427,8 +427,8 @@ impl Receiver {
                         self.link
                             .on_incomplete_transfer(
                                 delivery_tag,
-                                (&incomplete).section_number,
-                                (&incomplete).section_offset,
+                                incomplete.section_number,
+                                incomplete.section_offset,
                             )
                             .await;
                     }
@@ -549,14 +549,12 @@ impl Receiver {
                 is_closed_by_remote: true,
                 error: None,
             });
-        } else {
-            if let Err(e) = self.link.on_incoming_detach(remote_detach).await {
-                return Err(DetachError::new(false, Some(e)));
-            }
+        } else if let Err(e) = self.link.on_incoming_detach(remote_detach).await {
+            return Err(DetachError::new(false, Some(e)));
         }
-
-        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
         
+        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
+
         Ok(())
     }
 
@@ -626,7 +624,7 @@ impl Receiver {
 // TODO: Use type state to differentiate Mode First and Mode Second?
 impl Receiver {
     // TODO: batch disposition
-    async fn dispose(
+    pub(crate) async fn dispose(
         &mut self,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
@@ -654,7 +652,7 @@ impl Receiver {
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Accepted(Accepted {});
         self.dispose(
-            delivery.delivery_id.clone(),
+            delivery.delivery_id,
             delivery.delivery_tag.clone(),
             state,
         )
@@ -672,7 +670,7 @@ impl Receiver {
             error: error.into(),
         });
         self.dispose(
-            delivery.delivery_id.clone(),
+            delivery.delivery_id,
             delivery.delivery_tag.clone(),
             state,
         )
@@ -684,7 +682,7 @@ impl Receiver {
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Released(Released {});
         self.dispose(
-            delivery.delivery_id.clone(),
+            delivery.delivery_id,
             delivery.delivery_tag.clone(),
             state,
         )
@@ -696,11 +694,11 @@ impl Receiver {
     pub async fn modify<T>(
         &mut self,
         delivery: &Delivery<T>,
-        modified: impl Into<Modified>,
+        modified: Modified,
     ) -> Result<(), Error> {
-        let state = DeliveryState::Modified(modified.into());
+        let state = DeliveryState::Modified(modified);
         self.dispose(
-            delivery.delivery_id.clone(),
+            delivery.delivery_id,
             delivery.delivery_tag.clone(),
             state,
         )

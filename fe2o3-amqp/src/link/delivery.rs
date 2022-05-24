@@ -12,9 +12,6 @@ use tokio::sync::oneshot::{self, error::RecvError};
 use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::TransactionId;
-
 /// Reserved for receiver side
 #[derive(Debug)]
 pub struct Delivery<T> {
@@ -36,6 +33,16 @@ impl<T> Delivery<T> {
         &self.message
     }
 
+    /// Get the delivery ID
+    pub fn delivery_id(&self) -> &DeliveryNumber {
+        &self.delivery_id
+    }
+
+    /// Get the delivery tag
+    pub fn delivery_tag(&self) -> &DeliveryTag {
+        &self.delivery_tag
+    }
+
     /// Consume the delivery into the message
     pub fn into_message(self) -> Message<T> {
         self.message
@@ -48,15 +55,15 @@ impl<T> Delivery<T> {
 }
 
 // TODO: Vec doesnt implement display trait
-// impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match &self.message.body_section {
-//             BodySection::Data(data) => write!(f, "{}", data),
-//             BodySection::Sequence(seq) => write!(f, "{}", seq),
-//             BodySection::Value(val) => write!(f, "{}", val),
-//         }
-//     }
-// }
+impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.message.body_section {
+            BodySection::Data(data) => write!(f, "{}", data),
+            BodySection::Sequence(seq) => write!(f, "{}", seq),
+            BodySection::Value(val) => write!(f, "{}", val),
+        }
+    }
+}
 
 /// A type representing the delivery before sending
 ///
@@ -144,6 +151,12 @@ pub struct Builder<T> {
     // pub batchable: bool,
 }
 
+impl Default for Builder<Uninitialized> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Builder<Uninitialized> {
     /// Creates a new builder for [`Sendable`]
     pub fn new() -> Self {
@@ -170,8 +183,8 @@ impl<State> Builder<State> {
     /// Message format.
     ///
     /// See 2.8.11 Message Format in the AMQP1.0 specification
-    pub fn message_format(mut self, message_format: impl Into<MessageFormat>) -> Self {
-        self.message_format = message_format.into();
+    pub fn message_format(mut self, message_format: MessageFormat) -> Self {
+        self.message_format = message_format;
         self
     }
 
@@ -319,16 +332,11 @@ impl FromDeliveryState for NonTxnResult {
             DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                Err(link::Error::not_implemented())
+                Err(link::Error::not_implemented(None))
             }
         }
     }
 }
-
-// type TxnDeclareResult = Result<TransactionId, link::Error>;
-
-#[cfg(feature = "transaction")]
-type TxnResult = Result<TransactionId, link::Error>;
 
 impl<O> Future for DeliveryFut<O>
 where
@@ -357,7 +365,6 @@ where
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-
                                 Poll::Ready(O::from_recv_error(err))
                             }
                         }

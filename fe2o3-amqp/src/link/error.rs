@@ -4,9 +4,12 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot::error::RecvError};
 
 use crate::session::{AllocLinkError, DeallocLinkError};
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::TransactionId;
 
 /// Error associated with detaching a link
 #[derive(Debug)]
@@ -145,14 +148,47 @@ impl Error {
             None,
         ))
     }
+}
 
-    // pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
-    //     Self::Local(definitions::Error::new(
-    //         AmqpError::NotImplemented,
-    //         description.into(),
-    //         None,
-    //     ))
-    // }
+#[cfg(feature = "transaction")]
+impl Error {
+    pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            description.into(),
+            None,
+        ))
+    }
+
+    pub(crate) fn not_allowed(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotAllowed,
+            description.into(),
+            None,
+        ))
+    }
+
+    pub(crate) fn mismatched_transaction_id(
+        expecting: &TransactionId,
+        found: &TransactionId,
+    ) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            format!(
+                "Found mismatched transaction ID. Expecting: {:?}, found: {:?}",
+                expecting, found
+            ),
+            None,
+        ))
+    }
+
+    pub(crate) fn expecting_outcome() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            format!("Expecting an outcome, found None"),
+            None,
+        ))
+    }
 }
 
 impl From<AmqpError> for Error {
@@ -184,6 +220,22 @@ impl From<serde_amqp::Error> for Error {
             Some(format!("{:?}", err)),
             None,
         ))
+    }
+}
+
+impl From<RecvError> for Error {
+    fn from(_: RecvError) -> Self {
+        Error::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Delivery outcome sender has dropped".into()),
+            None,
+        ))
+    }
+}
+
+impl From<DetachError> for Error {
+    fn from(error: DetachError) -> Self {
+        Self::Detached(error)
     }
 }
 
