@@ -651,9 +651,6 @@ impl endpoint::Connection for Connection {
 
     #[instrument(skip_all)]
     fn on_outgoing_end(&mut self, channel: OutgoingChannel, end: End) -> Result<Frame, Self::Error> {
-        self.session_by_outgoing_channel
-            .try_remove(channel.0 as usize)
-            .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
         let frame = Frame::new(channel, FrameBody::End(end));
         Ok(frame)
     }

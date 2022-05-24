@@ -23,8 +23,6 @@ use crate::{endpoint, transport};
 use super::{heartbeat::HeartBeat, ConnectionState, Error};
 use super::{AllocSessionError, OpenError};
 
-pub(crate) type SessionId = usize;
-
 #[derive(Debug)]
 pub(crate) struct ConnectionEngine<Io, C> {
     transport: Transport<Io, amqp::Frame>,
