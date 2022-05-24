@@ -17,6 +17,9 @@ mod error;
 pub use error::*;
 use serde_amqp::to_value;
 
+mod acquisition;
+pub use acquisition::*;
+
 /// A transaction scope for the client side
 /// 
 /// # Examples
@@ -39,14 +42,14 @@ impl From<Controller<Declared>> for Transaction {
 
 impl Transaction {
     /// Get the transaction ID
-    pub fn transaction_id(&self) -> &TransactionId {
-        self.controller.transaction_id()
+    pub fn txn_id(&self) -> &TransactionId {
+        self.controller.txn_id()
     }
 
     /// Declares a transaction with a default controller
     /// 
     /// The user needs to supply a name for the underlying control link.
-    pub async fn declare<R>(session: &mut SessionHandle<R>, name: impl Into<String>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+    pub async fn declare<R>(session: &mut SessionHandle<R>, name: impl Into<String>, global_id: impl Into<Option<TransactionId>>) -> Result<Self, DeclareError> {
         let controller = Controller::attach(session, name, Coordinator::default()).await?
             .declare(global_id).await?;
         Ok(Self { controller })
@@ -102,7 +105,7 @@ impl Transaction {
         // explicitly associated with the same transaction.
         let sendable = sendable.into();
         let state = TransactionalState {
-            txn_id: self.controller.transaction_id().clone(),
+            txn_id: self.controller.txn_id().clone(),
             outcome: None,
         };
         let state = DeliveryState::TransactionalState(state);
@@ -132,9 +135,9 @@ impl Transaction {
                 DeliveryState::TransactionalState(txn) => {
                     // Interleaving transfer and disposition of different transactions
                     // isn't implemented
-                    if txn.txn_id != *self.controller.transaction_id() {
+                    if txn.txn_id != *self.controller.txn_id() {
                         return Err(link::Error::mismatched_transaction_id(
-                            self.controller.transaction_id(),
+                            self.controller.txn_id(),
                             &txn.txn_id,
                         ));
                     }
@@ -159,7 +162,7 @@ impl Transaction {
     /// MUST be terminated with a transaction-rollback error.
     pub async fn retire<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>, outcome: Outcome) -> Result<(), link::Error> {
         let txn_state = TransactionalState {
-            txn_id: self.controller.transaction_id().clone(),
+            txn_id: self.controller.txn_id().clone(),
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
@@ -196,7 +199,7 @@ impl Transaction {
         &mut self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
-        modified: impl Into<Modified>,
+        modified: Modified,
     ) -> Result<(), link::Error> {
         let outcome = Outcome::Modified(modified.into());
         self.retire(recver, delivery, outcome).await
@@ -205,7 +208,7 @@ impl Transaction {
     /// Acquire a transactional work
     /// 
     /// This will send 
-    pub async fn acquire<'t, 'r>(&'t mut self, recver: &'r mut Receiver, credit: SequenceNo) -> Result<TxnAcquisition<'t, 'r>, link::Error> {
+    pub async fn acquire<'r>(self, recver: &'r mut Receiver, credit: SequenceNo) -> Result<TxnAcquisition<'r>, link::Error> {
         {
             let mut writer = recver.link.flow_state.lock.write().await;
             match &mut writer.properties {
@@ -218,13 +221,13 @@ impl Transaction {
                             None
                         )))
                     }
-                    let value = to_value(self.controller.transaction_id())?;
+                    let value = to_value(self.controller.txn_id())?;
                     fields.insert(key, value);
                 }
                 None => {
                     let mut fields = Fields::new();
                     let key = Symbol::from("txn-id");
-                    let value = to_value(self.controller.transaction_id())?;
+                    let value = to_value(self.controller.txn_id())?;
                     fields.insert(key, value);
                 },
             }
@@ -238,70 +241,4 @@ impl Transaction {
         })
     }
 
-}
-
-/// 4.4.3 Transactional Acquisition
-#[derive(Debug)]
-pub struct TxnAcquisition<'t, 'r> {
-    /// The transaction context of this acquisition
-    pub txn: &'t mut Transaction,
-    /// The receiver that is associated with the acquisition
-    pub recver: &'r mut Receiver,
-    cleaned_up: bool,
-}
-
-impl<'t, 'r> TxnAcquisition<'t, 'r> {
-    /// Clear txn-id from link and set link to drain
-    pub async fn cleanup(&mut self, recver: &mut Receiver) -> Result<(), link::Error> {
-        // clear txn-id 
-        {
-            let mut writer = recver.link.flow_state.lock.write().await;
-            let key = Symbol::from("txn-id");
-            writer.properties.as_mut()
-                .map(|map| map.remove(&key));
-        }
-
-        // set drain to true
-        recver.link.send_flow(&mut recver.outgoing, Some(0), Some(true), true).await?;
-        
-        self.cleaned_up = true;
-        Ok(())
-    }
-
-    /// Transactionally acquire a message
-    pub async fn recv(&mut self) {
-        todo!()
-    }
-
-    /// Set the credit
-    pub async fn set_credit(&mut self, credit: SequenceNo){
-        todo!()
-    }
-
-    /// Commit the txn acquisition
-    pub async fn commit(self) {
-        todo!()
-    }
-    
-}
-
-impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
-    fn drop(&mut self) {
-        if !self.cleaned_up {
-            // clear txn-id from the link's properties
-            {
-                let mut writer = self.recver.link.flow_state.lock.blocking_write();
-                let key = Symbol::from("txn-id");
-                writer.properties.as_mut()
-                    .map(|fields| fields.remove(&key));
-            }
-    
-            // Set drain to true
-            if let Some(sender) = self.recver.outgoing.get_ref() {
-                if let Err(err) = (&mut self.recver.link).blocking_send_flow(sender, Some(0), Some(true), true) {
-                    tracing::error!("error {:?}", err)
-                }
-            }
-        }
-    }
 }

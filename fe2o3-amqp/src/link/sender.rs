@@ -154,7 +154,7 @@ impl Sender {
     /// Detach the link with a timeout
     pub async fn detach_with_timeout(
         &mut self,
-        duration: impl Into<Duration>,
+        duration: Duration,
     ) -> Result<Result<(), DetachError>, Elapsed> {
         timeout(duration.into(), self.detach()).await
     }
@@ -209,7 +209,7 @@ impl Sender {
     pub async fn send_with_timeout<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-        duration: impl Into<Duration>,
+        duration: Duration,
     ) -> Result<Result<(), Error>, Elapsed> {
         timeout(duration.into(), self.send(sendable)).await
     }
@@ -240,7 +240,7 @@ impl Sender {
     pub async fn send_batchable_with_timeout<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-        duration: impl Into<Duration>,
+        duration: Duration,
     ) -> Result<Timeout<DeliveryFut<Result<(), Error>>>, Error> {
         let fut = self.send_batchable(sendable).await?;
         Ok(timeout(duration.into(), fut))

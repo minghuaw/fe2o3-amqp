@@ -177,7 +177,7 @@ impl<State> Builder<State> {
     /// Message format.
     ///
     /// See 2.8.11 Message Format in the AMQP1.0 specification
-    pub fn message_format(mut self, message_format: impl Into<MessageFormat>) -> Self {
+    pub fn message_format(mut self, message_format: MessageFormat) -> Self {
         self.message_format = message_format.into();
         self
     }

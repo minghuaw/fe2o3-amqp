@@ -372,7 +372,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
     }
 
     /// URL scheme
-    pub fn scheme(mut self, scheme: impl Into<&'a str>) -> Self {
+    pub fn scheme(mut self, scheme: &'a str) -> Self {
         self.scheme = scheme.into();
         self
     }

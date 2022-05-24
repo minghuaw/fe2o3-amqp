@@ -255,7 +255,7 @@ impl Builder {
     }
 
     /// Set the "timeout" field
-    pub fn timeout(mut self, timeout: impl Into<Seconds>) -> Self {
+    pub fn timeout(mut self, timeout: Seconds) -> Self {
         self.target.timeout = timeout.into();
         self
     }

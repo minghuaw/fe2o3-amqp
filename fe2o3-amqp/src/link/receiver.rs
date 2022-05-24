@@ -696,7 +696,7 @@ impl Receiver {
     pub async fn modify<T>(
         &mut self,
         delivery: &Delivery<T>,
-        modified: impl Into<Modified>,
+        modified: Modified,
     ) -> Result<(), Error> {
         let state = DeliveryState::Modified(modified.into());
         self.dispose(

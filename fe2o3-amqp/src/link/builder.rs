@@ -264,7 +264,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     #[cfg(feature = "transaction")]
     pub fn coordinator(
         self,
-        coordinator: impl Into<Coordinator>,
+        coordinator: Coordinator,
     ) -> Builder<Role, Coordinator, NameState, WithTarget> {
         Builder {
             name: self.name,

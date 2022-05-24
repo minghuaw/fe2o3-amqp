@@ -91,7 +91,7 @@ impl Controller<Undeclared> {
     pub async fn attach<R>(
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
-        coordinator: impl Into<Coordinator>,
+        coordinator: Coordinator,
     ) -> Result<Self, AttachError> {
         Self::builder()
             .name(name)
@@ -104,9 +104,9 @@ impl Controller<Undeclared> {
     /// Declare a transaction
     pub async fn declare(
         mut self,
-        global_id: Option<TransactionId>,
+        global_id: impl Into<Option<TransactionId>>,
     ) -> Result<Controller<Declared>, DeclareError> {
-        match self.declare_inner(global_id).await {
+        match self.declare_inner(global_id.into()).await {
             Ok(declared) => Ok(Controller {
                 inner: self.inner,
                 declared,
@@ -151,7 +151,7 @@ impl Controller<Undeclared> {
 
 impl Controller<Declared> {
     /// Gets the transaction ID
-    pub fn transaction_id(&self) -> &TransactionId {
+    pub fn txn_id(&self) -> &TransactionId {
         &self.declared.txn_id
     }
 

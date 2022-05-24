@@ -38,6 +38,19 @@ pub enum SaslProfile {
     },
 }
 
+impl<T1, T2> From<(T1, T2)> for SaslProfile 
+where
+    T1: Into<String>,
+    T2: Into<String>,
+{
+    fn from((username, password): (T1, T2)) -> Self {
+        Self::Plain { 
+            username: username.into(), 
+            password: password.into() 
+        }
+    }
+}
+
 impl<'a> TryFrom<&'a Url> for SaslProfile {
     type Error = ();
 
