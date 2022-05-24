@@ -1,13 +1,16 @@
 //! Transaction
 
 use crate::{
-    endpoint::{Settlement, ReceiverLink},
+    endpoint::{ReceiverLink, Settlement},
     link::{self},
-    Receiver, Sendable, Sender, Delivery, session::SessionHandle,
+    session::SessionHandle,
+    Delivery, Receiver, Sendable, Sender,
 };
 use fe2o3_amqp_types::{
-    messaging::{DeliveryState, Outcome, Accepted, Modified, Rejected, Released},
-    transaction::{Declared, TransactionalState, Coordinator, TransactionId, TxnCapability}, definitions::{self, AmqpError, Fields, SequenceNo}, primitives::Symbol,
+    definitions::{self, AmqpError, Fields, SequenceNo},
+    messaging::{Accepted, DeliveryState, Modified, Outcome, Rejected, Released},
+    primitives::Symbol,
+    transaction::{Coordinator, Declared, TransactionId, TransactionalState, TxnCapability},
 };
 
 mod controller;
@@ -21,13 +24,13 @@ mod acquisition;
 pub use acquisition::*;
 
 /// A transaction scope for the client side
-/// 
+///
 /// # Examples
-/// 
+///
 /// ## Transactional posting
-/// 
+///
 /// ## Transactional retiring
-/// 
+///
 /// ## Transactional acquiring
 #[derive(Debug)]
 pub struct Transaction {
@@ -47,29 +50,45 @@ impl Transaction {
     }
 
     /// Declares a transaction with a default controller
-    /// 
+    ///
     /// The user needs to supply a name for the underlying control link.
-    pub async fn declare<R>(session: &mut SessionHandle<R>, name: impl Into<String>, global_id: impl Into<Option<TransactionId>>) -> Result<Self, DeclareError> {
-        let controller = Controller::attach(session, name, Coordinator::default()).await?
-            .declare(global_id).await?;
+    pub async fn declare<R>(
+        session: &mut SessionHandle<R>,
+        name: impl Into<String>,
+        global_id: impl Into<Option<TransactionId>>,
+    ) -> Result<Self, DeclareError> {
+        let controller = Controller::attach(session, name, Coordinator::default())
+            .await?
+            .declare(global_id)
+            .await?;
         Ok(Self { controller })
     }
 
     /// Declares a transaction with a default controller and a list of desired transaction capabilities
-    pub async fn declare_with_desired_capabilities<R>(session: &mut SessionHandle<R>, name: impl Into<String>, capabiltiies: impl IntoIterator<Item = TxnCapability>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+    pub async fn declare_with_desired_capabilities<R>(
+        session: &mut SessionHandle<R>,
+        name: impl Into<String>,
+        capabiltiies: impl IntoIterator<Item = TxnCapability>,
+        global_id: Option<TransactionId>,
+    ) -> Result<Self, DeclareError> {
         let coordinator = Coordinator {
             capabilities: Some(capabiltiies.into_iter().collect()),
         };
         let controller = Controller::builder()
             .name(name.into())
             .coordinator(coordinator)
-            .attach(session).await?
-            .declare(global_id).await?;
+            .attach(session)
+            .await?
+            .declare(global_id)
+            .await?;
         Ok(Self { controller })
     }
 
     /// Declares a transaction with an undeclared controller
-    pub async fn declare_with_controller<R>(controller: Controller<Undeclared>, global_id: Option<TransactionId>) -> Result<Self, DeclareError> {
+    pub async fn declare_with_controller<R>(
+        controller: Controller<Undeclared>,
+        global_id: Option<TransactionId>,
+    ) -> Result<Self, DeclareError> {
         let controller = controller.declare(global_id).await?;
         Ok(Self { controller })
     }
@@ -155,23 +174,38 @@ impl Transaction {
     }
 
     /// Associate an outcome with a transaction
-    /// 
+    ///
     /// The delivery itself need not be associated with the same transaction as the outcome, or
     /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
     /// different non-discharged transaction than the outcome. If this happens then the control link
     /// MUST be terminated with a transaction-rollback error.
-    pub async fn retire<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>, outcome: Outcome) -> Result<(), link::Error> {
+    pub async fn retire<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        outcome: Outcome,
+    ) -> Result<(), link::Error> {
         let txn_state = TransactionalState {
             txn_id: self.controller.txn_id().clone(),
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
-        recver.dispose(delivery.delivery_id.clone(), delivery.delivery_tag.clone(), state).await
+        recver
+            .dispose(
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                state,
+            )
+            .await
     }
 
     /// Associate an Accepted outcome with a transaction
-    pub async fn accept<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>) -> Result<(), link::Error> {
-        let outcome = Outcome::Accepted(Accepted {} );
+    pub async fn accept<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+    ) -> Result<(), link::Error> {
+        let outcome = Outcome::Accepted(Accepted {});
         self.retire(recver, delivery, outcome).await
     }
 
@@ -189,11 +223,15 @@ impl Transaction {
     }
 
     /// Associate a Released outcome with a transaction
-    pub async fn release<T>(&mut self, recver: &mut Receiver, delivery: &Delivery<T>) -> Result<(), link::Error> {
+    pub async fn release<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+    ) -> Result<(), link::Error> {
         let outcome = Outcome::Released(Released {});
         self.retire(recver, delivery, outcome).await
     }
-    
+
     /// Associate a Modified outcome with a transaction
     pub async fn modify<T>(
         &mut self,
@@ -206,9 +244,13 @@ impl Transaction {
     }
 
     /// Acquire a transactional work
-    /// 
-    /// This will send 
-    pub async fn acquire<'r>(self, recver: &'r mut Receiver, credit: SequenceNo) -> Result<TxnAcquisition<'r>, link::Error> {
+    ///
+    /// This will send
+    pub async fn acquire<'r>(
+        self,
+        recver: &'r mut Receiver,
+        credit: SequenceNo,
+    ) -> Result<TxnAcquisition<'r>, link::Error> {
         {
             let mut writer = recver.link.flow_state.lock.write().await;
             match &mut writer.properties {
@@ -218,8 +260,8 @@ impl Transaction {
                         return Err(link::Error::Local(definitions::Error::new(
                             AmqpError::NotImplemented,
                             "Link endpoint is already associated with a transaction".to_string(),
-                            None
-                        )))
+                            None,
+                        )));
                     }
                     let value = to_value(self.controller.txn_id())?;
                     fields.insert(key, value);
@@ -229,16 +271,18 @@ impl Transaction {
                     let key = Symbol::from("txn-id");
                     let value = to_value(self.controller.txn_id())?;
                     fields.insert(key, value);
-                },
+                }
             }
         }
 
-        recver.link.send_flow(&mut recver.outgoing, Some(credit), None, false).await?;
+        recver
+            .link
+            .send_flow(&mut recver.outgoing, Some(credit), None, false)
+            .await?;
         Ok(TxnAcquisition {
             txn: self,
             recver,
             cleaned_up: false,
         })
     }
-
 }

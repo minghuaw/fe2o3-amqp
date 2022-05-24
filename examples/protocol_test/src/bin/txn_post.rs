@@ -1,7 +1,9 @@
-use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, transaction::Transaction, Sender};
+use fe2o3_amqp::{
+    sasl_profile::SaslProfile, transaction::Transaction, Connection, Sender, Session,
+};
 use tokio::net::TcpStream;
-use tracing_subscriber::FmtSubscriber;
 use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
@@ -43,13 +45,17 @@ async fn main() {
         .unwrap();
 
     // Commit
-    let mut txn = Transaction::declare(&mut session, "controller-1", None).await.unwrap();
+    let mut txn = Transaction::declare(&mut session, "controller-1", None)
+        .await
+        .unwrap();
     txn.post(&mut sender, "hello").await.unwrap();
     txn.post(&mut sender, "world").await.unwrap();
     txn.commit().await.unwrap();
 
     // Rollback
-    let mut txn = Transaction::declare(&mut session, "controller-2", None).await.unwrap();
+    let mut txn = Transaction::declare(&mut session, "controller-2", None)
+        .await
+        .unwrap();
     txn.post(&mut sender, "foo").await.unwrap();
     txn.rollback().await.unwrap();
 

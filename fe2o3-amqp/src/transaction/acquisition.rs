@@ -1,11 +1,19 @@
 //! 4.4.3 Transactional Acquisition
 
-use fe2o3_amqp_types::{transaction::TransactionId, primitives::Symbol, definitions::{SequenceNo, self}, messaging::Modified};
+use fe2o3_amqp_types::{
+    definitions::{self, SequenceNo},
+    messaging::Modified,
+    primitives::Symbol,
+    transaction::TransactionId,
+};
 
-use crate::{Receiver, link::{self, delivery}, endpoint::ReceiverLink, Delivery};
+use crate::{
+    endpoint::ReceiverLink,
+    link::{self, delivery},
+    Delivery, Receiver,
+};
 
 use super::Transaction;
-
 
 /// 4.4.3 Transactional Acquisition
 #[derive(Debug)]
@@ -35,23 +43,25 @@ impl<'r> TxnAcquisition<'r> {
 
     /// Clear transaction-id from link and set link to drain
     pub async fn cleanup(&mut self) -> Result<(), link::Error> {
-        // clear txn-id 
+        // clear txn-id
         {
             let mut writer = self.recver.link.flow_state.lock.write().await;
             let key = Symbol::from("txn-id");
-            writer.properties.as_mut()
-                .map(|map| map.remove(&key));
+            writer.properties.as_mut().map(|map| map.remove(&key));
         }
 
         // set drain to true
-        self.recver.link.send_flow(&mut self.recver.outgoing, Some(0), Some(true), true).await?;
-        
+        self.recver
+            .link
+            .send_flow(&mut self.recver.outgoing, Some(0), Some(true), true)
+            .await?;
+
         self.cleaned_up = true;
         Ok(())
     }
 
     /// Transactionally acquire a message
-    pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, link::Error> 
+    pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, link::Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -88,7 +98,11 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Reject the message
-    pub async fn reject<T>(&mut self, delivery: &Delivery<T>, error: impl Into<Option<definitions::Error>>) -> Result<(), link::Error> {
+    pub async fn reject<T>(
+        &mut self,
+        delivery: &Delivery<T>,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), link::Error> {
         self.recver.reject(delivery, error).await
     }
 
@@ -98,7 +112,11 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Modify the message
-    pub async fn modify<T>(&mut self, delivery: &Delivery<T>, modified: Modified) -> Result<(), link::Error> {
+    pub async fn modify<T>(
+        &mut self,
+        delivery: &Delivery<T>,
+        modified: Modified,
+    ) -> Result<(), link::Error> {
         self.recver.modify(delivery, modified).await
     }
 }
@@ -110,13 +128,14 @@ impl<'r> Drop for TxnAcquisition<'r> {
             {
                 let mut writer = self.recver.link.flow_state.lock.blocking_write();
                 let key = Symbol::from("txn-id");
-                writer.properties.as_mut()
-                    .map(|fields| fields.remove(&key));
+                writer.properties.as_mut().map(|fields| fields.remove(&key));
             }
-    
+
             // Set drain to true
             if let Some(sender) = self.recver.outgoing.get_ref() {
-                if let Err(err) = (&mut self.recver.link).blocking_send_flow(sender, Some(0), Some(true), true) {
+                if let Err(err) =
+                    (&mut self.recver.link).blocking_send_flow(sender, Some(0), Some(true), true)
+                {
                     tracing::error!("error {:?}", err)
                 }
             }

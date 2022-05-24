@@ -1,6 +1,9 @@
-use fe2o3_amqp_types::{definitions, messaging::{Rejected, Released, Modified}};
+use fe2o3_amqp_types::{
+    definitions,
+    messaging::{Modified, Rejected, Released},
+};
 
-use crate::link::{DetachError, self, AttachError};
+use crate::link::{self, AttachError, DetachError};
 
 use super::{Controller, Undeclared};
 
@@ -96,20 +99,26 @@ impl From<link::Error> for DeclareErrorKind {
     }
 }
 
-impl<T> From<(Controller<Undeclared>, T)> for DeclareError where T: Into<DeclareErrorKind> {
+impl<T> From<(Controller<Undeclared>, T)> for DeclareError
+where
+    T: Into<DeclareErrorKind>,
+{
     fn from((controller, err): (Controller<Undeclared>, T)) -> Self {
         Self {
             controller: Some(controller),
-            kind: err.into()
+            kind: err.into(),
         }
     }
 }
 
-impl<T> From<T> for DeclareError where T: Into<DeclareErrorKind> {
+impl<T> From<T> for DeclareError
+where
+    T: Into<DeclareErrorKind>,
+{
     fn from(kind: T) -> Self {
         Self {
             controller: None,
-            kind: kind.into()
+            kind: kind.into(),
         }
     }
 }
