@@ -310,7 +310,7 @@ impl Receiver {
                     })
                 }
             };
-            self.link.output_handle = Some(handle.into());
+            self.link.output_handle = Some(handle);
         }
 
         if let Err(_err) =
