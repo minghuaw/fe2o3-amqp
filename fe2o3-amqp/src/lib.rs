@@ -7,13 +7,16 @@
 //!
 //! # Feature flags
 //!
-//! default: `[]`
-//!
-//! - `"rustls"`: enables TLS integration with `tokio-rustls` and `rustls`
-//! - `"native-tls"`: enables TLS integration with `tokio-native-tls` and `native-tls`
-//! - `"acceptor"`: enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`
-//! - `"transaction"`: enables `Controller`, `Transaction`, `TxnAcquisition`
-//! (only the client side is implemented so far)
+//! ```toml
+//! default = []
+//! ```
+//! 
+//! | Feature | Description |
+//! |---------|-------------|
+//! |`"rustls"`| enables TLS integration with `tokio-rustls` and `rustls` |
+//! |`"native-tls"`|enables TLS integration with `tokio-native-tls` and `native-tls`|
+//! |`"acceptor"`|enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
+//! |`"transaction"`| enables `Controller`, `Transaction`, `TxnAcquisition` (only the client side is implemented so far) |
 //!
 //! # Quick start
 //!
@@ -110,6 +113,41 @@
 //!
 //! More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
 //! The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
+//! 
+//! # Components
+//! 
+//! | Name | Description |
+//! |------|-------------|
+//! |`serde_amqp_derive`| Custom derive macro for described types as defined in AMQP1.0 protocol |
+//! |`serde_amqp`| AMQP1.0 serializer and deserializer as well as primitive types |
+//! |`fe2o3-amqp-types`| AMQP1.0 data types |
+//! |`fe2o3-amqp`| Implementation of AMQP1.0 `Connection`, `Session`, and `Link` |
+//! |`fe2o3-amqp-ext`| Extension types and implementations |
+//! 
+//! ## Road map
+//! 
+//! The items below are listed in the order of priority.
+//! 
+//! - [x] Proper error handling (more or less)
+//! - [x] Listeners
+//!   - [x] Acceptor that provide fine control over each incoming endpoint
+//!   - [x] TLS acceptor integration with `tokio-rustls`
+//!   - [x] TLS acceptor integration with `tokio-native-tls`
+//!   - [x] Naive PLAIN SASL acceptor
+//!   - [ ] ~~Listener that provide coarse control~~
+//! - [ ] Transaction
+//!   - [x] client side
+//!   - [ ] client side testing
+//!     - [x] posting
+//!     - [ ] retirement
+//!     - [ ] acquisition
+//!   - [ ] listener side
+//! - [ ] qpid interoperability test (this will be 0.1.0 release)
+//! - [ ] Link re-attachment
+//! - [ ] Message batch disposition
+//! - [ ] Pipelined open
+//! - [ ] SASL SCRAM-SHA1
+//!   - [ ] acceptor
 
 pub(crate) mod control;
 pub(crate) mod util;

@@ -385,7 +385,7 @@ where
                     });
                 }
             };
-            *self.link.output_handle_mut() = Some(handle.into());
+            *self.link.output_handle_mut() = Some(handle);
         }
 
         if let Err(_err) =

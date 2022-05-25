@@ -348,7 +348,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
             local_state,
             // state_code,
             name: self.name,
-            output_handle: Some(output_handle.into()),
+            output_handle: Some(output_handle),
             input_handle: None,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,

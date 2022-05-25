@@ -318,7 +318,7 @@ impl endpoint::Session for Session {
         match self.allocate_link(link_name, None) {
             Ok(output_handle) => {
                 let value = link_relay.with_output_handle(output_handle.clone());
-                self.link_by_input_handle.insert(input_handle.into(), value);
+                self.link_by_input_handle.insert(input_handle, value);
                 Ok(output_handle)
             }
             Err(err) => Err(err),
@@ -522,7 +522,7 @@ impl endpoint::Session for Session {
         } else {
             for delivery_id in first..last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
-                    if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
+                    if let Some(link_handle) = self.link_by_input_handle.get_mut(handle) {
                         // In mode Second, the receiver will first send a non-settled disposition,
                         // and wait for sender's settled disposition
                         let echo = link_handle
