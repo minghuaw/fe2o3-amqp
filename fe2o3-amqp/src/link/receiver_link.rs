@@ -353,7 +353,7 @@ fn rfind_offset_of_complete_message(bytes: &[u8]) -> Option<u64> {
 
     iter.rposition(|(&b0, (&b1, &b2))| {
         matches!(
-            (b0, b1, b2), 
+            (b0, b1, b2),
             (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
             | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
             | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)

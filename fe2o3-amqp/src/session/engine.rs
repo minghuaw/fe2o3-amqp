@@ -12,8 +12,8 @@ use tracing::{debug, error, instrument, trace};
 use crate::{
     connection::{self},
     control::{ConnectionControl, SessionControl},
-    endpoint::{self, Session, IncomingChannel},
-    link::{LinkFrame, LinkRelay},
+    endpoint::{self, IncomingChannel, Session},
+    link::LinkFrame,
     util::Running,
 };
 
@@ -85,7 +85,7 @@ impl SessionEngine<super::Session> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState, LinkRelay = LinkRelay> + Send + Sync + 'static,
+    S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
     S::Error: Into<Error> + Debug,
     S::AllocError: Into<AllocLinkError>,
 {
@@ -170,10 +170,10 @@ where
             }
             SessionControl::AllocateLink {
                 link_name,
-                link_handle,
+                link_relay,
                 responder,
             } => {
-                let result = self.session.allocate_link(link_name, link_handle);
+                let result = self.session.allocate_link(link_name, Some(link_relay));
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -183,13 +183,13 @@ where
             }
             SessionControl::AllocateIncomingLink {
                 link_name,
-                link_handle,
+                link_relay,
                 input_handle,
                 responder,
             } => {
                 let result =
                     self.session
-                        .allocate_incoming_link(link_name, link_handle, input_handle);
+                        .allocate_incoming_link(link_name, link_relay, input_handle);
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -245,11 +245,12 @@ where
                 .map_err(Into::into)?,
             LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow).map_err(Into::into)?,
             LinkFrame::Transfer {
+                input_handle,
                 performative,
                 payload,
             } => self
                 .session
-                .on_outgoing_transfer(performative, payload)
+                .on_outgoing_transfer(input_handle, performative, payload)
                 .map_err(Into::into)?,
             LinkFrame::Disposition(disposition) => self
                 .session
@@ -404,7 +405,8 @@ where
         }
 
         debug!("Stopped");
-        let _ = connection::deallocate_session(&mut self.conn, self.session.outgoing_channel()).await;
+        let _ =
+            connection::deallocate_session(&mut self.conn, self.session.outgoing_channel()).await;
         outcome
     }
 }

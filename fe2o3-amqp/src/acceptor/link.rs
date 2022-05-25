@@ -19,7 +19,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::{LinkAttach, InputHandle},
+    endpoint::{InputHandle, LinkAttach},
     link::{
         self,
         delivery::UnsettledMessage,
@@ -27,7 +27,7 @@ use crate::{
         role,
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        AttachError, LinkFrame, LinkRelay, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
+        AttachError, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
     Receiver, Sender,
@@ -258,6 +258,7 @@ impl LinkAcceptor {
         // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: rcv_settle_mode.clone(),
@@ -367,6 +368,7 @@ impl LinkAcceptor {
         // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),

@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
@@ -13,9 +13,10 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::{Link, LinkRelay, LinkIncomingItem},
+    endpoint::OutputHandle,
+    link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
-    util::{Consumer, Producer}, endpoint::OutputHandle,
+    util::{Consumer, Producer},
 };
 
 use super::{
@@ -430,6 +431,7 @@ where
         // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach in session
@@ -447,8 +449,7 @@ where
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader)
-            .await?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -503,6 +504,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
         // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach

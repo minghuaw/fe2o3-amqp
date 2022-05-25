@@ -69,3 +69,4 @@ librustls = { package = "rustls", version = "0.20", optional = true }
 webpki-roots = { version = "0.22.2", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
 libnative-tls = { package = "native-tls", version = "0.2.8", optional = true }
+crossbeam = "0.8.1"

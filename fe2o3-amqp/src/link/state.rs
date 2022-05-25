@@ -134,7 +134,7 @@ impl LinkFlowState<role::Sender> {
             // the delivery-count_rcv is the first delivery-count_snd sent from sender
             // to receiver, i.e., the delivery-count_snd specified in the flow state
             // carried by the initial attach frame from the sender to the receiver.
-            state.initial_delivery_count
+            state.initial_delivery_count,
         );
 
         if let Some(link_credit_rcv) = flow.link_credit {

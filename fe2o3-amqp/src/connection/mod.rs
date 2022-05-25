@@ -20,7 +20,7 @@ use url::Url;
 
 use crate::{
     control::ConnectionControl,
-    endpoint::{self, OutgoingChannel, IncomingChannel},
+    endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::amqp::{Frame, FrameBody},
     session::frame::{SessionFrame, SessionFrameBody, SessionIncomingItem},
     session::Session,
@@ -528,12 +528,17 @@ impl endpoint::Connection for Connection {
     }
 
     fn deallocate_session(&mut self, outgoing_channel: OutgoingChannel) {
-        self.session_by_outgoing_channel.remove(outgoing_channel.0 as usize);
+        self.session_by_outgoing_channel
+            .remove(outgoing_channel.0 as usize);
     }
 
     /// Reacting to remote Open frame
     #[instrument(skip_all)]
-    async fn on_incoming_open(&mut self, channel: IncomingChannel, open: Open) -> Result<(), Self::Error> {
+    async fn on_incoming_open(
+        &mut self,
+        channel: IncomingChannel,
+        open: Open,
+    ) -> Result<(), Self::Error> {
         trace!("channel = {}, frame = {:?}", channel.0, open);
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
@@ -551,7 +556,11 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote Begin frame
     #[instrument(skip_all)]
-    async fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error> {
+    async fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error> {
         trace!("channel = {}, frame = {:?}", channel.0, begin);
         match self.on_incoming_begin_inner(channel, &begin)? {
             Some(relay) => {
@@ -577,7 +586,11 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote End frame
     #[instrument(skip_all)]
-    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(
+        &mut self,
+        channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error> {
         trace!("channel = {}, frame = {:?}", channel.0, end);
         match &self.local_state {
             ConnectionState::Opened => {}
@@ -591,15 +604,18 @@ impl endpoint::Connection for Connection {
             .session_by_incoming_channel
             .remove(&channel)
             .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
-        relay.send(sframe)
-            .await?;
+        relay.send(sframe).await?;
 
         Ok(())
     }
 
     /// Reacting to remote Close frame
     #[instrument(skip_all)]
-    async fn on_incoming_close(&mut self, channel: IncomingChannel, close: Close) -> Result<(), Self::Error> {
+    async fn on_incoming_close(
+        &mut self,
+        channel: IncomingChannel,
+        close: Close,
+    ) -> Result<(), Self::Error> {
         trace!("channel = {}, frame = {:?}", channel.0, close);
 
         match &self.local_state {
@@ -650,7 +666,11 @@ impl endpoint::Connection for Connection {
     }
 
     #[instrument(skip_all)]
-    fn on_outgoing_end(&mut self, channel: OutgoingChannel, end: End) -> Result<Frame, Self::Error> {
+    fn on_outgoing_end(
+        &mut self,
+        channel: OutgoingChannel,
+        end: End,
+    ) -> Result<Frame, Self::Error> {
         let frame = Frame::new(channel, FrameBody::End(end));
         Ok(frame)
     }
@@ -684,7 +704,8 @@ impl endpoint::Connection for Connection {
         &mut self,
         incoming_channel: IncomingChannel,
     ) -> Option<&Sender<SessionIncomingItem>> {
-        self.session_by_incoming_channel.get(&incoming_channel)
+        self.session_by_incoming_channel
+            .get(&incoming_channel)
             .map(AsRef::as_ref)
     }
 
@@ -692,7 +713,8 @@ impl endpoint::Connection for Connection {
         &mut self,
         outgoing_channel: OutgoingChannel,
     ) -> Option<&Sender<SessionIncomingItem>> {
-        self.session_by_outgoing_channel.get(outgoing_channel.0 as usize)
+        self.session_by_outgoing_channel
+            .get(outgoing_channel.0 as usize)
             .map(AsRef::as_ref)
     }
 }

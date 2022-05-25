@@ -34,7 +34,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     frames::amqp::Frame,
-    link::{delivery::Delivery, LinkFrame},
+    link::{delivery::Delivery, LinkFrame, LinkRelay},
     session::frame::{SessionFrame, SessionIncomingItem},
     Payload,
 };
@@ -79,18 +79,34 @@ pub(crate) trait Connection {
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
 
     /// Reacting to remote Open frame
-    async fn on_incoming_open(&mut self, channel: IncomingChannel, open: Open) -> Result<(), Self::Error>;
+    async fn on_incoming_open(
+        &mut self,
+        channel: IncomingChannel,
+        open: Open,
+    ) -> Result<(), Self::Error>;
 
     /// Reacting to remote Begin frame
     ///
     /// Do NOT forward to session here. Forwarding is handled elsewhere.
-    async fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error>;
+    async fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error>;
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error>;
+    async fn on_incoming_end(
+        &mut self,
+        channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(&mut self, channel: IncomingChannel, close: Close) -> Result<(), Self::Error>;
+    async fn on_incoming_close(
+        &mut self,
+        channel: IncomingChannel,
+        close: Close,
+    ) -> Result<(), Self::Error>;
 
     /// Sending out an Open frame
     ///
@@ -112,9 +128,14 @@ pub(crate) trait Connection {
         W::Error: Into<Self::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     /// Intercepting session frames
-    fn on_outgoing_begin(&mut self, channel: OutgoingChannel, begin: Begin) -> Result<Frame, Self::Error>;
+    fn on_outgoing_begin(
+        &mut self,
+        channel: OutgoingChannel,
+        begin: Begin,
+    ) -> Result<Frame, Self::Error>;
 
-    fn on_outgoing_end(&mut self, channel: OutgoingChannel, end: End) -> Result<Frame, Self::Error>;
+    fn on_outgoing_end(&mut self, channel: OutgoingChannel, end: End)
+        -> Result<Frame, Self::Error>;
 
     fn session_tx_by_incoming_channel(
         &mut self,
@@ -162,7 +183,6 @@ pub(crate) trait Session {
     type AllocError: Send;
     type Error: Send;
     type State;
-    type LinkRelay;
 
     fn local_state(&self) -> &Self::State;
     fn local_state_mut(&mut self) -> &mut Self::State;
@@ -172,24 +192,35 @@ pub(crate) trait Session {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_relay: Self::LinkRelay,
+        link_relay: Option<LinkRelay<()>>, // TODO: how to expose error at compile time?
     ) -> Result<OutputHandle, Self::AllocError>;
 
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_relay: Self::LinkRelay,
+        link_relay: LinkRelay<()>,
         input_handle: InputHandle,
     ) -> Result<OutputHandle, Self::AllocError>;
 
-    fn deallocate_link(&mut self, link_name: String);
+    fn deallocate_link(&mut self, output_handle: OutputHandle);
 
-    fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error>;
+    fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_attach(&mut self, channel: IncomingChannel, attach: Attach)
-        -> Result<(), Self::Error>;
+    async fn on_incoming_attach(
+        &mut self,
+        channel: IncomingChannel,
+        attach: Attach,
+    ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_flow(&mut self, channel: IncomingChannel, flow: Flow) -> Result<(), Self::Error>;
+    async fn on_incoming_flow(
+        &mut self,
+        channel: IncomingChannel,
+        flow: Flow,
+    ) -> Result<(), Self::Error>;
 
     async fn on_incoming_transfer(
         &mut self,
@@ -204,10 +235,17 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_detach(&mut self, channel: IncomingChannel, detach: Detach)
-        -> Result<(), Self::Error>;
+    async fn on_incoming_detach(
+        &mut self,
+        channel: IncomingChannel,
+        detach: Detach,
+    ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error>;
+    async fn on_incoming_end(
+        &mut self,
+        channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error>;
 
     // Handling SessionFrames
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
@@ -227,6 +265,7 @@ pub(crate) trait Session {
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_transfer(
         &mut self,
+        input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<SessionFrame, Self::Error>;

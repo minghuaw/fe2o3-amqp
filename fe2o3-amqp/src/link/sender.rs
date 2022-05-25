@@ -298,6 +298,8 @@ impl SenderInner<SenderLink> {
             return Err(DetachError::new(false, Some(e)));
         };
 
+        // session::deallocate_link(&mut self.session, output_handle).await?;
+
         // Wait for remote detach
         let frame = match self.incoming.next().await {
             Some(frame) => frame,
@@ -339,8 +341,6 @@ impl SenderInner<SenderLink> {
             }
         }
 
-        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
-
         Ok(())
     }
 }
@@ -362,6 +362,7 @@ where
             let (tx, incoming) = mpsc::channel(self.buffer_size);
             let link_handle = LinkRelay::Sender {
                 tx,
+                output_handle: (),
                 flow_state: self.link.flow_state().producer(),
                 // TODO: what else to do during re-attaching
                 unsettled: self.link.unsettled().clone(),
@@ -458,8 +459,6 @@ where
                 Err(e) => return Err(DetachError::new(false, Some(e))),
             }
         };
-
-        session::deallocate_link(&mut self.session, self.link.name().into()).await?;
 
         Ok(())
     }

@@ -22,7 +22,7 @@ use crate::{
         self, engine::ConnectionEngine, ConnectionHandle, Error, OpenError,
         DEFAULT_CONTROL_CHAN_BUF,
     },
-    endpoint::{self, OutgoingChannel, IncomingChannel},
+    endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::{
         amqp::{self, Frame},
         sasl,
@@ -582,12 +582,20 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn on_incoming_open(&mut self, channel: IncomingChannel, open: Open) -> Result<(), Self::Error> {
+    async fn on_incoming_open(
+        &mut self,
+        channel: IncomingChannel,
+        open: Open,
+    ) -> Result<(), Self::Error> {
         self.connection.on_incoming_open(channel, open).await
     }
 
     #[inline]
-    async fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error> {
+    async fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error> {
         // This should remain mostly the same
         match self.connection.on_incoming_begin_inner(channel, &begin)? {
             Some(relay) => {
@@ -608,7 +616,10 @@ impl endpoint::Connection for ListenerConnection {
                 // remotely initiated session
 
                 // Here we will send the begin frame out to get processed
-                let incoming_session = IncomingSession { channel: channel.0, begin };
+                let incoming_session = IncomingSession {
+                    channel: channel.0,
+                    begin,
+                };
                 self.session_listener
                     .send(incoming_session)
                     .await
@@ -625,12 +636,20 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(
+        &mut self,
+        channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error> {
         self.connection.on_incoming_end(channel, end).await
     }
 
     #[inline]
-    async fn on_incoming_close(&mut self, channel: IncomingChannel, close: Close) -> Result<(), Self::Error> {
+    async fn on_incoming_close(
+        &mut self,
+        channel: IncomingChannel,
+        close: Close,
+    ) -> Result<(), Self::Error> {
         self.connection.on_incoming_close(channel, close).await
     }
 

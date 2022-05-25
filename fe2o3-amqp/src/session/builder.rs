@@ -11,9 +11,10 @@ use tokio_util::sync::PollSender;
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
+    endpoint::OutgoingChannel,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
-    Session, endpoint::OutgoingChannel,
+    Session,
 };
 
 use super::{Error, SessionHandle, DEFAULT_WINDOW};
@@ -94,7 +95,7 @@ impl Builder {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            local_links: Slab::new(),
+            link_name_by_output_handle: Slab::new(),
             link_by_name: BTreeMap::new(),
             link_by_input_handle: BTreeMap::new(),
             delivery_tag_by_id: BTreeMap::new(),

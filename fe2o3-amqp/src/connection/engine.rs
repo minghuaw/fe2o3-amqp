@@ -162,7 +162,11 @@ where
     C::AllocError: Into<AllocSessionError>,
 {
     #[instrument(skip_all)]
-    async fn forward_to_session(&mut self, channel: IncomingChannel, frame: SessionFrame) -> Result<(), Error> {
+    async fn forward_to_session(
+        &mut self,
+        channel: IncomingChannel,
+        frame: SessionFrame,
+    ) -> Result<(), Error> {
         trace!(frame = ?frame);
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
