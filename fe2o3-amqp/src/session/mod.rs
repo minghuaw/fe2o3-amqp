@@ -233,6 +233,7 @@ pub struct Session {
     /// local links by output handle
     pub(crate) local_links: Slab<LinkRelay>,
     pub(crate) link_by_name: BTreeMap<String, OutputHandle>,
+    // The key is not InputHandle to avoid additional clone
     pub(crate) link_by_input_handle: BTreeMap<Handle, OutputHandle>,
     // Maps from DeliveryId to link.DeliveryCount
     pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
