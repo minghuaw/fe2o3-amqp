@@ -6,13 +6,16 @@ A rust implementation of AMQP 1.0 protocol based on serde and tokio.
 
 ## Feature flags
 
-default: `[]`
+```toml
+default = []
+```
 
-- `"rustls"`: enables TLS integration with `tokio-rustls` and `rustls`
-- `"native-tls"`: enables TLS integration with `tokio-native-tls` and `native-tls`
-- `"acceptor"`: enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`
-- `"transaction"`: enables `Controller`, `Transaction`, `TxnAcquisition`
-(only the client side is implemented so far)
+| Feature | Description |
+|---------|-------------|
+|`"rustls"`| enables TLS integration with `tokio-rustls` and `rustls` |
+|`"native-tls"`|enables TLS integration with `tokio-native-tls` and `native-tls`|
+|`"acceptor"`|enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
+|`"transaction"`| enables `Controller`, `Transaction`, `TxnAcquisition` (only the client side is implemented so far) |
 
 ## Quick start
 
@@ -110,8 +113,6 @@ async fn main() {
 More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
 The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 
-License: MIT/Apache-2.0
-
 ## Components
 
 | Name | Description |
@@ -122,7 +123,7 @@ License: MIT/Apache-2.0
 |`fe2o3-amqp`| Implementation of AMQP1.0 `Connection`, `Session`, and `Link` |
 |`fe2o3-amqp-ext`| Extension types and implementations |
 
-## Road map
+### Road map
 
 The items below are listed in the order of priority.
 
@@ -146,3 +147,5 @@ The items below are listed in the order of priority.
 - [ ] Pipelined open
 - [ ] SASL SCRAM-SHA1
   - [ ] acceptor
+
+License: MIT/Apache-2.0
