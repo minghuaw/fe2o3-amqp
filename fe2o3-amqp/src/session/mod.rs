@@ -26,7 +26,7 @@ use tracing::{instrument, trace};
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
-    endpoint::{self, LinkFlow, OutgoingChannel},
+    endpoint::{self, LinkFlow, OutgoingChannel, IncomingChannel},
     link::{LinkFrame, LinkRelay},
     util::Constant,
     Payload,
@@ -219,7 +219,7 @@ pub struct Session {
     pub(crate) handle_max: Handle,
 
     // remote amqp states
-    pub(crate) incoming_channel: Option<u16>,
+    pub(crate) incoming_channel: Option<IncomingChannel>,
     // initialize with 0 first and change after receiving the remote Begin
     pub(crate) next_incoming_id: TransferNumber,
     pub(crate) remote_incoming_window: SequenceNo,
@@ -341,7 +341,7 @@ impl endpoint::Session for Session {
         }
     }
 
-    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error> {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
@@ -358,7 +358,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_attach(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
         // look up link Handle by link name
@@ -397,7 +397,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, _channel: IncomingChannel, flow: Flow) -> Result<(), Self::Error> {
         // Handle session flow control
         //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
@@ -453,7 +453,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_transfer(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
@@ -495,7 +495,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_disposition(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         // TODO: what to do when session lost delivery_tag_by_id
@@ -590,7 +590,7 @@ impl endpoint::Session for Session {
     #[instrument(skip_all)]
     async fn on_incoming_detach(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
         trace!(channel = ?_channel, frame = ?detach);
@@ -616,7 +616,7 @@ impl endpoint::Session for Session {
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(&mut self, _channel: IncomingChannel, end: End) -> Result<(), Self::Error> {
         trace!(end = ?end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
@@ -650,7 +650,7 @@ impl endpoint::Session for Session {
         W: Sink<SessionFrame> + Send + Unpin,
     {
         let begin = Begin {
-            remote_channel: self.incoming_channel,
+            remote_channel: self.incoming_channel.map(Into::into),
             next_outgoing_id: self.next_outgoing_id,
             incoming_window: self.incoming_window,
             outgoing_window: self.outgoing_window,

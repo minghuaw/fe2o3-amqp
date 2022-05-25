@@ -12,7 +12,7 @@ use tracing::{debug, error, instrument, trace};
 use crate::{
     connection::{self},
     control::{ConnectionControl, SessionControl},
-    endpoint::{self, Session},
+    endpoint::{self, Session, IncomingChannel},
     link::{LinkFrame, LinkRelay},
     util::Running,
 };
@@ -64,6 +64,7 @@ impl SessionEngine<super::Session> {
             }
         };
         let SessionFrame { channel, body } = frame;
+        let channel = IncomingChannel(channel);
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
             SessionFrameBody::End(end) => {
@@ -96,7 +97,7 @@ where
     #[instrument(skip_all)]
     async fn on_incoming(&mut self, incoming: SessionIncomingItem) -> Result<Running, Error> {
         let SessionFrame { channel, body } = incoming;
-
+        let channel = IncomingChannel(channel);
         match body {
             SessionFrameBody::Begin(begin) => {
                 self.session

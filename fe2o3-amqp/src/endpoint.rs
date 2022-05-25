@@ -152,24 +152,30 @@ pub(crate) trait Session {
     ) -> Result<Handle, Self::AllocError>;
     fn deallocate_link(&mut self, link_name: String);
 
-    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error>;
-    async fn on_incoming_attach(&mut self, channel: u16, attach: Attach)
+    fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error>;
+
+    async fn on_incoming_attach(&mut self, channel: IncomingChannel, attach: Attach)
         -> Result<(), Self::Error>;
-    async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error>;
+
+    async fn on_incoming_flow(&mut self, channel: IncomingChannel, flow: Flow) -> Result<(), Self::Error>;
+
     async fn on_incoming_transfer(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error>;
+
     async fn on_incoming_disposition(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error>;
-    async fn on_incoming_detach(&mut self, channel: u16, detach: Detach)
+
+    async fn on_incoming_detach(&mut self, channel: IncomingChannel, detach: Detach)
         -> Result<(), Self::Error>;
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error>;
+
+    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error>;
 
     // Handling SessionFrames
     async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
