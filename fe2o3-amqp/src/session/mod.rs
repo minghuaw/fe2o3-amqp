@@ -160,16 +160,6 @@ pub(crate) async fn allocate_link(
     result
 }
 
-// pub(crate) async fn deallocate_link(
-//     control: &mut mpsc::Sender<SessionControl>,
-//     output_handle: OutputHandle,
-// ) -> Result<(), DeallocLinkError> {
-//     control
-//         .send(SessionControl::DeallocateLink(output_handle))
-//         .await
-//         .map_err(|_| DeallocLinkError::IllegalState)
-// }
-
 /// AMQP1.0 Session
 ///
 /// # Begin a new Session with default configuration
