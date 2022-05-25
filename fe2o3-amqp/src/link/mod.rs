@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
-        Role, SenderSettleMode, SequenceNo, SessionError,
+        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
+        SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -34,7 +34,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
 use crate::{
-    endpoint::{self, LinkFlow, Settlement},
+    endpoint::{self, InputHandle, LinkFlow, OutputHandle, Settlement},
     link::{self, delivery::UnsettledMessage},
     util::{Consumer, Producer},
     Payload,
@@ -123,8 +123,8 @@ pub struct Link<R, T, F, M> {
     // pub(crate) state_code: Arc<AtomicU8>,
     pub(crate) name: String,
 
-    pub(crate) output_handle: Option<Handle>, // local handle
-    pub(crate) input_handle: Option<Handle>,  // remote handle
+    pub(crate) output_handle: Option<OutputHandle>, // local handle
+    pub(crate) input_handle: Option<InputHandle>,   // remote handle
 
     /// The `Sender` will manage whether to wait for incoming disposition
     pub(crate) snd_settle_mode: SenderSettleMode,
@@ -166,13 +166,11 @@ impl<R, T, F, M> Link<R, T, F, M> {
             | LinkState::Detached
             | LinkState::CloseSent
             | LinkState::CloseReceived => Ok(()),
-            LinkState::Closed => {
-                Err(definitions::Error::new(
-                    AmqpError::NotAllowed,
-                    "Link is permanently closed".to_string(),
-                    None,
-                ))
-            }
+            LinkState::Closed => Err(definitions::Error::new(
+                AmqpError::NotAllowed,
+                "Link is permanently closed".to_string(),
+                None,
+            )),
         }
     }
 }
@@ -200,11 +198,11 @@ where
         &self.name
     }
 
-    fn output_handle(&self) -> &Option<Handle> {
+    fn output_handle(&self) -> &Option<OutputHandle> {
         &self.output_handle
     }
 
-    fn output_handle_mut(&mut self) -> &mut Option<Handle> {
+    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
         &mut self.output_handle
     }
 
@@ -251,7 +249,7 @@ where
             }
         };
 
-        self.input_handle = Some(remote_attach.handle);
+        self.input_handle = Some(InputHandle::from(remote_attach.handle));
 
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
@@ -360,7 +358,7 @@ where
 
         let attach = Attach {
             name: self.name.clone(),
-            handle,
+            handle: handle.into(),
             role: R::into_role(),
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
@@ -488,7 +486,7 @@ where
         match self.output_handle.take() {
             Some(handle) => {
                 let detach = Detach {
-                    handle,
+                    handle: handle.into(),
                     closed,
                     error,
                 };
@@ -511,9 +509,10 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) enum LinkHandle {
+pub(crate) enum LinkRelay<O> {
     Sender {
         tx: mpsc::Sender<LinkIncomingItem>,
+        output_handle: O,
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
         flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
@@ -523,6 +522,7 @@ pub(crate) enum LinkHandle {
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
+        output_handle: O,
         flow_state: ReceiverFlowState,
         unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
         receiver_settle_mode: ReceiverSettleMode,
@@ -531,28 +531,78 @@ pub(crate) enum LinkHandle {
     },
 }
 
-impl LinkHandle {
+impl LinkRelay<()> {
+    pub fn with_output_handle(self, output_handle: OutputHandle) -> LinkRelay<OutputHandle> {
+        match self {
+            LinkRelay::Sender {
+                tx,
+                flow_state,
+                unsettled,
+                receiver_settle_mode,
+                ..
+            } => LinkRelay::Sender {
+                tx,
+                output_handle,
+                flow_state,
+                unsettled,
+                receiver_settle_mode,
+            },
+            LinkRelay::Receiver {
+                tx,
+                flow_state,
+                unsettled,
+                receiver_settle_mode,
+                more,
+                ..
+            } => LinkRelay::Receiver {
+                tx,
+                output_handle,
+                flow_state,
+                unsettled,
+                receiver_settle_mode,
+                more,
+            },
+        }
+    }
+}
+
+impl LinkRelay<OutputHandle> {
+    pub(crate) fn output_handle(&self) -> &OutputHandle {
+        match self {
+            Self::Sender { output_handle, .. } => &output_handle,
+            Self::Receiver { output_handle, .. } => &output_handle,
+        }
+    }
+
     pub(crate) async fn send(
         &mut self,
         frame: LinkFrame,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender { tx, .. } => tx.send(frame).await,
-            LinkHandle::Receiver { tx, .. } => tx.send(frame).await,
+            LinkRelay::Sender { tx, .. } => tx.send(frame).await,
+            LinkRelay::Receiver { tx, .. } => tx.send(frame).await,
         }
     }
 
-    pub(crate) async fn on_incoming_flow(
-        &mut self,
-        flow: LinkFlow,
-        output_handle: Handle,
-    ) -> Option<LinkFlow> {
+    pub(crate) async fn on_incoming_flow(&mut self, flow: LinkFlow) -> Option<LinkFlow> {
         match self {
-            LinkHandle::Sender { flow_state, .. } => {
-                flow_state.on_incoming_flow(flow, output_handle).await
+            LinkRelay::Sender {
+                flow_state,
+                output_handle,
+                ..
+            } => {
+                flow_state
+                    .on_incoming_flow(flow, output_handle.clone())
+                    .await
             }
-            LinkHandle::Receiver { flow_state, .. } => {
-                flow_state.on_incoming_flow(flow, output_handle).await
+            LinkRelay::Receiver {
+                flow_state,
+                output_handle,
+                ..
+            } => {
+                flow_state
+                    .on_incoming_flow(flow, output_handle.clone())
+                    .await
             }
         }
     }
@@ -568,7 +618,7 @@ impl LinkHandle {
         delivery_tag: DeliveryTag,
     ) -> bool {
         match self {
-            LinkHandle::Sender {
+            LinkRelay::Sender {
                 unsettled,
                 receiver_settle_mode,
                 ..
@@ -625,7 +675,7 @@ impl LinkHandle {
 
                 echo
             }
-            LinkHandle::Receiver { unsettled, .. } => {
+            LinkRelay::Receiver { unsettled, .. } => {
                 if settled {
                     let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
                 } else {
@@ -644,14 +694,14 @@ impl LinkHandle {
         }
     }
 
-    /// LinkHandle operates in session's event loop
+    /// LinkRelay operates in session's event loop
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, (bool, definitions::Error)> {
         match self {
-            LinkHandle::Sender { .. } => {
+            LinkRelay::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
                 Err((
                     true, // Closing the link
@@ -662,7 +712,7 @@ impl LinkHandle {
                     ),
                 ))
             }
-            LinkHandle::Receiver {
+            LinkRelay::Receiver {
                 tx,
                 receiver_settle_mode,
                 more,
@@ -674,6 +724,7 @@ impl LinkHandle {
                 let transfer_more = transfer.more;
 
                 tx.send(LinkFrame::Transfer {
+                    input_handle: InputHandle::from(transfer.handle.clone()),
                     performative: transfer,
                     payload,
                 })
@@ -716,14 +767,14 @@ impl LinkHandle {
         detach: Detach,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
-            LinkHandle::Sender { tx, .. } => {
+            LinkRelay::Sender { tx, .. } => {
                 // state_code.fetch_or(DETACHED, Ordering::Release);
                 // if detach.closed {
                 //     state_code.fetch_or(CLOSED, Ordering::Release);
                 // }
                 tx.send(LinkFrame::Detach(detach)).await?;
             }
-            LinkHandle::Receiver { tx, .. } => {
+            LinkRelay::Receiver { tx, .. } => {
                 // state_code.fetch_or(DETACHED, Ordering::Release);
                 // if detach.closed {
                 //     state_code.fetch_or(CLOSED, Ordering::Release);
@@ -856,6 +907,7 @@ mod tests {
         use tokio::sync::Notify;
 
         use super::*;
+        use crate::endpoint::OutputHandle;
         use crate::util::{Produce, Producer};
 
         let notifier = Arc::new(Notify::new());
@@ -871,7 +923,7 @@ mod tests {
         let notified = notifier.notified();
 
         let handle = tokio::spawn(async move {
-            let item = (LinkFlow::default(), Handle::from(0));
+            let item = (LinkFlow::default(), OutputHandle(0));
             producer.produce(item).await;
         });
 

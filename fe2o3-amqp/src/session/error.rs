@@ -33,7 +33,7 @@ pub enum Error {
 
     /// TODO: hide this from public API
     /// Link handle error should be handled differently. Link handle is only local
-    #[error("Local LinkHandle {:?} error {:?}", .handle, .error)]
+    #[error("Local LinkRelay {:?} error {:?}", .handle, .error)]
     LinkHandleError {
         /// Handle of the link
         handle: Handle,
@@ -114,8 +114,8 @@ impl From<AllocLinkError> for definitions::Error {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum DeallocLinkError {
-    #[error("Illegal session state")]
-    IllegalState,
-}
+// #[derive(Debug, thiserror::Error)]
+// pub(crate) enum DeallocLinkError {
+//     #[error("Illegal session state")]
+//     IllegalState,
+// }

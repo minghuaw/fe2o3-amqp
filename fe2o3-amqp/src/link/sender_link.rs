@@ -28,7 +28,8 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?;
+            .ok_or_else(Error::not_attached)?
+            .into();
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -164,10 +165,12 @@ where
             }
         }
 
+        let input_handle = self.input_handle.clone().ok_or(AmqpError::IllegalState)?;
         let handle = self
             .output_handle
             .clone()
-            .ok_or(AmqpError::IllegalState)?;
+            .ok_or(AmqpError::IllegalState)?
+            .into();
 
         let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);
@@ -199,7 +202,7 @@ where
                 delivery_id: None, // This will be set by the session
                 delivery_tag: Some(delivery_tag.clone()),
                 message_format: Some(message_format),
-                settled: Some(settled), // Having this always set in first frame helps debugging
+                settled: Some(settled),
                 more: false,
                 // If not set, this value is defaulted to the value negotiated
                 // on link attach.
@@ -211,7 +214,7 @@ where
             };
 
             // TODO: Clone should be very cheap on Bytes
-            send_transfer(writer, transfer, payload.clone()).await?;
+            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
         } else {
             // Need multiple transfers
             // Number of transfers needed
@@ -237,7 +240,7 @@ where
                 aborted: false,
                 batchable,
             };
-            send_transfer(writer, transfer, partial).await?;
+            send_transfer(writer, input_handle.clone(), transfer, partial).await?;
 
             // Send the transfers in the middle
             for _ in 1..n - 1 {
@@ -255,7 +258,7 @@ where
                     aborted: false,
                     batchable,
                 };
-                send_transfer(writer, transfer, partial).await?;
+                send_transfer(writer, input_handle.clone(), transfer, partial).await?;
             }
 
             // Send the last transfer
@@ -275,7 +278,7 @@ where
                 aborted: false,
                 batchable,
             };
-            send_transfer(writer, transfer, payload).await?;
+            send_transfer(writer, input_handle, transfer, payload).await?;
         }
 
         match settled {
@@ -411,11 +414,17 @@ where
 }
 
 #[inline]
-async fn send_transfer<W>(writer: &mut W, transfer: Transfer, payload: Payload) -> Result<(), Error>
+async fn send_transfer<W>(
+    writer: &mut W,
+    input_handle: InputHandle,
+    transfer: Transfer,
+    payload: Payload,
+) -> Result<(), Error>
 where
     W: Sink<LinkFrame> + Send + Unpin,
 {
     let frame = LinkFrame::Transfer {
+        input_handle,
         performative: transfer,
         payload,
     };

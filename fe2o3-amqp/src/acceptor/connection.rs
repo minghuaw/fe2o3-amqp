@@ -22,7 +22,7 @@ use crate::{
         self, engine::ConnectionEngine, ConnectionHandle, Error, OpenError,
         DEFAULT_CONTROL_CHAN_BUF,
     },
-    endpoint,
+    endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::{
         amqp::{self, Frame},
         sasl,
@@ -572,28 +572,36 @@ impl endpoint::Connection for ListenerConnection {
     fn allocate_session(
         &mut self,
         tx: mpsc::Sender<crate::session::frame::SessionIncomingItem>,
-    ) -> Result<(u16, crate::connection::engine::SessionId), Self::AllocError> {
+    ) -> Result<OutgoingChannel, Self::AllocError> {
         self.connection.allocate_session(tx)
     }
 
     #[inline]
-    fn deallocate_session(&mut self, session_id: usize) {
-        self.connection.deallocate_session(session_id)
+    fn deallocate_session(&mut self, outgoing_channel: OutgoingChannel) {
+        self.connection.deallocate_session(outgoing_channel)
     }
 
     #[inline]
-    async fn on_incoming_open(&mut self, channel: u16, open: Open) -> Result<(), Self::Error> {
+    async fn on_incoming_open(
+        &mut self,
+        channel: IncomingChannel,
+        open: Open,
+    ) -> Result<(), Self::Error> {
         self.connection.on_incoming_open(channel, open).await
     }
 
     #[inline]
-    async fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    async fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error> {
         // This should remain mostly the same
         match self.connection.on_incoming_begin_inner(channel, &begin)? {
-            Some(session_id) => {
+            Some(relay) => {
                 // forward begin to session
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Begin(begin));
-                self.connection.send_to_session(session_id, sframe).await?;
+                relay.send(sframe).await?;
             }
             None => {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
@@ -608,7 +616,10 @@ impl endpoint::Connection for ListenerConnection {
                 // remotely initiated session
 
                 // Here we will send the begin frame out to get processed
-                let incoming_session = IncomingSession { channel, begin };
+                let incoming_session = IncomingSession {
+                    channel: channel.0,
+                    begin,
+                };
                 self.session_listener
                     .send(incoming_session)
                     .await
@@ -625,12 +636,20 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(
+        &mut self,
+        channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error> {
         self.connection.on_incoming_end(channel, end).await
     }
 
     #[inline]
-    async fn on_incoming_close(&mut self, channel: u16, close: Close) -> Result<(), Self::Error> {
+    async fn on_incoming_close(
+        &mut self,
+        channel: IncomingChannel,
+        close: Close,
+    ) -> Result<(), Self::Error> {
         self.connection.on_incoming_close(channel, close).await
     }
 
@@ -659,14 +678,14 @@ impl endpoint::Connection for ListenerConnection {
     #[inline]
     fn on_outgoing_begin(
         &mut self,
-        outgoing_channel: u16,
+        outgoing_channel: OutgoingChannel,
         begin: Begin,
     ) -> Result<amqp::Frame, Self::Error> {
         if let Some(remote_channel) = begin.remote_channel {
-            let session_id = self
+            let relay = self
                 .connection
                 .session_by_outgoing_channel
-                .get(&outgoing_channel)
+                .get(outgoing_channel.0 as usize)
                 .ok_or_else(|| {
                     Error::amqp_error(
                         AmqpError::InternalError,
@@ -676,7 +695,7 @@ impl endpoint::Connection for ListenerConnection {
 
             self.connection
                 .session_by_incoming_channel
-                .insert(remote_channel, *session_id);
+                .insert(IncomingChannel(remote_channel), relay.clone());
         }
 
         self.connection.on_outgoing_begin(outgoing_channel, begin)
@@ -685,7 +704,7 @@ impl endpoint::Connection for ListenerConnection {
     #[inline]
     fn on_outgoing_end(
         &mut self,
-        channel: u16,
+        channel: OutgoingChannel,
         end: fe2o3_amqp_types::performatives::End,
     ) -> Result<amqp::Frame, Self::Error> {
         self.connection.on_outgoing_end(channel, end)
@@ -694,16 +713,16 @@ impl endpoint::Connection for ListenerConnection {
     #[inline]
     fn session_tx_by_incoming_channel(
         &mut self,
-        channel: u16,
-    ) -> Option<&mut mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
+        channel: IncomingChannel,
+    ) -> Option<&mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
         self.connection.session_tx_by_incoming_channel(channel)
     }
 
     #[inline]
     fn session_tx_by_outgoing_channel(
         &mut self,
-        channel: u16,
-    ) -> Option<&mut mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
+        channel: OutgoingChannel,
+    ) -> Option<&mpsc::Sender<crate::session::frame::SessionIncomingItem>> {
         self.connection.session_tx_by_outgoing_channel(channel)
     }
 }

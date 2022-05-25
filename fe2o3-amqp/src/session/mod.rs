@@ -26,8 +26,8 @@ use tracing::{instrument, trace};
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
-    endpoint::{self, LinkFlow},
-    link::{LinkFrame, LinkHandle},
+    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
+    link::{LinkFrame, LinkRelay},
     util::Constant,
     Payload,
 };
@@ -36,8 +36,8 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 mod error;
+pub(crate) use error::AllocLinkError;
 pub use error::Error;
-pub(crate) use error::{AllocLinkError, DeallocLinkError};
 
 mod builder;
 pub use builder::*;
@@ -135,14 +135,14 @@ impl<R> SessionHandle<R> {
 pub(crate) async fn allocate_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
-    link_handle: LinkHandle,
-) -> Result<Handle, AllocLinkError> {
+    link_relay: LinkRelay<()>,
+) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
     control
         .send(SessionControl::AllocateLink {
             link_name,
-            link_handle,
+            link_relay,
             responder,
         })
         .await
@@ -158,16 +158,6 @@ pub(crate) async fn allocate_link(
         // unmapped. Thus it could be considered as illegal state
         .map_err(|_| AllocLinkError::IllegalState)?;
     result
-}
-
-pub(crate) async fn deallocate_link(
-    control: &mut mpsc::Sender<SessionControl>,
-    link_name: String,
-) -> Result<(), DeallocLinkError> {
-    control
-        .send(SessionControl::DeallocateLink(link_name))
-        .await
-        .map_err(|_| DeallocLinkError::IllegalState)
 }
 
 /// AMQP1.0 Session
@@ -208,7 +198,7 @@ pub(crate) async fn deallocate_link(
 pub struct Session {
     pub(crate) control: mpsc::Sender<SessionControl>,
     // session_id: usize,
-    pub(crate) outgoing_channel: u16,
+    pub(crate) outgoing_channel: OutgoingChannel,
 
     // local amqp states
     pub(crate) local_state: SessionState,
@@ -219,7 +209,7 @@ pub struct Session {
     pub(crate) handle_max: Handle,
 
     // remote amqp states
-    pub(crate) incoming_channel: Option<u16>,
+    pub(crate) incoming_channel: Option<IncomingChannel>,
     // initialize with 0 first and change after receiving the remote Begin
     pub(crate) next_incoming_id: TransferNumber,
     pub(crate) remote_incoming_window: SequenceNo,
@@ -231,11 +221,11 @@ pub struct Session {
     pub(crate) properties: Option<Fields>,
 
     /// local links by output handle
-    pub(crate) local_links: Slab<LinkHandle>,
-    pub(crate) link_by_name: BTreeMap<String, Handle>,
-    pub(crate) link_by_input_handle: BTreeMap<Handle, Handle>,
+    pub(crate) link_name_by_output_handle: Slab<String>,
+    pub(crate) link_by_name: BTreeMap<String, Option<LinkRelay<OutputHandle>>>,
+    pub(crate) link_by_input_handle: BTreeMap<InputHandle, LinkRelay<OutputHandle>>,
     // Maps from DeliveryId to link.DeliveryCount
-    pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
+    pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (InputHandle, DeliveryTag)>,
 }
 
 impl Session {
@@ -275,7 +265,6 @@ impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
     type Error = Error;
     type State = SessionState;
-    type LinkHandle = LinkHandle;
 
     fn local_state(&self) -> &Self::State {
         &self.local_state
@@ -285,15 +274,15 @@ impl endpoint::Session for Session {
         &mut self.local_state
     }
 
-    fn outgoing_channel(&self) -> u16 {
+    fn outgoing_channel(&self) -> OutgoingChannel {
         self.outgoing_channel
     }
 
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_handle: LinkHandle,
-    ) -> Result<Handle, Self::AllocError> {
+        link_relay: Option<LinkRelay<()>>,
+    ) -> Result<OutputHandle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
             _ => return Err(AllocLinkError::IllegalState),
@@ -305,15 +294,16 @@ impl endpoint::Session for Session {
         }
 
         // get a new entry index
-        let entry = self.local_links.vacant_entry();
-        let handle = Handle(entry.key() as u32);
+        let entry = self.link_name_by_output_handle.vacant_entry();
+        let handle = OutputHandle(entry.key() as u32);
 
         // check if handle max is exceeded
         if handle.0 > self.handle_max.0 {
             Err(AllocLinkError::HandleMaxReached)
         } else {
-            entry.insert(link_handle);
-            self.link_by_name.insert(link_name, handle.clone());
+            entry.insert(link_name.clone());
+            let value = link_relay.map(|val| val.with_output_handle(handle.clone()));
+            self.link_by_name.insert(link_name, value);
             // TODO: how to know which link to send the Flow frames to?
             Ok(handle)
         }
@@ -322,26 +312,34 @@ impl endpoint::Session for Session {
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_handle: LinkHandle,
-        input_handle: Handle,
-    ) -> Result<Handle, Self::AllocError> {
-        match self.allocate_link(link_name, link_handle) {
+        link_relay: LinkRelay<()>,
+        input_handle: InputHandle,
+    ) -> Result<OutputHandle, Self::AllocError> {
+        match self.allocate_link(link_name, None) {
             Ok(output_handle) => {
-                self.link_by_input_handle
-                    .insert(input_handle, output_handle.clone());
+                let value = link_relay.with_output_handle(output_handle.clone());
+                self.link_by_input_handle.insert(input_handle.into(), value);
                 Ok(output_handle)
             }
             Err(err) => Err(err),
         }
     }
 
-    fn deallocate_link(&mut self, link_name: String) {
-        if let Some(handle) = self.link_by_name.remove(&link_name) {
-            self.local_links.remove(handle.0 as usize);
+    /// This should only deallocate the output handle
+    fn deallocate_link(&mut self, output_handle: OutputHandle) {
+        if let Some(name) = self
+            .link_name_by_output_handle
+            .try_remove(output_handle.0 as usize)
+        {
+            let _ = self.link_by_name.remove(&name);
         }
     }
 
-    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error> {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
@@ -358,46 +356,43 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_attach(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
-        // look up link Handle by link name
-        match self.link_by_name.get(&attach.name) {
-            Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
-                Some(link) => {
+        match self.link_by_name.get_mut(&attach.name) {
+            Some(link) => match link.take() {
+                Some(mut relay) => {
                     // Only Sender need to update the receiver settle mode
                     // because the sender needs to echo a disposition if
                     // rcv-settle-mode is 1
-                    if let LinkHandle::Sender {
+                    if let LinkRelay::Sender {
                         receiver_settle_mode,
                         ..
-                    } = link
+                    } = &mut relay
                     {
                         *receiver_settle_mode = attach.rcv_settle_mode.clone();
                     }
 
-                    let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
-                    self.link_by_input_handle
-                        .insert(input_handle, output_handle.clone());
-                    match link.send(LinkFrame::Attach(attach)).await {
-                        Ok(_) => {}
-                        Err(_) => {
-                            // TODO: how should this error be handled?
-                            // End with UnattachedHandle?
-                            return Err(Error::session_error(SessionError::UnattachedHandle, None));
-                            // End session with unattached handle?
-                        }
-                    }
-                }
-                None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
-            },
-            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
-        }
+                    let input_handle = InputHandle::from(attach.handle.clone()); // handle is just a wrapper around u32
+                    relay
+                        .send(LinkFrame::Attach(attach))
+                        .await
+                        .map_err(|_| Error::session_error(SessionError::UnattachedHandle, None))?;
+                    self.link_by_input_handle.insert(input_handle, relay);
 
-        Ok(())
+                    Ok(())
+                }
+                None => Err(Error::session_error(SessionError::HandleInUse, None)),
+            },
+            None => Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?,
+        }
     }
 
-    async fn on_incoming_flow(&mut self, _channel: u16, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(
+        &mut self,
+        _channel: IncomingChannel,
+        flow: Flow,
+    ) -> Result<(), Self::Error> {
         // Handle session flow control
         //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
@@ -424,26 +419,21 @@ impl endpoint::Session for Session {
 
         // Handle link flow control
         if let Ok(link_flow) = LinkFlow::try_from(flow) {
-            match self.link_by_input_handle.get(&link_flow.handle) {
-                Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
-                    Some(link_handle) => {
-                        if let Some(echo_flow) = link_handle
-                            .on_incoming_flow(link_flow, output_handle.clone())
+            let input_handle = InputHandle::from(link_flow.handle.clone());
+            match self.link_by_input_handle.get_mut(&input_handle) {
+                Some(link_relay) => {
+                    if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await {
+                        self.control
+                            .send(SessionControl::LinkFlow(echo_flow))
                             .await
-                        {
-                            self.control
-                                .send(SessionControl::LinkFlow(echo_flow))
-                                .await
-                                // Sending control to self. This will only give an error if the receiving
-                                // half is dropped. An error would thus indicate that the event loop
-                                // has stopped, so it could be considered illegal state.
-                                //
-                                // If the event loop has stopped, this should not be executed at all
-                                .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?;
-                        }
+                            // Sending control to self. This will only give an error if the receiving
+                            // half is dropped. An error would thus indicate that the event loop
+                            // has stopped, so it could be considered illegal state.
+                            //
+                            // If the event loop has stopped, this should not be executed at all
+                            .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?;
                     }
-                    None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
-                },
+                }
                 None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
             }
         }
@@ -453,7 +443,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_transfer(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
@@ -464,29 +454,26 @@ impl endpoint::Session for Session {
         self.next_incoming_id += 1;
         self.remote_outgoing_window -= 1;
 
-        match self.link_by_input_handle.get(&transfer.handle) {
-            Some(output_handle) => match self.local_links.get_mut(output_handle.0 as usize) {
-                Some(link_handle) => {
-                    let id_and_tag = match link_handle.on_incoming_transfer(transfer, payload).await
-                    {
-                        Ok(opt) => opt,
-                        Err((closed, error)) => {
-                            return Err(Error::LinkHandleError {
-                                handle: output_handle.clone(),
-                                closed,
-                                error,
-                            })
-                        }
-                    };
-
-                    // If the unsettled map needs this
-                    if let Some((delivery_id, delivery_tag)) = id_and_tag {
-                        self.delivery_tag_by_id
-                            .insert(delivery_id, (output_handle.clone(), delivery_tag));
+        let input_handle = InputHandle::from(transfer.handle.clone());
+        match self.link_by_input_handle.get_mut(&input_handle) {
+            Some(link_relay) => {
+                let id_and_tag = match link_relay.on_incoming_transfer(transfer, payload).await {
+                    Ok(opt) => opt,
+                    Err((closed, error)) => {
+                        return Err(Error::LinkHandleError {
+                            handle: link_relay.output_handle().clone().into(),
+                            closed,
+                            error,
+                        })
                     }
+                };
+
+                // If the unsettled map needs this
+                if let Some((delivery_id, delivery_tag)) = id_and_tag {
+                    self.delivery_tag_by_id
+                        .insert(delivery_id, (input_handle, delivery_tag));
                 }
-                None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
-            },
+            }
             None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
         };
 
@@ -495,7 +482,7 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_disposition(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         // TODO: what to do when session lost delivery_tag_by_id
@@ -520,7 +507,7 @@ impl endpoint::Session for Session {
             // If it is alrea
             for delivery_id in first..=last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&delivery_id) {
-                    if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
+                    if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
                         let _echo = link_handle
                             .on_incoming_disposition(
                                 disposition.role.clone(),
@@ -535,7 +522,7 @@ impl endpoint::Session for Session {
         } else {
             for delivery_id in first..last {
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
-                    if let Some(link_handle) = self.local_links.get_mut(handle.0 as usize) {
+                    if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
                         // In mode Second, the receiver will first send a non-settled disposition,
                         // and wait for sender's settled disposition
                         let echo = link_handle
@@ -590,33 +577,29 @@ impl endpoint::Session for Session {
     #[instrument(skip_all)]
     async fn on_incoming_detach(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
         trace!(channel = ?_channel, frame = ?detach);
         // Remove the link by input handle
-        let output_handle = match self.link_by_input_handle.remove(&detach.handle) {
-            Some(handle) => handle,
-            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
-        };
-        match self.local_links.get_mut(output_handle.0 as usize) {
-            Some(link) => {
-                // TODO:
-                match link.on_incoming_detach(detach).await {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return Err(Error::session_error(SessionError::UnattachedHandle, None))
-                    } // End session with unattached handle
-                }
-            }
-            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
+        match self
+            .link_by_input_handle
+            .remove(&InputHandle::from(detach.handle.clone()))
+        {
+            Some(mut link) => match link.on_incoming_detach(detach).await {
+                Ok(_) => Ok(()),
+                Err(_) => Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
+            },
+            None => Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
         }
-
-        Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_end(&mut self, _channel: u16, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(
+        &mut self,
+        _channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error> {
         trace!(end = ?end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
@@ -650,7 +633,7 @@ impl endpoint::Session for Session {
         W: Sink<SessionFrame> + Send + Unpin,
     {
         let begin = Begin {
-            remote_channel: self.incoming_channel,
+            remote_channel: self.incoming_channel.map(Into::into),
             next_outgoing_id: self.next_outgoing_id,
             incoming_window: self.incoming_window,
             outgoing_window: self.outgoing_window,
@@ -758,6 +741,7 @@ impl endpoint::Session for Session {
 
     fn on_outgoing_transfer(
         &mut self,
+        input_handle: InputHandle,
         mut transfer: Transfer,
         payload: Payload,
     ) -> Result<SessionFrame, Self::Error> {
@@ -767,6 +751,18 @@ impl endpoint::Session for Session {
 
         // TODO: What policy would result in a decrement in outgoing-window?
 
+        // If not set on the first (or only) transfer for a (multi-transfer)
+        // delivery, then the settled flag MUST be interpreted as being false.
+        //
+        // If the negotiated value for snd-settle-mode at attachment is settled,
+        // then this field MUST be true on at least one transfer frame for a
+        // delivery
+        //
+        // If the negotiated value for snd-settle-mode at attachment is unsettled,
+        // then this field MUST be false (or unset) on every transfer frame for a
+        // delivery
+        let settled = transfer.settled.unwrap_or(false);
+
         // Only the first transfer is required to have delivery_tag and delivery_id
         if let Some(delivery_tag) = &transfer.delivery_tag {
             // The next-outgoing-id is the transfer-id to assign to the next transfer frame.
@@ -774,8 +770,10 @@ impl endpoint::Session for Session {
             transfer.delivery_id = Some(delivery_id);
 
             // Disposition doesn't carry delivery tag
-            self.delivery_tag_by_id
-                .insert(delivery_id, (transfer.handle.clone(), delivery_tag.clone()));
+            if !settled {
+                self.delivery_tag_by_id
+                    .insert(delivery_id, (input_handle, delivery_tag.clone()));
+            }
         }
 
         self.next_outgoing_id += 1;
@@ -809,7 +807,7 @@ impl endpoint::Session for Session {
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         // TODO: what else do we need to do here?
-
+        self.deallocate_link(detach.handle.clone().into());
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)

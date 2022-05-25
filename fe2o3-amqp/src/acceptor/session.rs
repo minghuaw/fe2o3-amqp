@@ -8,7 +8,7 @@ use std::io;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Handle, SessionError},
+    definitions::{self, AmqpError, SessionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
 };
@@ -18,10 +18,11 @@ use tokio_util::sync::PollSender;
 use tracing::instrument;
 
 use crate::{
-    connection::engine::SessionId,
     control::{ConnectionControl, SessionControl},
-    endpoint::{self, LinkFlow, Session},
-    link::{LinkFrame, LinkHandle},
+    endpoint::{
+        self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle, Session,
+    },
+    link::{LinkFrame, LinkRelay},
     session::{
         self,
         engine::SessionEngine,
@@ -49,15 +50,15 @@ impl ListenerSessionHandle {
 pub(crate) async fn allocate_incoming_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
-    link_handle: LinkHandle,
-    input_handle: Handle,
-) -> Result<Handle, AllocLinkError> {
+    link_relay: LinkRelay<()>,
+    input_handle: InputHandle,
+) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
     control
         .send(SessionControl::AllocateIncomingLink {
             link_name,
-            link_handle,
+            link_relay,
             input_handle,
             responder,
         })
@@ -151,12 +152,15 @@ impl SessionAcceptor {
         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.0.buffer_size);
 
         // create session in connection::Engine
-        let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
+        let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
         let mut session =
             self.0
                 .clone()
                 .into_session(session_control_tx.clone(), outgoing_channel, local_state);
-        session.on_incoming_begin(incoming_session.channel, incoming_session.begin)?;
+        session.on_incoming_begin(
+            IncomingChannel(incoming_session.channel),
+            incoming_session.begin,
+        )?;
 
         let listener_session = ListenerSession {
             session,
@@ -165,7 +169,6 @@ impl SessionAcceptor {
         let engine = SessionEngine::<ListenerSession>::begin(
             connection.control.clone(),
             listener_session,
-            session_id,
             session_control_rx,
             incoming_rx,
             PollSender::new(connection.outgoing.clone()),
@@ -200,7 +203,6 @@ impl SessionEngine<ListenerSession> {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
         session: ListenerSession,
-        session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
@@ -210,7 +212,6 @@ impl SessionEngine<ListenerSession> {
         let mut engine = Self {
             conn,
             session,
-            session_id,
             control,
             incoming,
             outgoing,
@@ -238,8 +239,6 @@ impl endpoint::Session for ListenerSession {
 
     type State = <session::Session as endpoint::Session>::State;
 
-    type LinkHandle = <session::Session as endpoint::Session>::LinkHandle;
-
     fn local_state(&self) -> &Self::State {
         self.session.local_state()
     }
@@ -248,77 +247,75 @@ impl endpoint::Session for ListenerSession {
         self.session.local_state_mut()
     }
 
-    fn outgoing_channel(&self) -> u16 {
+    fn outgoing_channel(&self) -> OutgoingChannel {
         self.session.outgoing_channel()
     }
 
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_handle: Self::LinkHandle,
-    ) -> Result<fe2o3_amqp_types::definitions::Handle, Self::AllocError> {
+        link_handle: Option<LinkRelay<()>>,
+    ) -> Result<OutputHandle, Self::AllocError> {
         self.session.allocate_link(link_name, link_handle)
     }
 
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_handle: LinkHandle,
-        input_handle: Handle,
-    ) -> Result<Handle, Self::AllocError> {
+        link_handle: LinkRelay<()>,
+        input_handle: InputHandle,
+    ) -> Result<OutputHandle, Self::AllocError> {
         self.session
             .allocate_incoming_link(link_name, link_handle, input_handle)
     }
 
-    fn deallocate_link(&mut self, link_name: String) {
-        self.session.deallocate_link(link_name)
+    fn deallocate_link(&mut self, output_handle: OutputHandle) {
+        self.session.deallocate_link(output_handle)
     }
 
-    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    fn on_incoming_begin(
+        &mut self,
+        channel: IncomingChannel,
+        begin: Begin,
+    ) -> Result<(), Self::Error> {
         self.session.on_incoming_begin(channel, begin)
     }
 
     async fn on_incoming_attach(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
-        // Look up link handle by link name
-        match self.session.link_by_name.get(&attach.name) {
-            Some(output_handle) => match self.session.local_links.get_mut(output_handle.0 as usize)
-            {
-                Some(link) => {
+        match self.session.link_by_name.get_mut(&attach.name) {
+            Some(link) => match link.take() {
+                Some(mut relay) => {
                     // Only Sender need to update the receiver settle mode
                     // because the sender needs to echo a disposition if
                     // rcv-settle-mode is 1
-                    if let LinkHandle::Sender {
+                    if let LinkRelay::Sender {
                         receiver_settle_mode,
                         ..
-                    } = link
+                    } = &mut relay
                     {
                         *receiver_settle_mode = attach.rcv_settle_mode.clone();
                     }
 
-                    let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
+                    let input_handle = attach.handle.clone().into(); // handle is just a wrapper around u32
+                    relay
+                        .send(LinkFrame::Attach(attach))
+                        .await
+                        .map_err(|_| Error::session_error(SessionError::UnattachedHandle, None))?;
                     self.session
                         .link_by_input_handle
-                        .insert(input_handle, output_handle.clone());
-                    match link.send(LinkFrame::Attach(attach)).await {
-                        Ok(_) => Ok(()),
-                        Err(_) => {
-                            // TODO: how should this error be handled?
-                            // End with UnattachedHandle?
-                            return Err(Error::session_error(SessionError::UnattachedHandle, None));
-                            // End session with unattached handle?
-                        }
-                    }
+                        .insert(input_handle, relay);
+                    Ok(())
                 }
                 None => {
                     // TODO: Resuming link
-                    return Err(Error::amqp_error(
+                    Err(Error::amqp_error(
                         AmqpError::NotImplemented,
                         "Link resumption is not supported yet".to_string(),
-                    ));
+                    ))
                 }
             },
             None => {
@@ -335,18 +332,22 @@ impl endpoint::Session for ListenerSession {
                         Some("Listener session handle must have been dropped".to_string()),
                     )
                 })?;
-                Ok(())
+                return Ok(());
             }
         }
     }
 
-    async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(
+        &mut self,
+        channel: IncomingChannel,
+        flow: Flow,
+    ) -> Result<(), Self::Error> {
         self.session.on_incoming_flow(channel, flow).await
     }
 
     async fn on_incoming_transfer(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
@@ -357,7 +358,7 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_disposition(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         self.session
@@ -367,13 +368,17 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_detach(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
         self.session.on_incoming_detach(channel, detach).await
     }
 
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(
+        &mut self,
+        channel: IncomingChannel,
+        end: End,
+    ) -> Result<(), Self::Error> {
         self.session.on_incoming_end(channel, end).await
     }
 
@@ -407,10 +412,12 @@ impl endpoint::Session for ListenerSession {
 
     fn on_outgoing_transfer(
         &mut self,
+        input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<SessionFrame, Self::Error> {
-        self.session.on_outgoing_transfer(transfer, payload)
+        self.session
+            .on_outgoing_transfer(input_handle, transfer, payload)
     }
 
     fn on_outgoing_disposition(

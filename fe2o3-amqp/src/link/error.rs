@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::{mpsc, oneshot::error::RecvError};
 
-use crate::session::{AllocLinkError, DeallocLinkError};
+use crate::session::AllocLinkError;
 
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::TransactionId;
@@ -80,21 +80,6 @@ impl TryFrom<Error> for DetachError {
                 Ok(error)
             }
             Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
-        }
-    }
-}
-
-impl From<DeallocLinkError> for DetachError {
-    fn from(err: DeallocLinkError) -> Self {
-        match err {
-            DeallocLinkError::IllegalState => DetachError::new(
-                false,
-                Some(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    "Session must have been dropped".to_string(),
-                    None,
-                )),
-            ),
         }
     }
 }

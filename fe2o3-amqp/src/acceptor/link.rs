@@ -19,7 +19,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::LinkAttach,
+    endpoint::{InputHandle, LinkAttach},
     link::{
         self,
         delivery::UnsettledMessage,
@@ -27,7 +27,7 @@ use crate::{
         role,
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        AttachError, LinkFrame, LinkHandle, LinkIncomingItem, ReceiverFlowState, SenderFlowState,
+        AttachError, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState, SenderFlowState,
     },
     util::{Consumer, Initialized, Producer},
     Receiver, Sender,
@@ -256,8 +256,9 @@ impl LinkAcceptor {
         // Comparing unsettled should be taken care of in `on_incoming_attach`
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Receiver {
+        let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: rcv_settle_mode.clone(),
@@ -266,7 +267,7 @@ impl LinkAcceptor {
         };
 
         // Allocate link in session
-        let input_handle = remote_attach.handle.clone();
+        let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
             &mut session.control,
             remote_attach.name.clone(),
@@ -365,8 +366,9 @@ impl LinkAcceptor {
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Sender {
+        let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),
@@ -374,7 +376,7 @@ impl LinkAcceptor {
         };
 
         // Allocate link in session
-        let input_handle = remote_attach.handle.clone();
+        let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
             &mut session.control,
             remote_attach.name.clone(),

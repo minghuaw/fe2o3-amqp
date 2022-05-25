@@ -10,10 +10,10 @@ use tokio_util::sync::PollSender;
 use tracing::{debug, error, instrument, trace};
 
 use crate::{
-    connection::{self, engine::SessionId},
+    connection::{self},
     control::{ConnectionControl, SessionControl},
-    endpoint::{self, Session},
-    link::{LinkFrame, LinkHandle},
+    endpoint::{self, IncomingChannel, Session},
+    link::LinkFrame,
     util::Running,
 };
 
@@ -25,7 +25,6 @@ use super::{
 pub(crate) struct SessionEngine<S: Session> {
     pub conn: mpsc::Sender<ConnectionControl>,
     pub session: S,
-    pub session_id: SessionId,
     pub control: mpsc::Receiver<SessionControl>,
     pub incoming: mpsc::Receiver<SessionIncomingItem>,
     pub outgoing: PollSender<SessionFrame>,
@@ -37,7 +36,6 @@ impl SessionEngine<super::Session> {
     pub async fn begin(
         conn: mpsc::Sender<ConnectionControl>,
         session: super::Session,
-        session_id: SessionId,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
@@ -46,7 +44,6 @@ impl SessionEngine<super::Session> {
         let mut engine = Self {
             conn,
             session,
-            session_id,
             control,
             incoming,
             outgoing,
@@ -67,6 +64,7 @@ impl SessionEngine<super::Session> {
             }
         };
         let SessionFrame { channel, body } = frame;
+        let channel = IncomingChannel(channel);
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
             SessionFrameBody::End(end) => {
@@ -87,7 +85,7 @@ impl SessionEngine<super::Session> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState, LinkHandle = LinkHandle> + Send + 'static,
+    S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
     S::Error: Into<Error> + Debug,
     S::AllocError: Into<AllocLinkError>,
 {
@@ -99,7 +97,7 @@ where
     #[instrument(skip_all)]
     async fn on_incoming(&mut self, incoming: SessionIncomingItem) -> Result<Running, Error> {
         let SessionFrame { channel, body } = incoming;
-
+        let channel = IncomingChannel(channel);
         match body {
             SessionFrameBody::Begin(begin) => {
                 self.session
@@ -172,10 +170,10 @@ where
             }
             SessionControl::AllocateLink {
                 link_name,
-                link_handle,
+                link_relay,
                 responder,
             } => {
-                let result = self.session.allocate_link(link_name, link_handle);
+                let result = self.session.allocate_link(link_name, Some(link_relay));
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -185,13 +183,13 @@ where
             }
             SessionControl::AllocateIncomingLink {
                 link_name,
-                link_handle,
+                link_relay,
                 input_handle,
                 responder,
             } => {
                 let result =
                     self.session
-                        .allocate_incoming_link(link_name, link_handle, input_handle);
+                        .allocate_incoming_link(link_name, link_relay, input_handle);
                 responder.send(result.map_err(Into::into)).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -247,11 +245,12 @@ where
                 .map_err(Into::into)?,
             LinkFrame::Flow(flow) => self.session.on_outgoing_flow(flow).map_err(Into::into)?,
             LinkFrame::Transfer {
+                input_handle,
                 performative,
                 payload,
             } => self
                 .session
-                .on_outgoing_transfer(performative, payload)
+                .on_outgoing_transfer(input_handle, performative, payload)
                 .map_err(Into::into)?,
             LinkFrame::Disposition(disposition) => self
                 .session
@@ -337,7 +336,7 @@ where
         }
     }
 
-    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel()))]
+    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0))]
     async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
@@ -406,7 +405,8 @@ where
         }
 
         debug!("Stopped");
-        let _ = connection::deallocate_session(&mut self.conn, self.session_id).await;
+        let _ =
+            connection::deallocate_session(&mut self.conn, self.session.outgoing_channel()).await;
         outcome
     }
 }

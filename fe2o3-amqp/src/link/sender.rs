@@ -28,7 +28,7 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkHandle, SenderFlowState, SenderLink,
+    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SenderFlowState, SenderLink,
 };
 
 /// An AMQP1.0 sender
@@ -268,7 +268,7 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
         if let Some(handle) = self.link.output_handle() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
-                    handle: handle.clone(),
+                    handle: handle.clone().into(),
                     closed: true,
                     error: None,
                 };
@@ -297,6 +297,8 @@ impl SenderInner<SenderLink> {
         {
             return Err(DetachError::new(false, Some(e)));
         };
+
+        // session::deallocate_link(&mut self.session, output_handle).await?;
 
         // Wait for remote detach
         let frame = match self.incoming.next().await {
@@ -339,8 +341,6 @@ impl SenderInner<SenderLink> {
             }
         }
 
-        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
-
         Ok(())
     }
 }
@@ -360,8 +360,9 @@ where
         // May need to re-allocate output handle
         if self.link.output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkHandle::Sender {
+            let link_handle = LinkRelay::Sender {
                 tx,
+                output_handle: (),
                 flow_state: self.link.flow_state().producer(),
                 // TODO: what else to do during re-attaching
                 unsettled: self.link.unsettled().clone(),
@@ -384,7 +385,7 @@ where
                     });
                 }
             };
-            *self.link.output_handle_mut() = Some(handle);
+            *self.link.output_handle_mut() = Some(handle.into());
         }
 
         if let Err(_err) =
@@ -458,8 +459,6 @@ where
                 Err(e) => return Err(DetachError::new(false, Some(e))),
             }
         };
-
-        session::deallocate_link(&mut self.session, self.link.name().into()).await?;
 
         Ok(())
     }

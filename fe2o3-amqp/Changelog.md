@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.10
+
+1. Reduced lookups needed for incoming session frames and link frames
+
 ## 0.0.9
 
 1. Implemented client side transaction

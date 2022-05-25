@@ -11,6 +11,7 @@ use tokio_util::sync::PollSender;
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
+    endpoint::OutgoingChannel,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
     Session,
@@ -74,12 +75,11 @@ impl Builder {
     pub(crate) fn into_session(
         self,
         control: mpsc::Sender<SessionControl>,
-        outgoing_channel: u16,
+        outgoing_channel: OutgoingChannel,
         local_state: SessionState,
     ) -> Session {
         Session {
             control,
-            // session_id,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -95,7 +95,7 @@ impl Builder {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            local_links: Slab::new(),
+            link_name_by_output_handle: Slab::new(),
             link_by_name: BTreeMap::new(),
             link_by_input_handle: BTreeMap::new(),
             delivery_tag_by_id: BTreeMap::new(),
@@ -191,13 +191,12 @@ impl Builder {
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
 
         // create session in connection::Engine
-        let (outgoing_channel, session_id) = connection.allocate_session(incoming_tx).await?; // AllocSessionError
+        let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
 
         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
         let engine = SessionEngine::<crate::Session>::begin(
             connection.control.clone(),
             session,
-            session_id,
             session_control_rx,
             incoming_rx,
             PollSender::new(connection.outgoing.clone()),

@@ -24,7 +24,7 @@ use super::{
     delivery::Delivery,
     error::{AttachError, DetachError},
     receiver_link::section_number_and_offset,
-    role, Error, LinkFrame, LinkHandle, ReceiverLink, DEFAULT_CREDIT,
+    role, Error, LinkFrame, LinkRelay, ReceiverLink, DEFAULT_CREDIT,
 };
 
 macro_rules! or_assign {
@@ -220,7 +220,7 @@ impl Drop for Receiver {
         if let Some(handle) = self.link.output_handle.take() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
-                    handle,
+                    handle: handle.into(),
                     closed: true,
                     error: None,
                 };
@@ -283,8 +283,9 @@ impl Receiver {
     ) -> Result<&mut Self, DetachError> {
         if self.link.output_handle.is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkHandle::Receiver {
+            let link_handle = LinkRelay::Receiver {
                 tx,
+                output_handle: (),
                 flow_state: self.link.flow_state.clone(),
                 unsettled: self.link.unsettled.clone(),
                 receiver_settle_mode: self.link.rcv_settle_mode.clone(),
@@ -309,7 +310,7 @@ impl Receiver {
                     })
                 }
             };
-            self.link.output_handle = Some(handle);
+            self.link.output_handle = Some(handle.into());
         }
 
         if let Err(_err) =
@@ -366,18 +367,17 @@ impl Receiver {
                 Err(Error::Detached(err))
             }
             LinkFrame::Transfer {
+                input_handle: _,
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
-            LinkFrame::Attach(_) => {
-                Err(Error::Local(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    Some("Received Attach on an attached link".into()),
-                    None,
-                )))
-            }
+            LinkFrame::Attach(_) => Err(Error::Local(definitions::Error::new(
+                AmqpError::IllegalState,
+                Some("Received Attach on an attached link".into()),
+                None,
+            ))),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
-                // Flow and Disposition are handled by LinkHandle which runs
+                // Flow and Disposition are handled by LinkRelay which runs
                 // in the session loop
                 unreachable!()
             }
@@ -552,8 +552,6 @@ impl Receiver {
         } else if let Err(e) = self.link.on_incoming_detach(remote_detach).await {
             return Err(DetachError::new(false, Some(e)));
         }
-        
-        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
 
         Ok(())
     }
@@ -615,8 +613,6 @@ impl Receiver {
             }
         };
 
-        session::deallocate_link(&mut self.session, self.link.name.clone()).await?;
-
         Ok(())
     }
 }
@@ -651,12 +647,8 @@ impl Receiver {
     /// to `Accept`
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Accepted(Accepted {});
-        self.dispose(
-            delivery.delivery_id,
-            delivery.delivery_tag.clone(),
-            state,
-        )
-        .await
+        self.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
@@ -669,24 +661,16 @@ impl Receiver {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        self.dispose(
-            delivery.delivery_id,
-            delivery.delivery_tag.clone(),
-            state,
-        )
-        .await
+        self.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Released(Released {});
-        self.dispose(
-            delivery.delivery_id,
-            delivery.delivery_tag.clone(),
-            state,
-        )
-        .await
+        self.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
     }
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
@@ -697,12 +681,8 @@ impl Receiver {
         modified: Modified,
     ) -> Result<(), Error> {
         let state = DeliveryState::Modified(modified);
-        self.dispose(
-            delivery.delivery_id,
-            delivery.delivery_tag.clone(),
-            state,
-        )
-        .await
+        self.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
     }
 }
 

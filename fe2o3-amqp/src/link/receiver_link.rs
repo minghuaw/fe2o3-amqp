@@ -36,7 +36,8 @@ impl endpoint::ReceiverLink for ReceiverLink {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?;
+            .ok_or_else(Error::not_attached)?
+            .into();
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
@@ -271,7 +272,8 @@ impl endpoint::ReceiverLink for ReceiverLink {
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?;
+            .ok_or_else(Error::not_attached)?
+            .into();
 
         let delivery = Delivery {
             link_output_handle,
@@ -351,7 +353,7 @@ fn rfind_offset_of_complete_message(bytes: &[u8]) -> Option<u64> {
 
     iter.rposition(|(&b0, (&b1, &b2))| {
         matches!(
-            (b0, b1, b2), 
+            (b0, b1, b2),
             (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
             | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
             | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
@@ -421,7 +423,8 @@ impl ReceiverLink {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?;
+            .ok_or_else(|| Error::not_attached())?
+            .into();
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {

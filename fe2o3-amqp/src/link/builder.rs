@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Handle, ReceiverSettleMode, SenderSettleMode, SequenceNo},
+    definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
@@ -13,7 +13,8 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    link::{Link, LinkHandle, LinkIncomingItem},
+    endpoint::OutputHandle,
+    link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
@@ -333,7 +334,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     pub(crate) fn create_link<C, M>(
         self,
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
-        output_handle: Handle,
+        output_handle: OutputHandle,
         flow_state_consumer: C,
         // state_code: Arc<AtomicU8>,
     ) -> Link<Role, T, C, M> {
@@ -347,7 +348,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
             local_state,
             // state_code,
             name: self.name,
-            output_handle: Some(output_handle),
+            output_handle: Some(output_handle.into()),
             input_handle: None,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
@@ -428,8 +429,9 @@ where
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Sender {
+        let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach in session
@@ -447,8 +449,7 @@ where
         let mut writer = PollSender::new(writer);
         let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader)
-            .await?;
+        super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -501,8 +502,9 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
         let flow_state_producer = flow_state.clone();
         let flow_state_consumer = flow_state;
         // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkHandle::Receiver {
+        let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
+            output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach

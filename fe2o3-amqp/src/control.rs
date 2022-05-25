@@ -1,15 +1,15 @@
 //! Controls for Connection, Session, and Link
 
 use fe2o3_amqp_types::{
-    definitions::{self, Handle},
+    definitions::{self},
     performatives::Disposition,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
-    connection::{engine::SessionId, AllocSessionError},
-    endpoint::LinkFlow,
-    link::LinkHandle,
+    connection::AllocSessionError,
+    endpoint::{InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
+    link::LinkRelay,
     session::{frame::SessionIncomingItem, AllocLinkError},
 };
 
@@ -19,9 +19,9 @@ pub(crate) enum ConnectionControl {
     Close(Option<definitions::Error>),
     AllocateSession {
         tx: Sender<SessionIncomingItem>,
-        responder: oneshot::Sender<Result<(u16, SessionId), AllocSessionError>>,
+        responder: oneshot::Sender<Result<OutgoingChannel, AllocSessionError>>,
     },
-    DeallocateSession(SessionId),
+    DeallocateSession(OutgoingChannel),
 }
 
 impl std::fmt::Display for ConnectionControl {
@@ -33,7 +33,7 @@ impl std::fmt::Display for ConnectionControl {
                 tx: _,
                 responder: _,
             } => write!(f, "AllocateSession"),
-            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id),
+            Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id.0),
         }
     }
 }
@@ -43,16 +43,16 @@ pub(crate) enum SessionControl {
     End(Option<definitions::Error>),
     AllocateLink {
         link_name: String,
-        link_handle: LinkHandle,
-        responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
+        link_relay: LinkRelay<()>,
+        responder: oneshot::Sender<Result<OutputHandle, AllocLinkError>>,
     },
     AllocateIncomingLink {
         link_name: String,
-        link_handle: LinkHandle,
-        input_handle: Handle,
-        responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
+        link_relay: LinkRelay<()>,
+        input_handle: InputHandle,
+        responder: oneshot::Sender<Result<OutputHandle, AllocLinkError>>,
     },
-    DeallocateLink(String),
+    DeallocateLink(OutputHandle),
     LinkFlow(LinkFlow),
     Disposition(Disposition),
 }
@@ -63,16 +63,16 @@ impl std::fmt::Display for SessionControl {
             SessionControl::End(_) => write!(f, "End"),
             SessionControl::AllocateLink {
                 link_name: _,
-                link_handle: _,
+                link_relay: _,
                 responder: _,
             } => write!(f, "AllocateLink"),
             SessionControl::AllocateIncomingLink {
                 link_name: _,
-                link_handle: _,
+                link_relay: _,
                 input_handle: _,
                 responder: _,
             } => write!(f, "AllocateIncomingLink"),
-            SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({})", name),
+            SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({:?})", name),
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
         }
