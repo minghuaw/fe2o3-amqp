@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
+        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
@@ -34,7 +34,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
 use crate::{
-    endpoint::{self, LinkFlow, Settlement},
+    endpoint::{self, LinkFlow, Settlement, OutputHandle, InputHandle},
     link::{self, delivery::UnsettledMessage},
     util::{Consumer, Producer},
     Payload,
@@ -123,8 +123,8 @@ pub struct Link<R, T, F, M> {
     // pub(crate) state_code: Arc<AtomicU8>,
     pub(crate) name: String,
 
-    pub(crate) output_handle: Option<Handle>, // local handle
-    pub(crate) input_handle: Option<Handle>,  // remote handle
+    pub(crate) output_handle: Option<OutputHandle>, // local handle
+    pub(crate) input_handle: Option<InputHandle>,  // remote handle
 
     /// The `Sender` will manage whether to wait for incoming disposition
     pub(crate) snd_settle_mode: SenderSettleMode,
@@ -200,11 +200,11 @@ where
         &self.name
     }
 
-    fn output_handle(&self) -> &Option<Handle> {
+    fn output_handle(&self) -> &Option<OutputHandle> {
         &self.output_handle
     }
 
-    fn output_handle_mut(&mut self) -> &mut Option<Handle> {
+    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
         &mut self.output_handle
     }
 
@@ -251,7 +251,7 @@ where
             }
         };
 
-        self.input_handle = Some(remote_attach.handle);
+        self.input_handle = Some(InputHandle::from(remote_attach.handle));
 
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
@@ -360,7 +360,7 @@ where
 
         let attach = Attach {
             name: self.name.clone(),
-            handle,
+            handle: handle.into(),
             role: R::into_role(),
             snd_settle_mode: self.snd_settle_mode.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
@@ -488,7 +488,7 @@ where
         match self.output_handle.take() {
             Some(handle) => {
                 let detach = Detach {
-                    handle,
+                    handle: handle.into(),
                     closed,
                     error,
                 };
@@ -545,7 +545,7 @@ impl LinkRelay {
     pub(crate) async fn on_incoming_flow(
         &mut self,
         flow: LinkFlow,
-        output_handle: Handle,
+        output_handle: OutputHandle,
     ) -> Option<LinkFlow> {
         match self {
             LinkRelay::Sender { flow_state, .. } => {
@@ -857,6 +857,7 @@ mod tests {
 
         use super::*;
         use crate::util::{Produce, Producer};
+        use crate::endpoint::OutputHandle;
 
         let notifier = Arc::new(Notify::new());
         let state = LinkFlowState::sender(LinkFlowStateInner {
@@ -871,7 +872,7 @@ mod tests {
         let notified = notifier.notified();
 
         let handle = tokio::spawn(async move {
-            let item = (LinkFlow::default(), Handle::from(0));
+            let item = (LinkFlow::default(), OutputHandle(0));
             producer.produce(item).await;
         });
 

@@ -127,6 +127,36 @@ pub(crate) trait Connection {
     ) -> Option<&mpsc::Sender<SessionIncomingItem>>;
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub(crate) struct OutputHandle(pub UInt);
+
+impl From<Handle> for OutputHandle {
+    fn from(handle: Handle) -> Self {
+        Self(handle.0)
+    }
+}
+
+impl From<OutputHandle> for Handle {
+    fn from(handle: OutputHandle) -> Self {
+        Self(handle.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub(crate) struct InputHandle(pub UInt);
+
+impl From<Handle> for InputHandle {
+    fn from(handle: Handle) -> Self {
+        Self(handle.0)
+    }
+}
+
+impl From<InputHandle> for Handle {
+    fn from(handle: InputHandle) -> Self {
+        Self(handle.0)
+    }
+}
+
 #[async_trait]
 pub(crate) trait Session {
     type AllocError: Send;
@@ -142,14 +172,16 @@ pub(crate) trait Session {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_handle: Self::LinkRelay,
-    ) -> Result<Handle, Self::AllocError>;
+        link_relay: Self::LinkRelay,
+    ) -> Result<OutputHandle, Self::AllocError>;
+
     fn allocate_incoming_link(
         &mut self,
         link_name: String,
-        link_handle: Self::LinkRelay,
-        input_handle: Handle,
-    ) -> Result<Handle, Self::AllocError>;
+        link_relay: Self::LinkRelay,
+        input_handle: InputHandle,
+    ) -> Result<OutputHandle, Self::AllocError>;
+
     fn deallocate_link(&mut self, link_name: String);
 
     fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error>;
@@ -240,9 +272,9 @@ pub(crate) trait LinkExt: Link {
 
     fn name(&self) -> &str;
 
-    fn output_handle(&self) -> &Option<Handle>;
+    fn output_handle(&self) -> &Option<OutputHandle>;
 
-    fn output_handle_mut(&mut self) -> &mut Option<Handle>;
+    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle>;
 
     fn flow_state(&self) -> &Self::FlowState;
 

@@ -36,7 +36,8 @@ impl endpoint::ReceiverLink for ReceiverLink {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?;
+            .ok_or_else(Error::not_attached)?
+            .into();
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
@@ -271,7 +272,8 @@ impl endpoint::ReceiverLink for ReceiverLink {
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?;
+            .ok_or_else(Error::not_attached)?
+            .into();
 
         let delivery = Delivery {
             link_output_handle,
@@ -421,7 +423,8 @@ impl ReceiverLink {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?;
+            .ok_or_else(|| Error::not_attached())?
+            .into();
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {

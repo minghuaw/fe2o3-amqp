@@ -268,7 +268,7 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
         if let Some(handle) = self.link.output_handle() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
-                    handle: handle.clone(),
+                    handle: handle.clone().into(),
                     closed: true,
                     error: None,
                 };
@@ -384,7 +384,7 @@ where
                     });
                 }
             };
-            *self.link.output_handle_mut() = Some(handle);
+            *self.link.output_handle_mut() = Some(handle.into());
         }
 
         if let Err(_err) =

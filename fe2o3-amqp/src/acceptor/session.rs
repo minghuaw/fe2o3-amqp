@@ -19,7 +19,7 @@ use tracing::instrument;
 
 use crate::{
     control::{ConnectionControl, SessionControl},
-    endpoint::{self, LinkFlow, Session, OutgoingChannel},
+    endpoint::{self, LinkFlow, Session, OutgoingChannel, InputHandle, OutputHandle, IncomingChannel},
     link::{LinkFrame, LinkRelay},
     session::{
         self,
@@ -49,8 +49,8 @@ pub(crate) async fn allocate_incoming_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
     link_handle: LinkRelay,
-    input_handle: Handle,
-) -> Result<Handle, AllocLinkError> {
+    input_handle: InputHandle,
+) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
     control
@@ -155,7 +155,7 @@ impl SessionAcceptor {
             self.0
                 .clone()
                 .into_session(session_control_tx.clone(), outgoing_channel, local_state);
-        session.on_incoming_begin(incoming_session.channel, incoming_session.begin)?;
+        session.on_incoming_begin(IncomingChannel(incoming_session.channel), incoming_session.begin)?;
 
         let listener_session = ListenerSession {
             session,
@@ -252,7 +252,7 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         link_name: String,
         link_handle: Self::LinkRelay,
-    ) -> Result<fe2o3_amqp_types::definitions::Handle, Self::AllocError> {
+    ) -> Result<OutputHandle, Self::AllocError> {
         self.session.allocate_link(link_name, link_handle)
     }
 
@@ -260,8 +260,8 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         link_name: String,
         link_handle: LinkRelay,
-        input_handle: Handle,
-    ) -> Result<Handle, Self::AllocError> {
+        input_handle: InputHandle,
+    ) -> Result<OutputHandle, Self::AllocError> {
         self.session
             .allocate_incoming_link(link_name, link_handle, input_handle)
     }
@@ -270,13 +270,13 @@ impl endpoint::Session for ListenerSession {
         self.session.deallocate_link(link_name)
     }
 
-    fn on_incoming_begin(&mut self, channel: u16, begin: Begin) -> Result<(), Self::Error> {
+    fn on_incoming_begin(&mut self, channel: IncomingChannel, begin: Begin) -> Result<(), Self::Error> {
         self.session.on_incoming_begin(channel, begin)
     }
 
     async fn on_incoming_attach(
         &mut self,
-        _channel: u16,
+        _channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
         // Look up link handle by link name
@@ -295,7 +295,7 @@ impl endpoint::Session for ListenerSession {
                         *receiver_settle_mode = attach.rcv_settle_mode.clone();
                     }
 
-                    let input_handle = attach.handle.clone(); // handle is just a wrapper around u32
+                    let input_handle = attach.handle.clone().into(); // handle is just a wrapper around u32
                     self.session
                         .link_by_input_handle
                         .insert(input_handle, output_handle.clone());
@@ -336,13 +336,13 @@ impl endpoint::Session for ListenerSession {
         }
     }
 
-    async fn on_incoming_flow(&mut self, channel: u16, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, channel: IncomingChannel, flow: Flow) -> Result<(), Self::Error> {
         self.session.on_incoming_flow(channel, flow).await
     }
 
     async fn on_incoming_transfer(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
@@ -353,7 +353,7 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_disposition(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         self.session
@@ -363,13 +363,13 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_detach(
         &mut self,
-        channel: u16,
+        channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
         self.session.on_incoming_detach(channel, detach).await
     }
 
-    async fn on_incoming_end(&mut self, channel: u16, end: End) -> Result<(), Self::Error> {
+    async fn on_incoming_end(&mut self, channel: IncomingChannel, end: End) -> Result<(), Self::Error> {
         self.session.on_incoming_end(channel, end).await
     }
 

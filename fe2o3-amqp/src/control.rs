@@ -1,14 +1,14 @@
 //! Controls for Connection, Session, and Link
 
 use fe2o3_amqp_types::{
-    definitions::{self, Handle},
+    definitions::{self},
     performatives::Disposition,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
     connection::{AllocSessionError},
-    endpoint::{LinkFlow, OutgoingChannel},
+    endpoint::{LinkFlow, OutgoingChannel, OutputHandle, InputHandle},
     link::LinkRelay,
     session::{frame::SessionIncomingItem, AllocLinkError},
 };
@@ -44,13 +44,13 @@ pub(crate) enum SessionControl {
     AllocateLink {
         link_name: String,
         link_handle: LinkRelay,
-        responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
+        responder: oneshot::Sender<Result<OutputHandle, AllocLinkError>>,
     },
     AllocateIncomingLink {
         link_name: String,
         link_handle: LinkRelay,
-        input_handle: Handle,
-        responder: oneshot::Sender<Result<Handle, AllocLinkError>>,
+        input_handle: InputHandle,
+        responder: oneshot::Sender<Result<OutputHandle, AllocLinkError>>,
     },
     DeallocateLink(String),
     LinkFlow(LinkFlow),

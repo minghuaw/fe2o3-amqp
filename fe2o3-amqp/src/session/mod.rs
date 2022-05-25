@@ -26,7 +26,7 @@ use tracing::{instrument, trace};
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
-    endpoint::{self, LinkFlow, OutgoingChannel, IncomingChannel},
+    endpoint::{self, LinkFlow, OutgoingChannel, IncomingChannel, OutputHandle, InputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
     Payload,
@@ -136,7 +136,7 @@ pub(crate) async fn allocate_link(
     control: &mut mpsc::Sender<SessionControl>,
     link_name: String,
     link_handle: LinkRelay,
-) -> Result<Handle, AllocLinkError> {
+) -> Result<OutputHandle, AllocLinkError> {
     let (responder, resp_rx) = oneshot::channel();
 
     control
@@ -232,8 +232,8 @@ pub struct Session {
 
     /// local links by output handle
     pub(crate) local_links: Slab<LinkRelay>,
-    pub(crate) link_by_name: BTreeMap<String, Handle>,
-    pub(crate) link_by_input_handle: BTreeMap<Handle, Handle>,
+    pub(crate) link_by_name: BTreeMap<String, OutputHandle>,
+    pub(crate) link_by_input_handle: BTreeMap<Handle, OutputHandle>,
     // Maps from DeliveryId to link.DeliveryCount
     pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (Handle, DeliveryTag)>,
 }
@@ -293,7 +293,7 @@ impl endpoint::Session for Session {
         &mut self,
         link_name: String,
         link_handle: LinkRelay,
-    ) -> Result<Handle, Self::AllocError> {
+    ) -> Result<OutputHandle, Self::AllocError> {
         match &self.local_state {
             SessionState::Mapped => {}
             _ => return Err(AllocLinkError::IllegalState),
@@ -306,7 +306,7 @@ impl endpoint::Session for Session {
 
         // get a new entry index
         let entry = self.local_links.vacant_entry();
-        let handle = Handle(entry.key() as u32);
+        let handle = OutputHandle(entry.key() as u32);
 
         // check if handle max is exceeded
         if handle.0 > self.handle_max.0 {
@@ -323,12 +323,12 @@ impl endpoint::Session for Session {
         &mut self,
         link_name: String,
         link_handle: LinkRelay,
-        input_handle: Handle,
-    ) -> Result<Handle, Self::AllocError> {
+        input_handle: InputHandle,
+    ) -> Result<OutputHandle, Self::AllocError> {
         match self.allocate_link(link_name, link_handle) {
             Ok(output_handle) => {
                 self.link_by_input_handle
-                    .insert(input_handle, output_handle.clone());
+                    .insert(input_handle.into(), output_handle.clone());
                 Ok(output_handle)
             }
             Err(err) => Err(err),
@@ -472,7 +472,7 @@ impl endpoint::Session for Session {
                         Ok(opt) => opt,
                         Err((closed, error)) => {
                             return Err(Error::LinkHandleError {
-                                handle: output_handle.clone(),
+                                handle: output_handle.clone().into(),
                                 closed,
                                 error,
                             })
@@ -482,7 +482,7 @@ impl endpoint::Session for Session {
                     // If the unsettled map needs this
                     if let Some((delivery_id, delivery_tag)) = id_and_tag {
                         self.delivery_tag_by_id
-                            .insert(delivery_id, (output_handle.clone(), delivery_tag));
+                            .insert(delivery_id, (output_handle.clone().into(), delivery_tag));
                     }
                 }
                 None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?

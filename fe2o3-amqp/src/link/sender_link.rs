@@ -28,7 +28,8 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?;
+            .ok_or_else(Error::not_attached)?
+            .into();
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
@@ -167,7 +168,8 @@ where
         let handle = self
             .output_handle
             .clone()
-            .ok_or(AmqpError::IllegalState)?;
+            .ok_or(AmqpError::IllegalState)?
+            .into();
 
         let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);

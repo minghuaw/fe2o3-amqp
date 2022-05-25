@@ -3,11 +3,11 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, Handle, LinkError, SequenceNo};
+use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, LinkError, SequenceNo};
 use tokio::sync::RwLock;
 
 use crate::{
-    endpoint::LinkFlow,
+    endpoint::{LinkFlow, OutputHandle},
     util::{Consume, Produce, Producer, ProducerState},
 };
 
@@ -60,9 +60,9 @@ pub(crate) struct LinkFlowStateInner {
 }
 
 impl LinkFlowStateInner {
-    pub fn as_link_flow(&self, output_handle: Handle, echo: bool) -> LinkFlow {
+    pub fn as_link_flow(&self, output_handle: OutputHandle, echo: bool) -> LinkFlow {
         LinkFlow {
-            handle: output_handle,
+            handle: output_handle.into(),
             delivery_count: Some(self.delivery_count),
             link_credit: Some(self.link_credit),
             available: Some(self.available),
@@ -112,7 +112,7 @@ impl LinkFlowState<role::Sender> {
     pub(crate) async fn on_incoming_flow(
         &self,
         flow: LinkFlow,
-        output_handle: Handle,
+        output_handle: OutputHandle,
     ) -> Option<LinkFlow> {
         let mut state = self.lock.write().await;
 
@@ -177,7 +177,7 @@ impl LinkFlowState<role::Receiver> {
     pub(crate) async fn on_incoming_flow(
         &self,
         flow: LinkFlow,
-        output_handle: Handle,
+        output_handle: OutputHandle,
     ) -> Option<LinkFlow> {
         let mut state = self.lock.write().await;
 
@@ -281,7 +281,7 @@ pub(crate) type UnsettledMap<M> = BTreeMap<DeliveryTag, M>;
 
 #[async_trait]
 impl ProducerState for Arc<LinkFlowState<role::Sender>> {
-    type Item = (LinkFlow, Handle);
+    type Item = (LinkFlow, OutputHandle);
     // If echo is requested, a Some(LinkFlow) will be returned
     type Outcome = Option<LinkFlow>;
 
@@ -295,7 +295,7 @@ impl Producer<Arc<LinkFlowState<role::Sender>>> {
     pub async fn on_incoming_flow(
         &mut self,
         flow: LinkFlow,
-        output_handle: Handle,
+        output_handle: OutputHandle,
     ) -> Option<LinkFlow> {
         self.produce((flow, output_handle)).await
     }

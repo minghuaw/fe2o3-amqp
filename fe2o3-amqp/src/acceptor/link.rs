@@ -19,7 +19,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::LinkAttach,
+    endpoint::{LinkAttach, InputHandle},
     link::{
         self,
         delivery::UnsettledMessage,
@@ -266,7 +266,7 @@ impl LinkAcceptor {
         };
 
         // Allocate link in session
-        let input_handle = remote_attach.handle.clone();
+        let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
             &mut session.control,
             remote_attach.name.clone(),
@@ -374,7 +374,7 @@ impl LinkAcceptor {
         };
 
         // Allocate link in session
-        let input_handle = remote_attach.handle.clone();
+        let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
             &mut session.control,
             remote_attach.name.clone(),

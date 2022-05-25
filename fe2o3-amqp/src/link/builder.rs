@@ -15,7 +15,7 @@ use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     link::{Link, LinkRelay, LinkIncomingItem},
     session::{self, SessionHandle},
-    util::{Consumer, Producer},
+    util::{Consumer, Producer}, endpoint::OutputHandle,
 };
 
 use super::{
@@ -333,7 +333,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     pub(crate) fn create_link<C, M>(
         self,
         unsettled: Arc<RwLock<UnsettledMap<M>>>,
-        output_handle: Handle,
+        output_handle: OutputHandle,
         flow_state_consumer: C,
         // state_code: Arc<AtomicU8>,
     ) -> Link<Role, T, C, M> {
@@ -347,7 +347,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
             local_state,
             // state_code,
             name: self.name,
-            output_handle: Some(output_handle),
+            output_handle: Some(output_handle.into()),
             input_handle: None,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,

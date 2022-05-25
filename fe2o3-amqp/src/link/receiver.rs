@@ -220,7 +220,7 @@ impl Drop for Receiver {
         if let Some(handle) = self.link.output_handle.take() {
             if let Some(sender) = self.outgoing.get_ref() {
                 let detach = Detach {
-                    handle,
+                    handle: handle.into(),
                     closed: true,
                     error: None,
                 };
@@ -309,7 +309,7 @@ impl Receiver {
                     })
                 }
             };
-            self.link.output_handle = Some(handle);
+            self.link.output_handle = Some(handle.into());
         }
 
         if let Err(_err) =
