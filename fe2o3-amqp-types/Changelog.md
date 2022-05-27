@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.0.16
+
+1. Added `PartialEq` and `PartialOrd` to `TxnCapability`
+
+## 0.0.15
+
+1. Made target's fields public
+
 ## 0.0.14
 
 1. Added `Display` impl for some message format types
