@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.15
+
+1. Made all fields of `Target` public
+
 ## 0.0.14
 
 1. Added `Display` impl for some message format types

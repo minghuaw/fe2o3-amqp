@@ -160,29 +160,29 @@ mod target_archetype_serde_impl {
 )]
 pub struct Target {
     /// <field name="address" type="*" requires="address"/>
-    address: Option<Address>,
+    pub address: Option<Address>,
 
     /// <field name="durable" type="terminus-durability" default="none"/>
     #[amqp_contract(default)]
-    durable: TerminusDurability,
+    pub durable: TerminusDurability,
 
     /// <field name="expiry-policy" type="terminus-expiry-policy" default="session-end"/>
     #[amqp_contract(default)]
-    expiry_policy: TerminusExpiryPolicy,
+    pub expiry_policy: TerminusExpiryPolicy,
 
     /// <field name="timeout" type="seconds" default="0"/>
     #[amqp_contract(default)]
-    timeout: Seconds,
+    pub timeout: Seconds,
 
     /// <field name="dynamic" type="boolean" default="false"/>
     #[amqp_contract(default)]
-    dynamic: Boolean,
+    pub dynamic: Boolean,
 
     /// <field name="dynamic-node-properties" type="node-properties"/>
-    dynamic_node_properties: Option<NodeProperties>,
+    pub dynamic_node_properties: Option<NodeProperties>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
-    capabilities: Option<Vec<Symbol>>,
+    pub capabilities: Option<Vec<Symbol>>,
 }
 
 impl Target {
