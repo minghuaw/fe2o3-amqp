@@ -2,11 +2,11 @@
 
 ## 0.0.16
 
-1. Added `PartialEq` and `PartialOrd` for `TxnCapabilty`
+1. Added `PartialEq` and `PartialOrd` to `TxnCapability`
 
 ## 0.0.15
 
-1. Made all fields of `Target` public
+1. Made target's fields public
 
 ## 0.0.14
 
