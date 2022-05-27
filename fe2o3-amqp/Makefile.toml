@@ -4,3 +4,50 @@ command = "cargo"
 args = [
     "doc", "--no-deps", "--all-features", "--open"
 ]
+
+[tasks.feature_check]
+dependencies =  [
+    "check_all_features"
+]
+
+[tasks.check_all_features]
+toolchain = "stable"
+command = "cargo"
+args = [
+    "check", "--all-features"
+]
+
+[tasks.check_feature_acceptor]
+toolchain = "stable"
+command = "cargo"
+args = [
+    "check", "--no-default-features", "--features", "acceptor"
+]
+
+[tasks.check_feature_rustls]
+toolchain = "stable"
+command = "cargo"
+args = [
+    "check", "--no-default-features", "--features", "rustls"
+]
+
+[tasks.check_feature_nativetls]
+toolchain = "stable"
+command = "cargo"
+args = [
+    "check", "--no-default-features", "--features", "nativetls"
+]
+
+[tasks.check_feature_transaction]
+toolchain = "stable"
+command = "cargo"
+args = [
+    "check", "--no-default-features", "--features", "transaction"
+]
+
+[tasks.check_feature_group1]
+toolchain = "stable"
+command = "cargo"
+args = [
+    "check", "--no-default-features", "--features", "rustls, transaction"
+]
