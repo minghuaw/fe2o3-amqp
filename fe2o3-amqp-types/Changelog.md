@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.16
+
+1. Added `PartialEq` and `PartialOrd` for `TxnCapabilty`
+
 ## 0.0.15
 
 1. Made all fields of `Target` public
