@@ -122,3 +122,7 @@ where
         }
     }
 }
+
+pub(crate) enum CoordinatorError {
+    
+}

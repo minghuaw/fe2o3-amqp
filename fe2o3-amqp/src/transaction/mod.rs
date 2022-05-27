@@ -23,6 +23,9 @@ use serde_amqp::to_value;
 mod acquisition;
 pub use acquisition::*;
 
+mod manager;
+pub use manager::*;
+
 /// A transaction scope for the client side
 ///
 /// # Examples
@@ -245,7 +248,7 @@ impl Transaction {
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
-        recver
+        recver.inner
             .dispose(
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
@@ -307,7 +310,7 @@ impl Transaction {
         credit: SequenceNo,
     ) -> Result<TxnAcquisition<'r>, link::Error> {
         {
-            let mut writer = recver.link.flow_state.lock.write().await;
+            let mut writer = recver.inner.link.flow_state.lock.write().await;
             match &mut writer.properties {
                 Some(fields) => {
                     let key = Symbol::from("txn-id");
@@ -330,9 +333,9 @@ impl Transaction {
             }
         }
 
-        recver
+        recver.inner
             .link
-            .send_flow(&mut recver.outgoing, Some(credit), None, false)
+            .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
             .await?;
         Ok(TxnAcquisition {
             txn: self,

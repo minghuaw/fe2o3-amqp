@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{Source, Target, TargetArchetype},
+    messaging::{Source, Target, TargetArchetype, DeliveryState},
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
@@ -22,11 +22,11 @@ use crate::{
 use super::{
     delivery::UnsettledMessage,
     error::AttachError,
-    receiver::CreditMode,
+    receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender, SenderFlowState,
+    Receiver, Sender, SenderFlowState, ReceiverFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -478,9 +478,24 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     ///     .unwrap();
     /// ```
     pub async fn attach<R>(
-        mut self,
+        self,
         session: &mut SessionHandle<R>,
     ) -> Result<Receiver, AttachError> {
+        self.attach_inner(session)
+            .await
+            .map(|inner| Receiver { inner })
+    }
+}
+
+impl<T> Builder<role::Receiver, T, WithName, WithTarget>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+{
+    async fn attach_inner<R>(
+        mut self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<ReceiverInner<Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>, AttachError>
+    {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
         let credit_mode = self.credit_mode.clone();
@@ -525,7 +540,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
         // Send an Attach frame
         super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
-        let mut receiver = Receiver {
+        let mut inner = ReceiverInner {
             link,
             buffer_size,
             credit_mode,
@@ -536,8 +551,8 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
             incomplete_transfer: None,
         };
 
-        if let CreditMode::Auto(credit) = receiver.credit_mode {
-            receiver.set_credit(credit).await.map_err(|error| {
+        if let CreditMode::Auto(credit) = inner.credit_mode {
+            inner.set_credit(credit).await.map_err(|error| {
                 match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
@@ -545,7 +560,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
             })?;
         }
 
-        Ok(receiver)
+        Ok(inner)
     }
 }
 

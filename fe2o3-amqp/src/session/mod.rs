@@ -497,12 +497,6 @@ impl endpoint::Session for Session {
         let mut last_echo = first;
         let mut prev = false;
 
-        // let is_settled = match &disposition.state {
-        //     // TODO: What happens if state is not terminal but settles id true?
-        //     Some(state) => disposition.settled || state.is_terminal(),
-        //     None => disposition.settled,
-        // };
-
         if disposition.settled {
             // If it is alrea
             for delivery_id in first..=last {

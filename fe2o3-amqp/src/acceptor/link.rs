@@ -23,7 +23,7 @@ use crate::{
     link::{
         self,
         delivery::UnsettledMessage,
-        receiver::CreditMode,
+        receiver::{CreditMode, ReceiverInner},
         role,
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
@@ -309,7 +309,7 @@ impl LinkAcceptor {
         link.on_incoming_attach(remote_attach).await?;
         link.send_attach(&mut outgoing).await?;
 
-        let mut receiver = Receiver {
+        let mut inner = ReceiverInner {
             link,
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode.clone(),
@@ -320,9 +320,9 @@ impl LinkAcceptor {
             incomplete_transfer: None,
         };
 
-        if let CreditMode::Auto(credit) = receiver.credit_mode {
+        if let CreditMode::Auto(credit) = inner.credit_mode {
             tracing::debug!("Setting credits");
-            receiver.set_credit(credit).await.map_err(|error| {
+            inner.set_credit(credit).await.map_err(|error| {
                 match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
@@ -330,7 +330,7 @@ impl LinkAcceptor {
             })?;
         }
 
-        Ok(LinkEndpoint::Receiver(receiver))
+        Ok(LinkEndpoint::Receiver(Receiver {inner}))
     }
 
     async fn accept_as_new_sender(
