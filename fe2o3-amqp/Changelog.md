@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.0.12
+
+1. Fixed missing generics bug for using default connector for either TLS feature
+2. Added checking tasks for individual features in cargo make
+
+## 0.0.11
+
+1. Fixed typo in Readme
+
 ## 0.0.10
 
 1. Reduced lookups needed for incoming session frames and link frames
