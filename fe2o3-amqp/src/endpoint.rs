@@ -303,11 +303,14 @@ pub(crate) trait LinkAttach {
         W: Sink<LinkFrame> + Send + Unpin;
 }
 
-pub(crate) trait Link: LinkAttach + LinkDetach {}
+pub(crate) trait Link: LinkAttach + LinkDetach {
+    fn role() -> Role;
+}
 
 pub(crate) trait LinkExt: Link {
     type FlowState;
     type Unsettled;
+    type Target;
 
     fn name(&self) -> &str;
 
@@ -320,6 +323,8 @@ pub(crate) trait LinkExt: Link {
     fn unsettled(&self) -> &Self::Unsettled;
 
     fn rcv_settle_mode(&self) -> &ReceiverSettleMode;
+
+    fn target(&self) -> &Option<Self::Target>;
 }
 
 /// A subset of the fields in the Flow performative
@@ -375,8 +380,6 @@ pub(crate) enum Settlement {
 #[async_trait]
 pub(crate) trait SenderLink: Link + LinkExt {
     type Error: Send;
-
-    const ROLE: Role = Role::Sender;
 
     /// Set and send flow state
     async fn send_flow<W>(
@@ -435,8 +438,6 @@ pub(crate) trait SenderLink: Link + LinkExt {
 #[async_trait]
 pub(crate) trait ReceiverLink: Link + LinkExt {
     type Error: Send;
-
-    const ROLE: Role = Role::Receiver;
 
     /// Set and send flow state
     async fn send_flow<W>(

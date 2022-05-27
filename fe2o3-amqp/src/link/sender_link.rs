@@ -8,7 +8,7 @@ use super::*;
 #[async_trait]
 impl<T> endpoint::SenderLink for Link<role::Sender, T, SenderFlowState, UnsettledMessage>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype>  + VerifyTargetArchetype + Clone + Send,
 {
     type Error = link::Error;
 

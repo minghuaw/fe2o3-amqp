@@ -19,7 +19,7 @@ const FOOTER_CODE: u8 = 0x78;
 #[async_trait]
 impl<Tar> endpoint::ReceiverLink for Link<role::Receiver, Tar, ReceiverFlowState, DeliveryState> 
 where
-    Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    Tar: Into<TargetArchetype> + TryFrom<TargetArchetype>  + VerifyTargetArchetype + Clone + Send,
 {
     type Error = link::Error;
 
