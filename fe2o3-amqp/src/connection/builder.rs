@@ -745,7 +745,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         self,
         stream: Io,
         domain: &str,
-    ) -> Result<ConnectionHandle, OpenError>
+    ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -777,7 +777,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         self,
         stream: Io,
         domain: &str,
-    ) -> Result<ConnectionHandle, OpenError>
+    ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
