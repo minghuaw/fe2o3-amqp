@@ -26,6 +26,9 @@ pub use acquisition::*;
 mod manager;
 pub use manager::*;
 
+mod coordinator;
+pub use coordinator::*;
+
 /// A transaction scope for the client side
 ///
 /// # Examples
