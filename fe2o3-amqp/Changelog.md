@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.13
+
+1. Updated `fe2o3-amqp-types` to 0.0.16
+
 ## 0.0.12
 
 1. Fixed missing generics bug for using default connector for either TLS feature
