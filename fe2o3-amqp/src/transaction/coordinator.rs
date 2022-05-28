@@ -8,7 +8,7 @@ pub(crate) type CoordinatorLink = Link<role::Receiver, Coordinator, ReceiverFlow
 /// Transaction coordinator
 #[derive(Debug)]
 pub struct TxnCoordinator {
-    inner: ReceiverInner<CoordinatorLink>,
+    pub(crate) inner: ReceiverInner<CoordinatorLink>,
 }
 
 impl TxnCoordinator {

@@ -4,17 +4,19 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{performatives::{Attach, Transfer, Disposition, Flow, Detach}, transaction::{Declare, Discharge, TransactionId}};
 
-use crate::{endpoint::LinkFlow, link::receiver::ReceiverInner};
+use crate::{endpoint::{LinkFlow, InputHandle}, link::receiver::ReceiverInner};
 
 use super::TxnCoordinator;
 /// Transaction manager
 #[derive(Debug)]
 pub struct TxnManager {
-    coordinators: BTreeMap<TransactionId, TxnCoordinator>
+    pub(crate) coordinators: BTreeMap<InputHandle, TxnCoordinator>
 }
 
 impl TxnManager {
     pub(crate) fn on_incoming_attach(&mut self, attach: Attach) {
+
+
         todo!()
     }
 
