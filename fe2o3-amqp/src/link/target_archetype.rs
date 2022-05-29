@@ -76,12 +76,12 @@ impl VerifyTargetArchetype for Coordinator {
                         return Err(definitions::Error::new(
                             AmqpError::InternalError,
                             "Desired transaction capabilities are not supported".to_string(),
-                            None
-                        ))
+                            None,
+                        ));
                     }
                 }
                 Ok(())
-            },
+            }
             (Some(desired), None) => {
                 if desired.is_empty() {
                     Ok(())
@@ -89,12 +89,11 @@ impl VerifyTargetArchetype for Coordinator {
                     Err(definitions::Error::new(
                         AmqpError::InternalError,
                         "Desired transaction capabilities are not supported".to_string(),
-                        None
+                        None,
                     ))
                 }
-            },
-            (None, Some(_)) 
-            | (None, None) => Ok(())
+            }
+            (None, Some(_)) | (None, None) => Ok(()),
         }
     }
 

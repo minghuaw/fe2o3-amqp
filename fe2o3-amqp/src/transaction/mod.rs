@@ -23,11 +23,18 @@ use serde_amqp::to_value;
 mod acquisition;
 pub use acquisition::*;
 
+#[cfg(feature = "acceptor")]
 mod manager;
+
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
+#[cfg(feature = "acceptor")]
 pub use manager::*;
 
 mod coordinator;
 pub use coordinator::*;
+
+mod resource;
+pub use resource::*;
 
 /// A transaction scope for the client side
 ///
@@ -251,7 +258,8 @@ impl Transaction {
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
-        recver.inner
+        recver
+            .inner
             .dispose(
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
@@ -336,7 +344,8 @@ impl Transaction {
             }
         }
 
-        recver.inner
+        recver
+            .inner
             .link
             .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
             .await?;

@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, Fields, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
     },
-    messaging::{DeliveryState, Target},
+    messaging::{DeliveryState, Target, TargetArchetype},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -27,8 +27,10 @@ use crate::{
         role,
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
+        target_archetype::VerifyTargetArchetype,
         AttachError, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState, SenderFlowState,
     },
+    session::SessionHandle,
     util::{Consumer, Initialized, Producer},
     Receiver, Sender,
 };
@@ -163,10 +165,10 @@ impl LinkAcceptor {
 
     /// Reject an incoming attach with an attach that has either target
     /// or source field left empty (None or Null)
-    pub async fn reject_incoming_attach(
+    pub async fn reject_incoming_attach<R>(
         &self,
         mut remote_attach: Attach,
-        session: &mut ListenerSessionHandle,
+        session: &mut SessionHandle<R>,
     ) -> Result<(), AttachError> {
         let local_attach = match remote_attach.role {
             Role::Sender => {
@@ -187,26 +189,36 @@ impl LinkAcceptor {
         Ok(())
     }
 
-    /// Accept incoming link with an explicit Attach performative
-    pub async fn accept_incoming_attach(
+    pub(crate) async fn reject_if_source_or_target_is_none<R>(
         &self,
         remote_attach: Attach,
-        session: &mut ListenerSessionHandle,
-    ) -> Result<LinkEndpoint, AttachError> {
+        session: &mut SessionHandle<R>,
+    ) -> Result<Attach, AttachError> {
         match (
             &remote_attach.source.is_none(),
             &remote_attach.target.is_none(),
         ) {
             (true, _) => {
                 self.reject_incoming_attach(remote_attach, session).await?;
-                return Err(AttachError::SourceIsNone);
+                Err(AttachError::SourceIsNone)
             }
             (_, true) => {
                 self.reject_incoming_attach(remote_attach, session).await?;
-                return Err(AttachError::TargetIsNone);
+                Err(AttachError::TargetIsNone)
             }
-            _ => {}
+            _ => Ok(remote_attach),
         }
+    }
+
+    /// Accept incoming link with an explicit Attach performative
+    pub async fn accept_incoming_attach<R>(
+        &self,
+        remote_attach: Attach,
+        session: &mut SessionHandle<R>,
+    ) -> Result<LinkEndpoint, AttachError> {
+        let remote_attach = self
+            .reject_if_source_or_target_is_none(remote_attach, session)
+            .await?;
 
         // In this case, the sender is considered to hold the authoritative version of the
         // source properties, the receiver is considered to hold the authoritative version of the target properties.
@@ -219,11 +231,17 @@ impl LinkAcceptor {
         }
     }
 
-    async fn accept_as_new_receiver(
+    pub(crate) async fn accept_as_new_receiver_inner<R, T>(
         &self,
         remote_attach: Attach,
-        session: &mut ListenerSessionHandle,
-    ) -> Result<LinkEndpoint, AttachError> {
+        session: &mut SessionHandle<R>,
+    ) -> Result<
+        ReceiverInner<link::Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>,
+        AttachError,
+    >
+    where
+        T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    {
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
         let rcv_settle_mode = if self
@@ -277,7 +295,7 @@ impl LinkAcceptor {
         .await?;
 
         let target = match &remote_attach.target {
-            Some(t) => Target::try_from(*t.clone()).map_err(|_| {
+            Some(t) => T::try_from(*t.clone()).map_err(|_| {
                 AttachError::Local(definitions::Error::new(
                     AmqpError::NotImplemented,
                     "Coordinator is not implemented".to_string(),
@@ -287,7 +305,7 @@ impl LinkAcceptor {
             None => return Err(AttachError::TargetIsNone),
         };
 
-        let mut link = link::Link::<role::Receiver, Target, ReceiverFlowState, DeliveryState> {
+        let mut link = link::Link::<role::Receiver, T, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
             // state_code,
@@ -322,21 +340,32 @@ impl LinkAcceptor {
 
         if let CreditMode::Auto(credit) = inner.credit_mode {
             tracing::debug!("Setting credits");
-            inner.set_credit(credit).await.map_err(|error| {
-                match AttachError::try_from(error) {
+            inner
+                .set_credit(credit)
+                .await
+                .map_err(|error| match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
-                }
-            })?;
+                })?;
         }
 
-        Ok(LinkEndpoint::Receiver(Receiver {inner}))
+        Ok(inner)
     }
 
-    async fn accept_as_new_sender(
+    async fn accept_as_new_receiver<R>(
         &self,
         remote_attach: Attach,
-        session: &mut ListenerSessionHandle,
+        session: &mut SessionHandle<R>,
+    ) -> Result<LinkEndpoint, AttachError> {
+        self.accept_as_new_receiver_inner(remote_attach, session)
+            .await
+            .map(|inner| LinkEndpoint::Receiver(Receiver { inner }))
+    }
+
+    async fn accept_as_new_sender<R>(
+        &self,
+        remote_attach: Attach,
+        session: &mut SessionHandle<R>,
     ) -> Result<LinkEndpoint, AttachError> {
         let snd_settle_mode = if self
             .supported_snd_settle_modes

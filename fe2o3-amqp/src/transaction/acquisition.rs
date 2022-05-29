@@ -51,7 +51,8 @@ impl<'r> TxnAcquisition<'r> {
         }
 
         // set drain to true
-        self.recver.inner
+        self.recver
+            .inner
             .link
             .send_flow(&mut self.recver.inner.outgoing, Some(0), Some(true), true)
             .await?;
@@ -133,9 +134,12 @@ impl<'r> Drop for TxnAcquisition<'r> {
 
             // Set drain to true
             if let Some(sender) = self.recver.inner.outgoing.get_ref() {
-                if let Err(err) =
-                    (&mut self.recver.inner.link).blocking_send_flow(sender, Some(0), Some(true), true)
-                {
+                if let Err(err) = (&mut self.recver.inner.link).blocking_send_flow(
+                    sender,
+                    Some(0),
+                    Some(true),
+                    true,
+                ) {
                     tracing::error!("error {:?}", err)
                 }
             }

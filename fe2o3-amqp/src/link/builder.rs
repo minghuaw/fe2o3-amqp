@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{Source, Target, TargetArchetype, DeliveryState},
+    messaging::{DeliveryState, Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
@@ -26,7 +26,8 @@ use super::{
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender, SenderFlowState, ReceiverFlowState, target_archetype::VerifyTargetArchetype,
+    target_archetype::VerifyTargetArchetype,
+    Receiver, ReceiverFlowState, Sender, SenderFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -382,7 +383,12 @@ impl<T> Builder<role::Sender, T, WithName, WithTarget>
 where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
-    fn create_flow_state_containers(&mut self) -> (Producer<Arc<LinkFlowState<role::Sender>>>, Consumer<Arc<LinkFlowState<role::Sender>>>) {
+    fn create_flow_state_containers(
+        &mut self,
+    ) -> (
+        Producer<Arc<LinkFlowState<role::Sender>>>,
+        Consumer<Arc<LinkFlowState<role::Sender>>>,
+    ) {
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -459,10 +465,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(
-        self,
-        session: &mut SessionHandle<R>,
-    ) -> Result<Receiver, AttachError> {
+    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, AttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Receiver { inner })
@@ -534,12 +537,13 @@ where
         };
 
         if let CreditMode::Auto(credit) = inner.credit_mode {
-            inner.set_credit(credit).await.map_err(|error| {
-                match AttachError::try_from(error) {
+            inner
+                .set_credit(credit)
+                .await
+                .map_err(|error| match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
-                }
-            })?;
+                })?;
         }
 
         Ok(inner)

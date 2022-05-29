@@ -44,7 +44,8 @@ use crate::{
 
 use self::{
     delivery::Delivery,
-    state::{LinkFlowState, LinkState, UnsettledMap}, target_archetype::VerifyTargetArchetype,
+    state::{LinkFlowState, LinkState, UnsettledMap},
+    target_archetype::VerifyTargetArchetype,
 };
 
 /// Default amount of link credit
@@ -303,21 +304,21 @@ where
             Role::Receiver => {
                 // **the receiver is considered to hold the authoritative version of the target properties**.
                 let target = match remote_attach.target {
-                    Some(t) => {
-                        T::try_from(*t).map_err(|_| {
-                            AttachError::Local(definitions::Error::new(
-                                AmqpError::NotImplemented,
-                                None,
-                                None,
-                            ))
-                        })?
-                    },
+                    Some(t) => T::try_from(*t).map_err(|_| {
+                        AttachError::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            None,
+                            None,
+                        ))
+                    })?,
                     None => return Err(AttachError::TargetIsNone),
                 };
                 // Note that it is the responsibility of the transaction controller to
                 // verify that the capabilities of the controller meet its requirements.
                 if let Some(local) = &self.target {
-                    local.verify_as_sender(&target).map_err(AttachError::Local)?;
+                    local
+                        .verify_as_sender(&target)
+                        .map_err(AttachError::Local)?;
                 }
                 self.target = Some(target);
 

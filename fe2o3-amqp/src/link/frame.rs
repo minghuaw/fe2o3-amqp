@@ -22,3 +22,11 @@ pub(crate) enum LinkFrame {
     Disposition(Disposition),
     Detach(Detach),
 }
+
+/// Regular Attach for non-transactional links
+#[derive(Debug)]
+pub struct RegAttach {}
+
+/// Attach frame for control links
+#[derive(Debug)]
+pub struct TxnAttach {}

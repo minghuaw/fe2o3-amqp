@@ -339,7 +339,6 @@ where
         Ok(self)
     }
 
-
     #[inline]
     async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
     where
@@ -482,7 +481,6 @@ where
             .await
     }
 
-
     // TODO: batch disposition
     #[inline]
     pub(crate) async fn dispose(
@@ -506,7 +504,6 @@ where
         Ok(())
     }
 
-
     /// Drain the link.
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
@@ -525,7 +522,6 @@ where
             .send_flow(&mut self.outgoing, None, Some(true), false)
             .await
     }
-
 
     /// Detach the link.
     ///
@@ -637,7 +633,6 @@ where
     }
 }
 
-
 // TODO: Use type state to differentiate Mode First and Mode Second?
 impl Receiver {
     /// Receive a message from the link
@@ -673,7 +668,6 @@ impl Receiver {
         self.inner.drain().await
     }
 
-
     /// Detach the link.
     ///
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
@@ -694,7 +688,8 @@ impl Receiver {
     /// to `Accept`
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Accepted(Accepted {});
-        self.inner.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
             .await
     }
 
@@ -708,7 +703,8 @@ impl Receiver {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        self.inner.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
             .await
     }
 
@@ -716,7 +712,8 @@ impl Receiver {
     /// to `Release`
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
         let state = DeliveryState::Released(Released {});
-        self.inner.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
             .await
     }
 
@@ -728,7 +725,8 @@ impl Receiver {
         modified: Modified,
     ) -> Result<(), Error> {
         let state = DeliveryState::Modified(modified);
-        self.inner.dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
             .await
     }
 }

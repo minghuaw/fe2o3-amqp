@@ -123,6 +123,4 @@ where
     }
 }
 
-pub(crate) enum CoordinatorError {
-    
-}
+pub(crate) enum CoordinatorError {}

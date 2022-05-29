@@ -1,9 +1,16 @@
-use fe2o3_amqp_types::{transaction::{Coordinator, Declare, Discharge}, messaging::DeliveryState, performatives::{Transfer, Disposition}};
+use fe2o3_amqp_types::{
+    messaging::DeliveryState,
+    performatives::{Disposition, Transfer},
+    transaction::{Coordinator, Declare, Discharge},
+};
 
-use crate::{link::{ReceiverFlowState, Link, role, receiver::ReceiverInner}, endpoint::LinkFlow};
+use crate::{
+    endpoint::LinkFlow,
+    link::{receiver::ReceiverInner, role, Link, ReceiverFlowState},
+};
 
-
-pub(crate) type CoordinatorLink = Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
+pub(crate) type CoordinatorLink =
+    Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
 
 /// Transaction coordinator
 #[derive(Debug)]
@@ -24,7 +31,10 @@ impl TxnCoordinator {
         todo!()
     }
 
-    pub(crate) fn on_incoming_disposition(&mut self, disposition: Disposition) -> Option<Disposition> {
+    pub(crate) fn on_incoming_disposition(
+        &mut self,
+        disposition: Disposition,
+    ) -> Option<Disposition> {
         todo!()
     }
 
