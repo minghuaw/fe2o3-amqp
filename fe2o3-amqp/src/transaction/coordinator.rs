@@ -12,13 +12,30 @@ use crate::{
 pub(crate) type CoordinatorLink =
     Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
 
-/// Transaction coordinator
-#[derive(Debug)]
-pub struct TxnCoordinator {
-    pub(crate) inner: ReceiverInner<CoordinatorLink>,
+// /// State of transaction coordinator
+// pub enum TxnCoordinatorState {
+//     /// The control link is established
+//     Established,
+
+//     /// 
+// }
+
+pub(crate) mod coordinator_state {
+    pub struct Established {}
+
+    pub struct TxnDeclared {}
+
+    pub struct Closed {}
 }
 
-impl TxnCoordinator {
+/// Transaction coordinator
+#[derive(Debug)]
+pub struct TxnCoordinator<T> {
+    pub(crate) inner: ReceiverInner<CoordinatorLink>,
+    pub(crate) state: T
+}
+
+impl<T> TxnCoordinator<T> {
     pub(crate) fn on_incoming_transfer(&mut self, transfer: Transfer) -> Option<Transfer> {
         todo!()
     }
@@ -40,5 +57,9 @@ impl TxnCoordinator {
 
     pub(crate) fn on_incoming_flow(&mut self, flow: LinkFlow) {
         todo!()
+    }
+
+    async fn even_loop(self) {
+
     }
 }

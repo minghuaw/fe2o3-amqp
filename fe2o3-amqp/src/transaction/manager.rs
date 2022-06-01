@@ -13,10 +13,21 @@ use crate::{
     acceptor::LinkAcceptor,
     endpoint::{InputHandle, LinkFlow},
     link::{self, receiver::ReceiverInner, role, state::LinkState, AttachError, ReceiverFlowState},
-    session::SessionHandle,
+    session::SessionHandle, Payload,
 };
 
-use super::TxnCoordinator;
+use super::{TxnCoordinator, coordinator_state::Established};
+
+pub(crate) enum TxnWorkFrame {
+    Post{
+        input_handle: InputHandle,
+        transfer: Transfer,
+        payload: Payload,
+    },
+    Retire(Disposition),
+    Acquire()
+}
+
 /// Transaction manager
 #[derive(Debug)]
 pub struct TxnManager {
@@ -51,11 +62,11 @@ impl TxnManager {
                 )))
             }
         };
-        let coordinator = TxnCoordinator { inner };
+        let coordinator = TxnCoordinator { inner, state: Established {} };
         todo!()
     }
 
-    pub(crate) fn on_incoming_transfer(&mut self, transfer: Transfer) -> Option<Transfer> {
+    pub(crate) fn intercept_incoming_transfer(&mut self, transfer: Transfer) -> Option<Transfer> {
         todo!()
     }
 

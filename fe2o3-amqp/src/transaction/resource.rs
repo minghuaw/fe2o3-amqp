@@ -5,20 +5,10 @@ use crate::{endpoint::InputHandle, Payload};
 
 use super::TxnCoordinator;
 
-pub(crate) enum TxnWorkFrame {
-    Post{
-        input_handle: InputHandle,
-        transfer: Transfer,
-        payload: Payload,
-    },
-    Retire(Disposition),
-    Acquire()
-}
-
-/// Represents the transactional resource
-#[derive(Debug)]
-pub struct ResourceManager {
-    coordinator: TxnCoordinator,
-    work_frames: mpsc::Receiver<TxnWorkFrame>,
-}
+// /// Represents the transactional resource
+// #[derive(Debug)]
+// pub struct ResourceManager {
+//     coordinator: TxnCoordinator,
+//     work_frames: mpsc::Receiver<TxnWorkFrame>,
+// }
 
