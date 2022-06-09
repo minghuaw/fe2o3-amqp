@@ -1,3 +1,5 @@
+use std::sync::{Arc, atomic::AtomicU64};
+
 use fe2o3_amqp_types::{
     messaging::DeliveryState,
     performatives::{Disposition, Transfer},
@@ -20,22 +22,22 @@ pub(crate) type CoordinatorLink =
 //     /// 
 // }
 
-pub(crate) mod coordinator_state {
-    pub struct Established {}
+// pub(crate) mod coordinator_state {
+//     pub struct Established {}
 
-    pub struct TxnDeclared {}
+//     pub struct TxnDeclared {}
 
-    pub struct Closed {}
-}
+//     pub struct Closed {}
+// }
 
 /// Transaction coordinator
 #[derive(Debug)]
-pub struct TxnCoordinator<T> {
+pub struct TxnCoordinator {
     pub(crate) inner: ReceiverInner<CoordinatorLink>,
-    pub(crate) state: T
+    pub(crate) txn_id_source: Arc<AtomicU64>,
 }
 
-impl<T> TxnCoordinator<T> {
+impl TxnCoordinator {
     pub(crate) fn on_incoming_transfer(&mut self, transfer: Transfer) -> Option<Transfer> {
         todo!()
     }

@@ -55,6 +55,15 @@ pub(crate) enum SessionControl {
     DeallocateLink(OutputHandle),
     LinkFlow(LinkFlow),
     Disposition(Disposition),
+
+    #[cfg(feature = "transaction")]
+    CommitPosting(),
+
+    #[cfg(feature = "transaction")]
+    CommitRetirement(),
+
+    #[cfg(feature = "transaction")]
+    CommitAcquisition(),
 }
 
 impl std::fmt::Display for SessionControl {
@@ -75,6 +84,9 @@ impl std::fmt::Display for SessionControl {
             SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({:?})", name),
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
+            SessionControl::CommitPosting() => write!(f, "CommitPosting"),
+            SessionControl::CommitRetirement() => write!(f, "CommitRetirement"),
+            SessionControl::CommitAcquisition() => write!(f, "CommitAcquisition"),
         }
     }
 }

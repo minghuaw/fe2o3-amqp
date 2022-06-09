@@ -340,7 +340,7 @@ where
     }
 
     #[inline]
-    async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
+    pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {

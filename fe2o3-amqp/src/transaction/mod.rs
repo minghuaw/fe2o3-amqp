@@ -36,6 +36,8 @@ pub use coordinator::*;
 mod resource;
 pub use resource::*;
 
+mod control_link_frame;
+
 /// A transaction scope for the client side
 ///
 /// # Examples

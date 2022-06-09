@@ -143,6 +143,12 @@ impl std::fmt::Display for LinkAcceptor {
     }
 }
 
+impl Default for LinkAcceptor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LinkAcceptor {
     /// Creates a default LinkAcceptor
     pub fn new() -> Self {

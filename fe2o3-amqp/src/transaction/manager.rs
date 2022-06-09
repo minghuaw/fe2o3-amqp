@@ -1,44 +1,67 @@
 //! Listener side transaction manager
 
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::{
+    collections::BTreeMap,
+    marker::PhantomData,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use fe2o3_amqp_types::{
-    definitions::{ReceiverSettleMode, SenderSettleMode, AmqpError, Role, self},
+    definitions::{self, AmqpError, ReceiverSettleMode, Role, SenderSettleMode},
     messaging::DeliveryState,
     performatives::{Attach, Detach, Disposition, Flow, Transfer},
     transaction::{Coordinator, Declare, Discharge, TransactionId, TxnCapability},
 };
+use tokio::sync::mpsc;
 
 use crate::{
     acceptor::LinkAcceptor,
     endpoint::{InputHandle, LinkFlow},
     link::{self, receiver::ReceiverInner, role, state::LinkState, AttachError, ReceiverFlowState},
-    session::SessionHandle, Payload,
+    session::SessionHandle,
+    Payload,
 };
 
-use super::{TxnCoordinator, coordinator_state::Established};
+use super::TxnCoordinator;
 
 pub(crate) enum TxnWorkFrame {
-    Post{
+    Post {
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
     },
     Retire(Disposition),
-    Acquire()
+    Acquire(),
 }
+
+pub(crate) type TxnWorkSender = mpsc::Sender<TxnWorkFrame>;
 
 /// Transaction manager
 #[derive(Debug)]
-pub struct TxnManager {
+pub struct ResourceManager {
     pub(crate) acceptor: LinkAcceptor,
-    pub(crate) coordinators: BTreeMap<TransactionId, InputHandle>,
+    pub(crate) resources: BTreeMap<TransactionId, TxnWorkSender>,
+    pub(crate) txn_id_source: Arc<AtomicU64>,
 }
 
-impl TxnManager {
-    /// Creates a builder for TxnManager
-    pub fn builder() {
-        todo!()
+impl Default for ResourceManager {
+    fn default() -> Self {
+        Self {
+            acceptor: Default::default(),
+            resources: Default::default(),
+            txn_id_source: Arc::new(AtomicU64::new(0)),
+        }
+    }
+}
+
+impl ResourceManager {
+    /// Creates a new transaction resource manager
+    pub fn new(acceptor: LinkAcceptor) -> Self {
+        Self {
+            acceptor,
+            resources: Default::default(),
+            txn_id_source: Arc::new(AtomicU64::new(0)),
+        }
     }
 
     pub(crate) async fn accept_incoming_attach<R>(
@@ -52,17 +75,26 @@ impl TxnManager {
             .await?;
 
         let inner = match remote_attach.role {
-            Role::Sender => self.acceptor.accept_as_new_receiver_inner::<R, Coordinator>(remote_attach, session).await?,
+            Role::Sender => {
+                self.acceptor
+                    .accept_as_new_receiver_inner::<R, Coordinator>(remote_attach, session)
+                    .await?
+            }
             Role::Receiver => {
-                self.acceptor.reject_incoming_attach(remote_attach, session).await?;
+                self.acceptor
+                    .reject_incoming_attach(remote_attach, session)
+                    .await?;
                 return Err(AttachError::Local(definitions::Error::new(
                     AmqpError::NotAllowed,
                     "Controller has to be a sender".to_string(),
-                    None
-                )))
+                    None,
+                )));
             }
         };
-        let coordinator = TxnCoordinator { inner, state: Established {} };
+        let coordinator = TxnCoordinator {
+            inner,
+            txn_id_source: self.txn_id_source.clone(),
+        };
         todo!()
     }
 
@@ -85,4 +117,3 @@ impl TxnManager {
         todo!()
     }
 }
-

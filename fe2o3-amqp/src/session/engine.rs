@@ -221,6 +221,15 @@ where
                     // event loop has stopped. It should be treated as an io error
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
+            SessionControl::CommitPosting() => {
+                todo!()
+            }
+            SessionControl::CommitRetirement() => {
+                todo!()
+            }         
+            SessionControl::CommitAcquisition() => {
+                todo!()
+            }   
         }
 
         match self.session.local_state() {
