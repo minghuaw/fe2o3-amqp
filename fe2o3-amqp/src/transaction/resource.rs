@@ -7,12 +7,12 @@ use super::{TxnCoordinator, TxnWorkFrame};
 
 /// Represents the transactional resource
 #[derive(Debug)]
-pub struct ResourceManager {
+pub struct TxnResource {
     coordinator: TxnCoordinator,
     work_frames: mpsc::Receiver<TxnWorkFrame>,
 }
 
-impl ResourceManager {
+impl TxnResource {
     async fn event_loop(mut self) {
         loop {
             tokio::select! {
