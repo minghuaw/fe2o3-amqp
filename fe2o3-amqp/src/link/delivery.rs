@@ -48,6 +48,11 @@ impl<T> Delivery<T> {
         self.message
     }
 
+    /// Get a reference to the message body
+    pub fn body(&self) -> &Body<T> {
+        &self.message.body
+    }
+
     /// Consume the delivery into the message body section
     pub fn into_body(self) -> Body<T> {
         self.message.body

@@ -528,10 +528,16 @@ where
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
-    #[inline]
-    pub async fn detach(&mut self) -> Result<(), DetachError> {
+    pub async fn detach_with_error(
+        &mut self,
+        error: Option<definitions::Error>,
+    ) -> Result<(), DetachError> {
         // Send a non-closing detach
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, false, None).await {
+        if let Err(e) = self
+            .link
+            .send_detach(&mut self.outgoing, false, error)
+            .await
+        {
             return Err(DetachError::new(false, Some(e)));
         }
 
@@ -554,7 +560,7 @@ where
             let session_control = self.session.clone();
             self.reattach_inner(session_control).await?;
 
-            self.close().await?;
+            self.close_with_error(None).await?; // TODO: should error be resent?
 
             // A peer closes a link by sending the detach frame with the handle for the
             // specified link, and the closed flag set to true. The partner will destroy
@@ -575,10 +581,13 @@ where
     ///
     /// This will send a Detach performative with the `closed` field set to true.
     #[inline]
-    pub async fn close(&mut self) -> Result<(), DetachError> {
+    pub async fn close_with_error(
+        &mut self,
+        error: Option<definitions::Error>,
+    ) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, None).await {
+        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, error).await {
             return Err(DetachError::new(false, Some(e)));
         }
 
@@ -674,14 +683,36 @@ impl Receiver {
     /// peer responds with a Detach performative whose `closed` field is set to true, the link will
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(&mut self) -> Result<(), DetachError> {
-        self.inner.detach().await
+        self.inner.detach_with_error(None).await
+    }
+
+    /// Detach the link with an error.
+    ///
+    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
+    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
+    /// re-attach and then close by exchanging closing Detach performatives.
+    pub async fn detach_with_error(
+        &mut self,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), DetachError> {
+        self.inner.detach_with_error(error.into()).await
     }
 
     /// Close the link.
     ///
     /// This will send a Detach performative with the `closed` field set to true.
     pub async fn close(&mut self) -> Result<(), DetachError> {
-        self.inner.close().await
+        self.inner.close_with_error(None).await
+    }
+
+    /// Close the link with an error.
+    ///
+    /// This will send a Detach performative with the `closed` field set to true.
+    pub async fn close_with_error(
+        &mut self,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), DetachError> {
+        self.inner.close_with_error(error.into()).await
     }
 
     /// Accept the message by sending a disposition with the `delivery_state` field set

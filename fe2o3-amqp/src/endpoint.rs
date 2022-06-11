@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, Fields, Handle, MessageFormat, ReceiverSettleMode,
-        Role, SequenceNo,
+        Role, SequenceNo, self,
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
@@ -286,7 +286,7 @@ pub(crate) trait LinkDetach {
         &mut self,
         writer: &mut W,
         closed: bool,
-        error: Option<Self::DetachError>,
+        error: Option<Error>,
     ) -> Result<(), Self::DetachError>
     where
         W: Sink<LinkFrame> + Send + Unpin;

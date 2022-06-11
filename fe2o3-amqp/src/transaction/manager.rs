@@ -24,6 +24,7 @@ use crate::{
 
 use super::TxnCoordinator;
 
+#[derive(Debug)]
 pub(crate) enum TxnWorkFrame {
     Post {
         input_handle: InputHandle,
@@ -93,7 +94,6 @@ impl ResourceManager {
         };
         let coordinator = TxnCoordinator {
             inner,
-            txn_id_source: self.txn_id_source.clone(),
         };
         todo!()
     }

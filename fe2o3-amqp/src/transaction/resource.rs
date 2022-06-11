@@ -7,19 +7,10 @@ use super::{TxnCoordinator, TxnWorkFrame};
 
 /// Represents the transactional resource
 #[derive(Debug)]
-pub struct TxnResource {
-    coordinator: TxnCoordinator,
-    work_frames: mpsc::Receiver<TxnWorkFrame>,
+pub struct ResourceTransaction {
+    buf: Vec<TxnWorkFrame>
 }
 
-impl TxnResource {
-    async fn event_loop(mut self) {
-        loop {
-            tokio::select! {
-                delivery = self.coordinator.inner.recv_inner::<ControlMessageBody>() => {
+impl ResourceTransaction {
 
-                }
-            }
-        }
-    }
 }
