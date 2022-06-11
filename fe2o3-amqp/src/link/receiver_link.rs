@@ -347,7 +347,7 @@ where
 
 /// Finds offset of a complete message
 fn rfind_offset_of_complete_message(bytes: &[u8]) -> Option<u64> {
-    // For a complete message, the only need is to check Footer or BodySection
+    // For a complete message, the only need is to check Footer or Body
 
     let len = bytes.len();
     let mut iter = bytes
@@ -519,7 +519,7 @@ mod tests {
 
     use fe2o3_amqp_types::{
         messaging::{
-            message::{BodySection, __private::Serializable},
+            message::{Body, __private::Serializable},
             AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
         },
         primitives::Value,
@@ -542,7 +542,7 @@ mod tests {
             // message_annotations: None,
             properties: None,
             application_properties: None,
-            body_section: BodySection::Value(AmqpValue(Value::Bool(true))),
+            body: Body::Value(AmqpValue(Value::Bool(true))),
             footer: None,
         };
         // let mut buf = Vec::new();
