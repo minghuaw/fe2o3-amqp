@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.17
+
+1. Renamed `Message::body_section` to `body`
+2. Renamed `BodySection` to `Body`
+
 ## 0.0.16
 
 1. Added `PartialEq` and `PartialOrd` to `TxnCapability`
