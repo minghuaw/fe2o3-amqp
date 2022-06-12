@@ -184,6 +184,9 @@ impl From<DetachError> for SendError {
     }
 }
 
+/// Type alias for receiving error
+pub type RecvError = Error;
+
 /// Error associated with normal operations on a link
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -194,18 +197,6 @@ pub enum Error {
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError),
-
-    // /// The message was rejected
-    // #[error("Outcome Rejected: {:?}", .0)]
-    // Rejected(Rejected),
-
-    // /// The message was released
-    // #[error("Outsome Released: {:?}", .0)]
-    // Released(Released),
-
-    // /// The message was modified
-    // #[error("Outcome Modified: {:?}", .0)]
-    // Modified(Modified),
 }
 
 impl Error {
@@ -230,47 +221,6 @@ impl Error {
         Self::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Link is not attached".to_string()),
-            None,
-        ))
-    }
-}
-
-#[cfg(feature = "transaction")]
-impl Error {
-    pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            description.into(),
-            None,
-        ))
-    }
-
-    pub(crate) fn not_allowed(description: impl Into<Option<String>>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotAllowed,
-            description.into(),
-            None,
-        ))
-    }
-
-    pub(crate) fn mismatched_transaction_id(
-        expecting: &TransactionId,
-        found: &TransactionId,
-    ) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            format!(
-                "Found mismatched transaction ID. Expecting: {:?}, found: {:?}",
-                expecting, found
-            ),
-            None,
-        ))
-    }
-
-    pub(crate) fn expecting_outcome() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            format!("Expecting an outcome, found None"),
             None,
         ))
     }

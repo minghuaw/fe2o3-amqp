@@ -92,9 +92,7 @@ impl ResourceManager {
                 )));
             }
         };
-        let coordinator = TxnCoordinator {
-            inner,
-        };
+        let coordinator = TxnCoordinator::new(inner);
         todo!()
     }
 
