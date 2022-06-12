@@ -12,6 +12,7 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Detach, Disposition, Flow, Transfer},
     transaction::{Coordinator, Declare, Discharge, TransactionId, TxnCapability},
 };
+use serde_bytes::ByteBuf;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -22,9 +23,12 @@ use crate::{
     Payload,
 };
 
-use super::TxnCoordinator;
+use super::{ResourceTransaction, AllocateTxnIdFailed};
 
-#[derive(Debug)]
+/// Maximum number of retries when allocation of transaction ID fails (coinfli)
+pub const DEFAULT_MAX_TXN_ID_RETRIES: usize = 100;
+
+#[derive(Debug, Clone)]
 pub(crate) enum TxnWorkFrame {
     Post {
         input_handle: InputHandle,
@@ -38,19 +42,21 @@ pub(crate) enum TxnWorkFrame {
 pub(crate) type TxnWorkSender = mpsc::Sender<TxnWorkFrame>;
 
 /// Transaction manager
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransactionManager {
     pub(crate) acceptor: LinkAcceptor,
-    pub(crate) resources: BTreeMap<TransactionId, TxnWorkSender>,
-    pub(crate) txn_id_source: Arc<AtomicU64>,
+    pub(crate) txns: BTreeMap<TransactionId, ResourceTransaction>,
+    pub(crate) txn_id_source: u64,
+    pub(crate) max_retries: usize,
 }
 
 impl Default for TransactionManager {
     fn default() -> Self {
         Self {
             acceptor: Default::default(),
-            resources: Default::default(),
-            txn_id_source: Arc::new(AtomicU64::new(0)),
+            txns: Default::default(),
+            txn_id_source: 0,
+            max_retries: DEFAULT_MAX_TXN_ID_RETRIES,
         }
     }
 }
@@ -116,9 +122,23 @@ impl Default for TransactionManager {
 //     }
 // }
 
-impl endpoint::TransactionManager for TransactionManager {
-    fn allocate_transaction(&mut self) -> Result<TransactionId, ()> {
-        todo!()
+impl TransactionManager {
+    pub(crate) fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocateTxnIdFailed> {
+        let mut next_txn_id = ByteBuf::from(self.txn_id_source.to_be_bytes());
+        self.txn_id_source = self.txn_id_source.wrapping_add(1);
+        let mut retries = 0;
+
+        while self.txns.contains_key(&next_txn_id) {
+            if retries > self.max_retries {
+                return Err(AllocateTxnIdFailed {})
+            }
+
+            retries += 1;
+            next_txn_id = ByteBuf::from(self.txn_id_source.to_be_bytes());
+            self.txn_id_source = self.txn_id_source.wrapping_add(1);
+        }
+
+        Ok(next_txn_id)
     }
 
     fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), ()> {
@@ -129,9 +149,12 @@ impl endpoint::TransactionManager for TransactionManager {
         todo!()
     }
 
-    fn on_incoming_control_attach(&mut self, attach: Attach) {
-        todo!()
-    }
+    // async fn on_incoming_control_attach(&mut self, remote_attach: Attach) {
+        
+
+
+    //     todo!()
+    // }
 
     fn on_incoming_control_detach(&mut self, detach: Detach) {
         todo!()

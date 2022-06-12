@@ -32,7 +32,7 @@ use crate::{
     },
     session::SessionHandle,
     util::{Consumer, Initialized, Producer},
-    Receiver, Sender,
+    Receiver, Sender, control::SessionControl,
 };
 
 use super::{
@@ -91,7 +91,7 @@ pub enum LinkEndpoint {
 ///     .build();
 /// ```
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LinkAcceptor {
     /// Supported sender settle mode
     pub supported_snd_settle_modes: SupportedSenderSettleModes,
@@ -237,10 +237,11 @@ impl LinkAcceptor {
         }
     }
 
-    pub(crate) async fn accept_as_new_receiver_inner<R, T>(
+    pub(crate) async fn accept_as_new_receiver_inner<T>(
         &self,
         remote_attach: Attach,
-        session: &mut SessionHandle<R>,
+        control: &mpsc::Sender<SessionControl>,
+        outgoing: &mpsc::Sender<LinkFrame>,
     ) -> Result<
         ReceiverInner<link::Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>,
         AttachError,
@@ -293,7 +294,7 @@ impl LinkAcceptor {
         // Allocate link in session
         let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
-            &mut session.control,
+            control,
             remote_attach.name.clone(),
             link_handle,
             input_handle,
@@ -329,7 +330,7 @@ impl LinkAcceptor {
             unsettled,
         };
 
-        let mut outgoing = PollSender::new(session.outgoing.clone());
+        let mut outgoing = PollSender::new(outgoing.clone());
         link.on_incoming_attach(remote_attach).await?;
         link.send_attach(&mut outgoing).await?;
 
@@ -338,7 +339,7 @@ impl LinkAcceptor {
             buffer_size: self.buffer_size,
             credit_mode: self.credit_mode.clone(),
             processed: 0,
-            session: session.control.clone(),
+            session: control.clone(),
             outgoing,
             incoming: ReceiverStream::new(incoming_rx),
             incomplete_transfer: None,
@@ -363,7 +364,7 @@ impl LinkAcceptor {
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
     ) -> Result<LinkEndpoint, AttachError> {
-        self.accept_as_new_receiver_inner(remote_attach, session)
+        self.accept_as_new_receiver_inner(remote_attach, &session.control, &session.outgoing)
             .await
             .map(|inner| LinkEndpoint::Receiver(Receiver { inner }))
     }

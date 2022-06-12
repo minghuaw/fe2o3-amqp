@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload,
+    Payload, transaction::TransactionManager,
 };
 
 pub(crate) mod engine;
@@ -41,6 +41,9 @@ pub use error::Error;
 
 mod builder;
 pub use builder::*;
+
+#[cfg(feature = "transaction")]
+mod transaction;
 
 use self::frame::{SessionFrame, SessionFrameBody};
 
@@ -220,12 +223,16 @@ pub struct Session {
     pub(crate) desired_capabilities: Option<Vec<Symbol>>,
     pub(crate) properties: Option<Fields>,
 
-    /// local links by output handle
+    // local links by output handle
     pub(crate) link_name_by_output_handle: Slab<String>,
     pub(crate) link_by_name: BTreeMap<String, Option<LinkRelay<OutputHandle>>>,
     pub(crate) link_by_input_handle: BTreeMap<InputHandle, LinkRelay<OutputHandle>>,
     // Maps from DeliveryId to link.DeliveryCount
     pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (InputHandle, DeliveryTag)>,
+
+    // Transaction
+    #[cfg(feature = "transaction")]
+    pub(crate) txn_manager: TransactionManager
 }
 
 impl Session {

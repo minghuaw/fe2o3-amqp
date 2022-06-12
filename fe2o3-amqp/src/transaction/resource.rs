@@ -6,7 +6,7 @@ use crate::{endpoint::InputHandle, Payload, transaction::control_link_frame::Con
 use super::{TxnCoordinator, TxnWorkFrame};
 
 /// Represents the transactional resource
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResourceTransaction {
     buf: Vec<TxnWorkFrame>
 }

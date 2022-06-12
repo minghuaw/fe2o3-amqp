@@ -36,7 +36,7 @@ use crate::{
     frames::amqp::Frame,
     link::{delivery::Delivery, LinkFrame, LinkRelay},
     session::frame::{SessionFrame, SessionIncomingItem},
-    Payload,
+    Payload, transaction::AllocateTxnIdFailed,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -278,8 +278,8 @@ pub(crate) trait Session {
 
 /// How an incoming transaction should be handled in a session
 #[cfg(feature = "transaction")]
-pub(crate) trait TransactionManager {
-    fn allocate_transaction(&mut self) -> Result<TransactionId, ()>;
+pub(crate) trait TransactionSession {
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocateTxnIdFailed>;
 
     fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), ()>;
 

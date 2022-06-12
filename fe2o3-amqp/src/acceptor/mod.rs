@@ -27,7 +27,7 @@ pub struct IncomingSession {
 }
 
 /// The supported sender-settle-modes for the link acceptor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SupportedSenderSettleModes {
     /// Only supports `SenderSettleMode::Unsettled`
     Unsettled,
@@ -88,7 +88,7 @@ impl SupportedSenderSettleModes {
 }
 
 /// The supported receiver-settle-modes for the link acceptor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SupportedReceiverSettleModes {
     /// Only supports `ReceiverSettleMode::First`
     First,

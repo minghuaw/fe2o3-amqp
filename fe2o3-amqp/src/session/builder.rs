@@ -14,7 +14,7 @@ use crate::{
     endpoint::OutgoingChannel,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
-    Session,
+    Session, transaction::TransactionManager,
 };
 
 use super::{Error, SessionHandle, DEFAULT_WINDOW};
@@ -49,6 +49,9 @@ pub struct Builder {
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
     /// that are used by links attached to the session
     pub buffer_size: usize,
+
+    /// Transaction manager that manages incoming transactions
+    pub txn_manager: TransactionManager,
 }
 
 impl Default for Builder {
@@ -62,6 +65,7 @@ impl Default for Builder {
             desired_capabilities: None,
             properties: None,
             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
+            txn_manager: TransactionManager::default()
         }
     }
 }
@@ -99,6 +103,7 @@ impl Builder {
             link_by_name: BTreeMap::new(),
             link_by_input_handle: BTreeMap::new(),
             delivery_tag_by_id: BTreeMap::new(),
+            txn_manager: self.txn_manager
         }
     }
 
@@ -166,6 +171,12 @@ impl Builder {
     /// that are used by links attached to the session
     pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
+        self
+    }
+
+    /// Set the transaction manager
+    pub fn transaction_manager(mut self, txn_manager: TransactionManager) -> Self {
+        self.txn_manager = txn_manager;
         self
     }
 
