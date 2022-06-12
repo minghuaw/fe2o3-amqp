@@ -196,7 +196,7 @@ impl Controller<Declared> {
             | DeliveryState::TransactionalState(_) => {
                 Err(link::SendError::Local(definitions::Error::new(
                     AmqpError::NotAllowed,
-                    "Controller is expecting either an Accepted outcome or a Rejeccted outcome"
+                    "Controller is expecting either an Accepted outcome or a Rejected outcome"
                         .to_string(),
                     None,
                 )))

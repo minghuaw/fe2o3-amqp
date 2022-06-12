@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self},
-    performatives::Disposition,
+    performatives::Disposition, transaction::TransactionId,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -10,7 +10,7 @@ use crate::{
     connection::AllocSessionError,
     endpoint::{InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::LinkRelay,
-    session::{frame::SessionIncomingItem, AllocLinkError},
+    session::{frame::SessionIncomingItem, AllocLinkError}, transaction::AllocateTxnIdFailed,
 };
 
 #[derive(Debug)]
@@ -57,13 +57,13 @@ pub(crate) enum SessionControl {
     Disposition(Disposition),
 
     #[cfg(feature = "transaction")]
-    CommitPosting(),
+    AllocateTransaction(oneshot::Sender<Result<TransactionId, AllocateTxnIdFailed>>),
 
     #[cfg(feature = "transaction")]
-    CommitRetirement(),
+    CommitTransaction(),
 
     #[cfg(feature = "transaction")]
-    CommitAcquisition(),
+    RollbakcTransaction(TransactionId),
 }
 
 impl std::fmt::Display for SessionControl {
@@ -84,9 +84,9 @@ impl std::fmt::Display for SessionControl {
             SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({:?})", name),
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
-            SessionControl::CommitPosting() => write!(f, "CommitPosting"),
-            SessionControl::CommitRetirement() => write!(f, "CommitRetirement"),
-            SessionControl::CommitAcquisition() => write!(f, "CommitAcquisition"),
+            SessionControl::AllocateTransaction(_) => write!(f, "Allocate New Transaction"),
+            SessionControl::CommitTransaction() => write!(f, "CommitTransaction"),
+            SessionControl::RollbakcTransaction(id) => write!(f, "RollbackTransaction {:?}", id),
         }
     }
 }

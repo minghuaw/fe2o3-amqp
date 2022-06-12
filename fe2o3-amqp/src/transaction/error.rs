@@ -124,3 +124,7 @@ where
 }
 
 pub(crate) enum CoordinatorError {}
+
+/// Transaction manager failed allocate a new transaction ID
+#[derive(Debug)]
+pub struct AllocateTxnIdFailed {}
