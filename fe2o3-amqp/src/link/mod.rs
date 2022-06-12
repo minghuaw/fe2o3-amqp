@@ -263,6 +263,18 @@ where
 
         self.input_handle = Some(InputHandle::from(remote_attach.handle));
 
+        // **the receiver is considered to hold the authoritative version of the target properties**.
+        let target = match remote_attach.target {
+            Some(t) => T::try_from(*t).map_err(|_| {
+                AttachError::Local(definitions::Error::new(
+                    AmqpError::NotImplemented,
+                    None,
+                    None,
+                ))
+            })?,
+            None => return Err(AttachError::TargetIsNone),
+        };
+
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
         // attach frames could be in conflict.
@@ -291,6 +303,15 @@ where
                         )))
                     }
                 };
+
+                // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+                // Is this verification necessary?
+                if let Some(local) = &self.target {
+                    local
+                        .verify_as_receiver(&target)
+                        .map_err(AttachError::Local)?;
+                }
+
                 self.flow_state
                     .as_ref()
                     .initial_delivery_count_mut(|_| initial_delivery_count)
@@ -302,17 +323,6 @@ where
             }
             // Remote attach is from receiver, local is sender
             Role::Receiver => {
-                // **the receiver is considered to hold the authoritative version of the target properties**.
-                let target = match remote_attach.target {
-                    Some(t) => T::try_from(*t).map_err(|_| {
-                        AttachError::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            None,
-                            None,
-                        ))
-                    })?,
-                    None => return Err(AttachError::TargetIsNone),
-                };
                 // Note that it is the responsibility of the transaction controller to
                 // verify that the capabilities of the controller meet its requirements.
                 if let Some(local) = &self.target {
