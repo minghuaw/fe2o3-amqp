@@ -221,15 +221,6 @@ where
                     // event loop has stopped. It should be treated as an io error
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
-            SessionControl::AllocateTransaction(response) => {
-                todo!()
-            }
-            SessionControl::CommitTransaction() => {
-                todo!()
-            }
-            SessionControl::RollbakcTransaction(id) => {
-                todo!()
-            }         
         }
 
         match self.session.local_state() {

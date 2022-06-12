@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload, transaction::TransactionManager,
+    Payload
 };
 
 pub(crate) mod engine;
@@ -41,9 +41,6 @@ pub use error::Error;
 
 mod builder;
 pub use builder::*;
-
-#[cfg(feature = "transaction")]
-mod transaction;
 
 use self::frame::{SessionFrame, SessionFrameBody};
 
@@ -229,10 +226,6 @@ pub struct Session {
     pub(crate) link_by_input_handle: BTreeMap<InputHandle, LinkRelay<OutputHandle>>,
     // Maps from DeliveryId to link.DeliveryCount
     pub(crate) delivery_tag_by_id: BTreeMap<DeliveryNumber, (InputHandle, DeliveryTag)>,
-
-    // Transaction
-    #[cfg(feature = "transaction")]
-    pub(crate) txn_manager: TransactionManager
 }
 
 impl Session {

@@ -23,19 +23,6 @@ use serde_amqp::to_value;
 mod acquisition;
 pub use acquisition::*;
 
-#[cfg(feature = "acceptor")]
-mod manager;
-
-#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
-#[cfg(feature = "acceptor")]
-pub use manager::*;
-
-mod coordinator;
-pub use coordinator::*;
-
-mod resource;
-pub use resource::*;
-
 mod control_link_frame;
 
 /// A transaction scope for the client side

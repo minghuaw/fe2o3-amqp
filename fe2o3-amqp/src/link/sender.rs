@@ -6,7 +6,7 @@ use bytes::BytesMut;
 use futures_util::StreamExt;
 use tokio::{
     sync::mpsc,
-    time::{error::Elapsed, timeout, Timeout},
+    time::{error::Elapsed, timeout},
 };
 
 use fe2o3_amqp_types::{
