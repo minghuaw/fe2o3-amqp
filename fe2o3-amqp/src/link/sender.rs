@@ -28,7 +28,7 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SenderFlowState, SenderLink,
+    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SenderFlowState, SenderLink, SendError,
 };
 
 /// An AMQP1.0 sender
@@ -181,7 +181,7 @@ impl Sender {
     pub async fn send<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SendError> {
         let settlement = self.inner.send(sendable.into()).await?;
 
         // If not settled, must wait for outcome
@@ -192,12 +192,12 @@ impl Sender {
                 outcome,
             } => match outcome.await? {
                 DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-                DeliveryState::Rejected(rejected) => Err(Error::Rejected(rejected)),
-                DeliveryState::Released(released) => Err(Error::Released(released)),
-                DeliveryState::Modified(modified) => Err(Error::Modified(modified)),
+                DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+                DeliveryState::Released(released) => Err(SendError::Released(released)),
+                DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
                 #[cfg(feature = "transaction")]
                 DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                    Err(Error::not_implemented(None))
+                    Err(SendError::not_implemented(None))
                 }
             },
         }
@@ -210,7 +210,7 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
         duration: Duration,
-    ) -> Result<Result<(), Error>, Elapsed> {
+    ) -> Result<Result<(), SendError>, Elapsed> {
         timeout(duration, self.send(sendable)).await
     }
 
@@ -228,23 +228,23 @@ impl Sender {
     pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), Error>>, Error> {
+    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError> {
         let settlement = self.inner.send(sendable.into()).await?;
 
         Ok(DeliveryFut::from(settlement))
     }
 
-    /// Send a message without waiting for the acknowledgement with a timeout.
-    ///
-    /// This will set the batchable field of the `Transfer` performative to true.
-    pub async fn send_batchable_with_timeout<T: serde::Serialize>(
-        &mut self,
-        sendable: impl Into<Sendable<T>>,
-        duration: Duration,
-    ) -> Result<Timeout<DeliveryFut<Result<(), Error>>>, Error> {
-        let fut = self.send_batchable(sendable).await?;
-        Ok(timeout(duration, fut))
-    }
+    // /// Send a message without waiting for the acknowledgement with a timeout.
+    // ///
+    // /// This will set the batchable field of the `Transfer` performative to true.
+    // pub async fn send_batchable_with_timeout<T: serde::Serialize>(
+    //     &mut self,
+    //     sendable: impl Into<Sendable<T>>,
+    //     duration: Duration,
+    // ) -> Result<Timeout<DeliveryFut<Result<(), SendError>>>, SendError> {
+    //     let fut = self.send_batchable(sendable).await?;
+    //     Ok(timeout(duration, fut))
+    // }
 }
 
 /// This is so that the transaction controller can re-use
@@ -463,7 +463,7 @@ where
         Ok(())
     }
 
-    pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, Error>
+    pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, SendError>
     where
         T: serde::Serialize,
     {
@@ -474,7 +474,7 @@ where
         &mut self,
         sendable: Sendable<T>,
         state: Option<DeliveryState>,
-    ) -> Result<Settlement, Error>
+    ) -> Result<Settlement, SendError>
     where
         T: serde::Serialize,
     {

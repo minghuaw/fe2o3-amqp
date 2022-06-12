@@ -68,10 +68,12 @@ impl TxnCoordinator {
                 let _ = self.inner.close_with_error(Some(error)).await;
                 Running::Stop
             },
-            link::Error::Detached(_) => todo!(),
-            link::Error::Rejected(_) => todo!(),
-            link::Error::Released(_) => todo!(),
-            link::Error::Modified(_) => todo!(),
+            link::Error::Detached(err) => {
+                tracing::error!("Controller is detached with error {}", err);
+                
+                let _ = self.inner.close_with_error(None).await;
+                Running::Stop
+            },
         }
     }
 

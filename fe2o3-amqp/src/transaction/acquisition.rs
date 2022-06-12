@@ -76,7 +76,7 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Commit the transactional acquisition
-    pub async fn commit(mut self) -> Result<(), link::Error> {
+    pub async fn commit(mut self) -> Result<(), link::SendError> {
         self.cleanup().await?;
 
         self.txn.controller.commit().await?;
@@ -85,7 +85,7 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Rollback the transactional acquisition
-    pub async fn rollback(mut self) -> Result<(), link::Error> {
+    pub async fn rollback(mut self) -> Result<(), link::SendError> {
         self.cleanup().await?;
 
         self.txn.controller.rollback().await?;
@@ -96,7 +96,7 @@ impl<'r> TxnAcquisition<'r> {
     /// Accept the message
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
         self.txn.accept(self.recver, delivery).await
-    }
+    } 
 
     /// Reject the message
     pub async fn reject<T>(

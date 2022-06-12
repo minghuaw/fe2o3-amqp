@@ -12,6 +12,8 @@ use tokio::sync::oneshot::{self, error::RecvError};
 use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
 
+use super::SendError;
+
 /// Reserved for receiver side
 #[derive(Debug)]
 pub struct Delivery<T> {
@@ -320,7 +322,7 @@ impl<T> FromRecvError for Result<T, link::Error> {
     }
 }
 
-type NonTxnResult = Result<(), link::Error>;
+type NonTxnResult = Result<(), SendError>;
 
 impl FromSettled for NonTxnResult {
     fn from_settled() -> Self {
@@ -332,12 +334,12 @@ impl FromDeliveryState for NonTxnResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
-            DeliveryState::Released(released) => Err(link::Error::Released(released)),
-            DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
+            DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+            DeliveryState::Released(released) => Err(SendError::Released(released)),
+            DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                Err(link::Error::not_implemented(None))
+                Err(SendError::not_implemented(None))
             }
         }
     }

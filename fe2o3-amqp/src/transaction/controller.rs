@@ -45,13 +45,13 @@ pub struct Controller<D> {
 async fn send_on_control_link<T>(
     sender: &mut SenderInner<ControlLink>,
     sendable: Sendable<T>,
-) -> Result<oneshot::Receiver<DeliveryState>, link::Error>
+) -> Result<oneshot::Receiver<DeliveryState>, link::SendError>
 where
     T: serde::Serialize,
 {
     match sender.send(sendable).await? {
         Settlement::Settled => {
-            let err = link::Error::Local(definitions::Error::new(
+            let err = link::SendError::Local(definitions::Error::new(
                 AmqpError::InternalError,
                 "Declare cannot be sent settled".to_string(),
                 None,
@@ -118,7 +118,7 @@ impl Controller<Undeclared> {
     async fn declare_inner(
         &mut self,
         global_id: Option<TransactionId>,
-    ) -> Result<Declared, link::Error> {
+    ) -> Result<Declared, link::SendError> {
         // To begin transactional work, the transaction controller needs to obtain a transaction
         // identifier from the resource. It does this by sending a message to the coordinator whose
         // body consists of the declare type in a single amqp-value section. Other standard message
@@ -132,13 +132,13 @@ impl Controller<Undeclared> {
         let outcome = send_on_control_link(&mut self.inner, sendable).await?;
         match outcome.await? {
             DeliveryState::Declared(declared) => Ok(declared),
-            DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
+            DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Accepted(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
             | DeliveryState::TransactionalState(_) => {
-                Err(link::Error::Local(definitions::Error::new(
+                Err(link::SendError::Local(definitions::Error::new(
                     AmqpError::NotAllowed,
                     "Controller is expecting either a Declared outcome or a Rejeccted outcome"
                         .to_string(),
@@ -161,7 +161,7 @@ impl Controller<Declared> {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    pub async fn commit(&mut self) -> Result<(), link::Error> {
+    pub async fn commit(&mut self) -> Result<(), link::SendError> {
         self.discharge(false).await
     }
 
@@ -171,12 +171,12 @@ impl Controller<Declared> {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    pub async fn rollback(&mut self) -> Result<(), link::Error> {
+    pub async fn rollback(&mut self) -> Result<(), link::SendError> {
         self.discharge(true).await
     }
 
     /// Discharge
-    async fn discharge(&mut self, fail: impl Into<Option<bool>>) -> Result<(), link::Error> {
+    async fn discharge(&mut self, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
         let discharge = Discharge {
             txn_id: self.declared.txn_id.clone(),
             fail: fail.into(),
@@ -188,13 +188,13 @@ impl Controller<Declared> {
         let outcome = send_on_control_link(&mut self.inner, sendable).await?;
         match outcome.await? {
             DeliveryState::Accepted(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
+            DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
             | DeliveryState::Declared(_)
             | DeliveryState::TransactionalState(_) => {
-                Err(link::Error::Local(definitions::Error::new(
+                Err(link::SendError::Local(definitions::Error::new(
                     AmqpError::NotAllowed,
                     "Controller is expecting either an Accepted outcome or a Rejeccted outcome"
                         .to_string(),
