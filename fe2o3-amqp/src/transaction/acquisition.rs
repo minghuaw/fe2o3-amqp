@@ -45,15 +45,16 @@ impl<'r> TxnAcquisition<'r> {
     pub async fn cleanup(&mut self) -> Result<(), link::Error> {
         // clear txn-id
         {
-            let mut writer = self.recver.link.flow_state.lock.write().await;
+            let mut writer = self.recver.inner.link.flow_state.lock.write().await;
             let key = Symbol::from("txn-id");
             writer.properties.as_mut().map(|map| map.remove(&key));
         }
 
         // set drain to true
         self.recver
+            .inner
             .link
-            .send_flow(&mut self.recver.outgoing, Some(0), Some(true), true)
+            .send_flow(&mut self.recver.inner.outgoing, Some(0), Some(true), true)
             .await?;
 
         self.cleaned_up = true;
@@ -75,7 +76,7 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Commit the transactional acquisition
-    pub async fn commit(mut self) -> Result<(), link::Error> {
+    pub async fn commit(mut self) -> Result<(), link::SendError> {
         self.cleanup().await?;
 
         self.txn.controller.commit().await?;
@@ -84,7 +85,7 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Rollback the transactional acquisition
-    pub async fn rollback(mut self) -> Result<(), link::Error> {
+    pub async fn rollback(mut self) -> Result<(), link::SendError> {
         self.cleanup().await?;
 
         self.txn.controller.rollback().await?;
@@ -95,7 +96,7 @@ impl<'r> TxnAcquisition<'r> {
     /// Accept the message
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
         self.txn.accept(self.recver, delivery).await
-    }
+    } 
 
     /// Reject the message
     pub async fn reject<T>(
@@ -126,16 +127,19 @@ impl<'r> Drop for TxnAcquisition<'r> {
         if !self.cleaned_up {
             // clear txn-id from the link's properties
             {
-                let mut writer = self.recver.link.flow_state.lock.blocking_write();
+                let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();
                 let key = Symbol::from("txn-id");
                 writer.properties.as_mut().map(|fields| fields.remove(&key));
             }
 
             // Set drain to true
-            if let Some(sender) = self.recver.outgoing.get_ref() {
-                if let Err(err) =
-                    (&mut self.recver.link).blocking_send_flow(sender, Some(0), Some(true), true)
-                {
+            if let Some(sender) = self.recver.inner.outgoing.get_ref() {
+                if let Err(err) = (&mut self.recver.inner.link).blocking_send_flow(
+                    sender,
+                    Some(0),
+                    Some(true),
+                    true,
+                ) {
                     tracing::error!("error {:?}", err)
                 }
             }

@@ -14,7 +14,7 @@ use crate::{
     endpoint::OutgoingChannel,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
-    Session,
+    Session
 };
 
 use super::{Error, SessionHandle, DEFAULT_WINDOW};

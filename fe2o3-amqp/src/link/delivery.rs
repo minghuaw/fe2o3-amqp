@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::BodySection, DeliveryState, Message, Received},
+    messaging::{message::Body, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -11,6 +11,8 @@ use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{link, Payload};
+
+use super::SendError;
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -48,19 +50,24 @@ impl<T> Delivery<T> {
         self.message
     }
 
+    /// Get a reference to the message body
+    pub fn body(&self) -> &Body<T> {
+        &self.message.body
+    }
+
     /// Consume the delivery into the message body section
-    pub fn into_body(self) -> BodySection<T> {
-        self.message.body_section
+    pub fn into_body(self) -> Body<T> {
+        self.message.body
     }
 }
 
 // TODO: Vec doesnt implement display trait
 impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.message.body_section {
-            BodySection::Data(data) => write!(f, "{}", data),
-            BodySection::Sequence(seq) => write!(f, "{}", seq),
-            BodySection::Value(val) => write!(f, "{}", val),
+        match &self.message.body {
+            Body::Data(data) => write!(f, "{}", data),
+            Body::Sequence(seq) => write!(f, "{}", seq),
+            Body::Value(val) => write!(f, "{}", val),
         }
     }
 }
@@ -116,15 +123,15 @@ impl<T> From<Message<T>> for Sendable<T> {
     }
 }
 
-impl<T> From<BodySection<T>> for Sendable<T> {
-    fn from(body_section: BodySection<T>) -> Self {
+impl<T> From<Body<T>> for Sendable<T> {
+    fn from(body: Body<T>) -> Self {
         let message = Message {
             header: None,
             delivery_annotations: None,
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body_section,
+            body,
             footer: None,
         };
         Self {
@@ -315,7 +322,7 @@ impl<T> FromRecvError for Result<T, link::Error> {
     }
 }
 
-type NonTxnResult = Result<(), link::Error>;
+type NonTxnResult = Result<(), SendError>;
 
 impl FromSettled for NonTxnResult {
     fn from_settled() -> Self {
@@ -327,12 +334,12 @@ impl FromDeliveryState for NonTxnResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(link::Error::Rejected(rejected)),
-            DeliveryState::Released(released) => Err(link::Error::Released(released)),
-            DeliveryState::Modified(modified) => Err(link::Error::Modified(modified)),
+            DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+            DeliveryState::Released(released) => Err(SendError::Released(released)),
+            DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                Err(link::Error::not_implemented(None))
+                Err(SendError::not_implemented(None))
             }
         }
     }

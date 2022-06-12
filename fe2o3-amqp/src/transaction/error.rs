@@ -87,14 +87,14 @@ impl From<AttachError> for DeclareErrorKind {
     }
 }
 
-impl From<link::Error> for DeclareErrorKind {
-    fn from(error: link::Error) -> Self {
+impl From<link::SendError> for DeclareErrorKind {
+    fn from(error: link::SendError) -> Self {
         match error {
-            link::Error::Local(e) => Self::Local(e),
-            link::Error::Detached(e) => Self::Detached(e),
-            link::Error::Rejected(e) => Self::Rejected(e),
-            link::Error::Released(e) => Self::Released(e),
-            link::Error::Modified(e) => Self::Modified(e),
+            link::SendError::Local(e) => Self::Local(e),
+            link::SendError::Detached(e) => Self::Detached(e),
+            link::SendError::Rejected(e) => Self::Rejected(e),
+            link::SendError::Released(e) => Self::Released(e),
+            link::SendError::Modified(e) => Self::Modified(e),
         }
     }
 }

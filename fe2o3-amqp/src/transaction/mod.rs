@@ -23,6 +23,8 @@ use serde_amqp::to_value;
 mod acquisition;
 pub use acquisition::*;
 
+mod control_link_frame;
+
 /// A transaction scope for the client side
 ///
 /// # Examples
@@ -149,14 +151,14 @@ impl Transaction {
     }
 
     /// Rollback the transaction
-    pub async fn rollback(mut self) -> Result<(), link::Error> {
+    pub async fn rollback(mut self) -> Result<(), link::SendError> {
         self.controller.rollback().await?;
         self.controller.close().await?;
         Ok(())
     }
 
     /// Commit the transaction
-    pub async fn commit(mut self) -> Result<(), link::Error> {
+    pub async fn commit(mut self) -> Result<(), link::SendError> {
         self.controller.commit().await?;
         self.controller.close().await?;
         Ok(())
@@ -167,7 +169,7 @@ impl Transaction {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), link::Error>
+    ) -> Result<(), link::SendError>
     where
         T: serde::Serialize,
     {
@@ -203,14 +205,14 @@ impl Transaction {
                 | DeliveryState::Rejected(_)
                 | DeliveryState::Released(_)
                 | DeliveryState::Modified(_)
-                | DeliveryState::Declared(_) => Err(link::Error::not_allowed(
+                | DeliveryState::Declared(_) => Err(link::SendError::not_allowed(
                     "Expecting a TransactionalState".to_string(),
                 )),
                 DeliveryState::TransactionalState(txn) => {
                     // Interleaving transfer and disposition of different transactions
                     // isn't implemented
                     if txn.txn_id != *self.controller.txn_id() {
-                        return Err(link::Error::mismatched_transaction_id(
+                        return Err(link::SendError::mismatched_transaction_id(
                             self.controller.txn_id(),
                             &txn.txn_id,
                         ));
@@ -218,10 +220,10 @@ impl Transaction {
 
                     match txn.outcome {
                         Some(Outcome::Accepted(_)) => Ok(()),
-                        Some(Outcome::Rejected(value)) => Err(link::Error::Rejected(value)),
-                        Some(Outcome::Released(value)) => Err(link::Error::Released(value)),
-                        Some(Outcome::Modified(value)) => Err(link::Error::Modified(value)),
-                        Some(Outcome::Declared(_)) | None => Err(link::Error::expecting_outcome()),
+                        Some(Outcome::Rejected(value)) => Err(link::SendError::Rejected(value)),
+                        Some(Outcome::Released(value)) => Err(link::SendError::Released(value)),
+                        Some(Outcome::Modified(value)) => Err(link::SendError::Modified(value)),
+                        Some(Outcome::Declared(_)) | None => Err(link::SendError::expecting_outcome()),
                     }
                 }
             },
@@ -246,6 +248,7 @@ impl Transaction {
         };
         let state = DeliveryState::TransactionalState(txn_state);
         recver
+            .inner
             .dispose(
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
@@ -307,7 +310,7 @@ impl Transaction {
         credit: SequenceNo,
     ) -> Result<TxnAcquisition<'r>, link::Error> {
         {
-            let mut writer = recver.link.flow_state.lock.write().await;
+            let mut writer = recver.inner.link.flow_state.lock.write().await;
             match &mut writer.properties {
                 Some(fields) => {
                     let key = Symbol::from("txn-id");
@@ -331,8 +334,9 @@ impl Transaction {
         }
 
         recver
+            .inner
             .link
-            .send_flow(&mut recver.outgoing, Some(credit), None, false)
+            .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
             .await?;
         Ok(TxnAcquisition {
             txn: self,

@@ -24,6 +24,8 @@ pub mod sender;
 mod sender_link;
 pub mod state;
 
+pub(crate) mod target_archetype;
+
 pub use error::*;
 
 use futures_util::{Sink, SinkExt, Stream};
@@ -43,6 +45,7 @@ use crate::{
 use self::{
     delivery::Delivery,
     state::{LinkFlowState, LinkState, UnsettledMap},
+    target_archetype::VerifyTargetArchetype,
 };
 
 /// Default amount of link credit
@@ -58,6 +61,7 @@ pub(crate) type SenderLink = Link<role::Sender, Target, SenderFlowState, Unsettl
 pub(crate) type ReceiverLink = Link<role::Receiver, Target, ReceiverFlowState, DeliveryState>;
 
 pub(crate) type ArcSenderUnsettledMap = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
+pub(crate) type ArcReceiverUnsettledMap = Arc<RwLock<UnsettledMap<DeliveryState>>>;
 
 // const CLOSED: u8 = 0b0000_0100;
 // const DETACHED: u8 = 0b0000_0010;
@@ -178,21 +182,25 @@ impl<R, T, F, M> Link<R, T, F, M> {
 impl<R, T, F, M> endpoint::Link for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
+    fn role() -> Role {
+        R::into_role()
+    }
 }
 
 impl<R, T, F, M> endpoint::LinkExt for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
     type FlowState = F;
     type Unsettled = Arc<RwLock<UnsettledMap<M>>>;
+    type Target = T;
 
     fn name(&self) -> &str {
         &self.name
@@ -217,13 +225,17 @@ where
     fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
         &self.rcv_settle_mode
     }
+
+    fn target(&self) -> &Option<Self::Target> {
+        &self.target
+    }
 }
 
 #[async_trait]
 impl<R, T, F, M> endpoint::LinkAttach for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
@@ -250,6 +262,18 @@ where
         };
 
         self.input_handle = Some(InputHandle::from(remote_attach.handle));
+
+        // **the receiver is considered to hold the authoritative version of the target properties**.
+        let target = match remote_attach.target {
+            Some(t) => T::try_from(*t).map_err(|_| {
+                AttachError::Local(definitions::Error::new(
+                    AmqpError::NotImplemented,
+                    None,
+                    None,
+                ))
+            })?,
+            None => return Err(AttachError::TargetIsNone),
+        };
 
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
@@ -279,6 +303,15 @@ where
                         )))
                     }
                 };
+
+                // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+                // Is this verification necessary?
+                if let Some(local) = &self.target {
+                    local
+                        .verify_as_receiver(&target)
+                        .map_err(AttachError::Local)?;
+                }
+
                 self.flow_state
                     .as_ref()
                     .initial_delivery_count_mut(|_| initial_delivery_count)
@@ -290,17 +323,13 @@ where
             }
             // Remote attach is from receiver, local is sender
             Role::Receiver => {
-                // **the receiver is considered to hold the authoritative version of the target properties**.
-                let target = match remote_attach.target {
-                    Some(t) => T::try_from(*t).map_err(|_| {
-                        AttachError::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            None,
-                            None,
-                        ))
-                    })?,
-                    None => return Err(AttachError::TargetIsNone),
-                };
+                // Note that it is the responsibility of the transaction controller to
+                // verify that the capabilities of the controller meet its requirements.
+                if let Some(local) = &self.target {
+                    local
+                        .verify_as_sender(&target)
+                        .map_err(AttachError::Local)?;
+                }
                 self.target = Some(target);
 
                 // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
@@ -801,7 +830,8 @@ pub(crate) async fn do_attach<L, W, R>(
 ) -> Result<(), AttachError>
 where
     L: endpoint::LinkAttach<AttachError = AttachError>
-        + endpoint::LinkDetach<DetachError = definitions::Error>,
+        + endpoint::LinkDetach<DetachError = definitions::Error>
+        + endpoint::Link,
     W: Sink<LinkFrame> + Send + Unpin,
     R: Stream<Item = LinkFrame> + Send + Unpin,
 {

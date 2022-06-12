@@ -48,7 +48,7 @@ impl ListenerSessionHandle {
 }
 
 pub(crate) async fn allocate_incoming_link(
-    control: &mut mpsc::Sender<SessionControl>,
+    control: &mpsc::Sender<SessionControl>,
     link_name: String,
     link_relay: LinkRelay<()>,
     input_handle: InputHandle,

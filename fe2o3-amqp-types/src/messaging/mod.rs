@@ -6,7 +6,7 @@ use serde_amqp::{primitives::Symbol, value::Value};
 use std::collections::BTreeMap;
 
 pub mod message;
-pub use message::{BodySection, Message};
+pub use message::{Body, Message};
 
 /* -------------------------- 3.2 Messaging Format -------------------------- */
 mod format;

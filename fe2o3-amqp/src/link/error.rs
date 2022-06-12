@@ -4,7 +4,7 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
 };
-use tokio::sync::{mpsc, oneshot::error::RecvError};
+use tokio::sync::{mpsc, oneshot};
 
 use crate::session::AllocLinkError;
 
@@ -60,33 +60,33 @@ impl fmt::Display for DetachError {
 
 impl std::error::Error for DetachError {}
 
-impl TryFrom<Error> for DetachError {
-    type Error = Error;
+// impl TryFrom<Error> for DetachError {
+//     type Error = Error;
 
-    fn try_from(value: Error) -> Result<Self, Self::Error> {
-        match value {
-            Error::Local(error) => {
-                let err = Self {
-                    is_closed_by_remote: false,
-                    error: Some(error),
-                };
-                Ok(err)
-            }
-            Error::Detached(err) => {
-                let error = DetachError {
-                    is_closed_by_remote: err.is_closed_by_remote,
-                    error: err.error,
-                };
-                Ok(error)
-            }
-            Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
-        }
-    }
-}
+//     fn try_from(value: Error) -> Result<Self, Self::Error> {
+//         match value {
+//             Error::Local(error) => {
+//                 let err = Self {
+//                     is_closed_by_remote: false,
+//                     error: Some(error),
+//                 };
+//                 Ok(err)
+//             }
+//             Error::Detached(err) => {
+//                 let error = DetachError {
+//                     is_closed_by_remote: err.is_closed_by_remote,
+//                     error: err.error,
+//                 };
+//                 Ok(error)
+//             }
+//             // Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
+//         }
+//     }
+// }
 
-/// Error associated with normal operations on a link
+/// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum SendError {
     /// A local error
     #[error("Local error: {:?}", .0)]
     Local(definitions::Error),
@@ -108,35 +108,8 @@ pub enum Error {
     Modified(Modified),
 }
 
-impl Error {
-    // May want to have different handling of SendError
-    pub(crate) fn sending_to_session() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Failed to send to sesssion".to_string()),
-            None,
-        ))
-    }
-
-    pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some(format!("Expecting {}", frame_ident.into())),
-            None,
-        ))
-    }
-
-    pub(crate) fn not_attached() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Link is not attached".to_string()),
-            None,
-        ))
-    }
-}
-
 #[cfg(feature = "transaction")]
-impl Error {
+impl SendError {
     pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
         Self::Local(definitions::Error::new(
             AmqpError::NotImplemented,
@@ -176,6 +149,83 @@ impl Error {
     }
 }
 
+impl From<serde_amqp::Error> for SendError {
+    fn from(err: serde_amqp::Error) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::DecodeError,
+            Some(format!("{:?}", err)),
+            None,
+        ))
+    }
+}
+
+impl From<Error> for SendError {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::Local(e) => SendError::Local(e),
+            Error::Detached(e) => SendError::Detached(e),
+        }
+    }
+}
+
+impl From<oneshot::error::RecvError> for SendError {
+    fn from(_: oneshot::error::RecvError) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Delivery outcome sender has dropped".into()),
+            None,
+        ))
+    }
+}
+
+impl From<DetachError> for SendError {
+    fn from(error: DetachError) -> Self {
+        Self::Detached(error)
+    }
+}
+
+/// Type alias for receiving error
+pub type RecvError = Error;
+
+/// Error associated with normal operations on a link
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// A local error
+    #[error("Local error: {:?}", .0)]
+    Local(definitions::Error),
+
+    /// The remote peer detached with error
+    #[error("Link is detached {:?}", .0)]
+    Detached(DetachError),
+}
+
+impl Error {
+    // May want to have different handling of SendError
+    pub(crate) fn sending_to_session() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Failed to send to sesssion".to_string()),
+            None,
+        ))
+    }
+
+    pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some(format!("Expecting {}", frame_ident.into())),
+            None,
+        ))
+    }
+
+    pub(crate) fn not_attached() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::IllegalState,
+            Some("Link is not attached".to_string()),
+            None,
+        ))
+    }
+}
+
 impl From<AmqpError> for Error {
     fn from(err: AmqpError) -> Self {
         Self::Local(definitions::Error::new(err, None, None))
@@ -208,8 +258,8 @@ impl From<serde_amqp::Error> for Error {
     }
 }
 
-impl From<RecvError> for Error {
-    fn from(_: RecvError) -> Self {
+impl From<oneshot::error::RecvError> for Error {
+    fn from(_: oneshot::error::RecvError) -> Self {
         Error::Local(definitions::Error::new(
             AmqpError::IllegalState,
             Some("Delivery outcome sender has dropped".into()),
@@ -292,9 +342,7 @@ impl TryFrom<Error> for AttachError {
     fn try_from(value: Error) -> Result<Self, Self::Error> {
         match value {
             Error::Local(error) => Ok(AttachError::Local(error)),
-            Error::Rejected(_) | Error::Released(_) | Error::Modified(_) | Error::Detached(_) => {
-                Err(value)
-            }
+            Error::Detached(_) => Err(value),
         }
     }
 }

@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload,
+    Payload
 };
 
 pub(crate) mod engine;
@@ -220,7 +220,7 @@ pub struct Session {
     pub(crate) desired_capabilities: Option<Vec<Symbol>>,
     pub(crate) properties: Option<Fields>,
 
-    /// local links by output handle
+    // local links by output handle
     pub(crate) link_name_by_output_handle: Slab<String>,
     pub(crate) link_by_name: BTreeMap<String, Option<LinkRelay<OutputHandle>>>,
     pub(crate) link_by_input_handle: BTreeMap<InputHandle, LinkRelay<OutputHandle>>,
@@ -496,12 +496,6 @@ impl endpoint::Session for Session {
         let mut first_echo = first;
         let mut last_echo = first;
         let mut prev = false;
-
-        // let is_settled = match &disposition.state {
-        //     // TODO: What happens if state is not terminal but settles id true?
-        //     Some(state) => disposition.settled || state.is_terminal(),
-        //     None => disposition.settled,
-        // };
 
         if disposition.settled {
             // If it is alrea

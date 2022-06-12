@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{Source, Target, TargetArchetype},
+    messaging::{DeliveryState, Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
@@ -22,11 +22,12 @@ use crate::{
 use super::{
     delivery::UnsettledMessage,
     error::AttachError,
-    receiver::CreditMode,
+    receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
-    Receiver, Sender, SenderFlowState,
+    target_archetype::VerifyTargetArchetype,
+    Receiver, ReceiverFlowState, Sender, SenderFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -97,28 +98,6 @@ pub struct Builder<Role, T, NameState, Addr> {
     name_state: PhantomData<NameState>,
     addr_state: PhantomData<Addr>,
 }
-
-// impl<Role, Addr> From<Attach> for Builder<Role, WithName, Addr> {
-//     fn from(attach: Attach) -> Self {
-//         Self {
-//             name: attach.name,
-//             snd_settle_mode: attach.snd_settle_mode,
-//             rcv_settle_mode: attach.rcv_settle_mode,
-//             source: attach.source,
-//             target: attach.target,
-//             initial_delivery_count: attach.initial_delivery_count,
-//             max_message_size: attach.max_message_size,
-//             offered_capabilities: attach.offered_capabilities,
-//             desired_capabilities: attach.desired_capabilities,
-//             properties: attach.properties,
-//             buffer_size: todo!(),
-//             credit_mode: todo!(),
-//             role: todo!(),
-//             name_state: todo!(),
-//             addr_state: todo!(),
-//         }
-//     }
-// }
 
 impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutTarget> {
     fn default() -> Self {
@@ -402,17 +381,14 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
 
 impl<T> Builder<role::Sender, T, WithName, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
-    async fn attach_inner<R>(
-        mut self,
-        session: &mut SessionHandle<R>,
-    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
-    {
-        let buffer_size = self.buffer_size;
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = PollSender::new(session.outgoing.clone());
-
+    fn create_flow_state_containers(
+        &mut self,
+    ) -> (
+        Producer<Arc<LinkFlowState<role::Sender>>>,
+        Consumer<Arc<LinkFlowState<role::Sender>>>,
+    ) {
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -424,15 +400,27 @@ where
         };
         let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
         let notifier = Arc::new(Notify::new());
-        let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
-        let flow_state_consumer = Consumer::new(notifier, flow_state);
+        let producer = Producer::new(notifier.clone(), flow_state.clone());
+        let consumer = Consumer::new(notifier, flow_state);
+        (producer, consumer)
+    }
+
+    async fn attach_inner<R>(
+        mut self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
+    {
+        let buffer_size = self.buffer_size;
+        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = PollSender::new(session.outgoing.clone());
+        let (producer, consumer) = self.create_flow_state_containers();
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkRelay::Sender {
+
+        let link_relay = LinkRelay::Sender {
             tx: incoming_tx,
             output_handle: (),
-            flow_state: flow_state_producer,
+            flow_state: producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: Default::default(), // Update this on incoming attach in session
                                                       // state_code: state_code.clone(),
@@ -440,9 +428,9 @@ where
 
         // Create Link in Session
         let output_handle =
-            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
+            session::allocate_link(&mut session.control, self.name.clone(), link_relay).await?;
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
+        let mut link = self.create_link(unsettled, output_handle, consumer);
 
         // Get writer to session
         let writer = session.outgoing.clone();
@@ -477,10 +465,22 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(
+    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, AttachError> {
+        self.attach_inner(session)
+            .await
+            .map(|inner| Receiver { inner })
+    }
+}
+
+impl<T> Builder<role::Receiver, T, WithName, WithTarget>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Receiver, AttachError> {
+    ) -> Result<ReceiverInner<Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>, AttachError>
+    {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
         let credit_mode = self.credit_mode.clone();
@@ -525,7 +525,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
         // Send an Attach frame
         super::do_attach(&mut link, &mut writer, &mut reader).await?;
 
-        let mut receiver = Receiver {
+        let mut inner = ReceiverInner {
             link,
             buffer_size,
             credit_mode,
@@ -536,16 +536,17 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
             incomplete_transfer: None,
         };
 
-        if let CreditMode::Auto(credit) = receiver.credit_mode {
-            receiver.set_credit(credit).await.map_err(|error| {
-                match AttachError::try_from(error) {
+        if let CreditMode::Auto(credit) = inner.credit_mode {
+            inner
+                .set_credit(credit)
+                .await
+                .map_err(|error| match AttachError::try_from(error) {
                     Ok(error) => error,
                     Err(_) => unreachable!(),
-                }
-            })?;
+                })?;
         }
 
-        Ok(receiver)
+        Ok(inner)
     }
 }
 

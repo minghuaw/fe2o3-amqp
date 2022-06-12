@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.14
+
+1. Controller verifies txn capability on attach
+2. Updated `fe2o3-amqp-types` to 0.0.17 which renamed `BodySection` to `Body`
+
 ## 0.0.13
 
 1. Updated `fe2o3-amqp-types` to 0.0.16
