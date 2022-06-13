@@ -27,7 +27,7 @@ use fe2o3_amqp_types::{
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
-    primitives::{Boolean, UInt}, transaction::TransactionId,
+    primitives::{Boolean, UInt},
 };
 use futures_util::{Future, Sink};
 use tokio::sync::{mpsc, oneshot};

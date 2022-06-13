@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{Target, TargetArchetype},
+    messaging::{Target}, primitives::Symbol, transaction::TxnCapability,
 };
 
 #[cfg(feature = "transaction")]
@@ -101,5 +101,37 @@ impl VerifyTargetArchetype for Coordinator {
         // Note that it is the responsibility of the transaction controller to verify that the
         // capabilities of the controller meet its requirements.
         Ok(())
+    }
+}
+
+pub trait TargetArchetypeCapabilities {
+    type Capability;
+
+    fn capabilities(&self) -> &Option<Vec<Self::Capability>>;
+
+    fn capabilities_mut(&mut self) -> &mut Option<Vec<Self::Capability>>;
+}
+
+impl TargetArchetypeCapabilities for Target {
+    type Capability = Symbol;
+
+    fn capabilities(&self) -> &Option<Vec<Symbol>> {
+        &self.capabilities
+    }
+
+    fn capabilities_mut(&mut self) -> &mut Option<Vec<Symbol>> {
+        &mut self.capabilities
+    }
+}
+
+impl TargetArchetypeCapabilities for Coordinator {
+    type Capability = TxnCapability;
+
+    fn capabilities(&self) -> &Option<Vec<TxnCapability>> {
+        &self.capabilities
+    }
+
+    fn capabilities_mut(&mut self) -> &mut Option<Vec<TxnCapability>> {
+        &mut self.capabilities
     }
 }

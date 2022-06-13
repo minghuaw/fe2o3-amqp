@@ -55,10 +55,10 @@ pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 /// Type alias for sender link that ONLY represents the inner state of a Sender
-pub(crate) type SenderLink = Link<role::Sender, Target, SenderFlowState, UnsettledMessage>;
+pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
 
 /// Type alias for receiver link that ONLY represents the inner state of receiver
-pub(crate) type ReceiverLink = Link<role::Receiver, Target, ReceiverFlowState, DeliveryState>;
+pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, DeliveryState>;
 
 pub(crate) type ArcSenderUnsettledMap = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
 pub(crate) type ArcReceiverUnsettledMap = Arc<RwLock<UnsettledMap<DeliveryState>>>;

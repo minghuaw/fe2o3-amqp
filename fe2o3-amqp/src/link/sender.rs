@@ -72,7 +72,7 @@ use super::{
 ///     .unwrap();
 /// ```
 pub struct Sender {
-    pub(crate) inner: SenderInner<SenderLink>,
+    pub(crate) inner: SenderInner<SenderLink<Target>>,
 }
 
 impl std::fmt::Debug for Sender {
@@ -278,7 +278,7 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
     }
 }
 
-impl SenderInner<SenderLink> {
+impl SenderInner<SenderLink<Target>> {
     #[inline]
     pub async fn detach_with_error(
         &mut self,

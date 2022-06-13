@@ -6,7 +6,7 @@ use crate::link::error::DetachError;
 use super::*;
 
 #[async_trait]
-impl<T> endpoint::SenderLink for Link<role::Sender, T, SenderFlowState, UnsettledMessage>
+impl<T> endpoint::SenderLink for SenderLink<T>
 where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {

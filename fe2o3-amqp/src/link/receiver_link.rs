@@ -17,7 +17,7 @@ const AMQP_VAL_CODE: u8 = 0x77;
 const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
-impl<Tar> endpoint::ReceiverLink for Link<role::Receiver, Tar, ReceiverFlowState, DeliveryState>
+impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
     Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
@@ -411,7 +411,7 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
     (section_numbers, offset as u64)
 }
 
-impl ReceiverLink {
+impl ReceiverLink<Target> {
     /// Set and send flow state
     #[cfg(feature = "transaction")]
     pub(crate) fn blocking_send_flow(

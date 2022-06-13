@@ -199,7 +199,7 @@ impl Default for CreditMode {
 /// ```
 #[derive(Debug)]
 pub struct Receiver {
-    pub(crate) inner: ReceiverInner<ReceiverLink>,
+    pub(crate) inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
 impl Receiver {
