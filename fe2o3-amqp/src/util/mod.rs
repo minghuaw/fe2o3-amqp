@@ -1,5 +1,7 @@
 //! Common utilities
 
+use fe2o3_amqp_types::messaging::{Target, TargetArchetype};
+use fe2o3_amqp_types::transaction::Coordinator;
 use futures_util::Future;
 use std::ops::Deref;
 use std::{pin::Pin, task::Poll, time::Duration};
@@ -78,3 +80,47 @@ pub struct Uninitialized {}
 /// Shared type state for builders
 #[derive(Debug)]
 pub struct Initialized {}
+
+
+/// Convenience functions to test the variant of a TargetArchetype
+pub trait TargetArchetypeVariant {
+    fn is_target(&self) -> bool;
+
+    fn is_coordinator(&self) -> bool;
+}
+
+impl TargetArchetypeVariant for Target {
+    fn is_target(&self) -> bool {
+        true
+    }
+
+    fn is_coordinator(&self) -> bool {
+        false
+    }
+}
+
+impl TargetArchetypeVariant for Coordinator {
+    fn is_target(&self) -> bool {
+        false
+    }
+
+    fn is_coordinator(&self) -> bool {
+        true
+    }
+}
+
+impl TargetArchetypeVariant for TargetArchetype {
+    fn is_target(&self) -> bool {
+        match self {
+            TargetArchetype::Target(_) => true,
+            TargetArchetype::Coordinator(_) => false,
+        }
+    }
+
+    fn is_coordinator(&self) -> bool {
+        match self {
+            TargetArchetype::Target(_) => false,
+            TargetArchetype::Coordinator(_) => true,
+        }
+    }
+}

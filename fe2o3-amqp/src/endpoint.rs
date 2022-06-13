@@ -27,7 +27,7 @@ use fe2o3_amqp_types::{
     },
     messaging::DeliveryState,
     performatives::{Attach, Begin, Close, Detach, Disposition, End, Flow, Open, Transfer},
-    primitives::{Boolean, UInt},
+    primitives::{Boolean, UInt}, transaction::TransactionId,
 };
 use futures_util::{Future, Sink};
 use tokio::sync::{mpsc, oneshot};
@@ -275,26 +275,6 @@ pub(crate) trait Session {
     ) -> Result<SessionFrame, Self::Error>;
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
 }
-
-// /// How an incoming transaction should be handled in a session
-// #[cfg(feature = "transaction")]
-// pub(crate) trait TransactionSession {
-//     fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocateTxnIdFailed>;
-
-//     fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), ()>;
-
-//     fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), ()>;
-
-//     fn on_incoming_control_attach(&mut self, attach: Attach);
-
-//     fn on_incoming_control_detach(&mut self, detach: Detach);
-
-//     fn on_incoming_txn_posting(&mut self, transfer: Transfer);
-
-//     fn on_incoming_txn_retirement(&mut self, disposition: Disposition);
-
-//     fn on_incoming_txn_acquisition(&mut self, flow: Flow);
-// }
 
 #[async_trait]
 pub(crate) trait LinkDetach {

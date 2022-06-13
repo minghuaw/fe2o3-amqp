@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::Target,
+    messaging::{Target, TargetArchetype},
 };
 
 #[cfg(feature = "transaction")]

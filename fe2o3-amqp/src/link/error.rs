@@ -14,8 +14,6 @@ use fe2o3_amqp_types::transaction::TransactionId;
 /// Error associated with detaching a link
 #[derive(Debug)]
 pub struct DetachError {
-    // /// The link which encountered error while detaching
-    // pub link: Option<L>,
     /// Whether the remote is closing
     pub is_closed_by_remote: bool,
     /// The error associated with detachment
@@ -59,30 +57,6 @@ impl fmt::Display for DetachError {
 }
 
 impl std::error::Error for DetachError {}
-
-// impl TryFrom<Error> for DetachError {
-//     type Error = Error;
-
-//     fn try_from(value: Error) -> Result<Self, Self::Error> {
-//         match value {
-//             Error::Local(error) => {
-//                 let err = Self {
-//                     is_closed_by_remote: false,
-//                     error: Some(error),
-//                 };
-//                 Ok(err)
-//             }
-//             Error::Detached(err) => {
-//                 let error = DetachError {
-//                     is_closed_by_remote: err.is_closed_by_remote,
-//                     error: err.error,
-//                 };
-//                 Ok(error)
-//             }
-//             // Error::Rejected(_) | Error::Released(_) | Error::Modified(_) => Err(value),
-//         }
-//     }
-// }
 
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
