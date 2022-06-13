@@ -148,7 +148,7 @@ where
         mut stream: Io,
         hostname: Option<&str>,
         mut profile: SaslProfile,
-    ) -> Result<Io, NegotiationError> {
+    ) -> Result<(Io, bool), NegotiationError> {
         let span = span!(Level::TRACE, "SEND");
         let proto_header = ProtocolHeader::sasl();
         event!(parent: &span, Level::TRACE, ?proto_header);
@@ -188,7 +188,25 @@ where
                     transport.send(sasl::Frame::Response(response)).await?
                 }
                 Negotiation::Outcome(outcome) => match outcome.code {
-                    SaslCode::Ok => return Ok(transport.into_inner_io()),
+                    SaslCode::Ok => {
+                        if transport.framed.read_buffer().is_empty() {
+                            return Ok((transport.into_inner_io(), false));
+                        } else {
+                            transport
+                                .framed
+                                .read_buffer()
+                                .take(8)
+                                .read(&mut buf)
+                                .await?;
+                            if ProtocolHeader::try_from(buf) == Ok(ProtocolHeader::amqp())
+                                && transport.framed.read_buffer().len() == 8
+                            {
+                                return Ok((transport.into_inner_io(), true));
+                            } else {
+                                return Err(NegotiationError::DecodeError);
+                            }
+                        }
+                    }
                     code => {
                         return Err(NegotiationError::SaslError {
                             code,
@@ -210,11 +228,13 @@ where
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,
-    ) -> Result<ProtocolHeader, NegotiationError> {
+    ) -> Result<(), NegotiationError> {
         send_amqp_proto_header(io, local_state, proto_header.clone()).await?;
-        let incoming_header = recv_amqp_proto_header(io, local_state, proto_header).await?;
+        if let ConnectionState::HeaderSent = local_state {
+            recv_amqp_proto_header(io, local_state, proto_header).await?;
+        }
 
-        Ok(incoming_header)
+        Ok(())
     }
 
     /// Change the max_frame_size for the transport

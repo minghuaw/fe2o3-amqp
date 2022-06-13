@@ -513,13 +513,13 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     async fn negotiate_amqp_with_stream<Io>(
         &self,
         mut stream: Io,
+
         local_state: &mut ConnectionState,
     ) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let _remote_header =
-            Transport::negotiate(&mut stream, local_state, ProtocolHeader::amqp()).await?;
+        Transport::negotiate(&mut stream, local_state, ProtocolHeader::amqp()).await?;
         let idle_timeout = self
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
@@ -540,22 +540,29 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         match self.sasl_profile.take() {
             Some(profile) => {
                 let hostname = self.hostname;
-                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
-                self.connect_amqp_with_stream(stream).await
+                let (stream, amqp_header_received) =
+                    Transport::connect_sasl(stream, hostname, profile).await?;
+                self.connect_amqp_with_stream(stream, amqp_header_received)
+                    .await
             }
-            None => self.connect_amqp_with_stream(stream).await,
+            None => self.connect_amqp_with_stream(stream, false).await,
         }
     }
 
     async fn connect_amqp_with_stream<Io>(
         self,
         stream: Io,
+        amqp_header_received: bool,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         // exchange header
-        let mut local_state = ConnectionState::Start;
+        let mut local_state = if amqp_header_received {
+            ConnectionState::HeaderReceived
+        } else {
+            ConnectionState::Start
+        };
         let buffer_size = self.buffer_size;
         let transport = self
             .negotiate_amqp_with_stream(stream, &mut local_state)
