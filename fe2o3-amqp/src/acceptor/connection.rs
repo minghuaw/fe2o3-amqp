@@ -29,7 +29,7 @@ use crate::{
     },
     session::frame::{SessionFrame, SessionFrameBody},
     transport::{
-        protocol_header::{ProtocolHeader, ProtocolId},
+        protocol_header::{ProtocolHeader},
         send_amqp_proto_header, Transport,
     },
     util::{Initialized, Uninitialized},
@@ -220,68 +220,6 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
     }
 }
 
-macro_rules! sasl_not_impled {
-    ($header:expr) => {
-        async fn sasl_not_implemented<Io>(
-            &self,
-            mut stream: Io,
-            incoming_header: ProtocolHeader,
-        ) -> Result<ListenerConnectionHandle, OpenError>
-        where
-            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-        {
-            let header = $header;
-            let buf: [u8; 8] = header.into();
-            stream.write_all(&buf).await?;
-            Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
-        }
-    };
-}
-
-impl ConnectionAcceptor<(), ()> {
-    sasl_not_impled!(ProtocolHeader::amqp());
-}
-
-#[cfg(feature = "native-tls")]
-impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
-    sasl_not_impled!(ProtocolHeader::tls());
-}
-
-#[cfg(feature = "rustls")]
-impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
-    sasl_not_impled!(ProtocolHeader::tls());
-}
-
-macro_rules! tls_not_impled {
-    ($header:expr) => {
-        async fn tls_not_implemented<Io>(
-            &self,
-            mut stream: Io,
-            incoming_header: ProtocolHeader,
-        ) -> Result<ListenerConnectionHandle, OpenError>
-        where
-            Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-        {
-            // Send back supported protocol header: AMQP or SASL
-            let header = $header;
-            let buf: [u8; 8] = header.into();
-            stream.write_all(&buf).await?;
-            Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()))
-        }
-    };
-}
-
-impl<Sasl> ConnectionAcceptor<(), Sasl>
-where
-    Sasl: SaslAcceptor,
-{
-    tls_not_impled!(ProtocolHeader::sasl());
-}
-
-impl ConnectionAcceptor<(), ()> {
-    tls_not_impled!(ProtocolHeader::amqp());
-}
-
 impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl>
 where
     Sasl: SaslAcceptor,
@@ -404,7 +342,7 @@ where
 // A macro is used instead of blanked impl with trait to avoid heap allocated future
 #[cfg(any(feature = "rustls", feature = "native-tls"))]
 macro_rules! connect_tls {
-    ($fn_ident:ident, $sasl_handler:ident) => {
+    ($fn_ident:ident, $next_proto_header_handler:ident) => {
         async fn $fn_ident<Io>(
             &self,
             mut stream: Io,
@@ -433,21 +371,14 @@ macro_rules! connect_tls {
             let incoming_header =
                 ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
-            match incoming_header.id {
-                ProtocolId::Amqp => {
-                    self.negotiate_amqp_with_stream(tls_stream, incoming_header)
-                        .await
-                }
-                ProtocolId::Tls => Err(OpenError::ProtocolHeaderMismatch(incoming_header.into())),
-                ProtocolId::Sasl => self.$sasl_handler(tls_stream, incoming_header).await,
-            }
+            self.$next_proto_header_handler(tls_stream, incoming_header).await
         }
     };
 }
 
 #[cfg(feature = "native-tls")]
 impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
-    connect_tls!(connect_tls_with_native_tls, sasl_not_implemented);
+    connect_tls!(negotiate_tls_with_native_tls, negotiate_amqp_with_stream);
 }
 
 #[cfg(feature = "native-tls")]
@@ -455,12 +386,12 @@ impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    connect_tls!(connect_tls_with_native_tls, negotiate_sasl_with_stream);
+    connect_tls!(negotiate_tls_with_native_tls, negotiate_sasl_with_stream);
 }
 
 #[cfg(feature = "rustls")]
 impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
-    connect_tls!(connect_tls_with_rustls, sasl_not_implemented);
+    connect_tls!(negotiate_tls_with_rustls, negotiate_amqp_with_stream);
 }
 
 #[cfg(feature = "rustls")]
@@ -468,11 +399,11 @@ impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    connect_tls!(connect_tls_with_rustls, negotiate_sasl_with_stream);
+    connect_tls!(negotiate_tls_with_rustls, negotiate_sasl_with_stream);
 }
 
 macro_rules! impl_accept {
-    (<$tls:ty, $sasl:ty>, $tls_handler:ident, $sasl_handler:ident) => {
+    (<$tls:ty, $sasl:ty>, $proto_header_handler:ident) => {
         /// Accepts an incoming connection
         pub async fn accept<Io>(
             &self,
@@ -488,32 +419,31 @@ macro_rules! impl_accept {
             let incoming_header =
                 ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
-            match incoming_header.id {
-                ProtocolId::Amqp => {
-                    self.negotiate_amqp_with_stream(stream, incoming_header)
-                        .await
-                }
-                ProtocolId::Tls => self.$tls_handler(stream, incoming_header).await,
-                ProtocolId::Sasl => self.$sasl_handler(stream, incoming_header).await,
-            }
+            self.$proto_header_handler(stream, incoming_header).await
+
+            // match incoming_header.id {
+            //     ProtocolId::Amqp => self.$amqp_handler(stream, incoming_header).await,
+            //     ProtocolId::Tls => self.$tls_handler(stream, incoming_header).await,
+            //     ProtocolId::Sasl => self.$sasl_handler(stream, incoming_header).await,
+            // }
         }
     };
 }
 
 impl ConnectionAcceptor<(), ()> {
-    impl_accept!(<(),()>, tls_not_implemented, sasl_not_implemented);
+    impl_accept!(<(),()>, negotiate_amqp_with_stream);
 }
 
 impl<Sasl> ConnectionAcceptor<(), Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    impl_accept!(<(), Sasl>, tls_not_implemented, negotiate_sasl_with_stream);
+    impl_accept!(<(), Sasl>, negotiate_sasl_with_stream);
 }
 
 #[cfg(feature = "native-tls")]
 impl ConnectionAcceptor<tokio_native_tls::TlsAcceptor, ()> {
-    impl_accept!(<tokio_native_tls::TlsAcceptor, ()>, connect_tls_with_native_tls, sasl_not_implemented);
+    impl_accept!(<tokio_native_tls::TlsAcceptor, ()>, negotiate_tls_with_native_tls);
 }
 
 #[cfg(feature = "native-tls")]
@@ -521,12 +451,12 @@ impl<Sasl> ConnectionAcceptor<tokio_native_tls::TlsAcceptor, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    impl_accept!(<tokio_native_tls::TlsAcceptor, Sasl>, connect_tls_with_native_tls, negotiate_sasl_with_stream);
+    impl_accept!(<tokio_native_tls::TlsAcceptor, Sasl>, negotiate_tls_with_native_tls);
 }
 
 #[cfg(feature = "rustls")]
 impl ConnectionAcceptor<tokio_rustls::TlsAcceptor, ()> {
-    impl_accept!(<tokio_rustls::TlsAcceptor, ()>, connect_tls_with_rustls, sasl_not_implemented);
+    impl_accept!(<tokio_rustls::TlsAcceptor, ()>, negotiate_tls_with_rustls);
 }
 
 #[cfg(feature = "rustls")]
@@ -534,7 +464,7 @@ impl<Sasl> ConnectionAcceptor<tokio_rustls::TlsAcceptor, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    impl_accept!(<tokio_rustls::TlsAcceptor, Sasl>, connect_tls_with_rustls, negotiate_sasl_with_stream);
+    impl_accept!(<tokio_rustls::TlsAcceptor, Sasl>, negotiate_tls_with_rustls);
 }
 
 /// A connection on the listener side
