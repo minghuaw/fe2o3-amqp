@@ -62,9 +62,14 @@ impl<Io, Ftype> Transport<Io, Ftype>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Consume the transport and return the wrapped IO
-    pub fn into_inner_io(self) -> Io {
-        self.framed.into_inner()
+    // /// Consume the transport and return the wrapped IO
+    // pub fn into_inner_io(self) -> Io {
+    //     self.framed.into_inner()
+    // }
+
+    /// Consume the transport and return the underlying codec
+    pub fn into_framed_codec(self) -> Framed<Io, LengthDelimitedCodec> {
+        self.framed
     }
 
     /// Bind to an IO
@@ -77,6 +82,28 @@ where
             .max_frame_length(max_frame_size) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_framed(io);
+        // let idle_timeout = match idle_timeout {
+        //     Some(duration) => match duration.is_zero() {
+        //         true => None,
+        //         false => Some(IdleTimeout::new(duration)),
+        //     },
+        //     None => None,
+        // };
+
+        // Self {
+        //     framed,
+        //     idle_timeout,
+        //     ftype: PhantomData,
+        // }
+
+        Self::bind_to_framed_codec(framed, idle_timeout)
+    }
+
+    /// Bind transport a framed codec
+    pub fn bind_to_framed_codec(
+        framed: Framed<Io, LengthDelimitedCodec>,
+        idle_timeout: Option<Duration>,
+    ) -> Self {
         let idle_timeout = match idle_timeout {
             Some(duration) => match duration.is_zero() {
                 true => None,
@@ -93,7 +120,7 @@ where
     }
 }
 
-impl<Io> Transport<Io, amqp::Frame>
+impl<Io> Transport<Io, ()> 
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
@@ -141,7 +168,12 @@ where
             NegotiationError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
         })
     }
+}
 
+impl<Io> Transport<Io, sasl::Frame> 
+where
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
     /// Performs SASL negotiation
     #[instrument(skip_all, fields(hostname = ?hostname))]
     pub async fn connect_sasl(
@@ -203,10 +235,15 @@ where
             "Expecting SASL negotiation",
         )))
     }
+}
 
+impl<Io> Transport<Io, amqp::Frame>
+where
+    Io: AsyncRead + AsyncWrite + Unpin,
+{
     /// Performs AMQP negotiation
     #[instrument(skip_all)]
-    pub async fn negotiate(
+    pub async fn negotiate_amqp(
         io: &mut Io,
         local_state: &mut ConnectionState,
         proto_header: ProtocolHeader,

@@ -1,6 +1,11 @@
 //! Implements the protocol headers
 
-use std::convert::{TryFrom, TryInto};
+use std::{convert::{TryFrom, TryInto}, io};
+
+use bytes::{BufMut, Buf};
+use tokio_util::codec::{Encoder, Decoder};
+
+use super::Error;
 
 const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 
@@ -125,6 +130,25 @@ impl TryFrom<[u8; 8]> for ProtocolHeader {
     }
 }
 
+impl<'a> TryFrom<&'a [u8]> for ProtocolHeader {
+    type Error = &'a [u8];
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        if value.len() != 8 {
+            return Err(value)
+        }
+
+        if value[..4] != b"AMQP"[..] {
+            return Err(value)
+        }
+
+        let id = value[4].try_into()
+            .map_err(|_| value)?;
+        
+        Ok(Self::new(id, value[5], value[6], value[7]))
+    }
+}
+
 /// Protocol ID
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolId {
@@ -149,5 +173,39 @@ impl TryFrom<u8> for ProtocolId {
             _ => return Err(value),
         };
         Ok(val)
+    }
+}
+
+/// Encoder and Decoder for protocol headers
+#[derive(Debug, Clone)]
+pub struct ProtocolHeaderCodec {}
+
+impl Encoder<ProtocolHeader> for ProtocolHeaderCodec {
+    type Error = io::Error;
+
+    fn encode(&mut self, item: ProtocolHeader, dst: &mut bytes::BytesMut) -> Result<(), Self::Error> {
+        let buf: [u8; 8] = item.into();
+        dst.put(&buf[..]);
+        Ok(())
+    }
+}
+
+impl Decoder for ProtocolHeaderCodec {
+    type Item = ProtocolHeader;
+    type Error = io::Error;
+
+    fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.remaining() == 0 {
+            return Ok(None)
+        }
+        
+        if src.remaining() < 8 {
+            return Err(io::Error::new(io::ErrorKind::Other, "Expecting protocol header"))
+        }
+
+        let bytes = src.copy_to_bytes(8);
+        ProtocolHeader::try_from(bytes.as_ref())
+            .map(Some)
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Expecting protocol header"))
     }
 }
