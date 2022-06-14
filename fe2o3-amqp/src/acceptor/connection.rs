@@ -420,12 +420,6 @@ macro_rules! impl_accept {
                 ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
 
             self.$proto_header_handler(stream, incoming_header).await
-
-            // match incoming_header.id {
-            //     ProtocolId::Amqp => self.$amqp_handler(stream, incoming_header).await,
-            //     ProtocolId::Tls => self.$tls_handler(stream, incoming_header).await,
-            //     ProtocolId::Sasl => self.$sasl_handler(stream, incoming_header).await,
-            // }
         }
     };
 }
