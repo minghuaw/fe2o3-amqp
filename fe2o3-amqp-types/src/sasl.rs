@@ -1,7 +1,7 @@
 //! Types defined in AMQP 1.0 specification Part 5.3: SASL
 
 use serde_amqp::{
-    primitives::{Binary, Symbol},
+    primitives::{Binary, Symbol, Array},
     DeserializeComposite, SerializeComposite,
 };
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -28,7 +28,7 @@ pub struct SaslMechanisms {
     /// authenticate with it, then it SHOULD send a list of one element with its value as the
     /// SASL mechanism ANONYMOUS. The server mechanisms are ordered in decreasing level of
     /// preference.
-    pub sasl_server_mechanisms: Vec<Symbol>,
+    pub sasl_server_mechanisms: Array<Symbol>,
 }
 
 /// 5.3.3.2 SASL Init

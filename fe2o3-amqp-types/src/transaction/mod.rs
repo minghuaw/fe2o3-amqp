@@ -30,7 +30,7 @@ pub struct Coordinator {
     /// requirements.
     ///
     /// See txn-capability.
-    pub capabilities: Option<Vec<TxnCapability>>,
+    pub capabilities: Option<Array<TxnCapability>>,
 }
 
 impl From<Coordinator> for TargetArchetype {

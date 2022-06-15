@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Symbol, UInt, UShort},
+    primitives::{Symbol, UInt, UShort, Array},
 };
 
 use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
@@ -37,16 +37,16 @@ pub struct Open {
     pub idle_time_out: Option<Milliseconds>,
 
     /// <field name="outgoing-locales" type="ietf-language-tag" multiple="true"/>
-    pub outgoing_locales: Option<Vec<IetfLanguageTag>>,
+    pub outgoing_locales: Option<Array<IetfLanguageTag>>,
 
     /// <field name="incoming-locales" type="ietf-language-tag" multiple="true"/>
-    pub incoming_locales: Option<Vec<IetfLanguageTag>>,
+    pub incoming_locales: Option<Array<IetfLanguageTag>>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
-    pub offered_capabilities: Option<Vec<Symbol>>,
+    pub offered_capabilities: Option<Array<Symbol>>,
 
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
-    pub desired_capabilities: Option<Vec<Symbol>>,
+    pub desired_capabilities: Option<Array<Symbol>>,
 
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,
