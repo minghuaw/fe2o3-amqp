@@ -6,6 +6,8 @@ use serde_amqp::{
 };
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
+mod mechanisms;
+
 /// 5.3.3.1 SASL Mechanisms
 /// Advertise available sasl mechanisms.
 /// <type name="sasl-mechanisms" class="composite" source="list" provides="sasl-frame">
@@ -13,13 +15,11 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 ///     <field name="sasl-server-mechanisms" type="symbol" multiple="true" mandatory="true"/>
 /// </type>
 /// Advertises the available SASL mechanisms that can be used for authentication.
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:sasl-mechanisms:list",
-    code = 0x0000_0000_0000_0040,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
+/// 
+/// NOTE: Serialize and Deserialize are manually implemented because 
+/// > A field which is defined as both multiple and mandatory MUST contain at least one value 
+/// (i.e. for such a field both null and an array with no entries are invalid).
+#[derive(Debug, Clone)]
 pub struct SaslMechanisms {
     /// sasl-server-mechanisms supported sasl mechanisms
     ///

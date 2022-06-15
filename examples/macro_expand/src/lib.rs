@@ -5,8 +5,26 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, UInt, ULong},
+    primitives::{Boolean, UInt, ULong, Array, Symbol},
 };
+
+#[derive(SerializeComposite, DeserializeComposite)]
+#[amqp_contract(
+    name = "amqp:sasl-mechanisms:list",
+    code = 0x0000_0000_0000_0040,
+    encoding = "list",
+    rename_all = "kebab-case"
+)]
+pub struct SaslMechanisms {
+    /// sasl-server-mechanisms supported sasl mechanisms
+    ///
+    /// A list of the sasl security mechanisms supported by the sending peer. It is invalid for
+    /// this list to be null or empty. If the sending peer does not require its partner to
+    /// authenticate with it, then it SHOULD send a list of one element with its value as the
+    /// SASL mechanism ANONYMOUS. The server mechanisms are ordered in decreasing level of
+    /// preference.
+    pub sasl_server_mechanisms: Array<Symbol>,
+}
 
 // #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(
@@ -21,10 +39,10 @@ use serde_amqp::{
 // }
 // pub struct A(i32);
 
-#[derive(Serialize, Deserialize)]
-pub struct AnotherNewType<T> {
-    inner: T,
-}
+// #[derive(Serialize, Deserialize)]
+// pub struct AnotherNewType<T> {
+//     inner: T,
+// }
 
 // #[derive(SerializeComposite, DeserializeComposite)]
 // #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
