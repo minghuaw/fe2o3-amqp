@@ -12,7 +12,7 @@ use fe2o3_amqp_types::{
 };
 use futures_util::{Sink, SinkExt, StreamExt};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncWrite},
     sync::mpsc::{self, Receiver},
 };
 use tokio_util::codec::Framed;
@@ -30,7 +30,7 @@ use crate::{
     },
     session::frame::{SessionFrame, SessionFrameBody},
     transport::{
-        protocol_header::{ProtocolHeader, ProtocolHeaderCodec},
+        protocol_header::{ProtocolHeaderCodec},
         Transport,
     },
     util::{Initialized, Uninitialized},
@@ -350,6 +350,9 @@ macro_rules! connect_tls {
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
+            use crate::transport::protocol_header::ProtocolHeader;
+            use tokio::io::AsyncWriteExt;
+
             let incoming_header = crate::transport::recv_tls_proto_header(&mut stream).await?;
 
             let tls_header = ProtocolHeader::tls();

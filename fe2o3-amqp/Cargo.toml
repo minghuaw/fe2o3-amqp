@@ -40,7 +40,7 @@ acceptor = []
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-test = { version = "0.4" }
-testcontainers = "0.13.0"
+testcontainers = "0.14.0"
 
 [dependencies]
 serde_amqp = "0.0.6"

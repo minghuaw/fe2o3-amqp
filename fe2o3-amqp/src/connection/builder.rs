@@ -20,13 +20,10 @@ use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
-    frames::{amqp, sasl},
+    frames::sasl,
     sasl_profile::{Negotiation, SaslProfile},
     transport::Transport,
-    transport::{
-        error::NegotiationError,
-        protocol_header::{ProtocolHeader, ProtocolHeaderCodec},
-    },
+    transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec},
 };
 
 use super::{
@@ -842,8 +839,6 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        use std::io;
-
         let connector = libnative_tls::TlsConnector::new()
             .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
         let connector = tokio_native_tls::TlsConnector::from(connector);
