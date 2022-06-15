@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.8
+
+1. Updated dependencies
+   1. `ordered-float` to "3"
+   2. `uuid` to "1"
+
 ## 0.0.7
 
 1. Added `FromIterator` impl for `Array`
