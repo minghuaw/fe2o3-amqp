@@ -15,6 +15,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::mpsc::{self, Receiver},
 };
+use tokio_util::codec::Framed;
 
 use crate::{
     acceptor::sasl_acceptor::SaslServerFrame,
@@ -29,7 +30,7 @@ use crate::{
     },
     session::frame::{SessionFrame, SessionFrameBody},
     transport::{
-        protocol_header::{ProtocolHeader},
+        protocol_header::{ProtocolHeader, ProtocolHeaderCodec},
         send_amqp_proto_header, Transport,
     },
     util::{Initialized, Uninitialized},
@@ -172,28 +173,19 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
         }
     }
 
-    async fn negotiate_amqp_with_stream<Io>(
+    async fn negotiate_amqp_with_framed<Io>(
         &self,
-        mut stream: Io,
-        incoming_header: ProtocolHeader,
+        framed: Framed<Io, ProtocolHeaderCodec>
     ) -> Result<ListenerConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         let mut local_state = ConnectionState::HeaderReceived;
-        let idle_time_out = self
+        let idle_timeout = self
             .local_open
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
-        let local_header = ProtocolHeader::amqp();
-        if incoming_header != local_header {
-            let buf: [u8; 8] = local_header.into();
-            stream.write_all(&buf).await?;
-            return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()));
-        }
-        send_amqp_proto_header(&mut stream, &mut local_state, local_header).await?;
-        let transport =
-            Transport::<_, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_time_out);
+        let transport = Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
 
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
@@ -218,31 +210,31 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
         };
         Ok(connection_handle)
     }
+
+    async fn negotiate_amqp_with_stream<Io>(
+        &self,
+        stream: Io,
+    ) -> Result<ListenerConnectionHandle, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
+        self.negotiate_amqp_with_framed(framed).await
+    }
 }
 
 impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    async fn negotiate_sasl_with_stream<Io>(
+    async fn negotiate_sasl_with_framed<Io>(
         &self,
-        mut stream: Io,
-        incoming_header: ProtocolHeader,
+        framed: Framed<Io, ProtocolHeaderCodec>
     ) -> Result<ListenerConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let local_header = ProtocolHeader::sasl();
-        if incoming_header != local_header {
-            let buf: [u8; 8] = local_header.into();
-            stream.write_all(&buf).await?;
-            return Err(OpenError::ProtocolHeaderMismatch(incoming_header.into()));
-        }
-
-        let mut buf: [u8; 8] = local_header.into();
-        stream.write_all(&buf).await?;
-
-        let mut transport = Transport::<_, sasl::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, None);
+        let mut transport = Transport::negotiate_sasl_header(framed).await?;
 
         // Send mechanisms
         let mechanisms = SaslMechanisms {
@@ -287,14 +279,23 @@ where
         };
 
         transport.send(sasl::Frame::Outcome(outcome)).await?;
+        
+        // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
+        // it should be fine to simply drop it.
+        let framed = transport.into_framed_codec()
+            .map_codec(|_| ProtocolHeaderCodec::new());
+        self.negotiate_amqp_with_framed(framed).await
+    }
 
-        let mut stream = transport.into_inner_io();
-        stream.read_exact(&mut buf).await?;
-        let incoming_header =
-            ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
-
-        self.negotiate_amqp_with_stream(stream, incoming_header)
-            .await
+    async fn negotiate_sasl_with_stream<Io>(
+        &self,
+        stream: Io,
+    ) -> Result<ListenerConnectionHandle, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
+        self.negotiate_sasl_with_framed(framed).await
     }
 
     async fn negotiate_sasl_challenge<Io>(
@@ -346,11 +347,12 @@ macro_rules! connect_tls {
         async fn $fn_ident<Io>(
             &self,
             mut stream: Io,
-            incoming_header: ProtocolHeader,
         ) -> Result<ListenerConnectionHandle, OpenError>
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
+            let incoming_header = crate::transport::recv_tls_proto_header(&mut stream).await?;
+
             let tls_header = ProtocolHeader::tls();
             if tls_header != incoming_header {
                 let buf: [u8; 8] = tls_header.into();
@@ -359,19 +361,14 @@ macro_rules! connect_tls {
             }
 
             // Send protocol header
-            let mut buf: [u8; 8] = tls_header.into();
+            let buf: [u8; 8] = tls_header.into();
             stream.write_all(&buf).await?;
 
-            let mut tls_stream = self.tls_acceptor.accept(stream).await.map_err(|e| {
+            let tls_stream = self.tls_acceptor.accept(stream).await.map_err(|e| {
                 OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e)))
             })?;
 
-            // Read AMQP header
-            tls_stream.read_exact(&mut buf).await?;
-            let incoming_header =
-                ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
-
-            self.$next_proto_header_handler(tls_stream, incoming_header).await
+            self.$next_proto_header_handler(tls_stream).await
         }
     };
 }
@@ -412,14 +409,7 @@ macro_rules! impl_accept {
         where
             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
         {
-            // Read protocol header
-            let mut buf = [0u8; 8];
-            stream.read_exact(&mut buf).await?;
-
-            let incoming_header =
-                ProtocolHeader::try_from(buf).map_err(|v| OpenError::ProtocolHeaderMismatch(v))?;
-
-            self.$proto_header_handler(stream, incoming_header).await
+            self.$proto_header_handler(stream).await
         }
     };
 }

@@ -1,25 +1,28 @@
 //! Builder for [`crate::Connection`]
 
-use std::{convert::TryInto, marker::PhantomData, time::Duration};
+use std::{convert::TryInto, marker::PhantomData, time::Duration, io};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
-    performatives::{ChannelMax, MaxFrameSize, Open},
+    performatives::{ChannelMax, MaxFrameSize, Open}, sasl::SaslCode,
 };
+use futures_util::{StreamExt, SinkExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
     sync::mpsc::{self},
 };
+use tokio_util::codec::Framed;
+use tracing::instrument;
 use url::Url;
 
 use crate::{
     connection::{Connection, ConnectionState},
-    frames::amqp,
-    sasl_profile::SaslProfile,
+    frames::{amqp, sasl},
+    sasl_profile::{SaslProfile, Negotiation},
     transport::Transport,
-    transport::{error::NegotiationError, protocol_header::ProtocolHeader},
+    transport::{error::NegotiationError, protocol_header::{ProtocolHeader, ProtocolHeaderCodec}},
 };
 
 use super::{
@@ -509,25 +512,65 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
 }
 
 impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
-    #[inline]
-    async fn negotiate_amqp_with_stream<Io>(
-        &self,
-        mut stream: Io,
-        local_state: &mut ConnectionState,
-    ) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
+    // #[inline]
+    // async fn negotiate_amqp_with_stream<Io>(
+    //     &self,
+    //     stream: Io,
+    //     local_state: &mut ConnectionState,
+    // ) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
+    // where
+    //     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    // {
+    //     let mut framed = Framed::new(stream, ProtocolHeaderCodec::new());
+    //     let _remote_header =
+    //         Transport::negotiate_amqp_header(&mut framed, local_state).await?;
+    //     let idle_timeout = self
+    //         .idle_time_out
+    //         .map(|millis| Duration::from_millis(millis as u64));
+    //     // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
+    //     // channel number is 0
+    //     let codec = length_delimited_codec(MIN_MAX_FRAME_SIZE);
+    //     let framed = framed.map_codec(|_| codec);
+    //     let transport = 
+    //         Transport::<Io, amqp::Frame>::bind_to_framed_codec(framed, idle_timeout);
+    //     Ok(transport)
+    // }
+
+    /// Performs SASL negotiation
+    #[instrument(skip_all, fields(hostname = ?self.hostname))]
+    pub async fn negotiate_sasl<Io>(
+        &mut self,
+        transport: &mut Transport<Io, sasl::Frame>,
+        // hostname: Option<&str>,
+        mut profile: SaslProfile,
+    ) -> Result<(), NegotiationError> 
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let _remote_header =
-            Transport::negotiate(&mut stream, local_state, ProtocolHeader::amqp()).await?;
-        let idle_timeout = self
-            .idle_time_out
-            .map(|millis| Duration::from_millis(millis as u64));
-        // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
-        // channel number is 0
-        let transport =
-            Transport::<Io, amqp::Frame>::bind(stream, MIN_MAX_FRAME_SIZE, idle_timeout);
-        Ok(transport)
+        // TODO: timeout?
+        while let Some(frame) = transport.next().await {
+            let frame = frame?;
+
+            match profile.on_frame(frame, self.hostname).await? {
+                Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
+                Negotiation::_Response(response) => {
+                    transport.send(sasl::Frame::Response(response)).await?
+                }
+                Negotiation::Outcome(outcome) => match outcome.code {
+                    SaslCode::Ok => return Ok(()),
+                    code => {
+                        return Err(NegotiationError::SaslError {
+                            code,
+                            additional_data: outcome.additional_data,
+                        })
+                    }
+                },
+            }
+        }
+        Err(NegotiationError::Io(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "Expecting SASL negotiation",
+        )))
     }
 
     async fn connect_with_stream<Io>(
@@ -539,32 +582,40 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     {
         match self.sasl_profile.take() {
             Some(profile) => {
-                let hostname = self.hostname;
-                let stream = Transport::connect_sasl(stream, hostname, profile).await?;
-                self.connect_amqp_with_stream(stream).await
+                let framed = Framed::new(stream, ProtocolHeaderCodec::new());
+                let mut transport = Transport::negotiate_sasl_header(framed).await?;
+                self.negotiate_sasl(&mut transport, profile).await?;
+
+                // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
+                // it should be fine to simply drop it.
+                let framed = transport.into_framed_codec()
+                    .map_codec(|_| ProtocolHeaderCodec::new());
+
+                // Then perform AMQP negotiation
+                self.connect_amqp_with_framed(framed).await
             }
             None => self.connect_amqp_with_stream(stream).await,
         }
     }
 
-    async fn connect_amqp_with_stream<Io>(
+    async fn connect_amqp_with_framed<Io>(
         self,
-        stream: Io,
-    ) -> Result<ConnectionHandle<()>, OpenError>
+        framed: Framed<Io, ProtocolHeaderCodec>
+    ) -> Result<ConnectionHandle<()>, OpenError> 
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        // exchange header
+        // Exchange AMQP headers
         let mut local_state = ConnectionState::Start;
+        let idle_timeout = self
+            .idle_time_out
+            .map(|millis| Duration::from_millis(millis as u64));
         let buffer_size = self.buffer_size;
-        let transport = self
-            .negotiate_amqp_with_stream(stream, &mut local_state)
-            .await?;
+        let transport = Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
 
-        // spawn Connection Mux
         let local_open = Open::from(self);
 
-        // create channels
+        // Create channels
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
         let connection = Connection::new(control_tx.clone(), local_state, local_open);
@@ -574,7 +625,6 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
             connection,
             control_rx,
             outgoing_rx,
-            // session_control_rx
         )
         .await?;
         let handle = engine.spawn();
@@ -587,6 +637,17 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         };
 
         Ok(connection_handle)
+    }
+
+    async fn connect_amqp_with_stream<Io>(
+        self,
+        stream: Io,
+    ) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
+        self.connect_amqp_with_framed(framed).await
     }
 }
 
