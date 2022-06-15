@@ -180,7 +180,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let mut local_state = ConnectionState::HeaderReceived;
+        let mut local_state = ConnectionState::Start;
         let idle_timeout = self
             .local_open
             .idle_time_out

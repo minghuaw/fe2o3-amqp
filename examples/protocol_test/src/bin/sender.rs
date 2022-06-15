@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use fe2o3_amqp::sasl_profile::SaslProfile;
-use fe2o3_amqp::types::messaging::message::BodySection;
+use fe2o3_amqp::types::messaging::message::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sendable;
@@ -72,7 +72,7 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    let body = BodySection::from("hello");
+    let body = Body::from("hello");
     // let message = Message::from("hello");
     let message = Message::from(body);
     let message = Sendable::from(message);
