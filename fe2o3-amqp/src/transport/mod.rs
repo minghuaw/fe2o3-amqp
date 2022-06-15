@@ -11,8 +11,7 @@ pub(crate) mod error;
 pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, MAJOR, MIN_MAX_FRAME_SIZE, REVISION, MINOR},
-    sasl::SaslCode,
+    definitions::{AmqpError, MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
 use tracing::{event, instrument, span, trace, Level};
@@ -31,7 +30,6 @@ use tokio_util::codec::{
 
 use crate::{
     frames::{amqp, sasl},
-    sasl_profile::{Negotiation, SaslProfile},
     util::IdleTimeout,
 };
 
@@ -156,7 +154,7 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     /// Performs SASL header negotiation
-    /// 
+    ///
     /// This is separate from negotiate_amqp_header because SASL header exchange
     /// doesn't modify the connection state
     pub async fn negotiate_sasl_header(
@@ -176,6 +174,7 @@ where
                     std::io::ErrorKind::UnexpectedEof,
                     "Waiting for SASL header exchange",
                 )))??;
+        event!(parent: &span, Level::TRACE, ?incoming_header);
 
         if !incoming_header.is_sasl()
             || incoming_header.major != MAJOR
@@ -312,7 +311,9 @@ where
 }
 
 #[instrument(name = "RECV", skip_all)]
-pub(crate) async fn recv_tls_proto_header<Io>(stream: &mut Io) -> Result<ProtocolHeader, NegotiationError>
+pub(crate) async fn recv_tls_proto_header<Io>(
+    stream: &mut Io,
+) -> Result<ProtocolHeader, NegotiationError>
 where
     Io: AsyncRead + Unpin,
 {
@@ -538,11 +539,11 @@ mod tests {
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
-    use tokio_util::codec::{LengthDelimitedCodec, Framed};
+    use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
     use super::{
         amqp::{Frame, FrameBody},
-        protocol_header::{ProtocolHeaderCodec},
+        protocol_header::ProtocolHeaderCodec,
         Transport,
     };
 

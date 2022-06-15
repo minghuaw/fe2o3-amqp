@@ -1,5 +1,8 @@
 use fe2o3_amqp_types::transaction::{Declare, Discharge};
-use serde::{ser, de::{self, VariantAccess}};
+use serde::{
+    de::{self, VariantAccess},
+    ser,
+};
 
 pub enum ControlMessageBody {
     Declare(Declare),
@@ -34,12 +37,12 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             "amqp:declare:list" => Field::Declare,
             "amqp:discharge:list" => Field::Discharge,
-            _ => return Err(de::Error::custom("Wrong symbol for descriptor"))
+            _ => return Err(de::Error::custom("Wrong symbol for descriptor")),
         };
 
         Ok(val)
@@ -47,15 +50,17 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        E: de::Error, 
+        E: de::Error,
     {
         let val = match v {
             0x0000_0000_0000_0031 => Field::Declare,
             0x0000_0000_0000_0032 => Field::Discharge,
-            _ => return Err(de::Error::custom(format!(
-                "Wrong code value for descriptor, found {:#x?}",
-                v
-            )))
+            _ => {
+                return Err(de::Error::custom(format!(
+                    "Wrong code value for descriptor, found {:#x?}",
+                    v
+                )))
+            }
         };
 
         Ok(val)
@@ -65,7 +70,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_identifier(FieldVisitor {})
     }
@@ -82,7 +87,7 @@ impl<'de> de::Visitor<'de> for Visitor {
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
     where
-        A: de::EnumAccess<'de>, 
+        A: de::EnumAccess<'de>,
     {
         let (val, variant) = data.variant()?;
 
@@ -90,7 +95,7 @@ impl<'de> de::Visitor<'de> for Visitor {
             Field::Declare => {
                 let value = variant.newtype_variant()?;
                 Ok(ControlMessageBody::Declare(value))
-            },
+            }
             Field::Discharge => {
                 let value = variant.newtype_variant()?;
                 Ok(ControlMessageBody::Discharge(value))
@@ -102,12 +107,9 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for ControlMessageBody {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> 
+        D: serde::Deserializer<'de>,
     {
-        const VARIANTS: &[&str] = &[
-            "amqp:declare:list",
-            "amqp:discharge:list",
-        ];
+        const VARIANTS: &[&str] = &["amqp:declare:list", "amqp:discharge:list"];
         deserializer.deserialize_enum("ControlMessageBody", VARIANTS, Visitor {})
     }
 }

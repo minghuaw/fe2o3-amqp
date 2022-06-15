@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload
+    Payload,
 };
 
 pub(crate) mod engine;

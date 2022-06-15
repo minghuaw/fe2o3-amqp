@@ -19,6 +19,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
+    control::SessionControl,
     endpoint::{InputHandle, LinkAttach},
     link::{
         self,
@@ -32,7 +33,7 @@ use crate::{
     },
     session::SessionHandle,
     util::{Consumer, Initialized, Producer},
-    Receiver, Sender, control::SessionControl,
+    Receiver, Sender,
 };
 
 use super::{

@@ -1,11 +1,14 @@
 //! Implements the protocol headers
 
-use std::{convert::{TryFrom, TryInto}, io};
+use std::{
+    convert::{TryFrom, TryInto},
+    io,
+};
 
-use bytes::{BufMut, Buf, Bytes};
-use tokio_util::codec::{Encoder, Decoder};
+use bytes::{Buf, BufMut, Bytes};
+use tokio_util::codec::{Decoder, Encoder};
 
-use super::{error::NegotiationError};
+use super::error::NegotiationError;
 
 const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 
@@ -142,16 +145,15 @@ impl<'a> TryFrom<&'a [u8]> for ProtocolHeader {
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         if value.len() != 8 {
-            return Err(value)
+            return Err(value);
         }
 
         if value[..4] != b"AMQP"[..] {
-            return Err(value)
+            return Err(value);
         }
 
-        let id = value[4].try_into()
-            .map_err(|_| value)?;
-        
+        let id = value[4].try_into().map_err(|_| value)?;
+
         Ok(Self::new(id, value[5], value[6], value[7]))
     }
 }
@@ -161,18 +163,18 @@ impl TryFrom<Bytes> for ProtocolHeader {
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         if value.len() != 8 {
-            return Err(value)
+            return Err(value);
         }
 
         if value[..4] != b"AMQP"[..] {
-            return Err(value)
+            return Err(value);
         }
 
         let id = match value[4].try_into() {
             Ok(id) => id,
             Err(_) => return Err(value),
         };
-        
+
         Ok(Self::new(id, value[5], value[6], value[7]))
     }
 }
@@ -218,7 +220,11 @@ impl ProtocolHeaderCodec {
 impl Encoder<ProtocolHeader> for ProtocolHeaderCodec {
     type Error = io::Error;
 
-    fn encode(&mut self, item: ProtocolHeader, dst: &mut bytes::BytesMut) -> Result<(), Self::Error> {
+    fn encode(
+        &mut self,
+        item: ProtocolHeader,
+        dst: &mut bytes::BytesMut,
+    ) -> Result<(), Self::Error> {
         let buf: [u8; 8] = item.into();
         dst.put(&buf[..]);
         Ok(())
@@ -234,7 +240,7 @@ impl Decoder for ProtocolHeaderCodec {
         // returned. This indicates to the Framed instance that it needs to read some more bytes
         // before calling this method again.
         if src.remaining() < 8 {
-            return Ok(None)
+            return Ok(None);
         }
 
         let bytes = src.split_to(8).freeze();

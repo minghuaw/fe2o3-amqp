@@ -1,12 +1,13 @@
 //! Builder for [`crate::Connection`]
 
-use std::{convert::TryInto, marker::PhantomData, time::Duration, io};
+use std::{convert::TryInto, io, marker::PhantomData, time::Duration};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, IetfLanguageTag, Milliseconds, MIN_MAX_FRAME_SIZE},
-    performatives::{ChannelMax, MaxFrameSize, Open}, sasl::SaslCode,
+    performatives::{ChannelMax, MaxFrameSize, Open},
+    sasl::SaslCode,
 };
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{SinkExt, StreamExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -20,9 +21,12 @@ use url::Url;
 use crate::{
     connection::{Connection, ConnectionState},
     frames::{amqp, sasl},
-    sasl_profile::{SaslProfile, Negotiation},
+    sasl_profile::{Negotiation, SaslProfile},
     transport::Transport,
-    transport::{error::NegotiationError, protocol_header::{ProtocolHeader, ProtocolHeaderCodec}},
+    transport::{
+        error::NegotiationError,
+        protocol_header::{ProtocolHeader, ProtocolHeaderCodec},
+    },
 };
 
 use super::{
@@ -531,7 +535,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     //     // channel number is 0
     //     let codec = length_delimited_codec(MIN_MAX_FRAME_SIZE);
     //     let framed = framed.map_codec(|_| codec);
-    //     let transport = 
+    //     let transport =
     //         Transport::<Io, amqp::Frame>::bind_to_framed_codec(framed, idle_timeout);
     //     Ok(transport)
     // }
@@ -543,7 +547,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         transport: &mut Transport<Io, sasl::Frame>,
         // hostname: Option<&str>,
         mut profile: SaslProfile,
-    ) -> Result<(), NegotiationError> 
+    ) -> Result<(), NegotiationError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -588,7 +592,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
                 // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
                 // it should be fine to simply drop it.
-                let framed = transport.into_framed_codec()
+                let framed = transport
+                    .into_framed_codec()
                     .map_codec(|_| ProtocolHeaderCodec::new());
 
                 // Then perform AMQP negotiation
@@ -600,8 +605,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
     async fn connect_amqp_with_framed<Io>(
         self,
-        framed: Framed<Io, ProtocolHeaderCodec>
-    ) -> Result<ConnectionHandle<()>, OpenError> 
+        framed: Framed<Io, ProtocolHeaderCodec>,
+    ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -611,7 +616,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
         let buffer_size = self.buffer_size;
-        let transport = Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
+        let transport =
+            Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
 
         let local_open = Open::from(self);
 
@@ -620,13 +626,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
         let connection = Connection::new(control_tx.clone(), local_state, local_open);
 
-        let engine = ConnectionEngine::open(
-            transport,
-            connection,
-            control_rx,
-            outgoing_rx,
-        )
-        .await?;
+        let engine = ConnectionEngine::open(transport, connection, control_rx, outgoing_rx).await?;
         let handle = engine.spawn();
 
         let connection_handle = ConnectionHandle {
