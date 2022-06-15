@@ -50,7 +50,7 @@ impl TryFrom<TargetArchetype> for Coordinator {
     }
 }
 
-/// ```rust
+/// ```rust,ignore
 /// Coordinator {
 ///     capabilities: None,
 /// }
