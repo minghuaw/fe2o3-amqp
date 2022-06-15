@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.0.7
+
+1. Added `FromIterator` impl for `Array`
+
+## 0.0.6
+
+1. (forgot)
+
 ## 0.0.5
 
 1. Made `serde_amqp::read::{IoReader, SliceReader}` public.
