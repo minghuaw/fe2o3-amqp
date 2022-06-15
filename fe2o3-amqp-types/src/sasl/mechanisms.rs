@@ -5,6 +5,22 @@ use serde_amqp::primitives::{Array, Symbol};
 
 use super::SaslMechanisms;
 
+/// Entry in SaslMechanisms that represents a SASL Anonymous mechanism
+pub const ANONYMOUS: &str = "ANONYMOUS";
+
+impl Default for SaslMechanisms {
+    /// Creates a new instance of SaslMechanisms
+    /// 
+    /// A SASL mechanism ANONYMOUS is included by default
+    /// 
+    /// It is invalid for this list to be null or empty. If the sending peer does not require 
+    /// its partner to authenticate with it, then it SHOULD send a list of one element with 
+    /// its value as the SASL mechanism ANONYMOUS.
+    fn default() -> Self {
+        Self { sasl_server_mechanisms:  Array::from(vec![Symbol::from(ANONYMOUS)]) }
+    }
+}
+
 impl serde_amqp::serde::ser::Serialize for SaslMechanisms {
     fn serialize<_S>(&self, serializer: _S) -> Result<_S::Ok, _S::Error>
     where

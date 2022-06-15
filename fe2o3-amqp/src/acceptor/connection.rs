@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
     performatives::{Begin, Close, End, Open},
-    primitives::Symbol,
-    sasl::{SaslCode, SaslMechanisms, SaslOutcome},
+    sasl::{SaslCode, SaslOutcome},
     states::ConnectionState,
 };
 use futures_util::{Sink, SinkExt, StreamExt};
@@ -37,7 +36,7 @@ use crate::{
     util::{Initialized, Uninitialized},
 };
 
-use super::{builder::Builder, sasl_acceptor::SaslAcceptor, IncomingSession};
+use super::{builder::Builder, sasl_acceptor::{SaslAcceptor, SaslAcceptorExt}, IncomingSession};
 
 /// Type alias for listener connection handle
 pub type ListenerConnectionHandle = ConnectionHandle<Receiver<IncomingSession>>;
@@ -240,15 +239,7 @@ where
         let mut transport = Transport::negotiate_sasl_header(framed).await?;
 
         // Send mechanisms
-        let mechanisms = SaslMechanisms {
-            sasl_server_mechanisms: self
-                .sasl_acceptor
-                .mechanisms()
-                .into_iter()
-                .map(|s| Symbol::from(s))
-                .collect(),
-        };
-        let frame = sasl::Frame::Mechanisms(mechanisms);
+        let frame = sasl::Frame::Mechanisms(self.sasl_acceptor.sasl_mechanisms());
         tracing::trace!(sending = ?frame);
         transport.send(frame).await?;
 

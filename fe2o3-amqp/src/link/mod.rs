@@ -402,8 +402,8 @@ where
             initial_delivery_count,
 
             max_message_size,
-            offered_capabilities: self.offered_capabilities.clone(),
-            desired_capabilities: self.desired_capabilities.clone(),
+            offered_capabilities: self.offered_capabilities.clone().map(Into::into),
+            desired_capabilities: self.desired_capabilities.clone().map(Into::into),
             properties,
         };
         let frame = LinkFrame::Attach(attach);

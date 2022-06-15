@@ -135,10 +135,10 @@ impl<'a, Tls> From<Builder<'a, mode::ConnectorWithId, Tls>> for Open {
             channel_max: builder.channel_max,
             // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
             idle_time_out: builder.idle_time_out.map(|v| v / 2),
-            outgoing_locales: builder.outgoing_locales,
-            incoming_locales: builder.incoming_locales,
-            offered_capabilities: builder.offered_capabilities,
-            desired_capabilities: builder.desired_capabilities,
+            outgoing_locales: builder.outgoing_locales.map(Into::into),
+            incoming_locales: builder.incoming_locales.map(Into::into),
+            offered_capabilities: builder.offered_capabilities.map(Into::into),
+            desired_capabilities: builder.desired_capabilities.map(Into::into),
             properties: builder.properties,
         }
     }

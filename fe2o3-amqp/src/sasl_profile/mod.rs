@@ -104,7 +104,7 @@ impl SaslProfile {
         match frame {
             Frame::Mechanisms(mechanisms) => {
                 let mechanism = self.mechanism();
-                if mechanisms.sasl_server_mechanisms.contains(&mechanism) {
+                if mechanisms.sasl_server_mechanisms.0.contains(&mechanism) {
                     let init = SaslInit {
                         mechanism,
                         initial_response: self.initial_response(),
