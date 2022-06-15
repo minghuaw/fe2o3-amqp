@@ -5,15 +5,15 @@ use tokio::net::TcpStream;
 async fn main() {
     println!("Starting connection");
 
-    let addr = "localhost:5671";
-    let domain = "localhost";
-    let stream = TcpStream::connect(addr).await.unwrap();
-    let connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
-    let connector = tokio_native_tls::TlsConnector::from(connector);
-    let tls_stream = connector.connect(domain, stream).await.unwrap();
+    // let addr = "localhost:5671";
+    // let domain = "localhost";
+    // let stream = TcpStream::connect(addr).await.unwrap();
+    // let connector = native_tls::TlsConnector::builder()
+    //     .danger_accept_invalid_certs(true)
+    //     .build()
+    //     .unwrap();
+    // let connector = tokio_native_tls::TlsConnector::from(connector);
+    // let tls_stream = connector.connect(domain, stream).await.unwrap();
 
     let mut connection = Connection::builder()
         .container_id("connection-1")
@@ -21,13 +21,13 @@ async fn main() {
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .sasl_profile(SaslProfile::Plain {
-            username: "guest".into(),
-            password: "guest".into(),
-        })
-        .open_with_stream(tls_stream)
+        // .sasl_profile(SaslProfile::Plain {
+        //     username: "guest".into(),
+        //     password: "guest".into(),
+        // })
+        // .open_with_stream(tls_stream)
         // .open("amqp://localhost:5672")
-        // .open("amqp://guest:guest@localhost:5672")
+        .open("amqp://guest:guest@localhost:5672")
         .await
         .unwrap();
 

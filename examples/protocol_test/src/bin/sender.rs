@@ -43,10 +43,10 @@ async fn main() {
         .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
-        .sasl_profile(SaslProfile::Plain {
-            username: "guest".into(),
-            password: "guest".into(),
-        })
+        // .sasl_profile(SaslProfile::Plain {
+        //     username: "guest".into(),
+        //     password: "guest".into(),
+        // })
         // .open_with_stream(tls_stream)
         // .open("amqp://localhost:5672")
         .open("amqp://guest:guest@localhost:5672")
@@ -101,7 +101,7 @@ async fn main() {
     // let result = fut.await;
     // println!("fut {:?}", result);
 
-    sender.close().await.unwrap();
+    sender.detach().await.unwrap();
 
     // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
     //     .await
