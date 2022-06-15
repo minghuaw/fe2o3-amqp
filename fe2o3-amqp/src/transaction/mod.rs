@@ -223,7 +223,9 @@ impl Transaction {
                         Some(Outcome::Rejected(value)) => Err(link::SendError::Rejected(value)),
                         Some(Outcome::Released(value)) => Err(link::SendError::Released(value)),
                         Some(Outcome::Modified(value)) => Err(link::SendError::Modified(value)),
-                        Some(Outcome::Declared(_)) | None => Err(link::SendError::expecting_outcome()),
+                        Some(Outcome::Declared(_)) | None => {
+                            Err(link::SendError::expecting_outcome())
+                        }
                     }
                 }
             },

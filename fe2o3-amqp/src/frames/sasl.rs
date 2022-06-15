@@ -223,9 +223,9 @@ mod tests {
     use serde_amqp::{from_slice, to_vec};
 
     #[test]
-    fn test_serialize_frame_body() {
+    fn test_serialize_sasl_mechanisms() {
         let mechanism = SaslMechanisms {
-            sasl_server_mechanisms: vec![Symbol::from("PLAIN")],
+            sasl_server_mechanisms: vec![Symbol::from("PLAIN")].into(),
         };
         let buf = to_vec(&mechanism).unwrap();
         println!("{:#x?}", buf);

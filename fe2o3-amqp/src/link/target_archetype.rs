@@ -71,8 +71,8 @@ impl VerifyTargetArchetype for Coordinator {
         // capabilities of the controller meet its requirements.
         match (&self.capabilities, &other.capabilities) {
             (Some(desired), Some(provided)) => {
-                for cap in desired {
-                    if !provided.contains(cap) {
+                for cap in desired.0.iter() {
+                    if !provided.0.contains(cap) {
                         return Err(definitions::Error::new(
                             AmqpError::InternalError,
                             "Desired transaction capabilities are not supported".to_string(),
@@ -83,7 +83,7 @@ impl VerifyTargetArchetype for Coordinator {
                 Ok(())
             }
             (Some(desired), None) => {
-                if desired.is_empty() {
+                if desired.0.is_empty() {
                     Ok(())
                 } else {
                     Err(definitions::Error::new(

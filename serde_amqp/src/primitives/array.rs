@@ -94,3 +94,10 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Array<T> {
         )
     }
 }
+
+impl<T> FromIterator<T> for Array<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let v = Vec::from_iter(iter);
+        Self(v)
+    }
+}

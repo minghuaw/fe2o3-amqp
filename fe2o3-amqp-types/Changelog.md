@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.18
+
+1. Fixed bug where multiple valued fields should be encoded as `Array` instead of `List`
+2. Manually implemented `Serialize` and `Deserialize` for `SaslMechanism` to make sure `sasl_server_mechanisms` field contains at least value
+
 ## 0.0.17
 
 1. Renamed `Message::body_section` to `body`

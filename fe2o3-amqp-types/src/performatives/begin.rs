@@ -1,6 +1,6 @@
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Symbol, UInt, UShort},
+    primitives::{Symbol, UInt, UShort, Array},
 };
 
 use crate::definitions::{Fields, Handle, TransferNumber};
@@ -37,10 +37,10 @@ pub struct Begin {
     pub handle_max: Handle, // default to 4294967295
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
-    pub offered_capabilities: Option<Vec<Symbol>>,
+    pub offered_capabilities: Option<Array<Symbol>>,
 
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
-    pub desired_capabilities: Option<Vec<Symbol>>,
+    pub desired_capabilities: Option<Array<Symbol>>,
 
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,

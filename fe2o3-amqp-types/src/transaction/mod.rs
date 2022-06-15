@@ -3,7 +3,7 @@
 mod txn_capability;
 mod txn_error;
 
-use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite};
+use serde_amqp::{primitives::{Binary, Array}, DeserializeComposite, SerializeComposite};
 
 /// 4.5.1 Coordinator
 /// Target for communicating with a transaction coordinator.
@@ -30,7 +30,7 @@ pub struct Coordinator {
     /// requirements.
     ///
     /// See txn-capability.
-    pub capabilities: Option<Vec<TxnCapability>>,
+    pub capabilities: Option<Array<TxnCapability>>,
 }
 
 impl From<Coordinator> for TargetArchetype {
@@ -50,7 +50,7 @@ impl TryFrom<TargetArchetype> for Coordinator {
     }
 }
 
-/// ```rust
+/// ```rust,ignore
 /// Coordinator {
 ///     capabilities: None,
 /// }
@@ -63,7 +63,7 @@ impl Default for Coordinator {
 
 impl Coordinator {
     /// Creates a new coordinator
-    pub fn new(capabilities: impl Into<Option<Vec<TxnCapability>>>) -> Self {
+    pub fn new(capabilities: impl Into<Option<Array<TxnCapability>>>) -> Self {
         Self {
             capabilities: capabilities.into(),
         }

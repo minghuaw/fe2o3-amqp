@@ -1,5 +1,5 @@
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
-use serde_amqp::primitives::{Boolean, Symbol};
+use serde_amqp::primitives::{Boolean, Symbol, Array};
 
 use crate::definitions::{Fields, Seconds};
 
@@ -53,10 +53,10 @@ pub struct Source {
     pub default_outcome: Option<Outcome>,
 
     /// <field name="outcomes" type="symbol" multiple="true"/>
-    pub outcomes: Option<Vec<Symbol>>,
+    pub outcomes: Option<Array<Symbol>>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
-    pub capabilities: Option<Vec<Symbol>>,
+    pub capabilities: Option<Array<Symbol>>,
 }
 
 impl Source {
@@ -141,14 +141,14 @@ impl Builder {
     }
 
     /// Set the "outcomes" field
-    pub fn outcomes(mut self, outcomes: Vec<Symbol>) -> Self {
-        self.source.outcomes = Some(outcomes);
+    pub fn outcomes(mut self, outcomes: impl Into<Array<Symbol>>) -> Self {
+        self.source.outcomes = Some(outcomes.into());
         self
     }
 
     /// Set the "capabilities" field
-    pub fn capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.source.capabilities = Some(capabilities);
+    pub fn capabilities(mut self, capabilities: impl Into<Array<Symbol>>) -> Self {
+        self.source.capabilities = Some(capabilities.into());
         self
     }
 

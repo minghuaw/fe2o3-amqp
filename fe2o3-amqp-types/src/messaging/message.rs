@@ -228,9 +228,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             "amqp:message-annotations:map" => Field::MessageAnnotations,
             "amqp:properties:list" => Field::Properties,
             "amqp:application-properties:map" => Field::ApplicationProperties,
-            "amqp:data:binary" | "amqp:amqp-sequence:list" | "amqp:amqp-value:*" => {
-                Field::Body
-            }
+            "amqp:data:binary" | "amqp:amqp-sequence:list" | "amqp:amqp-value:*" => Field::Body,
             "amqp:footer:map" => Field::Footer,
             _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
         };
@@ -247,9 +245,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             0x0000_0000_0000_0072 => Field::MessageAnnotations,
             0x0000_0000_0000_0073 => Field::Properties,
             0x0000_0000_0000_0074 => Field::ApplicationProperties,
-            0x0000_0000_0000_0075 | 0x0000_0000_0000_0076 | 0x0000_0000_0000_0077 => {
-                Field::Body
-            }
+            0x0000_0000_0000_0075 | 0x0000_0000_0000_0076 | 0x0000_0000_0000_0077 => Field::Body,
             0x0000_0000_0000_0078 => Field::Footer,
             _ => return Err(serde_amqp::serde::de::Error::custom("Unknown identifier")),
         };
@@ -320,9 +316,7 @@ where
             message_annotations,
             properties,
             application_properties,
-            body: body
-                .ok_or_else(|| de::Error::custom("Expecting Body"))?
-                .0,
+            body: body.ok_or_else(|| de::Error::custom("Expecting Body"))?.0,
             footer,
         })
     }
@@ -635,8 +629,7 @@ mod body {
         type Value = Field;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter
-                .write_str("Body variant. One of Vec<Data>, Vec<AmqpSequence>, AmqpValue")
+            formatter.write_str("Body variant. One of Vec<Data>, Vec<AmqpSequence>, AmqpValue")
         }
 
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
