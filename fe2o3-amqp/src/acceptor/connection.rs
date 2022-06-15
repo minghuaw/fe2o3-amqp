@@ -16,6 +16,7 @@ use tokio::{
     sync::mpsc::{self, Receiver},
 };
 use tokio_util::codec::Framed;
+use tracing::instrument;
 
 use crate::{
     acceptor::sasl_acceptor::SaslServerFrame,
@@ -228,6 +229,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl>
 where
     Sasl: SaslAcceptor,
 {
+    #[instrument(skip_all)]
     async fn negotiate_sasl_with_framed<Io>(
         &self,
         framed: Framed<Io, ProtocolHeaderCodec>,
@@ -246,10 +248,13 @@ where
                 .map(|s| Symbol::from(s))
                 .collect(),
         };
-        transport.send(sasl::Frame::Mechanisms(mechanisms)).await?;
+        let frame = sasl::Frame::Mechanisms(mechanisms);
+        tracing::trace!(sending = ?frame);
+        transport.send(frame).await?;
 
         // Wait for Init
         let next = if let Some(frame) = transport.next().await {
+            tracing::trace!(received = ?frame);
             match frame? {
                 sasl::Frame::Init(init) => self.sasl_acceptor.on_init(init),
                 _ => {
@@ -278,8 +283,9 @@ where
             }
             SaslServerFrame::Outcome(outcome) => outcome,
         };
-
-        transport.send(sasl::Frame::Outcome(outcome)).await?;
+        let frame = sasl::Frame::Outcome(outcome);
+        tracing::trace!(sending = ?frame);
+        transport.send(frame).await?;
 
         // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
         // it should be fine to simply drop it.

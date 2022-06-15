@@ -513,30 +513,6 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
 }
 
 impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
-    // #[inline]
-    // async fn negotiate_amqp_with_stream<Io>(
-    //     &self,
-    //     stream: Io,
-    //     local_state: &mut ConnectionState,
-    // ) -> Result<Transport<Io, amqp::Frame>, NegotiationError>
-    // where
-    //     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    // {
-    //     let mut framed = Framed::new(stream, ProtocolHeaderCodec::new());
-    //     let _remote_header =
-    //         Transport::negotiate_amqp_header(&mut framed, local_state).await?;
-    //     let idle_timeout = self
-    //         .idle_time_out
-    //         .map(|millis| Duration::from_millis(millis as u64));
-    //     // Prior to any explicit negotiation, the maximum frame size is 512 (MIN-MAX-FRAME-SIZE) and the maximum
-    //     // channel number is 0
-    //     let codec = length_delimited_codec(MIN_MAX_FRAME_SIZE);
-    //     let framed = framed.map_codec(|_| codec);
-    //     let transport =
-    //         Transport::<Io, amqp::Frame>::bind_to_framed_codec(framed, idle_timeout);
-    //     Ok(transport)
-    // }
-
     /// Performs SASL negotiation
     #[instrument(skip_all, fields(hostname = ?self.hostname))]
     pub async fn negotiate_sasl<Io>(
@@ -552,10 +528,18 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         while let Some(frame) = transport.next().await {
             let frame = frame?;
 
+            tracing::trace!(received = ?frame);
+
             match profile.on_frame(frame, self.hostname).await? {
-                Negotiation::Init(init) => transport.send(sasl::Frame::Init(init)).await?,
+                Negotiation::Init(init) => {
+                    let frame = sasl::Frame::Init(init);
+                    tracing::trace!(sending = ?frame);
+                    transport.send(frame).await?
+                },
                 Negotiation::_Response(response) => {
-                    transport.send(sasl::Frame::Response(response)).await?
+                    let frame = sasl::Frame::Response(response);
+                    tracing::trace!(sending = ?frame);
+                    transport.send(frame).await?
                 }
                 Negotiation::Outcome(outcome) => match outcome.code {
                     SaslCode::Ok => return Ok(()),
