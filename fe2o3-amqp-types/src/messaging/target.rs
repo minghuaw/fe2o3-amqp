@@ -1,5 +1,5 @@
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
-use serde_amqp::primitives::{Boolean, Symbol};
+use serde_amqp::primitives::{Boolean, Symbol, Array};
 
 use crate::definitions::{Fields, Seconds};
 
@@ -182,7 +182,7 @@ pub struct Target {
     pub dynamic_node_properties: Option<NodeProperties>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
-    pub capabilities: Option<Vec<Symbol>>,
+    pub capabilities: Option<Array<Symbol>>,
 }
 
 impl Target {
@@ -273,8 +273,8 @@ impl Builder {
     }
 
     /// Set the "capabilities" field
-    pub fn capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.target.capabilities = Some(capabilities);
+    pub fn capabilities(mut self, capabilities: impl Into<Array<Symbol>>) -> Self {
+        self.target.capabilities = Some(capabilities.into());
         self
     }
 

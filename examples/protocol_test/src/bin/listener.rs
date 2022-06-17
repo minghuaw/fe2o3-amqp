@@ -2,7 +2,7 @@ use fe2o3_amqp::{
     acceptor::{
         link::{LinkAcceptor, LinkEndpoint},
         session::{ListenerSessionHandle, SessionAcceptor},
-        ConnectionAcceptor, ListenerConnectionHandle,
+        ConnectionAcceptor, ListenerConnectionHandle, SaslPlainMechanism,
     },
     types::primitives::Value,
 };
@@ -69,7 +69,11 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     let tcp_listener = TcpListener::bind(BASE_ADDR).await.unwrap();
-    let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
+    // let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
+    let connection_acceptor = ConnectionAcceptor::builder()
+        .container_id("example_connection_acceptor")
+        .sasl_acceptor(SaslPlainMechanism::new("guest", "guest"))
+        .build();
 
     while let Ok((stream, addr)) = tcp_listener.accept().await {
         println!("Incoming connection from {:?}", addr);

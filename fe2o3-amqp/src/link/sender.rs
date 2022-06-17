@@ -28,7 +28,8 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SenderFlowState, SenderLink, SendError,
+    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderFlowState,
+    SenderLink,
 };
 
 /// An AMQP1.0 sender

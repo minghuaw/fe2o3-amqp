@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
         SequenceNo, TransferNumber, MIN_MAX_FRAME_SIZE,
     },
     performatives::{ChannelMax, MaxFrameSize, Open},
-    primitives::{Symbol, ULong},
+    primitives::{Symbol, ULong, Array},
 };
 
 use crate::{
@@ -127,60 +127,60 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     /// Add one locales available for outgoing text
     pub fn add_outgoing_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
         match &mut self.inner.local_open.outgoing_locales {
-            Some(locales) => locales.push(locale.into()),
-            None => self.inner.local_open.outgoing_locales = Some(vec![locale.into()]),
+            Some(locales) => locales.0.push(locale.into()),
+            None => self.inner.local_open.outgoing_locales = Some(vec![locale.into()].into()),
         }
         self
     }
 
     /// Set the locales available for outgoing text
-    pub fn set_outgoing_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
-        self.inner.local_open.outgoing_locales = Some(locales);
+    pub fn set_outgoing_locales(mut self, locales: impl Into<Array<IetfLanguageTag>>) -> Self {
+        self.inner.local_open.outgoing_locales = Some(locales.into());
         self
     }
 
     /// Add one desired locales for incoming text in decreasing level of preference
     pub fn add_incoming_locales(mut self, locale: impl Into<IetfLanguageTag>) -> Self {
         match &mut self.inner.local_open.incoming_locales {
-            Some(locales) => locales.push(locale.into()),
-            None => self.inner.local_open.incoming_locales = Some(vec![locale.into()]),
+            Some(locales) => locales.0.push(locale.into()),
+            None => self.inner.local_open.incoming_locales = Some(vec![locale.into()].into()),
         }
         self
     }
 
     /// Set the desired locales for incoming text in decreasing level of preference
-    pub fn set_incoming_locales(mut self, locales: Vec<IetfLanguageTag>) -> Self {
-        self.inner.local_open.incoming_locales = Some(locales);
+    pub fn set_incoming_locales(mut self, locales: impl Into<Array<IetfLanguageTag>>) -> Self {
+        self.inner.local_open.incoming_locales = Some(locales.into());
         self
     }
 
     /// Add one extension capabilities the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.local_open.offered_capabilities {
-            Some(capabilities) => capabilities.push(capability.into()),
-            None => self.inner.local_open.offered_capabilities = Some(vec![capability.into()]),
+            Some(capabilities) => capabilities.0.push(capability.into()),
+            None => self.inner.local_open.offered_capabilities = Some(vec![capability.into()].into()),
         }
         self
     }
 
     /// Set the extension capabilities the sender supports
-    pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.inner.local_open.offered_capabilities = Some(capabilities);
+    pub fn set_offered_capabilities(mut self, capabilities: impl Into<Array<Symbol>>) -> Self {
+        self.inner.local_open.offered_capabilities = Some(capabilities.into());
         self
     }
 
     /// Add one extension capabilities the sender can use if the receiver supports them
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.local_open.desired_capabilities {
-            Some(capabilities) => capabilities.push(capability.into()),
-            None => self.inner.local_open.desired_capabilities = Some(vec![capability.into()]),
+            Some(capabilities) => capabilities.0.push(capability.into()),
+            None => self.inner.local_open.desired_capabilities = Some(vec![capability.into()].into()),
         }
         self
     }
 
     /// Set the extension capabilities the sender can use if the receiver supports them
-    pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.inner.local_open.desired_capabilities = Some(capabilities);
+    pub fn set_desired_capabilities(mut self, capabilities: impl Into<Array<Symbol>>) -> Self {
+        self.inner.local_open.desired_capabilities = Some(capabilities.into());
         self
     }
 

@@ -1,5 +1,6 @@
 use std::io;
 
+use bytes::Bytes;
 use fe2o3_amqp_types::{definitions::AmqpError, primitives::Binary, sasl::SaslCode};
 
 use crate::{frames, sasl_profile};
@@ -98,7 +99,7 @@ pub enum NegotiationError {
     Io(#[from] io::Error),
 
     #[error("Protocol header mismatch {0:?}")]
-    ProtocolHeaderMismatch([u8; 8]),
+    ProtocolHeaderMismatch(Bytes),
 
     #[error("Invalid domain")]
     InvalidDomain,

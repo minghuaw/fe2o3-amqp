@@ -96,7 +96,7 @@ impl<'r> TxnAcquisition<'r> {
     /// Accept the message
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
         self.txn.accept(self.recver, delivery).await
-    } 
+    }
 
     /// Reject the message
     pub async fn reject<T>(

@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.0.15
+
+1. Added type conversions to reflect bug fix in `fe2o3-amqp-types`
+   1. [#35](https://github.com/minghuaw/fe2o3-amqp/issues/35)
+
+2. AMQP protocol header and SASL protocol header are now handled by `ProtocolHeaderCodec` which allows changing between different `Framed` codecs without losing buffered data. [#33](https://github.com/minghuaw/fe2o3-amqp/issues/33)
+
 ## 0.0.14
 
 1. Controller verifies txn capability on attach

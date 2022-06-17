@@ -2,6 +2,7 @@
 
 use std::io;
 
+use bytes::Bytes;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ConnectionError, ErrorCondition},
     primitives::Binary,
@@ -130,7 +131,7 @@ pub enum OpenError {
 
     /// Protocol negotiation failed due to protocol header mismatch
     #[error("Protocol header mismatch. Found {0:?}")]
-    ProtocolHeaderMismatch([u8; 8]),
+    ProtocolHeaderMismatch(Bytes),
 
     /// SASL negotiation failed
     #[error("SASL error code {:?}, additional data: {:?}", .code, .additional_data)]

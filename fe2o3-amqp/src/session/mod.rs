@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload
+    Payload,
 };
 
 pub(crate) mod engine;
@@ -632,8 +632,8 @@ impl endpoint::Session for Session {
             incoming_window: self.incoming_window,
             outgoing_window: self.outgoing_window,
             handle_max: self.handle_max.clone(),
-            offered_capabilities: self.offered_capabilities.clone(),
-            desired_capabilities: self.desired_capabilities.clone(),
+            offered_capabilities: self.offered_capabilities.clone().map(Into::into),
+            desired_capabilities: self.desired_capabilities.clone().map(Into::into),
             properties: self.properties.clone(),
         };
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::Begin(begin));

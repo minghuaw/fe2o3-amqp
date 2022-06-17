@@ -1,8 +1,8 @@
 //! Supported SASL mechanisms
 
 use fe2o3_amqp_types::{
-    primitives::Symbol,
-    sasl::{SaslChallenge, SaslCode, SaslInit, SaslOutcome, SaslResponse},
+    primitives::{Symbol, Array},
+    sasl::{SaslChallenge, SaslCode, SaslInit, SaslOutcome, SaslResponse, SaslMechanisms},
 };
 
 use crate::sasl_profile::PLAIN;
@@ -20,7 +20,7 @@ pub enum SaslServerFrame {
 /// Server side SASL negotiation
 pub trait SaslAcceptor {
     /// List of supported mechanisms
-    fn mechanisms(&self) -> Vec<Symbol>;
+    fn mechanisms(&self) -> Array<Symbol>;
 
     /// Responde to a SaslInit frame
     fn on_init(&self, init: SaslInit) -> SaslServerFrame;
@@ -28,6 +28,29 @@ pub trait SaslAcceptor {
     /// Respond to a SaslResponse frame
     fn on_response(&self, response: SaslResponse) -> SaslServerFrame;
 }
+
+/// Extension trait of SaslAcceptor
+pub trait SaslAcceptorExt: SaslAcceptor {
+    /// Collects the supported sasl-server-mechanisms into a SaslMechanism frame.
+    /// 
+    /// A list of one element with its value as the SASL mechanism ANONYMOUS will be 
+    /// returned if there is ZERO supported mechanism.
+    /// 
+    /// It is invalid for this list to be null or empty. If the sending peer does not require 
+    /// its partner to authenticate with it, then it SHOULD send a list of one element with 
+    /// its value as the SASL mechanism ANONYMOUS.
+    fn sasl_mechanisms(&self) -> SaslMechanisms {
+        let server_mechanisms = self.mechanisms();
+        
+        if server_mechanisms.0.is_empty() {
+            SaslMechanisms::default()
+        } else {
+            SaslMechanisms { sasl_server_mechanisms: server_mechanisms }
+        }
+    }
+}
+
+impl<T: SaslAcceptor> SaslAcceptorExt for T { }
 
 // /// Supported SASL mechanism
 // #[derive(Debug)]
@@ -74,8 +97,8 @@ impl SaslPlainMechanism {
 }
 
 impl SaslAcceptor for SaslPlainMechanism {
-    fn mechanisms(&self) -> Vec<Symbol> {
-        vec![Symbol::from(PLAIN)]
+    fn mechanisms(&self) -> Array<Symbol> {
+        Array::from(vec![Symbol::from(PLAIN)])
     }
 
     fn on_init(&self, init: SaslInit) -> SaslServerFrame {
