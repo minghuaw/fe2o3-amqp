@@ -1,11 +1,23 @@
 //! Control link coordinator
 
-use fe2o3_amqp_types::{transaction::{Coordinator, TxnCapability}, messaging::DeliveryState, performatives::Attach};
+use fe2o3_amqp_types::{
+    messaging::DeliveryState,
+    performatives::Attach,
+    transaction::{Coordinator, TxnCapability},
+};
 use tokio::sync::mpsc;
 
-use crate::{link::{receiver::ReceiverInner, Link, role, ReceiverFlowState, LinkFrame, AttachError}, acceptor::{LinkAcceptor, local_receiver_link::LocalReceiverLinkAcceptor, link::SharedLinkAcceptorFields}, control::SessionControl};
+use crate::{
+    acceptor::{
+        link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor,
+        LinkAcceptor,
+    },
+    control::SessionControl,
+    link::{receiver::ReceiverInner, role, AttachError, Link, LinkFrame, ReceiverFlowState},
+};
 
-pub(crate) type CoordinatorLink = Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
+pub(crate) type CoordinatorLink =
+    Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
 
 /// An acceptor that handles incoming control links
 #[derive(Debug, Clone)]
@@ -16,18 +28,20 @@ pub(crate) struct ControlLinkAcceptor {
 
 impl ControlLinkAcceptor {
     pub async fn accept_incoming_attach(
-        &self, 
-        remote_attach: Attach, 
+        &self,
+        remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         session_tx: mpsc::Sender<LinkFrame>,
-    ) -> Result<Coordinator, AttachError> {
-        todo!()
+    ) -> Result<TxnCoordinator, AttachError> {
+        self.inner
+            .accept_incoming_attach_inner(&self.shared, remote_attach, &control, &session_tx)
+            .await
+            .map(|inner| TxnCoordinator { inner })
     }
 }
-
 
 /// Transaction coordinator
 #[derive(Debug)]
 pub(crate) struct TxnCoordinator {
-    inner: ReceiverInner<CoordinatorLink>
+    inner: ReceiverInner<CoordinatorLink>,
 }
