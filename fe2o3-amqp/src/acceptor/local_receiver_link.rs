@@ -20,7 +20,7 @@ use crate::{
         receiver::{CreditMode, ReceiverInner},
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        target_archetype::VerifyTargetArchetype,
+        target_archetype::{TargetArchetypeExt},
         AttachError, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState,
     },
     session::SessionHandle,
@@ -69,10 +69,7 @@ where
     }
 }
 
-impl<C> LocalReceiverLinkAcceptor<C>
-where
-    C: From<Symbol>,
-{
+impl LocalReceiverLinkAcceptor<Symbol> {
     pub async fn accept_incoming_attach<R>(
         &self,
         shared: &SharedLinkAcceptorFields,
@@ -88,7 +85,12 @@ where
         .await
         .map(|inner| Receiver { inner })
     }
+}
 
+impl<C> LocalReceiverLinkAcceptor<C>
+where
+    C: From<Symbol> + Clone,
+{
     pub async fn accept_incoming_attach_inner<T>(
         &self,
         shared: &SharedLinkAcceptorFields,
@@ -100,7 +102,7 @@ where
         AttachError,
     >
     where
-        T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+        T: Into<TargetArchetype> + TryFrom<TargetArchetype> + TargetArchetypeExt<Capability = C> + Clone + Send,
     {
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
@@ -154,7 +156,7 @@ where
         )
         .await?;
 
-        let target = match &remote_attach.target {
+        let mut target = match &remote_attach.target {
             Some(t) => T::try_from(*t.clone()).map_err(|_| {
                 AttachError::Local(definitions::Error::new(
                     AmqpError::NotImplemented,
@@ -164,6 +166,9 @@ where
             })?,
             None => return Err(AttachError::TargetIsNone),
         };
+
+        // Set local link to the capabilities that are actually supported
+        *target.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
 
         let mut link = link::Link::<role::Receiver, T, ReceiverFlowState, DeliveryState> {
             role: PhantomData,

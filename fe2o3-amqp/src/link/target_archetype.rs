@@ -2,7 +2,9 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::{Target}, primitives::Symbol, transaction::TxnCapability,
+    messaging::Target,
+    primitives::{Array, Symbol},
+    transaction::TxnCapability,
 };
 
 #[cfg(feature = "transaction")]
@@ -107,19 +109,19 @@ impl VerifyTargetArchetype for Coordinator {
 pub trait TargetArchetypeCapabilities {
     type Capability;
 
-    fn capabilities(&self) -> &Option<Vec<Self::Capability>>;
+    fn capabilities(&self) -> &Option<Array<Self::Capability>>;
 
-    fn capabilities_mut(&mut self) -> &mut Option<Vec<Self::Capability>>;
+    fn capabilities_mut(&mut self) -> &mut Option<Array<Self::Capability>>;
 }
 
 impl TargetArchetypeCapabilities for Target {
     type Capability = Symbol;
 
-    fn capabilities(&self) -> &Option<Vec<Symbol>> {
+    fn capabilities(&self) -> &Option<Array<Symbol>> {
         &self.capabilities
     }
 
-    fn capabilities_mut(&mut self) -> &mut Option<Vec<Symbol>> {
+    fn capabilities_mut(&mut self) -> &mut Option<Array<Symbol>> {
         &mut self.capabilities
     }
 }
@@ -127,11 +129,16 @@ impl TargetArchetypeCapabilities for Target {
 impl TargetArchetypeCapabilities for Coordinator {
     type Capability = TxnCapability;
 
-    fn capabilities(&self) -> &Option<Vec<TxnCapability>> {
+    fn capabilities(&self) -> &Option<Array<TxnCapability>> {
         &self.capabilities
     }
 
-    fn capabilities_mut(&mut self) -> &mut Option<Vec<TxnCapability>> {
+    fn capabilities_mut(&mut self) -> &mut Option<Array<TxnCapability>> {
         &mut self.capabilities
     }
 }
+
+/// Extension trait for TargetArchetypes
+pub trait TargetArchetypeExt: VerifyTargetArchetype + TargetArchetypeCapabilities {}
+
+impl<T> TargetArchetypeExt for T where T: VerifyTargetArchetype + TargetArchetypeCapabilities {}
