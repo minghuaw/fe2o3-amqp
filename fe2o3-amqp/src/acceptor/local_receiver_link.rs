@@ -34,10 +34,7 @@ use super::{link::SharedLinkAcceptorFields, SupportedReceiverSettleModes};
 /// the sender is considered to hold the authoritative version of the
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
-pub(crate) struct LocalReceiverLinkAcceptor<C>
-where
-    C: From<Symbol>,
-{
+pub(crate) struct LocalReceiverLinkAcceptor<C> {
     /// Supported receiver settle mode
     pub supported_rcv_settle_modes: SupportedReceiverSettleModes,
 
@@ -55,10 +52,7 @@ where
     pub target_capabilities: Option<Vec<C>>,
 }
 
-impl<C> Default for LocalReceiverLinkAcceptor<C>
-where
-    C: From<Symbol>,
-{
+impl<C> Default for LocalReceiverLinkAcceptor<C> {
     fn default() -> Self {
         Self {
             supported_rcv_settle_modes: SupportedReceiverSettleModes::default(),
@@ -89,7 +83,7 @@ impl LocalReceiverLinkAcceptor<Symbol> {
 
 impl<C> LocalReceiverLinkAcceptor<C>
 where
-    C: From<Symbol> + Clone,
+    C: Clone,
 {
     pub async fn accept_incoming_attach_inner<T>(
         &self,

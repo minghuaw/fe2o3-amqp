@@ -1,16 +1,17 @@
 //! Control link coordinator
 
-use fe2o3_amqp_types::{transaction::Coordinator, messaging::DeliveryState, performatives::Attach};
+use fe2o3_amqp_types::{transaction::{Coordinator, TxnCapability}, messaging::DeliveryState, performatives::Attach};
 use tokio::sync::mpsc;
 
-use crate::{link::{receiver::ReceiverInner, Link, role, ReceiverFlowState, LinkFrame, AttachError}, acceptor::LinkAcceptor, control::SessionControl};
+use crate::{link::{receiver::ReceiverInner, Link, role, ReceiverFlowState, LinkFrame, AttachError}, acceptor::{LinkAcceptor, local_receiver_link::LocalReceiverLinkAcceptor, link::SharedLinkAcceptorFields}, control::SessionControl};
 
 pub(crate) type CoordinatorLink = Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
 
 /// An acceptor that handles incoming control links
 #[derive(Debug, Clone)]
 pub(crate) struct ControlLinkAcceptor {
-    inner: LinkAcceptor,
+    shared: SharedLinkAcceptorFields,
+    inner: LocalReceiverLinkAcceptor<TxnCapability>,
 }
 
 impl ControlLinkAcceptor {

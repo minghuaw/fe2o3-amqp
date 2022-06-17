@@ -34,10 +34,7 @@ use super::{link::SharedLinkAcceptorFields, SupportedSenderSettleModes};
 /// the sender is considered to hold the authoritative version of the
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
-pub(crate) struct LocalSenderLinkAcceptor<C>
-where
-    C: From<Symbol>,
-{
+pub(crate) struct LocalSenderLinkAcceptor<C> {
     /// Supported sender settle mode
     pub supported_snd_settle_modes: SupportedSenderSettleModes,
 
