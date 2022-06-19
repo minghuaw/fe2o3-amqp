@@ -13,7 +13,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::PollSender;
 
 use crate::{
-    endpoint::{InputHandle, LinkAttach},
+    endpoint::{InputHandle, LinkAttach, LinkAttachAcceptorExt},
     link::{
         self,
         delivery::UnsettledMessage,
@@ -160,7 +160,7 @@ where
         };
 
         let mut outgoing = PollSender::new(session.outgoing.clone());
-        link.on_incoming_attach(remote_attach).await?;
+        link.on_incoming_attach_as_acceptor(remote_attach).await?;
         link.send_attach(&mut outgoing)
             .await
             .map_err(|err| (err.into(), None))?;

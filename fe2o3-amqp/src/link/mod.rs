@@ -244,7 +244,7 @@ where
     async fn on_incoming_attach(
         &mut self,
         remote_attach: Attach,
-    ) -> Result<(), (Self::AttachError, Option<Attach>)> {
+    ) -> Result<(), Self::AttachError> {
         match self.local_state {
             LinkState::AttachSent => {
                 // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
@@ -262,31 +262,48 @@ where
                     None,
                 ));
 
-                return Err((err, None));
+                return Err(err);
             }
         };
 
-        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+        self.input_handle = Some(InputHandle::from(remote_attach.handle.clone()));
 
         // **the receiver is considered to hold the authoritative version of the target properties**.
-        let target = match remote_attach.target {
-            Some(t) => T::try_from(*t).map_err(|_| {
-                (
-                    AttachError::Local(definitions::Error::new(
-                        AmqpError::NotImplemented,
-                        None,
-                        None,
-                    )),
-                    Some(remote_attach),
-                )
-            })?,
-            None => return Err((AttachError::TargetIsNone, Some(remote_attach))),
+        // let target = match remote_attach.target {
+        //     Some(t) => match T::try_from(*t) {
+        //         Ok(t) => t,
+        //         Err(_) => {
+        //             return Err((
+        //                 AttachError::Local(definitions::Error::new(
+        //                     AmqpError::NotImplemented,
+        //                     None,
+        //                     None,
+        //                 )),
+        //                 Some(remote_attach),
+        //             ))
+        //         }
+        //     None => return Err((AttachError::TargetIsNone, Some(remote_attach))),
+        // };
+        let target = match &remote_attach.target {
+            Some(t) => match T::try_from(*t.clone()) {
+                Ok(t) => t,
+                Err(_) => {
+                    return Err(
+                        AttachError::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            "Target mismatch".to_string(),
+                            None
+                        ),
+                    ))
+                },
+            },
+            None => return Err(AttachError::TargetIsNone),
         };
 
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
         // was suspended. When this happens, the termini properties communicated in the source and target fields of the
         // attach frames could be in conflict.
-        match remote_attach.role {
+        match &remote_attach.role {
             // Remote attach is from sender, local is receiver
             Role::Sender => {
                 // In this case, the sender is considered to hold the authoritative version of the
@@ -294,7 +311,7 @@ where
 
                 let source = *remote_attach
                     .source
-                    .ok_or((AttachError::SourceIsNone, Some(remote_attach)))?;
+                    .ok_or(AttachError::SourceIsNone)?;
                 self.source = Some(source);
 
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
@@ -306,13 +323,12 @@ where
                 let initial_delivery_count = match remote_attach.initial_delivery_count {
                     Some(val) => val,
                     None => {
-                        return Err((
+                        return Err(
                             AttachError::Local(definitions::Error::new(
                                 AmqpError::NotAllowed,
                                 None,
                                 None,
-                            )),
-                            None,
+                            ),
                         ))
                     }
                 };
@@ -322,7 +338,7 @@ where
                 if let Some(local) = &self.target {
                     local
                         .verify_as_receiver(&target)
-                        .map_err(|err| (AttachError::Local(err), Some(remote_attach)))?;
+                        .map_err(|err| (AttachError::Local(err)))?;
                 }
 
                 self.flow_state
@@ -341,7 +357,7 @@ where
                 if let Some(local) = &self.target {
                     local
                         .verify_as_sender(&target)
-                        .map_err(|err| (AttachError::Local(err), Some(remote_attach)))?;
+                        .map_err(|err| (AttachError::Local(err)))?;
                 }
                 self.target = Some(target);
 

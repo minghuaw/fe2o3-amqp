@@ -302,11 +302,16 @@ pub(crate) trait LinkDetach {
 pub(crate) trait LinkAttach {
     type AttachError: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), (Self::AttachError, Option<Attach>)>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where
         W: Sink<LinkFrame> + Send + Unpin;
+}
+
+#[async_trait]
+pub(crate) trait LinkAttachAcceptorExt: LinkAttach {
+    async fn on_incoming_attach_as_acceptor(&mut self, attach: Attach) -> Result<(), (Self::AttachError, Option<Attach>)>;
 }
 
 pub(crate) trait Link: LinkAttach + LinkDetach {

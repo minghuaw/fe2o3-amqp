@@ -6,19 +6,20 @@
 
 use std::marker::PhantomData;
 
+use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, Fields, Role},
     performatives::Attach,
-    primitives::{Symbol, ULong},
+    primitives::{Symbol, ULong}, messaging::{TargetArchetype, DeliveryState},
 };
 use tokio::sync::mpsc;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     control::SessionControl,
-    link::{AttachError, LinkFrame},
+    link::{AttachError, LinkFrame, role, Link, target_archetype::VerifyTargetArchetype, state::LinkFlowState},
     session::SessionHandle,
-    util::Initialized,
+    util::Initialized, endpoint,
 };
 
 use super::{
@@ -266,4 +267,17 @@ pub(crate) async fn handle_attach_error(
         AttachError::Local(_) => todo!(),
     }
     todo!()
+}
+
+#[async_trait]
+impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M> 
+where
+    R: role::IntoRole + Send + Sync,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+{
+    async fn on_incoming_attach_as_acceptor(&mut self, attach: Attach) -> Result<(), (Self::AttachError, Option<Attach>)> {
+        todo!()
+    }
 }
