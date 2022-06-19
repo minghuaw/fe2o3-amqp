@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
-    messaging::Target,
+    messaging::{Target, TargetArchetype},
     primitives::{Array, Symbol},
     transaction::TxnCapability,
 };
@@ -138,7 +138,50 @@ impl TargetArchetypeCapabilities for Coordinator {
     }
 }
 
-/// Extension trait for TargetArchetypes
-pub trait TargetArchetypeExt: VerifyTargetArchetype + TargetArchetypeCapabilities {}
+pub trait VariantOfTargetArchetype {
+    fn is_target(&self) -> bool;
+    fn is_coordinator(&self) -> bool;
+}
 
-impl<T> TargetArchetypeExt for T where T: VerifyTargetArchetype + TargetArchetypeCapabilities {}
+impl VariantOfTargetArchetype for Target {
+    fn is_target(&self) -> bool {
+        true
+    }
+
+    fn is_coordinator(&self) -> bool {
+        false
+    }
+}
+
+impl VariantOfTargetArchetype for Coordinator {
+    fn is_target(&self) -> bool {
+        false
+    }
+
+    fn is_coordinator(&self) -> bool {
+        true
+    }
+}
+
+impl VariantOfTargetArchetype for TargetArchetype {
+    fn is_target(&self) -> bool {
+        match self {
+            TargetArchetype::Target(_) => true,
+            TargetArchetype::Coordinator(_) => false,
+        }
+    }
+
+    fn is_coordinator(&self) -> bool {
+        match self {
+            TargetArchetype::Target(_) => true,
+            TargetArchetype::Coordinator(_) => false,
+        }
+    }
+}
+
+/// Extension trait for TargetArchetypes
+pub trait TargetArchetypeExt: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype {
+
+}
+
+impl<T> TargetArchetypeExt for T where T: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype {}

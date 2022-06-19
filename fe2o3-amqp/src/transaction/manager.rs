@@ -6,14 +6,14 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    transaction::TransactionId,
+    transaction::TransactionId, messaging::TargetArchetype,
 };
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
 use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{AttachError, LinkFrame, LinkRelay},
+    link::{AttachError, LinkFrame, LinkRelay, target_archetype::VariantOfTargetArchetype},
     session::frame::SessionFrame,
     Payload, Session,
 };
@@ -77,8 +77,11 @@ where
 }
 
 #[async_trait]
-impl HandleControlLink for TxnSession<Session> {
-    type Error = AttachError;
+impl<S> HandleControlLink for TxnSession<S> 
+where
+    S: endpoint::Session + Send,
+{
+    type Error = S::Error;
 
     async fn on_incoming_control_attach(
         &mut self,
@@ -109,13 +112,13 @@ where
     type State = S::State;
 
     fn local_state(&self) -> &Self::State {
-        todo!()
+        self.session.local_state()
     }
     fn local_state_mut(&mut self) -> &mut Self::State {
-        todo!()
+        self.session.local_state_mut()
     }
     fn outgoing_channel(&self) -> OutgoingChannel {
-        todo!()
+        self.session.outgoing_channel()
     }
 
     // Allocate new local handle for new Link
@@ -124,7 +127,7 @@ where
         link_name: String,
         link_relay: Option<LinkRelay<()>>, // TODO: how to expose error at compile time?
     ) -> Result<OutputHandle, Self::AllocError> {
-        todo!()
+        self.session.allocate_link(link_name, link_relay)
     }
 
     fn allocate_incoming_link(
@@ -133,11 +136,11 @@ where
         link_relay: LinkRelay<()>,
         input_handle: InputHandle,
     ) -> Result<OutputHandle, Self::AllocError> {
-        todo!()
+        self.session.allocate_incoming_link(link_name, link_relay, input_handle)
     }
 
     fn deallocate_link(&mut self, output_handle: OutputHandle) {
-        todo!()
+        self.session.deallocate_link(output_handle)
     }
 
     fn on_incoming_begin(
@@ -145,7 +148,7 @@ where
         channel: IncomingChannel,
         begin: Begin,
     ) -> Result<(), Self::Error> {
-        todo!()
+        self.session.on_incoming_begin(channel, begin)
     }
 
     async fn on_incoming_attach(
@@ -153,7 +156,11 @@ where
         channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
-        todo!()
+        match attach.target.as_ref().map(|t| t.is_coordinator()) {
+            Some(true) => self.on_incoming_control_attach(channel, attach).await,
+            Some(false)
+            | None => self.session.on_incoming_attach(channel, attach).await,
+        }
     }
 
     async fn on_incoming_flow(
@@ -186,7 +193,7 @@ where
         channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
-        todo!()
+        self.session.on_incoming_detach(channel, detach).await
     }
 
     async fn on_incoming_end(
@@ -194,7 +201,7 @@ where
         channel: IncomingChannel,
         end: End,
     ) -> Result<(), Self::Error> {
-        todo!()
+        self.session.on_incoming_end(channel, end).await
     }
 
     // Handling SessionFrames
@@ -202,7 +209,7 @@ where
     where
         W: Sink<SessionFrame> + Send + Unpin,
     {
-        todo!()
+        self.session.send_begin(writer).await
     }
 
     async fn send_end<W>(
@@ -213,12 +220,12 @@ where
     where
         W: Sink<SessionFrame> + Send + Unpin,
     {
-        todo!()
+        self.session.send_end(writer, error).await
     }
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        self.session.on_outgoing_attach(attach)
     }
 
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
@@ -242,6 +249,6 @@ where
     }
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
-        todo!()
+        self.on_outgoing_detach(detach)
     }
 }
