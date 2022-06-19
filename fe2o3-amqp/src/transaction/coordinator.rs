@@ -30,13 +30,23 @@ impl ControlLinkAcceptor {
     pub async fn accept_incoming_attach(
         &self,
         remote_attach: Attach,
-        control: mpsc::Sender<SessionControl>,
-        session_tx: mpsc::Sender<LinkFrame>,
+        control: &mpsc::Sender<SessionControl>,
+        outgoing: &mpsc::Sender<LinkFrame>,
     ) -> Result<TxnCoordinator, AttachError> {
-        self.inner
-            .accept_incoming_attach_inner(&self.shared, remote_attach, &control, &session_tx)
+        match self
+            .inner
+            .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
             .await
-            .map(|inner| TxnCoordinator { inner })
+        {
+            Ok(inner) => Ok(TxnCoordinator { inner }),
+            Err((error, remote_attach)) => Err(crate::acceptor::link::handle_attach_error(
+                error,
+                remote_attach,
+                outgoing,
+                control,
+            )
+            .await),
+        }
     }
 }
 

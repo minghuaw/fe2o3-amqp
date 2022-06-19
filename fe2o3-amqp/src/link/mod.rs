@@ -241,7 +241,10 @@ where
 {
     type AttachError = link::AttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+    async fn on_incoming_attach(
+        &mut self,
+        remote_attach: Attach,
+    ) -> Result<(), (Self::AttachError, Option<Attach>)> {
         match self.local_state {
             LinkState::AttachSent => {
                 // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
@@ -253,11 +256,13 @@ where
                 self.local_state = LinkState::AttachReceived
             }
             _ => {
-                return Err(AttachError::Local(definitions::Error::new(
+                let err = AttachError::Local(definitions::Error::new(
                     AmqpError::IllegalState,
                     None,
                     None,
-                )))
+                ));
+
+                return Err((err, None));
             }
         };
 
@@ -266,13 +271,16 @@ where
         // **the receiver is considered to hold the authoritative version of the target properties**.
         let target = match remote_attach.target {
             Some(t) => T::try_from(*t).map_err(|_| {
-                AttachError::Local(definitions::Error::new(
-                    AmqpError::NotImplemented,
-                    None,
-                    None,
-                ))
+                (
+                    AttachError::Local(definitions::Error::new(
+                        AmqpError::NotImplemented,
+                        None,
+                        None,
+                    )),
+                    Some(remote_attach),
+                )
             })?,
-            None => return Err(AttachError::TargetIsNone),
+            None => return Err((AttachError::TargetIsNone, Some(remote_attach))),
         };
 
         // When resuming a link, it is possible that the properties of the source and target have changed while the link
@@ -284,7 +292,9 @@ where
                 // In this case, the sender is considered to hold the authoritative version of the
                 // version of the source properties
 
-                let source = *remote_attach.source.ok_or(AttachError::SourceIsNone)?;
+                let source = *remote_attach
+                    .source
+                    .ok_or((AttachError::SourceIsNone, Some(remote_attach)))?;
                 self.source = Some(source);
 
                 // The receiver SHOULD respect the sender’s desired settlement mode if the sender
@@ -292,15 +302,18 @@ where
                 self.snd_settle_mode = remote_attach.snd_settle_mode;
 
                 // The delivery-count is initialized by the sender when a link endpoint is
-                // created, and is incre- mented whenever a message is sent
+                // created, and is incremented whenever a message is sent
                 let initial_delivery_count = match remote_attach.initial_delivery_count {
                     Some(val) => val,
                     None => {
-                        return Err(AttachError::Local(definitions::Error::new(
-                            AmqpError::NotAllowed,
+                        return Err((
+                            AttachError::Local(definitions::Error::new(
+                                AmqpError::NotAllowed,
+                                None,
+                                None,
+                            )),
                             None,
-                            None,
-                        )))
+                        ))
                     }
                 };
 
@@ -309,7 +322,7 @@ where
                 if let Some(local) = &self.target {
                     local
                         .verify_as_receiver(&target)
-                        .map_err(AttachError::Local)?;
+                        .map_err(|err| (AttachError::Local(err), Some(remote_attach)))?;
                 }
 
                 self.flow_state
@@ -328,7 +341,7 @@ where
                 if let Some(local) = &self.target {
                     local
                         .verify_as_sender(&target)
-                        .map_err(AttachError::Local)?;
+                        .map_err(|err| (AttachError::Local(err), Some(remote_attach)))?;
                 }
                 self.target = Some(target);
 

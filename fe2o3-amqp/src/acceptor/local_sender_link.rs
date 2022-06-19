@@ -78,16 +78,22 @@ where
         shared: &SharedLinkAcceptorFields,
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
-    ) -> Result<Sender, AttachError> {
+    ) -> Result<Sender, (AttachError, Option<Attach>)> {
         let snd_settle_mode = if self
             .supported_snd_settle_modes
             .supports(&remote_attach.snd_settle_mode)
         {
             remote_attach.snd_settle_mode.clone()
         } else {
-            self.fallback_snd_settle_mode
-                .clone()
-                .ok_or_else(|| AttachError::SenderSettleModeNotSupported)?
+            match self.fallback_snd_settle_mode.clone() {
+                Some(mode) => mode,
+                None => {
+                    return Err((
+                        AttachError::SenderSettleModeNotSupported,
+                        Some(remote_attach),
+                    ))
+                }
+            }
         };
 
         let (incoming_tx, incoming_rx) = mpsc::channel(shared.buffer_size);
@@ -124,12 +130,16 @@ where
             link_handle,
             input_handle,
         )
-        .await?;
+        .await;
+        let output_handle = match output_handle {
+            Ok(handle) => handle,
+            Err(err) => return Err((err.into(), Some(remote_attach))),
+        };
 
-        let source = *(&remote_attach)
-            .source
-            .clone()
-            .ok_or(AttachError::SourceIsNone)?;
+        let source = match &remote_attach.source {
+            Some(val) => *val.clone(),
+            None => return Err((AttachError::SourceIsNone, Some(remote_attach))),
+        };
 
         let mut link = link::Link::<role::Sender, Target, SenderFlowState, UnsettledMessage> {
             role: PhantomData,
@@ -151,7 +161,9 @@ where
 
         let mut outgoing = PollSender::new(session.outgoing.clone());
         link.on_incoming_attach(remote_attach).await?;
-        link.send_attach(&mut outgoing).await?;
+        link.send_attach(&mut outgoing)
+            .await
+            .map_err(|err| (err.into(), None))?;
 
         let inner = SenderInner {
             link,

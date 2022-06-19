@@ -20,7 +20,7 @@ use crate::{
         receiver::{CreditMode, ReceiverInner},
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        target_archetype::{TargetArchetypeExt},
+        target_archetype::TargetArchetypeExt,
         AttachError, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState,
     },
     session::SessionHandle,
@@ -69,7 +69,7 @@ impl LocalReceiverLinkAcceptor<Symbol> {
         shared: &SharedLinkAcceptorFields,
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
-    ) -> Result<Receiver, AttachError> {
+    ) -> Result<Receiver, (AttachError, Option<Attach>)> {
         self.accept_incoming_attach_inner(
             shared,
             remote_attach,
@@ -93,10 +93,14 @@ where
         outgoing: &mpsc::Sender<LinkFrame>,
     ) -> Result<
         ReceiverInner<link::Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>,
-        AttachError,
+        (AttachError, Option<Attach>),
     >
     where
-        T: Into<TargetArchetype> + TryFrom<TargetArchetype> + TargetArchetypeExt<Capability = C> + Clone + Send,
+        T: Into<TargetArchetype>
+            + TryFrom<TargetArchetype>
+            + TargetArchetypeExt<Capability = C>
+            + Clone
+            + Send,
     {
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
@@ -106,9 +110,15 @@ where
         {
             remote_attach.rcv_settle_mode.clone()
         } else {
-            self.fallback_rcv_settle_mode
-                .clone()
-                .ok_or_else(|| AttachError::ReceiverSettleModeNotSupported)?
+            match self.fallback_rcv_settle_mode.clone() {
+                Some(mode) => mode,
+                None => {
+                    return Err((
+                        AttachError::ReceiverSettleModeNotSupported,
+                        Some(remote_attach),
+                    ))
+                }
+            }
         };
 
         // Create channels for Session-Link communication
@@ -148,17 +158,27 @@ where
             link_handle,
             input_handle,
         )
-        .await?;
+        .await;
+        let output_handle = match output_handle {
+            Ok(handle) => handle,
+            Err(err) => return Err((err.into(), Some(remote_attach))),
+        };
 
         let mut target = match &remote_attach.target {
-            Some(t) => T::try_from(*t.clone()).map_err(|_| {
-                AttachError::Local(definitions::Error::new(
-                    AmqpError::NotImplemented,
-                    "Coordinator is not implemented".to_string(),
-                    None,
-                ))
-            })?,
-            None => return Err(AttachError::TargetIsNone),
+            Some(t) => match T::try_from(*t.clone()) {
+                Ok(t) => t,
+                Err(_) => {
+                    return Err((
+                        AttachError::Local(definitions::Error::new(
+                            AmqpError::NotImplemented,
+                            "Coordinator is not implemented".to_string(),
+                            None,
+                        )),
+                        Some(remote_attach),
+                    ))
+                }
+            },
+            None => return Err((AttachError::TargetIsNone, Some(remote_attach))),
         };
 
         // Set local link to the capabilities that are actually supported
@@ -184,7 +204,9 @@ where
 
         let mut outgoing = PollSender::new(outgoing.clone());
         link.on_incoming_attach(remote_attach).await?;
-        link.send_attach(&mut outgoing).await?;
+        link.send_attach(&mut outgoing)
+            .await
+            .map_err(|err| (err.into(), None))?;
 
         let mut inner = ReceiverInner {
             link,
@@ -203,7 +225,7 @@ where
                 .set_credit(credit)
                 .await
                 .map_err(|error| match AttachError::try_from(error) {
-                    Ok(error) => error,
+                    Ok(error) => (error, None),
                     Err(_) => unreachable!(),
                 })?;
         }

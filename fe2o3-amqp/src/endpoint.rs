@@ -185,7 +185,9 @@ pub(crate) trait Session {
     type State;
 
     fn local_state(&self) -> &Self::State;
+
     fn local_state_mut(&mut self) -> &mut Self::State;
+    
     fn outgoing_channel(&self) -> OutgoingChannel;
 
     // Allocate new local handle for new Link
@@ -262,17 +264,21 @@ pub(crate) trait Session {
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
+
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
+
     fn on_outgoing_transfer(
         &mut self,
         input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<SessionFrame, Self::Error>;
+
     fn on_outgoing_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error>;
+
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
 }
 
@@ -296,7 +302,7 @@ pub(crate) trait LinkDetach {
 pub(crate) trait LinkAttach {
     type AttachError: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), (Self::AttachError, Option<Attach>)>;
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
     where

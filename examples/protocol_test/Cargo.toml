@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 fe2o3-amqp = { version = "0.0.15", path = "../../fe2o3-amqp", features = ["acceptor", "transaction"] }
 # fe2o3-amqp = { version = "0.0.13", features = ["acceptor", "transaction"] }
-tokio = { version = "1.11.0", features = ["net", "macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["net", "macros", "rt-multi-thread", "rt", "time"] }
 tracing = "0.1.31"
 tracing-subscriber = "0.3.9"
 tokio-native-tls = "0.3.0"

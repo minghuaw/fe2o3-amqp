@@ -7,13 +7,15 @@
 use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Role},
+    definitions::{self, AmqpError, Fields, Role},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
+use tokio::sync::mpsc;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
+    control::SessionControl,
     link::{AttachError, LinkFrame},
     session::SessionHandle,
     util::Initialized,
@@ -138,66 +140,19 @@ impl LinkAcceptor {
         }
     }
 
-    /// Reject an incoming attach with an attach that has either target
-    /// or source field left empty (None or Null)
-    pub async fn reject_incoming_attach<R>(
-        &self,
-        mut remote_attach: Attach,
-        session: &mut SessionHandle<R>,
-    ) -> Result<(), AttachError> {
-        let local_attach = match remote_attach.role {
-            Role::Sender => {
-                remote_attach.target = None;
-                remote_attach
-            }
-            Role::Receiver => {
-                remote_attach.source = None;
-                remote_attach
-            }
-        };
-        let frame = LinkFrame::Attach(local_attach);
-        session
-            .outgoing
-            .send(frame)
-            .await
-            .map_err(|_| AttachError::IllegalSessionState)?; // Session must have been dropped
-        Ok(())
-    }
-
-    pub(crate) async fn reject_if_source_or_target_is_none<R>(
-        &self,
-        remote_attach: Attach,
-        session: &mut SessionHandle<R>,
-    ) -> Result<Attach, AttachError> {
-        match (
-            &remote_attach.source.is_none(),
-            &remote_attach.target.is_none(),
-        ) {
-            (true, _) => {
-                self.reject_incoming_attach(remote_attach, session).await?;
-                Err(AttachError::SourceIsNone)
-            }
-            (_, true) => {
-                self.reject_incoming_attach(remote_attach, session).await?;
-                Err(AttachError::TargetIsNone)
-            }
-            _ => Ok(remote_attach),
-        }
-    }
-
     /// Accept incoming link with an explicit Attach performative
     pub async fn accept_incoming_attach<R>(
         &self,
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
     ) -> Result<LinkEndpoint, AttachError> {
-        let remote_attach = self
-            .reject_if_source_or_target_is_none(remote_attach, session)
-            .await?;
+        // let remote_attach = self
+        //     .reject_if_source_or_target_is_none(remote_attach, session)
+        //     .await?;
 
         // In this case, the sender is considered to hold the authoritative version of the
         // source properties, the receiver is considered to hold the authoritative version of the target properties.
-        match remote_attach.role {
+        let result = match remote_attach.role {
             Role::Sender => {
                 // Remote is sender -> local is receiver
                 self.local_receiver_acceptor
@@ -210,6 +165,13 @@ impl LinkAcceptor {
                 .accept_incoming_attach(&self.shared, remote_attach, session)
                 .await
                 .map(|sender| LinkEndpoint::Sender(sender)),
+        };
+
+        match result {
+            Ok(link) => Ok(link),
+            Err((error, remote_attach)) => {
+                Err(handle_attach_error(error, remote_attach, &session.outgoing, &session.control).await)
+            }
         }
     }
 
@@ -224,4 +186,84 @@ impl LinkAcceptor {
             .ok_or_else(|| AttachError::IllegalSessionState)?;
         self.accept_incoming_attach(remote_attach, session).await
     }
+}
+
+/// Reject an incoming attach with an attach that has either target
+/// or source field left empty (None or Null)
+pub(crate) async fn reject_incoming_attach(
+    mut remote_attach: Attach,
+    outgoing: &mpsc::Sender<LinkFrame>,
+) -> Result<(), AttachError> {
+    let local_attach = match remote_attach.role {
+        Role::Sender => {
+            remote_attach.target = None;
+            remote_attach
+        }
+        Role::Receiver => {
+            remote_attach.source = None;
+            remote_attach
+        }
+    };
+    let frame = LinkFrame::Attach(local_attach);
+    outgoing
+        .send(frame)
+        .await
+        .map_err(|_| AttachError::IllegalSessionState)?; // Session must have been dropped
+    Ok(())
+}
+
+pub(crate) async fn reject_if_source_or_target_is_none<R>(
+    remote_attach: Attach,
+    outgoing: &mut mpsc::Sender<LinkFrame>,
+) -> Result<Attach, AttachError> {
+    match (
+        &remote_attach.source.is_none(),
+        &remote_attach.target.is_none(),
+    ) {
+        (true, _) => {
+            reject_incoming_attach(remote_attach, outgoing).await?;
+            Err(AttachError::SourceIsNone)
+        }
+        (_, true) => {
+            reject_incoming_attach(remote_attach, outgoing).await?;
+            Err(AttachError::TargetIsNone)
+        }
+        _ => Ok(remote_attach),
+    }
+}
+
+/// If remote_attach is some, then the link should echo an attach with emtpy source or target
+pub(crate) async fn handle_attach_error(
+    error: AttachError,
+    remote_attach: Option<Attach>,
+    outgoing: &mpsc::Sender<LinkFrame>,
+    session_control: &mpsc::Sender<SessionControl>
+) -> AttachError {
+    // If a response of an empty attach is needed
+    if let Some(remote_attach) = remote_attach {
+        reject_incoming_attach(remote_attach, outgoing).await;
+    }
+
+    match error {
+        AttachError::IllegalSessionState => {
+            let err = definitions::Error::new(
+                AmqpError::IllegalState,
+                "Illegal session state".to_string(),
+                None,
+            );
+            session_control.send(SessionControl::End(Some(err))).await;
+        }
+        AttachError::HandleMaxReached => {
+            // A peer that receives a handle outside the supported range MUST close the connection with the
+            // framing-error error-code
+            todo!()
+        }
+        AttachError::DuplicatedLinkName => todo!(),
+        AttachError::SourceIsNone => todo!(),
+        AttachError::TargetIsNone => todo!(),
+        AttachError::ReceiverSettleModeNotSupported => todo!(),
+        AttachError::SenderSettleModeNotSupported => todo!(),
+        AttachError::Local(_) => todo!(),
+    }
+    todo!()
 }

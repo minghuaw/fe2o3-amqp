@@ -310,6 +310,41 @@ impl From<AllocLinkError> for AttachError {
     }
 }
 
+// impl From<AttachError> for definitions::Error {
+//     fn from(err: AttachError) -> Self {
+//         let (condition, description, info): (ErrorCondition, _, _) = match err {
+//             AttachError::IllegalSessionState => (
+//                 AmqpError::IllegalState.into(),
+//                 Some("Illegal session state".to_string()),
+//                 None,
+//             ),
+//             AttachError::HandleMaxReached => {
+//                 // A peer that receives a handle outside the supported range MUST close the connection with the
+//                 // framing-error error-code
+//                 (
+//                     ConnectionError::FramingError.into(),
+//                     Some("Max number of handle exceeded".to_string()),
+//                     None,
+//                 )
+//             }
+//             AttachError::DuplicatedLinkName => (
+//                 AmqpError::InvalidField.into(),
+//                 Some("Link name duplicated".to_string()),
+//                 None,
+//             ),
+//             AttachError::SourceIsNone => (
+
+//             ),
+//             AttachError::TargetIsNone => todo!(),
+//             AttachError::ReceiverSettleModeNotSupported => todo!(),
+//             AttachError::SenderSettleModeNotSupported => todo!(),
+//             AttachError::Local(_) => todo!(),
+//         };
+
+//         Self::new(condition, description, info)
+//     }
+// }
+
 impl TryFrom<Error> for AttachError {
     type Error = Error;
 
