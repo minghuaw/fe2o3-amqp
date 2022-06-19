@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
-        SenderSettleMode, SequenceNo, SessionError,
+        self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
+        Role, SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -22,7 +22,8 @@ pub mod receiver;
 mod receiver_link;
 pub mod sender;
 mod sender_link;
-pub mod state;
+
+pub(crate) mod state;
 
 pub(crate) mod target_archetype;
 
@@ -179,6 +180,137 @@ impl<R, T, F, M> Link<R, T, F, M> {
     }
 }
 
+impl<R, T, F, M> Link<R, T, F, M>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    F: AsRef<LinkFlowState<R>> + Send + Sync,
+    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+{
+    pub(crate) async fn on_incoming_attach_inner(
+        &mut self,
+        handle: Handle,
+        target: Option<Box<TargetArchetype>>,
+        role: Role,
+        source: Option<Box<Source>>,
+        snd_settle_mode: SenderSettleMode,
+        initial_delivery_count: Option<u32>,
+        rcv_settle_mode: ReceiverSettleMode,
+        max_message_size: Option<u64>,
+    ) -> Result<(), AttachError> {
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+            _ => return Err(AttachError::illegal_state(None)),
+        };
+
+        self.input_handle = Some(InputHandle::from(handle));
+
+        let target = target.ok_or(AttachError::TargetIsNone).map(|t| {
+            T::try_from(*t).map_err(|_| AttachError::not_implemented("Target mismatch".to_string()))
+        })??;
+
+        // When resuming a link, it is possible that the properties of the source and target have changed while the link
+        // was suspended. When this happens, the termini properties communicated in the source and target fields of the
+        // attach frames could be in conflict.
+        match role {
+            // Remote attach is from sender, local is receiver
+            Role::Sender => {
+                self.on_incoming_attach_as_receiver(
+                    source,
+                    snd_settle_mode,
+                    initial_delivery_count,
+                    target,
+                )
+                .await?;
+            }
+            // Remote attach is from receiver, local is sender
+            Role::Receiver => {
+                self.on_incoming_attach_as_sender(target, rcv_settle_mode)
+                    .await?;
+            }
+        }
+
+        // set max message size
+        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
+        self.max_message_size = get_max_message_size(self.max_message_size, max_message_size);
+
+        // TODO: what to do with the unattached
+
+        Ok(())
+    }
+
+    // Handles incoming attach when the remote is sender
+    pub(crate) async fn on_incoming_attach_as_receiver(
+        &mut self,
+        source: Option<Box<Source>>,
+        snd_settle_mode: SenderSettleMode,
+        initial_delivery_count: Option<u32>,
+        target: T,
+    ) -> Result<(), AttachError> {
+        // In this case, the sender is considered to hold the authoritative version of the
+        // version of the source properties
+
+        let source = source.ok_or(AttachError::SourceIsNone)?;
+        self.source = Some(*source);
+
+        // The receiver SHOULD respect the sender’s desired settlement mode if the sender
+        // initiates the attach exchange and the receiver supports the desired mode.
+        self.snd_settle_mode = snd_settle_mode;
+
+        // The delivery-count is initialized by the sender when a link endpoint is
+        // created, and is incremented whenever a message is sent
+        let initial_delivery_count = match initial_delivery_count {
+            Some(val) => val,
+            None => {
+                return Err(AttachError::not_allowed(
+                    "This MUST NOT be null if role is sender".to_string(),
+                ))
+            }
+        };
+
+        // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+        // Is this verification necessary?
+        if let Some(local) = &self.target {
+            local
+                .verify_as_receiver(&target)
+                .map_err(|err| (AttachError::Local(err)))?;
+        }
+
+        self.flow_state
+            .as_ref()
+            .initial_delivery_count_mut(|_| initial_delivery_count)
+            .await;
+        self.flow_state
+            .as_ref()
+            .delivery_count_mut(|_| initial_delivery_count)
+            .await;
+
+        Ok(())
+    }
+
+    pub(crate) async fn on_incoming_attach_as_sender(
+        &mut self,
+        target: T,
+        rcv_settle_mode: ReceiverSettleMode,
+    ) -> Result<(), AttachError> {
+        // Note that it is the responsibility of the transaction controller to
+        // verify that the capabilities of the controller meet its requirements.
+        if let Some(local) = &self.target {
+            local
+                .verify_as_sender(&target)
+                .map_err(|err| (AttachError::Local(err)))?;
+        }
+        self.target = Some(target);
+
+        // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
+        // initiates the attach exchange and the sender supports the desired mode
+        self.rcv_settle_mode = rcv_settle_mode;
+
+        Ok(())
+    }
+}
+
 impl<R, T, F, M> endpoint::Link for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
@@ -241,140 +373,17 @@ where
 {
     type AttachError = link::AttachError;
 
-    async fn on_incoming_attach(
-        &mut self,
-        remote_attach: Attach,
-    ) -> Result<(), Self::AttachError> {
-        match self.local_state {
-            LinkState::AttachSent => {
-                // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
-                self.local_state = LinkState::Attached
-            }
-            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
-            LinkState::Detached => {
-                // remote peer is attempting to re-attach
-                self.local_state = LinkState::AttachReceived
-            }
-            _ => {
-                let err = AttachError::Local(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    None,
-                    None,
-                ));
-
-                return Err(err);
-            }
-        };
-
-        self.input_handle = Some(InputHandle::from(remote_attach.handle.clone()));
-
-        // **the receiver is considered to hold the authoritative version of the target properties**.
-        // let target = match remote_attach.target {
-        //     Some(t) => match T::try_from(*t) {
-        //         Ok(t) => t,
-        //         Err(_) => {
-        //             return Err((
-        //                 AttachError::Local(definitions::Error::new(
-        //                     AmqpError::NotImplemented,
-        //                     None,
-        //                     None,
-        //                 )),
-        //                 Some(remote_attach),
-        //             ))
-        //         }
-        //     None => return Err((AttachError::TargetIsNone, Some(remote_attach))),
-        // };
-        let target = match &remote_attach.target {
-            Some(t) => match T::try_from(*t.clone()) {
-                Ok(t) => t,
-                Err(_) => {
-                    return Err(
-                        AttachError::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            "Target mismatch".to_string(),
-                            None
-                        ),
-                    ))
-                },
-            },
-            None => return Err(AttachError::TargetIsNone),
-        };
-
-        // When resuming a link, it is possible that the properties of the source and target have changed while the link
-        // was suspended. When this happens, the termini properties communicated in the source and target fields of the
-        // attach frames could be in conflict.
-        match &remote_attach.role {
-            // Remote attach is from sender, local is receiver
-            Role::Sender => {
-                // In this case, the sender is considered to hold the authoritative version of the
-                // version of the source properties
-
-                let source = *remote_attach
-                    .source
-                    .ok_or(AttachError::SourceIsNone)?;
-                self.source = Some(source);
-
-                // The receiver SHOULD respect the sender’s desired settlement mode if the sender
-                // initiates the attach exchange and the receiver supports the desired mode.
-                self.snd_settle_mode = remote_attach.snd_settle_mode;
-
-                // The delivery-count is initialized by the sender when a link endpoint is
-                // created, and is incremented whenever a message is sent
-                let initial_delivery_count = match remote_attach.initial_delivery_count {
-                    Some(val) => val,
-                    None => {
-                        return Err(
-                            AttachError::Local(definitions::Error::new(
-                                AmqpError::NotAllowed,
-                                None,
-                                None,
-                            ),
-                        ))
-                    }
-                };
-
-                // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
-                // Is this verification necessary?
-                if let Some(local) = &self.target {
-                    local
-                        .verify_as_receiver(&target)
-                        .map_err(|err| (AttachError::Local(err)))?;
-                }
-
-                self.flow_state
-                    .as_ref()
-                    .initial_delivery_count_mut(|_| initial_delivery_count)
-                    .await;
-                self.flow_state
-                    .as_ref()
-                    .delivery_count_mut(|_| initial_delivery_count)
-                    .await;
-            }
-            // Remote attach is from receiver, local is sender
-            Role::Receiver => {
-                // Note that it is the responsibility of the transaction controller to
-                // verify that the capabilities of the controller meet its requirements.
-                if let Some(local) = &self.target {
-                    local
-                        .verify_as_sender(&target)
-                        .map_err(|err| (AttachError::Local(err)))?;
-                }
-                self.target = Some(target);
-
-                // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
-                // initiates the attach exchange and the sender supports the desired mode
-                self.rcv_settle_mode = remote_attach.rcv_settle_mode;
-            }
-        }
-
-        // set max message size
-        // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
-        self.max_message_size =
-            max_message_size(self.max_message_size, remote_attach.max_message_size);
-
-        // TODO: what to do with the unattached
-
-        Ok(())
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+        self.on_incoming_attach_inner(
+            remote_attach.handle,
+            remote_attach.target,
+            remote_attach.role,
+            remote_attach.source,
+            remote_attach.snd_settle_mode,
+            remote_attach.initial_delivery_count,
+            remote_attach.rcv_settle_mode,
+            remote_attach.max_message_size,
+        ).await
     }
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
@@ -942,7 +951,7 @@ where
     Ok(())
 }
 
-fn max_message_size(local: u64, remote: Option<u64>) -> u64 {
+pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
     let remote_max_msg_size = remote.unwrap_or(0);
     match local {
         0 => remote_max_msg_size,

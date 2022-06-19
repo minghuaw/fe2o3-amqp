@@ -75,7 +75,7 @@ impl LinkFlowStateInner {
 
 /// The Sender and Receiver handle link flow control differently
 #[derive(Debug)]
-pub(crate) struct LinkFlowState<R> {
+pub struct LinkFlowState<R> {
     // Sender(RwLock<LinkFlowStateInner>),
     // Receiver(RwLock<LinkFlowStateInner>),
     pub(crate) lock: RwLock<LinkFlowStateInner>,
@@ -83,7 +83,7 @@ pub(crate) struct LinkFlowState<R> {
 }
 
 impl<R> LinkFlowState<R> {
-    pub fn new(inner: LinkFlowStateInner) -> Self {
+    pub(crate) fn new(inner: LinkFlowStateInner) -> Self {
         Self {
             lock: RwLock::new(inner),
             role: PhantomData,
@@ -92,13 +92,13 @@ impl<R> LinkFlowState<R> {
 }
 
 impl LinkFlowState<role::Sender> {
-    pub fn sender(inner: LinkFlowStateInner) -> Self {
+    pub(crate) fn sender(inner: LinkFlowStateInner) -> Self {
         Self::new(inner)
     }
 }
 
 impl LinkFlowState<role::Receiver> {
-    pub fn receiver(inner: LinkFlowStateInner) -> Self {
+    pub(crate) fn receiver(inner: LinkFlowStateInner) -> Self {
         Self::new(inner)
     }
 }
@@ -292,7 +292,7 @@ impl ProducerState for Arc<LinkFlowState<role::Sender>> {
 }
 
 impl Producer<Arc<LinkFlowState<role::Sender>>> {
-    pub async fn on_incoming_flow(
+    pub(crate) async fn on_incoming_flow(
         &mut self,
         flow: LinkFlow,
         output_handle: OutputHandle,

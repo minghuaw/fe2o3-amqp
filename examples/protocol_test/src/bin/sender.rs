@@ -101,7 +101,7 @@ async fn main() {
     // let result = fut.await;
     // println!("fut {:?}", result);
 
-    sender.detach().await.unwrap();
+    sender.close().await.unwrap();
 
     // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
     //     .await

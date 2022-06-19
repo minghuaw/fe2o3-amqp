@@ -9,17 +9,22 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, Fields, Role},
+    messaging::{DeliveryState, TargetArchetype},
     performatives::Attach,
-    primitives::{Symbol, ULong}, messaging::{TargetArchetype, DeliveryState},
+    primitives::{Symbol, ULong},
 };
 use tokio::sync::mpsc;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
     control::SessionControl,
-    link::{AttachError, LinkFrame, role, Link, target_archetype::VerifyTargetArchetype, state::LinkFlowState},
+    endpoint,
+    link::{
+        role, state::LinkFlowState, target_archetype::VerifyTargetArchetype, AttachError, Link,
+        LinkFrame,
+    },
     session::SessionHandle,
-    util::Initialized, endpoint,
+    util::Initialized,
 };
 
 use super::{
@@ -171,7 +176,10 @@ impl LinkAcceptor {
         match result {
             Ok(link) => Ok(link),
             Err((error, remote_attach)) => {
-                Err(handle_attach_error(error, remote_attach, &session.outgoing, &session.control).await)
+                Err(
+                    handle_attach_error(error, remote_attach, &session.outgoing, &session.control)
+                        .await,
+                )
             }
         }
     }
@@ -238,11 +246,13 @@ pub(crate) async fn handle_attach_error(
     error: AttachError,
     remote_attach: Option<Attach>,
     outgoing: &mpsc::Sender<LinkFrame>,
-    session_control: &mpsc::Sender<SessionControl>
+    session_control: &mpsc::Sender<SessionControl>,
 ) -> AttachError {
     // If a response of an empty attach is needed
     if let Some(remote_attach) = remote_attach {
-        reject_incoming_attach(remote_attach, outgoing).await;
+        if let Err(err) = reject_incoming_attach(remote_attach, outgoing).await {
+            return err
+        }
     }
 
     match error {
@@ -252,7 +262,9 @@ pub(crate) async fn handle_attach_error(
                 "Illegal session state".to_string(),
                 None,
             );
-            session_control.send(SessionControl::End(Some(err))).await;
+            if let Err(_) = session_control.send(SessionControl::End(Some(err))).await {
+                return AttachError::IllegalSessionState
+            }
         }
         AttachError::HandleMaxReached => {
             // A peer that receives a handle outside the supported range MUST close the connection with the
@@ -266,18 +278,34 @@ pub(crate) async fn handle_attach_error(
         AttachError::SenderSettleModeNotSupported => todo!(),
         AttachError::Local(_) => todo!(),
     }
-    todo!()
+
+    error
 }
 
 #[async_trait]
-impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M> 
+impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    async fn on_incoming_attach_as_acceptor(&mut self, attach: Attach) -> Result<(), (Self::AttachError, Option<Attach>)> {
-        todo!()
+    async fn on_incoming_attach_as_acceptor(
+        &mut self,
+        mut remote_attach: Attach,
+    ) -> Result<(), (Self::AttachError, Option<Attach>)> {
+        self.on_incoming_attach_inner(
+            // Cloning is relatively cheap except for on target and source
+            remote_attach.handle.clone(),
+            remote_attach.target.take(),
+            remote_attach.role.clone(),
+            remote_attach.source.take(),
+            remote_attach.snd_settle_mode.clone(),
+            remote_attach.initial_delivery_count.clone(),
+            remote_attach.rcv_settle_mode.clone(),
+            remote_attach.max_message_size.clone(),
+        )
+        .await
+        .map_err(|err| (err, Some(remote_attach)))
     }
 }

@@ -364,4 +364,20 @@ impl AttachError {
             None,
         ))
     }
+
+    pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::NotImplemented,
+            description,
+            None
+        ))
+    }
+
+    pub(crate) fn not_allowed(description: impl Into<Option<String>>) -> Self {
+        AttachError::Local(definitions::Error::new(
+            AmqpError::NotAllowed,
+            description,
+            None,
+        ))
+    }
 }
