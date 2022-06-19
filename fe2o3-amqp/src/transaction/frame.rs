@@ -1,10 +1,10 @@
 //! Transactional work frames
 
-use fe2o3_amqp_types::performatives::{Transfer, Disposition, Flow};
+use fe2o3_amqp_types::performatives::{Disposition, Flow, Transfer};
 
 use crate::{endpoint::InputHandle, Payload};
 
-/// Transactional work 
+/// Transactional work
 #[derive(Debug)]
 pub(crate) enum TransactionalWork {
     Post {

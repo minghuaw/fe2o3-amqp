@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
         SequenceNo, TransferNumber, MIN_MAX_FRAME_SIZE,
     },
     performatives::{ChannelMax, MaxFrameSize, Open},
-    primitives::{Symbol, ULong, Array},
+    primitives::{Array, Symbol, ULong},
 };
 
 use crate::{
@@ -158,7 +158,9 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.local_open.offered_capabilities {
             Some(capabilities) => capabilities.0.push(capability.into()),
-            None => self.inner.local_open.offered_capabilities = Some(vec![capability.into()].into()),
+            None => {
+                self.inner.local_open.offered_capabilities = Some(vec![capability.into()].into())
+            }
         }
         self
     }
@@ -173,7 +175,9 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.local_open.desired_capabilities {
             Some(capabilities) => capabilities.0.push(capability.into()),
-            None => self.inner.local_open.desired_capabilities = Some(vec![capability.into()].into()),
+            None => {
+                self.inner.local_open.desired_capabilities = Some(vec![capability.into()].into())
+            }
         }
         self
     }
@@ -347,7 +351,9 @@ impl Builder<LinkAcceptor, Initialized> {
 
     /// The settlement policy of the receiver
     pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
-        self.inner.local_receiver_acceptor.supported_rcv_settle_modes = modes;
+        self.inner
+            .local_receiver_acceptor
+            .supported_rcv_settle_modes = modes;
         self
     }
 
@@ -409,13 +415,19 @@ impl Builder<LinkAcceptor, Initialized> {
     }
 
     /// Set the target capabilities field
-    pub fn target_capabilities(mut self, target_capabilities: impl Into<Option<Vec<Symbol>>>) -> Self {
+    pub fn target_capabilities(
+        mut self,
+        target_capabilities: impl Into<Option<Vec<Symbol>>>,
+    ) -> Self {
         self.inner.local_receiver_acceptor.target_capabilities = target_capabilities.into();
         self
     }
 
     /// Set the source capabilities field
-    pub fn source_capabilities(mut self, source_capabilities: impl Into<Option<Vec<Symbol>>>) -> Self {
+    pub fn source_capabilities(
+        mut self,
+        source_capabilities: impl Into<Option<Vec<Symbol>>>,
+    ) -> Self {
         self.inner.local_sender_acceptor.source_capabilities = source_capabilities.into();
         self
     }

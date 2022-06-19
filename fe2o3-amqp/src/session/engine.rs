@@ -1,7 +1,7 @@
 use std::{fmt::Debug, io};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Handle, ConnectionError},
+    definitions::{self, AmqpError, ConnectionError, Handle},
     performatives::Detach,
 };
 use futures_util::SinkExt;
@@ -306,11 +306,11 @@ where
                 let error = definitions::Error::new(
                     ConnectionError::FramingError,
                     "A handle outside the supported range is received".to_string(),
-                    None
+                    None,
                 );
                 let _ = self.conn.send(ConnectionControl::Close(Some(error))).await;
                 Running::Stop
-            },
+            }
         }
     }
 

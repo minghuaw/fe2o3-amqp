@@ -81,7 +81,6 @@ pub struct Uninitialized {}
 #[derive(Debug)]
 pub struct Initialized {}
 
-
 /// Convenience functions to test the variant of a TargetArchetype
 pub trait TargetArchetypeVariant {
     fn is_target(&self) -> bool;

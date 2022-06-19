@@ -29,14 +29,15 @@ use crate::{
         sasl,
     },
     session::frame::{SessionFrame, SessionFrameBody},
-    transport::{
-        protocol_header::{ProtocolHeaderCodec},
-        Transport,
-    },
+    transport::{protocol_header::ProtocolHeaderCodec, Transport},
     util::{Initialized, Uninitialized},
 };
 
-use super::{builder::Builder, sasl_acceptor::{SaslAcceptor, SaslAcceptorExt}, IncomingSession};
+use super::{
+    builder::Builder,
+    sasl_acceptor::{SaslAcceptor, SaslAcceptorExt},
+    IncomingSession,
+};
 
 /// Type alias for listener connection handle
 pub type ListenerConnectionHandle = ConnectionHandle<Receiver<IncomingSession>>;

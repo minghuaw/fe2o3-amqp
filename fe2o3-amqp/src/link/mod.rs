@@ -383,7 +383,8 @@ where
             remote_attach.initial_delivery_count,
             remote_attach.rcv_settle_mode,
             remote_attach.max_message_size,
-        ).await
+        )
+        .await
     }
 
     async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>

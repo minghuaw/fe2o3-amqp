@@ -24,7 +24,7 @@ pub enum Error {
     JoinError(#[from] JoinError),
 
     /// TODO: Fine grain control over particular errors
-    /// 
+    ///
     /// A local error
     #[error("Local error {:?}", .0)]
     Local(definitions::Error),

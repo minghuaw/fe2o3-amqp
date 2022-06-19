@@ -4,16 +4,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    performatives::{Attach, Detach, Disposition, Flow, Transfer, Begin, End},
-    transaction::TransactionId, definitions,
+    definitions,
+    performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
+    transaction::TransactionId,
 };
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
 use crate::{
-    endpoint::{self, IncomingChannel, OutgoingChannel, OutputHandle, InputHandle, LinkFlow},
+    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{AttachError, LinkFrame, LinkRelay},
-    Session, Payload, session::frame::SessionFrame,
+    session::frame::SessionFrame,
+    Payload, Session,
 };
 
 use super::frame::TransactionalWork;
@@ -203,7 +205,11 @@ where
         todo!()
     }
 
-    async fn send_end<W>(&mut self, writer: &mut W, error: Option<definitions::Error>) -> Result<(), Self::Error>
+    async fn send_end<W>(
+        &mut self,
+        writer: &mut W,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::Error>
     where
         W: Sink<SessionFrame> + Send + Unpin,
     {
@@ -218,7 +224,7 @@ where
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
-    
+
     fn on_outgoing_transfer(
         &mut self,
         input_handle: InputHandle,
@@ -234,7 +240,7 @@ where
     ) -> Result<SessionFrame, Self::Error> {
         todo!()
     }
-    
+
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         todo!()
     }

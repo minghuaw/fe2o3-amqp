@@ -227,7 +227,7 @@ pub(crate) async fn handle_attach_error(
     // If a response of an empty attach is needed
     if let Some(remote_attach) = remote_attach {
         if let Err(err) = reject_incoming_attach(remote_attach, outgoing).await {
-            return err
+            return err;
         }
     }
 

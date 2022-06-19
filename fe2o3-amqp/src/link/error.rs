@@ -361,7 +361,7 @@ impl AttachError {
         Self::Local(definitions::Error::new(
             AmqpError::NotImplemented,
             description,
-            None
+            None,
         ))
     }
 

@@ -25,9 +25,9 @@ pub use acquisition::*;
 
 mod control_link_frame;
 
-pub mod manager;
-pub mod frame;
 pub mod coordinator;
+pub mod frame;
+pub mod manager;
 
 /// A transaction scope for the client side
 ///

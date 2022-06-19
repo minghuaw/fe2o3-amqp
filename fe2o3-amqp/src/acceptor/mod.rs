@@ -3,10 +3,10 @@
 pub mod builder;
 pub mod connection;
 pub mod link;
-pub mod sasl_acceptor;
-pub mod session;
 pub mod local_receiver_link;
 pub mod local_sender_link;
+pub mod sasl_acceptor;
+pub mod session;
 
 use fe2o3_amqp_types::{
     definitions::{ReceiverSettleMode, SenderSettleMode},
