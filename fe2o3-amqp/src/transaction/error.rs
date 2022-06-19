@@ -80,8 +80,6 @@ impl From<AttachError> for DeclareErrorKind {
             AttachError::DuplicatedLinkName => Self::DuplicatedLinkName,
             AttachError::SourceIsNone => Self::SourceIsNone,
             AttachError::TargetIsNone => Self::TargetIsNone,
-            AttachError::ReceiverSettleModeNotSupported => Self::ReceiverSettleModeNotSupported,
-            AttachError::SenderSettleModeNotSupported => Self::SenderSettleModeNotSupported,
             AttachError::Local(e) => Self::Local(e),
         }
     }

@@ -43,7 +43,7 @@ pub(crate) struct LocalSenderLinkAcceptor<C> {
     ///
     /// If this field is None, an incoming attach whose desired sender settle
     /// mode is not supported will then be rejected
-    pub fallback_snd_settle_mode: Option<SenderSettleMode>,
+    pub fallback_snd_settle_mode: SenderSettleMode,
 
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
@@ -61,7 +61,7 @@ where
     fn default() -> Self {
         Self {
             supported_snd_settle_modes: SupportedSenderSettleModes::default(),
-            fallback_snd_settle_mode: Some(SenderSettleMode::default()),
+            fallback_snd_settle_mode: SenderSettleMode::default(),
             initial_delivery_count: 0,
             source_capabilities: None,
         }
@@ -85,15 +85,7 @@ where
         {
             remote_attach.snd_settle_mode.clone()
         } else {
-            match self.fallback_snd_settle_mode.clone() {
-                Some(mode) => mode,
-                None => {
-                    return Err((
-                        AttachError::SenderSettleModeNotSupported,
-                        Some(remote_attach),
-                    ))
-                }
-            }
+            self.fallback_snd_settle_mode.clone()
         };
 
         let (incoming_tx, incoming_rx) = mpsc::channel(shared.buffer_size);

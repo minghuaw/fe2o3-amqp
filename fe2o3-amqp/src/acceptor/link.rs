@@ -152,10 +152,6 @@ impl LinkAcceptor {
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
     ) -> Result<LinkEndpoint, AttachError> {
-        // let remote_attach = self
-        //     .reject_if_source_or_target_is_none(remote_attach, session)
-        //     .await?;
-
         // In this case, the sender is considered to hold the authoritative version of the
         // source properties, the receiver is considered to hold the authoritative version of the target properties.
         let result = match remote_attach.role {
@@ -221,26 +217,6 @@ pub(crate) async fn reject_incoming_attach(
     Ok(())
 }
 
-pub(crate) async fn reject_if_source_or_target_is_none<R>(
-    remote_attach: Attach,
-    outgoing: &mut mpsc::Sender<LinkFrame>,
-) -> Result<Attach, AttachError> {
-    match (
-        &remote_attach.source.is_none(),
-        &remote_attach.target.is_none(),
-    ) {
-        (true, _) => {
-            reject_incoming_attach(remote_attach, outgoing).await?;
-            Err(AttachError::SourceIsNone)
-        }
-        (_, true) => {
-            reject_incoming_attach(remote_attach, outgoing).await?;
-            Err(AttachError::TargetIsNone)
-        }
-        _ => Ok(remote_attach),
-    }
-}
-
 /// If remote_attach is some, then the link should echo an attach with emtpy source or target
 pub(crate) async fn handle_attach_error(
     error: AttachError,
@@ -255,6 +231,7 @@ pub(crate) async fn handle_attach_error(
         }
     }
 
+    // Additional handling
     match error {
         AttachError::IllegalSessionState => {
             let err = definitions::Error::new(
@@ -265,21 +242,14 @@ pub(crate) async fn handle_attach_error(
             if let Err(_) = session_control.send(SessionControl::End(Some(err))).await {
                 return AttachError::IllegalSessionState
             }
+            error
         }
-        AttachError::HandleMaxReached => {
-            // A peer that receives a handle outside the supported range MUST close the connection with the
-            // framing-error error-code
-            todo!()
-        }
-        AttachError::DuplicatedLinkName => todo!(),
-        AttachError::SourceIsNone => todo!(),
-        AttachError::TargetIsNone => todo!(),
-        AttachError::ReceiverSettleModeNotSupported => todo!(),
-        AttachError::SenderSettleModeNotSupported => todo!(),
-        AttachError::Local(_) => todo!(),
+        AttachError::HandleMaxReached // TODO: any additional steps needed?
+        | AttachError::DuplicatedLinkName
+        | AttachError::SourceIsNone
+        | AttachError::TargetIsNone
+        | AttachError::Local(_) => error,
     }
-
-    error
 }
 
 #[async_trait]

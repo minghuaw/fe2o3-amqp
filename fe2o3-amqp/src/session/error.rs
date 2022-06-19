@@ -23,9 +23,16 @@ pub enum Error {
     #[error(transparent)]
     JoinError(#[from] JoinError),
 
+    /// TODO: Fine grain control over particular errors
+    /// 
     /// A local error
     #[error("Local error {:?}", .0)]
     Local(definitions::Error),
+
+    /// A peer that receives a handle outside the supported range MUST close the connection with the
+    /// framing-error error-code
+    #[error("A handle outside the supported range is received")]
+    HandleMaxExceeded,
 
     /// The remote peer ended the session with the provided error
     #[error("Remote error {:?}", .0)]

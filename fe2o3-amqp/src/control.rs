@@ -1,7 +1,7 @@
 //! Controls for Connection, Session, and Link
 
 use fe2o3_amqp_types::{
-    definitions::{self},
+    definitions::{self, ConnectionError},
     performatives::Disposition,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
@@ -55,6 +55,7 @@ pub(crate) enum SessionControl {
     DeallocateLink(OutputHandle),
     LinkFlow(LinkFlow),
     Disposition(Disposition),
+    CloseConnectionWithError((ConnectionError, Option<String>)),
 }
 
 impl std::fmt::Display for SessionControl {
@@ -75,6 +76,7 @@ impl std::fmt::Display for SessionControl {
             SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({:?})", name),
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
+            SessionControl::CloseConnectionWithError(_) => write!(f, "CloseConnectionWithError"),
         }
     }
 }

@@ -287,14 +287,6 @@ pub enum AttachError {
     #[error("Target is None")]
     TargetIsNone,
 
-    /// The desired mode is not supported
-    #[error("Desired receiver settle mode is not supported")]
-    ReceiverSettleModeNotSupported,
-
-    /// The desired mode is not supported
-    #[error("Desired sender settle mode is not supported")]
-    SenderSettleModeNotSupported,
-
     /// A local error
     #[error("Local error: {:?}", .0)]
     Local(definitions::Error),

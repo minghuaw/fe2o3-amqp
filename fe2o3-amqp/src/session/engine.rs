@@ -1,7 +1,7 @@
 use std::{fmt::Debug, io};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Handle},
+    definitions::{self, AmqpError, Handle, ConnectionError},
     performatives::Detach,
 };
 use futures_util::SinkExt;
@@ -221,6 +221,14 @@ where
                     // event loop has stopped. It should be treated as an io error
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
+            SessionControl::CloseConnectionWithError((condition, description)) => {
+                let error = definitions::Error::new(condition, description, None);
+                let control = ConnectionControl::Close(Some(error));
+                self.conn
+                    .send(control)
+                    .await
+                    .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            }
         }
 
         match self.session.local_state() {
@@ -294,6 +302,15 @@ where
                 closed,
                 error,
             } => self.on_link_handle_error(handle, closed, error).await,
+            Error::HandleMaxExceeded => {
+                let error = definitions::Error::new(
+                    ConnectionError::FramingError,
+                    "A handle outside the supported range is received".to_string(),
+                    None
+                );
+                let _ = self.conn.send(ConnectionControl::Close(Some(error))).await;
+                Running::Stop
+            },
         }
     }
 

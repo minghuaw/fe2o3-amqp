@@ -43,7 +43,7 @@ pub(crate) struct LocalReceiverLinkAcceptor<C> {
     ///
     /// If this field is None, an incoming attach whose desired receiver settle
     /// mode is not supported will then be rejected
-    pub fallback_rcv_settle_mode: Option<ReceiverSettleMode>,
+    pub fallback_rcv_settle_mode: ReceiverSettleMode,
 
     /// Credit mode of the link. This has no effect on a sender
     pub credit_mode: CreditMode,
@@ -56,7 +56,7 @@ impl<C> Default for LocalReceiverLinkAcceptor<C> {
     fn default() -> Self {
         Self {
             supported_rcv_settle_modes: SupportedReceiverSettleModes::default(),
-            fallback_rcv_settle_mode: Some(ReceiverSettleMode::default()),
+            fallback_rcv_settle_mode: ReceiverSettleMode::default(),
             credit_mode: CreditMode::default(),
             target_capabilities: None,
         }
@@ -110,15 +110,7 @@ where
         {
             remote_attach.rcv_settle_mode.clone()
         } else {
-            match self.fallback_rcv_settle_mode.clone() {
-                Some(mode) => mode,
-                None => {
-                    return Err((
-                        AttachError::ReceiverSettleModeNotSupported,
-                        Some(remote_attach),
-                    ))
-                }
-            }
+            self.fallback_rcv_settle_mode.clone()
         };
 
         // Create channels for Session-Link communication
@@ -161,7 +153,7 @@ where
         .await;
         let output_handle = match output_handle {
             Ok(handle) => handle,
-            Err(err) => return Err((err.into(), Some(remote_attach))),
+            Err(err) => return Err((err.into(), Some(remote_attach))), // If allocation fails, should respond with an empty attach
         };
 
         let mut target = match &remote_attach.target {

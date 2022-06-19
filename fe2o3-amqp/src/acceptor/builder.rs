@@ -340,7 +340,7 @@ impl Builder<LinkAcceptor, Initialized> {
 
     /// The sender settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
-    pub fn fallback_sender_settle_mode(mut self, mode: Option<SenderSettleMode>) -> Self {
+    pub fn fallback_sender_settle_mode(mut self, mode: SenderSettleMode) -> Self {
         self.inner.local_sender_acceptor.fallback_snd_settle_mode = mode;
         self
     }
@@ -353,7 +353,7 @@ impl Builder<LinkAcceptor, Initialized> {
 
     /// The receiver settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
-    pub fn fallback_receiver_settle_mode(mut self, mode: Option<ReceiverSettleMode>) -> Self {
+    pub fn fallback_receiver_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
         self.inner.local_receiver_acceptor.fallback_rcv_settle_mode = mode;
         self
     }
