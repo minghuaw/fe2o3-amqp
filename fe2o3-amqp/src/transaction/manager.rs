@@ -120,5 +120,4 @@ mod tests {
         let uuid2 = Uuid::from_slice(txn_id.as_ref()).unwrap();
         assert_eq!(uuid, uuid2);
     }
-
 }
