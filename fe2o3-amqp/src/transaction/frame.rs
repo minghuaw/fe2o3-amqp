@@ -6,7 +6,7 @@ use crate::{endpoint::InputHandle, Payload};
 
 /// Transactional work
 #[derive(Debug)]
-pub(crate) enum TransactionalWork {
+pub(crate) enum TxnWorkFrame {
     Post {
         input_handle: InputHandle,
         transfer: Transfer,

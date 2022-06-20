@@ -4,10 +4,11 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{performatives::{Attach, Detach, Transfer, Flow, Disposition, Begin, End}, transaction::TransactionId, primitives::Symbol, messaging::DeliveryState, definitions};
 use futures_util::Sink;
 use tracing::instrument;
+use uuid::Uuid;
 
 use crate::{endpoint::{self, IncomingChannel, LinkFlow, OutgoingChannel, OutputHandle, InputHandle}, session::{self, frame::SessionFrame}, Payload, link::{LinkRelay, target_archetype::VariantOfTargetArchetype}};
 
-use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork}, TXN_ID_KEY};
+use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork, ResourceTransaction}, TXN_ID_KEY};
 
 ///
 #[derive(Debug)]
@@ -46,14 +47,6 @@ where
         let _ = tokio::spawn(coordinator.event_loop());
         Ok(())
     }
-
-    fn on_incoming_control_detach(
-        &mut self,
-        channel: IncomingChannel,
-        detach: Detach,
-    ) -> Result<(), Self::Error> {
-        todo!()
-    }
 }
 
 #[async_trait]
@@ -63,8 +56,14 @@ where
 {
     type Error = S::Error;
 
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, Self::Error> {
-        todo!()
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, Self::Error> {   
+        let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
+        while self.txn_manager.txns.contains_key(&txn_id) { // TODO: timeout?
+            txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
+        }
+
+        let _ = self.txn_manager.txns.insert(txn_id.clone(), ResourceTransaction::new());
+        Ok(txn_id)
     }
 
     fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
@@ -75,22 +74,12 @@ where
         todo!()
     }
 
-    fn on_incoming_txn_transfer<'life0, 'async_trait>(
-        &'life0 mut self,
+    async fn on_incoming_txn_transfer(
+        &mut self,
         channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
-    ) -> core::pin::Pin<
-        Box<
-            dyn core::future::Future<Output = Result<(), Self::Error>>
-                + core::marker::Send
-                + 'async_trait,
-        >,
-    >
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 

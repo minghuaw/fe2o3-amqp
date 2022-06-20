@@ -1,30 +1,24 @@
 //! Manages incoming transaction on the resource side
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    thread::JoinHandle,
+    collections::{BTreeMap},
 };
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions,
-    messaging::{TargetArchetype, DeliveryState},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol,
     transaction::TransactionId,
 };
-use futures_util::Sink;
-use serde_amqp::Value;
 use tokio::sync::mpsc;
 
 use crate::{
-    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{target_archetype::VariantOfTargetArchetype, AttachError, LinkFrame, LinkRelay},
-    session::{self, frame::SessionFrame, AllocLinkError},
-    Payload, Session,
+    endpoint::{IncomingChannel, LinkFlow, },
+    link::{LinkFrame, },
+    session::{frame::SessionFrame, },
+    Payload,
 };
 
-use super::{coordinator::ControlLinkAcceptor, frame::TransactionalWork};
+use super::{coordinator::ControlLinkAcceptor, frame::TxnWorkFrame};
 
 #[async_trait]
 pub(crate) trait HandleControlLink {
@@ -34,12 +28,6 @@ pub(crate) trait HandleControlLink {
         &mut self,
         channel: IncomingChannel,
         attach: Attach,
-    ) -> Result<(), Self::Error>;
-
-    fn on_incoming_control_detach(
-        &mut self,
-        channel: IncomingChannel,
-        detach: Detach,
     ) -> Result<(), Self::Error>;
 }
 
@@ -88,7 +76,8 @@ pub(crate) trait HandleTransactionalWork {
 pub(crate) struct TransactionManager {
     pub control_link_outgoing: mpsc::Sender<LinkFrame>,
     pub txn_id_source: u64,
-    pub txns: BTreeMap<TransactionId, TransactionalWork>,
+    pub txns: BTreeMap<TransactionId, ResourceTransaction>,
+    // pub txns: Slab<Vec<TransactionalWork>>,
     pub control_link_acceptor: ControlLinkAcceptor,
     // pub coordinators: BTreeSet<JoinHandle<>>,
 }
@@ -102,7 +91,35 @@ impl TransactionManager {
             control_link_outgoing,
             txn_id_source: 0,
             txns: BTreeMap::new(),
+            // txns: Slab::new(),
             control_link_acceptor,
         }
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct ResourceTransaction {
+    pub frames: Vec<TxnWorkFrame>,
+}
+
+impl ResourceTransaction {
+    pub fn new() -> Self {
+        Self { frames: Vec::new() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::transaction::TransactionId;
+    use slab::Slab;
+
+    // #[test]
+    // fn test_recover_key_from_txn_id() {
+    //     let mut slab = Slab::new();
+    //     let key = slab.insert("AMQP");
+    //     let txn_id = TransactionId::from(key.to_be_bytes());
+
+    //     let key2 = usize::from()
+    // }
+
 }

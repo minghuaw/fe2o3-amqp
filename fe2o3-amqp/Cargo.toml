@@ -27,8 +27,7 @@ default = [
     "transaction",
 ]
 
-
-transaction = ["fe2o3-amqp-types/transaction"]
+transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
 # TLS related features
 rustls = ["tokio-rustls", "librustls", "webpki-roots"]
@@ -69,3 +68,4 @@ librustls = { package = "rustls", version = "0.20", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
 libnative-tls = { package = "native-tls", version = "0.2.8", optional = true }
+uuid = { version = "1.1.2", features = ["v4"], optional = true }

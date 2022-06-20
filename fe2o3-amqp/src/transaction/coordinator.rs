@@ -7,6 +7,7 @@ use fe2o3_amqp_types::{
     transaction::{Coordinator, Declare, Declared, Discharge, TxnCapability},
 };
 use tokio::{sync::mpsc, task::JoinHandle};
+use tracing::{instrument, trace};
 
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
@@ -37,12 +38,14 @@ impl Default for ControlLinkAcceptor {
 }
 
 impl ControlLinkAcceptor {
+    #[instrument(skip_all)]
     pub(crate) async fn accept_incoming_attach(
         &self,
         remote_attach: Attach,
         control: &mpsc::Sender<SessionControl>,
         outgoing: &mpsc::Sender<LinkFrame>,
     ) -> Result<TxnCoordinator, AttachError> {
+        trace!(control_link_attach = ?remote_attach);
         match self
             .inner
             .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
