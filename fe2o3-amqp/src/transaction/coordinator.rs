@@ -1,16 +1,18 @@
 //! Control link coordinator
 
 use fe2o3_amqp_types::{
-    messaging::{DeliveryState, Accepted},
+    definitions::{self, AmqpError},
+    messaging::{Accepted, DeliveryState},
     performatives::Attach,
-    transaction::{Coordinator, TxnCapability, Declared, Declare, Discharge}, definitions::{self, AmqpError},
+    transaction::{Coordinator, Declare, Declared, Discharge, TxnCapability},
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
-    link::{receiver::ReceiverInner, role, AttachError, Link, LinkFrame, ReceiverFlowState}, Delivery,
+    link::{receiver::ReceiverInner, role, AttachError, Link, LinkFrame, ReceiverFlowState},
+    Delivery,
 };
 
 use super::control_link_msg::ControlMessageBody;
@@ -20,13 +22,22 @@ pub(crate) type CoordinatorLink =
 
 /// An acceptor that handles incoming control links
 #[derive(Debug, Clone)]
-pub(crate) struct ControlLinkAcceptor {
+pub struct ControlLinkAcceptor {
     shared: SharedLinkAcceptorFields,
     inner: LocalReceiverLinkAcceptor<TxnCapability>,
 }
 
+impl Default for ControlLinkAcceptor {
+    fn default() -> Self {
+        Self {
+            shared: Default::default(),
+            inner: Default::default(),
+        }
+    }
+}
+
 impl ControlLinkAcceptor {
-    pub async fn accept_incoming_attach(
+    pub(crate) async fn accept_incoming_attach(
         &self,
         remote_attach: Attach,
         control: &mpsc::Sender<SessionControl>,
@@ -65,6 +76,7 @@ impl TxnCoordinator {
     }
 
     pub async fn event_loop(mut self) {
+        tracing::info!("Coordinator started");
         loop {
             let delivery: Delivery<ControlMessageBody> = match self.inner.recv().await {
                 Ok(d) => d,
@@ -75,10 +87,10 @@ impl TxnCoordinator {
                     match error {
                         crate::link::Error::Local(err) => {
                             let _ = self.inner.close_with_error(Some(err)).await;
-                        },
+                        }
                         crate::link::Error::Detached(_) => {
-                            let _  = self.inner.close_with_error(None).await;
-                        },
+                            let _ = self.inner.close_with_error(None).await;
+                        }
                     }
 
                     break;
@@ -87,21 +99,27 @@ impl TxnCoordinator {
 
             let body = match delivery.body() {
                 fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
-                fe2o3_amqp_types::messaging::Body::Sequence(_) 
+                fe2o3_amqp_types::messaging::Body::Sequence(_)
                 | fe2o3_amqp_types::messaging::Body::Data(_) => {
                     let error = definitions::Error::new(
                         AmqpError::NotAllowed,
-                        "The coordinator is expecting either a Declare or Discharge message body".to_string(),
-                        None
+                        "The coordinator is expecting either a Declare or Discharge message body"
+                            .to_string(),
+                        None,
                     );
                     let _ = self.inner.close_with_error(Some(error)).await;
                     break;
-                },
+                }
             };
 
             let result = match body {
-                ControlMessageBody::Declare(declare) => self.on_declare(declare).await.map(DeliveryState::Declared),
-                ControlMessageBody::Discharge(discharge) => self.on_discharge(discharge).await.map(DeliveryState::Accepted),
+                ControlMessageBody::Declare(declare) => {
+                    self.on_declare(declare).await.map(DeliveryState::Declared)
+                }
+                ControlMessageBody::Discharge(discharge) => self
+                    .on_discharge(discharge)
+                    .await
+                    .map(DeliveryState::Accepted),
             };
 
             let delivery_state = match result {
@@ -109,7 +127,11 @@ impl TxnCoordinator {
                 Err(error) => todo!(),
             };
 
-            if let Err(_) = self.inner.dispose(delivery.delivery_id, delivery.delivery_tag, delivery_state).await {
+            if let Err(_) = self
+                .inner
+                .dispose(delivery.delivery_id, delivery.delivery_tag, delivery_state)
+                .await
+            {
                 todo!()
             }
         }

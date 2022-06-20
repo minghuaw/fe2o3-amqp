@@ -32,10 +32,10 @@ pub(crate) struct SessionEngine<S: Session> {
     pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl SessionEngine<super::Session> {
-    pub async fn begin(
+impl<S> SessionEngine<S> where S: endpoint::Session<Error = Error> {
+    pub(crate) async fn begin_client_session(
         conn: mpsc::Sender<ConnectionControl>,
-        session: super::Session,
+        session: S,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,

@@ -12,7 +12,12 @@ use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
     endpoint::OutgoingChannel,
+    link::LinkFrame,
     session::{engine::SessionEngine, SessionState},
+    transaction::{
+        coordinator::ControlLinkAcceptor,
+        manager::{TransactionManager, TxnSession},
+    },
     util::Constant,
     Session,
 };
@@ -49,6 +54,10 @@ pub struct Builder {
     /// Buffer size of the underlying [`tokio::sync::mpsc::channel`]
     /// that are used by links attached to the session
     pub buffer_size: usize,
+
+    /// Acceptor for incoming transaction control links
+    #[cfg(feature = "transaction")]
+    pub control_link_acceptor: ControlLinkAcceptor,
 }
 
 impl Default for Builder {
@@ -62,6 +71,9 @@ impl Default for Builder {
             desired_capabilities: None,
             properties: None,
             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
+
+            #[cfg(feature = "transaction")]
+            control_link_acceptor: Default::default(),
         }
     }
 }
@@ -100,6 +112,45 @@ impl Builder {
             link_by_input_handle: BTreeMap::new(),
             delivery_tag_by_id: BTreeMap::new(),
         }
+    }
+
+    pub(crate) fn into_txn_session(
+        self,
+        control: mpsc::Sender<SessionControl>,
+        outgoing: mpsc::Sender<LinkFrame>,
+        outgoing_channel: OutgoingChannel,
+        local_state: SessionState,
+    ) -> TxnSession<Session> {
+        let txn_manager = TransactionManager::new(outgoing, self.control_link_acceptor);
+        let session = Session {
+            control,
+            outgoing_channel,
+            local_state,
+            initial_outgoing_id: Constant::new(self.next_outgoing_id),
+            next_outgoing_id: self.next_outgoing_id,
+            incoming_window: self.incoming_window,
+            outgoing_window: self.outgoing_window,
+            handle_max: self.handle_max,
+            incoming_channel: None,
+            next_incoming_id: 0,
+            remote_incoming_window: 0,
+            remote_outgoing_window: 0,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
+
+            link_name_by_output_handle: Slab::new(),
+            link_by_name: BTreeMap::new(),
+            link_by_input_handle: BTreeMap::new(),
+            delivery_tag_by_id: BTreeMap::new(),
+        };
+
+        let txn_session = TxnSession {
+            session,
+            txn_manager,
+        };
+
+        txn_session
     }
 
     /// The transfer-id of the first transfer id the sender will send
@@ -193,8 +244,18 @@ impl Builder {
         // create session in connection::Engine
         let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
 
+        #[cfg(not(feature = "transaction"))]
         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
-        let engine = SessionEngine::<crate::Session>::begin(
+
+        #[cfg(feature = "transaction")]
+        let session = self.into_txn_session(
+            session_control_tx.clone(),
+            outgoing_tx.clone(),
+            outgoing_channel,
+            local_state,
+        );
+
+        let engine = SessionEngine::begin_client_session(
             connection.control.clone(),
             session,
             session_control_rx,

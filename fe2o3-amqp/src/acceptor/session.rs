@@ -166,7 +166,7 @@ impl SessionAcceptor {
             session,
             link_listener: link_listener_tx,
         };
-        let engine = SessionEngine::<ListenerSession>::begin(
+        let engine = SessionEngine::<ListenerSession>::begin_listener_session(
             connection.control.clone(),
             listener_session,
             session_control_rx,
@@ -200,7 +200,7 @@ impl SessionAcceptor {
 }
 
 impl SessionEngine<ListenerSession> {
-    pub async fn begin(
+    pub async fn begin_listener_session(
         conn: mpsc::Sender<ConnectionControl>,
         session: ListenerSession,
         control: mpsc::Receiver<SessionControl>,
