@@ -231,6 +231,12 @@ pub struct ListenerSession {
     pub(crate) link_listener: mpsc::Sender<Attach>,
 }
 
+impl endpoint::SessionExt for ListenerSession {
+    fn control(&self) -> &mpsc::Sender<SessionControl> {
+        &self.session.control
+    }
+}
+
 #[async_trait]
 impl endpoint::Session for ListenerSession {
     type AllocError = <session::Session as endpoint::Session>::AllocError;

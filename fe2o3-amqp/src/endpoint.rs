@@ -36,7 +36,7 @@ use crate::{
     frames::amqp::Frame,
     link::{delivery::Delivery, LinkFrame, LinkRelay},
     session::frame::{SessionFrame, SessionIncomingItem},
-    Payload,
+    Payload, control::SessionControl,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -280,6 +280,10 @@ pub(crate) trait Session {
     ) -> Result<SessionFrame, Self::Error>;
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
+}
+
+pub(crate) trait SessionExt: Session {
+    fn control(&self) -> &mpsc::Sender<SessionControl>;
 }
 
 #[async_trait]

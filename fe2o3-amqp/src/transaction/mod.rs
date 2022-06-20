@@ -23,7 +23,7 @@ use serde_amqp::to_value;
 mod acquisition;
 pub use acquisition::*;
 
-mod control_link_frame;
+pub(crate) mod control_link_msg;
 
 pub mod coordinator;
 pub mod frame;

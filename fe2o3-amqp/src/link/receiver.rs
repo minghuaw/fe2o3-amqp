@@ -339,6 +339,18 @@ where
         Ok(self)
     }
 
+    pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
+        loop {
+            match self.recv_inner().await? {
+                Some(delivery) => return Ok(delivery),
+                None => continue, // Incomplete transfer, there are more transfer frames coming
+            }
+        }
+    }
+
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
     where
@@ -656,12 +668,7 @@ impl Receiver {
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        loop {
-            match self.inner.recv_inner().await? {
-                Some(delivery) => return Ok(delivery),
-                None => continue,
-            }
-        }
+        self.inner.recv().await
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle

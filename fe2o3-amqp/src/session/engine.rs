@@ -311,6 +311,12 @@ where
                 let _ = self.conn.send(ConnectionControl::Close(Some(error))).await;
                 Running::Stop
             }
+            #[cfg(feature = "transaction")]
+            Error::CoordinatorAttachError(error) => {
+                // TODO: just log the error?
+                tracing::error!(?error);
+                Running::Continue
+            },
         }
     }
 

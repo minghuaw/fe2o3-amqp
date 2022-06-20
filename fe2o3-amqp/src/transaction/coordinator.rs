@@ -1,20 +1,19 @@
 //! Control link coordinator
 
 use fe2o3_amqp_types::{
-    messaging::DeliveryState,
+    messaging::{DeliveryState, Accepted},
     performatives::Attach,
-    transaction::{Coordinator, TxnCapability},
+    transaction::{Coordinator, TxnCapability, Declared, Declare, Discharge}, definitions::{self, AmqpError},
 };
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
-    acceptor::{
-        link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor,
-        LinkAcceptor,
-    },
+    acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
-    link::{receiver::ReceiverInner, role, AttachError, Link, LinkFrame, ReceiverFlowState},
+    link::{receiver::ReceiverInner, role, AttachError, Link, LinkFrame, ReceiverFlowState}, Delivery,
 };
+
+use super::control_link_msg::ControlMessageBody;
 
 pub(crate) type CoordinatorLink =
     Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
@@ -54,4 +53,65 @@ impl ControlLinkAcceptor {
 #[derive(Debug)]
 pub(crate) struct TxnCoordinator {
     inner: ReceiverInner<CoordinatorLink>,
+}
+
+impl TxnCoordinator {
+    async fn on_declare(&mut self, declare: &Declare) -> Result<Declared, ()> {
+        todo!()
+    }
+
+    async fn on_discharge(&mut self, discharge: &Discharge) -> Result<Accepted, ()> {
+        todo!()
+    }
+
+    pub async fn event_loop(mut self) {
+        loop {
+            let delivery: Delivery<ControlMessageBody> = match self.inner.recv().await {
+                Ok(d) => d,
+                Err(error) => {
+                    // TODO: How should error be handled?
+                    tracing::error!(?error);
+
+                    match error {
+                        crate::link::Error::Local(err) => {
+                            let _ = self.inner.close_with_error(Some(err)).await;
+                        },
+                        crate::link::Error::Detached(_) => {
+                            let _  = self.inner.close_with_error(None).await;
+                        },
+                    }
+
+                    break;
+                }
+            };
+
+            let body = match delivery.body() {
+                fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
+                fe2o3_amqp_types::messaging::Body::Sequence(_) 
+                | fe2o3_amqp_types::messaging::Body::Data(_) => {
+                    let error = definitions::Error::new(
+                        AmqpError::NotAllowed,
+                        "The coordinator is expecting either a Declare or Discharge message body".to_string(),
+                        None
+                    );
+                    let _ = self.inner.close_with_error(Some(error)).await;
+                    break;
+                },
+            };
+
+            let result = match body {
+                ControlMessageBody::Declare(declare) => self.on_declare(declare).await.map(DeliveryState::Declared),
+                ControlMessageBody::Discharge(discharge) => self.on_discharge(discharge).await.map(DeliveryState::Accepted),
+            };
+
+            let delivery_state = match result {
+                Ok(state) => state,
+                Err(error) => todo!(),
+            };
+
+            if let Err(_) = self.inner.dispose(delivery.delivery_id, delivery.delivery_tag, delivery_state).await {
+                todo!()
+            }
+        }
+    }
 }

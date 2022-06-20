@@ -5,20 +5,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions,
+    messaging::TargetArchetype,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    transaction::TransactionId, messaging::TargetArchetype,
+    transaction::TransactionId,
 };
 use futures_util::Sink;
 use tokio::sync::mpsc;
 
 use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
-    link::{AttachError, LinkFrame, LinkRelay, target_archetype::VariantOfTargetArchetype},
-    session::frame::SessionFrame,
+    link::{target_archetype::VariantOfTargetArchetype, AttachError, LinkFrame, LinkRelay},
+    session::{self, frame::SessionFrame, AllocLinkError},
     Payload, Session,
 };
 
-use super::frame::TransactionalWork;
+use super::{coordinator::ControlLinkAcceptor, frame::TransactionalWork};
 
 #[async_trait]
 pub(crate) trait HandleControlLink {
@@ -38,8 +39,8 @@ pub(crate) trait HandleControlLink {
 }
 
 /// How an incoming transaction should be handled in a session
-#[cfg(feature = "transaction")]
-pub(crate) trait ResourceTxnManager {
+#[async_trait]
+pub(crate) trait HandleTransactionalWork {
     type Error: Send;
 
     fn allocate_transaction_id(&mut self) -> Result<TransactionId, Self::Error>;
@@ -48,11 +49,33 @@ pub(crate) trait ResourceTxnManager {
 
     fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error>;
 
-    fn on_incoming_txn_posting(&mut self, transfer: Transfer) -> Result<(), Self::Error>;
+    async fn on_incoming_txn_transfer(
+        &mut self,
+        input_handle: InputHandle,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Result<(), Self::Error>;
 
-    fn on_incoming_txn_retirement(&mut self, disposition: Disposition) -> Result<(), Self::Error>;
+    async fn on_incoming_txn_flow(
+        &mut self,
+        channel: IncomingChannel,
+        flow: Flow,
+    ) -> Result<(), Self::Error>;
 
-    fn on_incoming_txn_acquisition(&mut self, flow: Flow) -> Result<(), Self::Error>;
+    async fn on_incoming_txn_disposition(
+        &mut self,
+        channel: IncomingChannel,
+        disposition: Disposition,
+    ) -> Result<(), Self::Error>;
+
+    fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
+
+    fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
+
+    fn on_outgoing_txn_disposition(
+        &mut self,
+        disposition: Disposition,
+    ) -> Result<SessionFrame, Self::Error>;
 }
 
 /// Transaction manager
@@ -61,6 +84,7 @@ pub(crate) struct TransactionManager {
     pub control_link_tx: mpsc::Sender<LinkFrame>,
     pub txn_id_source: u64,
     pub txns: BTreeMap<TransactionId, TransactionalWork>,
+    pub control_link_acceptor: ControlLinkAcceptor,
     pub coordinators: BTreeSet<()>,
 }
 
@@ -77,17 +101,28 @@ where
 }
 
 #[async_trait]
-impl<S> HandleControlLink for TxnSession<S> 
+impl<S> HandleControlLink for TxnSession<S>
 where
-    S: endpoint::Session + Send,
+    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
     type Error = S::Error;
 
     async fn on_incoming_control_attach(
         &mut self,
         channel: IncomingChannel,
-        attach: Attach,
+        remote_attach: Attach,
     ) -> Result<(), Self::Error> {
+        let coordinator = self.txn_manager
+            .control_link_acceptor
+            .accept_incoming_attach(
+                remote_attach,
+                self.session.control(),
+                &self.txn_manager.control_link_tx,
+            )
+            .await
+            .map_err(session::Error::CoordinatorAttachError)?;
+        
+        let handle = tokio::spawn(coordinator.event_loop());
         todo!()
     }
 
@@ -100,10 +135,100 @@ where
     }
 }
 
+impl<S> HandleTransactionalWork for TxnSession<S>
+where
+    S: endpoint::Session<Error = session::Error> + Send,
+{
+    type Error = S::Error;
+    
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId,Self::Error>  {
+        todo!()
+    }
+
+    fn commit_transaction(&mut self,txn_id:TransactionId) -> Result<(),Self::Error>  {
+        todo!()
+    }
+
+    fn rollback_transaction(&mut self,txn_id:TransactionId) -> Result<(),Self::Error>  {
+        todo!()
+    }
+
+    fn on_incoming_txn_transfer<'life0, 'async_trait>(
+        &'life0 mut self,
+        input_handle: InputHandle,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<(), Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        todo!()
+    }
+
+    fn on_incoming_txn_flow<'life0, 'async_trait>(
+        &'life0 mut self,
+        channel: IncomingChannel,
+        flow: Flow,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<(), Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        todo!()
+    }
+
+    fn on_incoming_txn_disposition<'life0, 'async_trait>(
+        &'life0 mut self,
+        channel: IncomingChannel,
+        disposition: Disposition,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<(), Self::Error>>
+                + core::marker::Send
+                + 'async_trait,
+        >,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        todo!()
+    }
+
+    fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
+        todo!()
+    }
+
+    fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
+        todo!()
+    }
+
+    fn on_outgoing_txn_disposition(
+        &mut self,
+        disposition: Disposition,
+    ) -> Result<SessionFrame, Self::Error> {
+        todo!()
+    }
+
+}
+
 #[async_trait]
 impl<S> endpoint::Session for TxnSession<S>
 where
-    S: endpoint::Session + Send,
+    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
     type AllocError = S::AllocError;
 
@@ -136,7 +261,8 @@ where
         link_relay: LinkRelay<()>,
         input_handle: InputHandle,
     ) -> Result<OutputHandle, Self::AllocError> {
-        self.session.allocate_incoming_link(link_name, link_relay, input_handle)
+        self.session
+            .allocate_incoming_link(link_name, link_relay, input_handle)
     }
 
     fn deallocate_link(&mut self, output_handle: OutputHandle) {
@@ -158,8 +284,7 @@ where
     ) -> Result<(), Self::Error> {
         match attach.target.as_ref().map(|t| t.is_coordinator()) {
             Some(true) => self.on_incoming_control_attach(channel, attach).await,
-            Some(false)
-            | None => self.session.on_incoming_attach(channel, attach).await,
+            Some(false) | None => self.session.on_incoming_attach(channel, attach).await,
         }
     }
 

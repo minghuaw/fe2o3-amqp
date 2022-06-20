@@ -3,9 +3,9 @@ use std::io;
 use fe2o3_amqp_types::definitions::{
     self, AmqpError, ConnectionError, ErrorCondition, Handle, SessionError,
 };
-use tokio::task::JoinError;
+use tokio::{task::JoinError, sync::mpsc::error};
 
-use crate::connection::AllocSessionError;
+use crate::{connection::AllocSessionError, link::AttachError};
 
 /// Session errors
 #[derive(Debug, thiserror::Error)]
@@ -49,6 +49,13 @@ pub enum Error {
         /// Error
         error: definitions::Error,
     },
+
+    /// A remotely initiated control link failed to attach
+    /// 
+    /// TODO: Hide from public API?
+    #[cfg(feature = "transaction")]
+    #[error("Control link attach error {:?}", .0)]
+    CoordinatorAttachError(AttachError),
 }
 
 impl Error {

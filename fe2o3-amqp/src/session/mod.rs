@@ -260,6 +260,12 @@ impl Session {
     }
 }
 
+impl endpoint::SessionExt for Session {
+    fn control(&self) -> &mpsc::Sender<SessionControl> {
+        &self.control
+    }
+}
+
 #[async_trait]
 impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
