@@ -28,6 +28,9 @@ pub(crate) mod control_link_msg;
 pub mod coordinator;
 pub mod frame;
 pub mod manager;
+pub mod session;
+
+const TXN_ID_KEY: &str = "txn-id";
 
 /// A transaction scope for the client side
 ///

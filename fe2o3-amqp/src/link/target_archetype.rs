@@ -175,9 +175,9 @@ impl VariantOfTargetArchetype for TargetArchetype {
 
     fn is_coordinator(&self) -> bool {
         match self {
-            TargetArchetype::Target(_) => true,
+            TargetArchetype::Target(_) => false,
             #[cfg(feature = "transaction")]
-            TargetArchetype::Coordinator(_) => false,
+            TargetArchetype::Coordinator(_) => true,
         }
     }
 }
