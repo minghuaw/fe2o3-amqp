@@ -1,13 +1,13 @@
 //! Common utilities
 
-use fe2o3_amqp_types::messaging::{Target, TargetArchetype};
-use fe2o3_amqp_types::transaction::Coordinator;
 use futures_util::Future;
 use std::ops::Deref;
 use std::{pin::Pin, task::Poll, time::Duration};
 use tokio::time::Instant;
-
 use tokio::time::Sleep;
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::Coordinator;
 
 mod consumer;
 mod producer;

@@ -12,14 +12,18 @@ use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
     endpoint::OutgoingChannel,
-    link::LinkFrame,
     session::{engine::SessionEngine, SessionState},
+    util::Constant,
+    Session,
+};
+
+#[cfg(feature = "transaction")]
+use crate::{
+    link::LinkFrame,
     transaction::{
         coordinator::ControlLinkAcceptor,
         manager::{TransactionManager, TxnSession},
-    },
-    util::Constant,
-    Session,
+    }
 };
 
 use super::{Error, SessionHandle, DEFAULT_WINDOW};
@@ -114,6 +118,7 @@ impl Builder {
         }
     }
 
+    #[cfg(feature = "transaction")]
     pub(crate) fn into_txn_session(
         self,
         control: mpsc::Sender<SessionControl>,

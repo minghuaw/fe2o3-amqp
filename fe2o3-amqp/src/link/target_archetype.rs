@@ -4,11 +4,10 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError},
     messaging::{Target, TargetArchetype},
     primitives::{Array, Symbol},
-    transaction::TxnCapability,
 };
 
 #[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::Coordinator;
+use fe2o3_amqp_types::transaction::{Coordinator, TxnCapability};
 
 /// Performs verification on whether the incoming `Target` field complies with the specification
 /// or meets the requirement.
@@ -126,6 +125,7 @@ impl TargetArchetypeCapabilities for Target {
     }
 }
 
+#[cfg(feature = "transaction")]
 impl TargetArchetypeCapabilities for Coordinator {
     type Capability = TxnCapability;
 
@@ -153,6 +153,7 @@ impl VariantOfTargetArchetype for Target {
     }
 }
 
+#[cfg(feature = "transaction")]
 impl VariantOfTargetArchetype for Coordinator {
     fn is_target(&self) -> bool {
         false
@@ -167,6 +168,7 @@ impl VariantOfTargetArchetype for TargetArchetype {
     fn is_target(&self) -> bool {
         match self {
             TargetArchetype::Target(_) => true,
+            #[cfg(feature = "transaction")]
             TargetArchetype::Coordinator(_) => false,
         }
     }
@@ -174,6 +176,7 @@ impl VariantOfTargetArchetype for TargetArchetype {
     fn is_coordinator(&self) -> bool {
         match self {
             TargetArchetype::Target(_) => true,
+            #[cfg(feature = "transaction")]
             TargetArchetype::Coordinator(_) => false,
         }
     }
