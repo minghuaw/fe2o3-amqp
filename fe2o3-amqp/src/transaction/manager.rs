@@ -111,15 +111,14 @@ impl ResourceTransaction {
 #[cfg(test)]
 mod tests {
     use fe2o3_amqp_types::transaction::TransactionId;
-    use slab::Slab;
+    use uuid::Uuid;
 
-    // #[test]
-    // fn test_recover_key_from_txn_id() {
-    //     let mut slab = Slab::new();
-    //     let key = slab.insert("AMQP");
-    //     let txn_id = TransactionId::from(key.to_be_bytes());
-
-    //     let key2 = usize::from()
-    // }
+    #[test]
+    fn test_recover_key_from_txn_id() {
+        let uuid = Uuid::new_v4();
+        let txn_id = TransactionId::from(uuid.clone().into_bytes());
+        let uuid2 = Uuid::from_slice(txn_id.as_ref()).unwrap();
+        assert_eq!(uuid, uuid2);
+    }
 
 }
