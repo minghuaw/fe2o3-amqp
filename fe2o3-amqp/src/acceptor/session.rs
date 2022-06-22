@@ -35,7 +35,7 @@ use crate::{
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
-/// An empty trait that acts as a constraint for session engine
+/// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}
 
 impl ListenerSessionEndpoint for ListenerSession {}
