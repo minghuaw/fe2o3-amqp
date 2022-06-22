@@ -128,29 +128,29 @@ impl Builder {
         local_state: SessionState,
     ) -> TxnSession<Session> {
         let txn_manager = TransactionManager::new(outgoing, self.control_link_acceptor.clone());
-        // let session = Session {
-        //     control,
-        //     outgoing_channel,
-        //     local_state,
-        //     initial_outgoing_id: Constant::new(self.next_outgoing_id),
-        //     next_outgoing_id: self.next_outgoing_id,
-        //     incoming_window: self.incoming_window,
-        //     outgoing_window: self.outgoing_window,
-        //     handle_max: self.handle_max,
-        //     incoming_channel: None,
-        //     next_incoming_id: 0,
-        //     remote_incoming_window: 0,
-        //     remote_outgoing_window: 0,
-        //     offered_capabilities: self.offered_capabilities,
-        //     desired_capabilities: self.desired_capabilities,
-        //     properties: self.properties,
+        let session = Session {
+            control,
+            outgoing_channel,
+            local_state,
+            initial_outgoing_id: Constant::new(self.next_outgoing_id),
+            next_outgoing_id: self.next_outgoing_id,
+            incoming_window: self.incoming_window,
+            outgoing_window: self.outgoing_window,
+            handle_max: self.handle_max,
+            incoming_channel: None,
+            next_incoming_id: 0,
+            remote_incoming_window: 0,
+            remote_outgoing_window: 0,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
 
-        //     link_name_by_output_handle: Slab::new(),
-        //     link_by_name: BTreeMap::new(),
-        //     link_by_input_handle: BTreeMap::new(),
-        //     delivery_tag_by_id: BTreeMap::new(),
-        // };
-        let session = self.into_session(control, outgoing_channel, local_state);
+            link_name_by_output_handle: Slab::new(),
+            link_by_name: BTreeMap::new(),
+            link_by_input_handle: BTreeMap::new(),
+            delivery_tag_by_id: BTreeMap::new(),
+        };
+        // let session = self.into_session(control, outgoing_channel, local_state);
 
         let txn_session = TxnSession {
             session,

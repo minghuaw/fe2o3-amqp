@@ -30,10 +30,18 @@ use crate::{
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
-    Payload,
+    Payload, transaction::{manager::TransactionManager, session::TxnSession},
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
+
+/// An empty trait that acts as a constraint for session engine
+pub trait ListenerSessionEndpoint {}
+
+impl ListenerSessionEndpoint for ListenerSession {}
+
+#[cfg(feature = "transaction")]
+impl ListenerSessionEndpoint for TxnSession<ListenerSession> {}
 
 type SessionBuilder = crate::session::Builder;
 
@@ -166,7 +174,17 @@ impl SessionAcceptor {
             session,
             link_listener: link_listener_tx,
         };
-        let engine = SessionEngine::<ListenerSession>::begin_listener_session(
+
+        #[cfg(feature = "transaction")]
+        let listener_session = {
+            let txn_manager = TransactionManager::new(outgoing_tx.clone(), self.0.control_link_acceptor.clone());
+            TxnSession {
+                session: listener_session,
+                txn_manager
+            }
+        };
+
+        let engine = SessionEngine::begin_listener_session(
             connection.control.clone(),
             listener_session,
             session_control_rx,
@@ -199,10 +217,13 @@ impl SessionAcceptor {
     }
 }
 
-impl SessionEngine<ListenerSession> {
+impl<S> SessionEngine<S> 
+where
+    S: ListenerSessionEndpoint + endpoint::SessionEndpoint<Error = Error>,
+{
     pub async fn begin_listener_session(
         conn: mpsc::Sender<ConnectionControl>,
-        session: ListenerSession,
+        session: S,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
