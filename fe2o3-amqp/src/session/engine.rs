@@ -32,7 +32,10 @@ pub(crate) struct SessionEngine<S: Session> {
     pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl<S> SessionEngine<S> where S: endpoint::Session<Error = Error> {
+impl<S> SessionEngine<S>
+where
+    S: endpoint::Session<Error = Error>,
+{
     pub(crate) async fn begin_client_session(
         conn: mpsc::Sender<ConnectionControl>,
         session: S,
@@ -85,7 +88,8 @@ impl<S> SessionEngine<S> where S: endpoint::Session<Error = Error> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
+    // S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
+    S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
     S::Error: Into<Error> + Debug,
     S::AllocError: Into<AllocLinkError>,
 {
@@ -229,6 +233,19 @@ where
                     .await
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
+            
+            #[cfg(feature = "transaction")]
+            SessionControl::AllocateTransactionId() => {
+                todo!()
+            }
+            #[cfg(feature = "transaction")]
+            SessionControl::CommitTransaction(txn_id) => {
+                todo!()
+            }
+            #[cfg(feature = "transaction")]
+            SessionControl::RollbackTransaction(txn_id) => {
+                todo!()
+            }
         }
 
         match self.session.local_state() {
@@ -316,7 +333,7 @@ where
                 // TODO: just log the error?
                 tracing::error!(?error);
                 Running::Continue
-            },
+            }
         }
     }
 

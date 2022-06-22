@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
     performatives::Attach,
     transaction::{Coordinator, Declare, Declared, Discharge, TxnCapability},
 };
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{sync::mpsc};
 use tracing::{instrument, trace};
 
 use crate::{

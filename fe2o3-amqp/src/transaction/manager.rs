@@ -31,16 +31,11 @@ pub(crate) trait HandleControlLink {
     ) -> Result<(), Self::Error>;
 }
 
+
 /// How an incoming transaction should be handled in a session
 #[async_trait]
 pub(crate) trait HandleTransactionalWork {
     type Error: Send;
-
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, Self::Error>;
-
-    fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error>;
-
-    fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error>;
 
     async fn on_incoming_txn_transfer(
         &mut self,

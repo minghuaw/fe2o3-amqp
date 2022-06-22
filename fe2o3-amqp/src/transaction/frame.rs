@@ -8,7 +8,6 @@ use crate::{endpoint::InputHandle, Payload};
 #[derive(Debug)]
 pub(crate) enum TxnWorkFrame {
     Post {
-        input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
     },

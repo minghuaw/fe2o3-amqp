@@ -59,6 +59,14 @@ pub enum Error {
 }
 
 impl Error {
+    pub(crate) fn decode_error() -> Self {
+        Self::Local(definitions::Error::new(
+            AmqpError::DecodeError,
+            None,
+            None
+        ))
+    }
+
     pub(crate) fn amqp_error(
         condition: impl Into<AmqpError>,
         description: impl Into<Option<String>>,

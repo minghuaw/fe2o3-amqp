@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{endpoint::{self, IncomingChannel, LinkFlow, OutgoingChannel, OutputHandle, InputHandle}, session::{self, frame::SessionFrame}, Payload, link::{LinkRelay, target_archetype::VariantOfTargetArchetype}};
 
-use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork, ResourceTransaction}, TXN_ID_KEY};
+use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork, ResourceTransaction}, TXN_ID_KEY, frame::TxnWorkFrame};
 
 ///
 #[derive(Debug)]
@@ -49,13 +49,10 @@ where
     }
 }
 
-#[async_trait]
-impl<S> HandleTransactionalWork for TxnSession<S>
+impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
-    S: endpoint::Session<Error = session::Error> + Send,
+    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    type Error = S::Error;
-
     fn allocate_transaction_id(&mut self) -> Result<TransactionId, Self::Error> {   
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         while self.txn_manager.txns.contains_key(&txn_id) { // TODO: timeout?
@@ -65,7 +62,12 @@ where
         let _ = self.txn_manager.txns.insert(txn_id.clone(), ResourceTransaction::new());
         Ok(txn_id)
     }
+}
 
+impl<S> endpoint::HandleDischarge for TxnSession<S>
+where
+    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
+{
     fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
         todo!()
     }
@@ -73,6 +75,14 @@ where
     fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
         todo!()
     }
+}
+
+#[async_trait]
+impl<S> HandleTransactionalWork for TxnSession<S>
+where
+    S: endpoint::Session<Error = session::Error> + Send,
+{
+    type Error = S::Error;
 
     async fn on_incoming_txn_transfer(
         &mut self,
@@ -80,7 +90,21 @@ where
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let txn_id = match &transfer.state {
+            Some(DeliveryState::TransactionalState(txn_state)) => &txn_state.txn_id, 
+            Some(_)
+            | None => todo!(),
+        };
+
+        let txn = match self.txn_manager.txns.get_mut(txn_id) {
+            Some(txn) => txn,
+            None => todo!(), // TODO: Ignore?
+        };
+
+        let work_frame = TxnWorkFrame::Post { transfer, payload };
+        txn.frames.push(work_frame);
+
+        Ok(())
     }
 
     async fn on_incoming_txn_flow(

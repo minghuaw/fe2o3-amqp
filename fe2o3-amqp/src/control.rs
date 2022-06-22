@@ -13,6 +13,9 @@ use crate::{
     session::{frame::SessionIncomingItem, AllocLinkError},
 };
 
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::TransactionId;
+
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {
     // Open,
@@ -56,6 +59,14 @@ pub(crate) enum SessionControl {
     LinkFlow(LinkFlow),
     Disposition(Disposition),
     CloseConnectionWithError((ConnectionError, Option<String>)),
+
+    // Transaction related controls
+    #[cfg(feature = "transaction")]
+    AllocateTransactionId(),
+    #[cfg(feature = "transaction")]
+    CommitTransaction(TransactionId),
+    #[cfg(feature = "transaction")]
+    RollbackTransaction(TransactionId),
 }
 
 impl std::fmt::Display for SessionControl {
@@ -77,6 +88,13 @@ impl std::fmt::Display for SessionControl {
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
             SessionControl::CloseConnectionWithError(_) => write!(f, "CloseConnectionWithError"),
+            
+            #[cfg(feature = "transaction")]
+            SessionControl::AllocateTransactionId() => write!(f, "AllocateTransactionId"),
+            #[cfg(feature = "transaction")]
+            SessionControl::CommitTransaction(_) => write!(f, "CommitTransaction"),
+            #[cfg(feature = "transaction")]
+            SessionControl::RollbackTransaction(_) => write!(f, "RollbackTransaction"),
         }
     }
 }
