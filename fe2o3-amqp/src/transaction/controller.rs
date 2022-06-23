@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SenderSettleMode},
     messaging::{DeliveryState, Message},
@@ -26,7 +28,7 @@ pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, U
 /// # Type parameter `S`
 #[derive(Debug)]
 pub struct Controller {
-    pub(crate) inner: SenderInner<ControlLink>,
+    pub(crate) inner: RefCell<SenderInner<ControlLink>>,
 }
 
 #[inline]
@@ -56,15 +58,15 @@ where
 impl Controller {
     /// Close the control link with error
     pub async fn close_with_error(
-        &mut self,
+        &self,
         error: definitions::Error,
     ) -> Result<(), link::DetachError> {
-        self.inner.close_with_error(Some(error)).await
+        self.inner.borrow_mut().close_with_error(Some(error)).await
     }
 
     /// Close the link
-    pub async fn close(&mut self) -> Result<(), link::DetachError> {
-        self.inner.close_with_error(None).await
+    pub async fn close(&self) -> Result<(), link::DetachError> {
+        self.inner.borrow_mut().close_with_error(None).await
     }
 }
 
@@ -109,7 +111,7 @@ impl Controller {
     // }
 
     pub(crate) async fn declare_inner(
-        &mut self,
+        &self,
         global_id: Option<TransactionId>,
     ) -> Result<Declared, link::SendError> {
         // To begin transactional work, the transaction controller needs to obtain a transaction
@@ -122,7 +124,7 @@ impl Controller {
         // the outcome of the declare from the receiver
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut self.inner, sendable).await?;
+        let outcome = send_on_control_link(&mut self.inner.borrow_mut(), sendable).await?;
         match outcome.await? {
             DeliveryState::Declared(declared) => Ok(declared),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
@@ -142,7 +144,7 @@ impl Controller {
     }
 
     /// Discharge
-    pub(crate) async fn discharge(&mut self, txn_id: TransactionId, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
+    pub(crate) async fn discharge(&self, txn_id: TransactionId, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
         let discharge = Discharge {
             txn_id,
             fail: fail.into(),
@@ -151,7 +153,7 @@ impl Controller {
         let message = Message::<Discharge>::builder().value(discharge).build();
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut self.inner, sendable).await?;
+        let outcome = send_on_control_link(&mut self.inner.borrow_mut(), sendable).await?;
         match outcome.await? {
             DeliveryState::Accepted(_) => Ok(()),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),

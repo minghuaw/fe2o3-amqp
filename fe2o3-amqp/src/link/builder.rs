@@ -1,6 +1,6 @@
 //! Implements the builder for a link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc, cell::RefCell};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -552,7 +552,7 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
         self.attach_inner(session)
             .await
             .map(|inner| Controller {
-                inner,
+                inner: RefCell::new(inner),
             })
     }
 }

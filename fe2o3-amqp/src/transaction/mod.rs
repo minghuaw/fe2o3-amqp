@@ -114,7 +114,7 @@ const TXN_ID_KEY: &str = "txn-id";
 /// ```
 #[derive(Debug)]
 pub struct Transaction<'t> {
-    controller: &'t mut Controller,
+    controller: &'t Controller,
     declared: Declared,
     is_discharged: bool,
 }
@@ -129,7 +129,7 @@ impl<'t> Transaction<'t> {
     ///
     /// The user needs to supply a name for the underlying control link.
     pub async fn declare(
-        controller: &'t mut Controller,
+        controller: &'t Controller,
         global_id: impl Into<Option<TransactionId>>,
     ) -> Result<Transaction<'t>, DeclareError> {
         let declared = controller.declare_inner(global_id.into()).await?;
@@ -381,23 +381,25 @@ impl<'t> Drop for Transaction<'t> {
             let payload = payload.freeze();
             let payload_copy = payload.clone();
 
-            match self.controller.inner.link.flow_state.try_consume(1) {
+            let mut inner_guard = self.controller.inner.borrow_mut();
+
+            match inner_guard.link.flow_state.try_consume(1) {
                 Ok(_) => {
-                    let input_handle = match self.controller.inner.link.input_handle.clone().ok_or(AmqpError::IllegalState) {
+                    let input_handle = match inner_guard.link.input_handle.clone().ok_or(AmqpError::IllegalState) {
                         Ok(handle) => handle,
                         Err(error) => {
                             tracing::error!(?error);
                             return
                         },
                     };
-                    let handle = match self.controller.inner.link
+                    let handle = match inner_guard.link
                         .output_handle
                         .clone() {
                             Some(handle) => handle.into(),
                             None => return,
                         };
                     // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
-                    let tag = match self.controller.inner.link.flow_state.state().lock.try_read() {
+                    let tag = match inner_guard.link.flow_state.state().lock.try_read() {
                         Ok(inner) => inner.delivery_count.to_be_bytes(),
                         Err(error) => {
                             tracing::error!(?error);
@@ -421,7 +423,7 @@ impl<'t> Drop for Transaction<'t> {
                     };
 
                     // try receive in case of detach
-                    match self.controller.inner.incoming.try_recv() {
+                    match inner_guard.incoming.try_recv() {
                         Ok(_) => {
                             // The only frames that are relayed is detach
                             return
@@ -438,7 +440,7 @@ impl<'t> Drop for Transaction<'t> {
                         performative: transfer,
                         payload,
                     };
-                    if let Err(_) = self.controller.inner.outgoing.blocking_send(frame) {
+                    if let Err(_) = inner_guard.outgoing.blocking_send(frame) {
                         // Channel is already closed
                         return
                     }
@@ -449,7 +451,7 @@ impl<'t> Drop for Transaction<'t> {
                     let (tx, rx) = oneshot::channel();
                     let unsettled = UnsettledMessage::new(payload_copy, tx);
                     {
-                        let mut guard = match self.controller.inner.link.unsettled.try_write() {
+                        let mut guard = match inner_guard.link.unsettled.try_write() {
                             Ok(guard) => guard,
                             Err(error) => {
                                 tracing::error!(?error);

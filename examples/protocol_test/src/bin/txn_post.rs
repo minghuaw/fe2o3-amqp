@@ -46,23 +46,19 @@ async fn main() {
     let mut controller = Controller::attach(&mut session, "controller-1").await.unwrap();
 
     // Commit
-    {
-        let mut txn = Transaction::declare(&mut controller, None)
-            .await
-            .unwrap();
-        txn.post(&mut sender, "hello").await.unwrap();
-        txn.post(&mut sender, "world").await.unwrap();
-        txn.commit().await.unwrap();
-    }
-
+    let mut txn1 = Transaction::declare(&controller, None)
+        .await
+        .unwrap();
+    txn1.post(&mut sender, "hello").await.unwrap();
+    txn1.post(&mut sender, "world").await.unwrap();
+    txn1.commit().await.unwrap();
+    
     // Rollback
-    {
-        let mut txn = Transaction::declare(&mut controller, None)
-            .await
-            .unwrap();
-        txn.post(&mut sender, "foo").await.unwrap();
-        txn.rollback().await.unwrap();
-    }
+    let mut txn2 = Transaction::declare(&controller, None)
+    .await
+    .unwrap();
+    txn2.post(&mut sender, "foo").await.unwrap();
+    txn2.rollback().await.unwrap();
 
     session.close().await.unwrap();
     connection.close().await.unwrap();
