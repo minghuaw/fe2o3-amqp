@@ -827,11 +827,11 @@ impl HandleDeclare for Session {
 
 #[cfg(feature = "transaction")]
 impl HandleDischarge for Session {
-    fn commit_transaction(&mut self, txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
+    fn commit_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
         Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
     }
 
-    fn rollback_transaction(&mut self, txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
+    fn rollback_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
         Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
     }
 }

@@ -24,7 +24,7 @@ default = [
     "acceptor",
     "rustls",
     "native-tls",
-    # "transaction",
+    "transaction",
 ]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]

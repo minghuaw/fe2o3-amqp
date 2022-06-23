@@ -154,7 +154,7 @@ impl SessionAcceptor {
     async fn launch_listener_session_engine<R>(
         &self,
         listener_session: ListenerSession,
-        _control_link_outgoing: mpsc::Sender<LinkFrame>,
+        _control_link_outgoing: &mpsc::Sender<LinkFrame>,
         connection: &crate::connection::ConnectionHandle<R>,
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
@@ -176,7 +176,7 @@ impl SessionAcceptor {
     async fn launch_listener_session_engine<R>(
         &self,
         listener_session: ListenerSession,
-        control_link_outgoing: mpsc::Sender<LinkFrame>,
+        control_link_outgoing: &mpsc::Sender<LinkFrame>,
         connection: &crate::connection::ConnectionHandle<R>,
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
@@ -185,7 +185,7 @@ impl SessionAcceptor {
         match self.0.control_link_acceptor.clone() {
             Some(control_link_acceptor) => {
                 let txn_manager =
-                    TransactionManager::new(control_link_outgoing, control_link_acceptor);
+                    TransactionManager::new(control_link_outgoing.clone(), control_link_acceptor);
                 let listener_session = TxnSession {
                     session: listener_session,
                     txn_manager,
@@ -249,7 +249,7 @@ impl SessionAcceptor {
         let engine_handle = self
             .launch_listener_session_engine(
                 listener_session,
-                outgoing_tx.clone(),
+                &outgoing_tx,
                 connection,
                 session_control_rx,
                 incoming_rx,
@@ -539,7 +539,7 @@ impl endpoint::HandleDeclare for ListenerSession {
 impl endpoint::HandleDischarge for ListenerSession {
     fn commit_transaction(
         &mut self,
-        txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<(), Self::Error> {
         Err(Error::amqp_error(
             AmqpError::NotImplemented,
@@ -549,7 +549,7 @@ impl endpoint::HandleDischarge for ListenerSession {
 
     fn rollback_transaction(
         &mut self,
-        txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<(), Self::Error> {
         Err(Error::amqp_error(
             AmqpError::NotImplemented,

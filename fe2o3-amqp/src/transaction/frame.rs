@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::performatives::{Disposition, Flow, Transfer};
 
-use crate::{endpoint::InputHandle, Payload};
+use crate::{Payload};
 
 /// Transactional work
 #[derive(Debug)]

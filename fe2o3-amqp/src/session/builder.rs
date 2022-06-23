@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
-use futures_util::Future;
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -11,22 +10,22 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::ConnectionHandle,
-    control::{ConnectionControl, SessionControl},
-    endpoint::{self, OutgoingChannel},
+    control::{SessionControl},
+    endpoint::{OutgoingChannel},
     link::LinkFrame,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
     Session,
 };
 
-#[cfg(feature = "transaction")]
+#[cfg(all(feature = "transaction", feature = "acceptor"))]
 use crate::transaction::{
     coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
 };
 
 use super::{
-    frame::{SessionFrame, SessionIncomingItem},
-    AllocLinkError, Error, SessionHandle, DEFAULT_WINDOW,
+    frame::{SessionFrame},
+    Error, SessionHandle, DEFAULT_WINDOW,
 };
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
@@ -61,7 +60,7 @@ pub struct Builder {
     pub buffer_size: usize,
 
     /// Acceptor for incoming transaction control links
-    #[cfg(feature = "transaction")]
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     pub control_link_acceptor: Option<ControlLinkAcceptor>,
 }
 
@@ -77,8 +76,8 @@ impl Default for Builder {
             properties: None,
             buffer_size: DEFAULT_SESSION_MUX_BUFFER_SIZE,
 
-            #[cfg(feature = "transaction")]
-            control_link_acceptor: Default::default(),
+            #[cfg(all(feature = "transaction", feature = "acceptor"))]
+            control_link_acceptor: None,
         }
     }
 }
@@ -119,7 +118,7 @@ impl Builder {
         }
     }
 
-    #[cfg(feature = "transaction")]
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     pub(crate) fn into_txn_session(
         self,
         control: mpsc::Sender<SessionControl>,
@@ -161,11 +160,11 @@ impl Builder {
         txn_session
     }
 
-    #[cfg(not(feature = "transaction"))]
+    #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
     async fn launch_client_session_engine<R>(
         self,
         session_control_tx: mpsc::Sender<SessionControl>,
-        outgoing: mpsc::Sender<LinkFrame>,
+        _outgoing: &mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
         connection: &ConnectionHandle<R>,
@@ -186,11 +185,11 @@ impl Builder {
         Ok(engine.spawn())
     }
 
-    #[cfg(feature = "transaction")]
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     async fn launch_client_session_engine<R>(
         mut self,
         session_control_tx: mpsc::Sender<SessionControl>,
-        control_link_outgoing: mpsc::Sender<LinkFrame>,
+        control_link_outgoing: &mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
         connection: &ConnectionHandle<R>,
@@ -202,7 +201,7 @@ impl Builder {
             Some(control_link_acceptor) => {
                 let session = self.into_txn_session(
                     session_control_tx,
-                    control_link_outgoing,
+                    control_link_outgoing.clone(),
                     outgoing_channel,
                     control_link_acceptor,
                     local_state,
@@ -329,7 +328,7 @@ impl Builder {
         let engine_handle = self
             .launch_client_session_engine(
                 session_control_tx.clone(),
-                outgoing_tx.clone(),
+                &outgoing_tx,
                 outgoing_channel,
                 local_state,
                 connection,

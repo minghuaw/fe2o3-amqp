@@ -6,7 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
+    performatives::{Attach, Disposition, Flow, Transfer},
     transaction::TransactionId,
 };
 use tokio::sync::mpsc;
@@ -70,11 +70,8 @@ pub(crate) trait HandleTransactionalWork {
 #[derive(Debug)]
 pub(crate) struct TransactionManager {
     pub control_link_outgoing: mpsc::Sender<LinkFrame>,
-    pub txn_id_source: u64,
     pub txns: BTreeMap<TransactionId, ResourceTransaction>,
-    // pub txns: Slab<Vec<TransactionalWork>>,
     pub control_link_acceptor: ControlLinkAcceptor,
-    // pub coordinators: BTreeSet<JoinHandle<>>,
 }
 
 impl TransactionManager {
@@ -84,9 +81,7 @@ impl TransactionManager {
     ) -> Self {
         Self {
             control_link_outgoing,
-            txn_id_source: 0,
             txns: BTreeMap::new(),
-            // txns: Slab::new(),
             control_link_acceptor,
         }
     }

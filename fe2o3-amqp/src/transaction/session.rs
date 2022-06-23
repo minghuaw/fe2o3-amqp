@@ -29,7 +29,7 @@ where
 
     async fn on_incoming_control_attach(
         &mut self,
-        channel: IncomingChannel,
+        _channel: IncomingChannel,
         remote_attach: Attach,
     ) -> Result<(), Self::Error> {
         let coordinator = self

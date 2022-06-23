@@ -6,9 +6,6 @@ use std::{pin::Pin, task::Poll, time::Duration};
 use tokio::time::Instant;
 use tokio::time::Sleep;
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::Coordinator;
-
 mod consumer;
 mod producer;
 pub use consumer::*;

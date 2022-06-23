@@ -25,9 +25,15 @@ pub use acquisition::*;
 
 pub(crate) mod control_link_msg;
 
+#[cfg(feature = "acceptor")]
 pub mod coordinator;
+
 pub mod frame;
+
+#[cfg(feature = "acceptor")]
 pub mod manager;
+
+#[cfg(feature = "acceptor")]
 pub mod session;
 
 const TXN_ID_KEY: &str = "txn-id";

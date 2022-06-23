@@ -3,7 +3,7 @@ use std::io;
 use fe2o3_amqp_types::definitions::{
     self, AmqpError, ConnectionError, ErrorCondition, Handle, SessionError,
 };
-use tokio::{task::JoinError, sync::mpsc::error};
+use tokio::{task::JoinError};
 
 use crate::{connection::AllocSessionError, link::AttachError};
 
@@ -59,13 +59,13 @@ pub enum Error {
 }
 
 impl Error {
-    pub(crate) fn decode_error() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::DecodeError,
-            None,
-            None
-        ))
-    }
+    // pub(crate) fn decode_error() -> Self {
+    //     Self::Local(definitions::Error::new(
+    //         AmqpError::DecodeError,
+    //         None,
+    //         None
+    //     ))
+    // }
 
     pub(crate) fn amqp_error(
         condition: impl Into<AmqpError>,
