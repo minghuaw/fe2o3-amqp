@@ -355,7 +355,6 @@ impl<'t> Transaction<'t> {
         Ok(TxnAcquisition {
             txn: self,
             recver,
-            cleaned_up: false,
         })
     }
 }

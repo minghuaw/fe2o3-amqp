@@ -27,7 +27,7 @@ pub struct TxnAcquisition<'t, 'r> {
     pub(super) txn: Transaction<'t>,
     /// The receiver that is associated with the acquisition
     pub(super) recver: &'r mut Receiver,
-    pub(super) cleaned_up: bool,
+    // pub(super) cleaned_up: bool,
 }
 
 impl<'t, 'r> TxnAcquisition<'t, 'r> {
@@ -62,7 +62,7 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
             .send_flow(&mut self.recver.inner.outgoing, Some(0), Some(true), true)
             .await?;
 
-        self.cleaned_up = true;
+        // self.cleaned_up = true;
         Ok(())
     }
 
@@ -125,7 +125,7 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
 
 impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
     fn drop(&mut self) {
-        if !self.cleaned_up {
+        if !self.txn.is_discharged {
             // clear txn-id from the link's properties
             {
                 let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();
