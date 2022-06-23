@@ -13,16 +13,13 @@ where
     type Error = link::Error;
 
     /// Set and send flow state
-    async fn send_flow<W>(
+    async fn send_flow(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
+    ) -> Result<(), Self::Error> {
         self.error_if_closed().map_err(link::Error::Local)?;
 
         let handle = self
@@ -107,9 +104,9 @@ where
             .map_err(|_| Error::sending_to_session())
     }
 
-    async fn send_payload<W, Fut>(
+    async fn send_payload<Fut>(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         detached: Fut,
         mut payload: Payload,
         message_format: MessageFormat,
@@ -118,7 +115,6 @@ where
         batchable: bool,
     ) -> Result<Settlement, Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
         use crate::endpoint::LinkDetach;
@@ -303,17 +299,15 @@ where
         }
     }
 
-    async fn dispose<W>(
+    async fn dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
     {
         self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
@@ -334,16 +328,14 @@ where
         send_disposition(writer, delivery_id, None, settled, Some(state), batchable).await
     }
 
-    async fn batch_dispose<W>(
+    async fn batch_dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         mut ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
     {
         self.error_if_closed().map_err(Error::Local)?;
 
@@ -416,14 +408,12 @@ where
 }
 
 #[inline]
-async fn send_transfer<W>(
-    writer: &mut W,
+async fn send_transfer(
+    writer: &mpsc::Sender<LinkFrame>,
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
 ) -> Result<(), Error>
-where
-    W: Sink<LinkFrame> + Send + Unpin,
 {
     let frame = LinkFrame::Transfer {
         input_handle,
@@ -437,16 +427,14 @@ where
 }
 
 #[inline]
-async fn send_disposition<W>(
-    writer: &mut W,
+async fn send_disposition(
+    writer: &mpsc::Sender<LinkFrame>,
     first: DeliveryNumber,
     last: Option<DeliveryNumber>,
     settled: bool,
     state: Option<DeliveryState>,
     batchable: bool,
 ) -> Result<(), Error>
-where
-    W: Sink<LinkFrame> + Send + Unpin,
 {
     let disposition = Disposition {
         role: Role::Sender,

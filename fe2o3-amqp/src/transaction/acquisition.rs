@@ -134,15 +134,13 @@ impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
             }
 
             // Set drain to true
-            if let Some(sender) = self.recver.inner.outgoing.get_ref() {
-                if let Err(err) = (&mut self.recver.inner.link).blocking_send_flow(
-                    sender,
-                    Some(0),
-                    Some(true),
-                    true,
-                ) {
-                    tracing::error!("error {:?}", err)
-                }
+            if let Err(err) = (&mut self.recver.inner.link).blocking_send_flow(
+                &self.recver.inner.outgoing,
+                Some(0),
+                Some(true),
+                true,
+            ) {
+                tracing::error!("error {:?}", err)
             }
         }
     }

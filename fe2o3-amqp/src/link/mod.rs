@@ -29,7 +29,6 @@ pub(crate) mod target_archetype;
 
 pub use error::*;
 
-use futures_util::{Sink, SinkExt, Stream};
 pub use receiver::Receiver;
 pub use sender::Sender;
 use serde_amqp::from_reader;
@@ -387,10 +386,7 @@ where
         .await
     }
 
-    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
+    async fn send_attach(&mut self, writer: &mpsc::Sender<LinkFrame>) -> Result<(), Self::AttachError> {
         self.error_if_closed().map_err(AttachError::Local)?;
 
         // Create Attach frame
@@ -532,15 +528,12 @@ where
     }
 
     #[instrument(skip_all)]
-    async fn send_detach<W>(
+    async fn send_detach(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         closed: bool,
         error: Option<Self::DetachError>,
-    ) -> Result<(), Self::DetachError>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
+    ) -> Result<(), Self::DetachError> {
         match self.local_state {
             LinkState::Attached => {
                 self.local_state = LinkState::DetachSent;
@@ -862,26 +855,22 @@ pub(crate) async fn remove_from_unsettled<M>(
     lock.remove(key)
 }
 
-pub(crate) async fn do_attach<L, W, R>(
+pub(crate) async fn do_attach<L>(
     link: &mut L,
-    writer: &mut W,
-    reader: &mut R,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
 ) -> Result<(), AttachError>
 where
     L: endpoint::LinkAttach<AttachError = AttachError>
         + endpoint::LinkDetach<DetachError = definitions::Error>
         + endpoint::Link,
-    W: Sink<LinkFrame> + Send + Unpin,
-    R: Stream<Item = LinkFrame> + Send + Unpin,
 {
-    use futures_util::StreamExt;
-
     // Send an Attach frame
     endpoint::LinkAttach::send_attach(link, writer).await?;
 
     // Wait for an Attach frame
     let frame = reader
-        .next()
+        .recv()
         .await
         .ok_or_else(|| AttachError::illegal_state(None))?;
 
@@ -923,21 +912,17 @@ where
     Ok(())
 }
 
-pub(crate) async fn expect_detach_then_detach<L, W, R>(
+pub(crate) async fn expect_detach_then_detach<L>(
     link: &mut L,
-    writer: &mut W,
-    reader: &mut R,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
 ) -> Result<(), Error>
 where
     L: endpoint::LinkAttach<AttachError = AttachError>
         + endpoint::LinkDetach<DetachError = definitions::Error>,
-    W: Sink<LinkFrame> + Send + Unpin,
-    R: Stream<Item = LinkFrame> + Send + Unpin,
 {
-    use futures_util::StreamExt;
-
     let frame = reader
-        .next()
+        .recv()
         .await
         .ok_or_else(|| Error::expecting_frame("Detach"))?;
 

@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use bytes::BytesMut;
-use futures_util::StreamExt;
 use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
@@ -14,8 +13,6 @@ use fe2o3_amqp_types::{
     messaging::{message::__private::Serializable, Address, DeliveryState, Target},
     performatives::Detach,
 };
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
@@ -260,21 +257,21 @@ pub(crate) struct SenderInner<L: endpoint::SenderLink> {
     pub(crate) session: mpsc::Sender<SessionControl>,
 
     // Outgoing mpsc channel to send the Link frames
-    pub(crate) outgoing: PollSender<LinkFrame>,
-    pub(crate) incoming: ReceiverStream<LinkFrame>,
+    // pub(crate) outgoing: PollSender<LinkFrame>,
+    // pub(crate) incoming: ReceiverStream<LinkFrame>,
+    pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 }
 
 impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle() {
-            if let Some(sender) = self.outgoing.get_ref() {
-                let detach = Detach {
-                    handle: handle.clone().into(),
-                    closed: true,
-                    error: None,
-                };
-                let _ = sender.try_send(LinkFrame::Detach(detach));
-            }
+        if let Some(handle) = self.link.output_handle_mut().take() {
+            let detach = Detach {
+                handle: handle.into(),
+                closed: true,
+                error: None,
+            };
+            let _ = self.outgoing.try_send(LinkFrame::Detach(detach));
         }
     }
 }
@@ -293,7 +290,7 @@ impl SenderInner<SenderLink<Target>> {
         // The sender may reattach after fully detached
         if let Err(e) = self
             .link
-            .send_detach(&mut self.outgoing, false, error)
+            .send_detach(&self.outgoing, false, error)
             .await
         {
             return Err(DetachError::new(false, Some(e)));
@@ -302,7 +299,7 @@ impl SenderInner<SenderLink<Target>> {
         // session::deallocate_link(&mut self.session, output_handle).await?;
 
         // Wait for remote detach
-        let frame = match self.incoming.next().await {
+        let frame = match self.incoming.recv().await {
             Some(frame) => frame,
             None => return Err(detach_error_expecting_frame()),
         };
@@ -370,7 +367,7 @@ where
                 receiver_settle_mode: self.link.rcv_settle_mode().clone(),
                 // state_code: self.link.state_code.clone(),
             };
-            self.incoming = ReceiverStream::new(incoming);
+            self.incoming = incoming;
             let handle = match session::allocate_link(
                 &mut session_control,
                 self.link.name().into(),
@@ -390,7 +387,7 @@ where
         }
 
         if let Err(_err) =
-            super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
+            super::do_attach(&mut self.link, &self.outgoing, &mut self.incoming).await
         {
             let err = definitions::Error::new(AmqpError::IllegalState, None, None);
             return Err(DetachError::new(false, Some(err)));
@@ -410,7 +407,7 @@ where
         }
 
         // Wait for remote detach
-        let frame = match self.incoming.next().await {
+        let frame = match self.incoming.recv().await {
             Some(frame) => frame,
             None => return Err(detach_error_expecting_frame()),
         };
@@ -445,7 +442,7 @@ where
 
             let session_control = self.session.clone();
             self.reattach_inner(session_control).await?;
-            let frame = match self.incoming.next().await {
+            let frame = match self.incoming.recv().await {
                 Some(frame) => frame,
                 None => return Err(detach_error_expecting_frame()),
             };
@@ -498,7 +495,7 @@ where
         let payload = payload.freeze();
 
         // send a transfer, checking state will be implemented in SenderLink
-        let detached_fut = self.incoming.next();
+        let detached_fut = self.incoming.recv();
         let settlement = self
             .link
             .send_payload(

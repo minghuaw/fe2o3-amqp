@@ -8,8 +8,6 @@ use fe2o3_amqp_types::{
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::PollSender;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
@@ -411,8 +409,8 @@ where
     ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
     {
         let buffer_size = self.buffer_size;
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = PollSender::new(session.outgoing.clone());
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
         let (producer, consumer) = self.create_flow_state_containers();
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
@@ -433,11 +431,8 @@ where
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
         // Get writer to session
-        let writer = session.outgoing.clone();
-        let mut writer = PollSender::new(writer);
-        let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -445,7 +440,7 @@ where
             buffer_size,
             session: session.control.clone(),
             outgoing,
-            incoming: reader,
+            incoming: incoming_rx,
             // marker: PhantomData,
         };
         Ok(inner)
@@ -484,8 +479,8 @@ where
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
         let credit_mode = self.credit_mode.clone();
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = PollSender::new(session.outgoing.clone());
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
 
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
@@ -519,11 +514,8 @@ where
         let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
-        let writer = session.outgoing.clone();
-        let mut writer = PollSender::new(writer);
-        let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
 
         let mut inner = ReceiverInner {
             link,
@@ -532,7 +524,7 @@ where
             processed: 0,
             session: session.control.clone(),
             outgoing,
-            incoming: reader,
+            incoming: incoming_rx,
             incomplete_transfer: None,
         };
 

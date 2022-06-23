@@ -24,15 +24,13 @@ where
     type Error = link::Error;
 
     /// Set and send flow state
-    async fn send_flow<W>(
+    async fn send_flow(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
     ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
     {
         self.error_if_closed().map_err(Self::Error::Local)?;
 
@@ -291,17 +289,15 @@ where
         ))
     }
 
-    async fn dispose<W>(
+    async fn dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         // settled: bool,
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
     {
         self.error_if_closed().map_err(Self::Error::Local)?;
 

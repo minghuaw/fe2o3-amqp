@@ -9,7 +9,8 @@ use fe2o3_amqp_types::{
     messaging::DeliveryState,
     performatives::{Attach, Detach, Transfer},
 };
-use futures_util::{Future, Sink};
+use futures_util::{Future};
+use tokio::sync::mpsc;
 
 use crate::{
     link::{delivery::Delivery, LinkFrame, },
@@ -24,14 +25,12 @@ pub(crate) trait LinkDetach {
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
-    async fn send_detach<W>(
+    async fn send_detach(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         closed: bool,
         error: Option<Error>,
-    ) -> Result<(), Self::DetachError>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    ) -> Result<(), Self::DetachError>;
 }
 
 #[async_trait]
@@ -40,9 +39,7 @@ pub(crate) trait LinkAttach {
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
 
-    async fn send_attach<W>(&mut self, writer: &mut W) -> Result<(), Self::AttachError>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    async fn send_attach(&mut self, writer: &mpsc::Sender<LinkFrame>) -> Result<(), Self::AttachError>;
 }
 
 #[async_trait]
@@ -83,20 +80,18 @@ pub(crate) trait SenderLink: Link + LinkExt {
     type Error: Send;
 
     /// Set and send flow state
-    async fn send_flow<W>(
+    async fn send_flow(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    ) -> Result<(), Self::Error>;
 
     /// Send message via transfer frame and return whether the message is already settled
-    async fn send_payload<W, Fut>(
+    async fn send_payload<Fut>(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         detached: Fut,
         payload: Payload,
         message_format: MessageFormat,
@@ -109,31 +104,26 @@ pub(crate) trait SenderLink: Link + LinkExt {
         batchable: bool,
     ) -> Result<Settlement, Self::Error>
     where
-        W: Sink<LinkFrame> + Send + Unpin,
         Fut: Future<Output = Option<LinkFrame>> + Send;
 
-    async fn dispose<W>(
+    async fn dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    ) -> Result<(), Self::Error>;
 
-    async fn batch_dispose<W>(
+    async fn batch_dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         ids_and_tags: Vec<(DeliveryNumber, DeliveryTag)>,
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    ) -> Result<(), Self::Error>;
 }
 
 #[async_trait]
@@ -141,15 +131,13 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     type Error: Send;
 
     /// Set and send flow state
-    async fn send_flow<W>(
+    async fn send_flow(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>, // TODO: Is Option necessary?
         echo: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    ) -> Result<(), Self::Error>;
 
     async fn on_incomplete_transfer(
         &mut self,
@@ -174,15 +162,13 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     where
         T: for<'de> serde::Deserialize<'de> + Send;
 
-    async fn dispose<W>(
+    async fn dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         // settled: bool, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin;
+    ) -> Result<(), Self::Error>;
 }

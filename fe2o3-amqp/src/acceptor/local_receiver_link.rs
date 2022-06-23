@@ -9,8 +9,6 @@ use fe2o3_amqp_types::{
     primitives::Symbol,
 };
 use tokio::sync::{mpsc, RwLock};
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
@@ -194,9 +192,9 @@ where
             unsettled,
         };
 
-        let mut outgoing = PollSender::new(outgoing.clone());
+        let outgoing = outgoing.clone();
         link.on_incoming_attach_as_acceptor(remote_attach).await?;
-        link.send_attach(&mut outgoing)
+        link.send_attach(&outgoing)
             .await
             .map_err(|err| (err.into(), None))?;
 
@@ -207,7 +205,7 @@ where
             processed: 0,
             session: control.clone(),
             outgoing,
-            incoming: ReceiverStream::new(incoming_rx),
+            incoming: incoming_rx,
             incomplete_transfer: None,
         };
 

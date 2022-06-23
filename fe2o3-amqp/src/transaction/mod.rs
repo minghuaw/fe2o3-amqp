@@ -421,7 +421,7 @@ impl<'t> Drop for Transaction<'t> {
                     };
 
                     // try receive in case of detach
-                    match self.controller.inner.incoming.as_mut().try_recv() {
+                    match self.controller.inner.incoming.try_recv() {
                         Ok(_) => {
                             // The only frames that are relayed is detach
                             return
@@ -433,19 +433,14 @@ impl<'t> Drop for Transaction<'t> {
                     }
 
                     // Send out Rollback
-                    match self.controller.inner.outgoing.get_ref() {
-                        Some(sender) => {
-                            let frame = LinkFrame::Transfer {
-                                input_handle,
-                                performative: transfer,
-                                payload,
-                            };
-                            if let Err(_) = sender.blocking_send(frame) {
-                                // Channel is already closed
-                                return
-                            }
-                        },
-                        None => return, // mpsc channel is already closed
+                    let frame = LinkFrame::Transfer {
+                        input_handle,
+                        performative: transfer,
+                        payload,
+                    };
+                    if let Err(_) = self.controller.inner.outgoing.blocking_send(frame) {
+                        // Channel is already closed
+                        return
                     }
 
                     // TODO: Wait for accept or not?

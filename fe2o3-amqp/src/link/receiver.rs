@@ -6,10 +6,7 @@ use fe2o3_amqp_types::{
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
-use futures_util::StreamExt;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::PollSender;
 
 use crate::{
     control::SessionControl,
@@ -262,8 +259,10 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) session: mpsc::Sender<SessionControl>,
 
     // Outgoing mpsc channel to send the Link Frames
-    pub(crate) outgoing: PollSender<LinkFrame>,
-    pub(crate) incoming: ReceiverStream<LinkFrame>,
+    // pub(crate) outgoing: PollSender<LinkFrame>,
+    // pub(crate) incoming: ReceiverStream<LinkFrame>,
+    pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 
     // pub(crate) marker: PhantomData<S>,
     pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
@@ -271,15 +270,13 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle() {
-            if let Some(sender) = self.outgoing.get_ref() {
-                let detach = Detach {
-                    handle: handle.clone().into(),
-                    closed: true,
-                    error: None,
-                };
-                let _ = sender.try_send(LinkFrame::Detach(detach));
-            }
+        if let Some(handle) = self.link.output_handle_mut().take() {
+            let detach = Detach {
+                handle: handle.into(),
+                closed: true,
+                error: None,
+            };
+            let _ = self.outgoing.try_send(LinkFrame::Detach(detach));
         }
     }
 }
@@ -310,7 +307,7 @@ where
                 // will be added to sessions map
                 more: false,
             };
-            self.incoming = ReceiverStream::new(incoming);
+            self.incoming = incoming;
             let handle = match session::allocate_link(
                 &mut session_control,
                 self.link.name().into(),
@@ -356,7 +353,7 @@ where
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        let frame = self.incoming.next().await.ok_or_else(|| {
+        let frame = self.incoming.recv().await.ok_or_else(|| {
             Error::Local(definitions::Error::new(
                 AmqpError::IllegalState,
                 Some("Session is dropped".into()),
@@ -554,7 +551,7 @@ where
         }
 
         // Wait for remote detach
-        let frame = match self.incoming.next().await {
+        let frame = match self.incoming.recv().await {
             Some(frame) => frame,
             None => return Err(detach_error_expecting_frame()),
         };
@@ -604,7 +601,7 @@ where
         }
 
         // Wait for remote detach
-        let frame = match self.incoming.next().await {
+        let frame = match self.incoming.recv().await {
             Some(frame) => frame,
             None => return Err(detach_error_expecting_frame()),
         };
@@ -634,7 +631,7 @@ where
 
             let session_control = self.session.clone();
             self.reattach_inner(session_control).await?;
-            let frame = match self.incoming.next().await {
+            let frame = match self.incoming.recv().await {
                 Some(frame) => frame,
                 None => return Err(detach_error_expecting_frame()),
             };
