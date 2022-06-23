@@ -19,8 +19,6 @@ use crate::{
     Sendable,
 };
 
-use super::{DeclareError, Transaction};
-
 pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, UnsettledMessage>;
 
 /// Transaction controller
