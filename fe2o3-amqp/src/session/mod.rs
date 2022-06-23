@@ -591,9 +591,9 @@ impl endpoint::Session for Session {
         {
             Some(mut link) => match link.on_incoming_detach(detach).await {
                 Ok(_) => Ok(()),
-                Err(_) => Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
+                Err(_) => Err(Error::session_error(SessionError::UnattachedHandle, "Local link is already dropped".to_string())), // End session with unattached handle
             },
-            None => Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle
+            None => Err(Error::session_error(SessionError::UnattachedHandle, "Handle is not found".to_string())), // End session with unattached handle
         }
     }
 

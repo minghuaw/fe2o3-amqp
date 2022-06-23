@@ -81,9 +81,14 @@ async fn main() {
     //     .settled(true)
     //     .build();
 
-    sender.send(message).await.unwrap();
+    tokio::spawn(async move {
+        sender.send(message).await.unwrap();
+    
+        sender.send("world").await.unwrap();
 
-    sender.send("world").await.unwrap();
+        sender.close().await.unwrap();
+    });
+
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {
@@ -101,7 +106,7 @@ async fn main() {
     // let result = fut.await;
     // println!("fut {:?}", result);
 
-    sender.close().await.unwrap();
+
 
     // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
     //     .await

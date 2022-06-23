@@ -58,15 +58,15 @@ where
 impl Controller {
     /// Close the control link with error
     pub async fn close_with_error(
-        &self,
+        &mut self,
         error: definitions::Error,
     ) -> Result<(), link::DetachError> {
-        self.inner.borrow_mut().close_with_error(Some(error)).await
+        self.inner.get_mut().close_with_error(Some(error)).await
     }
 
     /// Close the link
-    pub async fn close(&self) -> Result<(), link::DetachError> {
-        self.inner.borrow_mut().close_with_error(None).await
+    pub async fn close(&mut self) -> Result<(), link::DetachError> {
+        self.inner.get_mut().close_with_error(None).await
     }
 }
 
@@ -172,3 +172,5 @@ impl Controller {
         }
     }
 }
+
+// TODO: implement Drop for controller to drop all non-committed transactions
