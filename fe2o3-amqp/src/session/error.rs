@@ -5,7 +5,10 @@ use fe2o3_amqp_types::definitions::{
 };
 use tokio::{task::JoinError};
 
-use crate::{connection::AllocSessionError, link::AttachError};
+use crate::{connection::AllocSessionError};
+
+#[cfg(feature = "transaction")]
+use crate::link::AttachError;
 
 /// Session errors
 #[derive(Debug, thiserror::Error)]

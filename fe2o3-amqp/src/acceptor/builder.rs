@@ -21,6 +21,9 @@ use super::{
     SupportedSenderSettleModes,
 };
 
+#[cfg(feature = "transaction")]
+use crate::transaction::coordinator::ControlLinkAcceptor;
+
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
 pub struct Builder<T, M> {
@@ -315,6 +318,14 @@ impl Builder<SessionAcceptor, Initialized> {
     /// that are used by links attached to the session
     pub fn buffer_size(mut self, buffer_size: usize) -> Self {
         self.inner.0.buffer_size = buffer_size;
+        self
+    }
+
+    /// Enable handling remotely initiated control link and transaction by setting the 
+    /// `control_link_acceptor` field
+    #[cfg(feature = "transaction")]
+    pub fn control_link_acceptor(mut self, control_link_acceptor: Option<ControlLinkAcceptor>) -> Self {
+        self.inner.0.control_link_acceptor = control_link_acceptor;
         self
     }
 }
