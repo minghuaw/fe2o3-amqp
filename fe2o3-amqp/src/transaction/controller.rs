@@ -77,8 +77,16 @@ impl Controller {
         link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithoutTarget>::new()
     }
 
-    /// Attach the controller
+    /// Attach the controller with the default [`Coordinator`]
     pub async fn attach<R>(
+        session: &mut SessionHandle<R>,
+        name: impl Into<String>,
+    ) -> Result<Self, AttachError> {
+        Self::attach_with_coordinator(session, name, Coordinator::default()).await
+    }
+
+    /// Attach the controller with a customized [`Coordinator`]
+    pub async fn attach_with_coordinator<R>(
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
         coordinator: Coordinator,

@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::Transaction, Connection, Sender, Session,
+    sasl_profile::SaslProfile, transaction::{Transaction, Controller}, Connection, Sender, Session, types::transaction::Coordinator,
 };
 use tokio::net::TcpStream;
 use tracing::Level;
@@ -43,21 +43,26 @@ async fn main() {
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await
         .unwrap();
+    let mut controller = Controller::attach(&mut session, "controller-1").await.unwrap();
 
     // Commit
-    let mut txn = Transaction::declare(&mut session, "controller-1", None)
-        .await
-        .unwrap();
-    txn.post(&mut sender, "hello").await.unwrap();
-    txn.post(&mut sender, "world").await.unwrap();
-    txn.commit().await.unwrap();
+    {
+        let mut txn = Transaction::declare(&mut controller, None)
+            .await
+            .unwrap();
+        txn.post(&mut sender, "hello").await.unwrap();
+        txn.post(&mut sender, "world").await.unwrap();
+        txn.commit().await.unwrap();
+    }
 
     // Rollback
-    let mut txn = Transaction::declare(&mut session, "controller-2", None)
-        .await
-        .unwrap();
-    txn.post(&mut sender, "foo").await.unwrap();
-    txn.rollback().await.unwrap();
+    {
+        let mut txn = Transaction::declare(&mut controller, None)
+            .await
+            .unwrap();
+        txn.post(&mut sender, "foo").await.unwrap();
+        txn.rollback().await.unwrap();
+    }
 
     session.close().await.unwrap();
     connection.close().await.unwrap();
