@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle,},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload,
+    Payload, transaction::TransactionManagerError,
 };
 
 #[cfg(feature = "transaction")]
@@ -820,8 +820,9 @@ impl endpoint::Session for Session {
 #[cfg(feature = "transaction")]
 impl HandleDeclare for Session {
     // This should be unreachable, but an error is probably a better way
-    fn allocate_transaction_id(&mut self) -> Result<fe2o3_amqp_types::transaction::TransactionId, Self::Error> {
-        Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+    fn allocate_transaction_id(&mut self) -> Result<fe2o3_amqp_types::transaction::TransactionId, TransactionManagerError> {
+        // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+        Err(TransactionManagerError::AllocateTxnIdFailed)
     }
 }
 

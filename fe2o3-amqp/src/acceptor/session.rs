@@ -31,7 +31,7 @@ use crate::{
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
-    Payload,
+    Payload, transaction::TransactionManagerError,
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
@@ -527,11 +527,12 @@ impl endpoint::HandleDeclare for ListenerSession {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, Self::Error> {
-        Err(Error::amqp_error(
-            AmqpError::NotImplemented,
-            "Resource side transaction is not enabled".to_string(),
-        ))
+    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, TransactionManagerError> {
+        // Err(Error::amqp_error(
+        //     AmqpError::NotImplemented,
+        //     "Resource side transaction is not enabled".to_string(),
+        // ))
+        Err(TransactionManagerError::AllocateTxnIdFailed)
     }
 }
 

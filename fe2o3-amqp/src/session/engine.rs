@@ -236,6 +236,11 @@ where
             
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { resp } => {
+                let result = self.session.allocate_transaction_id();
+                resp.send(result).map_err(|_| Error::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    "SessionHandle is dropped",
+                )))?;
                 todo!()
             }
             #[cfg(feature = "transaction")]

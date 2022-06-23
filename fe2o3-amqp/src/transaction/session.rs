@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{endpoint::{self, IncomingChannel, LinkFlow, OutgoingChannel, OutputHandle, InputHandle}, session::{self, frame::SessionFrame}, Payload, link::{LinkRelay, target_archetype::VariantOfTargetArchetype}};
 
-use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork, ResourceTransaction}, TXN_ID_KEY, frame::TxnWorkFrame};
+use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork, ResourceTransaction}, TXN_ID_KEY, frame::TxnWorkFrame, TransactionManagerError};
 
 ///
 #[derive(Debug)]
@@ -53,7 +53,7 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, Self::Error> {   
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, TransactionManagerError> {   
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         while self.txn_manager.txns.contains_key(&txn_id) { // TODO: timeout?
             txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
