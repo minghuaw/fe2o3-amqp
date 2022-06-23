@@ -380,7 +380,7 @@ impl<'t> Drop for Transaction<'t> {
             let payload = payload.freeze();
             let payload_copy = payload.clone();
 
-            let mut inner = self.controller.inner.borrow_mut();
+            let mut inner = self.controller.inner.blocking_lock();
 
             match inner.link.flow_state.try_consume(1) {
                 Ok(_) => {

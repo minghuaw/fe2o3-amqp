@@ -1,11 +1,9 @@
-use std::cell::RefCell;
-
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SenderSettleMode},
     messaging::{DeliveryState, Message},
     transaction::{Coordinator, Declare, Declared, Discharge, TransactionId},
 };
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex};
 
 use crate::{
     endpoint::Settlement,
@@ -28,7 +26,7 @@ pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, U
 /// # Type parameter `S`
 #[derive(Debug)]
 pub struct Controller {
-    pub(crate) inner: RefCell<SenderInner<ControlLink>>,
+    pub(crate) inner: Mutex<SenderInner<ControlLink>>,
 }
 
 #[inline]
@@ -124,7 +122,7 @@ impl Controller {
         // the outcome of the declare from the receiver
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut self.inner.borrow_mut(), sendable).await?;
+        let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
         match outcome.await? {
             DeliveryState::Declared(declared) => Ok(declared),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
@@ -153,7 +151,7 @@ impl Controller {
         let message = Message::<Discharge>::builder().value(discharge).build();
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut self.inner.borrow_mut(), sendable).await?;
+        let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
         match outcome.await? {
             DeliveryState::Accepted(_) => Ok(()),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),

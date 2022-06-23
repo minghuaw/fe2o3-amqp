@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
     messaging::{DeliveryState, Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
-use tokio::sync::{mpsc, Notify, RwLock};
+use tokio::sync::{mpsc, Notify, RwLock, Mutex};
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
@@ -552,7 +552,7 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
         self.attach_inner(session)
             .await
             .map(|inner| Controller {
-                inner: RefCell::new(inner),
+                inner: Mutex::new(inner),
             })
     }
 }
