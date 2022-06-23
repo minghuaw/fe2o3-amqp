@@ -26,11 +26,14 @@ use tracing::{instrument, trace};
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
-    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
+    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle,},
     link::{LinkFrame, LinkRelay},
     util::Constant,
     Payload,
 };
+
+#[cfg(feature = "transaction")]
+use crate::endpoint::{ HandleDeclare, HandleDischarge};
 
 pub(crate) mod engine;
 pub(crate) mod frame;
@@ -811,5 +814,24 @@ impl endpoint::Session for Session {
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
+    }
+}
+
+#[cfg(feature = "transaction")]
+impl HandleDeclare for Session {
+    // This should be unreachable, but an error is probably a better way
+    fn allocate_transaction_id(&mut self) -> Result<fe2o3_amqp_types::transaction::TransactionId, Self::Error> {
+        Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+    }
+}
+
+#[cfg(feature = "transaction")]
+impl HandleDischarge for Session {
+    fn commit_transaction(&mut self, txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
+        Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+    }
+
+    fn rollback_transaction(&mut self, txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
+        Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
     }
 }

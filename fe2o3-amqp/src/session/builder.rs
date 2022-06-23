@@ -3,31 +3,31 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
+use futures_util::Future;
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::PollSender;
 
 use crate::{
     connection::ConnectionHandle,
-    control::SessionControl,
-    endpoint::OutgoingChannel,
+    control::{ConnectionControl, SessionControl},
+    endpoint::{self, OutgoingChannel},
+    link::LinkFrame,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
     Session,
 };
 
 #[cfg(feature = "transaction")]
-use crate::{
-    link::LinkFrame,
-    transaction::{
-        coordinator::ControlLinkAcceptor,
-        manager::{TransactionManager},
-        session::TxnSession,
-    }
+use crate::transaction::{
+    coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
 };
 
-use super::{Error, SessionHandle, DEFAULT_WINDOW};
+use super::{
+    frame::{SessionFrame, SessionIncomingItem},
+    AllocLinkError, Error, SessionHandle, DEFAULT_WINDOW,
+};
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -62,7 +62,7 @@ pub struct Builder {
 
     /// Acceptor for incoming transaction control links
     #[cfg(feature = "transaction")]
-    pub control_link_acceptor: ControlLinkAcceptor,
+    pub control_link_acceptor: Option<ControlLinkAcceptor>,
 }
 
 impl Default for Builder {
@@ -125,9 +125,10 @@ impl Builder {
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
+        control_link_acceptor: ControlLinkAcceptor,
         local_state: SessionState,
     ) -> TxnSession<Session> {
-        let txn_manager = TransactionManager::new(outgoing, self.control_link_acceptor.clone());
+        let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
         let session = Session {
             control,
             outgoing_channel,
@@ -158,6 +159,80 @@ impl Builder {
         };
 
         txn_session
+    }
+
+    #[cfg(not(feature = "transaction"))]
+    async fn launch_client_session_engine<R>(
+        self,
+        session_control_tx: mpsc::Sender<SessionControl>,
+        outgoing: mpsc::Sender<LinkFrame>,
+        outgoing_channel: OutgoingChannel,
+        local_state: SessionState,
+        connection: &ConnectionHandle<R>,
+        session_control_rx: mpsc::Receiver<SessionControl>,
+        incoming: mpsc::Receiver<SessionFrame>,
+        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+        let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+        let engine = SessionEngine::begin_client_session(
+            connection.control.clone(),
+            session,
+            session_control_rx,
+            incoming,
+            PollSender::new(connection.outgoing.clone()),
+            outgoing_link_frames,
+        )
+        .await?;
+        Ok(engine.spawn())
+    }
+
+    #[cfg(feature = "transaction")]
+    async fn launch_client_session_engine<R>(
+        mut self,
+        session_control_tx: mpsc::Sender<SessionControl>,
+        control_link_outgoing: mpsc::Sender<LinkFrame>,
+        outgoing_channel: OutgoingChannel,
+        local_state: SessionState,
+        connection: &ConnectionHandle<R>,
+        session_control_rx: mpsc::Receiver<SessionControl>,
+        incoming: mpsc::Receiver<SessionFrame>,
+        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+        match self.control_link_acceptor.take() {
+            Some(control_link_acceptor) => {
+                let session = self.into_txn_session(
+                    session_control_tx,
+                    control_link_outgoing,
+                    outgoing_channel,
+                    control_link_acceptor,
+                    local_state,
+                );
+                let engine = SessionEngine::begin_client_session(
+                    connection.control.clone(),
+                    session,
+                    session_control_rx,
+                    incoming,
+                    PollSender::new(connection.outgoing.clone()),
+                    outgoing_link_frames,
+                )
+                .await?;
+                Ok(engine.spawn())
+            }
+            None => {
+                let session =
+                    self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+                let engine = SessionEngine::begin_client_session(
+                    connection.control.clone(),
+                    session,
+                    session_control_rx,
+                    incoming,
+                    PollSender::new(connection.outgoing.clone()),
+                    outgoing_link_frames,
+                )
+                .await?;
+                Ok(engine.spawn())
+            }
+        }
     }
 
     /// The transfer-id of the first transfer id the sender will send
@@ -251,28 +326,19 @@ impl Builder {
         // create session in connection::Engine
         let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
 
-        #[cfg(not(feature = "transaction"))]
-        let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+        let engine_handle = self
+            .launch_client_session_engine(
+                session_control_tx.clone(),
+                outgoing_tx.clone(),
+                outgoing_channel,
+                local_state,
+                connection,
+                session_control_rx,
+                incoming_rx,
+                outgoing_rx,
+            )
+            .await?;
 
-        #[cfg(feature = "transaction")]
-        let session = self.into_txn_session(
-            session_control_tx.clone(),
-            outgoing_tx.clone(),
-            outgoing_channel,
-            local_state,
-        );
-
-        let engine = SessionEngine::begin_client_session(
-            connection.control.clone(),
-            session,
-            session_control_rx,
-            incoming_rx,
-            PollSender::new(connection.outgoing.clone()),
-            outgoing_rx,
-        )
-        .await?;
-
-        let engine_handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,
             engine_handle,

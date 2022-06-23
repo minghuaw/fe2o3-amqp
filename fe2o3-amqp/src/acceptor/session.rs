@@ -14,6 +14,7 @@ use fe2o3_amqp_types::{
 };
 use futures_util::Sink;
 use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 use tokio_util::sync::PollSender;
 use tracing::instrument;
 
@@ -30,10 +31,13 @@ use crate::{
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
-    Payload, transaction::{manager::TransactionManager, session::TxnSession},
+    Payload,
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
+
+#[cfg(feature = "transaction")]
+use crate::transaction::{manager::TransactionManager, session::TxnSession};
 
 /// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}
@@ -146,6 +150,73 @@ impl SessionAcceptor {
         Builder::<Self, Initialized>::new()
     }
 
+    #[cfg(not(feature = "transaction"))]
+    async fn launch_listener_session_engine<R>(
+        &self,
+        listener_session: ListenerSession,
+        _control_link_outgoing: mpsc::Sender<LinkFrame>,
+        connection: &crate::connection::ConnectionHandle<R>,
+        session_control_rx: mpsc::Receiver<SessionControl>,
+        incoming: mpsc::Receiver<SessionFrame>,
+        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+        let engine = SessionEngine::begin_listener_session(
+            connection.control.clone(),
+            listener_session,
+            session_control_rx,
+            incoming,
+            PollSender::new(connection.outgoing.clone()),
+            outgoing_link_frames,
+        )
+        .await?;
+        Ok(engine.spawn())
+    }
+
+    #[cfg(feature = "transaction")]
+    async fn launch_listener_session_engine<R>(
+        &self,
+        listener_session: ListenerSession,
+        control_link_outgoing: mpsc::Sender<LinkFrame>,
+        connection: &crate::connection::ConnectionHandle<R>,
+        session_control_rx: mpsc::Receiver<SessionControl>,
+        incoming: mpsc::Receiver<SessionFrame>,
+        outgoing_link_frames: mpsc::Receiver<LinkFrame>,
+    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+        match self.0.control_link_acceptor.clone() {
+            Some(control_link_acceptor) => {
+                let txn_manager =
+                    TransactionManager::new(control_link_outgoing, control_link_acceptor);
+                let listener_session = TxnSession {
+                    session: listener_session,
+                    txn_manager,
+                };
+
+                let engine = SessionEngine::begin_listener_session(
+                    connection.control.clone(),
+                    listener_session,
+                    session_control_rx,
+                    incoming,
+                    PollSender::new(connection.outgoing.clone()),
+                    outgoing_link_frames,
+                )
+                .await?;
+                Ok(engine.spawn())
+            }
+            None => {
+                let engine = SessionEngine::begin_listener_session(
+                    connection.control.clone(),
+                    listener_session,
+                    session_control_rx,
+                    incoming,
+                    PollSender::new(connection.outgoing.clone()),
+                    outgoing_link_frames,
+                )
+                .await?;
+                Ok(engine.spawn())
+            }
+        }
+    }
+
     /// Accept an incoming session
     pub async fn accept_incoming_session(
         &self,
@@ -175,25 +246,17 @@ impl SessionAcceptor {
             link_listener: link_listener_tx,
         };
 
-        #[cfg(feature = "transaction")]
-        let listener_session = {
-            let txn_manager = TransactionManager::new(outgoing_tx.clone(), self.0.control_link_acceptor.clone());
-            TxnSession {
-                session: listener_session,
-                txn_manager
-            }
-        };
+        let engine_handle = self
+            .launch_listener_session_engine(
+                listener_session,
+                outgoing_tx.clone(),
+                connection,
+                session_control_rx,
+                incoming_rx,
+                outgoing_rx,
+            )
+            .await?;
 
-        let engine = SessionEngine::begin_listener_session(
-            connection.control.clone(),
-            listener_session,
-            session_control_rx,
-            incoming_rx,
-            PollSender::new(connection.outgoing.clone()),
-            outgoing_rx,
-        )
-        .await?;
-        let engine_handle = engine.spawn();
         let handle = SessionHandle {
             control: session_control_tx,
             engine_handle,
@@ -217,7 +280,7 @@ impl SessionAcceptor {
     }
 }
 
-impl<S> SessionEngine<S> 
+impl<S> SessionEngine<S>
 where
     S: ListenerSessionEndpoint + endpoint::SessionEndpoint<Error = Error>,
 {
@@ -456,5 +519,41 @@ impl endpoint::Session for ListenerSession {
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
         self.session.on_outgoing_detach(detach)
+    }
+}
+
+#[cfg(feature = "transaction")]
+impl endpoint::HandleDeclare for ListenerSession {
+    // This should be unreachable, but an error is probably a better way
+    fn allocate_transaction_id(
+        &mut self,
+    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, Self::Error> {
+        Err(Error::amqp_error(
+            AmqpError::NotImplemented,
+            "Resource side transaction is not enabled".to_string(),
+        ))
+    }
+}
+
+#[cfg(feature = "transaction")]
+impl endpoint::HandleDischarge for ListenerSession {
+    fn commit_transaction(
+        &mut self,
+        txn_id: fe2o3_amqp_types::transaction::TransactionId,
+    ) -> Result<(), Self::Error> {
+        Err(Error::amqp_error(
+            AmqpError::NotImplemented,
+            "Resource side transaction is not enabled".to_string(),
+        ))
+    }
+
+    fn rollback_transaction(
+        &mut self,
+        txn_id: fe2o3_amqp_types::transaction::TransactionId,
+    ) -> Result<(), Self::Error> {
+        Err(Error::amqp_error(
+            AmqpError::NotImplemented,
+            "Resource side transaction is not enabled".to_string(),
+        ))
     }
 }
