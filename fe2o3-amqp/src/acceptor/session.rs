@@ -537,8 +537,9 @@ impl endpoint::HandleDeclare for ListenerSession {
 }
 
 #[cfg(feature = "transaction")]
+#[async_trait]
 impl endpoint::HandleDischarge for ListenerSession {
-    fn commit_transaction(
+    async fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<(), Self::Error> {
@@ -548,7 +549,7 @@ impl endpoint::HandleDischarge for ListenerSession {
         ))
     }
 
-    fn rollback_transaction(
+    async fn rollback_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<(), Self::Error> {

@@ -241,15 +241,14 @@ where
                     io::ErrorKind::Other,
                     "SessionHandle is dropped",
                 )))?;
-                todo!()
             }
             #[cfg(feature = "transaction")]
             SessionControl::CommitTransaction(txn_id) => {
-                todo!()
+                self.session.commit_transaction(txn_id).await.map_err(Into::into)?;
             }
             #[cfg(feature = "transaction")]
             SessionControl::RollbackTransaction(txn_id) => {
-                todo!()
+                self.session.rollback_transaction(txn_id).await.map_err(Into::into)?;
             }
         }
 

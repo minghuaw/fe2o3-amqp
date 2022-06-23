@@ -64,15 +64,16 @@ where
     }
 }
 
+#[async_trait]
 impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
+    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
         todo!()
     }
 
-    fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
+    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
         todo!()
     }
 }

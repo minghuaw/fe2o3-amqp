@@ -827,12 +827,13 @@ impl HandleDeclare for Session {
 }
 
 #[cfg(feature = "transaction")]
+#[async_trait]
 impl HandleDischarge for Session {
-    fn commit_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
+    async fn commit_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
         Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
     }
 
-    fn rollback_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
+    async fn rollback_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
         Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
     }
 }
