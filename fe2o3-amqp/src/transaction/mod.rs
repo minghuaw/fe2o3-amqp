@@ -2,15 +2,22 @@
 
 use crate::{
     endpoint::{ReceiverLink, Settlement},
-    link::{self},
-    session::SessionHandle,
+    link::{self, LinkFrame, delivery::UnsettledMessage},
+    util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
+use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Fields, SequenceNo},
-    messaging::{Accepted, DeliveryState, Modified, Outcome, Rejected, Released},
+    definitions::{self, AmqpError, Fields, SequenceNo, DeliveryTag},
+    messaging::{
+        message::__private::Serializable, Accepted, DeliveryState, Message, Modified, Outcome,
+        Rejected, Released,
+    },
+    performatives::Transfer,
     primitives::Symbol,
-    transaction::{Coordinator, Declared, TransactionId, TransactionalState, TxnCapability},
+    transaction::{
+        Declared, Discharge, TransactionId, TransactionalState, 
+    },
 };
 
 mod controller;
@@ -18,10 +25,13 @@ pub use controller::*;
 
 mod error;
 pub use error::*;
-use serde_amqp::to_value;
+use serde::Serialize;
+use serde_amqp::{ser::Serializer, to_value};
 
 mod acquisition;
 pub use acquisition::*;
+use tokio::sync::{oneshot, mpsc::error::TryRecvError};
+use tracing::instrument;
 
 pub(crate) mod control_link_msg;
 
@@ -103,78 +113,67 @@ const TXN_ID_KEY: &str = "txn-id";
 /// txn_acq.commit().await.unwrap();
 /// ```
 #[derive(Debug)]
-pub struct Transaction {
-    controller: Controller<Declared>,
+pub struct Transaction<'t> {
+    controller: &'t mut Controller,
+    declared: Declared,
+    is_discharged: bool,
 }
 
-impl From<Controller<Declared>> for Transaction {
-    fn from(controller: Controller<Declared>) -> Self {
-        Self { controller }
-    }
-}
-
-impl Transaction {
+impl<'t> Transaction<'t> {
     /// Get the transaction ID
     pub fn txn_id(&self) -> &TransactionId {
-        self.controller.txn_id()
+        &self.declared.txn_id
     }
 
     /// Declares a transaction with a default controller
     ///
     /// The user needs to supply a name for the underlying control link.
-    pub async fn declare<R>(
-        session: &mut SessionHandle<R>,
-        name: impl Into<String>,
+    pub async fn declare(
+        controller: &'t mut Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Self, DeclareError> {
-        let controller = Controller::attach(session, name, Coordinator::default())
-            .await?
-            .declare(global_id)
-            .await?;
-        Ok(Self { controller })
-    }
-
-    /// Declares a transaction with a default controller and a list of desired transaction capabilities
-    pub async fn declare_with_desired_capabilities<R>(
-        session: &mut SessionHandle<R>,
-        name: impl Into<String>,
-        capabiltiies: impl IntoIterator<Item = TxnCapability>,
-        global_id: Option<TransactionId>,
-    ) -> Result<Self, DeclareError> {
-        let coordinator = Coordinator {
-            capabilities: Some(capabiltiies.into_iter().collect()),
-        };
-        let controller = Controller::builder()
-            .name(name.into())
-            .coordinator(coordinator)
-            .attach(session)
-            .await?
-            .declare(global_id)
-            .await?;
-        Ok(Self { controller })
-    }
-
-    /// Declares a transaction with an undeclared controller
-    pub async fn declare_with_controller<R>(
-        controller: Controller<Undeclared>,
-        global_id: Option<TransactionId>,
-    ) -> Result<Self, DeclareError> {
-        let controller = controller.declare(global_id).await?;
-        Ok(Self { controller })
+    ) -> Result<Transaction<'t>, DeclareError> {
+        let declared = controller.declare_inner(global_id.into()).await?;
+        Ok(Self {
+            controller,
+            declared,
+            is_discharged: false,
+        })
     }
 
     /// Rollback the transaction
-    pub async fn rollback(mut self) -> Result<(), link::SendError> {
-        self.controller.rollback().await?;
-        self.controller.close().await?;
-        Ok(())
+    ///
+    /// This will send a [`Discharge`] with the `fail` field set to true
+    ///
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
+    /// error to the controller as a transaction-error
+    pub async fn rollback(&mut self) -> Result<(), DischargeError> {
+        if !self.is_discharged {
+            self.controller
+                .discharge(self.declared.txn_id.clone(), true)
+                .await?;
+            self.is_discharged = true;
+            Ok(())
+        } else {
+            Err(DischargeError::AlreadyDischarged)
+        }
     }
 
     /// Commit the transaction
-    pub async fn commit(mut self) -> Result<(), link::SendError> {
-        self.controller.commit().await?;
-        self.controller.close().await?;
-        Ok(())
+    ///
+    /// This will send a [`Discharge`] with the `fail` field set to false.
+    ///
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
+    /// error to the controller as a transaction-error
+    pub async fn commit(&mut self) -> Result<(), DischargeError> {
+        if !self.is_discharged {
+            self.controller
+                .discharge(self.declared.txn_id.clone(), false)
+                .await?;
+            self.is_discharged = true;
+            Ok(())
+        } else {
+            Err(DischargeError::AlreadyDischarged)
+        }
     }
 
     /// Post a transactional work
@@ -194,7 +193,7 @@ impl Transaction {
         // explicitly associated with the same transaction.
         let sendable = sendable.into();
         let state = TransactionalState {
-            txn_id: self.controller.txn_id().clone(),
+            txn_id: self.declared.txn_id.clone(),
             outcome: None,
         };
         let state = DeliveryState::TransactionalState(state);
@@ -224,9 +223,9 @@ impl Transaction {
                 DeliveryState::TransactionalState(txn) => {
                     // Interleaving transfer and disposition of different transactions
                     // isn't implemented
-                    if txn.txn_id != *self.controller.txn_id() {
+                    if txn.txn_id != self.declared.txn_id {
                         return Err(link::SendError::mismatched_transaction_id(
-                            self.controller.txn_id(),
+                            &self.declared.txn_id,
                             &txn.txn_id,
                         ));
                     }
@@ -258,7 +257,7 @@ impl Transaction {
         outcome: Outcome,
     ) -> Result<(), link::Error> {
         let txn_state = TransactionalState {
-            txn_id: self.controller.txn_id().clone(),
+            txn_id: self.declared.txn_id.clone(),
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
@@ -323,7 +322,7 @@ impl Transaction {
         self,
         recver: &'r mut Receiver,
         credit: SequenceNo,
-    ) -> Result<TxnAcquisition<'r>, link::Error> {
+    ) -> Result<TxnAcquisition<'t, 'r>, link::Error> {
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
             match &mut writer.properties {
@@ -336,13 +335,13 @@ impl Transaction {
                             None,
                         )));
                     }
-                    let value = to_value(self.controller.txn_id())?;
+                    let value = to_value(&self.declared.txn_id)?;
                     fields.insert(key, value);
                 }
                 None => {
                     let mut fields = Fields::new();
                     let key = Symbol::from("txn-id");
-                    let value = to_value(self.controller.txn_id())?;
+                    let value = to_value(&self.declared.txn_id)?;
                     fields.insert(key, value);
                 }
             }
@@ -358,5 +357,133 @@ impl Transaction {
             recver,
             cleaned_up: false,
         })
+    }
+}
+
+impl<'t> Drop for Transaction<'t> {
+    #[instrument]
+    fn drop(&mut self) {
+        if !self.is_discharged {
+            // rollback
+            let discharge = Discharge {
+                txn_id: self.declared.txn_id.clone(),
+                fail: Some(true),
+            };
+            // As with the declare message, it is an error if the sender sends the transfer pre-settled.
+            let message = Message::<Discharge>::builder().value(discharge).build();
+            let mut payload = BytesMut::new();
+            let mut serializer = Serializer::from((&mut payload).writer());
+            if let Err(error) = Serializable(message).serialize(&mut serializer) {
+                tracing::error!(?error);
+                return;
+            }
+            // let payload = BytesMut::from(payload);
+            let payload = payload.freeze();
+            let payload_copy = payload.clone();
+
+            match self.controller.inner.link.flow_state.try_consume(1) {
+                Ok(_) => {
+                    let input_handle = match self.controller.inner.link.input_handle.clone().ok_or(AmqpError::IllegalState) {
+                        Ok(handle) => handle,
+                        Err(error) => {
+                            tracing::error!(?error);
+                            return
+                        },
+                    };
+                    let handle = match self.controller.inner.link
+                        .output_handle
+                        .clone() {
+                            Some(handle) => handle.into(),
+                            None => return,
+                        };
+                    // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
+                    let tag = match self.controller.inner.link.flow_state.state().lock.try_read() {
+                        Ok(inner) => inner.delivery_count.to_be_bytes(),
+                        Err(error) => {
+                            tracing::error!(?error);
+                            return 
+                        },
+                    };
+                    let delivery_tag = DeliveryTag::from(tag);
+
+                    let transfer = Transfer {
+                        handle,
+                        delivery_id: None,
+                        delivery_tag: Some(delivery_tag.clone()),
+                        message_format: Some(0),
+                        settled: Some(false),
+                        more: false, // This message should be small enough
+                        rcv_settle_mode: None,
+                        state: None,
+                        resume: false,
+                        aborted: false,
+                        batchable: false,
+                    };
+
+                    // try receive in case of detach
+                    match self.controller.inner.incoming.as_mut().try_recv() {
+                        Ok(_) => {
+                            // The only frames that are relayed is detach
+                            return
+                        },
+                        Err(error) => match error {
+                            TryRecvError::Empty => {},
+                            TryRecvError::Disconnected => return,
+                        },
+                    }
+
+                    // Send out Rollback
+                    match self.controller.inner.outgoing.get_ref() {
+                        Some(sender) => {
+                            let frame = LinkFrame::Transfer {
+                                input_handle,
+                                performative: transfer,
+                                payload,
+                            };
+                            if let Err(_) = sender.blocking_send(frame) {
+                                // Channel is already closed
+                                return
+                            }
+                        },
+                        None => return, // mpsc channel is already closed
+                    }
+
+                    // TODO: Wait for accept or not?
+                    // The transfer is sent unsettled and will be 
+                    // inserted into
+                    let (tx, rx) = oneshot::channel();
+                    let unsettled = UnsettledMessage::new(payload_copy, tx);
+                    {
+                        let mut guard = match self.controller.inner.link.unsettled.try_write() {
+                            Ok(guard) => guard,
+                            Err(error) => {
+                                tracing::error!(?error);
+                                return
+                            },
+                        };
+                        guard.insert(delivery_tag, unsettled);
+                    }
+                    match rx.blocking_recv() {
+                        Ok(state) => {
+                            match state {
+                                DeliveryState::Accepted(_) => {},
+                                _ => {
+                                    tracing::error!(error = ?state);
+                                    return
+                                }
+                            }
+                        },
+                        Err(error) => {
+                            tracing::error!(?error);
+                            return
+                        },
+                    };
+                }
+                Err(error) => {
+                    tracing::error!(?error);
+                    return;
+                }
+            }
+        }
     }
 }

@@ -40,3 +40,9 @@ pub trait Consume {
 
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome;
 }
+
+pub trait TryConsume: Consume {
+    type Error;
+
+    fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error>;
+}

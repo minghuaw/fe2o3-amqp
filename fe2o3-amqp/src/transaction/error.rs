@@ -5,11 +5,9 @@ use fe2o3_amqp_types::{
 
 use crate::link::{self, AttachError, DetachError};
 
-use super::{Controller, Undeclared};
-
-/// Error kind of a declare error
+/// An error associated declaring a transaction
 #[derive(Debug, thiserror::Error)]
-pub enum DeclareErrorKind {
+pub enum DeclareError {
     /// Session is in an illegal state
     #[error("Illegal session state")]
     IllegalSessionState,
@@ -62,17 +60,7 @@ pub enum DeclareErrorKind {
     Modified(Modified),
 }
 
-/// An error associated declaring a transaction
-#[derive(Debug)]
-pub struct DeclareError {
-    /// The controller used for declaration
-    pub controller: Option<Controller<Undeclared>>,
-
-    /// Error associated with the declaration
-    pub kind: DeclareErrorKind,
-}
-
-impl From<AttachError> for DeclareErrorKind {
+impl From<AttachError> for DeclareError {
     fn from(error: AttachError) -> Self {
         match error {
             AttachError::IllegalSessionState => Self::IllegalSessionState,
@@ -85,7 +73,7 @@ impl From<AttachError> for DeclareErrorKind {
     }
 }
 
-impl From<link::SendError> for DeclareErrorKind {
+impl From<link::SendError> for DeclareError {
     fn from(error: link::SendError) -> Self {
         match error {
             link::SendError::Local(e) => Self::Local(e),
@@ -97,33 +85,49 @@ impl From<link::SendError> for DeclareErrorKind {
     }
 }
 
-impl<T> From<(Controller<Undeclared>, T)> for DeclareError
-where
-    T: Into<DeclareErrorKind>,
-{
-    fn from((controller, err): (Controller<Undeclared>, T)) -> Self {
-        Self {
-            controller: Some(controller),
-            kind: err.into(),
-        }
-    }
-}
-
-impl<T> From<T> for DeclareError
-where
-    T: Into<DeclareErrorKind>,
-{
-    fn from(kind: T) -> Self {
-        Self {
-            controller: None,
-            kind: kind.into(),
-        }
-    }
-}
-
 /// The transaction manager was unable to allocate new transaction IDs
 #[derive(Debug)]
 pub enum TransactionManagerError {
     /// The transaction manager failed to allocate a new transaction ID
     AllocateTxnIdFailed,
+}
+
+/// Error when discharging a transaction
+#[derive(Debug, thiserror::Error)]
+pub enum DischargeError {
+    /// A local error
+    #[error("Local error: {:?}", .0)]
+    Local(definitions::Error),
+
+    /// The remote peer detached with error
+    #[error("Link is detached {:?}", .0)]
+    Detached(DetachError),
+
+    /// The message was rejected
+    #[error("Outcome Rejected: {:?}", .0)]
+    Rejected(Rejected),
+
+    /// The message was released
+    #[error("Outsome Released: {:?}", .0)]
+    Released(Released),
+
+    /// The message was modified
+    #[error("Outcome Modified: {:?}", .0)]
+    Modified(Modified),
+
+    /// The transaction has already discharged
+    #[error("The transaction has already discharged")]
+    AlreadyDischarged,
+}
+
+impl<E> From<E> for DischargeError where E: Into<link::SendError> {
+    fn from(err: E) -> Self {
+        match err.into() {
+            link::SendError::Local(error) => Self::Local(error),
+            link::SendError::Detached(error) => Self::Detached(error),
+            link::SendError::Rejected(error) => Self::Rejected(error),
+            link::SendError::Released(error) => Self::Released(error),
+            link::SendError::Modified(error) => Self::Modified(error),
+        }
+    }
 }

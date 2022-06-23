@@ -13,26 +13,31 @@ use crate::{
     Delivery, Receiver,
 };
 
-use super::Transaction;
+use super::{Transaction, DischargeError};
 
 /// 4.4.3 Transactional Acquisition
+/// 
+/// # Lifetime parameters
+/// 
+/// 't: lifetime of the Transaction
+/// 'r: lifetime of the Receiver
 #[derive(Debug)]
-pub struct TxnAcquisition<'r> {
+pub struct TxnAcquisition<'t, 'r> {
     /// The transaction context of this acquisition
-    pub(super) txn: Transaction,
+    pub(super) txn: Transaction<'t>,
     /// The receiver that is associated with the acquisition
     pub(super) recver: &'r mut Receiver,
     pub(super) cleaned_up: bool,
 }
 
-impl<'r> TxnAcquisition<'r> {
+impl<'t, 'r> TxnAcquisition<'t, 'r> {
     /// Get an immutable reference to the underlying transaction
     pub fn txn(&self) -> &Transaction {
         &self.txn
     }
 
     /// Get a mutable reference to the underlying transaction
-    pub fn txn_mut(&mut self) -> &mut Transaction {
+    pub fn txn_mut(&'t mut self) -> &'t mut Transaction {
         &mut self.txn
     }
 
@@ -76,20 +81,16 @@ impl<'r> TxnAcquisition<'r> {
     }
 
     /// Commit the transactional acquisition
-    pub async fn commit(mut self) -> Result<(), link::SendError> {
+    pub async fn commit(mut self) -> Result<(), DischargeError> {
         self.cleanup().await?;
-
-        self.txn.controller.commit().await?;
-        self.txn.controller.close().await?;
+        self.txn.commit().await?;
         Ok(())
     }
 
     /// Rollback the transactional acquisition
-    pub async fn rollback(mut self) -> Result<(), link::SendError> {
+    pub async fn rollback(mut self) -> Result<(), DischargeError> {
         self.cleanup().await?;
-
-        self.txn.controller.rollback().await?;
-        self.txn.controller.close().await?;
+        self.txn.rollback().await?;
         Ok(())
     }
 
@@ -122,7 +123,7 @@ impl<'r> TxnAcquisition<'r> {
     }
 }
 
-impl<'r> Drop for TxnAcquisition<'r> {
+impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
     fn drop(&mut self) {
         if !self.cleaned_up {
             // clear txn-id from the link's properties

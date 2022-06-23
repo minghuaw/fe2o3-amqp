@@ -31,7 +31,7 @@ use super::{
 };
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{Controller, Undeclared};
+use crate::transaction::{Controller};
 
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::Coordinator;
@@ -556,12 +556,11 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Controller<Undeclared>, AttachError> {
+    ) -> Result<Controller, AttachError> {
         self.attach_inner(session)
             .await
-            .map(|inner| Controller::<Undeclared> {
+            .map(|inner| Controller {
                 inner,
-                declared: Undeclared {},
             })
     }
 }

@@ -8,10 +8,10 @@ use tokio::sync::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},
-    util::{Consume, Produce, Producer, ProducerState},
+    util::{Consume, Produce, Producer, ProducerState, TryConsume},
 };
 
-use super::{role, SenderFlowState};
+use super::{role, SenderFlowState, SenderTryConsumeError};
 
 /// Link state.
 ///
@@ -323,20 +323,27 @@ impl Consume for SenderFlowState {
     }
 }
 
+
+impl TryConsume for SenderFlowState {
+    type Error = SenderTryConsumeError;
+
+    fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
+        let mut state = self.state().lock.try_write()?;
+        if state.link_credit < item {
+            Err(Self::Error::InsufficientCredit)
+        } else {
+            state.delivery_count += item;
+            state.link_credit -= item;
+            // Ok(SenderPermit::Send)
+            Ok(())
+        }
+    }
+}
+
 async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
     // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
-    // if state.drain {
-    //     Ok(SenderPermit::Drain)
-    // } else {
-    //     if state.link_credit < count {
-    //         Err(())
-    //     } else {
-    //         state.delivery_count += count;
-    //         state.link_credit -= count;
-    //         Ok(SenderPermit::Send)
-    //     }
-    // }
+
     if state.link_credit < count {
         Err(())
     } else {

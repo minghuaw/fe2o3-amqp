@@ -4,7 +4,7 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, LinkError},
     messaging::{Modified, Rejected, Released},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, TryLockError};
 
 use crate::session::AllocLinkError;
 
@@ -371,5 +371,25 @@ impl AttachError {
             description,
             None,
         ))
+    }
+}
+
+/// Error with the sender trying consume link credit
+/// 
+/// This is only used in 
+#[derive(Debug, thiserror::Error)]
+pub enum SenderTryConsumeError {
+    /// The sender is unable to acquire lock to inner state
+    #[error("Try lock error")]
+    TryLockError,
+
+    /// There is not enough link credit
+    #[error("Insufficient link credit")]
+    InsufficientCredit,
+}
+
+impl From<TryLockError> for SenderTryConsumeError {
+    fn from(_: TryLockError) -> Self {
+        Self::TryLockError
     }
 }

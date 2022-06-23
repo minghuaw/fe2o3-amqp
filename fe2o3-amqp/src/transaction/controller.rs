@@ -19,26 +19,16 @@ use crate::{
     Sendable,
 };
 
-use super::DeclareError;
+use super::{DeclareError, Transaction};
 
 pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, UnsettledMessage>;
-
-/// Zero-sized type state representing a controller that has not declared a transaction
-#[derive(Debug)]
-pub struct Undeclared {}
 
 /// Transaction controller
 ///
 /// # Type parameter `S`
-///
-/// This is a type state with two possible values
-///
-/// 1. [`Undeclared`] representing a controller that
-/// 2. [`Declared`]
 #[derive(Debug)]
-pub struct Controller<D> {
+pub struct Controller {
     pub(crate) inner: SenderInner<ControlLink>,
-    pub(crate) declared: D,
 }
 
 #[inline]
@@ -65,7 +55,7 @@ where
     }
 }
 
-impl<D> Controller<D> {
+impl Controller {
     /// Close the control link with error
     pub async fn close_with_error(
         &mut self,
@@ -80,7 +70,7 @@ impl<D> Controller<D> {
     }
 }
 
-impl Controller<Undeclared> {
+impl Controller {
     /// Creates a new builder for controller
     pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithoutTarget>
     {
@@ -101,21 +91,18 @@ impl Controller<Undeclared> {
             .await
     }
 
-    /// Declare a transaction
-    pub async fn declare(
-        mut self,
-        global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Controller<Declared>, DeclareError> {
-        match self.declare_inner(global_id.into()).await {
-            Ok(declared) => Ok(Controller {
-                inner: self.inner,
-                declared,
-            }),
-            Err(error) => Err(DeclareError::from((self, error))),
-        }
-    }
+    // /// Declare a transaction
+    // pub async fn declare<'a>(
+    //     &'a mut self,
+    //     global_id: impl Into<Option<TransactionId>>,
+    // ) -> Result<Transaction<'a>, DeclareError> {
+    //     match self.declare_inner(global_id.into()).await {
+    //         Ok(declared) => Ok(Transaction { controller: self, declared }),
+    //         Err(error) => Err(DeclareError::from((self, error))),
+    //     }
+    // }
 
-    async fn declare_inner(
+    pub(crate) async fn declare_inner(
         &mut self,
         global_id: Option<TransactionId>,
     ) -> Result<Declared, link::SendError> {
@@ -147,38 +134,11 @@ impl Controller<Undeclared> {
             }
         }
     }
-}
-
-impl Controller<Declared> {
-    /// Gets the transaction ID
-    pub fn txn_id(&self) -> &TransactionId {
-        &self.declared.txn_id
-    }
-
-    /// Commit the transaction
-    ///
-    /// This will send a [`Discharge`] with the `fail` field set to false.
-    ///
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
-    /// error to the controller as a transaction-error
-    pub async fn commit(&mut self) -> Result<(), link::SendError> {
-        self.discharge(false).await
-    }
-
-    /// Rollback the transaction
-    ///
-    /// This will send a [`Discharge`] with the `fail` field set to true
-    ///
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
-    /// error to the controller as a transaction-error
-    pub async fn rollback(&mut self) -> Result<(), link::SendError> {
-        self.discharge(true).await
-    }
 
     /// Discharge
-    async fn discharge(&mut self, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
+    pub(crate) async fn discharge(&mut self, txn_id: TransactionId, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
         let discharge = Discharge {
-            txn_id: self.declared.txn_id.clone(),
+            txn_id,
             fail: fail.into(),
         };
         // As with the declare message, it is an error if the sender sends the transfer pre-settled.
