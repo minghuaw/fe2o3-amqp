@@ -235,7 +235,7 @@ where
             }
             
             #[cfg(feature = "transaction")]
-            SessionControl::AllocateTransactionId() => {
+            SessionControl::AllocateTransactionId { resp } => {
                 todo!()
             }
             #[cfg(feature = "transaction")]
