@@ -47,7 +47,7 @@ async fn main() {
         
 
     // Commit
-    let mut txn1 = Transaction::declare(&controller, None)
+    let mut txn1 = Transaction::declare(&mut controller, None)
         .await
         .unwrap();
     txn1.post(&mut sender, "hello").await.unwrap();
@@ -55,7 +55,7 @@ async fn main() {
     txn1.commit().await.unwrap();
 
     // Rollback
-    let mut txn2 = Transaction::declare(&controller, None)
+    let mut txn2 = Transaction::declare(&mut controller, None)
     .await
     .unwrap();
     txn2.post(&mut sender, "foo").await.unwrap();
