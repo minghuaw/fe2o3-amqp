@@ -54,25 +54,23 @@ where
 }
 
 impl Controller {
+    /// Creates a new builder for controller
+    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithoutTarget>
+    {
+        link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithoutTarget>::new()
+    }
+
     /// Close the control link with error
     pub async fn close_with_error(
-        &mut self,
+        mut self,
         error: definitions::Error,
     ) -> Result<(), link::DetachError> {
         self.inner.get_mut().close_with_error(Some(error)).await
     }
 
     /// Close the link
-    pub async fn close(&mut self) -> Result<(), link::DetachError> {
+    pub async fn close(mut self) -> Result<(), link::DetachError> {
         self.inner.get_mut().close_with_error(None).await
-    }
-}
-
-impl Controller {
-    /// Creates a new builder for controller
-    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithoutTarget>
-    {
-        link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithoutTarget>::new()
     }
 
     /// Attach the controller with the default [`Coordinator`]

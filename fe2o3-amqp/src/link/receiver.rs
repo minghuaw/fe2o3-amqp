@@ -1,12 +1,14 @@
 //! Implementation of AMQP1.0 receiver
 
+use std::time::Duration;
+
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time::{error::Elapsed, timeout}};
 
 use crate::{
     control::SessionControl,
@@ -245,6 +247,140 @@ impl Receiver {
             .attach(session)
             .await
     }
+
+    /// Receive a message from the link
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
+        self.inner.recv().await
+    }
+
+    /// Set the link credit. This will stop draining if the link is in a draining cycle
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
+        self.inner.set_credit(credit).await
+    }
+
+    /// Drain the link.
+    ///
+    /// This will send a `Flow` performative with the `drain` field set to true.
+    /// Setting the credit will set the `drain` field to false and stop draining
+    pub async fn drain(&mut self) -> Result<(), Error> {
+        self.inner.drain().await
+    }
+
+    /// Detach the link.
+    ///
+    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
+    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
+    /// re-attach and then close by exchanging closing Detach performatives.
+    pub async fn detach(mut self) -> Result<DetachedReceiver, DetachError> {
+        self.inner.detach_with_error(None).await?;
+        Ok(DetachedReceiver { inner: self.inner })
+    }
+
+    /// Detach the link with an error.
+    ///
+    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
+    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
+    /// re-attach and then close by exchanging closing Detach performatives.
+    pub async fn detach_with_error(
+        mut self,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<DetachedReceiver, DetachError> {
+        self.inner.detach_with_error(error.into()).await?;
+        Ok(DetachedReceiver { inner: self.inner })
+    }
+
+    /// Detach the link with a timeout
+    /// 
+    /// This simply wraps [`detach`] with a `timeout`
+    pub async fn detach_with_timeout(
+        self,
+        duration: Duration,
+    ) -> Result<Result<DetachedReceiver, DetachError>, Elapsed> {
+        timeout(duration, self.detach()).await
+    }
+
+    /// Close the link.
+    ///
+    /// This will send a Detach performative with the `closed` field set to true.
+    pub async fn close(mut self) -> Result<(), DetachError> {
+        self.inner.close_with_error(None).await
+    }
+
+    /// Close the link with an error.
+    ///
+    /// This will send a Detach performative with the `closed` field set to true.
+    pub async fn close_with_error(
+        mut self,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), DetachError> {
+        self.inner.close_with_error(error.into()).await
+    }
+
+    /// Accept the message by sending a disposition with the `delivery_state` field set
+    /// to `Accept`
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
+        let state = DeliveryState::Accepted(Accepted {});
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
+    }
+
+    /// Reject the message by sending a disposition with the `delivery_state` field set
+    /// to `Reject`
+    pub async fn reject<T>(
+        &mut self,
+        delivery: &Delivery<T>,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), Error> {
+        let state = DeliveryState::Rejected(Rejected {
+            error: error.into(),
+        });
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
+    }
+
+    /// Release the message by sending a disposition with the `delivery_state` field set
+    /// to `Release`
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
+        let state = DeliveryState::Released(Released {});
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
+    }
+
+    /// Modify the message by sending a disposition with the `delivery_state` field set
+    /// to `Modify`
+    pub async fn modify<T>(
+        &mut self,
+        delivery: &Delivery<T>,
+        modified: Modified,
+    ) -> Result<(), Error> {
+        let state = DeliveryState::Modified(modified);
+        self.inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .await
+    }
+}
+
+/// A detached receiver
+/// 
+/// # Link re-attachment
+/// 
+/// TODO
+#[derive(Debug)]
+pub struct DetachedReceiver {
+    inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
 #[derive(Debug)]
@@ -252,19 +388,15 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
-    // pub(crate) flow_threshold: SequenceNo,
     pub(crate) processed: SequenceNo,
 
     // Control sender to the session
     pub(crate) session: mpsc::Sender<SessionControl>,
 
     // Outgoing mpsc channel to send the Link Frames
-    // pub(crate) outgoing: PollSender<LinkFrame>,
-    // pub(crate) incoming: ReceiverStream<LinkFrame>,
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 
-    // pub(crate) marker: PhantomData<S>,
     pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
 }
 
@@ -651,120 +783,6 @@ where
     }
 }
 
-// TODO: Use type state to differentiate Mode First and Mode Second?
-impl Receiver {
-    /// Receive a message from the link
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
-    /// receiver.accept(&delivery).await.unwrap();
-    /// ```
-    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
-    where
-        T: for<'de> serde::Deserialize<'de> + Send,
-    {
-        self.inner.recv().await
-    }
-
-    /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
-        self.inner.set_credit(credit).await
-    }
-
-    /// Drain the link.
-    ///
-    /// This will send a `Flow` performative with the `drain` field set to true.
-    /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), Error> {
-        self.inner.drain().await
-    }
-
-    /// Detach the link.
-    ///
-    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
-    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
-    /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach(&mut self) -> Result<(), DetachError> {
-        self.inner.detach_with_error(None).await
-    }
-
-    /// Detach the link with an error.
-    ///
-    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
-    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
-    /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach_with_error(
-        &mut self,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DetachError> {
-        self.inner.detach_with_error(error.into()).await
-    }
-
-    /// Close the link.
-    ///
-    /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close(&mut self) -> Result<(), DetachError> {
-        self.inner.close_with_error(None).await
-    }
-
-    /// Close the link with an error.
-    ///
-    /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close_with_error(
-        &mut self,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DetachError> {
-        self.inner.close_with_error(error.into()).await
-    }
-
-    /// Accept the message by sending a disposition with the `delivery_state` field set
-    /// to `Accept`
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
-        let state = DeliveryState::Accepted(Accepted {});
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-
-    /// Reject the message by sending a disposition with the `delivery_state` field set
-    /// to `Reject`
-    pub async fn reject<T>(
-        &mut self,
-        delivery: &Delivery<T>,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), Error> {
-        let state = DeliveryState::Rejected(Rejected {
-            error: error.into(),
-        });
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-
-    /// Release the message by sending a disposition with the `delivery_state` field set
-    /// to `Release`
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
-        let state = DeliveryState::Released(Released {});
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-
-    /// Modify the message by sending a disposition with the `delivery_state` field set
-    /// to `Modify`
-    pub async fn modify<T>(
-        &mut self,
-        delivery: &Delivery<T>,
-        modified: Modified,
-    ) -> Result<(), Error> {
-        let state = DeliveryState::Modified(modified);
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-}
 
 #[cfg(test)]
 mod tests {

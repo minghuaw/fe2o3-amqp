@@ -137,35 +137,39 @@ impl Sender {
     ///
     /// If the remote peer sends a detach frame with closed field set to true,
     /// the Sender will re-attach and send a closing detach
-    pub async fn detach(&mut self) -> Result<(), DetachError> {
-        self.inner.detach_with_error(None).await
+    pub async fn detach(mut self) -> Result<DetachedSender, DetachError> {
+        self.inner.detach_with_error(None).await?;
+        Ok(DetachedSender { inner: self.inner })
     }
 
     /// Detach the link with an error
     pub async fn detach_with_error(
-        &mut self,
+        mut self,
         error: definitions::Error,
-    ) -> Result<(), DetachError> {
-        self.inner.detach_with_error(Some(error)).await
+    ) -> Result<DetachedSender, DetachError> {
+        self.inner.detach_with_error(Some(error)).await?;
+        Ok(DetachedSender { inner: self.inner })
     }
 
     /// Detach the link with a timeout
+    /// 
+    /// This simply wraps [`detach`] with a `timeout`
     pub async fn detach_with_timeout(
-        &mut self,
+        self,
         duration: Duration,
-    ) -> Result<Result<(), DetachError>, Elapsed> {
+    ) -> Result<Result<DetachedSender, DetachError>, Elapsed> {
         timeout(duration, self.detach()).await
     }
 
     /// Close the link.
     ///
     /// This will set the `closed` field in the Detach performative to true
-    pub async fn close(&mut self) -> Result<(), DetachError> {
+    pub async fn close(mut self) -> Result<(), DetachError> {
         self.inner.close_with_error(None).await
     }
 
     /// Detach the link with an error
-    pub async fn close_with_error(&mut self, error: definitions::Error) -> Result<(), DetachError> {
+    pub async fn close_with_error(mut self, error: definitions::Error) -> Result<(), DetachError> {
         self.inner.close_with_error(Some(error)).await
     }
 
@@ -245,6 +249,16 @@ impl Sender {
     // }
 }
 
+/// A detached sender
+/// 
+/// # Link re-attachment
+/// 
+/// TODO
+#[derive(Debug)]
+pub struct DetachedSender {
+    inner: SenderInner<SenderLink<Target>>,
+}
+
 /// This is so that the transaction controller can re-use
 /// the sender
 #[derive(Debug)]
@@ -257,8 +271,6 @@ pub(crate) struct SenderInner<L: endpoint::SenderLink> {
     pub(crate) session: mpsc::Sender<SessionControl>,
 
     // Outgoing mpsc channel to send the Link frames
-    // pub(crate) outgoing: PollSender<LinkFrame>,
-    // pub(crate) incoming: ReceiverStream<LinkFrame>,
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 }
