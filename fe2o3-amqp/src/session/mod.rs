@@ -307,16 +307,11 @@ impl endpoint::Session for Session {
         let entry = self.link_name_by_output_handle.vacant_entry();
         let handle = OutputHandle(entry.key() as u32);
 
-        // check if handle max is exceeded
-        if handle.0 > self.handle_max.0 {
-            Err(AllocLinkError::HandleMaxReached)
-        } else {
-            entry.insert(link_name.clone());
-            let value = link_relay.map(|val| val.with_output_handle(handle.clone()));
-            self.link_by_name.insert(link_name, value);
-            // TODO: how to know which link to send the Flow frames to?
-            Ok(handle)
-        }
+        entry.insert(link_name.clone());
+        let value = link_relay.map(|val| val.with_output_handle(handle.clone()));
+        self.link_by_name.insert(link_name, value);
+        // TODO: how to know which link to send the Flow frames to?
+        Ok(handle)
     }
 
     fn allocate_incoming_link(

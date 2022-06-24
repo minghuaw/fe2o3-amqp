@@ -296,7 +296,6 @@ impl From<AllocLinkError> for AttachError {
     fn from(error: AllocLinkError) -> Self {
         match error {
             AllocLinkError::IllegalState => Self::IllegalSessionState,
-            AllocLinkError::HandleMaxReached => Self::HandleMaxReached,
             AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
         }
     }

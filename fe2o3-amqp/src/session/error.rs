@@ -1,7 +1,7 @@
 use std::io;
 
 use fe2o3_amqp_types::definitions::{
-    self, AmqpError, ConnectionError, ErrorCondition, Handle, SessionError,
+    self, AmqpError, ErrorCondition, Handle, SessionError,
 };
 use tokio::task::JoinError;
 
@@ -98,9 +98,6 @@ pub(crate) enum AllocLinkError {
     #[error("Illegal session state")]
     IllegalState,
 
-    #[error("Reached session handle max")]
-    HandleMaxReached,
-
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 }
@@ -125,11 +122,6 @@ impl From<AllocLinkError> for definitions::Error {
                 description: None,
                 info: None,
             },
-            AllocLinkError::HandleMaxReached => Self {
-                condition: ConnectionError::FramingError.into(),
-                description: Some("Handle max has been reached".to_string()),
-                info: None,
-            },
             AllocLinkError::DuplicatedLinkName => Self {
                 condition: AmqpError::NotAllowed.into(),
                 description: Some("Link name is duplicated".to_string()),
@@ -138,9 +130,3 @@ impl From<AllocLinkError> for definitions::Error {
         }
     }
 }
-
-// #[derive(Debug, thiserror::Error)]
-// pub(crate) enum DeallocLinkError {
-//     #[error("Illegal session state")]
-//     IllegalState,
-// }
