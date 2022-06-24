@@ -83,14 +83,14 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
     /// Commit the transactional acquisition
     pub async fn commit(mut self) -> Result<(), DischargeError> {
         self.cleanup().await?;
-        self.txn.commit().await?;
+        self.txn.commit_inner().await?;
         Ok(())
     }
 
     /// Rollback the transactional acquisition
     pub async fn rollback(mut self) -> Result<(), DischargeError> {
         self.cleanup().await?;
-        self.txn.rollback().await?;
+        self.txn.rollback_inner().await?;
         Ok(())
     }
 

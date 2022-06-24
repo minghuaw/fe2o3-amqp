@@ -146,7 +146,11 @@ impl<'t> Transaction<'t> {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    pub async fn rollback(&mut self) -> Result<(), DischargeError> {
+    pub async fn rollback(mut self) -> Result<(), DischargeError> {
+        self.rollback_inner().await
+    }
+    
+    pub(crate) async fn rollback_inner(&mut self) -> Result<(), DischargeError> {
         if !self.is_discharged {
             self.controller
                 .discharge(self.declared.txn_id.clone(), true)
@@ -164,7 +168,11 @@ impl<'t> Transaction<'t> {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    pub async fn commit(&mut self) -> Result<(), DischargeError> {
+    pub async fn commit(mut self) -> Result<(), DischargeError> {
+        self.commit_inner().await
+    }
+    
+    pub(crate) async fn commit_inner(&mut self) -> Result<(), DischargeError> {
         if !self.is_discharged {
             self.controller
                 .discharge(self.declared.txn_id.clone(), false)
