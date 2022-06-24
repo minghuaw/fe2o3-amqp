@@ -13,12 +13,12 @@ use crate::{
     Delivery, Receiver,
 };
 
-use super::{Transaction, DischargeError};
+use super::{DischargeError, Transaction};
 
 /// 4.4.3 Transactional Acquisition
-/// 
+///
 /// # Lifetime parameters
-/// 
+///
 /// 't: lifetime of the Transaction
 /// 'r: lifetime of the Receiver
 #[derive(Debug)]

@@ -1,6 +1,6 @@
 //! Manually implement Serialize and Deserialize for SaslMechanisms
 
-use serde::{ser, de};
+use serde::{de, ser};
 use serde_amqp::primitives::{Array, Symbol};
 
 use super::SaslMechanisms;
@@ -10,14 +10,16 @@ pub const ANONYMOUS: &str = "ANONYMOUS";
 
 impl Default for SaslMechanisms {
     /// Creates a new instance of SaslMechanisms
-    /// 
+    ///
     /// A SASL mechanism ANONYMOUS is included by default
-    /// 
-    /// It is invalid for this list to be null or empty. If the sending peer does not require 
-    /// its partner to authenticate with it, then it SHOULD send a list of one element with 
+    ///
+    /// It is invalid for this list to be null or empty. If the sending peer does not require
+    /// its partner to authenticate with it, then it SHOULD send a list of one element with
     /// its value as the SASL mechanism ANONYMOUS.
     fn default() -> Self {
-        Self { sasl_server_mechanisms:  Array::from(vec![Symbol::from(ANONYMOUS)]) }
+        Self {
+            sasl_server_mechanisms: Array::from(vec![Symbol::from(ANONYMOUS)]),
+        }
     }
 }
 
@@ -28,7 +30,7 @@ impl serde_amqp::serde::ser::Serialize for SaslMechanisms {
     {
         use serde_amqp::serde::ser::SerializeStruct;
 
-        // NOTE: A field which is defined as both multiple and mandatory MUST contain at least one value 
+        // NOTE: A field which is defined as both multiple and mandatory MUST contain at least one value
         // (i.e. for such a field both null and an array with no entries are invalid).
         if self.sasl_server_mechanisms.0.is_empty() {
             return Err(ser::Error::custom(
@@ -106,15 +108,12 @@ impl<'de> serde_amqp::serde::de::Deserialize<'de> for SaslMechanisms {
             where
                 _A: serde_amqp::serde::de::SeqAccess<'de>,
             {
-                let __descriptor: serde_amqp::descriptor::Descriptor =
-                    match __seq.next_element()? {
-                        Some(val) => val,
-                        None => {
-                            return Err(serde_amqp::serde::de::Error::custom(
-                                "Expecting descriptor",
-                            ))
-                        }
-                    };
+                let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
+                    Some(val) => val,
+                    None => {
+                        return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
+                    }
+                };
                 match __descriptor {
                     serde_amqp::descriptor::Descriptor::Name(__symbol) => {
                         if __symbol.into_inner() != "amqp:sasl-mechanisms:list" {
@@ -206,11 +205,11 @@ impl<'de> serde_amqp::serde::de::Deserialize<'de> for SaslMechanisms {
             FIELDS,
             Visitor::new(),
         )?;
-        
+
         if mechanisms.sasl_server_mechanisms.0.is_empty() {
             return Err(de::Error::custom(
                 "A field which is defined as both multiple and mandatory MUST contain at least one value"
-            ))
+            ));
         }
         Ok(mechanisms)
     }

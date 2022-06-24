@@ -10,7 +10,8 @@ use crate::{
     connection::AllocSessionError,
     endpoint::{InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::LinkRelay,
-    session::{frame::SessionIncomingItem, AllocLinkError}, transaction::TransactionManagerError,
+    session::{frame::SessionIncomingItem, AllocLinkError},
+    transaction::TransactionManagerError,
 };
 
 #[cfg(feature = "transaction")]
@@ -62,8 +63,8 @@ pub(crate) enum SessionControl {
 
     // Transaction related controls
     #[cfg(feature = "transaction")]
-    AllocateTransactionId{
-        resp: oneshot::Sender<Result<TransactionId, TransactionManagerError>>
+    AllocateTransactionId {
+        resp: oneshot::Sender<Result<TransactionId, TransactionManagerError>>,
     },
     #[cfg(feature = "transaction")]
     CommitTransaction(TransactionId),
@@ -90,9 +91,9 @@ impl std::fmt::Display for SessionControl {
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
             SessionControl::CloseConnectionWithError(_) => write!(f, "CloseConnectionWithError"),
-            
+
             #[cfg(feature = "transaction")]
-            SessionControl::AllocateTransactionId{..} => write!(f, "AllocateTransactionId"),
+            SessionControl::AllocateTransactionId { .. } => write!(f, "AllocateTransactionId"),
             #[cfg(feature = "transaction")]
             SessionControl::CommitTransaction(_) => write!(f, "CommitTransaction"),
             #[cfg(feature = "transaction")]

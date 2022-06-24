@@ -375,8 +375,8 @@ impl AttachError {
 }
 
 /// Error with the sender trying consume link credit
-/// 
-/// This is only used in 
+///
+/// This is only used in
 #[derive(Debug, thiserror::Error)]
 pub enum SenderTryConsumeError {
     /// The sender is unable to acquire lock to inner state

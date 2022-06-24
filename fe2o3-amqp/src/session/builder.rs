@@ -10,8 +10,8 @@ use tokio_util::sync::PollSender;
 
 use crate::{
     connection::ConnectionHandle,
-    control::{SessionControl},
-    endpoint::{OutgoingChannel},
+    control::SessionControl,
+    endpoint::OutgoingChannel,
     link::LinkFrame,
     session::{engine::SessionEngine, SessionState},
     util::Constant,
@@ -23,10 +23,7 @@ use crate::transaction::{
     coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
 };
 
-use super::{
-    frame::{SessionFrame},
-    Error, SessionHandle, DEFAULT_WINDOW,
-};
+use super::{frame::SessionFrame, Error, SessionHandle, DEFAULT_WINDOW};
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -301,10 +298,13 @@ impl Builder {
         self
     }
 
-    /// Enable handling remotely initiated control link and transaction by setting the 
+    /// Enable handling remotely initiated control link and transaction by setting the
     /// `control_link_acceptor` field
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    pub fn control_link_acceptor(mut self, control_link_acceptor: Option<ControlLinkAcceptor>) -> Self {
+    pub fn control_link_acceptor(
+        mut self,
+        control_link_acceptor: Option<ControlLinkAcceptor>,
+    ) -> Self {
         self.control_link_acceptor = control_link_acceptor;
         self
     }

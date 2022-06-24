@@ -2,22 +2,20 @@
 
 use crate::{
     endpoint::{ReceiverLink, Settlement},
-    link::{self, LinkFrame, delivery::UnsettledMessage},
+    link::{self, delivery::UnsettledMessage, LinkFrame},
     util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Fields, SequenceNo, DeliveryTag},
+    definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
     messaging::{
         message::__private::Serializable, Accepted, DeliveryState, Message, Modified, Outcome,
         Rejected, Released,
     },
     performatives::Transfer,
     primitives::Symbol,
-    transaction::{
-        Declared, Discharge, TransactionId, TransactionalState, 
-    },
+    transaction::{Declared, Discharge, TransactionId, TransactionalState},
 };
 
 mod controller;
@@ -30,7 +28,7 @@ use serde_amqp::{ser::Serializer, to_value};
 
 mod acquisition;
 pub use acquisition::*;
-use tokio::sync::{oneshot, mpsc::error::TryRecvError};
+use tokio::sync::{mpsc::error::TryRecvError, oneshot};
 use tracing::instrument;
 
 pub(crate) mod control_link_msg;
@@ -149,7 +147,7 @@ impl<'t> Transaction<'t> {
     pub async fn rollback(mut self) -> Result<(), DischargeError> {
         self.rollback_inner().await
     }
-    
+
     pub(crate) async fn rollback_inner(&mut self) -> Result<(), DischargeError> {
         if !self.is_discharged {
             self.controller
@@ -171,7 +169,7 @@ impl<'t> Transaction<'t> {
     pub async fn commit(mut self) -> Result<(), DischargeError> {
         self.commit_inner().await
     }
-    
+
     pub(crate) async fn commit_inner(&mut self) -> Result<(), DischargeError> {
         if !self.is_discharged {
             self.controller
@@ -360,10 +358,7 @@ impl<'t> Transaction<'t> {
             .link
             .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
             .await?;
-        Ok(TxnAcquisition {
-            txn: self,
-            recver,
-        })
+        Ok(TxnAcquisition { txn: self, recver })
     }
 }
 
@@ -392,26 +387,29 @@ impl<'t> Drop for Transaction<'t> {
 
             match inner.link.flow_state.try_consume(1) {
                 Ok(_) => {
-                    let input_handle = match inner.link.input_handle.clone().ok_or(AmqpError::IllegalState) {
+                    let input_handle = match inner
+                        .link
+                        .input_handle
+                        .clone()
+                        .ok_or(AmqpError::IllegalState)
+                    {
                         Ok(handle) => handle,
                         Err(error) => {
                             tracing::error!(?error);
-                            return
-                        },
+                            return;
+                        }
                     };
-                    let handle = match inner.link
-                        .output_handle
-                        .clone() {
-                            Some(handle) => handle.into(),
-                            None => return,
-                        };
+                    let handle = match inner.link.output_handle.clone() {
+                        Some(handle) => handle.into(),
+                        None => return,
+                    };
                     // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
                     let tag = match inner.link.flow_state.state().lock.try_read() {
                         Ok(inner) => inner.delivery_count.to_be_bytes(),
                         Err(error) => {
                             tracing::error!(?error);
-                            return 
-                        },
+                            return;
+                        }
                     };
                     let delivery_tag = DeliveryTag::from(tag);
 
@@ -433,10 +431,10 @@ impl<'t> Drop for Transaction<'t> {
                     match inner.incoming.try_recv() {
                         Ok(_) => {
                             // The only frames that are relayed is detach
-                            return
-                        },
+                            return;
+                        }
                         Err(error) => match error {
-                            TryRecvError::Empty => {},
+                            TryRecvError::Empty => {}
                             TryRecvError::Disconnected => return,
                         },
                     }
@@ -449,11 +447,11 @@ impl<'t> Drop for Transaction<'t> {
                     };
                     if let Err(_) = inner.outgoing.blocking_send(frame) {
                         // Channel is already closed
-                        return
+                        return;
                     }
 
                     // TODO: Wait for accept or not?
-                    // The transfer is sent unsettled and will be 
+                    // The transfer is sent unsettled and will be
                     // inserted into
                     let (tx, rx) = oneshot::channel();
                     let unsettled = UnsettledMessage::new(payload_copy, tx);
@@ -462,25 +460,23 @@ impl<'t> Drop for Transaction<'t> {
                             Ok(guard) => guard,
                             Err(error) => {
                                 tracing::error!(?error);
-                                return
-                            },
+                                return;
+                            }
                         };
                         guard.insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {
-                        Ok(state) => {
-                            match state {
-                                DeliveryState::Accepted(_) => {},
-                                _ => {
-                                    tracing::error!(error = ?state);
-                                    return
-                                }
+                        Ok(state) => match state {
+                            DeliveryState::Accepted(_) => {}
+                            _ => {
+                                tracing::error!(error = ?state);
+                                return;
                             }
                         },
                         Err(error) => {
                             tracing::error!(?error);
-                            return
-                        },
+                            return;
+                        }
                     };
                 }
                 Err(error) => {

@@ -152,7 +152,7 @@ impl Sender {
     }
 
     /// Detach the link with a timeout
-    /// 
+    ///
     /// This simply wraps [`detach`] with a `timeout`
     pub async fn detach_with_timeout(
         self,
@@ -250,9 +250,9 @@ impl Sender {
 }
 
 /// A detached sender
-/// 
+///
 /// # Link re-attachment
-/// 
+///
 /// TODO
 #[derive(Debug)]
 pub struct DetachedSender {
@@ -300,11 +300,7 @@ impl SenderInner<SenderLink<Target>> {
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        if let Err(e) = self
-            .link
-            .send_detach(&self.outgoing, false, error)
-            .await
-        {
+        if let Err(e) = self.link.send_detach(&self.outgoing, false, error).await {
             return Err(DetachError::new(false, Some(e)));
         };
 

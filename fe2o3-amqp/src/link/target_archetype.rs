@@ -183,8 +183,12 @@ impl VariantOfTargetArchetype for TargetArchetype {
 }
 
 /// Extension trait for TargetArchetypes
-pub trait TargetArchetypeExt: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype {
-
+pub trait TargetArchetypeExt:
+    VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype
+{
 }
 
-impl<T> TargetArchetypeExt for T where T: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype {}
+impl<T> TargetArchetypeExt for T where
+    T: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype
+{
+}

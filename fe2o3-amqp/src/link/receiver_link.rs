@@ -30,8 +30,7 @@ where
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), Self::Error>
-    {
+    ) -> Result<(), Self::Error> {
         self.error_if_closed().map_err(Self::Error::Local)?;
 
         let handle = self
@@ -297,8 +296,7 @@ where
         // settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    {
+    ) -> Result<(), Self::Error> {
         self.error_if_closed().map_err(Self::Error::Local)?;
 
         let settled = match self.rcv_settle_mode {

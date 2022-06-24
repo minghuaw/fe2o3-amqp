@@ -30,8 +30,9 @@ use crate::{
         frame::{SessionFrame, SessionIncomingItem},
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
+    transaction::TransactionManagerError,
     util::Initialized,
-    Payload, transaction::TransactionManagerError,
+    Payload,
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};

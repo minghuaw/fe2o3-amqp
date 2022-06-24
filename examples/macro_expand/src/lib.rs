@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, UInt, ULong, Array, Symbol},
+    primitives::{Array, Boolean, Symbol, UInt, ULong},
 };
 
 #[derive(SerializeComposite, DeserializeComposite)]

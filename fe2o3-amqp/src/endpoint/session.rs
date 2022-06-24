@@ -5,16 +5,12 @@ use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
 };
-use futures_util::{Sink};
-use tokio::sync::{mpsc};
+use futures_util::Sink;
+use tokio::sync::mpsc;
 
-use crate::{
-    link::{LinkRelay},
-    session::frame::{SessionFrame},
-    Payload, control::SessionControl,
-};
+use crate::{control::SessionControl, link::LinkRelay, session::frame::SessionFrame, Payload};
 
-use super::{OutgoingChannel, OutputHandle, InputHandle, IncomingChannel, LinkFlow};
+use super::{IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle};
 
 #[async_trait]
 pub(crate) trait Session {

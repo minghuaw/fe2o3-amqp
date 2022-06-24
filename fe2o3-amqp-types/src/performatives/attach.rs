@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, Symbol, ULong, Array},
+    primitives::{Array, Boolean, Symbol, ULong},
 };
 
 use crate::{

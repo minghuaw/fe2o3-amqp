@@ -307,8 +307,7 @@ where
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    {
+    ) -> Result<(), Self::Error> {
         self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
@@ -335,8 +334,7 @@ where
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    {
+    ) -> Result<(), Self::Error> {
         self.error_if_closed().map_err(Error::Local)?;
 
         if let SenderSettleMode::Settled = self.snd_settle_mode {
@@ -413,8 +411,7 @@ async fn send_transfer(
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
-) -> Result<(), Error>
-{
+) -> Result<(), Error> {
     let frame = LinkFrame::Transfer {
         input_handle,
         performative: transfer,
@@ -434,8 +431,7 @@ async fn send_disposition(
     settled: bool,
     state: Option<DeliveryState>,
     batchable: bool,
-) -> Result<(), Error>
-{
+) -> Result<(), Error> {
     let disposition = Disposition {
         role: Role::Sender,
         first,

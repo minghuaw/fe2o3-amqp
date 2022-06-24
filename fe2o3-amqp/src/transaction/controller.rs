@@ -140,7 +140,11 @@ impl Controller {
     }
 
     /// Discharge
-    pub(crate) async fn discharge(&self, txn_id: TransactionId, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
+    pub(crate) async fn discharge(
+        &self,
+        txn_id: TransactionId,
+        fail: impl Into<Option<bool>>,
+    ) -> Result<(), link::SendError> {
         let discharge = Discharge {
             txn_id,
             fail: fail.into(),

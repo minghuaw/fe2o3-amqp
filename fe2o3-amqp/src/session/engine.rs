@@ -233,22 +233,30 @@ where
                     .await
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
-            
+
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { resp } => {
                 let result = self.session.allocate_transaction_id();
-                resp.send(result).map_err(|_| Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    "SessionHandle is dropped",
-                )))?;
+                resp.send(result).map_err(|_| {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SessionHandle is dropped",
+                    ))
+                })?;
             }
             #[cfg(feature = "transaction")]
             SessionControl::CommitTransaction(txn_id) => {
-                self.session.commit_transaction(txn_id).await.map_err(Into::into)?;
+                self.session
+                    .commit_transaction(txn_id)
+                    .await
+                    .map_err(Into::into)?;
             }
             #[cfg(feature = "transaction")]
             SessionControl::RollbackTransaction(txn_id) => {
-                self.session.rollback_transaction(txn_id).await.map_err(Into::into)?;
+                self.session
+                    .rollback_transaction(txn_id)
+                    .await
+                    .map_err(Into::into)?;
             }
         }
 

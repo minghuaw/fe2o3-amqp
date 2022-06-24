@@ -120,7 +120,10 @@ pub enum DischargeError {
     AlreadyDischarged,
 }
 
-impl<E> From<E> for DischargeError where E: Into<link::SendError> {
+impl<E> From<E> for DischargeError
+where
+    E: Into<link::SendError>,
+{
     fn from(err: E) -> Self {
         match err.into() {
             link::SendError::Local(error) => Self::Local(error),

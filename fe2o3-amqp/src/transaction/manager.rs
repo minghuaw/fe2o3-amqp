@@ -1,8 +1,6 @@
 //! Manages incoming transaction on the resource side
 
-use std::{
-    collections::{BTreeMap},
-};
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -12,9 +10,9 @@ use fe2o3_amqp_types::{
 use tokio::sync::mpsc;
 
 use crate::{
-    endpoint::{IncomingChannel, LinkFlow, },
-    link::{LinkFrame, },
-    session::{frame::SessionFrame, },
+    endpoint::{IncomingChannel, LinkFlow},
+    link::LinkFrame,
+    session::frame::SessionFrame,
     Payload,
 };
 
@@ -30,7 +28,6 @@ pub(crate) trait HandleControlLink {
         attach: Attach,
     ) -> Result<(), Self::Error>;
 }
-
 
 /// How an incoming transaction should be handled in a session
 #[async_trait]

@@ -321,10 +321,13 @@ impl Builder<SessionAcceptor, Initialized> {
         self
     }
 
-    /// Enable handling remotely initiated control link and transaction by setting the 
+    /// Enable handling remotely initiated control link and transaction by setting the
     /// `control_link_acceptor` field
     #[cfg(feature = "transaction")]
-    pub fn control_link_acceptor(mut self, control_link_acceptor: Option<ControlLinkAcceptor>) -> Self {
+    pub fn control_link_acceptor(
+        mut self,
+        control_link_acceptor: Option<ControlLinkAcceptor>,
+    ) -> Self {
         self.inner.0.control_link_acceptor = control_link_acceptor;
         self
     }

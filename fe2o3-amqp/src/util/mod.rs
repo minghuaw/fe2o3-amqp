@@ -77,4 +77,3 @@ pub struct Uninitialized {}
 /// Shared type state for builders
 #[derive(Debug)]
 pub struct Initialized {}
-

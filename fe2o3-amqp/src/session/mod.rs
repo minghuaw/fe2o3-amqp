@@ -26,14 +26,15 @@ use tracing::{instrument, trace};
 use crate::{
     connection::ConnectionHandle,
     control::SessionControl,
-    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle,},
+    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
+    transaction::TransactionManagerError,
     util::Constant,
-    Payload, transaction::TransactionManagerError,
+    Payload,
 };
 
 #[cfg(feature = "transaction")]
-use crate::endpoint::{ HandleDeclare, HandleDischarge};
+use crate::endpoint::{HandleDeclare, HandleDischarge};
 
 pub(crate) mod engine;
 pub(crate) mod frame;
@@ -591,9 +592,15 @@ impl endpoint::Session for Session {
         {
             Some(mut link) => match link.on_incoming_detach(detach).await {
                 Ok(_) => Ok(()),
-                Err(_) => Err(Error::session_error(SessionError::UnattachedHandle, "Local link is already dropped".to_string())), // End session with unattached handle
+                Err(_) => Err(Error::session_error(
+                    SessionError::UnattachedHandle,
+                    "Local link is already dropped".to_string(),
+                )), // End session with unattached handle
             },
-            None => Err(Error::session_error(SessionError::UnattachedHandle, "Handle is not found".to_string())), // End session with unattached handle
+            None => Err(Error::session_error(
+                SessionError::UnattachedHandle,
+                "Handle is not found".to_string(),
+            )), // End session with unattached handle
         }
     }
 
@@ -820,7 +827,9 @@ impl endpoint::Session for Session {
 #[cfg(feature = "transaction")]
 impl HandleDeclare for Session {
     // This should be unreachable, but an error is probably a better way
-    fn allocate_transaction_id(&mut self) -> Result<fe2o3_amqp_types::transaction::TransactionId, TransactionManagerError> {
+    fn allocate_transaction_id(
+        &mut self,
+    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, TransactionManagerError> {
         // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
         Err(TransactionManagerError::AllocateTxnIdFailed)
     }
@@ -829,11 +838,23 @@ impl HandleDeclare for Session {
 #[cfg(feature = "transaction")]
 #[async_trait]
 impl HandleDischarge for Session {
-    async fn commit_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
-        Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+    async fn commit_transaction(
+        &mut self,
+        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+    ) -> Result<(), Self::Error> {
+        Err(Error::amqp_error(
+            AmqpError::NotImplemented,
+            "Resource side transaction is not enabled".to_string(),
+        ))
     }
 
-    async fn rollback_transaction(&mut self, _txn_id: fe2o3_amqp_types::transaction::TransactionId) -> Result<(), Self::Error> {
-        Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
+    async fn rollback_transaction(
+        &mut self,
+        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+    ) -> Result<(), Self::Error> {
+        Err(Error::amqp_error(
+            AmqpError::NotImplemented,
+            "Resource side transaction is not enabled".to_string(),
+        ))
     }
 }

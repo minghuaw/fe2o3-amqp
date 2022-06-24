@@ -1,14 +1,31 @@
 //! Implements session that can handle transaction
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::{performatives::{Attach, Detach, Transfer, Flow, Disposition, Begin, End}, transaction::TransactionId, primitives::Symbol, messaging::DeliveryState, definitions};
+use fe2o3_amqp_types::{
+    definitions,
+    messaging::DeliveryState,
+    performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
+    primitives::Symbol,
+    transaction::TransactionId,
+};
 use futures_util::Sink;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::{endpoint::{self, IncomingChannel, LinkFlow, OutgoingChannel, OutputHandle, InputHandle}, session::{self, frame::SessionFrame}, Payload, link::{LinkRelay, target_archetype::VariantOfTargetArchetype}};
+use crate::{
+    endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
+    link::{target_archetype::VariantOfTargetArchetype, LinkRelay},
+    session::{self, frame::SessionFrame},
+    Payload,
+};
 
-use super::{manager::{TransactionManager, HandleControlLink, HandleTransactionalWork, ResourceTransaction}, TXN_ID_KEY, frame::TxnWorkFrame, TransactionManagerError};
+use super::{
+    frame::TxnWorkFrame,
+    manager::{
+        HandleControlLink, HandleTransactionalWork, ResourceTransaction, TransactionManager,
+    },
+    TransactionManagerError, TXN_ID_KEY,
+};
 
 ///
 #[derive(Debug)]
@@ -53,13 +70,17 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, TransactionManagerError> {   
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, TransactionManagerError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
-        while self.txn_manager.txns.contains_key(&txn_id) { // TODO: timeout?
+        while self.txn_manager.txns.contains_key(&txn_id) {
+            // TODO: timeout?
             txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         }
 
-        let _ = self.txn_manager.txns.insert(txn_id.clone(), ResourceTransaction::new());
+        let _ = self
+            .txn_manager
+            .txns
+            .insert(txn_id.clone(), ResourceTransaction::new());
         Ok(txn_id)
     }
 }
@@ -92,9 +113,8 @@ where
         payload: Payload,
     ) -> Result<(), Self::Error> {
         let txn_id = match &transfer.state {
-            Some(DeliveryState::TransactionalState(txn_state)) => &txn_state.txn_id, 
-            Some(_)
-            | None => todo!(),
+            Some(DeliveryState::TransactionalState(txn_state)) => &txn_state.txn_id,
+            Some(_) | None => todo!(),
         };
 
         let txn = match self.txn_manager.txns.get_mut(txn_id) {
@@ -209,12 +229,13 @@ where
         channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error> {
-        match flow.properties.as_ref()
+        match flow
+            .properties
+            .as_ref()
             .map(|fields| fields.contains_key(&Symbol::from(TXN_ID_KEY)))
         {
             Some(true) => self.on_incoming_txn_flow(channel, flow).await,
-            Some(false)
-            | None => self.session.on_incoming_flow(channel, flow).await,
+            Some(false) | None => self.session.on_incoming_flow(channel, flow).await,
         }
     }
 
@@ -225,9 +246,15 @@ where
         payload: Payload,
     ) -> Result<(), Self::Error> {
         match &transfer.state {
-            Some(DeliveryState::TransactionalState(_)) => self.on_incoming_txn_transfer(channel, transfer, payload).await,
-            Some(_)
-            | None => self.session.on_incoming_transfer(channel, transfer, payload).await,
+            Some(DeliveryState::TransactionalState(_)) => {
+                self.on_incoming_txn_transfer(channel, transfer, payload)
+                    .await
+            }
+            Some(_) | None => {
+                self.session
+                    .on_incoming_transfer(channel, transfer, payload)
+                    .await
+            }
         }
     }
 
@@ -237,9 +264,14 @@ where
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         match disposition.state {
-            Some(DeliveryState::TransactionalState(_)) => self.on_incoming_txn_disposition(channel, disposition).await,
-            Some(_)
-            | None => self.session.on_incoming_disposition(channel, disposition).await,
+            Some(DeliveryState::TransactionalState(_)) => {
+                self.on_incoming_txn_disposition(channel, disposition).await
+            }
+            Some(_) | None => {
+                self.session
+                    .on_incoming_disposition(channel, disposition)
+                    .await
+            }
         }
     }
 
@@ -296,7 +328,8 @@ where
     ) -> Result<SessionFrame, Self::Error> {
         // TODO:
 
-        self.session.on_outgoing_transfer(input_handle, transfer, payload)
+        self.session
+            .on_outgoing_transfer(input_handle, transfer, payload)
     }
 
     fn on_outgoing_disposition(

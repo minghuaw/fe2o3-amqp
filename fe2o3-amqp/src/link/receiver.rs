@@ -8,7 +8,10 @@ use fe2o3_amqp_types::{
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
-use tokio::{sync::mpsc, time::{error::Elapsed, timeout}};
+use tokio::{
+    sync::mpsc,
+    time::{error::Elapsed, timeout},
+};
 
 use crate::{
     control::SessionControl,
@@ -300,7 +303,7 @@ impl Receiver {
     }
 
     /// Detach the link with a timeout
-    /// 
+    ///
     /// This simply wraps [`detach`] with a `timeout`
     pub async fn detach_with_timeout(
         self,
@@ -374,9 +377,9 @@ impl Receiver {
 }
 
 /// A detached receiver
-/// 
+///
 /// # Link re-attachment
-/// 
+///
 /// TODO
 #[derive(Debug)]
 pub struct DetachedReceiver {
@@ -782,7 +785,6 @@ where
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

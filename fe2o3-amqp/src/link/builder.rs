@@ -1,13 +1,13 @@
 //! Implements the builder for a link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc, cell::RefCell};
+use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{DeliveryState, Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
-use tokio::sync::{mpsc, Notify, RwLock, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify, RwLock};
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
@@ -29,7 +29,7 @@ use super::{
 };
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{Controller};
+use crate::transaction::Controller;
 
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::Coordinator;
@@ -549,10 +549,8 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
         self,
         session: &mut SessionHandle<R>,
     ) -> Result<Controller, AttachError> {
-        self.attach_inner(session)
-            .await
-            .map(|inner| Controller {
-                inner: Mutex::new(inner),
-            })
+        self.attach_inner(session).await.map(|inner| Controller {
+            inner: Mutex::new(inner),
+        })
     }
 }

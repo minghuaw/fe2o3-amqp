@@ -386,7 +386,10 @@ where
         .await
     }
 
-    async fn send_attach(&mut self, writer: &mpsc::Sender<LinkFrame>) -> Result<(), Self::AttachError> {
+    async fn send_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+    ) -> Result<(), Self::AttachError> {
         self.error_if_closed().map_err(AttachError::Local)?;
 
         // Create Attach frame

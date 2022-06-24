@@ -3,18 +3,17 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode,
-        Role, SequenceNo,
+        DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
     },
     messaging::DeliveryState,
     performatives::{Attach, Detach, Transfer},
 };
-use futures_util::{Future};
+use futures_util::Future;
 use tokio::sync::mpsc;
 
 use crate::{
-    link::{delivery::Delivery, LinkFrame, },
-    Payload, 
+    link::{delivery::Delivery, LinkFrame},
+    Payload,
 };
 
 use super::{OutputHandle, Settlement};
@@ -39,7 +38,10 @@ pub(crate) trait LinkAttach {
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
 
-    async fn send_attach(&mut self, writer: &mpsc::Sender<LinkFrame>) -> Result<(), Self::AttachError>;
+    async fn send_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+    ) -> Result<(), Self::AttachError>;
 }
 
 #[async_trait]
@@ -73,7 +75,6 @@ pub(crate) trait LinkExt: Link {
 
     fn target(&self) -> &Option<Self::Target>;
 }
-
 
 #[async_trait]
 pub(crate) trait SenderLink: Link + LinkExt {

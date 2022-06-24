@@ -2,18 +2,15 @@
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{Error},
+    definitions::Error,
     performatives::{Begin, Close, End, Open},
 };
-use futures_util::{Sink};
-use tokio::sync::{mpsc};
+use futures_util::Sink;
+use tokio::sync::mpsc;
 
-use crate::{
-    frames::amqp::Frame,
-    session::frame::{SessionIncomingItem},
-};
+use crate::{frames::amqp::Frame, session::frame::SessionIncomingItem};
 
-use super::{Session, OutgoingChannel, IncomingChannel};
+use super::{IncomingChannel, OutgoingChannel, Session};
 
 /// Trait for connection
 #[async_trait]

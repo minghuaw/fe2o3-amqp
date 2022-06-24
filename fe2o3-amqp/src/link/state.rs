@@ -323,7 +323,6 @@ impl Consume for SenderFlowState {
     }
 }
 
-
 impl TryConsume for SenderFlowState {
     type Error = SenderTryConsumeError;
 
