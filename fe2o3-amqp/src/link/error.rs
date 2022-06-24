@@ -358,24 +358,45 @@ pub(crate) enum ReceiverAttachError {
 
 }
 
+/// Errors associated with attaching a link as receiver
 #[derive(Debug)]
-#[allow(missing_docs)]
 pub enum ReceiverAttachErrorKind {
     // Errors that should end the session
+    /// The associated session has dropped
     SessionIsDropped,
+    
+    /// Link name is already in use
     DuplicatedLinkName,
 
-    // Illegal link state
+    /// Illegal link state
     IllegalState, 
+
+    /// The local terminus is expecting an Attach from the remote peer
     NonAttachFrameReceived,
+
+    /// The link is expected to be detached immediately but didn't receive
+    /// an incoming Detach frame
     ExpectImmediateDetach,
 
     // Errors that should reject Attach
+    /// Incoming Attach frame's Source field is None
     IncomingSourceIsNone,
+    
+    /// Incoming Attach frame's Target field is None
     IncomingTargetIsNone,
+
+    /// The remote Attach contains a [`Coordinator`] in the Target
     CoordinatorIsNotImplemented,
+
+    /// This MUST NOT be null if role is sender
     InitialDeliveryCountIsNone,
+
+    /// When dynamic is set to true by the sending link endpoint, this field constitutes a request
+    /// for the receiving peer to dynamically create a node at the target. In this case the address
+    /// field MUST NOT be set.
     AddressIsSomeWhenDynamicIsTrue,
+
+    /// If the dynamic field is not set to true this field MUST be left unset.
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
 }
 
@@ -401,9 +422,8 @@ impl<'a> TryFrom<&'a ReceiverAttachErrorKind> for definitions::Error {
     }
 }
 
-/// Errors for attaching a sender
+/// Errors associated with attaching a link as sender
 #[derive(Debug)]
-#[allow(missing_docs)]
 pub enum SenderAttachErrorKind {
     // Illegal session state
 
@@ -416,17 +436,32 @@ pub enum SenderAttachErrorKind {
     /// Illegal link state
     IllegalState, 
 
-    /// Link 
+    /// The local terminus is expecting an Attach from the remote peer
     NonAttachFrameReceived,
+
+    /// The link is expected to be detached immediately but didn't receive
+    /// an incoming Detach frame
     ExpectImmediateDetach,
 
     // Errors that should reject Attach
+    /// Incoming Attach frame's Source field is None
     IncomingSourceIsNone,
+
+    /// Incoming Attach frame's Target field is None
     IncomingTargetIsNone,
+
+    /// The remote Attach contains a [`Coordinator`] in the Target
     CoordinatorIsNotImplemented,
+
+    /// When set to true by the receiving link endpoint this field indicates creation of a
+    /// dynamically created node. In this case the address field will contain the address of the
+    /// created node.
     AddressIsNoneWhenDynamicIsTrue,
+
+    /// If the dynamic field is not set to true this field MUST be left unset.
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
 
+    /// Desired TransactionCapabilities is not supported
     DesireTxnCapabilitiesNotSupported,
 }
 
