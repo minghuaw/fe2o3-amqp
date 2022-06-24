@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, Mutex, Notify, RwLock};
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    endpoint::OutputHandle,
+    endpoint::{OutputHandle, LinkExt},
     link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
@@ -25,7 +25,7 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverFlowState, Sender, SenderFlowState,
+    Receiver, ReceiverFlowState, Sender, SenderFlowState, SenderLink, ReceiverLink,
 };
 
 #[cfg(feature = "transaction")]
@@ -406,7 +406,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
+    ) -> Result<SenderInner<SenderLink<T>>, AttachError>
     {
         let buffer_size = self.buffer_size;
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
@@ -432,7 +432,15 @@ where
 
         // Get writer to session
         // Send an Attach frame
-        super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
+        // super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
+        if let Err(attach_error) =
+            link.negotiate_attach(&session.outgoing, &mut incoming_rx).await
+        {
+            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            // return Err(DetachError::new(false, Some(err)));
+            let err = link.handle_attach_error(attach_error, &session.outgoing, &mut incoming_rx, &session.control).await;
+            todo!()
+        }
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -474,7 +482,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<ReceiverInner<Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>, AttachError>
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, AttachError>
     {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
@@ -514,8 +522,14 @@ where
         let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
-        // Send an Attach frame
-        super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
+        if let Err(attach_error) =
+            link.negotiate_attach(&session.outgoing, &mut incoming_rx).await
+        {
+            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            // return Err(DetachError::new(false, Some(err)));
+            let err = link.handle_attach_error(attach_error, &session.outgoing, &mut incoming_rx, &session.control).await;
+            todo!()
+        }
 
         let mut inner = ReceiverInner {
             link,

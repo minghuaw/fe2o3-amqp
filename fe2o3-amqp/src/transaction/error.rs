@@ -12,10 +12,6 @@ pub enum DeclareError {
     #[error("Illegal session state")]
     IllegalSessionState,
 
-    /// Session's max number of handle has reached
-    #[error("Handle max reached")]
-    HandleMaxReached,
-
     /// Link name is duplicated
     #[error("Link name must be unique")]
     DuplicatedLinkName,
@@ -64,7 +60,6 @@ impl From<AttachError> for DeclareError {
     fn from(error: AttachError) -> Self {
         match error {
             AttachError::IllegalSessionState => Self::IllegalSessionState,
-            AttachError::HandleMaxReached => Self::HandleMaxReached,
             AttachError::DuplicatedLinkName => Self::DuplicatedLinkName,
             AttachError::SourceIsNone => Self::SourceIsNone,
             AttachError::TargetIsNone => Self::TargetIsNone,

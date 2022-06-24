@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     link::{delivery::Delivery, LinkFrame},
-    Payload,
+    Payload, control::SessionControl,
 };
 
 use super::{OutputHandle, Settlement};
@@ -56,6 +56,7 @@ pub(crate) trait Link: LinkAttach + LinkDetach {
     fn role() -> Role;
 }
 
+#[async_trait]
 pub(crate) trait LinkExt: Link {
     type FlowState;
     type Unsettled;
@@ -74,6 +75,20 @@ pub(crate) trait LinkExt: Link {
     fn rcv_settle_mode(&self) -> &ReceiverSettleMode;
 
     fn target(&self) -> &Option<Self::Target>;
+
+    async fn negotiate_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        reader: &mut mpsc::Receiver<LinkFrame>,
+    ) -> Result<(), Self::AttachError>;
+
+    async fn handle_attach_error(
+        &mut self,
+        attach_error: Self::AttachError,
+        writer: &mpsc::Sender<LinkFrame>,
+        reader: &mut mpsc::Receiver<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+    ) -> Self::AttachError;
 }
 
 #[async_trait]

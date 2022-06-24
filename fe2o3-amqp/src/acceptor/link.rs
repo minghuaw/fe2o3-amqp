@@ -21,7 +21,7 @@ use crate::{
     endpoint,
     link::{
         role, state::LinkFlowState, target_archetype::VerifyTargetArchetype, AttachError, Link,
-        LinkFrame,
+        LinkFrame, SenderLink, ReceiverLink,
     },
     session::SessionHandle,
     util::Initialized,
@@ -244,38 +244,89 @@ pub(crate) async fn handle_attach_error(
             }
             error
         }
-        AttachError::HandleMaxReached // TODO: any additional steps needed?
-        | AttachError::DuplicatedLinkName
+        AttachError::DuplicatedLinkName
         | AttachError::SourceIsNone
         | AttachError::TargetIsNone
         | AttachError::Local(_) => error,
     }
 }
 
+// #[async_trait]
+// impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M>
+// where
+//     R: role::IntoRole + Send + Sync,
+//     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+//     F: AsRef<LinkFlowState<R>> + Send + Sync,
+//     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+// {
+//     async fn on_incoming_attach_as_acceptor(
+//         &mut self,
+//         mut remote_attach: Attach,
+//     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
+//         self.on_incoming_attach_inner(
+//             // Cloning is relatively cheap except for on target and source
+//             remote_attach.handle.clone(),
+//             remote_attach.target.take(),
+//             remote_attach.role.clone(),
+//             remote_attach.source.take(),
+//             remote_attach.snd_settle_mode.clone(),
+//             remote_attach.initial_delivery_count.clone(),
+//             remote_attach.rcv_settle_mode.clone(),
+//             remote_attach.max_message_size.clone(),
+//         )
+//         .await
+//         .map_err(|err| (err, Some(remote_attach)))
+//     }
+// }
+
 #[async_trait]
-impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M>
+impl<T> endpoint::LinkAttachAcceptorExt for SenderLink<T>
 where
-    R: role::IntoRole + Send + Sync,
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
-    F: AsRef<LinkFlowState<R>> + Send + Sync,
-    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
     async fn on_incoming_attach_as_acceptor(
         &mut self,
         mut remote_attach: Attach,
     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
-        self.on_incoming_attach_inner(
-            // Cloning is relatively cheap except for on target and source
-            remote_attach.handle.clone(),
-            remote_attach.target.take(),
-            remote_attach.role.clone(),
-            remote_attach.source.take(),
-            remote_attach.snd_settle_mode.clone(),
-            remote_attach.initial_delivery_count.clone(),
-            remote_attach.rcv_settle_mode.clone(),
-            remote_attach.max_message_size.clone(),
-        )
-        .await
-        .map_err(|err| (err, Some(remote_attach)))
+        // self.on_incoming_attach_inner(
+        //     // Cloning is relatively cheap except for on target and source
+        //     remote_attach.handle.clone(),
+        //     remote_attach.target.take(),
+        //     remote_attach.role.clone(),
+        //     remote_attach.source.take(),
+        //     remote_attach.snd_settle_mode.clone(),
+        //     remote_attach.initial_delivery_count.clone(),
+        //     remote_attach.rcv_settle_mode.clone(),
+        //     remote_attach.max_message_size.clone(),
+        // )
+        // .await
+        // .map_err(|err| (err, Some(remote_attach)))
+        todo!()
+    }
+}
+
+#[async_trait]
+impl<T> endpoint::LinkAttachAcceptorExt for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    async fn on_incoming_attach_as_acceptor(
+        &mut self,
+        mut remote_attach: Attach,
+    ) -> Result<(), (Self::AttachError, Option<Attach>)> {
+        // self.on_incoming_attach_inner(
+        //     // Cloning is relatively cheap except for on target and source
+        //     remote_attach.handle.clone(),
+        //     remote_attach.target.take(),
+        //     remote_attach.role.clone(),
+        //     remote_attach.source.take(),
+        //     remote_attach.snd_settle_mode.clone(),
+        //     remote_attach.initial_delivery_count.clone(),
+        //     remote_attach.rcv_settle_mode.clone(),
+        //     remote_attach.max_message_size.clone(),
+        // )
+        // .await
+        // .map_err(|err| (err, Some(remote_attach)))
+        todo!()
     }
 }

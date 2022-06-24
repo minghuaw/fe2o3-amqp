@@ -1,7 +1,7 @@
 use std::fmt;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ErrorCondition, LinkError},
+    definitions::{self, AmqpError, ErrorCondition, LinkError, SessionError},
     messaging::{Modified, Rejected, Released},
 };
 use tokio::sync::{mpsc, oneshot, TryLockError};
@@ -268,10 +268,6 @@ pub enum AttachError {
     #[error("Illegal session state")]
     IllegalSessionState,
 
-    /// Session's max number of handle has reached
-    #[error("Handle max reached")]
-    HandleMaxReached,
-
     /// Link name is duplicated
     #[error("Link name must be unique")]
     DuplicatedLinkName,
@@ -300,41 +296,6 @@ impl From<AllocLinkError> for AttachError {
         }
     }
 }
-
-// impl From<AttachError> for definitions::Error {
-//     fn from(err: AttachError) -> Self {
-//         let (condition, description, info): (ErrorCondition, _, _) = match err {
-//             AttachError::IllegalSessionState => (
-//                 AmqpError::IllegalState.into(),
-//                 Some("Illegal session state".to_string()),
-//                 None,
-//             ),
-//             AttachError::HandleMaxReached => {
-//                 // A peer that receives a handle outside the supported range MUST close the connection with the
-//                 // framing-error error-code
-//                 (
-//                     ConnectionError::FramingError.into(),
-//                     Some("Max number of handle exceeded".to_string()),
-//                     None,
-//                 )
-//             }
-//             AttachError::DuplicatedLinkName => (
-//                 AmqpError::InvalidField.into(),
-//                 Some("Link name duplicated".to_string()),
-//                 None,
-//             ),
-//             AttachError::SourceIsNone => (
-
-//             ),
-//             AttachError::TargetIsNone => todo!(),
-//             AttachError::ReceiverSettleModeNotSupported => todo!(),
-//             AttachError::SenderSettleModeNotSupported => todo!(),
-//             AttachError::Local(_) => todo!(),
-//         };
-
-//         Self::new(condition, description, info)
-//     }
-// }
 
 impl TryFrom<Error> for AttachError {
     type Error = Error;
@@ -390,5 +351,134 @@ pub enum SenderTryConsumeError {
 impl From<TryLockError> for SenderTryConsumeError {
     fn from(_: TryLockError) -> Self {
         Self::TryLockError
+    }
+}
+
+pub(crate) enum ReceiverAttachError {
+
+}
+
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub enum ReceiverAttachErrorKind {
+    // Errors that should end the session
+    SessionIsDropped,
+    DuplicatedLinkName,
+
+    // Illegal link state
+    IllegalState, 
+    NonAttachFrameReceived,
+    ExpectImmediateDetach,
+
+    // Errors that should reject Attach
+    IncomingSourceIsNone,
+    IncomingTargetIsNone,
+    CoordinatorIsNotImplemented,
+    InitialDeliveryCountIsNone,
+    AddressIsSomeWhenDynamicIsTrue,
+    DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
+}
+
+impl<'a> TryFrom<&'a ReceiverAttachErrorKind> for definitions::Error {
+    type Error = &'a ReceiverAttachErrorKind;
+
+    fn try_from(value: &'a ReceiverAttachErrorKind) -> Result<Self, Self::Error> {
+        let condition: ErrorCondition = match value {
+            ReceiverAttachErrorKind::SessionIsDropped => AmqpError::IllegalState.into(),
+            ReceiverAttachErrorKind::DuplicatedLinkName => SessionError::HandleInUse.into(),
+            ReceiverAttachErrorKind::IllegalState => AmqpError::IllegalState.into(),
+            ReceiverAttachErrorKind::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
+            ReceiverAttachErrorKind::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
+            ReceiverAttachErrorKind::IncomingSourceIsNone 
+            | ReceiverAttachErrorKind::IncomingTargetIsNone => return Err(value),
+            ReceiverAttachErrorKind::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
+            ReceiverAttachErrorKind::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
+            ReceiverAttachErrorKind::AddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            ReceiverAttachErrorKind::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
+        };
+
+        Ok(Self::new(condition, format!("{:?}", value), None))
+    }
+}
+
+/// Errors for attaching a sender
+#[derive(Debug)]
+#[allow(missing_docs)]
+pub enum SenderAttachErrorKind {
+    // Illegal session state
+
+    /// Session stopped
+    SessionIsDropped,
+
+    /// Link name duplicated
+    DuplicatedLinkName,
+
+    /// Illegal link state
+    IllegalState, 
+
+    /// Link 
+    NonAttachFrameReceived,
+    ExpectImmediateDetach,
+
+    // Errors that should reject Attach
+    IncomingSourceIsNone,
+    IncomingTargetIsNone,
+    CoordinatorIsNotImplemented,
+    AddressIsNoneWhenDynamicIsTrue,
+    DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
+
+    DesireTxnCapabilitiesNotSupported,
+}
+
+impl<'a> TryFrom<&'a SenderAttachErrorKind> for definitions::Error {
+    type Error = &'a SenderAttachErrorKind;
+
+    fn try_from(value: &'a SenderAttachErrorKind) -> Result<Self, Self::Error> {
+        let condition: ErrorCondition = match value {
+            SenderAttachErrorKind::SessionIsDropped => AmqpError::IllegalState.into(),
+            SenderAttachErrorKind::DuplicatedLinkName => SessionError::HandleInUse.into(),
+            SenderAttachErrorKind::IllegalState => AmqpError::IllegalState.into(),
+            SenderAttachErrorKind::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
+            SenderAttachErrorKind::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
+            SenderAttachErrorKind::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
+            SenderAttachErrorKind::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
+            SenderAttachErrorKind::AddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+
+            SenderAttachErrorKind::IncomingSourceIsNone 
+            | SenderAttachErrorKind::IncomingTargetIsNone 
+            | SenderAttachErrorKind::DesireTxnCapabilitiesNotSupported => return Err(value),
+        };
+
+        Ok(Self::new(condition, format!("{:?}", value), None))
+    }
+}
+
+pub(crate) enum LinkAttachErrorKind {
+
+}
+
+pub(crate) enum SendAttachErrorKind {
+    /// Illegal link state
+    IllegalState, 
+
+    /// Illegal session state
+    SessionIsDropped,
+}
+
+impl From<SendAttachErrorKind> for SenderAttachErrorKind {
+    fn from(value: SendAttachErrorKind) -> Self {
+        match value {
+            SendAttachErrorKind::IllegalState => Self::IllegalState,
+            SendAttachErrorKind::SessionIsDropped => Self::SessionIsDropped,
+        }
+    }
+}
+
+impl From<SendAttachErrorKind> for ReceiverAttachErrorKind {
+    fn from(value: SendAttachErrorKind) -> Self {
+        match value {
+            SendAttachErrorKind::IllegalState => Self::IllegalState,
+            SendAttachErrorKind::SessionIsDropped => Self::SessionIsDropped,
+        }
     }
 }

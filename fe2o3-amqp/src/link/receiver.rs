@@ -420,7 +420,7 @@ impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
             Error = Error,
-            AttachError = AttachError,
+            // AttachError = AttachError,
             DetachError = definitions::Error,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>,
 {
@@ -461,11 +461,13 @@ where
             *self.link.output_handle_mut() = Some(handle);
         }
 
-        if let Err(_err) =
-            super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
+        if let Err(attach_error) =
+            self.link.negotiate_attach(&self.outgoing, &mut self.incoming).await
         {
-            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(false, Some(err)));
+            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            // return Err(DetachError::new(false, Some(err)));
+            let err = self.link.handle_attach_error(attach_error, &self.outgoing, &mut self.incoming, &self.session).await;
+            todo!()
         }
 
         Ok(self)

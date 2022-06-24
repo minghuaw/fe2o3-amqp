@@ -28,13 +28,15 @@ use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
-    transaction::TransactionManagerError,
     util::Constant,
     Payload,
 };
 
 #[cfg(feature = "transaction")]
 use crate::endpoint::{HandleDeclare, HandleDischarge};
+
+#[cfg(feature = "transaction")]
+use crate::transaction::TransactionManagerError;
 
 pub(crate) mod engine;
 pub(crate) mod frame;

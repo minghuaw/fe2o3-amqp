@@ -11,11 +11,13 @@ use crate::{
     endpoint::{InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::LinkRelay,
     session::{frame::SessionIncomingItem, AllocLinkError},
-    transaction::TransactionManagerError,
 };
 
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::TransactionId;
+
+#[cfg(feature = "transaction")]
+use crate::transaction::TransactionManagerError;
 
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {
