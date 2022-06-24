@@ -25,7 +25,7 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverFlowState, Sender, SenderFlowState, SenderLink, ReceiverLink,
+    Receiver, ReceiverFlowState, Sender, SenderFlowState, SenderLink, ReceiverLink, ReceiverAttachError,
 };
 
 #[cfg(feature = "transaction")]
@@ -468,7 +468,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, AttachError> {
+    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, ReceiverAttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Receiver { inner })
@@ -482,7 +482,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<ReceiverInner<ReceiverLink<T>>, AttachError>
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
     {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;

@@ -31,12 +31,12 @@ where
         drain: Option<bool>,
         echo: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(Self::Error::Local)?;
+        self.error_if_closed().map_err(|_| Error::NotAttached)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?
+            .ok_or(Error::NotAttached)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -120,7 +120,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::sending_to_session())
+            .map_err(|_| Error::SessionIsDropped)
     }
 
     async fn on_incomplete_transfer(
@@ -146,7 +146,7 @@ where
         }
     }
 
-    async fn on_incoming_transfer<T>(
+    async fn on_complete_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -174,25 +174,14 @@ where
         // This only takes care of whether the message is considered
         // sett
         let settled_by_sender = transfer.settled.unwrap_or(false);
-        let delivery_id = transfer.delivery_id.ok_or_else(|| {
-            Error::Local(definitions::Error::new(
-                AmqpError::NotAllowed,
-                Some("The delivery-id is not found".into()),
-                None,
-            ))
-        })?;
-        let delivery_tag = transfer.delivery_tag.ok_or_else(|| {
-            Error::Local(definitions::Error::new(
-                AmqpError::NotAllowed,
-                Some("The delivery-tag is not found".into()),
-                None,
-            ))
-        })?;
+        let delivery_id = transfer.delivery_id.ok_or(Error::DeliveryIdIsNone)?;
+        let delivery_tag = transfer.delivery_tag.ok_or(Error::DeliveryTagIsNone)?;
 
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
+            let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                .map_err(|_| Error::MessageDecodeError)?;
             (message.0, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
@@ -202,11 +191,7 @@ where
                 // field to second.
                 if let ReceiverSettleMode::First = &self.rcv_settle_mode {
                     if let ReceiverSettleMode::Second = mode {
-                        return Err(Error::Local(definitions::Error::new(
-                            AmqpError::NotAllowed,
-                            Some("Negotiated link value is First".into()),
-                            None,
-                        )));
+                        return Err(Error::IllegalRcvSettleModeInTransfer);
                     }
                 }
                 mode
@@ -224,16 +209,9 @@ where
                     // let reader = IoReader::new(payload.reader());
                     // let deserializer = Deserializer::new(reader);
                     // let message: Message<T> = Message::<T>::deserialize(&mut deserializer)?;
-                    let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
+                    let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                        .map_err(|_| Error::MessageDecodeError)?;
 
-                    // let disposition = Disposition {
-                    //     role: Role::Receiver,
-                    //     first: delivery_id,
-                    //     last: None,
-                    //     settled: true,
-                    //     state: Some(DeliveryState::Accepted(Accepted {})),
-                    //     batchable: false,
-                    // };
                     (message.0, Some(DeliveryState::Accepted(Accepted {})))
                 }
                 // If second, this indicates that the receiver MUST NOT settle until
@@ -242,8 +220,9 @@ where
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(payload.as_ref())
-                        .ok_or(AmqpError::DecodeError)?;
-                    let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
+                        .ok_or(Error::MessageDecodeError)?;
+                    let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                        .map_err(|_| Error::MessageDecodeError)?;
                     let message = message.0;
                     let section_number = message.sections();
 
@@ -272,7 +251,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?
+            .ok_or(Error::NotAttached)?
             .into();
 
         let delivery = Delivery {
@@ -297,7 +276,7 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(Self::Error::Local)?;
+        self.error_if_closed().map_err(|_| Error::NotAttached)?;
 
         let settled = match self.rcv_settle_mode {
             ReceiverSettleMode::First => {
@@ -332,7 +311,7 @@ where
         writer
             .send(frame)
             .await
-            .map_err(|_| Error::sending_to_session())?;
+            .map_err(|_| Error::SessionIsDropped)?;
 
         // This is a unit enum, clone should be really cheap
         Ok(())

@@ -164,7 +164,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_incoming_transfer<T>(
+    async fn on_complete_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,

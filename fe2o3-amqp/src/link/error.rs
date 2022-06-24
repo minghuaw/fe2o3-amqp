@@ -133,14 +133,14 @@ impl From<serde_amqp::Error> for SendError {
     }
 }
 
-impl From<Error> for SendError {
-    fn from(err: Error) -> Self {
-        match err {
-            Error::Local(e) => SendError::Local(e),
-            Error::Detached(e) => SendError::Detached(e),
-        }
-    }
-}
+// impl From<Error> for SendError {
+//     fn from(err: Error) -> Self {
+//         match err {
+//             Error::Local(e) => SendError::Local(e),
+//             Error::Detached(e) => SendError::Detached(e),
+//         }
+//     }
+// }
 
 impl From<oneshot::error::RecvError> for SendError {
     fn from(_: oneshot::error::RecvError) -> Self {
@@ -164,89 +164,104 @@ pub type RecvError = Error;
 /// Error associated with normal operations on a link
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// A local error
-    #[error("Local error: {:?}", .0)]
-    Local(definitions::Error),
+    // /// A local error
+    // #[error("Local error: {:?}", .0)]
+    // Local(definitions::Error),
 
-    /// The remote peer detached with error
-    #[error("Link is detached {:?}", .0)]
-    Detached(DetachError),
+    // /// The remote peer detached with error
+    // #[error("Link is detached {:?}", .0)]
+    // Detached(DetachError),
+
+    /// Illegal link state (attempting to send while link is detached)
+    #[error("Illegal link state, link is detached")]
+    NotAttached,
+
+    /// Session has dropped
+    #[error("Session has dropped")]
+    SessionIsDropped,
+
+    /// The delivery-id is not found in Transfer
+    #[error("Delivery ID is not found in Transfer")]
+    DeliveryIdIsNone,
+
+    /// The delivery-tag is not found in Transfer
+    #[error("Delivery tag is not found in Transfer")]
+    DeliveryTagIsNone,
+
+    /// Decoding Message failed
+    #[error("Decoding Message failed")]
+    MessageDecodeError,
+
+    /// If the negotiated link value is first, then it is illegal to set this
+    /// field to second.
+    #[error("Negotiated value is first. Setting mode to second is illegal.")]
+    IllegalRcvSettleModeInTransfer,
 }
 
-impl Error {
-    // May want to have different handling of SendError
-    pub(crate) fn sending_to_session() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Failed to send to sesssion".to_string()),
-            None,
-        ))
-    }
+// impl Error {
+//     // May want to have different handling of SendError
+//     pub(crate) fn sending_to_session() -> Self {
+//         Self::Local(definitions::Error::new(
+//             AmqpError::IllegalState,
+//             Some("Failed to send to sesssion".to_string()),
+//             None,
+//         ))
+//     }
 
-    pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some(format!("Expecting {}", frame_ident.into())),
-            None,
-        ))
-    }
+//     pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
+//         Self::Local(definitions::Error::new(
+//             AmqpError::IllegalState,
+//             Some(format!("Expecting {}", frame_ident.into())),
+//             None,
+//         ))
+//     }
 
-    pub(crate) fn not_attached() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Link is not attached".to_string()),
-            None,
-        ))
-    }
-}
+//     pub(crate) fn not_attached() -> Self {
+//         Self::Local(definitions::Error::new(
+//             AmqpError::IllegalState,
+//             Some("Link is not attached".to_string()),
+//             None,
+//         ))
+//     }
+// }
 
-impl From<AmqpError> for Error {
-    fn from(err: AmqpError) -> Self {
-        Self::Local(definitions::Error::new(err, None, None))
-    }
-}
+// impl From<AmqpError> for Error {
+//     fn from(err: AmqpError) -> Self {
+//         Self::Local(definitions::Error::new(err, None, None))
+//     }
+// }
 
-impl From<LinkError> for Error {
-    fn from(err: LinkError) -> Self {
-        Self::Local(definitions::Error::new(err, None, None))
-    }
-}
+// impl From<LinkError> for Error {
+//     fn from(err: LinkError) -> Self {
+//         Self::Local(definitions::Error::new(err, None, None))
+//     }
+// }
 
-impl<T> From<mpsc::error::SendError<T>> for Error {
-    fn from(_: mpsc::error::SendError<T>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Failed to send to sesssion".to_string()),
-            None,
-        ))
-    }
-}
+// impl<T> From<mpsc::error::SendError<T>> for Error {
+//     fn from(_: mpsc::error::SendError<T>) -> Self {
+//         Self::Local(definitions::Error::new(
+//             AmqpError::IllegalState,
+//             Some("Failed to send to sesssion".to_string()),
+//             None,
+//         ))
+//     }
+// }
 
-impl From<serde_amqp::Error> for Error {
-    fn from(err: serde_amqp::Error) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::DecodeError,
-            Some(format!("{:?}", err)),
-            None,
-        ))
-    }
-}
+// impl From<oneshot::error::RecvError> for Error {
+//     fn from(_: oneshot::error::RecvError) -> Self {
+//         Error::Local(definitions::Error::new(
+//             AmqpError::IllegalState,
+//             Some("Delivery outcome sender has dropped".into()),
+//             None,
+//         ))
+//     }
+// }
 
-impl From<oneshot::error::RecvError> for Error {
-    fn from(_: oneshot::error::RecvError) -> Self {
-        Error::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Delivery outcome sender has dropped".into()),
-            None,
-        ))
-    }
-}
-
-impl From<DetachError> for Error {
-    fn from(error: DetachError) -> Self {
-        Self::Detached(error)
-    }
-}
+// impl From<DetachError> for Error {
+//     fn from(error: DetachError) -> Self {
+//         Self::Detached(error)
+//     }
+// }
 
 pub(crate) fn detach_error_expecting_frame() -> DetachError {
     let error = definitions::Error::new(
@@ -297,16 +312,16 @@ impl From<AllocLinkError> for AttachError {
     }
 }
 
-impl TryFrom<Error> for AttachError {
-    type Error = Error;
+// impl TryFrom<Error> for AttachError {
+//     type Error = Error;
 
-    fn try_from(value: Error) -> Result<Self, Self::Error> {
-        match value {
-            Error::Local(error) => Ok(AttachError::Local(error)),
-            Error::Detached(_) => Err(value),
-        }
-    }
-}
+//     fn try_from(value: Error) -> Result<Self, Self::Error> {
+//         match value {
+//             Error::Local(error) => Ok(AttachError::Local(error)),
+//             Error::Detached(_) => Err(value),
+//         }
+//     }
+// }
 
 impl AttachError {
     pub(crate) fn illegal_state(description: impl Into<Option<String>>) -> Self {
@@ -354,7 +369,9 @@ impl From<TryLockError> for SenderTryConsumeError {
     }
 }
 
-pub(crate) enum ReceiverAttachError {
+/// Error attaching the receiver
+#[derive(Debug)]
+pub enum ReceiverAttachError {
 
 }
 

@@ -20,12 +20,12 @@ where
         available: Option<u32>,
         echo: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(link::Error::Local)?;
+        self.error_if_closed().map_err(|_| Error::NotAttached)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?
+            .ok_or(Error::NotAttached)?
             .into();
 
         let flow = match (delivery_count, available) {
@@ -101,7 +101,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::sending_to_session())
+            .map_err(|_| Error::SessionIsDropped)
     }
 
     async fn send_payload<Fut>(
@@ -120,7 +120,7 @@ where
         use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
-        self.error_if_closed().map_err(Self::Error::Local)?;
+        self.error_if_closed().map_err(|_| Error::NotAttached)?;
 
         tokio::select! {
             _ = self.flow_state.consume(1) => {

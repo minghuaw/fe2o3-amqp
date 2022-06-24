@@ -589,14 +589,14 @@ where
                     } = incomplete;
                     buffer.extend(payload);
                     self.link
-                        .on_incoming_transfer(performative, buffer.freeze())
+                        .on_complete_transfer(performative, buffer.freeze())
                         .await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;
                     // TODO: Is there any way to optimize this?
                     // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
-                    self.link.on_incoming_transfer(transfer, payload).await?
+                    self.link.on_complete_transfer(transfer, payload).await?
                 }
             }
         };
