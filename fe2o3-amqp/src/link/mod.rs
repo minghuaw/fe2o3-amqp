@@ -155,31 +155,31 @@ pub struct Link<R, T, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
-impl<R, T, F, M> Link<R, T, F, M> {
-    pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
-    where
-        R: role::IntoRole + Send + Sync,
-        F: AsRef<LinkFlowState<R>> + Send + Sync,
-        M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
-    {
-        match self.local_state {
-            LinkState::Unattached
-            | LinkState::AttachSent
-            | LinkState::AttachReceived
-            | LinkState::Attached
-            | LinkState::DetachSent
-            | LinkState::DetachReceived
-            | LinkState::Detached
-            | LinkState::CloseSent
-            | LinkState::CloseReceived => Ok(()),
-            LinkState::Closed => Err(definitions::Error::new(
-                AmqpError::NotAllowed,
-                "Link is permanently closed".to_string(),
-                None,
-            )),
-        }
-    }
-}
+// impl<R, T, F, M> Link<R, T, F, M> {
+//     pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
+//     where
+//         R: role::IntoRole + Send + Sync,
+//         F: AsRef<LinkFlowState<R>> + Send + Sync,
+//         M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+//     {
+//         match self.local_state {
+//             LinkState::Unattached
+//             | LinkState::AttachSent
+//             | LinkState::AttachReceived
+//             | LinkState::Attached
+//             | LinkState::DetachSent
+//             | LinkState::DetachReceived
+//             | LinkState::Detached
+//             | LinkState::CloseSent
+//             | LinkState::CloseReceived => Ok(()),
+//             LinkState::Closed => Err(definitions::Error::new(
+//                 AmqpError::NotAllowed,
+//                 "Link is permanently closed".to_string(),
+//                 None,
+//             )),
+//         }
+//     }
+// }
 
 impl<R, T, F, M> Link<R, T, F, M>
 where
@@ -325,12 +325,12 @@ where
             | LinkState::Detached // May attempt to re-attach
             | LinkState::DetachSent => {
                 writer.send(frame).await
-                    .map_err(|_| SendAttachErrorKind::SessionIsDropped)?;
+                    .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 self.local_state = LinkState::AttachSent
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
-                    .map_err(|_| SendAttachErrorKind::SessionIsDropped)?;
+                    .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
                 self.local_state = LinkState::Attached
             }
@@ -399,7 +399,7 @@ where
         let remote_attach = match reader
             .recv()
             .await
-            .ok_or(SenderAttachErrorKind::SessionIsDropped)?
+            .ok_or(SenderAttachErrorKind::IllegalSessionState)?
         {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(SenderAttachErrorKind::NonAttachFrameReceived)
@@ -416,7 +416,7 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> SenderAttachErrorKind {
         match attach_error {
-            SenderAttachErrorKind::SessionIsDropped 
+            SenderAttachErrorKind::IllegalSessionState 
             | SenderAttachErrorKind::IllegalState 
             | SenderAttachErrorKind::NonAttachFrameReceived 
             | SenderAttachErrorKind::ExpectImmediateDetach => attach_error,
@@ -429,7 +429,7 @@ where
                 );
                 session.send(SessionControl::End(Some(error))).await
                     .map(|_| attach_error)
-                    .unwrap_or(SenderAttachErrorKind::SessionIsDropped)
+                    .unwrap_or(SenderAttachErrorKind::IllegalSessionState)
             },
 
             SenderAttachErrorKind::IncomingSourceIsNone 
@@ -438,10 +438,10 @@ where
                     Some(LinkFrame::Detach(remote_detach)) => {
                         self.send_detach(writer, remote_detach.closed, None).await
                             .map(|_| attach_error)
-                            .unwrap_or(SenderAttachErrorKind::SessionIsDropped)
+                            .unwrap_or(SenderAttachErrorKind::IllegalSessionState)
                     },
                     Some(_) => SenderAttachErrorKind::NonAttachFrameReceived,
-                    None => SenderAttachErrorKind::SessionIsDropped,
+                    None => SenderAttachErrorKind::IllegalSessionState,
                 }
             },
             
@@ -455,9 +455,9 @@ where
                             Ok(_) => match reader.recv().await {
                                 Some(LinkFrame::Detach(remote_detach)) => attach_error,
                                 Some(_) => SenderAttachErrorKind::NonAttachFrameReceived,
-                                None => SenderAttachErrorKind::SessionIsDropped,
+                                None => SenderAttachErrorKind::IllegalSessionState,
                             },
-                            Err(_) => SenderAttachErrorKind::SessionIsDropped,
+                            Err(_) => SenderAttachErrorKind::IllegalSessionState,
                         }
                     },
                     Err(_) => attach_error,
@@ -525,7 +525,7 @@ where
         let remote_attach = match reader
             .recv()
             .await
-            .ok_or(ReceiverAttachErrorKind::SessionIsDropped)?
+            .ok_or(ReceiverAttachErrorKind::IllegalSessionState)?
         {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(ReceiverAttachErrorKind::NonAttachFrameReceived)
@@ -542,7 +542,7 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> ReceiverAttachErrorKind {
         match attach_error {
-            ReceiverAttachErrorKind::SessionIsDropped 
+            ReceiverAttachErrorKind::IllegalSessionState 
             | ReceiverAttachErrorKind::IllegalState 
             | ReceiverAttachErrorKind::NonAttachFrameReceived 
             | ReceiverAttachErrorKind::ExpectImmediateDetach => attach_error,
@@ -555,7 +555,7 @@ where
                 );
                 session.send(SessionControl::End(Some(error))).await
                     .map(|_| attach_error)
-                    .unwrap_or(ReceiverAttachErrorKind::SessionIsDropped)
+                    .unwrap_or(ReceiverAttachErrorKind::IllegalSessionState)
             },
             ReceiverAttachErrorKind::IncomingSourceIsNone 
             | ReceiverAttachErrorKind::IncomingTargetIsNone => {
@@ -563,10 +563,10 @@ where
                     Some(LinkFrame::Detach(remote_detach)) => {
                         self.send_detach(writer, remote_detach.closed, None).await
                             .map(|_| attach_error)
-                            .unwrap_or(ReceiverAttachErrorKind::SessionIsDropped)
+                            .unwrap_or(ReceiverAttachErrorKind::IllegalSessionState)
                     },
                     Some(_) => ReceiverAttachErrorKind::NonAttachFrameReceived,
-                    None => ReceiverAttachErrorKind::SessionIsDropped,
+                    None => ReceiverAttachErrorKind::IllegalSessionState,
                 }
             },
 
@@ -580,9 +580,9 @@ where
                             Ok(_) => match reader.recv().await {
                                 Some(LinkFrame::Detach(remote_detach)) => attach_error,
                                 Some(_) => ReceiverAttachErrorKind::NonAttachFrameReceived,
-                                None => ReceiverAttachErrorKind::SessionIsDropped,
+                                None => ReceiverAttachErrorKind::IllegalSessionState,
                             },
-                            Err(_) => ReceiverAttachErrorKind::SessionIsDropped,
+                            Err(_) => ReceiverAttachErrorKind::IllegalSessionState,
                         }
                     },
                     Err(_) => attach_error,
@@ -650,7 +650,7 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    type DetachError = definitions::Error;
+    type DetachError = DetachError;
 
     /// Closing or not isn't taken care of here but outside
     #[instrument(skip_all)]
@@ -661,19 +661,30 @@ where
             true => match self.local_state {
                 LinkState::Attached
                 | LinkState::AttachSent
-                | LinkState::AttachReceived
-                | LinkState::DetachSent
-                | LinkState::DetachReceived => self.local_state = LinkState::CloseReceived,
+                | LinkState::AttachReceived => {
+                    self.local_state = LinkState::CloseReceived;
+                    match detach.error {
+                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
+                        None => Ok(()),
+                    }
+                },
+                LinkState::DetachSent => {
+                    self.local_state = LinkState::CloseReceived;
+                    match detach.error {
+                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
+                        None => Err(DetachError::ClosedByRemoteWhenDetaching),
+                    }
+                }
                 LinkState::CloseSent => {
                     self.local_state = LinkState::Closed;
                     let _ = self.output_handle.take();
+                    match detach.error {
+                        Some(error) => Err(DetachError::RemoteClosedWithError(error)),
+                        None => Ok(()),
+                    }
                 }
                 _ => {
-                    return Err(definitions::Error::new(
-                        AmqpError::IllegalState,
-                        Some("Illegal local state".into()),
-                        None,
-                    ))
+                    Err(DetachError::IllegalState)
                 }
             },
             false => {
@@ -685,20 +696,16 @@ where
                         let _ = self.output_handle.take();
                     }
                     _ => {
-                        return Err(definitions::Error::new(
-                            AmqpError::IllegalState,
-                            Some("Illegal local state".into()),
-                            None,
-                        ))
+                        return Err(DetachError::IllegalState)
                     }
+                }
+
+                match detach.error {
+                    Some(error) => Err(DetachError::RemoteDetachedWithError(error)),
+                    None => Ok(()),
                 }
             }
         }
-
-        if let Some(err) = detach.error {
-            return Err(err);
-        }
-        Ok(())
     }
 
     #[instrument(skip_all)]
@@ -706,19 +713,9 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         closed: bool,
-        error: Option<Self::DetachError>,
+        error: Option<definitions::Error>,
     ) -> Result<(), Self::DetachError> {
-        match self.local_state {
-            LinkState::Attached => {
-                self.local_state = LinkState::DetachSent;
-            }
-            LinkState::DetachReceived => {
-                self.local_state = LinkState::Detached;
-            }
-            _ => return Err(AmqpError::IllegalState.into()),
-        }
-
-        match self.output_handle.take() {
+        match self.output_handle {
             Some(handle) => {
                 let detach = Detach {
                     handle: handle.into(),
@@ -728,15 +725,20 @@ where
 
                 debug!("Sending detach: {:?}", detach);
 
-                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| {
-                    definitions::Error::new(
-                        AmqpError::IllegalState,
-                        Some("Session must have dropped".to_string()),
-                        None,
-                    )
-                })?;
+                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| DetachError::IllegalSessionState)?;
+
+                match (self.local_state, closed) {
+                    (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
+                    (LinkState::DetachReceived, false) => self.local_state = LinkState::Detached,
+                    (LinkState::CloseReceived, false) => return Err(DetachError::ClosedByRemoteWhenDetaching),
+                    (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
+                    (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemoteWhenClosing),
+                    (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
+                    _ => return Err(DetachError::IllegalState)
+                };
+                self.output_handle.take();
             }
-            None => return Err(definitions::Error::new(AmqpError::IllegalState, None, None)),
+            None => return Err(DetachError::IllegalState),
         }
 
         Ok(())
@@ -1092,22 +1094,21 @@ pub(crate) async fn expect_detach_then_detach<L>(
     reader: &mut mpsc::Receiver<LinkFrame>,
 ) -> Result<(), Error>
 where
-    L: endpoint::LinkAttach<AttachError = AttachError>
-        + endpoint::LinkDetach<DetachError = definitions::Error>,
+    L: endpoint::LinkAttach
+        + endpoint::LinkDetach<DetachError = DetachError>,
 {
     let frame = reader
         .recv()
         .await
-        .ok_or_else(|| Error::expecting_frame("Detach"))?;
+        .ok_or(Error::ExpectImmediateDetach)?;
 
-    let _remote_detach = match frame {
+    let remote_detach = match frame {
         LinkFrame::Detach(detach) => detach,
-        _ => return Err(Error::expecting_frame("Detach")),
+        _ => return Err(Error::ExpectImmediateDetach),
     };
 
-    link.send_detach(writer, false, None)
-        .await
-        .map_err(Error::Local)?;
+    link.send_detach(writer, remote_detach.closed, None)
+        .await?;
     Ok(())
 }
 

@@ -31,12 +31,12 @@ where
         drain: Option<bool>,
         echo: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(|_| Error::NotAttached)?;
+        // self.error_if_closed().map_err(|_| Error::NotAttached)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Error::NotAttached)?
+            .ok_or(Error::IllegalState)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -120,7 +120,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::SessionIsDropped)
+            .map_err(|_| Error::IllegalSessionState)
     }
 
     async fn on_incomplete_transfer(
@@ -251,7 +251,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(Error::NotAttached)?
+            .ok_or(Error::IllegalState)?
             .into();
 
         let delivery = Delivery {
@@ -276,7 +276,7 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(|_| Error::NotAttached)?;
+        // self.error_if_closed().map_err(|_| Error::IllegalState)?;
 
         let settled = match self.rcv_settle_mode {
             ReceiverSettleMode::First => {
@@ -311,7 +311,7 @@ where
         writer
             .send(frame)
             .await
-            .map_err(|_| Error::SessionIsDropped)?;
+            .map_err(|_| Error::IllegalSessionState)?;
 
         // This is a unit enum, clone should be really cheap
         Ok(())
@@ -394,12 +394,12 @@ impl ReceiverLink<Target> {
         drain: Option<bool>,
         echo: bool,
     ) -> Result<(), link::Error> {
-        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
+        // self.error_if_closed().map_err(|e| link::Error::Local(e))?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?
+            .ok_or(Error::IllegalState)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -482,7 +482,7 @@ impl ReceiverLink<Target> {
         };
         writer
             .blocking_send(LinkFrame::Flow(flow))
-            .map_err(|_| Error::sending_to_session())
+            .map_err(|_| Error::IllegalSessionState)
     }
 }
 

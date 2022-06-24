@@ -312,13 +312,12 @@ trait FromRecvError {
     fn from_recv_error(err: RecvError) -> Self;
 }
 
-impl<T> FromRecvError for Result<T, link::Error> {
-    fn from_recv_error(_: RecvError) -> Self {
-        Err(link::Error::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Outcome sender is dropped".into()),
-            None,
-        )))
+impl<T, E> FromRecvError for Result<T, E> 
+where
+    E: From<RecvError>,
+{
+    fn from_recv_error(err: RecvError) -> Self {
+        Err(E::from(err))
     }
 }
 

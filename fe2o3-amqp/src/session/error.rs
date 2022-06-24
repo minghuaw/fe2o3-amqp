@@ -96,7 +96,7 @@ impl Error {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AllocLinkError {
     #[error("Illegal session state")]
-    IllegalState,
+    IllegalSessionState,
 
     #[error("Link name must be unique")]
     DuplicatedLinkName,
@@ -117,9 +117,9 @@ impl From<AllocSessionError> for Error {
 impl From<AllocLinkError> for definitions::Error {
     fn from(err: AllocLinkError) -> Self {
         match err {
-            AllocLinkError::IllegalState => Self {
+            AllocLinkError::IllegalSessionState => Self {
                 condition: AmqpError::IllegalState.into(),
-                description: None,
+                description: Some("Illegal session state".to_string()),
                 info: None,
             },
             AllocLinkError::DuplicatedLinkName => Self {

@@ -20,12 +20,12 @@ where
         available: Option<u32>,
         echo: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(|_| Error::NotAttached)?;
+        // self.error_if_closed().map_err(|_| Error::IllegalState)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Error::NotAttached)?
+            .ok_or(Error::IllegalState)?
             .into();
 
         let flow = match (delivery_count, available) {
@@ -101,7 +101,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::SessionIsDropped)
+            .map_err(|_| Error::IllegalSessionState)
     }
 
     async fn send_payload<Fut>(
@@ -120,7 +120,7 @@ where
         use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
-        self.error_if_closed().map_err(|_| Error::NotAttached)?;
+        // self.error_if_closed().map_err(|_| Error::IllegalState)?;
 
         tokio::select! {
             _ = self.flow_state.consume(1) => {
@@ -137,35 +137,28 @@ where
                     Some(LinkFrame::Detach(detach)) => {
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
-                        self.send_detach(writer, closed, None).await
-                            .map_err(Self::Error::Local)?;
+                        self.send_detach(writer, closed, None).await?;
 
-                        let detach_err = match result {
-                            Ok(_) => DetachError {
-                                is_closed_by_remote: closed,
-                                error: None
-                            },
-                            Err(err) => DetachError {
-                                is_closed_by_remote: closed,
-                                error: Some(err)
-                            }
-                        };
-
-                        return Err(Error::Detached(detach_err))
+                        // return Err(Error::Detached(detach_err))
+                        match (result, closed) {
+                            (Ok(_), true) => return Err(Error::RemoteClosed),
+                            (Ok(_), false) => return Err(Error::RemoteDetached),
+                            (Err(err), _) => return Err(Error::from(err)),
+                        }
                     },
                     _ => {
                         // Other frames should not forwarded to the sender by the session
-                        return Err(Error::expecting_frame("Detach"))
+                        return Err(Error::ExpectImmediateDetach)
                     }
                 }
             }
         }
 
-        let input_handle = self.input_handle.clone().ok_or(AmqpError::IllegalState)?;
+        let input_handle = self.input_handle.clone().ok_or(Error::IllegalState)?;
         let handle = self
             .output_handle
             .clone()
-            .ok_or(AmqpError::IllegalState)?
+            .ok_or(Error::IllegalState)?
             .into();
 
         // Delivery count is incremented when consuming credit
@@ -308,7 +301,7 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(Error::Local)?;
+        // self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
@@ -335,7 +328,7 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::Error> {
-        self.error_if_closed().map_err(Error::Local)?;
+        // self.error_if_closed().map_err(Error::Local)?;
 
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
@@ -420,7 +413,7 @@ async fn send_transfer(
     writer
         .send(frame)
         .await
-        .map_err(|_| Error::sending_to_session())
+        .map_err(|_| Error::IllegalSessionState)
 }
 
 #[inline]
@@ -444,5 +437,5 @@ async fn send_disposition(
     writer
         .send(frame)
         .await
-        .map_err(|_| Error::sending_to_session())
+        .map_err(|_| Error::IllegalSessionState)
 }

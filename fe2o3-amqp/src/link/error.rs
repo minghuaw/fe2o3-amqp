@@ -11,52 +11,98 @@ use crate::session::AllocLinkError;
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::TransactionId;
 
-/// Error associated with detaching a link
-#[derive(Debug)]
-pub struct DetachError {
-    /// Whether the remote is closing
-    pub is_closed_by_remote: bool,
-    /// The error associated with detachment
-    pub error: Option<definitions::Error>,
+// /// Error associated with detaching a link
+// #[derive(Debug)]
+// pub struct DetachError {
+//     /// Whether the remote is closing
+//     pub is_closed_by_remote: bool,
+//     /// The error associated with detachment
+//     pub error: Option<definitions::Error>,
+// }
+
+/// Error associated with detaching
+#[derive(Debug, thiserror::Error)]
+pub enum DetachError {
+    /// ILlegal link state
+    #[error("Illegal local state")]
+    IllegalState,
+
+    /// Session has dropped
+    #[error("Session has dropped")]
+    IllegalSessionState,
+
+    /// Expecting a detach but found other frame
+    #[error("Expecting a Detach")]
+    NonDetachFrameReceived,
+
+    /// Remote peer detached with error
+    #[error("Remote detached with an error: {}", .0)]
+    RemoteDetachedWithError(definitions::Error),
+
+    /// Remote peer sent a closing detach when the local terminus sent a non-closing detach
+    #[error("Link closed by remote")]
+    ClosedByRemote,
+
+    /// Remote peer sent a non-closing detach when the local terminus is sending a closing detach
+    #[error("Link will be closed by local terminus")]
+    DetachedByRemote,
+
+    /// Remote peer closed the link with an error
+    #[error("Remote peer closed the link with an error: {}", .0)]
+    RemoteClosedWithError(definitions::Error)
 }
 
-impl DetachError {
-    pub(crate) fn new(is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
-        Self {
-            is_closed_by_remote,
-            error,
+impl From<DetachError> for Error {
+    fn from(value: DetachError) -> Self {
+        match value {
+            DetachError::IllegalState => Self::IllegalState,
+            DetachError::IllegalSessionState => Self::IllegalSessionState,
+            DetachError::RemoteDetachedWithError(error) => Self::RemoteDetachedWithError(error),
+            DetachError::ClosedByRemote => Self::RemoteClosed,
+            DetachError::DetachedByRemote => Self::RemoteDetached,
+            DetachError::RemoteClosedWithError(error) => Self::RemoteClosedWithError(error),
+            DetachError::NonDetachFrameReceived => Self::ExpectImmediateDetach,
         }
     }
-
-    /// Whether the remote decided to close
-    pub fn is_closed_by_remote(&self) -> bool {
-        self.is_closed_by_remote
-    }
-
-    /// The error condition
-    pub fn error_condition(&self) -> Option<&ErrorCondition> {
-        match &self.error {
-            Some(e) => Some(&e.condition),
-            None => None,
-        }
-    }
-
-    /// Convert into the inner error
-    pub fn into_error(self) -> Option<definitions::Error> {
-        self.error
-    }
 }
 
-impl fmt::Display for DetachError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DetachError")
-            .field("is_closed_by_remote", &self.is_closed_by_remote)
-            .field("error", &self.error)
-            .finish()
-    }
-}
+// impl DetachError {
+//     pub(crate) fn new(is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
+//         Self {
+//             is_closed_by_remote,
+//             error,
+//         }
+//     }
 
-impl std::error::Error for DetachError {}
+//     /// Whether the remote decided to close
+//     pub fn is_closed_by_remote(&self) -> bool {
+//         self.is_closed_by_remote
+//     }
+
+//     /// The error condition
+//     pub fn error_condition(&self) -> Option<&ErrorCondition> {
+//         match &self.error {
+//             Some(e) => Some(&e.condition),
+//             None => None,
+//         }
+//     }
+
+//     /// Convert into the inner error
+//     pub fn into_error(self) -> Option<definitions::Error> {
+//         self.error
+//     }
+// }
+
+// impl fmt::Display for DetachError {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.debug_struct("DetachError")
+//             .field("is_closed_by_remote", &self.is_closed_by_remote)
+//             .field("error", &self.error)
+//             .finish()
+//     }
+// }
+
+// impl std::error::Error for DetachError {}
 
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
@@ -164,21 +210,15 @@ pub type RecvError = Error;
 /// Error associated with normal operations on a link
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    // /// A local error
-    // #[error("Local error: {:?}", .0)]
-    // Local(definitions::Error),
 
-    // /// The remote peer detached with error
-    // #[error("Link is detached {:?}", .0)]
-    // Detached(DetachError),
 
-    /// Illegal link state (attempting to send while link is detached)
-    #[error("Illegal link state, link is detached")]
-    NotAttached,
+    /// ILlegal link state
+    #[error("Illegal local state")]
+    IllegalState,
 
     /// Session has dropped
     #[error("Session has dropped")]
-    SessionIsDropped,
+    IllegalSessionState,
 
     /// The delivery-id is not found in Transfer
     #[error("Delivery ID is not found in Transfer")]
@@ -194,8 +234,51 @@ pub enum Error {
 
     /// If the negotiated link value is first, then it is illegal to set this
     /// field to second.
-    #[error("Negotiated value is first. Setting mode to second is illegal.")]
+    #[error("Negotiated value is first. Setting mode to second is illegal")]
     IllegalRcvSettleModeInTransfer,
+
+    /// The link is expected to be detached immediately but didn't receive
+    /// an incoming Detach frame
+    #[error("Expecting an immediate detach")]
+    ExpectImmediateDetach,
+
+    /// Remote peer detached 
+    #[error("Remote detached")]
+    RemoteDetached,
+
+    /// Remote peer detached with error
+    #[error("Remote detached with an error: {}", .0)]
+    RemoteDetachedWithError(definitions::Error),
+
+    // /// Remote peer sent a closing detach when the local terminus sent a non-closing detach
+    // #[error("Link closed by remote")]
+    // ClosedByRemoteWhenDetaching,
+
+    // /// Remote peer sent a non-closing detach when the local terminus is sending a closing detach
+    // #[error("Link will be closed by local terminus")]
+    // DetachedByRemoteWhenClosing,
+
+    /// Remote peer closed 
+    #[error("Remote closed")]
+    RemoteClosed,
+
+    /// Remote peer closed the link with an error
+    #[error("Remote peer closed the link with an error: {}", .0)]
+    RemoteClosedWithError(definitions::Error),
+
+    /// The peer sent more message transfers than currently allowed on the link.
+    #[error("The peer sent more message transfers than currently allowed on the link")]
+    TransferLimitExceeded,
+
+    /// Field is inconsisten in multi-frame delivery
+    #[error("Field is inconsisten in multi-frame delivery")]
+    InconsistentFieldInMultiFrameDelivery
+}
+
+impl From<oneshot::error::RecvError> for Error {
+    fn from(_: oneshot::error::RecvError) -> Self {
+        Self::IllegalSessionState
+    }
 }
 
 // impl Error {
@@ -263,18 +346,18 @@ pub enum Error {
 //     }
 // }
 
-pub(crate) fn detach_error_expecting_frame() -> DetachError {
-    let error = definitions::Error::new(
-        AmqpError::IllegalState,
-        Some("Expecting remote detach frame".to_string()),
-        None,
-    );
+// pub(crate) fn detach_error_expecting_frame() -> DetachError {
+//     let error = definitions::Error::new(
+//         AmqpError::IllegalState,
+//         Some("Expecting remote detach frame".to_string()),
+//         None,
+//     );
 
-    DetachError {
-        is_closed_by_remote: false,
-        error: Some(error),
-    }
-}
+//     DetachError {
+//         is_closed_by_remote: false,
+//         error: Some(error),
+//     }
+// }
 
 /// Error associated with attaching a link
 #[derive(Debug, thiserror::Error)]
@@ -306,7 +389,7 @@ pub enum AttachError {
 impl From<AllocLinkError> for AttachError {
     fn from(error: AllocLinkError) -> Self {
         match error {
-            AllocLinkError::IllegalState => Self::IllegalSessionState,
+            AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
             AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
         }
     }
@@ -380,7 +463,7 @@ pub enum ReceiverAttachError {
 pub enum ReceiverAttachErrorKind {
     // Errors that should end the session
     /// The associated session has dropped
-    SessionIsDropped,
+    IllegalSessionState,
     
     /// Link name is already in use
     DuplicatedLinkName,
@@ -417,12 +500,21 @@ pub enum ReceiverAttachErrorKind {
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
 }
 
+impl From<AllocLinkError> for ReceiverAttachErrorKind {
+    fn from(value: AllocLinkError) -> Self {
+        match value {
+            AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
+            AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
+        }
+    }
+}
+
 impl<'a> TryFrom<&'a ReceiverAttachErrorKind> for definitions::Error {
     type Error = &'a ReceiverAttachErrorKind;
 
     fn try_from(value: &'a ReceiverAttachErrorKind) -> Result<Self, Self::Error> {
         let condition: ErrorCondition = match value {
-            ReceiverAttachErrorKind::SessionIsDropped => AmqpError::IllegalState.into(),
+            ReceiverAttachErrorKind::IllegalSessionState => AmqpError::IllegalState.into(),
             ReceiverAttachErrorKind::DuplicatedLinkName => SessionError::HandleInUse.into(),
             ReceiverAttachErrorKind::IllegalState => AmqpError::IllegalState.into(),
             ReceiverAttachErrorKind::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
@@ -445,7 +537,7 @@ pub enum SenderAttachErrorKind {
     // Illegal session state
 
     /// Session stopped
-    SessionIsDropped,
+    IllegalSessionState,
 
     /// Link name duplicated
     DuplicatedLinkName,
@@ -487,7 +579,7 @@ impl<'a> TryFrom<&'a SenderAttachErrorKind> for definitions::Error {
 
     fn try_from(value: &'a SenderAttachErrorKind) -> Result<Self, Self::Error> {
         let condition: ErrorCondition = match value {
-            SenderAttachErrorKind::SessionIsDropped => AmqpError::IllegalState.into(),
+            SenderAttachErrorKind::IllegalSessionState => AmqpError::IllegalState.into(),
             SenderAttachErrorKind::DuplicatedLinkName => SessionError::HandleInUse.into(),
             SenderAttachErrorKind::IllegalState => AmqpError::IllegalState.into(),
             SenderAttachErrorKind::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
@@ -514,14 +606,14 @@ pub(crate) enum SendAttachErrorKind {
     IllegalState, 
 
     /// Illegal session state
-    SessionIsDropped,
+    IllegalSessionState,
 }
 
 impl From<SendAttachErrorKind> for SenderAttachErrorKind {
     fn from(value: SendAttachErrorKind) -> Self {
         match value {
             SendAttachErrorKind::IllegalState => Self::IllegalState,
-            SendAttachErrorKind::SessionIsDropped => Self::SessionIsDropped,
+            SendAttachErrorKind::IllegalSessionState => Self::IllegalSessionState,
         }
     }
 }
@@ -530,7 +622,7 @@ impl From<SendAttachErrorKind> for ReceiverAttachErrorKind {
     fn from(value: SendAttachErrorKind) -> Self {
         match value {
             SendAttachErrorKind::IllegalState => Self::IllegalState,
-            SendAttachErrorKind::SessionIsDropped => Self::SessionIsDropped,
+            SendAttachErrorKind::IllegalSessionState => Self::IllegalSessionState,
         }
     }
 }

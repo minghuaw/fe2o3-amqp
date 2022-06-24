@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, LinkError, SequenceNo};
+use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, SequenceNo};
 use tokio::sync::RwLock;
 
 use crate::{
@@ -267,7 +267,7 @@ impl LinkFlowState<role::Receiver> {
     pub async fn consume(&self, count: u32) -> Result<(), super::Error> {
         let mut state = self.lock.write().await;
         if state.link_credit < count {
-            Err(LinkError::TransferLimitExceeded.into())
+            Err(super::Error::TransferLimitExceeded)
         } else {
             state.delivery_count += count;
             state.link_credit -= count;

@@ -17,7 +17,6 @@ use fe2o3_amqp_types::{
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkDetach, LinkExt, Settlement},
-    link::error::detach_error_expecting_frame,
     session::{self, SessionHandle},
 };
 

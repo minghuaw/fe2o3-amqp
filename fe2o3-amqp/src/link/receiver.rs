@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
+    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo, SessionError},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
+use futures_util::TryFutureExt;
 use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
@@ -16,8 +17,7 @@ use tokio::{
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkExt},
-    link::error::detach_error_expecting_frame,
-    session::{self, SessionHandle},
+    session::{self, SessionHandle, AllocLinkError},
     Payload,
 };
 
@@ -27,7 +27,7 @@ use super::{
     error::{AttachError, DetachError},
     receiver_link::section_number_and_offset,
     role, ArcReceiverUnsettledMap, Error, LinkFrame, LinkRelay, ReceiverFlowState, ReceiverLink,
-    DEFAULT_CREDIT,
+    DEFAULT_CREDIT, ReceiverAttachError, ReceiverAttachErrorKind,
 };
 
 macro_rules! or_assign {
@@ -36,14 +36,7 @@ macro_rules! or_assign {
             Some(value) => {
                 if let Some(other_value) = $other.$field {
                     if *value != other_value {
-                        return Err(Error::Local(
-                            definitions::Error::new(
-                                AmqpError::NotAllowed,
-                                Some(format!("Inconsistent {:?} in multi-frame delivery", value)),
-                                None
-                            )
-                        ))
-
+                        return Err(Error::InconsistentFieldInMultiFrameDelivery)
                     }
                 }
             },
@@ -243,7 +236,7 @@ impl Receiver {
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Receiver, AttachError> {
+    ) -> Result<Receiver, ReceiverAttachError> {
         Self::builder()
             .name(name)
             .source(addr)
@@ -421,14 +414,14 @@ where
     L: endpoint::ReceiverLink<
             Error = Error,
             // AttachError = AttachError,
-            DetachError = definitions::Error,
+            DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>,
 {
     #[inline]
     async fn reattach_inner(
         &mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, DetachError> {
+    ) -> Result<&mut Self, ReceiverAttachErrorKind> {
         if self.link.output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
             let link_handle = LinkRelay::Receiver {
@@ -451,12 +444,7 @@ where
             .await
             {
                 Ok(handle) => handle,
-                Err(err) => {
-                    return Err(DetachError {
-                        is_closed_by_remote: false,
-                        error: Some(definitions::Error::from(err)),
-                    })
-                }
+                Err(err) => return Err(err.into())
             };
             *self.link.output_handle_mut() = Some(handle);
         }
@@ -490,32 +478,23 @@ where
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        let frame = self.incoming.recv().await.ok_or_else(|| {
-            Error::Local(definitions::Error::new(
-                AmqpError::IllegalState,
-                Some("Session is dropped".into()),
-                None,
-            ))
-        })?;
+        let frame = self.incoming.recv().await.ok_or(Error::IllegalSessionState)?;
 
         match frame {
             LinkFrame::Detach(detach) => {
-                let err = DetachError {
-                    is_closed_by_remote: detach.closed,
-                    error: detach.error,
-                };
-                Err(Error::Detached(err))
+                match (detach.error, detach.closed) {
+                    (Some(err), false) => Err(Error::RemoteDetachedWithError(err)),
+                    (Some(err), true) => Err(Error::RemoteClosedWithError(err)),
+                    (None, false) => Err(Error::RemoteDetached),
+                    (None, true) => Err(Error::RemoteClosed),
+                }
             }
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
-            LinkFrame::Attach(_) => Err(Error::Local(definitions::Error::new(
-                AmqpError::IllegalState,
-                Some("Received Attach on an attached link".into()),
-                None,
-            ))),
+            LinkFrame::Attach(_) => Err(Error::IllegalState),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
                 // in the session loop
@@ -679,23 +658,18 @@ where
         error: Option<definitions::Error>,
     ) -> Result<(), DetachError> {
         // Send a non-closing detach
-        if let Err(e) = self
+        self
             .link
             .send_detach(&mut self.outgoing, false, error)
-            .await
-        {
-            return Err(DetachError::new(false, Some(e)));
-        }
+            .await?;
 
         // Wait for remote detach
-        let frame = match self.incoming.recv().await {
-            Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame()),
-        };
+        let frame = self.incoming.recv().await
+            .ok_or(DetachError::IllegalSessionState)?;
 
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame()),
+            _ => return Err(DetachError::NonDetachFrameReceived),
         };
 
         if remote_detach.closed {
@@ -704,7 +678,8 @@ where
             // signal that it has closed the link by reattaching and then sending
             // a closing detach.
             let session_control = self.session.clone();
-            self.reattach_inner(session_control).await?;
+            self.reattach_inner(session_control).await
+                .map_err(|_| DetachError::ClosedByRemote)?;
 
             self.close_with_error(None).await?; // TODO: should error be resent?
 
@@ -712,15 +687,10 @@ where
             // specified link, and the closed flag set to true. The partner will destroy
             // the corresponding link endpoint, and reply with its own detach frame with
             // the closed flag set to true.
-            return Err(DetachError {
-                is_closed_by_remote: true,
-                error: None,
-            });
-        } else if let Err(e) = self.link.on_incoming_detach(remote_detach).await {
-            return Err(DetachError::new(false, Some(e)));
+            Err(DetachError::ClosedByRemote)
+        } else {
+            self.link.on_incoming_detach(remote_detach).await
         }
-
-        Ok(())
     }
 
     /// Close the link.
