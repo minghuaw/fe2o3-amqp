@@ -1,7 +1,7 @@
 //! Helper types differentiating message delivery
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
+    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{message::Body, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
@@ -10,9 +10,7 @@ use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{endpoint::Settlement, util::Uninitialized};
-use crate::{link, Payload};
-
-use super::SendError;
+use crate::{Payload};
 
 /// Reserved for receiver side
 #[derive(Debug)]

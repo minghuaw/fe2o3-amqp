@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode,
+        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode,
         Role, SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
@@ -39,7 +39,7 @@ use tracing::{debug, instrument, trace};
 
 use crate::{
     endpoint::{self, InputHandle, LinkAttach, LinkFlow, OutputHandle, Settlement, LinkDetach},
-    link::{self, delivery::UnsettledMessage},
+    link::{delivery::UnsettledMessage},
     util::{Consumer, Producer},
     Payload, control::SessionControl,
 };
@@ -334,7 +334,9 @@ where
             | SenderAttachError::IncomingTargetIsNone => {
                 match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        self.send_detach(writer, remote_detach.closed, None).await
+                        let closed = remote_detach.closed;
+                        let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
+                        self.send_detach(writer, closed, None).await
                             .map(|_| attach_error)
                             .unwrap_or(SenderAttachError::IllegalSessionState)
                     },
@@ -351,7 +353,10 @@ where
                     Ok(error) => {
                         match self.send_detach(writer, true, Some(error)).await {
                             Ok(_) => match reader.recv().await {
-                                Some(LinkFrame::Detach(remote_detach)) => attach_error,
+                                Some(LinkFrame::Detach(remote_detach)) => {
+                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
+                                    attach_error
+                                },
                                 Some(_) => SenderAttachError::NonAttachFrameReceived,
                                 None => SenderAttachError::IllegalSessionState,
                             },
@@ -476,7 +481,10 @@ where
                     Ok(error) => {
                         match self.send_detach(writer, true, Some(error)).await {
                             Ok(_) => match reader.recv().await {
-                                Some(LinkFrame::Detach(remote_detach)) => attach_error,
+                                Some(LinkFrame::Detach(remote_detach)) => {
+                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: how to handle this?
+                                    attach_error
+                                },
                                 Some(_) => ReceiverAttachError::NonAttachFrameReceived,
                                 None => ReceiverAttachError::IllegalSessionState,
                             },

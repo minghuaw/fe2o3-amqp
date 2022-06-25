@@ -4,27 +4,26 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{DeliveryState, Source, Target, TargetArchetype},
+    messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
-use tokio::sync::{mpsc, Mutex, Notify, RwLock};
+use tokio::sync::{mpsc, Notify, RwLock};
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    endpoint::{OutputHandle, LinkExt},
+    endpoint::{LinkExt, OutputHandle},
     link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
 
 use super::{
-    delivery::UnsettledMessage,
     receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverFlowState, Sender, SenderFlowState, SenderLink, ReceiverLink, ReceiverAttachError, SenderAttachError,
+    Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderLink,
 };
 
 #[cfg(feature = "transaction")]
@@ -369,7 +368,10 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Sender, SenderAttachError> {
+    pub async fn attach<R>(
+        self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Sender, SenderAttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Sender { inner })
@@ -378,7 +380,12 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
 
 impl<T> Builder<role::Sender, T, WithName, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     fn create_flow_state_containers(
         &mut self,
@@ -405,8 +412,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<SenderInner<SenderLink<T>>, SenderAttachError>
-    {
+    ) -> Result<SenderInner<SenderLink<T>>, SenderAttachError> {
         let buffer_size = self.buffer_size;
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
@@ -432,13 +438,21 @@ where
         // Get writer to session
         // Send an Attach frame
         // super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
-        if let Err(attach_error) =
-            link.negotiate_attach(&session.outgoing, &mut incoming_rx).await
+        if let Err(attach_error) = link
+            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+            .await
         {
             // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
             // return Err(DetachError::new(false, Some(err)));
-            let err = link.handle_attach_error(attach_error, &session.outgoing, &mut incoming_rx, &session.control).await;
-            todo!()
+            let err = link
+                .handle_attach_error(
+                    attach_error,
+                    &session.outgoing,
+                    &mut incoming_rx,
+                    &session.control,
+                )
+                .await;
+            return Err(err);
         }
 
         // Attach completed, return Sender
@@ -467,7 +481,10 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, ReceiverAttachError> {
+    pub async fn attach<R>(
+        self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Receiver, ReceiverAttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Receiver { inner })
@@ -476,13 +493,17 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
 
 impl<T> Builder<role::Receiver, T, WithName, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
-    {
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
         let credit_mode = self.credit_mode.clone();
@@ -521,13 +542,21 @@ where
         let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
-        if let Err(attach_error) =
-            link.negotiate_attach(&session.outgoing, &mut incoming_rx).await
+        if let Err(attach_error) = link
+            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+            .await
         {
             // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
             // return Err(DetachError::new(false, Some(err)));
-            let err = link.handle_attach_error(attach_error, &session.outgoing, &mut incoming_rx, &session.control).await;
-            todo!()
+            let err = link
+                .handle_attach_error(
+                    attach_error,
+                    &session.outgoing,
+                    &mut incoming_rx,
+                    &session.control,
+                )
+                .await;
+            return Err(err);
         }
 
         let mut inner = ReceiverInner {
