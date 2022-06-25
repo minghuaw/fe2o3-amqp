@@ -11,15 +11,6 @@ use crate::session::AllocLinkError;
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::TransactionId;
 
-// /// Error associated with detaching a link
-// #[derive(Debug)]
-// pub struct DetachError {
-//     /// Whether the remote is closing
-//     pub is_closed_by_remote: bool,
-//     /// The error associated with detachment
-//     pub error: Option<definitions::Error>,
-// }
-
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
 pub enum DetachError {
@@ -66,50 +57,12 @@ impl From<DetachError> for Error {
     }
 }
 
-// impl DetachError {
-//     pub(crate) fn new(is_closed_by_remote: bool, error: Option<definitions::Error>) -> Self {
-//         Self {
-//             is_closed_by_remote,
-//             error,
-//         }
-//     }
-
-//     /// Whether the remote decided to close
-//     pub fn is_closed_by_remote(&self) -> bool {
-//         self.is_closed_by_remote
-//     }
-
-//     /// The error condition
-//     pub fn error_condition(&self) -> Option<&ErrorCondition> {
-//         match &self.error {
-//             Some(e) => Some(&e.condition),
-//             None => None,
-//         }
-//     }
-
-//     /// Convert into the inner error
-//     pub fn into_error(self) -> Option<definitions::Error> {
-//         self.error
-//     }
-// }
-
-// impl fmt::Display for DetachError {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_struct("DetachError")
-//             .field("is_closed_by_remote", &self.is_closed_by_remote)
-//             .field("error", &self.error)
-//             .finish()
-//     }
-// }
-
-// impl std::error::Error for DetachError {}
-
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
     /// 
     #[error("Local error: {:?}", .0)]
-    LinkError(#[from] Error),
+    LinkError(#[from] SenderTransferError),
 
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
@@ -245,17 +198,6 @@ impl From<AllocLinkError> for AttachError {
     }
 }
 
-// impl TryFrom<Error> for AttachError {
-//     type Error = Error;
-
-//     fn try_from(value: Error) -> Result<Self, Self::Error> {
-//         match value {
-//             Error::Local(error) => Ok(AttachError::Local(error)),
-//             Error::Detached(_) => Err(value),
-//         }
-//     }
-// }
-
 impl AttachError {
     pub(crate) fn illegal_state(description: impl Into<Option<String>>) -> Self {
         Self::Local(definitions::Error::new(
@@ -301,12 +243,6 @@ impl From<TryLockError> for SenderTryConsumeError {
         Self::TryLockError
     }
 }
-
-// /// Error attaching the receiver
-// #[derive(Debug)]
-// pub enum ReceiverAttachError {
-
-// }
 
 /// Errors associated with attaching a link as receiver
 #[derive(Debug)]
@@ -456,10 +392,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
     }
 }
 
-pub(crate) enum LinkAttachErrorKind {
-
-}
-
+/// Errors with sending attach
 pub(crate) enum SendAttachErrorKind {
     /// Illegal link state
     IllegalState, 
@@ -484,4 +417,75 @@ impl From<SendAttachErrorKind> for ReceiverAttachError {
             SendAttachErrorKind::IllegalSessionState => Self::IllegalSessionState,
         }
     }
+}
+
+/// Errors associated with sending/handling Flow 
+#[derive(Debug, thiserror::Error)]
+pub enum SenderFlowError {
+    /// ILlegal link state
+    #[error("Illegal local state")]
+    IllegalState,
+
+    /// Session has dropped
+    #[error("Session has dropped")]
+    IllegalSessionState,
+}
+
+/// Errors associated with sending Transfer
+#[derive(Debug, thiserror::Error)]
+pub enum SenderTransferError {
+    /// ILlegal link state
+    #[error("Illegal local state")]
+    IllegalState,
+
+    /// Session has dropped
+    #[error("Session has dropped")]
+    IllegalSessionState,
+
+    /// Remote peer detached 
+    #[error("Remote detached")]
+    RemoteDetached,
+
+    /// Remote peer detached with error
+    #[error("Remote detached with an error: {}", .0)]
+    RemoteDetachedWithError(definitions::Error),
+
+    /// Remote peer closed 
+    #[error("Remote closed")]
+    RemoteClosed,
+
+    /// Remote peer closed the link with an error
+    #[error("Remote peer closed the link with an error: {}", .0)]
+    RemoteClosedWithError(definitions::Error),
+
+    /// The link is expected to be detached immediately but didn't receive
+    /// an incoming Detach frame
+    #[error("Expecting an immediate detach")]
+    ExpectImmediateDetach,
+}
+
+impl From<DetachError> for SenderTransferError {
+    fn from(value: DetachError) -> Self {
+        match value {
+            DetachError::IllegalState => Self::IllegalState,
+            DetachError::IllegalSessionState => Self::IllegalSessionState,
+            DetachError::RemoteDetachedWithError(error) => Self::RemoteDetachedWithError(error),
+            DetachError::ClosedByRemote => Self::RemoteClosed,
+            DetachError::DetachedByRemote => Self::RemoteDetached,
+            DetachError::RemoteClosedWithError(error) => Self::RemoteClosedWithError(error),
+            DetachError::NonDetachFrameReceived => Self::ExpectImmediateDetach,
+        }
+    }
+}
+
+/// Errors associated with sending/handling Disposition
+#[derive(Debug, thiserror::Error)]
+pub enum SenderDispositionError {
+    /// ILlegal link state
+    #[error("Illegal local state")]
+    IllegalState,
+
+    /// Session has dropped
+    #[error("Session has dropped")]
+    IllegalSessionState,
 }

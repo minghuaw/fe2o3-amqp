@@ -1,8 +1,6 @@
 use fe2o3_amqp_types::definitions::SequenceNo;
 use futures_util::Future;
 
-use crate::link::error::DetachError;
-
 use super::*;
 
 #[async_trait]
@@ -10,7 +8,9 @@ impl<T> endpoint::SenderLink for SenderLink<T>
 where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
-    type Error = link::Error;
+    type FlowError = SenderFlowError;
+    type TransferError = SenderTransferError;
+    type DispositionError = SenderDispositionError;
 
     /// Set and send flow state
     async fn send_flow(
@@ -19,13 +19,13 @@ where
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::FlowError> {
         // self.error_if_closed().map_err(|_| Error::IllegalState)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Error::IllegalState)?
+            .ok_or(Self::FlowError::IllegalState)?
             .into();
 
         let flow = match (delivery_count, available) {
@@ -101,7 +101,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::IllegalSessionState)
+            .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
     async fn send_payload<Fut>(
@@ -113,7 +113,7 @@ where
         settled: Option<bool>,
         state: Option<DeliveryState>,
         batchable: bool,
-    ) -> Result<Settlement, Self::Error>
+    ) -> Result<Settlement, Self::TransferError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
@@ -141,14 +141,14 @@ where
 
                         // return Err(Error::Detached(detach_err))
                         match (result, closed) {
-                            (Ok(_), true) => return Err(Error::RemoteClosed),
-                            (Ok(_), false) => return Err(Error::RemoteDetached),
-                            (Err(err), _) => return Err(Error::from(err)),
+                            (Ok(_), true) => return Err(Self::TransferError::RemoteClosed),
+                            (Ok(_), false) => return Err(Self::TransferError::RemoteDetached),
+                            (Err(err), _) => return Err(Self::TransferError::from(err)),
                         }
                     },
                     _ => {
                         // Other frames should not forwarded to the sender by the session
-                        return Err(Error::ExpectImmediateDetach)
+                        return Err(Self::TransferError::ExpectImmediateDetach)
                     }
                 }
             }
@@ -156,11 +156,11 @@ where
 
         tracing::debug!(input_handle = ?self.input_handle);
 
-        let input_handle = self.input_handle.clone().ok_or(Error::IllegalState)?;
+        let input_handle = self.input_handle.clone().ok_or(Self::TransferError::IllegalState)?;
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Error::IllegalState)?
+            .ok_or(Self::TransferError::IllegalState)?
             .into();
 
         // Delivery count is incremented when consuming credit
@@ -302,7 +302,7 @@ where
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::DispositionError> {
         // self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
@@ -329,7 +329,7 @@ where
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::DispositionError> {
         // self.error_if_closed().map_err(Error::Local)?;
 
         if let SenderSettleMode::Settled = self.snd_settle_mode {
@@ -406,7 +406,7 @@ async fn send_transfer(
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
-) -> Result<(), Error> {
+) -> Result<(), SenderTransferError> {
     let frame = LinkFrame::Transfer {
         input_handle,
         performative: transfer,
@@ -415,7 +415,7 @@ async fn send_transfer(
     writer
         .send(frame)
         .await
-        .map_err(|_| Error::IllegalSessionState)
+        .map_err(|_| SenderTransferError::IllegalSessionState)
 }
 
 #[inline]
@@ -426,7 +426,7 @@ async fn send_disposition(
     settled: bool,
     state: Option<DeliveryState>,
     batchable: bool,
-) -> Result<(), Error> {
+) -> Result<(), SenderDispositionError> {
     let disposition = Disposition {
         role: Role::Sender,
         first,
@@ -439,5 +439,5 @@ async fn send_disposition(
     writer
         .send(frame)
         .await
-        .map_err(|_| Error::IllegalSessionState)
+        .map_err(|_| SenderDispositionError::IllegalSessionState)
 }

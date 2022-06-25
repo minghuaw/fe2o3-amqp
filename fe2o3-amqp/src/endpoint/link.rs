@@ -93,7 +93,9 @@ pub(crate) trait LinkExt: Link {
 
 #[async_trait]
 pub(crate) trait SenderLink: Link + LinkExt {
-    type Error: Send;
+    type FlowError: Send;
+    type TransferError: Send;
+    type DispositionError: Send;
 
     /// Set and send flow state
     async fn send_flow(
@@ -102,7 +104,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::FlowError>;
 
     /// Send message via transfer frame and return whether the message is already settled
     async fn send_payload<Fut>(
@@ -118,7 +120,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
         // The delivery state should be attached on every transfer if specified
         state: Option<DeliveryState>,
         batchable: bool,
-    ) -> Result<Settlement, Self::Error>
+    ) -> Result<Settlement, Self::TransferError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send;
 
@@ -130,7 +132,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::DispositionError>;
 
     async fn batch_dispose(
         &mut self,
@@ -139,7 +141,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
         settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::DispositionError>;
 }
 
 #[async_trait]
