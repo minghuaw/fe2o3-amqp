@@ -399,13 +399,13 @@ impl ReceiverLink<Target> {
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), FlowError> {
         // self.error_if_closed().map_err(|e| link::Error::Local(e))?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Error::IllegalState)?
+            .ok_or(FlowError::IllegalState)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -488,7 +488,7 @@ impl ReceiverLink<Target> {
         };
         writer
             .blocking_send(LinkFrame::Flow(flow))
-            .map_err(|_| Error::IllegalSessionState)
+            .map_err(|_| FlowError::IllegalSessionState)
     }
 }
 

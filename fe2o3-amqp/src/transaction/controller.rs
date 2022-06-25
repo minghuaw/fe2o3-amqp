@@ -1,5 +1,5 @@
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SenderSettleMode},
+    definitions::{self, SenderSettleMode},
     messaging::{DeliveryState, Message},
     transaction::{Coordinator, Declare, Declared, Discharge, TransactionId},
 };
@@ -13,7 +13,8 @@ use crate::{
         delivery::UnsettledMessage,
         role,
         sender::SenderInner,
-        AttachError, Link, SenderFlowState,
+        shared_inner::LinkEndpointInnerDetach,
+        Link, LinkStateError, SendError, SenderAttachError, SenderFlowState,
     },
     session::SessionHandle,
     Sendable,
@@ -38,14 +39,7 @@ where
     T: serde::Serialize,
 {
     match sender.send(sendable).await? {
-        Settlement::Settled => {
-            let err = link::SendError::Local(definitions::Error::new(
-                AmqpError::InternalError,
-                "Declare cannot be sent settled".to_string(),
-                None,
-            ));
-            return Err(err);
-        }
+        Settlement::Settled => Err(SendError::IllegalDeliveryState),
         Settlement::Unsettled {
             _delivery_tag,
             outcome,
@@ -77,7 +71,7 @@ impl Controller {
     pub async fn attach<R>(
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
-    ) -> Result<Self, AttachError> {
+    ) -> Result<Self, SenderAttachError> {
         Self::attach_with_coordinator(session, name, Coordinator::default()).await
     }
 
@@ -86,7 +80,7 @@ impl Controller {
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
         coordinator: Coordinator,
-    ) -> Result<Self, AttachError> {
+    ) -> Result<Self, SenderAttachError> {
         Self::builder()
             .name(name)
             .coordinator(coordinator)
@@ -109,7 +103,7 @@ impl Controller {
     pub(crate) async fn declare_inner(
         &self,
         global_id: Option<TransactionId>,
-    ) -> Result<Declared, link::SendError> {
+    ) -> Result<Declared, SendError> {
         // To begin transactional work, the transaction controller needs to obtain a transaction
         // identifier from the resource. It does this by sending a message to the coordinator whose
         // body consists of the declare type in a single amqp-value section. Other standard message
@@ -121,21 +115,17 @@ impl Controller {
         let sendable = Sendable::builder().message(message).settled(false).build();
 
         let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
-        match outcome.await? {
+        match outcome
+            .await
+            .map_err(|_| LinkStateError::IllegalSessionState)?
+        {
             DeliveryState::Declared(declared) => Ok(declared),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Accepted(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
-            | DeliveryState::TransactionalState(_) => {
-                Err(link::SendError::Local(definitions::Error::new(
-                    AmqpError::NotAllowed,
-                    "Controller is expecting either a Declared outcome or a Rejeccted outcome"
-                        .to_string(),
-                    None,
-                )))
-            }
+            | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
         }
     }
 
@@ -154,21 +144,17 @@ impl Controller {
         let sendable = Sendable::builder().message(message).settled(false).build();
 
         let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
-        match outcome.await? {
+        match outcome
+            .await
+            .map_err(|_| LinkStateError::IllegalSessionState)?
+        {
             DeliveryState::Accepted(_) => Ok(()),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
             | DeliveryState::Declared(_)
-            | DeliveryState::TransactionalState(_) => {
-                Err(link::SendError::Local(definitions::Error::new(
-                    AmqpError::NotAllowed,
-                    "Controller is expecting either an Accepted outcome or a Rejected outcome"
-                        .to_string(),
-                    None,
-                )))
-            }
+            | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
         }
     }
 }

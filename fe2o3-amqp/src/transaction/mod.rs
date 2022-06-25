@@ -2,7 +2,9 @@
 
 use crate::{
     endpoint::{ReceiverLink, Settlement},
-    link::{self, delivery::UnsettledMessage, LinkFrame},
+    link::{
+        self, delivery::UnsettledMessage, DispositionError, LinkFrame, LinkStateError, SendError, FlowError,
+    },
     util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
@@ -24,7 +26,7 @@ pub use controller::*;
 mod error;
 pub use error::*;
 use serde::Serialize;
-use serde_amqp::{ser::Serializer, to_value};
+use serde_amqp::{ser::Serializer, Value};
 
 mod acquisition;
 pub use acquisition::*;
@@ -129,7 +131,7 @@ impl<'t> Transaction<'t> {
     pub async fn declare(
         controller: &'t Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Transaction<'t>, DeclareError> {
+    ) -> Result<Transaction<'t>, SendError> {
         let declared = controller.declare_inner(global_id.into()).await?;
         Ok(Self {
             controller,
@@ -144,20 +146,18 @@ impl<'t> Transaction<'t> {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    pub async fn rollback(mut self) -> Result<(), DischargeError> {
+    pub async fn rollback(mut self) -> Result<(), SendError> {
         self.rollback_inner().await
     }
 
-    pub(crate) async fn rollback_inner(&mut self) -> Result<(), DischargeError> {
+    pub(crate) async fn rollback_inner(&mut self) -> Result<(), SendError> {
         if !self.is_discharged {
             self.controller
                 .discharge(self.declared.txn_id.clone(), true)
                 .await?;
             self.is_discharged = true;
-            Ok(())
-        } else {
-            Err(DischargeError::AlreadyDischarged)
         }
+        Ok(())
     }
 
     /// Commit the transaction
@@ -166,20 +166,18 @@ impl<'t> Transaction<'t> {
     ///
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
     /// error to the controller as a transaction-error
-    pub async fn commit(mut self) -> Result<(), DischargeError> {
+    pub async fn commit(mut self) -> Result<(), SendError> {
         self.commit_inner().await
     }
 
-    pub(crate) async fn commit_inner(&mut self) -> Result<(), DischargeError> {
+    pub(crate) async fn commit_inner(&mut self) -> Result<(), SendError> {
         if !self.is_discharged {
             self.controller
                 .discharge(self.declared.txn_id.clone(), false)
                 .await?;
             self.is_discharged = true;
-            Ok(())
-        } else {
-            Err(DischargeError::AlreadyDischarged)
         }
+        Ok(())
     }
 
     /// Post a transactional work
@@ -187,7 +185,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), link::SendError>
+    ) -> Result<(), SendError>
     where
         T: serde::Serialize,
     {
@@ -217,35 +215,23 @@ impl<'t> Transaction<'t> {
             Settlement::Unsettled {
                 _delivery_tag,
                 outcome,
-            } => match outcome.await? {
+            } => match outcome
+                .await
+                .map_err(|_| LinkStateError::IllegalSessionState)?
+            {
                 DeliveryState::Received(_)
                 | DeliveryState::Accepted(_)
                 | DeliveryState::Rejected(_)
                 | DeliveryState::Released(_)
                 | DeliveryState::Modified(_)
-                | DeliveryState::Declared(_) => Err(link::SendError::not_allowed(
-                    "Expecting a TransactionalState".to_string(),
-                )),
-                DeliveryState::TransactionalState(txn) => {
-                    // Interleaving transfer and disposition of different transactions
-                    // isn't implemented
-                    if txn.txn_id != self.declared.txn_id {
-                        return Err(link::SendError::mismatched_transaction_id(
-                            &self.declared.txn_id,
-                            &txn.txn_id,
-                        ));
-                    }
-
-                    match txn.outcome {
-                        Some(Outcome::Accepted(_)) => Ok(()),
-                        Some(Outcome::Rejected(value)) => Err(link::SendError::Rejected(value)),
-                        Some(Outcome::Released(value)) => Err(link::SendError::Released(value)),
-                        Some(Outcome::Modified(value)) => Err(link::SendError::Modified(value)),
-                        Some(Outcome::Declared(_)) | None => {
-                            Err(link::SendError::expecting_outcome())
-                        }
-                    }
-                }
+                | DeliveryState::Declared(_) => Err(SendError::IllegalDeliveryState),
+                DeliveryState::TransactionalState(txn) => match txn.outcome {
+                    Some(Outcome::Accepted(_)) => Ok(()),
+                    Some(Outcome::Rejected(value)) => Err(link::SendError::Rejected(value)),
+                    Some(Outcome::Released(value)) => Err(link::SendError::Released(value)),
+                    Some(Outcome::Modified(value)) => Err(link::SendError::Modified(value)),
+                    Some(Outcome::Declared(_)) | None => Err(SendError::IllegalDeliveryState),
+                },
             },
         }
     }
@@ -261,7 +247,7 @@ impl<'t> Transaction<'t> {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         outcome: Outcome,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         let txn_state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
             outcome: Some(outcome),
@@ -282,7 +268,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         let outcome = Outcome::Accepted(Accepted {});
         self.retire(recver, delivery, outcome).await
     }
@@ -293,7 +279,7 @@ impl<'t> Transaction<'t> {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         let outcome = Outcome::Rejected(Rejected {
             error: error.into(),
         });
@@ -305,7 +291,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         let outcome = Outcome::Released(Released {});
         self.retire(recver, delivery, outcome).await
     }
@@ -316,7 +302,7 @@ impl<'t> Transaction<'t> {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         let outcome = Outcome::Modified(modified.into());
         self.retire(recver, delivery, outcome).await
     }
@@ -328,26 +314,21 @@ impl<'t> Transaction<'t> {
         self,
         recver: &'r mut Receiver,
         credit: SequenceNo,
-    ) -> Result<TxnAcquisition<'t, 'r>, link::Error> {
+    ) -> Result<TxnAcquisition<'t, 'r>, FlowError> {
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
+            let key = Symbol::from(TXN_ID_KEY);
+            let value = Value::Binary(self.declared.txn_id.clone());
             match &mut writer.properties {
                 Some(fields) => {
-                    let key = Symbol::from("txn-id");
                     if fields.contains_key(&key) {
-                        return Err(link::Error::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            "Link endpoint is already associated with a transaction".to_string(),
-                            None,
-                        )));
+                        return Err(FlowError::IllegalState);
                     }
-                    let value = to_value(&self.declared.txn_id)?;
+
                     fields.insert(key, value);
                 }
                 None => {
                     let mut fields = Fields::new();
-                    let key = Symbol::from("txn-id");
-                    let value = to_value(&self.declared.txn_id)?;
                     fields.insert(key, value);
                 }
             }

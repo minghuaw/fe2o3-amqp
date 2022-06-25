@@ -6,9 +6,6 @@ use tokio::sync::TryLockError;
 
 use crate::session::AllocLinkError;
 
-#[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::TransactionId;
-
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
 pub enum DetachError {
@@ -461,6 +458,15 @@ impl From<IllegalLinkStateError> for SenderAttachError {
         match value {
             IllegalLinkStateError::IllegalState => SenderAttachError::IllegalState,
             IllegalLinkStateError::IllegalSessionState => SenderAttachError::IllegalSessionState,
+        }
+    }
+}
+
+impl From<IllegalLinkStateError> for SendError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
+            IllegalLinkStateError::IllegalSessionState => LinkStateError::IllegalSessionState.into(),
         }
     }
 }

@@ -586,7 +586,9 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Controller, AttachError> {
+    ) -> Result<Controller, SenderAttachError> {
+        use tokio::sync::Mutex;
+        
         self.attach_inner(session).await.map(|inner| Controller {
             inner: Mutex::new(inner),
         })

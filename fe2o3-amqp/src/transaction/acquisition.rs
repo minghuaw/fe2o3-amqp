@@ -9,11 +9,11 @@ use fe2o3_amqp_types::{
 
 use crate::{
     endpoint::ReceiverLink,
-    link::{self, delivery},
+    link::{delivery, FlowError, RecvError, SendError, DispositionError},
     Delivery, Receiver,
 };
 
-use super::{DischargeError, Transaction};
+use super::{Transaction, TXN_ID_KEY};
 
 /// 4.4.3 Transactional Acquisition
 ///
@@ -47,11 +47,11 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
     }
 
     /// Clear transaction-id from link and set link to drain
-    pub async fn cleanup(&mut self) -> Result<(), link::Error> {
+    pub async fn cleanup(&mut self) -> Result<(), FlowError> {
         // clear txn-id
         {
             let mut writer = self.recver.inner.link.flow_state.lock.write().await;
-            let key = Symbol::from("txn-id");
+            let key = Symbol::from(TXN_ID_KEY);
             writer.properties.as_mut().map(|map| map.remove(&key));
         }
 
@@ -67,7 +67,7 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
     }
 
     /// Transactionally acquire a message
-    pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, link::Error>
+    pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -75,27 +75,27 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
     }
 
     /// Set the credit
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), link::Error> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), FlowError> {
         // "txn-id" should be already included in the link's properties map
         self.recver.set_credit(credit).await
     }
 
     /// Commit the transactional acquisition
-    pub async fn commit(mut self) -> Result<(), DischargeError> {
+    pub async fn commit(mut self) -> Result<(), SendError> {
         self.cleanup().await?;
         self.txn.commit_inner().await?;
         Ok(())
     }
 
     /// Rollback the transactional acquisition
-    pub async fn rollback(mut self) -> Result<(), DischargeError> {
+    pub async fn rollback(mut self) -> Result<(), SendError> {
         self.cleanup().await?;
         self.txn.rollback_inner().await?;
         Ok(())
     }
 
     /// Accept the message
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         self.txn.accept(self.recver, delivery).await
     }
 
@@ -104,12 +104,12 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
         &mut self,
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         self.txn.reject(self.recver, delivery, error).await
     }
 
     /// Release the message
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), link::Error> {
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         self.txn.release(self.recver, delivery).await
     }
 
@@ -118,7 +118,7 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
         &mut self,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), link::Error> {
+    ) -> Result<(), DispositionError> {
         self.txn.modify(self.recver, delivery, modified).await
     }
 }
@@ -129,7 +129,7 @@ impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
             // clear txn-id from the link's properties
             {
                 let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();
-                let key = Symbol::from("txn-id");
+                let key = Symbol::from(TXN_ID_KEY);
                 writer.properties.as_mut().map(|fields| fields.remove(&key));
             }
 
