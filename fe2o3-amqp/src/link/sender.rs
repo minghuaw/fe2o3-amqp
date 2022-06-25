@@ -26,7 +26,7 @@ use super::{
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
     role,
-    shared_inner::{LinkEndpointInnerReattach, LinkEndpointInner},
+    shared_inner::{LinkEndpointInnerReattach, LinkEndpointInner, LinkEndpointInnerDetach},
     ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderAttachError,
     SenderFlowState, SenderLink,
 };
@@ -357,6 +357,10 @@ where
             )
             .await
     }
+
+    async fn send_detach(&mut self, closed: bool, error: Option<definitions::Error>) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
+        self.link.send_detach(&self.outgoing, closed, error).await
+    }
 }
 
 // #[async_trait]
@@ -420,50 +424,50 @@ where
 // }
 
 impl SenderInner<SenderLink<Target>> {
-    #[inline]
-    pub async fn detach_with_error(
-        &mut self,
-        error: Option<definitions::Error>,
-    ) -> Result<(), DetachError> {
-        // let mut detaching = self.into_detached();
+    // #[inline]
+    // pub async fn detach_with_error(
+    //     &mut self,
+    //     error: Option<definitions::Error>,
+    // ) -> Result<(), DetachError> {
+    //     // let mut detaching = self.into_detached();
 
-        // TODO: how should disposition be handled?
+    //     // TODO: how should disposition be handled?
 
-        // detach will send detach with closed=false and wait for remote detach
-        // The sender may reattach after fully detached
-        self.link.send_detach(&self.outgoing, false, error).await?;
+    //     // detach will send detach with closed=false and wait for remote detach
+    //     // The sender may reattach after fully detached
+    //     self.link.send_detach(&self.outgoing, false, error).await?;
 
-        // Wait for remote detach
-        let frame = match self.incoming.recv().await {
-            Some(frame) => frame,
-            None => return Err(DetachError::IllegalSessionState),
-        };
+    //     // Wait for remote detach
+    //     let frame = match self.incoming.recv().await {
+    //         Some(frame) => frame,
+    //         None => return Err(DetachError::IllegalSessionState),
+    //     };
 
-        let remote_detach = match frame {
-            LinkFrame::Detach(detach) => detach,
-            _ => return Err(DetachError::NonDetachFrameReceived),
-        };
+    //     let remote_detach = match frame {
+    //         LinkFrame::Detach(detach) => detach,
+    //         _ => return Err(DetachError::NonDetachFrameReceived),
+    //     };
 
-        if remote_detach.closed {
-            // Note that one peer MAY send a closing detach while its partner is
-            // sending a non-closing detach. In this case, the partner MUST
-            // signal that it has closed the link by reattaching and then sending
-            // a closing detach.
-            self.reattach_inner()
-                .await
-                .map_err(|_| DetachError::ClosedByRemote)?;
+    //     if remote_detach.closed {
+    //         // Note that one peer MAY send a closing detach while its partner is
+    //         // sending a non-closing detach. In this case, the partner MUST
+    //         // signal that it has closed the link by reattaching and then sending
+    //         // a closing detach.
+    //         self.reattach_inner()
+    //             .await
+    //             .map_err(|_| DetachError::ClosedByRemote)?;
 
-            self.close_with_error(None).await?;
+    //         self.close_with_error(None).await?;
 
-            // A peer closes a link by sending the detach frame with the handle for the
-            // specified link, and the closed flag set to true. The partner will destroy
-            // the corresponding link endpoint, and reply with its own detach frame with
-            // the closed flag set to true.
-            Err(DetachError::ClosedByRemote)
-        } else {
-            self.link.on_incoming_detach(remote_detach).await
-        }
-    }
+    //         // A peer closes a link by sending the detach frame with the handle for the
+    //         // specified link, and the closed flag set to true. The partner will destroy
+    //         // the corresponding link endpoint, and reply with its own detach frame with
+    //         // the closed flag set to true.
+    //         Err(DetachError::ClosedByRemote)
+    //     } else {
+    //         self.link.on_incoming_detach(remote_detach).await
+    //     }
+    // }
 }
 
 impl<L> SenderInner<L>
@@ -481,62 +485,62 @@ where
         
     // }
 
-    pub async fn close_with_error(
-        &mut self,
-        error: Option<definitions::Error>,
-    ) -> Result<(), DetachError> {
-        // Send detach with closed=true and wait for remote closing detach
-        // The sender will be dropped after close
-        self.link
-            .send_detach(&mut self.outgoing, true, error)
-            .await?;
+    // pub async fn close_with_error(
+    //     &mut self,
+    //     error: Option<definitions::Error>,
+    // ) -> Result<(), DetachError> {
+    //     // Send detach with closed=true and wait for remote closing detach
+    //     // The sender will be dropped after close
+    //     self.link
+    //         .send_detach(&mut self.outgoing, true, error)
+    //         .await?;
 
-        // Wait for remote detach
-        let frame = match self.incoming.recv().await {
-            Some(frame) => frame,
-            None => return Err(DetachError::IllegalSessionState),
-        };
-        let remote_detach = match frame {
-            LinkFrame::Detach(detach) => detach,
-            _ => return Err(DetachError::NonDetachFrameReceived),
-        };
+    //     // Wait for remote detach
+    //     let frame = match self.incoming.recv().await {
+    //         Some(frame) => frame,
+    //         None => return Err(DetachError::IllegalSessionState),
+    //     };
+    //     let remote_detach = match frame {
+    //         LinkFrame::Detach(detach) => detach,
+    //         _ => return Err(DetachError::NonDetachFrameReceived),
+    //     };
 
-        if remote_detach.closed {
-            // If the remote detach contains an error, the error will be propagated
-            // back by `on_incoming_detach`
-            self.link.on_incoming_detach(remote_detach).await?;
-        } else {
-            // Note that one peer MAY send a closing detach while its partner is
-            // sending a non-closing detach. In this case, the partner MUST
-            // signal that it has closed the link by reattaching and then sending
-            // a closing detach.
+    //     if remote_detach.closed {
+    //         // If the remote detach contains an error, the error will be propagated
+    //         // back by `on_incoming_detach`
+    //         self.link.on_incoming_detach(remote_detach).await?;
+    //     } else {
+    //         // Note that one peer MAY send a closing detach while its partner is
+    //         // sending a non-closing detach. In this case, the partner MUST
+    //         // signal that it has closed the link by reattaching and then sending
+    //         // a closing detach.
 
-            // Probably something like below
-            // 1. wait for incoming attach
-            // 2. send back attach
-            // 3. wait for incoming closing detach
-            // 4. detach
+    //         // Probably something like below
+    //         // 1. wait for incoming attach
+    //         // 2. send back attach
+    //         // 3. wait for incoming closing detach
+    //         // 4. detach
 
-            self.reattach_inner()
-                .await
-                .map_err(|_| DetachError::DetachedByRemote)?;
-            let frame = match self.incoming.recv().await {
-                Some(frame) => frame,
-                None => return Err(DetachError::IllegalSessionState),
-            };
+    //         self.reattach_inner()
+    //             .await
+    //             .map_err(|_| DetachError::DetachedByRemote)?;
+    //         let frame = match self.incoming.recv().await {
+    //             Some(frame) => frame,
+    //             None => return Err(DetachError::IllegalSessionState),
+    //         };
 
-            // TODO: is checking closing still necessary?
-            let _remote_detach = match frame {
-                LinkFrame::Detach(detach) => detach,
-                _ => return Err(DetachError::NonDetachFrameReceived),
-            };
-            self.link
-                .send_detach(&mut self.outgoing, true, None)
-                .await?;
-        };
+    //         // TODO: is checking closing still necessary?
+    //         let _remote_detach = match frame {
+    //             LinkFrame::Detach(detach) => detach,
+    //             _ => return Err(DetachError::NonDetachFrameReceived),
+    //         };
+    //         self.link
+    //             .send_detach(&mut self.outgoing, true, None)
+    //             .await?;
+    //     };
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, SendError>
     where
