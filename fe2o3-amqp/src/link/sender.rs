@@ -27,8 +27,8 @@ use super::{
     error::{DetachError},
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-    ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderAttachError,
-    SenderFlowState, SenderLink, SenderTransferError,
+    ArcSenderUnsettledMap, LinkFrame, LinkRelay, SendError, SenderAttachError,
+    SenderFlowState, SenderLink, LinkStateError,
 };
 
 /// An AMQP1.0 sender
@@ -194,7 +194,7 @@ impl Sender {
             Settlement::Unsettled {
                 _delivery_tag: _,
                 outcome,
-            } => match outcome.await.map_err(|_| SenderTransferError::IllegalSessionState)? {
+            } => match outcome.await.map_err(|_| LinkStateError::IllegalSessionState)? {
                 DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
                 DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
                 DeliveryState::Released(released) => Err(SendError::Released(released)),
@@ -365,7 +365,7 @@ where
 impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<
-            TransferError = SenderTransferError,
+            TransferError = LinkStateError,
             AttachError = SenderAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap> + Send + Sync,

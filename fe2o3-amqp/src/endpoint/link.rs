@@ -146,7 +146,9 @@ pub(crate) trait SenderLink: Link + LinkExt {
 
 #[async_trait]
 pub(crate) trait ReceiverLink: Link + LinkExt {
-    type Error: Send;
+    type FlowError: Send;
+    type TransferError: Send;
+    type DispositionError: Send;
 
     /// Set and send flow state
     async fn send_flow(
@@ -155,7 +157,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         link_credit: Option<u32>,
         drain: Option<bool>, // TODO: Is Option necessary?
         echo: bool,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::FlowError>;
 
     async fn on_incomplete_transfer(
         &mut self,
@@ -175,7 +177,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
             Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
-        Self::Error,
+        Self::TransferError,
     >
     where
         T: for<'de> serde::Deserialize<'de> + Send;
@@ -188,5 +190,5 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         // settled: bool, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::DispositionError>;
 }

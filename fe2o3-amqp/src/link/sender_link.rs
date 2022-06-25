@@ -8,9 +8,9 @@ impl<T> endpoint::SenderLink for SenderLink<T>
 where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
-    type FlowError = SenderFlowError;
-    type TransferError = SenderTransferError;
-    type DispositionError = SenderDispositionError;
+    type FlowError = FlowError;
+    type TransferError = LinkStateError;
+    type DispositionError = DispositionError;
 
     /// Set and send flow state
     async fn send_flow(
@@ -406,7 +406,7 @@ async fn send_transfer(
     input_handle: InputHandle,
     transfer: Transfer,
     payload: Payload,
-) -> Result<(), SenderTransferError> {
+) -> Result<(), LinkStateError> {
     let frame = LinkFrame::Transfer {
         input_handle,
         performative: transfer,
@@ -415,7 +415,7 @@ async fn send_transfer(
     writer
         .send(frame)
         .await
-        .map_err(|_| SenderTransferError::IllegalSessionState)
+        .map_err(|_| LinkStateError::IllegalSessionState)
 }
 
 #[inline]
@@ -426,7 +426,7 @@ async fn send_disposition(
     settled: bool,
     state: Option<DeliveryState>,
     batchable: bool,
-) -> Result<(), SenderDispositionError> {
+) -> Result<(), IllegalLinkStateError> {
     let disposition = Disposition {
         role: Role::Sender,
         first,
@@ -439,5 +439,5 @@ async fn send_disposition(
     writer
         .send(frame)
         .await
-        .map_err(|_| SenderDispositionError::IllegalSessionState)
+        .map_err(|_| IllegalLinkStateError::IllegalSessionState)
 }

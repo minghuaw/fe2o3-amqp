@@ -21,7 +21,9 @@ impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
     Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
-    type Error = link::Error;
+    type FlowError = FlowError;
+    type TransferError = ReceiverTransferError;
+    type DispositionError = DispositionError;
 
     /// Set and send flow state
     async fn send_flow(
@@ -30,13 +32,13 @@ where
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::FlowError> {
         // self.error_if_closed().map_err(|_| Error::NotAttached)?;
 
         let handle = self
             .output_handle
             .clone()
-            .ok_or(Error::IllegalState)?
+            .ok_or(Self::FlowError::IllegalState)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -120,7 +122,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::IllegalSessionState)
+            .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
     async fn on_incomplete_transfer(
@@ -157,7 +159,7 @@ where
             Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
-        Self::Error,
+        Self::TransferError,
     >
     where
         T: for<'de> serde::Deserialize<'de> + Send,
@@ -174,14 +176,14 @@ where
         // This only takes care of whether the message is considered
         // sett
         let settled_by_sender = transfer.settled.unwrap_or(false);
-        let delivery_id = transfer.delivery_id.ok_or(Error::DeliveryIdIsNone)?;
-        let delivery_tag = transfer.delivery_tag.ok_or(Error::DeliveryTagIsNone)?;
+        let delivery_id = transfer.delivery_id.ok_or(Self::TransferError::DeliveryIdIsNone)?;
+        let delivery_tag = transfer.delivery_tag.ok_or(Self::TransferError::DeliveryTagIsNone)?;
 
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
             let message: Deserializable<Message<T>> = from_reader(payload.reader())
-                .map_err(|_| Error::MessageDecodeError)?;
+                .map_err(|_| Self::TransferError::MessageDecodeError)?;
             (message.0, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
@@ -191,7 +193,7 @@ where
                 // field to second.
                 if let ReceiverSettleMode::First = &self.rcv_settle_mode {
                     if let ReceiverSettleMode::Second = mode {
-                        return Err(Error::IllegalRcvSettleModeInTransfer);
+                        return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
                     }
                 }
                 mode
@@ -210,7 +212,7 @@ where
                     // let deserializer = Deserializer::new(reader);
                     // let message: Message<T> = Message::<T>::deserialize(&mut deserializer)?;
                     let message: Deserializable<Message<T>> = from_reader(payload.reader())
-                        .map_err(|_| Error::MessageDecodeError)?;
+                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
 
                     (message.0, Some(DeliveryState::Accepted(Accepted {})))
                 }
@@ -220,9 +222,9 @@ where
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(payload.as_ref())
-                        .ok_or(Error::MessageDecodeError)?;
+                        .ok_or(Self::TransferError::MessageDecodeError)?;
                     let message: Deserializable<Message<T>> = from_reader(payload.reader())
-                        .map_err(|_| Error::MessageDecodeError)?;
+                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
                     let message = message.0;
                     let section_number = message.sections();
 
@@ -251,7 +253,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or(Error::IllegalState)?
+            .ok_or(ReceiverTransferError::IllegalState)?
             .into();
 
         let delivery = Delivery {
@@ -275,7 +277,7 @@ where
         // settled: bool,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::DispositionError> {
         // self.error_if_closed().map_err(|_| Error::IllegalState)?;
 
         let settled = match self.rcv_settle_mode {
@@ -311,7 +313,7 @@ where
         writer
             .send(frame)
             .await
-            .map_err(|_| Error::IllegalSessionState)?;
+            .map_err(|_| Self::DispositionError::IllegalSessionState)?;
 
         // This is a unit enum, clone should be really cheap
         Ok(())

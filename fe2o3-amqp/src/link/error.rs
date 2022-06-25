@@ -1,10 +1,8 @@
-use std::fmt;
-
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ErrorCondition, LinkError, SessionError},
+    definitions::{self, AmqpError, ErrorCondition, SessionError},
     messaging::{Modified, Rejected, Released},
 };
-use tokio::sync::{mpsc, oneshot, TryLockError};
+use tokio::sync::{TryLockError};
 
 use crate::session::AllocLinkError;
 
@@ -40,29 +38,15 @@ pub enum DetachError {
 
     /// Remote peer closed the link with an error
     #[error("Remote peer closed the link with an error: {}", .0)]
-    RemoteClosedWithError(definitions::Error)
-}
-
-impl From<DetachError> for Error {
-    fn from(value: DetachError) -> Self {
-        match value {
-            DetachError::IllegalState => Self::IllegalState,
-            DetachError::IllegalSessionState => Self::IllegalSessionState,
-            DetachError::RemoteDetachedWithError(error) => Self::RemoteDetachedWithError(error),
-            DetachError::ClosedByRemote => Self::RemoteClosed,
-            DetachError::DetachedByRemote => Self::RemoteDetached,
-            DetachError::RemoteClosedWithError(error) => Self::RemoteClosedWithError(error),
-            DetachError::NonDetachFrameReceived => Self::ExpectImmediateDetach,
-        }
-    }
+    RemoteClosedWithError(definitions::Error),
 }
 
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
-    /// 
+    /// Errors found in link state
     #[error("Local error: {:?}", .0)]
-    LinkError(#[from] SenderTransferError),
+    LinkStateError(#[from] LinkStateError),
 
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
@@ -95,73 +79,6 @@ impl From<DetachError> for SendError {
     }
 }
 
-/// Type alias for receiving error
-pub type RecvError = Error;
-
-/// Error associated with normal operations on a link
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
-
-    /// Session has dropped
-    #[error("Session has dropped")]
-    IllegalSessionState,
-
-    /// The delivery-id is not found in Transfer
-    #[error("Delivery ID is not found in Transfer")]
-    DeliveryIdIsNone,
-
-    /// The delivery-tag is not found in Transfer
-    #[error("Delivery tag is not found in Transfer")]
-    DeliveryTagIsNone,
-
-    /// Decoding Message failed
-    #[error("Decoding Message failed")]
-    MessageDecodeError,
-
-    /// If the negotiated link value is first, then it is illegal to set this
-    /// field to second.
-    #[error("Negotiated value is first. Setting mode to second is illegal")]
-    IllegalRcvSettleModeInTransfer,
-
-    /// The link is expected to be detached immediately but didn't receive
-    /// an incoming Detach frame
-    #[error("Expecting an immediate detach")]
-    ExpectImmediateDetach,
-
-    /// Remote peer detached 
-    #[error("Remote detached")]
-    RemoteDetached,
-
-    /// Remote peer detached with error
-    #[error("Remote detached with an error: {}", .0)]
-    RemoteDetachedWithError(definitions::Error),
-
-    /// Remote peer closed 
-    #[error("Remote closed")]
-    RemoteClosed,
-
-    /// Remote peer closed the link with an error
-    #[error("Remote peer closed the link with an error: {}", .0)]
-    RemoteClosedWithError(definitions::Error),
-
-    /// The peer sent more message transfers than currently allowed on the link.
-    #[error("The peer sent more message transfers than currently allowed on the link")]
-    TransferLimitExceeded,
-
-    /// Field is inconsisten in multi-frame delivery
-    #[error("Field is inconsisten in multi-frame delivery")]
-    InconsistentFieldInMultiFrameDelivery
-}
-
-impl From<oneshot::error::RecvError> for Error {
-    fn from(_: oneshot::error::RecvError) -> Self {
-        Self::IllegalSessionState
-    }
-}
-
 /// Error with the sender trying consume link credit
 ///
 /// This is only used in
@@ -188,12 +105,12 @@ pub enum ReceiverAttachError {
     // Errors that should end the session
     /// The associated session has dropped
     IllegalSessionState,
-    
+
     /// Link name is already in use
     DuplicatedLinkName,
 
     /// Illegal link state
-    IllegalState, 
+    IllegalState,
 
     /// The local terminus is expecting an Attach from the remote peer
     NonAttachFrameReceived,
@@ -205,7 +122,7 @@ pub enum ReceiverAttachError {
     // Errors that should reject Attach
     /// Incoming Attach frame's Source field is None
     IncomingSourceIsNone,
-    
+
     /// Incoming Attach frame's Target field is None
     IncomingTargetIsNone,
 
@@ -243,12 +160,14 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::IllegalState => AmqpError::IllegalState.into(),
             ReceiverAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
             ReceiverAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
-            ReceiverAttachError::IncomingSourceIsNone 
+            ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone => return Err(value),
             ReceiverAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
             ReceiverAttachError::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
             ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
-            ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
+            ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
+                AmqpError::InvalidField.into()
+            }
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))
@@ -259,7 +178,6 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
 #[derive(Debug)]
 pub enum SenderAttachError {
     // Illegal session state
-
     /// Session stopped
     IllegalSessionState,
 
@@ -267,7 +185,7 @@ pub enum SenderAttachError {
     DuplicatedLinkName,
 
     /// Illegal link state
-    IllegalState, 
+    IllegalState,
 
     /// The local terminus is expecting an Attach from the remote peer
     NonAttachFrameReceived,
@@ -318,11 +236,13 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
             SenderAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
             SenderAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
-            SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
+            SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
+                AmqpError::InvalidField.into()
+            }
             SenderAttachError::AddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
 
-            SenderAttachError::IncomingSourceIsNone 
-            | SenderAttachError::IncomingTargetIsNone 
+            SenderAttachError::IncomingSourceIsNone
+            | SenderAttachError::IncomingTargetIsNone
             | SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
         };
 
@@ -333,7 +253,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
 /// Errors with sending attach
 pub(crate) enum SendAttachErrorKind {
     /// Illegal link state
-    IllegalState, 
+    IllegalState,
 
     /// Illegal session state
     IllegalSessionState,
@@ -357,21 +277,9 @@ impl From<SendAttachErrorKind> for ReceiverAttachError {
     }
 }
 
-/// Errors associated with sending/handling Flow 
+/// Errors associated with link state
 #[derive(Debug, thiserror::Error)]
-pub enum SenderFlowError {
-    /// ILlegal link state
-    #[error("Illegal local state")]
-    IllegalState,
-
-    /// Session has dropped
-    #[error("Session has dropped")]
-    IllegalSessionState,
-}
-
-/// Errors associated with sending Transfer
-#[derive(Debug, thiserror::Error)]
-pub enum SenderTransferError {
+pub enum LinkStateError {
     /// ILlegal link state
     #[error("Illegal local state")]
     IllegalState,
@@ -380,7 +288,7 @@ pub enum SenderTransferError {
     #[error("Session has dropped")]
     IllegalSessionState,
 
-    /// Remote peer detached 
+    /// Remote peer detached
     #[error("Remote detached")]
     RemoteDetached,
 
@@ -388,7 +296,7 @@ pub enum SenderTransferError {
     #[error("Remote detached with an error: {}", .0)]
     RemoteDetachedWithError(definitions::Error),
 
-    /// Remote peer closed 
+    /// Remote peer closed
     #[error("Remote closed")]
     RemoteClosed,
 
@@ -402,7 +310,7 @@ pub enum SenderTransferError {
     ExpectImmediateDetach,
 }
 
-impl From<DetachError> for SenderTransferError {
+impl From<DetachError> for LinkStateError {
     fn from(value: DetachError) -> Self {
         match value {
             DetachError::IllegalState => Self::IllegalState,
@@ -416,9 +324,99 @@ impl From<DetachError> for SenderTransferError {
     }
 }
 
+/// Errors associated with receiving a transfer
+#[derive(Debug, thiserror::Error)]
+pub enum ReceiverTransferError {
+    /// ILlegal link state
+    #[error("Illegal local state")]
+    IllegalState,
+
+    /// The peer sent more message transfers than currently allowed on the link.
+    #[error("The peer sent more message transfers than currently allowed on the link")]
+    TransferLimitExceeded,
+
+    /// The delivery-id is not found in Transfer
+    #[error("Delivery ID is not found in Transfer")]
+    DeliveryIdIsNone,
+
+    /// The delivery-tag is not found in Transfer
+    #[error("Delivery tag is not found in Transfer")]
+    DeliveryTagIsNone,
+
+    /// Decoding Message failed
+    #[error("Decoding Message failed")]
+    MessageDecodeError,
+
+    /// If the negotiated link value is first, then it is illegal to set this
+    /// field to second.
+    #[error("Negotiated value is first. Setting mode to second is illegal")]
+    IllegalRcvSettleModeInTransfer,
+
+    /// Field is inconsisten in multi-frame delivery
+    #[error("Field is inconsisten in multi-frame delivery")]
+    InconsistentFieldInMultiFrameDelivery,
+}
+
+/// Errors associated with receiving
+#[derive(Debug, thiserror::Error)]
+pub enum RecvError {
+    /// Errors found in link state
+    #[error("Local error: {:?}", .0)]
+    LinkStateError(LinkStateError),
+
+    /// The peer sent more message transfers than currently allowed on the link.
+    #[error("The peer sent more message transfers than currently allowed on the link")]
+    TransferLimitExceeded,
+
+    /// The delivery-id is not found in Transfer
+    #[error("Delivery ID is not found in Transfer")]
+    DeliveryIdIsNone,
+
+    /// The delivery-tag is not found in Transfer
+    #[error("Delivery tag is not found in Transfer")]
+    DeliveryTagIsNone,
+
+    /// Decoding Message failed
+    #[error("Decoding Message failed")]
+    MessageDecodeError,
+
+    /// If the negotiated link value is first, then it is illegal to set this
+    /// field to second.
+    #[error("Negotiated value is first. Setting mode to second is illegal")]
+    IllegalRcvSettleModeInTransfer,
+
+    /// Field is inconsisten in multi-frame delivery
+    #[error("Field is inconsisten in multi-frame delivery")]
+    InconsistentFieldInMultiFrameDelivery,
+}
+
+impl From<ReceiverTransferError> for RecvError {
+    fn from(value: ReceiverTransferError) -> Self {
+        match value {
+            ReceiverTransferError::TransferLimitExceeded => RecvError::TransferLimitExceeded,
+            ReceiverTransferError::DeliveryIdIsNone => RecvError::DeliveryIdIsNone,
+            ReceiverTransferError::DeliveryTagIsNone => RecvError::DeliveryTagIsNone,
+            ReceiverTransferError::MessageDecodeError => RecvError::MessageDecodeError,
+            ReceiverTransferError::IllegalRcvSettleModeInTransfer => {
+                RecvError::IllegalRcvSettleModeInTransfer
+            }
+            ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
+                RecvError::InconsistentFieldInMultiFrameDelivery
+            }
+            ReceiverTransferError::IllegalState => RecvError::LinkStateError(LinkStateError::IllegalState),
+        }
+    }
+}
+
+/// Type alias for disposition error
+pub type DispositionError = IllegalLinkStateError;
+
+/// Type alias for flow error
+pub type FlowError = IllegalLinkStateError;
+
 /// Errors associated with sending/handling Disposition
 #[derive(Debug, thiserror::Error)]
-pub enum SenderDispositionError {
+pub enum IllegalLinkStateError {
     /// ILlegal link state
     #[error("Illegal local state")]
     IllegalState,
@@ -426,4 +424,19 @@ pub enum SenderDispositionError {
     /// Session has dropped
     #[error("Session has dropped")]
     IllegalSessionState,
+}
+
+impl From<IllegalLinkStateError> for LinkStateError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState,
+            IllegalLinkStateError::IllegalSessionState => LinkStateError::IllegalSessionState,
+        }
+    }
+}
+
+impl<T> From<T> for RecvError where T: Into<LinkStateError> {
+    fn from(value: T) -> Self {
+        Self::LinkStateError(value.into())
+    }
 }

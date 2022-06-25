@@ -11,7 +11,7 @@ use crate::{
     util::{Consume, Produce, Producer, ProducerState, TryConsume},
 };
 
-use super::{role, SenderFlowState, SenderTryConsumeError};
+use super::{role, SenderFlowState, SenderTryConsumeError, ReceiverTransferError};
 
 /// Link state.
 ///
@@ -264,10 +264,10 @@ impl<R> LinkFlowState<R> {
 impl LinkFlowState<role::Receiver> {
     /// Consume one link credit if available. Returns an error if there is
     /// not enough link credit
-    pub async fn consume(&self, count: u32) -> Result<(), super::Error> {
+    pub async fn consume(&self, count: u32) -> Result<(), ReceiverTransferError> {
         let mut state = self.lock.write().await;
         if state.link_credit < count {
-            Err(super::Error::TransferLimitExceeded)
+            Err(ReceiverTransferError::TransferLimitExceeded)
         } else {
             state.delivery_count += count;
             state.link_credit -= count;

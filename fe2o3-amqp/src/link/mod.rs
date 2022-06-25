@@ -157,32 +157,6 @@ pub struct Link<R, T, F, M> {
     pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
 }
 
-// impl<R, T, F, M> Link<R, T, F, M> {
-//     pub(crate) fn error_if_closed(&self) -> Result<(), definitions::Error>
-//     where
-//         R: role::IntoRole + Send + Sync,
-//         F: AsRef<LinkFlowState<R>> + Send + Sync,
-//         M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
-//     {
-//         match self.local_state {
-//             LinkState::Unattached
-//             | LinkState::AttachSent
-//             | LinkState::AttachReceived
-//             | LinkState::Attached
-//             | LinkState::DetachSent
-//             | LinkState::DetachReceived
-//             | LinkState::Detached
-//             | LinkState::CloseSent
-//             | LinkState::CloseReceived => Ok(()),
-//             LinkState::Closed => Err(definitions::Error::new(
-//                 AmqpError::NotAllowed,
-//                 "Link is permanently closed".to_string(),
-//                 None,
-//             )),
-//         }
-//     }
-// }
-
 impl<R, T, F, M> Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
@@ -999,17 +973,9 @@ impl LinkRelay<OutputHandle> {
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
             LinkRelay::Sender { tx, .. } => {
-                // state_code.fetch_or(DETACHED, Ordering::Release);
-                // if detach.closed {
-                //     state_code.fetch_or(CLOSED, Ordering::Release);
-                // }
                 tx.send(LinkFrame::Detach(detach)).await?;
             }
             LinkRelay::Receiver { tx, .. } => {
-                // state_code.fetch_or(DETACHED, Ordering::Release);
-                // if detach.closed {
-                //     state_code.fetch_or(CLOSED, Ordering::Release);
-                // }
                 tx.send(LinkFrame::Detach(detach)).await?;
             }
         }
@@ -1023,87 +989,6 @@ pub(crate) async fn remove_from_unsettled<M>(
 ) -> Option<M> {
     let mut lock = unsettled.write().await;
     lock.remove(key)
-}
-
-// pub(crate) async fn do_attach<L, E>(
-//     link: &mut L,
-//     writer: &mpsc::Sender<LinkFrame>,
-//     reader: &mut mpsc::Receiver<LinkFrame>,
-// ) -> Result<(), SendAttachErrorKind>
-// where
-//     L: endpoint::LinkAttach
-//         + endpoint::LinkDetach<DetachError = definitions::Error>
-//         + endpoint::Link,
-// {
-//     // Send an Attach frame
-//     endpoint::LinkAttach::send_attach(link, writer).await?;
-
-//     // Wait for an Attach frame
-//     let frame = reader
-//         .recv()
-//         .await
-//         .ok_or_else(|| AttachError::illegal_state(None))?;
-
-//     let remote_attach = match frame {
-//         LinkFrame::Attach(attach) => attach,
-//         // LinkFrame::Detach(detach) => {
-//         //     return Err(Error::Detached(DetachError {
-//         //         link: None,
-//         //         is_closed_by_remote: detach.closed,
-//         //         error: detach.error,
-//         //     }))
-//         // }
-//         // TODO: how to handle this?
-//         _ => return Err(AttachError::illegal_state("expecting Attach".to_string())),
-//     };
-
-//     // Note that if the application chooses not to create a terminus,
-//     // the session endpoint will still create a link endpoint and issue
-//     // an attach indicating that the link endpoint has no associated
-//     // local terminus. In this case, the session endpoint MUST immediately
-//     // detach the newly created link endpoint.
-//     match remote_attach.target.is_none() || remote_attach.source.is_none() {
-//         true => {
-//             // If no target or source is supplied with the remote attach frame,
-//             // an immediate detach should be expected
-//             tracing::error!("Found null source or target");
-//             expect_detach_then_detach(link, writer, reader)
-//                 .await
-//                 .map_err(|_| AttachError::illegal_state("Expecting detach".to_string()))?;
-//         }
-//         false => {
-//             if let Err(e) = link.on_incoming_attach(remote_attach).await {
-//                 // Should any error happen handling remote
-//                 tracing::error!("{:?}", e);
-//             }
-//         }
-//     }
-
-//     Ok(())
-// }
-
-pub(crate) async fn expect_detach_then_detach<L>(
-    link: &mut L,
-    writer: &mpsc::Sender<LinkFrame>,
-    reader: &mut mpsc::Receiver<LinkFrame>,
-) -> Result<(), Error>
-where
-    L: endpoint::LinkAttach
-        + endpoint::LinkDetach<DetachError = DetachError>,
-{
-    let frame = reader
-        .recv()
-        .await
-        .ok_or(Error::ExpectImmediateDetach)?;
-
-    let remote_detach = match frame {
-        LinkFrame::Detach(detach) => detach,
-        _ => return Err(Error::ExpectImmediateDetach),
-    };
-
-    link.send_detach(writer, remote_detach.closed, None)
-        .await?;
-    Ok(())
 }
 
 pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {

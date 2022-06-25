@@ -28,8 +28,8 @@ use super::{
     receiver_link::section_number_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-    ArcReceiverUnsettledMap, Error, LinkFrame, LinkRelay, ReceiverAttachError, ReceiverFlowState,
-    ReceiverLink, DEFAULT_CREDIT,
+    ArcReceiverUnsettledMap, LinkFrame, LinkRelay, ReceiverAttachError, ReceiverFlowState,
+    ReceiverLink, DEFAULT_CREDIT, IllegalLinkStateError, ReceiverTransferError, RecvError, LinkStateError, DispositionError
 };
 
 macro_rules! or_assign {
@@ -38,7 +38,7 @@ macro_rules! or_assign {
             Some(value) => {
                 if let Some(other_value) = $other.$field {
                     if *value != other_value {
-                        return Err(Error::InconsistentFieldInMultiFrameDelivery)
+                        return Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery)
                     }
                 }
             },
@@ -76,7 +76,7 @@ impl IncompleteTransfer {
     }
 
     /// Like `|=` operator but works on the field level
-    pub fn or_assign(&mut self, other: Transfer) -> Result<(), Error> {
+    pub fn or_assign(&mut self, other: Transfer) -> Result<(), ReceiverTransferError> {
         or_assign! {
             self, other,
             delivery_id,
@@ -254,7 +254,7 @@ impl Receiver {
     /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
-    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
+    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -262,7 +262,7 @@ impl Receiver {
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
         self.inner.set_credit(credit).await
     }
 
@@ -270,7 +270,7 @@ impl Receiver {
     ///
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), Error> {
+    pub async fn drain(&mut self) -> Result<(), IllegalLinkStateError> {
         self.inner.drain().await
     }
 
@@ -326,7 +326,7 @@ impl Receiver {
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
     /// to `Accept`
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
         self.inner
             .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
@@ -339,7 +339,7 @@ impl Receiver {
         &mut self,
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
@@ -350,7 +350,7 @@ impl Receiver {
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         self.inner
             .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
@@ -363,7 +363,7 @@ impl Receiver {
         &mut self,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
         self.inner
             .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
@@ -415,7 +415,7 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
 impl<L> LinkEndpointInner for ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            Error = Error,
+            
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
@@ -490,14 +490,16 @@ where
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            Error = Error,
+            FlowError = IllegalLinkStateError,
+            TransferError = ReceiverTransferError,
+            DispositionError = IllegalLinkStateError,
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
         + Send
         + Sync,
 {
-    pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
+    pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -510,7 +512,7 @@ where
     }
 
     #[inline]
-    pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
+    pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -518,21 +520,21 @@ where
             .incoming
             .recv()
             .await
-            .ok_or(Error::IllegalSessionState)?;
+            .ok_or(LinkStateError::IllegalSessionState)?;
 
         match frame {
             LinkFrame::Detach(detach) => match (detach.error, detach.closed) {
-                (Some(err), false) => Err(Error::RemoteDetachedWithError(err)),
-                (Some(err), true) => Err(Error::RemoteClosedWithError(err)),
-                (None, false) => Err(Error::RemoteDetached),
-                (None, true) => Err(Error::RemoteClosed),
+                (Some(err), false) => Err(LinkStateError::RemoteDetachedWithError(err).into()),
+                (Some(err), true) => Err(LinkStateError::RemoteClosedWithError(err).into()),
+                (None, false) => Err(LinkStateError::RemoteDetached.into()),
+                (None, true) => Err(LinkStateError::RemoteClosed.into()),
             },
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
-            LinkFrame::Attach(_) => Err(Error::IllegalState),
+            LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
                 // in the session loop
@@ -546,7 +548,7 @@ where
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery<T>>, Error>
+    ) -> Result<Option<Delivery<T>>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -633,7 +635,7 @@ where
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
         self.processed = 0;
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -651,7 +653,7 @@ where
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         state: DeliveryState,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DispositionError> {
         let _ = self
             .link
             .dispose(&mut self.outgoing, delivery_id, delivery_tag, state, false)
@@ -672,7 +674,7 @@ where
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
     #[inline]
-    pub async fn drain(&mut self) -> Result<(), Error> {
+    pub async fn drain(&mut self) -> Result<(), DispositionError> {
         self.processed = 0;
 
         // Return if already draining
