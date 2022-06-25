@@ -19,13 +19,12 @@ use crate::{
 
 use super::{
     delivery::UnsettledMessage,
-    error::AttachError,
     receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverFlowState, Sender, SenderFlowState, SenderLink, ReceiverLink, ReceiverAttachError,
+    Receiver, ReceiverFlowState, Sender, SenderFlowState, SenderLink, ReceiverLink, ReceiverAttachError, SenderAttachError,
 };
 
 #[cfg(feature = "transaction")]
@@ -370,7 +369,7 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Sender, AttachError> {
+    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Sender, SenderAttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Sender { inner })
@@ -406,7 +405,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<SenderInner<SenderLink<T>>, AttachError>
+    ) -> Result<SenderInner<SenderLink<T>>, SenderAttachError>
     {
         let buffer_size = self.buffer_size;
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);

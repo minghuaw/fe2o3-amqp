@@ -162,68 +162,6 @@ impl From<oneshot::error::RecvError> for Error {
     }
 }
 
-/// Error associated with attaching a link
-#[derive(Debug, thiserror::Error)]
-pub enum AttachError {
-    /// Session is in an illegal state
-    #[error("Illegal session state")]
-    IllegalSessionState,
-
-    /// Link name is duplicated
-    #[error("Link name must be unique")]
-    DuplicatedLinkName,
-
-    /// Initial delivery count field MUST NOT be null if role is sender, and it is ignored if the role is receiver.
-    /// #[error("Initial delivery count MUST NOT be null if role is sender,")]
-    /// InitialDeliveryCountIsNull,
-    /// Source field in Attach is Null
-    #[error("Source is None")]
-    SourceIsNone,
-
-    /// Target field in Attach is Null
-    #[error("Target is None")]
-    TargetIsNone,
-
-    /// A local error
-    #[error("Local error: {:?}", .0)]
-    Local(definitions::Error),
-}
-
-impl From<AllocLinkError> for AttachError {
-    fn from(error: AllocLinkError) -> Self {
-        match error {
-            AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
-            AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
-        }
-    }
-}
-
-impl AttachError {
-    pub(crate) fn illegal_state(description: impl Into<Option<String>>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            description.into(),
-            None,
-        ))
-    }
-
-    pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            description,
-            None,
-        ))
-    }
-
-    pub(crate) fn not_allowed(description: impl Into<Option<String>>) -> Self {
-        AttachError::Local(definitions::Error::new(
-            AmqpError::NotAllowed,
-            description,
-            None,
-        ))
-    }
-}
-
 /// Error with the sender trying consume link credit
 ///
 /// This is only used in

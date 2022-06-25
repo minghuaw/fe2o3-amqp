@@ -24,7 +24,7 @@ use crate::{
 use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
-    error::{AttachError, DetachError},
+    error::{DetachError},
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
     ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderAttachError,
@@ -122,7 +122,7 @@ impl Sender {
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Sender, AttachError> {
+    ) -> Result<Sender, SenderAttachError> {
         Self::builder()
             .name(name)
             .target(addr)
