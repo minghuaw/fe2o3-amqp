@@ -12,11 +12,11 @@ use tracing::{instrument, trace};
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
-    link::{receiver::ReceiverInner, role, AttachError, Link, LinkFrame, ReceiverFlowState},
+    link::{receiver::ReceiverInner, role, Link, LinkFrame, ReceiverFlowState, ReceiverAttachError, RecvError},
     Delivery,
 };
 
-use super::control_link_msg::ControlMessageBody;
+use super::control_link_frame::ControlMessageBody;
 
 pub(crate) type CoordinatorLink =
     Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
@@ -44,22 +44,13 @@ impl ControlLinkAcceptor {
         remote_attach: Attach,
         control: &mpsc::Sender<SessionControl>,
         outgoing: &mpsc::Sender<LinkFrame>,
-    ) -> Result<TxnCoordinator, AttachError> {
+    ) -> Result<TxnCoordinator, ReceiverAttachError> {
         trace!(control_link_attach = ?remote_attach);
-        match self
+        self
             .inner
             .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
             .await
-        {
-            Ok(inner) => Ok(TxnCoordinator { inner }),
-            Err((error, remote_attach)) => Err(crate::acceptor::link::handle_attach_error(
-                error,
-                remote_attach,
-                outgoing,
-                control,
-            )
-            .await),
-        }
+            .map(|inner| TxnCoordinator { inner })
     }
 }
 
@@ -78,6 +69,43 @@ impl TxnCoordinator {
         todo!()
     }
 
+    async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) {
+        
+        let body = match delivery.body() {
+            fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
+            fe2o3_amqp_types::messaging::Body::Sequence(_)
+            | fe2o3_amqp_types::messaging::Body::Data(_) => {
+                // Message Decode Error?
+                todo!()
+            }
+        };
+
+        let result = match body {
+            ControlMessageBody::Declare(declare) => {
+                self.on_declare(declare).await.map(DeliveryState::Declared)
+            }
+            ControlMessageBody::Discharge(discharge) => self
+                .on_discharge(discharge)
+                .await
+                .map(DeliveryState::Accepted),
+        };
+
+        let delivery_state = match result {
+            Ok(state) => state,
+            Err(error) => todo!(),
+        };
+
+        if let Err(_) = self
+            .inner
+            .dispose(delivery.delivery_id, delivery.delivery_tag, delivery_state)
+            .await
+        {
+            todo!()
+        }
+
+        todo!()
+    }
+
     pub async fn event_loop(mut self) {
         tracing::info!("Coordinator started");
         loop {
@@ -88,55 +116,20 @@ impl TxnCoordinator {
                     tracing::error!(?error);
 
                     match error {
-                        crate::link::Error::Local(err) => {
-                            let _ = self.inner.close_with_error(Some(err)).await;
-                        }
-                        crate::link::Error::Detached(_) => {
-                            let _ = self.inner.close_with_error(None).await;
-                        }
+                        RecvError::LinkStateError(_) => todo!(),
+                        RecvError::TransferLimitExceeded => todo!(),
+                        RecvError::DeliveryIdIsNone => todo!(),
+                        RecvError::DeliveryTagIsNone => todo!(),
+                        RecvError::MessageDecodeError => todo!(),
+                        RecvError::IllegalRcvSettleModeInTransfer => todo!(),
+                        RecvError::InconsistentFieldInMultiFrameDelivery => todo!(),
                     }
 
                     break;
                 }
             };
 
-            let body = match delivery.body() {
-                fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
-                fe2o3_amqp_types::messaging::Body::Sequence(_)
-                | fe2o3_amqp_types::messaging::Body::Data(_) => {
-                    let error = definitions::Error::new(
-                        AmqpError::NotAllowed,
-                        "The coordinator is expecting either a Declare or Discharge message body"
-                            .to_string(),
-                        None,
-                    );
-                    let _ = self.inner.close_with_error(Some(error)).await;
-                    break;
-                }
-            };
-
-            let result = match body {
-                ControlMessageBody::Declare(declare) => {
-                    self.on_declare(declare).await.map(DeliveryState::Declared)
-                }
-                ControlMessageBody::Discharge(discharge) => self
-                    .on_discharge(discharge)
-                    .await
-                    .map(DeliveryState::Accepted),
-            };
-
-            let delivery_state = match result {
-                Ok(state) => state,
-                Err(error) => todo!(),
-            };
-
-            if let Err(_) = self
-                .inner
-                .dispose(delivery.delivery_id, delivery.delivery_tag, delivery_state)
-                .await
-            {
-                todo!()
-            }
+            self.on_delivery(delivery).await
         }
     }
 }
