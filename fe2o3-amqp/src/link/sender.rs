@@ -17,18 +17,18 @@ use fe2o3_amqp_types::{
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkDetach, LinkExt, Settlement, LinkAttach},
-    session::{SessionHandle},
+    endpoint::{self, LinkAttach, LinkDetach, LinkExt, Settlement},
+    session::SessionHandle,
 };
 
 use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
-    error::{DetachError},
+    error::DetachError,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-    ArcSenderUnsettledMap, LinkFrame, LinkRelay, SendError, SenderAttachError,
-    SenderFlowState, SenderLink, LinkStateError,
+    ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
+    SenderFlowState, SenderLink,
 };
 
 /// An AMQP1.0 sender
@@ -194,7 +194,10 @@ impl Sender {
             Settlement::Unsettled {
                 _delivery_tag: _,
                 outcome,
-            } => match outcome.await.map_err(|_| LinkStateError::IllegalSessionState)? {
+            } => match outcome
+                .await
+                .map_err(|_| LinkStateError::IllegalSessionState)?
+            {
                 DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
                 DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
                 DeliveryState::Released(released) => Err(SendError::Released(released)),
@@ -293,10 +296,8 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
 #[async_trait]
 impl<L> LinkEndpointInner for SenderInner<L>
 where
-    L: endpoint::SenderLink<
-            AttachError = SenderAttachError,
-            DetachError = DetachError,
-        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+    L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>
+        + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
         + Send
         + Sync,
 {
@@ -357,7 +358,11 @@ where
             .await
     }
 
-    async fn send_detach(&mut self, closed: bool, error: Option<definitions::Error>) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
+    async fn send_detach(
+        &mut self,
+        closed: bool,
+        error: Option<definitions::Error>,
+    ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         self.link.send_detach(&self.outgoing, closed, error).await
     }
 }
@@ -368,7 +373,9 @@ where
             TransferError = LinkStateError,
             AttachError = SenderAttachError,
             DetachError = DetachError,
-        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap> + Send + Sync,
+        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + Send
+        + Sync,
 {
     pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, SendError>
     where

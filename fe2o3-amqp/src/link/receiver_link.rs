@@ -176,8 +176,12 @@ where
         // This only takes care of whether the message is considered
         // sett
         let settled_by_sender = transfer.settled.unwrap_or(false);
-        let delivery_id = transfer.delivery_id.ok_or(Self::TransferError::DeliveryIdIsNone)?;
-        let delivery_tag = transfer.delivery_tag.ok_or(Self::TransferError::DeliveryTagIsNone)?;
+        let delivery_id = transfer
+            .delivery_id
+            .ok_or(Self::TransferError::DeliveryIdIsNone)?;
+        let delivery_tag = transfer
+            .delivery_tag
+            .ok_or(Self::TransferError::DeliveryTagIsNone)?;
 
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to

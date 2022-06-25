@@ -9,8 +9,8 @@ use pin_project_lite::pin_project;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
+use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
-use crate::{Payload};
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -310,7 +310,7 @@ trait FromRecvError {
     fn from_recv_error(err: RecvError) -> Self;
 }
 
-impl<T, E> FromRecvError for Result<T, E> 
+impl<T, E> FromRecvError for Result<T, E>
 where
     E: From<RecvError>,
 {

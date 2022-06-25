@@ -37,7 +37,9 @@ use crate::{
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{manager::TransactionManager, session::TxnSession, TransactionManagerError};
+use crate::transaction::{
+    manager::TransactionManager, session::TxnSession, TransactionManagerError,
+};
 
 /// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}

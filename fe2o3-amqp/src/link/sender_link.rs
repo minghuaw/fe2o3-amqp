@@ -156,7 +156,10 @@ where
 
         tracing::debug!(input_handle = ?self.input_handle);
 
-        let input_handle = self.input_handle.clone().ok_or(Self::TransferError::IllegalState)?;
+        let input_handle = self
+            .input_handle
+            .clone()
+            .ok_or(Self::TransferError::IllegalState)?;
         let handle = self
             .output_handle
             .clone()

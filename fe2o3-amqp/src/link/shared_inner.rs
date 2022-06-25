@@ -8,7 +8,7 @@ use crate::{
     session::{self, AllocLinkError},
 };
 
-use super::{LinkFrame, LinkRelay, DetachError};
+use super::{DetachError, LinkFrame, LinkRelay};
 
 #[async_trait]
 pub(crate) trait LinkEndpointInner {
@@ -35,16 +35,18 @@ pub(crate) trait LinkEndpointInner {
         attach_error: <Self::Link as LinkAttach>::AttachError,
     ) -> <Self::Link as LinkAttach>::AttachError;
 
-    async fn send_detach(&mut self, closed: bool, error: Option<definitions::Error>) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
+    async fn send_detach(
+        &mut self,
+        closed: bool,
+        error: Option<definitions::Error>,
+    ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
 }
 
 #[async_trait]
 pub(crate) trait LinkEndpointInnerReattach {
     type ReattachError: Send + From<AllocLinkError>;
 
-    async fn reattach_inner(
-        &mut self,
-    ) -> Result<&mut Self, Self::ReattachError>;
+    async fn reattach_inner(&mut self) -> Result<&mut Self, Self::ReattachError>;
 }
 
 #[async_trait]
@@ -55,27 +57,23 @@ where
 {
     type ReattachError = <T::Link as LinkAttach>::AttachError;
 
-    async fn reattach_inner(
-        &mut self,
-    ) -> Result<&mut Self, Self::ReattachError> {
+    async fn reattach_inner(&mut self) -> Result<&mut Self, Self::ReattachError> {
         if self.link().output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size());
             let link_relay = self.as_new_link_relay(tx);
             *self.reader_mut() = incoming;
             let link_name = self.link().name().to_string();
-            let handle = session::allocate_link(self.session_control(), link_name, link_relay).await?;
+            let handle =
+                session::allocate_link(self.session_control(), link_name, link_relay).await?;
             *self.link_mut().output_handle_mut() = Some(handle);
         }
 
         match self.negotiate_attach().await {
             Ok(_) => Ok(self),
-            Err(attach_error) => Err(self
-                .handle_attach_error(attach_error)
-                .await),
+            Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
         }
     }
 }
-
 
 #[async_trait]
 pub(crate) trait LinkEndpointInnerDetach: LinkEndpointInner {
@@ -99,8 +97,8 @@ pub(crate) trait LinkEndpointInnerDetach: LinkEndpointInner {
 }
 
 #[async_trait]
-impl<T> LinkEndpointInnerDetach for T 
-where 
+impl<T> LinkEndpointInnerDetach for T
+where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
 {
@@ -109,12 +107,16 @@ where
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         // Send a non-closing detach
-        self.send_detach(false, error)
-            .await?;
+        self.send_detach(false, error).await?;
 
-        let remote_detach = match self.reader_mut().recv().await.ok_or(DetachError::IllegalSessionState)? {
+        let remote_detach = match self
+            .reader_mut()
+            .recv()
+            .await
+            .ok_or(DetachError::IllegalSessionState)?
+        {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(DetachError::NonDetachFrameReceived)
+            _ => return Err(DetachError::NonDetachFrameReceived),
         };
 
         if remote_detach.closed {
@@ -149,9 +151,14 @@ where
             .map_err(|_| DetachError::IllegalSessionState)?;
 
         // Wait for remote detach
-        let remote_detach = match self.reader_mut().recv().await.ok_or(DetachError::IllegalSessionState)? {
+        let remote_detach = match self
+            .reader_mut()
+            .recv()
+            .await
+            .ok_or(DetachError::IllegalSessionState)?
+        {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(DetachError::NonDetachFrameReceived)
+            _ => return Err(DetachError::NonDetachFrameReceived),
         };
 
         if remote_detach.closed {
@@ -172,13 +179,17 @@ where
             self.reattach_inner()
                 .await
                 .map_err(|_| DetachError::DetachedByRemote)?;
-            let remote_detach = match self.reader_mut().recv().await.ok_or(DetachError::IllegalSessionState)? {
+            let remote_detach = match self
+                .reader_mut()
+                .recv()
+                .await
+                .ok_or(DetachError::IllegalSessionState)?
+            {
                 LinkFrame::Detach(detach) => detach,
-                _ => return Err(DetachError::NonDetachFrameReceived)
+                _ => return Err(DetachError::NonDetachFrameReceived),
             };
             self.link_mut().on_incoming_detach(remote_detach).await?;
-            self.send_detach(true, None)
-                .await?;
+            self.send_detach(true, None).await?;
         };
 
         Ok(())

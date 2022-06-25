@@ -1,8 +1,6 @@
 use std::io;
 
-use fe2o3_amqp_types::definitions::{
-    self, AmqpError, ErrorCondition, Handle, SessionError,
-};
+use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, Handle, SessionError};
 use tokio::task::JoinError;
 
 use crate::connection::AllocSessionError;

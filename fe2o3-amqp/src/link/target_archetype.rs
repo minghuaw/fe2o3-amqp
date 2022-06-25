@@ -56,7 +56,7 @@ impl VerifyTargetArchetype for Coordinator {
             (Some(desired), Some(provided)) => {
                 for cap in desired.0.iter() {
                     if !provided.0.contains(cap) {
-                        return Err(SenderAttachError::DesireTxnCapabilitiesNotSupported)
+                        return Err(SenderAttachError::DesireTxnCapabilitiesNotSupported);
                     }
                 }
                 Ok(())

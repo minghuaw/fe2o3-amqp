@@ -16,20 +16,21 @@ use tokio::{
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkAttach, LinkExt, LinkDetach},
-    session::{SessionHandle},
+    endpoint::{self, LinkAttach, LinkDetach, LinkExt},
+    session::SessionHandle,
     Payload,
 };
 
 use super::{
     builder::{self, WithTarget, WithoutName},
     delivery::Delivery,
-    error::{DetachError},
+    error::DetachError,
     receiver_link::section_number_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-    ArcReceiverUnsettledMap, LinkFrame, LinkRelay, ReceiverAttachError, ReceiverFlowState,
-    ReceiverLink, DEFAULT_CREDIT, IllegalLinkStateError, ReceiverTransferError, RecvError, LinkStateError, DispositionError
+    ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
+    LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
+    RecvError, DEFAULT_CREDIT,
 };
 
 macro_rules! or_assign {
@@ -414,11 +415,8 @@ impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
 #[async_trait]
 impl<L> LinkEndpointInner for ReceiverInner<L>
 where
-    L: endpoint::ReceiverLink<
-            
-            AttachError = ReceiverAttachError,
-            DetachError = DetachError,
-        > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+    L: endpoint::ReceiverLink<AttachError = ReceiverAttachError, DetachError = DetachError>
+        + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
         + Send
         + Sync,
 {
@@ -481,10 +479,13 @@ where
             .await
     }
 
-    async fn send_detach(&mut self, closed: bool, error: Option<definitions::Error>) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
+    async fn send_detach(
+        &mut self,
+        closed: bool,
+        error: Option<definitions::Error>,
+    ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         self.link.send_detach(&self.outgoing, closed, error).await
     }
-
 }
 
 impl<L> ReceiverInner<L>

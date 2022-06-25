@@ -12,8 +12,9 @@ use futures_util::Future;
 use tokio::sync::mpsc;
 
 use crate::{
+    control::SessionControl,
     link::{delivery::Delivery, LinkFrame},
-    Payload, control::SessionControl,
+    Payload,
 };
 
 use super::{OutputHandle, Settlement};

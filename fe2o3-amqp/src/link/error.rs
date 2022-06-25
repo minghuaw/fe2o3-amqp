@@ -2,7 +2,7 @@ use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, SessionError},
     messaging::{Modified, Rejected, Released},
 };
-use tokio::sync::{TryLockError};
+use tokio::sync::TryLockError;
 
 use crate::session::AllocLinkError;
 
@@ -403,7 +403,9 @@ impl From<ReceiverTransferError> for RecvError {
             ReceiverTransferError::InconsistentFieldInMultiFrameDelivery => {
                 RecvError::InconsistentFieldInMultiFrameDelivery
             }
-            ReceiverTransferError::IllegalState => RecvError::LinkStateError(LinkStateError::IllegalState),
+            ReceiverTransferError::IllegalState => {
+                RecvError::LinkStateError(LinkStateError::IllegalState)
+            }
         }
     }
 }
@@ -435,7 +437,10 @@ impl From<IllegalLinkStateError> for LinkStateError {
     }
 }
 
-impl<T> From<T> for RecvError where T: Into<LinkStateError> {
+impl<T> From<T> for RecvError
+where
+    T: Into<LinkStateError>,
+{
     fn from(value: T) -> Self {
         Self::LinkStateError(value.into())
     }

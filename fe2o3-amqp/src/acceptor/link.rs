@@ -21,7 +21,7 @@ use crate::{
     endpoint,
     link::{
         role, state::LinkFlowState, target_archetype::VerifyTargetArchetype, AttachError, Link,
-        LinkFrame, SenderLink, ReceiverLink,
+        LinkFrame, ReceiverLink, SenderLink,
     },
     session::SessionHandle,
     util::Initialized,
@@ -240,7 +240,7 @@ pub(crate) async fn handle_attach_error(
                 None,
             );
             if let Err(_) = session_control.send(SessionControl::End(Some(err))).await {
-                return AttachError::IllegalSessionState
+                return AttachError::IllegalSessionState;
             }
             error
         }

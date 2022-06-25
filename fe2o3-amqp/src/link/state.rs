@@ -11,7 +11,7 @@ use crate::{
     util::{Consume, Produce, Producer, ProducerState, TryConsume},
 };
 
-use super::{role, SenderFlowState, SenderTryConsumeError, ReceiverTransferError};
+use super::{role, ReceiverTransferError, SenderFlowState, SenderTryConsumeError};
 
 /// Link state.
 ///

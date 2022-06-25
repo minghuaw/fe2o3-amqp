@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode,
-        Role, SenderSettleMode, SequenceNo, SessionError,
+        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
+        SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
@@ -38,10 +38,11 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
 use crate::{
-    endpoint::{self, InputHandle, LinkAttach, LinkFlow, OutputHandle, Settlement, LinkDetach},
-    link::{delivery::UnsettledMessage},
+    control::SessionControl,
+    endpoint::{self, InputHandle, LinkAttach, LinkDetach, LinkFlow, OutputHandle, Settlement},
+    link::delivery::UnsettledMessage,
     util::{Consumer, Producer},
-    Payload, control::SessionControl,
+    Payload,
 };
 
 use self::{
@@ -300,7 +301,7 @@ where
             .ok_or(SenderAttachError::IllegalSessionState)?
         {
             LinkFrame::Attach(attach) => attach,
-            _ => return Err(SenderAttachError::NonAttachFrameReceived)
+            _ => return Err(SenderAttachError::NonAttachFrameReceived),
         };
 
         self.on_incoming_attach(remote_attach).await
@@ -314,40 +315,42 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> SenderAttachError {
         match attach_error {
-            SenderAttachError::IllegalSessionState 
-            | SenderAttachError::IllegalState 
-            | SenderAttachError::NonAttachFrameReceived 
+            SenderAttachError::IllegalSessionState
+            | SenderAttachError::IllegalState
+            | SenderAttachError::NonAttachFrameReceived
             | SenderAttachError::ExpectImmediateDetach => attach_error,
 
             SenderAttachError::DuplicatedLinkName => {
                 let error = definitions::Error::new(
                     SessionError::HandleInUse,
                     "Link name is in use".to_string(),
-                    None
+                    None,
                 );
-                session.send(SessionControl::End(Some(error))).await
+                session
+                    .send(SessionControl::End(Some(error)))
+                    .await
                     .map(|_| attach_error)
                     .unwrap_or(SenderAttachError::IllegalSessionState)
-            },
+            }
 
-            SenderAttachError::IncomingSourceIsNone 
-            | SenderAttachError::IncomingTargetIsNone => {
+            SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
                 match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
                         let closed = remote_detach.closed;
                         let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
-                        self.send_detach(writer, closed, None).await
+                        self.send_detach(writer, closed, None)
+                            .await
                             .map(|_| attach_error)
                             .unwrap_or(SenderAttachError::IllegalSessionState)
-                    },
+                    }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
                     None => SenderAttachError::IllegalSessionState,
                 }
-            },
-            
-            SenderAttachError::CoordinatorIsNotImplemented 
-            | SenderAttachError::AddressIsNoneWhenDynamicIsTrue 
-            | SenderAttachError::DesireTxnCapabilitiesNotSupported 
+            }
+
+            SenderAttachError::CoordinatorIsNotImplemented
+            | SenderAttachError::AddressIsNoneWhenDynamicIsTrue
+            | SenderAttachError::DesireTxnCapabilitiesNotSupported
             | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 match (&attach_error).try_into() {
                     Ok(error) => {
@@ -356,13 +359,13 @@ where
                                 Some(LinkFrame::Detach(remote_detach)) => {
                                     let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
                                     attach_error
-                                },
+                                }
                                 Some(_) => SenderAttachError::NonAttachFrameReceived,
                                 None => SenderAttachError::IllegalSessionState,
                             },
                             Err(_) => SenderAttachError::IllegalSessionState,
                         }
-                    },
+                    }
                     Err(_) => attach_error,
                 }
             }
@@ -431,10 +434,10 @@ where
             .ok_or(ReceiverAttachError::IllegalSessionState)?
         {
             LinkFrame::Attach(attach) => attach,
-            _ => return Err(ReceiverAttachError::NonAttachFrameReceived)
+            _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
         };
 
-        self.on_incoming_attach(remote_attach).await 
+        self.on_incoming_attach(remote_attach).await
     }
 
     async fn handle_attach_error(
@@ -445,37 +448,37 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> ReceiverAttachError {
         match attach_error {
-            ReceiverAttachError::IllegalSessionState 
-            | ReceiverAttachError::IllegalState 
-            | ReceiverAttachError::NonAttachFrameReceived 
+            ReceiverAttachError::IllegalSessionState
+            | ReceiverAttachError::IllegalState
+            | ReceiverAttachError::NonAttachFrameReceived
             | ReceiverAttachError::ExpectImmediateDetach => attach_error,
 
             ReceiverAttachError::DuplicatedLinkName => {
                 let error = definitions::Error::new(
                     SessionError::HandleInUse,
                     "Link name is in use".to_string(),
-                    None
+                    None,
                 );
-                session.send(SessionControl::End(Some(error))).await
+                session
+                    .send(SessionControl::End(Some(error)))
+                    .await
                     .map(|_| attach_error)
                     .unwrap_or(ReceiverAttachError::IllegalSessionState)
-            },
-            ReceiverAttachError::IncomingSourceIsNone 
-            | ReceiverAttachError::IncomingTargetIsNone => {
-                match reader.recv().await {
-                    Some(LinkFrame::Detach(remote_detach)) => {
-                        self.send_detach(writer, remote_detach.closed, None).await
-                            .map(|_| attach_error)
-                            .unwrap_or(ReceiverAttachError::IllegalSessionState)
-                    },
-                    Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-                    None => ReceiverAttachError::IllegalSessionState,
-                }
+            }
+            ReceiverAttachError::IncomingSourceIsNone
+            | ReceiverAttachError::IncomingTargetIsNone => match reader.recv().await {
+                Some(LinkFrame::Detach(remote_detach)) => self
+                    .send_detach(writer, remote_detach.closed, None)
+                    .await
+                    .map(|_| attach_error)
+                    .unwrap_or(ReceiverAttachError::IllegalSessionState),
+                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+                None => ReceiverAttachError::IllegalSessionState,
             },
 
-            ReceiverAttachError::CoordinatorIsNotImplemented 
-            | ReceiverAttachError::InitialDeliveryCountIsNone 
-            | ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue 
+            ReceiverAttachError::CoordinatorIsNotImplemented
+            | ReceiverAttachError::InitialDeliveryCountIsNone
+            | ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue
             | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 match (&attach_error).try_into() {
                     Ok(error) => {
@@ -484,13 +487,13 @@ where
                                 Some(LinkFrame::Detach(remote_detach)) => {
                                     let _ = self.on_incoming_detach(remote_detach).await; // FIXME: how to handle this?
                                     attach_error
-                                },
+                                }
                                 Some(_) => ReceiverAttachError::NonAttachFrameReceived,
                                 None => ReceiverAttachError::IllegalSessionState,
                             },
                             Err(_) => ReceiverAttachError::IllegalSessionState,
                         }
-                    },
+                    }
                     Err(_) => attach_error,
                 }
             }
@@ -515,7 +518,8 @@ where
 
         self.input_handle = Some(InputHandle::from(remote_attach.handle));
 
-        let target = remote_attach.target
+        let target = remote_attach
+            .target
             .map(|t| T::try_from(*t))
             .transpose()
             .map_err(|_| SenderAttachError::CoordinatorIsNotImplemented)?;
@@ -535,7 +539,8 @@ where
         // initiates the attach exchange and the sender supports the desired mode
         self.rcv_settle_mode = remote_attach.rcv_settle_mode;
 
-        self.max_message_size = get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+        self.max_message_size =
+            get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         Ok(())
     }
@@ -569,7 +574,9 @@ where
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
 
-        let source = remote_attach.source.ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
+        let source = remote_attach
+            .source
+            .ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
         self.source = Some(*source);
 
         // The receiver SHOULD respect the sender’s desired settlement mode if the sender
@@ -578,9 +585,12 @@ where
 
         // The delivery-count is initialized by the sender when a link endpoint is
         // created, and is incremented whenever a message is sent
-        let initial_delivery_count = remote_attach.initial_delivery_count.ok_or(ReceiverAttachError::InitialDeliveryCountIsNone)?;
+        let initial_delivery_count = remote_attach
+            .initial_delivery_count
+            .ok_or(ReceiverAttachError::InitialDeliveryCountIsNone)?;
 
-        let target = remote_attach.target
+        let target = remote_attach
+            .target
             .map(|t| T::try_from(*t))
             .transpose()
             .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
@@ -595,7 +605,8 @@ where
             _ => {}
         }
 
-        self.max_message_size = get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+        self.max_message_size =
+            get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         self.flow_state
             .as_ref()
@@ -635,15 +646,13 @@ where
 
         match detach.closed {
             true => match self.local_state {
-                LinkState::Attached
-                | LinkState::AttachSent
-                | LinkState::AttachReceived => {
+                LinkState::Attached | LinkState::AttachSent | LinkState::AttachReceived => {
                     self.local_state = LinkState::CloseReceived;
                     match detach.error {
                         Some(error) => Err(DetachError::RemoteClosedWithError(error)),
                         None => Ok(()),
                     }
-                },
+                }
                 LinkState::DetachSent => {
                     self.local_state = LinkState::CloseReceived;
                     match detach.error {
@@ -659,9 +668,7 @@ where
                         None => Ok(()),
                     }
                 }
-                _ => {
-                    Err(DetachError::IllegalState)
-                }
+                _ => Err(DetachError::IllegalState),
             },
             false => {
                 match self.local_state {
@@ -671,9 +678,7 @@ where
                         // Dropping output handle as it is already detached
                         let _ = self.output_handle.take();
                     }
-                    _ => {
-                        return Err(DetachError::IllegalState)
-                    }
+                    _ => return Err(DetachError::IllegalState),
                 }
 
                 match detach.error {
@@ -701,7 +706,10 @@ where
 
                 debug!("Sending detach: {:?}", detach);
 
-                writer.send(LinkFrame::Detach(detach)).await.map_err(|_| DetachError::IllegalSessionState)?;
+                writer
+                    .send(LinkFrame::Detach(detach))
+                    .await
+                    .map_err(|_| DetachError::IllegalSessionState)?;
 
                 match (&self.local_state, closed) {
                     (LinkState::Attached, false) => self.local_state = LinkState::DetachSent,
@@ -710,7 +718,7 @@ where
                     (LinkState::Attached, true) => self.local_state = LinkState::CloseSent,
                     (LinkState::DetachReceived, true) => return Err(DetachError::DetachedByRemote),
                     (LinkState::CloseReceived, true) => self.local_state = LinkState::Closed,
-                    _ => return Err(DetachError::IllegalState)
+                    _ => return Err(DetachError::IllegalState),
                 };
                 self.output_handle.take();
             }
