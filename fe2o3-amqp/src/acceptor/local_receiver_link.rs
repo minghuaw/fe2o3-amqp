@@ -150,6 +150,8 @@ where
         )
         .await?;
 
+        // **the receiver is considered to hold the authoritative version of the target properties**,
+        // Is this verification necessary?
         let local_target = remote_attach
             .target.clone()
             .map(|t| T::try_from(*t))

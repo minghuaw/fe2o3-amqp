@@ -116,6 +116,8 @@ impl LocalSenderLinkAcceptor<Symbol> {
         )
         .await?;
 
+        // In this case, the sender is considered to hold the authoritative version of the
+        // version of the source properties
         let local_source = remote_attach.source.clone()
             .map(|s| {
                 let mut source = *s;

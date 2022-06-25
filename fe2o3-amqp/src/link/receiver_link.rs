@@ -532,3 +532,213 @@ mod tests {
         println!("{:?}, {:?}", nums, offset);
     }
 }
+
+
+#[async_trait]
+impl<T> endpoint::LinkAttach for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    type AttachError = ReceiverAttachError;
+
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+        use self::source::VerifySource;
+
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+            _ => return Err(ReceiverAttachError::IllegalState),
+        };
+
+        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+
+        // In this case, the sender is considered to hold the authoritative version of the
+        // version of the source properties
+        let remote_source = remote_attach
+            .source
+            .ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
+        if let Some(local_source) = &self.source {
+            local_source.verify_as_receiver(&remote_source)?;
+        }
+        self.source = Some(*remote_source);
+
+        // The receiver SHOULD respect the sender’s desired settlement mode if the sender
+        // initiates the attach exchange and the receiver supports the desired mode.
+        self.snd_settle_mode = remote_attach.snd_settle_mode;
+
+        // The delivery-count is initialized by the sender when a link endpoint is
+        // created, and is incremented whenever a message is sent
+        let initial_delivery_count = remote_attach
+            .initial_delivery_count
+            .ok_or(ReceiverAttachError::InitialDeliveryCountIsNone)?;
+
+        let target = remote_attach
+            .target
+            .map(|t| T::try_from(*t))
+            .transpose()
+            .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
+
+        // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+        // Is this verification necessary?
+        match (&self.target, &target) {
+            (Some(local_target), Some(remote_target)) => {
+                local_target.verify_as_receiver(remote_target)?
+            }
+            (_, None) => return Err(ReceiverAttachError::IncomingTargetIsNone),
+            _ => {}
+        }
+
+        self.max_message_size =
+            get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+
+        self.flow_state
+            .as_ref()
+            .initial_delivery_count_mut(|_| initial_delivery_count)
+            .await;
+        self.flow_state
+            .as_ref()
+            .delivery_count_mut(|_| initial_delivery_count)
+            .await;
+
+        Ok(())
+    }
+
+    async fn send_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+    ) -> Result<(), Self::AttachError> {
+        self.send_attach_inner(writer).await?;
+        Ok(())
+    }
+}
+
+
+impl<T> endpoint::Link for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    fn role() -> Role {
+        Role::Receiver
+    }
+}
+
+#[async_trait]
+impl<T> endpoint::LinkExt for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    type FlowState = ReceiverFlowState;
+    type Unsettled = Arc<RwLock<UnsettledMap<DeliveryState>>>;
+    type Target = T;
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn output_handle(&self) -> &Option<OutputHandle> {
+        &self.output_handle
+    }
+
+    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
+        &mut self.output_handle
+    }
+
+    fn flow_state(&self) -> &Self::FlowState {
+        &self.flow_state
+    }
+
+    fn unsettled(&self) -> &Self::Unsettled {
+        &self.unsettled
+    }
+
+    fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
+        &self.rcv_settle_mode
+    }
+
+    fn target(&self) -> &Option<Self::Target> {
+        &self.target
+    }
+
+    async fn negotiate_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        reader: &mut mpsc::Receiver<LinkFrame>,
+    ) -> Result<(), ReceiverAttachError> {
+        // Send out local attach
+        self.send_attach(writer).await?;
+
+        // Wait for remote attach
+        let remote_attach = match reader
+            .recv()
+            .await
+            .ok_or(ReceiverAttachError::IllegalSessionState)?
+        {
+            LinkFrame::Attach(attach) => attach,
+            _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
+        };
+
+        self.on_incoming_attach(remote_attach).await
+    }
+
+    async fn handle_attach_error(
+        &mut self,
+        attach_error: ReceiverAttachError,
+        writer: &mpsc::Sender<LinkFrame>,
+        reader: &mut mpsc::Receiver<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+    ) -> ReceiverAttachError {
+        match attach_error {
+            ReceiverAttachError::IllegalSessionState
+            | ReceiverAttachError::IllegalState
+            | ReceiverAttachError::NonAttachFrameReceived
+            | ReceiverAttachError::ExpectImmediateDetach => attach_error,
+
+            ReceiverAttachError::DuplicatedLinkName => {
+                let error = definitions::Error::new(
+                    SessionError::HandleInUse,
+                    "Link name is in use".to_string(),
+                    None,
+                );
+                session
+                    .send(SessionControl::End(Some(error)))
+                    .await
+                    .map(|_| attach_error)
+                    .unwrap_or(ReceiverAttachError::IllegalSessionState)
+            }
+            ReceiverAttachError::IncomingSourceIsNone
+            | ReceiverAttachError::IncomingTargetIsNone => match reader.recv().await {
+                Some(LinkFrame::Detach(remote_detach)) => self
+                    .send_detach(writer, remote_detach.closed, None)
+                    .await
+                    .map(|_| attach_error)
+                    .unwrap_or(ReceiverAttachError::IllegalSessionState),
+                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+                None => ReceiverAttachError::IllegalSessionState,
+            },
+
+            ReceiverAttachError::CoordinatorIsNotImplemented
+            | ReceiverAttachError::InitialDeliveryCountIsNone
+            | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
+            | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
+            | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
+                match (&attach_error).try_into() {
+                    Ok(error) => {
+                        match self.send_detach(writer, true, Some(error)).await {
+                            Ok(_) => match reader.recv().await {
+                                Some(LinkFrame::Detach(remote_detach)) => {
+                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: how to handle this?
+                                    attach_error
+                                }
+                                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+                                None => ReceiverAttachError::IllegalSessionState,
+                            },
+                            Err(_) => ReceiverAttachError::IllegalSessionState,
+                        }
+                    }
+                    Err(_) => attach_error,
+                }
+            }
+        }
+    }
+}
