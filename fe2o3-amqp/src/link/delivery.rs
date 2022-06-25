@@ -321,28 +321,28 @@ where
     }
 }
 
-type NonTxnResult = Result<(), SendError>;
+// type NonTxnResult = Result<(), SendError>;
 
-impl FromSettled for NonTxnResult {
-    fn from_settled() -> Self {
-        Ok(())
-    }
-}
+// impl FromSettled for NonTxnResult {
+//     fn from_settled() -> Self {
+//         Ok(())
+//     }
+// }
 
-impl FromDeliveryState for NonTxnResult {
-    fn from_delivery_state(state: DeliveryState) -> Self {
-        match state {
-            DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
-            DeliveryState::Released(released) => Err(SendError::Released(released)),
-            DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
-            #[cfg(feature = "transaction")]
-            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                Err(SendError::not_implemented(None))
-            }
-        }
-    }
-}
+// impl FromDeliveryState for NonTxnResult {
+//     fn from_delivery_state(state: DeliveryState) -> Self {
+//         match state {
+//             DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+//             DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+//             DeliveryState::Released(released) => Err(SendError::Released(released)),
+//             DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
+//             #[cfg(feature = "transaction")]
+//             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+//                 Err(SendError::)
+//             }
+//         }
+//     }
+// }
 
 impl<O> Future for DeliveryFut<O>
 where

@@ -37,7 +37,7 @@ pub enum DeclareError {
 
     /// A local error
     #[error("Local error: {:?}", .0)]
-    Local(definitions::Error),
+    LinkError(#[from] link::Error),
 
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
@@ -71,11 +71,13 @@ impl From<AttachError> for DeclareError {
 impl From<link::SendError> for DeclareError {
     fn from(error: link::SendError) -> Self {
         match error {
-            link::SendError::Local(e) => Self::Local(e),
+            link::SendError::LinkError(e) => Self::LinkError(e),
             link::SendError::Detached(e) => Self::Detached(e),
             link::SendError::Rejected(e) => Self::Rejected(e),
             link::SendError::Released(e) => Self::Released(e),
             link::SendError::Modified(e) => Self::Modified(e),
+            link::SendError::IllegalDeliveryState => todo!(),
+            link::SendError::MessageEncodeError => todo!(),
         }
     }
 }

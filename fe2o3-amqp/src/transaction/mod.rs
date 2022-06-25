@@ -31,7 +31,7 @@ pub use acquisition::*;
 use tokio::sync::{mpsc::error::TryRecvError, oneshot};
 use tracing::instrument;
 
-pub(crate) mod control_link_msg;
+pub(crate) mod control_link_frame;
 
 #[cfg(feature = "acceptor")]
 pub mod coordinator;

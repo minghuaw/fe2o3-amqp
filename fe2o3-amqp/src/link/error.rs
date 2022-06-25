@@ -107,9 +107,9 @@ impl From<DetachError> for Error {
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
-    /// A local error
+    /// 
     #[error("Local error: {:?}", .0)]
-    Local(definitions::Error),
+    LinkError(#[from] Error),
 
     /// The remote peer detached with error
     #[error("Link is detached {:?}", .0)]
@@ -126,76 +126,14 @@ pub enum SendError {
     /// The message was modified
     #[error("Outcome Modified: {:?}", .0)]
     Modified(Modified),
-}
 
-#[cfg(feature = "transaction")]
-impl SendError {
-    pub(crate) fn not_implemented(description: impl Into<Option<String>>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            description.into(),
-            None,
-        ))
-    }
+    /// Transactional state found on non-transactional delivery
+    #[error("Transactional state found on non-transactional delivery")]
+    IllegalDeliveryState,
 
-    pub(crate) fn not_allowed(description: impl Into<Option<String>>) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotAllowed,
-            description.into(),
-            None,
-        ))
-    }
-
-    pub(crate) fn mismatched_transaction_id(
-        expecting: &TransactionId,
-        found: &TransactionId,
-    ) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            format!(
-                "Found mismatched transaction ID. Expecting: {:?}, found: {:?}",
-                expecting, found
-            ),
-            None,
-        ))
-    }
-
-    pub(crate) fn expecting_outcome() -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::NotImplemented,
-            format!("Expecting an outcome, found None"),
-            None,
-        ))
-    }
-}
-
-impl From<serde_amqp::Error> for SendError {
-    fn from(err: serde_amqp::Error) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::DecodeError,
-            Some(format!("{:?}", err)),
-            None,
-        ))
-    }
-}
-
-// impl From<Error> for SendError {
-//     fn from(err: Error) -> Self {
-//         match err {
-//             Error::Local(e) => SendError::Local(e),
-//             Error::Detached(e) => SendError::Detached(e),
-//         }
-//     }
-// }
-
-impl From<oneshot::error::RecvError> for SendError {
-    fn from(_: oneshot::error::RecvError) -> Self {
-        Self::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Delivery outcome sender has dropped".into()),
-            None,
-        ))
-    }
+    /// Error serializing message
+    #[error("Error encoding message")]
+    MessageEncodeError,
 }
 
 impl From<DetachError> for SendError {
@@ -210,8 +148,6 @@ pub type RecvError = Error;
 /// Error associated with normal operations on a link
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-
-
     /// ILlegal link state
     #[error("Illegal local state")]
     IllegalState,
@@ -250,14 +186,6 @@ pub enum Error {
     #[error("Remote detached with an error: {}", .0)]
     RemoteDetachedWithError(definitions::Error),
 
-    // /// Remote peer sent a closing detach when the local terminus sent a non-closing detach
-    // #[error("Link closed by remote")]
-    // ClosedByRemoteWhenDetaching,
-
-    // /// Remote peer sent a non-closing detach when the local terminus is sending a closing detach
-    // #[error("Link will be closed by local terminus")]
-    // DetachedByRemoteWhenClosing,
-
     /// Remote peer closed 
     #[error("Remote closed")]
     RemoteClosed,
@@ -280,84 +208,6 @@ impl From<oneshot::error::RecvError> for Error {
         Self::IllegalSessionState
     }
 }
-
-// impl Error {
-//     // May want to have different handling of SendError
-//     pub(crate) fn sending_to_session() -> Self {
-//         Self::Local(definitions::Error::new(
-//             AmqpError::IllegalState,
-//             Some("Failed to send to sesssion".to_string()),
-//             None,
-//         ))
-//     }
-
-//     pub(crate) fn expecting_frame(frame_ident: impl Into<String>) -> Self {
-//         Self::Local(definitions::Error::new(
-//             AmqpError::IllegalState,
-//             Some(format!("Expecting {}", frame_ident.into())),
-//             None,
-//         ))
-//     }
-
-//     pub(crate) fn not_attached() -> Self {
-//         Self::Local(definitions::Error::new(
-//             AmqpError::IllegalState,
-//             Some("Link is not attached".to_string()),
-//             None,
-//         ))
-//     }
-// }
-
-// impl From<AmqpError> for Error {
-//     fn from(err: AmqpError) -> Self {
-//         Self::Local(definitions::Error::new(err, None, None))
-//     }
-// }
-
-// impl From<LinkError> for Error {
-//     fn from(err: LinkError) -> Self {
-//         Self::Local(definitions::Error::new(err, None, None))
-//     }
-// }
-
-// impl<T> From<mpsc::error::SendError<T>> for Error {
-//     fn from(_: mpsc::error::SendError<T>) -> Self {
-//         Self::Local(definitions::Error::new(
-//             AmqpError::IllegalState,
-//             Some("Failed to send to sesssion".to_string()),
-//             None,
-//         ))
-//     }
-// }
-
-// impl From<oneshot::error::RecvError> for Error {
-//     fn from(_: oneshot::error::RecvError) -> Self {
-//         Error::Local(definitions::Error::new(
-//             AmqpError::IllegalState,
-//             Some("Delivery outcome sender has dropped".into()),
-//             None,
-//         ))
-//     }
-// }
-
-// impl From<DetachError> for Error {
-//     fn from(error: DetachError) -> Self {
-//         Self::Detached(error)
-//     }
-// }
-
-// pub(crate) fn detach_error_expecting_frame() -> DetachError {
-//     let error = definitions::Error::new(
-//         AmqpError::IllegalState,
-//         Some("Expecting remote detach frame".to_string()),
-//         None,
-//     );
-
-//     DetachError {
-//         is_closed_by_remote: false,
-//         error: Some(error),
-//     }
-// }
 
 /// Error associated with attaching a link
 #[derive(Debug, thiserror::Error)]
@@ -452,15 +302,15 @@ impl From<TryLockError> for SenderTryConsumeError {
     }
 }
 
-/// Error attaching the receiver
-#[derive(Debug)]
-pub enum ReceiverAttachError {
+// /// Error attaching the receiver
+// #[derive(Debug)]
+// pub enum ReceiverAttachError {
 
-}
+// }
 
 /// Errors associated with attaching a link as receiver
 #[derive(Debug)]
-pub enum ReceiverAttachErrorKind {
+pub enum ReceiverAttachError {
     // Errors that should end the session
     /// The associated session has dropped
     IllegalSessionState,
@@ -500,7 +350,7 @@ pub enum ReceiverAttachErrorKind {
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
 }
 
-impl From<AllocLinkError> for ReceiverAttachErrorKind {
+impl From<AllocLinkError> for ReceiverAttachError {
     fn from(value: AllocLinkError) -> Self {
         match value {
             AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
@@ -509,22 +359,22 @@ impl From<AllocLinkError> for ReceiverAttachErrorKind {
     }
 }
 
-impl<'a> TryFrom<&'a ReceiverAttachErrorKind> for definitions::Error {
-    type Error = &'a ReceiverAttachErrorKind;
+impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
+    type Error = &'a ReceiverAttachError;
 
-    fn try_from(value: &'a ReceiverAttachErrorKind) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a ReceiverAttachError) -> Result<Self, Self::Error> {
         let condition: ErrorCondition = match value {
-            ReceiverAttachErrorKind::IllegalSessionState => AmqpError::IllegalState.into(),
-            ReceiverAttachErrorKind::DuplicatedLinkName => SessionError::HandleInUse.into(),
-            ReceiverAttachErrorKind::IllegalState => AmqpError::IllegalState.into(),
-            ReceiverAttachErrorKind::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
-            ReceiverAttachErrorKind::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
-            ReceiverAttachErrorKind::IncomingSourceIsNone 
-            | ReceiverAttachErrorKind::IncomingTargetIsNone => return Err(value),
-            ReceiverAttachErrorKind::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
-            ReceiverAttachErrorKind::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
-            ReceiverAttachErrorKind::AddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
-            ReceiverAttachErrorKind::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
+            ReceiverAttachError::IllegalSessionState => AmqpError::IllegalState.into(),
+            ReceiverAttachError::DuplicatedLinkName => SessionError::HandleInUse.into(),
+            ReceiverAttachError::IllegalState => AmqpError::IllegalState.into(),
+            ReceiverAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
+            ReceiverAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
+            ReceiverAttachError::IncomingSourceIsNone 
+            | ReceiverAttachError::IncomingTargetIsNone => return Err(value),
+            ReceiverAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
+            ReceiverAttachError::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
+            ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))
@@ -533,7 +383,7 @@ impl<'a> TryFrom<&'a ReceiverAttachErrorKind> for definitions::Error {
 
 /// Errors associated with attaching a link as sender
 #[derive(Debug)]
-pub enum SenderAttachErrorKind {
+pub enum SenderAttachError {
     // Illegal session state
 
     /// Session stopped
@@ -574,23 +424,32 @@ pub enum SenderAttachErrorKind {
     DesireTxnCapabilitiesNotSupported,
 }
 
-impl<'a> TryFrom<&'a SenderAttachErrorKind> for definitions::Error {
-    type Error = &'a SenderAttachErrorKind;
+impl From<AllocLinkError> for SenderAttachError {
+    fn from(value: AllocLinkError) -> Self {
+        match value {
+            AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
+            AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
+        }
+    }
+}
 
-    fn try_from(value: &'a SenderAttachErrorKind) -> Result<Self, Self::Error> {
+impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
+    type Error = &'a SenderAttachError;
+
+    fn try_from(value: &'a SenderAttachError) -> Result<Self, Self::Error> {
         let condition: ErrorCondition = match value {
-            SenderAttachErrorKind::IllegalSessionState => AmqpError::IllegalState.into(),
-            SenderAttachErrorKind::DuplicatedLinkName => SessionError::HandleInUse.into(),
-            SenderAttachErrorKind::IllegalState => AmqpError::IllegalState.into(),
-            SenderAttachErrorKind::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
-            SenderAttachErrorKind::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
-            SenderAttachErrorKind::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
-            SenderAttachErrorKind::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
-            SenderAttachErrorKind::AddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            SenderAttachError::IllegalSessionState => AmqpError::IllegalState.into(),
+            SenderAttachError::DuplicatedLinkName => SessionError::HandleInUse.into(),
+            SenderAttachError::IllegalState => AmqpError::IllegalState.into(),
+            SenderAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
+            SenderAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
+            SenderAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
+            SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => AmqpError::InvalidField.into(),
+            SenderAttachError::AddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
 
-            SenderAttachErrorKind::IncomingSourceIsNone 
-            | SenderAttachErrorKind::IncomingTargetIsNone 
-            | SenderAttachErrorKind::DesireTxnCapabilitiesNotSupported => return Err(value),
+            SenderAttachError::IncomingSourceIsNone 
+            | SenderAttachError::IncomingTargetIsNone 
+            | SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))
@@ -609,7 +468,7 @@ pub(crate) enum SendAttachErrorKind {
     IllegalSessionState,
 }
 
-impl From<SendAttachErrorKind> for SenderAttachErrorKind {
+impl From<SendAttachErrorKind> for SenderAttachError {
     fn from(value: SendAttachErrorKind) -> Self {
         match value {
             SendAttachErrorKind::IllegalState => Self::IllegalState,
@@ -618,7 +477,7 @@ impl From<SendAttachErrorKind> for SenderAttachErrorKind {
     }
 }
 
-impl From<SendAttachErrorKind> for ReceiverAttachErrorKind {
+impl From<SendAttachErrorKind> for ReceiverAttachError {
     fn from(value: SendAttachErrorKind) -> Self {
         match value {
             SendAttachErrorKind::IllegalState => Self::IllegalState,

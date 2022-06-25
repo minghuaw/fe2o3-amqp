@@ -30,7 +30,6 @@ use crate::{
         frame::{SessionFrame, SessionIncomingItem},
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
-    transaction::TransactionManagerError,
     util::Initialized,
     Payload,
 };
@@ -38,7 +37,7 @@ use crate::{
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{manager::TransactionManager, session::TxnSession};
+use crate::transaction::{manager::TransactionManager, session::TxnSession, TransactionManagerError};
 
 /// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}
@@ -80,13 +79,13 @@ pub(crate) async fn allocate_incoming_link(
         // dropped, meaning the `SessionEngine::event_loop` has stopped.
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
-        .map_err(|_| AllocLinkError::IllegalState)?;
+        .map_err(|_| AllocLinkError::IllegalSessionState)?;
     let result = resp_rx
         .await
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalState)?;
+        .map_err(|_| AllocLinkError::IllegalSessionState)?;
     result
 }
 

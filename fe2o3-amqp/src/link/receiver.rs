@@ -27,7 +27,7 @@ use super::{
     error::{AttachError, DetachError},
     receiver_link::section_number_and_offset,
     role, ArcReceiverUnsettledMap, Error, LinkFrame, LinkRelay, ReceiverFlowState, ReceiverLink,
-    DEFAULT_CREDIT, ReceiverAttachError, ReceiverAttachErrorKind,
+    DEFAULT_CREDIT, ReceiverAttachError,
 };
 
 macro_rules! or_assign {
@@ -421,7 +421,7 @@ where
     async fn reattach_inner(
         &mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, ReceiverAttachErrorKind> {
+    ) -> Result<&mut Self, ReceiverAttachError> {
         if self.link.output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
             let link_handle = LinkRelay::Receiver {
@@ -436,16 +436,13 @@ where
                 more: false,
             };
             self.incoming = incoming;
-            let handle = match session::allocate_link(
+            let handle = session::allocate_link(
                 &mut session_control,
                 self.link.name().into(),
                 link_handle,
             )
-            .await
-            {
-                Ok(handle) => handle,
-                Err(err) => return Err(err.into())
-            };
+            .await?;
+            
             *self.link.output_handle_mut() = Some(handle);
         }
 
@@ -703,27 +700,20 @@ where
     ) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, error).await {
-            return Err(DetachError::new(false, Some(e)));
-        }
+        self.link.send_detach(&mut self.outgoing, true, error).await
+            .map_err(|_| DetachError::IllegalSessionState)?;
 
         // Wait for remote detach
-        let frame = match self.incoming.recv().await {
-            Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame()),
-        };
+        let frame = self.incoming.recv().await.ok_or(DetachError::IllegalSessionState)?;
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame()),
+            _ => return Err(DetachError::NonDetachFrameReceived),
         };
 
         if remote_detach.closed {
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
-            match self.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {}
-                Err(e) => return Err(DetachError::new(false, Some(e))),
-            }
+            self.link.on_incoming_detach(remote_detach).await?;
         } else {
             // Note that one peer MAY send a closing detach while its partner is
             // sending a non-closing detach. In this case, the partner MUST
@@ -737,21 +727,18 @@ where
             // 4. detach
 
             let session_control = self.session.clone();
-            self.reattach_inner(session_control).await?;
+            self.reattach_inner(session_control).await.map_err(|_| DetachError::DetachedByRemote)?;
             let frame = match self.incoming.recv().await {
                 Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame()),
+                None => return Err(DetachError::IllegalSessionState),
             };
 
             // TODO: is checking closing still necessary?
             let _remote_detach = match frame {
                 LinkFrame::Detach(detach) => detach,
-                _ => return Err(detach_error_expecting_frame()),
+                _ => return Err(DetachError::NonDetachFrameReceived),
             };
-            match self.link.send_detach(&mut self.outgoing, true, None).await {
-                Ok(_) => {}
-                Err(e) => return Err(DetachError::new(false, Some(e))),
-            }
+            self.link.send_detach(&mut self.outgoing, true, None).await?;
         };
 
         Ok(())

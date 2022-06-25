@@ -546,10 +546,7 @@ where
             inner
                 .set_credit(credit)
                 .await
-                .map_err(|error| match AttachError::try_from(error) {
-                    Ok(error) => error,
-                    Err(_) => unreachable!(),
-                })?;
+                .map_err(|_| ReceiverAttachError::IllegalState)?; // TODO: further decompose errors?
         }
 
         Ok(inner)

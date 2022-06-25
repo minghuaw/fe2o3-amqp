@@ -25,7 +25,7 @@ use super::{
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
     role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderFlowState,
-    SenderLink,
+    SenderLink, SenderAttachError,
 };
 
 /// An AMQP1.0 sender
@@ -191,14 +191,14 @@ impl Sender {
             Settlement::Unsettled {
                 _delivery_tag: _,
                 outcome,
-            } => match outcome.await? {
+            } => match outcome.await.map_err(|_| Error::IllegalSessionState)? {
                 DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
                 DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
                 DeliveryState::Released(released) => Err(SendError::Released(released)),
                 DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
                 #[cfg(feature = "transaction")]
                 DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                    Err(SendError::not_implemented(None))
+                    Err(SendError::IllegalDeliveryState)
                 }
             },
         }
@@ -299,21 +299,17 @@ impl SenderInner<SenderLink<Target>> {
 
         // detach will send detach with closed=false and wait for remote detach
         // The sender may reattach after fully detached
-        if let Err(e) = self.link.send_detach(&self.outgoing, false, error).await {
-            return Err(DetachError::new(false, Some(e)));
-        };
-
-        // session::deallocate_link(&mut self.session, output_handle).await?;
+        self.link.send_detach(&self.outgoing, false, error).await?;
 
         // Wait for remote detach
         let frame = match self.incoming.recv().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame()),
+            None => return Err(DetachError::IllegalSessionState),
         };
 
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame()),
+            _ => return Err(DetachError::NonDetachFrameReceived),
         };
 
         if remote_detach.closed {
@@ -322,7 +318,8 @@ impl SenderInner<SenderLink<Target>> {
             // signal that it has closed the link by reattaching and then sending
             // a closing detach.
             let session_control = self.session.clone();
-            self.reattach_inner(session_control).await?;
+            self.reattach_inner(session_control).await
+                .map_err(|_| DetachError::ClosedByRemote)?;
 
             self.close_with_error(None).await?;
 
@@ -330,23 +327,10 @@ impl SenderInner<SenderLink<Target>> {
             // specified link, and the closed flag set to true. The partner will destroy
             // the corresponding link endpoint, and reply with its own detach frame with
             // the closed flag set to true.
-            return Err(DetachError {
-                is_closed_by_remote: true,
-                error: None,
-            });
+            Err(DetachError::ClosedByRemote)
         } else {
-            match self.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(DetachError {
-                        is_closed_by_remote: false,
-                        error: Some(e),
-                    })
-                }
-            }
+            self.link.on_incoming_detach(remote_detach).await
         }
-
-        Ok(())
     }
 }
 
@@ -355,13 +339,13 @@ where
     L: endpoint::SenderLink<
             Error = Error,
             // AttachError = AttachError,
-            DetachError = definitions::Error,
+            DetachError = DetachError,
         > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>,
 {
     async fn reattach_inner(
         &mut self,
         mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, DetachError> {
+    ) -> Result<&mut Self, SenderAttachError> {
         // May need to re-allocate output handle
         if self.link.output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size);
@@ -375,21 +359,13 @@ where
                 // state_code: self.link.state_code.clone(),
             };
             self.incoming = incoming;
-            let handle = match session::allocate_link(
+            let handle = session::allocate_link(
                 &mut session_control,
                 self.link.name().into(),
                 link_handle,
             )
-            .await
-            {
-                Ok(handle) => handle,
-                Err(err) => {
-                    return Err(DetachError {
-                        is_closed_by_remote: false,
-                        error: Some(definitions::Error::from(err)),
-                    });
-                }
-            };
+            .await?;
+
             *self.link.output_handle_mut() = Some(handle);
         }
 
@@ -411,32 +387,22 @@ where
     ) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, error).await {
-            return Err(DetachError::new(false, Some(e)));
-        }
+        self.link.send_detach(&mut self.outgoing, true, error).await?;
 
         // Wait for remote detach
         let frame = match self.incoming.recv().await {
             Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame()),
+            None => return Err(DetachError::IllegalSessionState),
         };
         let remote_detach = match frame {
             LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame()),
+            _ => return Err(DetachError::NonDetachFrameReceived),
         };
 
         if remote_detach.closed {
             // If the remote detach contains an error, the error will be propagated
             // back by `on_incoming_detach`
-            match self.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(DetachError {
-                        is_closed_by_remote: false,
-                        error: Some(e),
-                    })
-                }
-            }
+            self.link.on_incoming_detach(remote_detach).await?;
         } else {
             // Note that one peer MAY send a closing detach while its partner is
             // sending a non-closing detach. In this case, the partner MUST
@@ -450,21 +416,18 @@ where
             // 4. detach
 
             let session_control = self.session.clone();
-            self.reattach_inner(session_control).await?;
+            self.reattach_inner(session_control).await.map_err(|_| DetachError::DetachedByRemote)?;
             let frame = match self.incoming.recv().await {
                 Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame()),
+                None => return Err(DetachError::IllegalSessionState),
             };
 
             // TODO: is checking closing still necessary?
             let _remote_detach = match frame {
                 LinkFrame::Detach(detach) => detach,
-                _ => return Err(detach_error_expecting_frame()),
+                _ => return Err(DetachError::NonDetachFrameReceived),
             };
-            match self.link.send_detach(&mut self.outgoing, true, None).await {
-                Ok(_) => {}
-                Err(e) => return Err(DetachError::new(false, Some(e))),
-            }
+            self.link.send_detach(&mut self.outgoing, true, None).await?;
         };
 
         Ok(())
@@ -499,7 +462,7 @@ where
         // serialize message
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
-        Serializable(message).serialize(&mut serializer)?;
+        Serializable(message).serialize(&mut serializer).map_err(|_| SendError::MessageEncodeError)?;
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 
