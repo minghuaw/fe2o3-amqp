@@ -27,6 +27,8 @@ pub(crate) mod state;
 
 pub(crate) mod target_archetype;
 
+pub(crate) mod shared_inner;
+
 pub use error::*;
 
 pub use receiver::Receiver;
@@ -188,84 +190,6 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    // Handles incoming attach when the remote is sender
-    pub(crate) async fn on_incoming_attach_as_receiver(
-        &mut self,
-        source: Option<Source>,
-        snd_settle_mode: SenderSettleMode,
-        initial_delivery_count: Option<u32>,
-        target: Option<TargetArchetype>,
-    ) -> Result<(), ReceiverAttachError> {
-        // In this case, the sender is considered to hold the authoritative version of the
-        // version of the source properties
-
-        let source = source.ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
-        self.source = Some(source);
-
-        // The receiver SHOULD respect the sender’s desired settlement mode if the sender
-        // initiates the attach exchange and the receiver supports the desired mode.
-        self.snd_settle_mode = snd_settle_mode;
-
-        // The delivery-count is initialized by the sender when a link endpoint is
-        // created, and is incremented whenever a message is sent
-        let initial_delivery_count =
-            initial_delivery_count.ok_or(ReceiverAttachError::InitialDeliveryCountIsNone)?;
-
-        let target = target
-            .map(|t| T::try_from(t))
-            .transpose()
-            .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
-
-        // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
-        // Is this verification necessary?
-        match (&self.target, &target) {
-            (Some(local_target), Some(remote_target)) => {
-                local_target.verify_as_receiver(remote_target)?
-            }
-            (_, None) => return Err(ReceiverAttachError::IncomingTargetIsNone),
-            _ => {}
-        }
-
-        self.flow_state
-            .as_ref()
-            .initial_delivery_count_mut(|_| initial_delivery_count)
-            .await;
-        self.flow_state
-            .as_ref()
-            .delivery_count_mut(|_| initial_delivery_count)
-            .await;
-
-        Ok(())
-    }
-
-    pub(crate) async fn on_incoming_attach_as_sender(
-        &mut self,
-        target: Option<TargetArchetype>,
-        rcv_settle_mode: ReceiverSettleMode,
-    ) -> Result<(), SenderAttachError> {
-        let target = target
-            .map(|t| T::try_from(t))
-            .transpose()
-            .map_err(|_| SenderAttachError::CoordinatorIsNotImplemented)?;
-
-        // Note that it is the responsibility of the transaction controller to
-        // verify that the capabilities of the controller meet its requirements.
-        match (&self.target, &target) {
-            (Some(local_target), Some(remote_target)) => {
-                local_target.verify_as_sender(remote_target)?
-            }
-            (_, None) => return Err(SenderAttachError::IncomingTargetIsNone),
-            _ => {}
-        }
-        self.target = target;
-
-        // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
-        // initiates the attach exchange and the sender supports the desired mode
-        self.rcv_settle_mode = rcv_settle_mode;
-
-        Ok(())
-    }
-
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -600,11 +524,38 @@ where
     type AttachError = SenderAttachError;
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
-        self.on_incoming_attach_as_sender(
-            remote_attach.target.map(|t| *t),
-            remote_attach.rcv_settle_mode,
-        )
-        .await
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+            _ => return Err(SenderAttachError::IllegalState),
+        };
+
+        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+
+        let target = remote_attach.target
+            .map(|t| T::try_from(*t))
+            .transpose()
+            .map_err(|_| SenderAttachError::CoordinatorIsNotImplemented)?;
+
+        // Note that it is the responsibility of the transaction controller to
+        // verify that the capabilities of the controller meet its requirements.
+        match (&self.target, &target) {
+            (Some(local_target), Some(remote_target)) => {
+                local_target.verify_as_sender(remote_target)?
+            }
+            (_, None) => return Err(SenderAttachError::IncomingTargetIsNone),
+            _ => {}
+        }
+        self.target = target;
+
+        // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
+        // initiates the attach exchange and the sender supports the desired mode
+        self.rcv_settle_mode = remote_attach.rcv_settle_mode;
+
+        self.max_message_size = get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+
+        Ok(())
     }
 
     async fn send_attach(
@@ -624,13 +575,56 @@ where
     type AttachError = ReceiverAttachError;
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
-        self.on_incoming_attach_as_receiver(
-            remote_attach.source.map(|t| *t),
-            remote_attach.snd_settle_mode,
-            remote_attach.initial_delivery_count,
-            remote_attach.target.map(|t| *t),
-        )
-        .await
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+            _ => return Err(ReceiverAttachError::IllegalState),
+        };
+
+        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+
+        // In this case, the sender is considered to hold the authoritative version of the
+        // version of the source properties
+
+        let source = remote_attach.source.ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
+        self.source = Some(*source);
+
+        // The receiver SHOULD respect the sender’s desired settlement mode if the sender
+        // initiates the attach exchange and the receiver supports the desired mode.
+        self.snd_settle_mode = remote_attach.snd_settle_mode;
+
+        // The delivery-count is initialized by the sender when a link endpoint is
+        // created, and is incremented whenever a message is sent
+        let initial_delivery_count = remote_attach.initial_delivery_count.ok_or(ReceiverAttachError::InitialDeliveryCountIsNone)?;
+
+        let target = remote_attach.target
+            .map(|t| T::try_from(*t))
+            .transpose()
+            .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
+
+        // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+        // Is this verification necessary?
+        match (&self.target, &target) {
+            (Some(local_target), Some(remote_target)) => {
+                local_target.verify_as_receiver(remote_target)?
+            }
+            (_, None) => return Err(ReceiverAttachError::IncomingTargetIsNone),
+            _ => {}
+        }
+
+        self.max_message_size = get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+
+        self.flow_state
+            .as_ref()
+            .initial_delivery_count_mut(|_| initial_delivery_count)
+            .await;
+        self.flow_state
+            .as_ref()
+            .delivery_count_mut(|_| initial_delivery_count)
+            .await;
+
+        Ok(())
     }
 
     async fn send_attach(

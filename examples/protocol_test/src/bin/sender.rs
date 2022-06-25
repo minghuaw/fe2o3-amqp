@@ -80,15 +80,20 @@ async fn main() {
     //     .message("hello world")
     //     .settled(true)
     //     .build();
-
-    tokio::spawn(async move {
-        sender.send(message).await.unwrap();
     
-        sender.send("world").await.unwrap();
+    // let handle = tokio::spawn(async move {
+    //     sender.send(message).await.unwrap();
+    
+    //     sender.send("world").await.unwrap();
+    //     sender.detach().await.unwrap();
+    // });
 
-        sender.close().await.unwrap();
-    });
+    // handle.await;
 
+    sender.send(message).await.unwrap();
+    
+    // sender.send("world").await.unwrap();
+    sender.close().await.unwrap();
 
     // // sender.close().await.unwrap();
     // if let Err(err) = sender.detach().await {

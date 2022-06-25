@@ -154,6 +154,8 @@ where
             }
         }
 
+        tracing::debug!(input_handle = ?self.input_handle);
+
         let input_handle = self.input_handle.clone().ok_or(Error::IllegalState)?;
         let handle = self
             .output_handle

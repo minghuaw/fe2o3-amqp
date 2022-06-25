@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use async_trait::async_trait;
 use bytes::BytesMut;
 use tokio::{
     sync::mpsc,
@@ -16,7 +17,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkDetach, LinkExt, Settlement},
+    endpoint::{self, LinkDetach, LinkExt, Settlement, LinkAttach},
     session::{self, SessionHandle},
 };
 
@@ -24,8 +25,10 @@ use super::{
     builder::{self, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::{AttachError, DetachError},
-    role, ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderFlowState,
-    SenderLink, SenderAttachError,
+    role,
+    shared_inner::{LinkEndpointInnerReattach, LinkEndpointInner},
+    ArcSenderUnsettledMap, Error, LinkFrame, LinkRelay, SendError, SenderAttachError,
+    SenderFlowState, SenderLink,
 };
 
 /// An AMQP1.0 sender
@@ -287,6 +290,135 @@ impl<L: endpoint::SenderLink> Drop for SenderInner<L> {
     }
 }
 
+#[async_trait]
+impl<L> LinkEndpointInner for SenderInner<L>
+where
+    L: endpoint::SenderLink<
+            Error = Error,
+            AttachError = SenderAttachError,
+            DetachError = DetachError,
+        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + Send
+        + Sync,
+{
+    type Link = L;
+
+    fn link(&self) -> &Self::Link {
+        &self.link
+    }
+
+    fn link_mut(&mut self) -> &mut Self::Link {
+        &mut self.link
+    }
+
+    fn writer(&self) -> &mpsc::Sender<LinkFrame> {
+        &self.outgoing
+    }
+
+    fn reader_mut(&mut self) -> &mut mpsc::Receiver<LinkFrame> {
+        &mut self.incoming
+    }
+
+    fn buffer_size(&self) -> usize {
+        self.buffer_size
+    }
+
+    fn as_new_link_relay(&self, tx: mpsc::Sender<LinkFrame>) -> LinkRelay<()> {
+        LinkRelay::Sender {
+            tx,
+            output_handle: (),
+            flow_state: self.link.flow_state().producer(),
+            // TODO: what else to do during re-attaching
+            unsettled: self.link.unsettled().clone(),
+            receiver_settle_mode: self.link.rcv_settle_mode().clone(),
+        }
+    }
+
+    fn session_control(&self) -> &mpsc::Sender<SessionControl> {
+        &self.session
+    }
+
+    async fn negotiate_attach(&mut self) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
+        self.link
+            .negotiate_attach(&self.outgoing, &mut self.incoming)
+            .await
+    }
+
+    async fn handle_attach_error(
+        &mut self,
+        attach_error: <Self::Link as LinkAttach>::AttachError,
+    ) -> <Self::Link as LinkAttach>::AttachError {
+        self.link
+            .handle_attach_error(
+                attach_error,
+                &self.outgoing,
+                &mut self.incoming,
+                &self.session,
+            )
+            .await
+    }
+}
+
+// #[async_trait]
+// impl<L> LinkEndpointInnerReattach for SenderInner<L>
+// where
+//     L: endpoint::SenderLink<
+//             Error = Error,
+//             AttachError = SenderAttachError,
+//             DetachError = DetachError,
+//         > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+//         + Send
+//         + Sync,
+// {
+//     type ReattachError = SenderAttachError;
+
+//     async fn reattach_inner(
+//         &mut self,
+//         mut session_control: mpsc::Sender<SessionControl>,
+//     ) -> Result<&mut Self, Self::ReattachError> {
+//         // May need to re-allocate output handle
+//         if self.link.output_handle().is_none() {
+//             let (tx, incoming) = mpsc::channel(self.buffer_size);
+//             let link_handle = LinkRelay::Sender {
+//                 tx,
+//                 output_handle: (),
+//                 flow_state: self.link.flow_state().producer(),
+//                 // TODO: what else to do during re-attaching
+//                 unsettled: self.link.unsettled().clone(),
+//                 receiver_settle_mode: self.link.rcv_settle_mode().clone(),
+//                 // state_code: self.link.state_code.clone(),
+//             };
+//             self.incoming = incoming;
+//             let handle =
+//                 session::allocate_link(&mut session_control, self.link.name().into(), link_handle)
+//                     .await?;
+
+//             *self.link.output_handle_mut() = Some(handle);
+//         }
+
+//         if let Err(attach_error) = self
+//             .link
+//             .negotiate_attach(&self.outgoing, &mut self.incoming)
+//             .await
+//         {
+//             // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+//             // return Err(DetachError::new(false, Some(err)));
+//             let err = self
+//                 .link
+//                 .handle_attach_error(
+//                     attach_error,
+//                     &self.outgoing,
+//                     &mut self.incoming,
+//                     &self.session,
+//                 )
+//                 .await;
+//             return Err(err);
+//         }
+
+//         Ok(self)
+//     }
+// }
+
 impl SenderInner<SenderLink<Target>> {
     #[inline]
     pub async fn detach_with_error(
@@ -317,8 +449,8 @@ impl SenderInner<SenderLink<Target>> {
             // sending a non-closing detach. In this case, the partner MUST
             // signal that it has closed the link by reattaching and then sending
             // a closing detach.
-            let session_control = self.session.clone();
-            self.reattach_inner(session_control).await
+            self.reattach_inner()
+                .await
                 .map_err(|_| DetachError::ClosedByRemote)?;
 
             self.close_with_error(None).await?;
@@ -338,48 +470,16 @@ impl<L> SenderInner<L>
 where
     L: endpoint::SenderLink<
             Error = Error,
-            // AttachError = AttachError,
+            AttachError = SenderAttachError,
             DetachError = DetachError,
-        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>,
+        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap> + Send + Sync,
 {
-    async fn reattach_inner(
-        &mut self,
-        mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, SenderAttachError> {
-        // May need to re-allocate output handle
-        if self.link.output_handle().is_none() {
-            let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkRelay::Sender {
-                tx,
-                output_handle: (),
-                flow_state: self.link.flow_state().producer(),
-                // TODO: what else to do during re-attaching
-                unsettled: self.link.unsettled().clone(),
-                receiver_settle_mode: self.link.rcv_settle_mode().clone(),
-                // state_code: self.link.state_code.clone(),
-            };
-            self.incoming = incoming;
-            let handle = session::allocate_link(
-                &mut session_control,
-                self.link.name().into(),
-                link_handle,
-            )
-            .await?;
-
-            *self.link.output_handle_mut() = Some(handle);
-        }
-
-        if let Err(attach_error) =
-            self.link.negotiate_attach(&self.outgoing, &mut self.incoming).await
-        {
-            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            // return Err(DetachError::new(false, Some(err)));
-            let err = self.link.handle_attach_error(attach_error, &self.outgoing, &mut self.incoming, &self.session).await;
-            todo!()
-        }
-
-        Ok(self)
-    }
+    // async fn reattach_inner(
+    //     &mut self,
+    //     mut session_control: mpsc::Sender<SessionControl>,
+    // ) -> Result<&mut Self, SenderAttachError> {
+        
+    // }
 
     pub async fn close_with_error(
         &mut self,
@@ -387,7 +487,9 @@ where
     ) -> Result<(), DetachError> {
         // Send detach with closed=true and wait for remote closing detach
         // The sender will be dropped after close
-        self.link.send_detach(&mut self.outgoing, true, error).await?;
+        self.link
+            .send_detach(&mut self.outgoing, true, error)
+            .await?;
 
         // Wait for remote detach
         let frame = match self.incoming.recv().await {
@@ -415,8 +517,9 @@ where
             // 3. wait for incoming closing detach
             // 4. detach
 
-            let session_control = self.session.clone();
-            self.reattach_inner(session_control).await.map_err(|_| DetachError::DetachedByRemote)?;
+            self.reattach_inner()
+                .await
+                .map_err(|_| DetachError::DetachedByRemote)?;
             let frame = match self.incoming.recv().await {
                 Some(frame) => frame,
                 None => return Err(DetachError::IllegalSessionState),
@@ -427,7 +530,9 @@ where
                 LinkFrame::Detach(detach) => detach,
                 _ => return Err(DetachError::NonDetachFrameReceived),
             };
-            self.link.send_detach(&mut self.outgoing, true, None).await?;
+            self.link
+                .send_detach(&mut self.outgoing, true, None)
+                .await?;
         };
 
         Ok(())
@@ -462,7 +567,9 @@ where
         // serialize message
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
-        Serializable(message).serialize(&mut serializer).map_err(|_| SendError::MessageEncodeError)?;
+        Serializable(message)
+            .serialize(&mut serializer)
+            .map_err(|_| SendError::MessageEncodeError)?;
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 

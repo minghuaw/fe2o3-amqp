@@ -379,7 +379,7 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
 
 impl<T> Builder<role::Sender, T, WithName, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     fn create_flow_state_containers(
         &mut self,
@@ -477,7 +477,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
 
 impl<T> Builder<role::Receiver, T, WithName, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     async fn attach_inner<R>(
         mut self,

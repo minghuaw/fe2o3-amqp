@@ -139,7 +139,7 @@ impl<R> SessionHandle<R> {
 }
 
 pub(crate) async fn allocate_link(
-    control: &mut mpsc::Sender<SessionControl>,
+    control: &mpsc::Sender<SessionControl>,
     link_name: String,
     link_relay: LinkRelay<()>,
 ) -> Result<OutputHandle, AllocLinkError> {
