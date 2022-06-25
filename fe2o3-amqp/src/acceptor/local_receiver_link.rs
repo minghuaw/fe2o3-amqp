@@ -3,23 +3,23 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ReceiverSettleMode},
+    definitions::{ReceiverSettleMode},
     messaging::{DeliveryState, TargetArchetype},
     performatives::Attach,
-    primitives::Symbol,
+    primitives::{Symbol, Array},
 };
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{
     control::SessionControl,
-    endpoint::{InputHandle, LinkAttach, LinkAttachAcceptorExt},
+    endpoint::{InputHandle, LinkAttach, LinkExt},
     link::{
         self,
         receiver::{CreditMode, ReceiverInner},
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
-        AttachError, LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState,
+        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState, ReceiverAttachError,
     },
     session::SessionHandle,
     Receiver,
@@ -67,7 +67,7 @@ impl LocalReceiverLinkAcceptor<Symbol> {
         shared: &SharedLinkAcceptorFields,
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
-    ) -> Result<Receiver, (AttachError, Option<Attach>)> {
+    ) -> Result<Receiver, ReceiverAttachError> {
         self.accept_incoming_attach_inner(
             shared,
             remote_attach,
@@ -91,14 +91,14 @@ where
         outgoing: &mpsc::Sender<LinkFrame>,
     ) -> Result<
         ReceiverInner<link::Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>,
-        (AttachError, Option<Attach>),
+        ReceiverAttachError,
     >
     where
         T: Into<TargetArchetype>
             + TryFrom<TargetArchetype>
             + TargetArchetypeExt<Capability = C>
             + Clone
-            + Send,
+            + Send + Sync,
     {
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
@@ -112,7 +112,7 @@ where
         };
 
         // Create channels for Session-Link communication
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(shared.buffer_size);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(shared.buffer_size);
 
         // Create shared flow state
         let flow_state_inner = LinkFlowStateInner {
@@ -148,31 +148,17 @@ where
             link_handle,
             input_handle,
         )
-        .await;
-        let output_handle = match output_handle {
-            Ok(handle) => handle,
-            Err(err) => return Err((err.into(), Some(remote_attach))), // If allocation fails, should respond with an empty attach
-        };
+        .await?;
 
-        let mut target = match &remote_attach.target {
-            Some(t) => match T::try_from(*t.clone()) {
-                Ok(t) => t,
-                Err(_) => {
-                    return Err((
-                        AttachError::Local(definitions::Error::new(
-                            AmqpError::NotImplemented,
-                            "Coordinator is not implemented".to_string(),
-                            None,
-                        )),
-                        Some(remote_attach),
-                    ))
-                }
-            },
-            None => return Err((AttachError::TargetIsNone, Some(remote_attach))),
-        };
-
-        // Set local link to the capabilities that are actually supported
-        *target.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
+        let local_target = remote_attach
+            .target.clone()
+            .map(|t| T::try_from(*t))
+            .transpose()
+            .map(|mut t| {
+                t.as_mut().map(|t| *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into));
+                t
+            })
+            .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
 
         let mut link = link::Link::<role::Receiver, T, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
@@ -184,7 +170,7 @@ where
             snd_settle_mode: Default::default(), // Will take value from incoming attach
             rcv_settle_mode,
             source: None, // Will take value from incoming attach
-            target: Some(target),
+            target: local_target, // Will take value from incoming attach
             max_message_size: shared.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: shared.offered_capabilities.clone(),
             desired_capabilities: shared.desired_capabilities.clone(),
@@ -193,10 +179,13 @@ where
         };
 
         let outgoing = outgoing.clone();
-        link.on_incoming_attach_as_acceptor(remote_attach).await?;
-        link.send_attach(&outgoing)
-            .await
-            .map_err(|err| (err.into(), None))?;
+        match link.on_incoming_attach(remote_attach).await {
+            Ok(_) => link.send_attach(&outgoing).await?,
+            Err(attach_error) => {
+                link.send_attach(&outgoing).await?;
+                return Err(link.handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control).await)
+            },
+        }
 
         let mut inner = ReceiverInner {
             link,
@@ -213,11 +202,7 @@ where
             tracing::debug!("Setting credits");
             inner
                 .set_credit(credit)
-                .await
-                .map_err(|error| match AttachError::try_from(error) {
-                    Ok(error) => (error, None),
-                    Err(_) => unreachable!(),
-                })?;
+                .await?;
         }
 
         Ok(inner)

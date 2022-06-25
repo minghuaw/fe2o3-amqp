@@ -334,14 +334,15 @@ where
             }
 
             SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
+                // Just send detach immediately
+                let err = self.send_detach(writer, true, None)
+                    .await
+                    .map(|_| attach_error)
+                    .unwrap_or(SenderAttachError::IllegalSessionState);
                 match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        let closed = remote_detach.closed;
                         let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
-                        self.send_detach(writer, closed, None)
-                            .await
-                            .map(|_| attach_error)
-                            .unwrap_or(SenderAttachError::IllegalSessionState)
+                        err
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
                     None => SenderAttachError::IllegalSessionState,

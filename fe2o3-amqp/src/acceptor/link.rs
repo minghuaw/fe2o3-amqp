@@ -20,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint,
     link::{
-        role, state::LinkFlowState, target_archetype::VerifyTargetArchetype, AttachError, Link,
+        role, state::LinkFlowState, target_archetype::VerifyTargetArchetype, Link,
         LinkFrame, ReceiverLink, SenderLink,
     },
     session::SessionHandle,
@@ -29,7 +29,7 @@ use crate::{
 
 use super::{
     builder::Builder, local_receiver_link::LocalReceiverLinkAcceptor,
-    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle,
+    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle, error::AcceptorAttachError,
 };
 
 /// Listener side link endpoint
@@ -151,31 +151,25 @@ impl LinkAcceptor {
         &self,
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
-    ) -> Result<LinkEndpoint, AttachError> {
+    ) -> Result<LinkEndpoint, AcceptorAttachError> {
         // In this case, the sender is considered to hold the authoritative version of the
         // source properties, the receiver is considered to hold the authoritative version of the target properties.
-        let result = match remote_attach.role {
+        match remote_attach.role {
             Role::Sender => {
                 // Remote is sender -> local is receiver
                 self.local_receiver_acceptor
                     .accept_incoming_attach(&self.shared, remote_attach, session)
                     .await
                     .map(|receiver| LinkEndpoint::Receiver(receiver))
+                    .map_err(Into::into)
             }
-            Role::Receiver => self
-                .local_sender_acceptor
-                .accept_incoming_attach(&self.shared, remote_attach, session)
-                .await
-                .map(|sender| LinkEndpoint::Sender(sender)),
-        };
-
-        match result {
-            Ok(link) => Ok(link),
-            Err((error, remote_attach)) => {
-                Err(
-                    handle_attach_error(error, remote_attach, &session.outgoing, &session.control)
-                        .await,
-                )
+            Role::Receiver => {
+                self
+                    .local_sender_acceptor
+                    .accept_incoming_attach(&self.shared, remote_attach, session)
+                    .await
+                    .map(|sender| LinkEndpoint::Sender(sender))
+                    .map_err(Into::into)
             }
         }
     }
@@ -184,72 +178,72 @@ impl LinkAcceptor {
     pub async fn accept(
         &self,
         session: &mut ListenerSessionHandle,
-    ) -> Result<LinkEndpoint, AttachError> {
+    ) -> Result<LinkEndpoint, AcceptorAttachError> {
         let remote_attach = session
             .next_incoming_attach()
             .await
-            .ok_or_else(|| AttachError::IllegalSessionState)?;
+            .ok_or(AcceptorAttachError::IllegalSessionState)?;
         self.accept_incoming_attach(remote_attach, session).await
     }
 }
 
-/// Reject an incoming attach with an attach that has either target
-/// or source field left empty (None or Null)
-pub(crate) async fn reject_incoming_attach(
-    mut remote_attach: Attach,
-    outgoing: &mpsc::Sender<LinkFrame>,
-) -> Result<(), AttachError> {
-    let local_attach = match remote_attach.role {
-        Role::Sender => {
-            remote_attach.target = None;
-            remote_attach
-        }
-        Role::Receiver => {
-            remote_attach.source = None;
-            remote_attach
-        }
-    };
-    let frame = LinkFrame::Attach(local_attach);
-    outgoing
-        .send(frame)
-        .await
-        .map_err(|_| AttachError::IllegalSessionState)?; // Session must have been dropped
-    Ok(())
-}
+// /// Reject an incoming attach with an attach that has either target
+// /// or source field left empty (None or Null)
+// pub(crate) async fn reject_incoming_attach(
+//     mut remote_attach: Attach,
+//     outgoing: &mpsc::Sender<LinkFrame>,
+// ) -> Result<(), ()> {
+//     let local_attach = match remote_attach.role {
+//         Role::Sender => {
+//             remote_attach.target = None;
+//             remote_attach
+//         }
+//         Role::Receiver => {
+//             remote_attach.source = None;
+//             remote_attach
+//         }
+//     };
+//     let frame = LinkFrame::Attach(local_attach);
+//     outgoing
+//         .send(frame)
+//         .await
+//         .map_err(|_| AttachError::IllegalSessionState)?; // Session must have been dropped
+//     Ok(())
+// }
 
-/// If remote_attach is some, then the link should echo an attach with emtpy source or target
-pub(crate) async fn handle_attach_error(
-    error: AttachError,
-    remote_attach: Option<Attach>,
-    outgoing: &mpsc::Sender<LinkFrame>,
-    session_control: &mpsc::Sender<SessionControl>,
-) -> AttachError {
-    // If a response of an empty attach is needed
-    if let Some(remote_attach) = remote_attach {
-        if let Err(err) = reject_incoming_attach(remote_attach, outgoing).await {
-            return err;
-        }
-    }
+// /// If remote_attach is some, then the link should echo an attach with emtpy source or target
+// pub(crate) async fn handle_attach_error(
+//     error: AttachError,
+//     remote_attach: Option<Attach>,
+//     outgoing: &mpsc::Sender<LinkFrame>,
+//     session_control: &mpsc::Sender<SessionControl>,
+// ) -> AttachError {
+//     // If a response of an empty attach is needed
+//     if let Some(remote_attach) = remote_attach {
+//         if let Err(err) = reject_incoming_attach(remote_attach, outgoing).await {
+//             return err;
+//         }
+//     }
 
-    // Additional handling
-    match error {
-        AttachError::IllegalSessionState => {
-            let err = definitions::Error::new(
-                AmqpError::IllegalState,
-                "Illegal session state".to_string(),
-                None,
-            );
-            if let Err(_) = session_control.send(SessionControl::End(Some(err))).await {
-                return AttachError::IllegalSessionState;
-            }
-            error
-        }
-        AttachError::DuplicatedLinkName
-        | AttachError::SourceIsNone
-        | AttachError::TargetIsNone
-        | AttachError::Local(_) => error,
-    }
-}
+//     // Additional handling
+//     match error {
+//         AttachError::IllegalSessionState => {
+//             let err = definitions::Error::new(
+//                 AmqpError::IllegalState,
+//                 "Illegal session state".to_string(),
+//                 None,
+//             );
+//             if let Err(_) = session_control.send(SessionControl::End(Some(err))).await {
+//                 return AttachError::IllegalSessionState;
+//             }
+//             error
+//         }
+//         AttachError::DuplicatedLinkName
+//         | AttachError::SourceIsNone
+//         | AttachError::TargetIsNone
+//         | AttachError::Local(_) => error,
+//     }
+// }
 
 // #[async_trait]
 // impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M>
@@ -279,54 +273,54 @@ pub(crate) async fn handle_attach_error(
 //     }
 // }
 
-#[async_trait]
-impl<T> endpoint::LinkAttachAcceptorExt for SenderLink<T>
-where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
-{
-    async fn on_incoming_attach_as_acceptor(
-        &mut self,
-        mut remote_attach: Attach,
-    ) -> Result<(), (Self::AttachError, Option<Attach>)> {
-        // self.on_incoming_attach_inner(
-        //     // Cloning is relatively cheap except for on target and source
-        //     remote_attach.handle.clone(),
-        //     remote_attach.target.take(),
-        //     remote_attach.role.clone(),
-        //     remote_attach.source.take(),
-        //     remote_attach.snd_settle_mode.clone(),
-        //     remote_attach.initial_delivery_count.clone(),
-        //     remote_attach.rcv_settle_mode.clone(),
-        //     remote_attach.max_message_size.clone(),
-        // )
-        // .await
-        // .map_err(|err| (err, Some(remote_attach)))
-        todo!()
-    }
-}
+// #[async_trait]
+// impl<T> endpoint::LinkAttachAcceptorExt for SenderLink<T>
+// where
+//     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+// {
+//     async fn on_incoming_attach_as_acceptor(
+//         &mut self,
+//         mut remote_attach: Attach,
+//     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
+//         // self.on_incoming_attach_inner(
+//         //     // Cloning is relatively cheap except for on target and source
+//         //     remote_attach.handle.clone(),
+//         //     remote_attach.target.take(),
+//         //     remote_attach.role.clone(),
+//         //     remote_attach.source.take(),
+//         //     remote_attach.snd_settle_mode.clone(),
+//         //     remote_attach.initial_delivery_count.clone(),
+//         //     remote_attach.rcv_settle_mode.clone(),
+//         //     remote_attach.max_message_size.clone(),
+//         // )
+//         // .await
+//         // .map_err(|err| (err, Some(remote_attach)))
+//         todo!()
+//     }
+// }
 
-#[async_trait]
-impl<T> endpoint::LinkAttachAcceptorExt for ReceiverLink<T>
-where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
-{
-    async fn on_incoming_attach_as_acceptor(
-        &mut self,
-        mut remote_attach: Attach,
-    ) -> Result<(), (Self::AttachError, Option<Attach>)> {
-        // self.on_incoming_attach_inner(
-        //     // Cloning is relatively cheap except for on target and source
-        //     remote_attach.handle.clone(),
-        //     remote_attach.target.take(),
-        //     remote_attach.role.clone(),
-        //     remote_attach.source.take(),
-        //     remote_attach.snd_settle_mode.clone(),
-        //     remote_attach.initial_delivery_count.clone(),
-        //     remote_attach.rcv_settle_mode.clone(),
-        //     remote_attach.max_message_size.clone(),
-        // )
-        // .await
-        // .map_err(|err| (err, Some(remote_attach)))
-        todo!()
-    }
-}
+// #[async_trait]
+// impl<T> endpoint::LinkAttachAcceptorExt for ReceiverLink<T>
+// where
+//     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+// {
+//     async fn on_incoming_attach_as_acceptor(
+//         &mut self,
+//         mut remote_attach: Attach,
+//     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
+//         // self.on_incoming_attach_inner(
+//         //     // Cloning is relatively cheap except for on target and source
+//         //     remote_attach.handle.clone(),
+//         //     remote_attach.target.take(),
+//         //     remote_attach.role.clone(),
+//         //     remote_attach.source.take(),
+//         //     remote_attach.snd_settle_mode.clone(),
+//         //     remote_attach.initial_delivery_count.clone(),
+//         //     remote_attach.rcv_settle_mode.clone(),
+//         //     remote_attach.max_message_size.clone(),
+//         // )
+//         // .await
+//         // .map_err(|err| (err, Some(remote_attach)))
+//         todo!()
+//     }
+// }

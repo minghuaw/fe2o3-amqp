@@ -45,13 +45,13 @@ pub(crate) trait LinkAttach {
     ) -> Result<(), Self::AttachError>;
 }
 
-#[async_trait]
-pub(crate) trait LinkAttachAcceptorExt: LinkAttach {
-    async fn on_incoming_attach_as_acceptor(
-        &mut self,
-        attach: Attach,
-    ) -> Result<(), (Self::AttachError, Option<Attach>)>;
-}
+// #[async_trait]
+// pub(crate) trait LinkAttachAcceptorExt: LinkAttach {
+//     async fn on_incoming_attach_as_acceptor(
+//         &mut self,
+//         attach: Attach,
+//     ) -> Result<(), Self::AttachError>;
+// }
 
 pub(crate) trait Link: LinkAttach + LinkDetach {
     fn role() -> Role;

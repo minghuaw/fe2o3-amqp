@@ -437,6 +437,24 @@ impl From<IllegalLinkStateError> for LinkStateError {
     }
 }
 
+impl From<IllegalLinkStateError> for ReceiverAttachError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => ReceiverAttachError::IllegalState,
+            IllegalLinkStateError::IllegalSessionState => ReceiverAttachError::IllegalSessionState,
+        }
+    }
+}
+
+impl From<IllegalLinkStateError> for SenderAttachError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => SenderAttachError::IllegalState,
+            IllegalLinkStateError::IllegalSessionState => SenderAttachError::IllegalSessionState,
+        }
+    }
+}
+
 impl<T> From<T> for RecvError
 where
     T: Into<LinkStateError>,

@@ -573,8 +573,7 @@ where
         if let CreditMode::Auto(credit) = inner.credit_mode {
             inner
                 .set_credit(credit)
-                .await
-                .map_err(|_| ReceiverAttachError::IllegalState)?; // TODO: further decompose errors?
+                .await?;
         }
 
         Ok(inner)

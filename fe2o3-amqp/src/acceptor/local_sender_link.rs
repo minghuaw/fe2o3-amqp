@@ -6,19 +6,16 @@ use fe2o3_amqp_types::{
     definitions::{SenderSettleMode, SequenceNo},
     messaging::Target,
     performatives::Attach,
-    primitives::Symbol,
+    primitives::{Symbol},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 
 use crate::{
-    endpoint::{InputHandle, LinkAttach, LinkAttachAcceptorExt},
+    endpoint::{InputHandle, LinkAttach, LinkExt},
     link::{
-        self,
-        delivery::UnsettledMessage,
-        role,
         sender::SenderInner,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        AttachError, LinkRelay, SenderFlowState,
+        LinkRelay, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
     util::{Consumer, Producer},
@@ -66,17 +63,14 @@ where
     }
 }
 
-impl<C> LocalSenderLinkAcceptor<C>
-where
-    C: From<Symbol>,
-{
+impl LocalSenderLinkAcceptor<Symbol> {
     /// Accepts an incoming attach as a local sender
     pub async fn accept_incoming_attach<R>(
         &self,
         shared: &SharedLinkAcceptorFields,
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
-    ) -> Result<Sender, (AttachError, Option<Attach>)> {
+    ) -> Result<Sender, SenderAttachError> {
         let snd_settle_mode = if self
             .supported_snd_settle_modes
             .supports(&remote_attach.snd_settle_mode)
@@ -86,7 +80,7 @@ where
             self.fallback_snd_settle_mode.clone()
         };
 
-        let (incoming_tx, incoming_rx) = mpsc::channel(shared.buffer_size);
+        let (incoming_tx, mut incoming_rx) = mpsc::channel(shared.buffer_size);
 
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -120,27 +114,25 @@ where
             link_handle,
             input_handle,
         )
-        .await;
-        let output_handle = match output_handle {
-            Ok(handle) => handle,
-            Err(err) => return Err((err.into(), Some(remote_attach))),
-        };
+        .await?;
 
-        let source = match &remote_attach.source {
-            Some(val) => *val.clone(),
-            None => return Err((AttachError::SourceIsNone, Some(remote_attach))),
-        };
+        let local_source = remote_attach.source.clone()
+            .map(|s| {
+                let mut source = *s;
+                source.capabilities = self.source_capabilities.clone().map(Into::into);
+                source
+            });
 
-        let mut link = link::Link::<role::Sender, Target, SenderFlowState, UnsettledMessage> {
+        let mut link = SenderLink::<Target> {
             role: PhantomData,
             local_state: LinkState::Unattached, // will be set in `on_incoming_attach`
-            // state_code,
+
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // this will be set in `on_incoming_attach`
             snd_settle_mode,
             rcv_settle_mode: Default::default(), // Will take value from incoming attach
-            source: Some(source),                // Will take value from incoming attach
+            source: local_source,
             target: None,                        // Will take value from incoming attach
             max_message_size: shared.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: shared.offered_capabilities.clone(),
@@ -150,18 +142,21 @@ where
         };
 
         let outgoing = session.outgoing.clone();
-        link.on_incoming_attach_as_acceptor(remote_attach).await?;
-        link.send_attach(&outgoing)
-            .await
-            .map_err(|err| (err.into(), None))?;
 
+        match link.on_incoming_attach(remote_attach).await {
+            Ok(_) => link.send_attach(&outgoing).await?,
+            Err(attach_error) => {
+                link.send_attach(&outgoing).await?;
+                return Err(link.handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &session.control).await)
+            },
+        }
+        
         let inner = SenderInner {
             link,
             buffer_size: shared.buffer_size,
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
-            // marker: PhantomData,
         };
         Ok(Sender { inner })
     }
