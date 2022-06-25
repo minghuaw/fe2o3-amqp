@@ -24,7 +24,7 @@ impl VerifyTargetArchetype for Target {
         // created an addressable node at the request of the sender and is now communicating the
         // address of that created node).
         if other.dynamic && other.address.is_none() {
-            Err(SenderAttachError::AddressIsNoneWhenDynamicIsTrue)
+            Err(SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue)
         } else if !other.dynamic && other.dynamic_node_properties.is_some() {
             // If the dynamic field is not set to true this field MUST be left unset.
             Err(SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse)
@@ -38,7 +38,7 @@ impl VerifyTargetArchetype for Target {
         // link endpoint where the dynamic flag is set to true (that is where the sender is
         // requesting the receiver to create an addressable node).
         if other.dynamic && other.address.is_some() {
-            Err(ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue)
+            Err(ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue)
         } else if !other.dynamic && other.dynamic_node_properties.is_some() {
             Err(ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse)
         } else {

@@ -1,6 +1,7 @@
 //! Implements AMQP1.0 Link
 
 mod frame;
+mod source;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
@@ -350,7 +351,8 @@ where
             }
 
             SenderAttachError::CoordinatorIsNotImplemented
-            | SenderAttachError::AddressIsNoneWhenDynamicIsTrue
+            | SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue
+            | SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue
             | SenderAttachError::DesireTxnCapabilitiesNotSupported
             | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 match (&attach_error).try_into() {
@@ -479,7 +481,8 @@ where
 
             ReceiverAttachError::CoordinatorIsNotImplemented
             | ReceiverAttachError::InitialDeliveryCountIsNone
-            | ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue
+            | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
+            | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
             | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 match (&attach_error).try_into() {
                     Ok(error) => {
@@ -510,6 +513,8 @@ where
     type AttachError = SenderAttachError;
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+        use self::source::VerifySource;
+
         match self.local_state {
             LinkState::AttachSent => self.local_state = LinkState::Attached,
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
@@ -518,6 +523,17 @@ where
         };
 
         self.input_handle = Some(InputHandle::from(remote_attach.handle));
+
+        // In this case, the sender is considered to hold the authoritative version of the
+        // version of the source properties
+        // TODO: is verification necessary?
+        match (&self.source, &remote_attach.source) {
+            (Some(local_source), Some(remote_source)) => {
+                local_source.verify_as_sender(remote_source)?;
+            },
+            (_, None) => return Err(SenderAttachError::IncomingSourceIsNone),
+            _ => {}
+        }
 
         let target = remote_attach
             .target
@@ -563,6 +579,8 @@ where
     type AttachError = ReceiverAttachError;
 
     async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+        use self::source::VerifySource;
+
         match self.local_state {
             LinkState::AttachSent => self.local_state = LinkState::Attached,
             LinkState::Unattached => self.local_state = LinkState::AttachReceived,
@@ -574,11 +592,13 @@ where
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
-
-        let source = remote_attach
+        let remote_source = remote_attach
             .source
             .ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
-        self.source = Some(*source);
+        if let Some(local_source) = &self.source {
+            local_source.verify_as_receiver(&remote_source)?;
+        }
+        self.source = Some(*remote_source);
 
         // The receiver SHOULD respect the sender’s desired settlement mode if the sender
         // initiates the attach exchange and the receiver supports the desired mode.

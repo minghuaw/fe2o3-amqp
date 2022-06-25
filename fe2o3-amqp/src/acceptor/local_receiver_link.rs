@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
     definitions::{ReceiverSettleMode},
     messaging::{DeliveryState, TargetArchetype},
     performatives::Attach,
-    primitives::{Symbol, Array},
+    primitives::{Symbol},
 };
 use tokio::sync::{mpsc, RwLock};
 

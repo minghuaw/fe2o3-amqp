@@ -6,23 +6,15 @@
 
 use std::marker::PhantomData;
 
-use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Fields, Role},
-    messaging::{DeliveryState, TargetArchetype},
+    definitions::{Fields, Role},
+
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
-use tokio::sync::mpsc;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    control::SessionControl,
-    endpoint,
-    link::{
-        role, state::LinkFlowState, target_archetype::VerifyTargetArchetype, Link,
-        LinkFrame, ReceiverLink, SenderLink,
-    },
     session::SessionHandle,
     util::Initialized,
 };
@@ -186,141 +178,3 @@ impl LinkAcceptor {
         self.accept_incoming_attach(remote_attach, session).await
     }
 }
-
-// /// Reject an incoming attach with an attach that has either target
-// /// or source field left empty (None or Null)
-// pub(crate) async fn reject_incoming_attach(
-//     mut remote_attach: Attach,
-//     outgoing: &mpsc::Sender<LinkFrame>,
-// ) -> Result<(), ()> {
-//     let local_attach = match remote_attach.role {
-//         Role::Sender => {
-//             remote_attach.target = None;
-//             remote_attach
-//         }
-//         Role::Receiver => {
-//             remote_attach.source = None;
-//             remote_attach
-//         }
-//     };
-//     let frame = LinkFrame::Attach(local_attach);
-//     outgoing
-//         .send(frame)
-//         .await
-//         .map_err(|_| AttachError::IllegalSessionState)?; // Session must have been dropped
-//     Ok(())
-// }
-
-// /// If remote_attach is some, then the link should echo an attach with emtpy source or target
-// pub(crate) async fn handle_attach_error(
-//     error: AttachError,
-//     remote_attach: Option<Attach>,
-//     outgoing: &mpsc::Sender<LinkFrame>,
-//     session_control: &mpsc::Sender<SessionControl>,
-// ) -> AttachError {
-//     // If a response of an empty attach is needed
-//     if let Some(remote_attach) = remote_attach {
-//         if let Err(err) = reject_incoming_attach(remote_attach, outgoing).await {
-//             return err;
-//         }
-//     }
-
-//     // Additional handling
-//     match error {
-//         AttachError::IllegalSessionState => {
-//             let err = definitions::Error::new(
-//                 AmqpError::IllegalState,
-//                 "Illegal session state".to_string(),
-//                 None,
-//             );
-//             if let Err(_) = session_control.send(SessionControl::End(Some(err))).await {
-//                 return AttachError::IllegalSessionState;
-//             }
-//             error
-//         }
-//         AttachError::DuplicatedLinkName
-//         | AttachError::SourceIsNone
-//         | AttachError::TargetIsNone
-//         | AttachError::Local(_) => error,
-//     }
-// }
-
-// #[async_trait]
-// impl<R, T, F, M> endpoint::LinkAttachAcceptorExt for Link<R, T, F, M>
-// where
-//     R: role::IntoRole + Send + Sync,
-//     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
-//     F: AsRef<LinkFlowState<R>> + Send + Sync,
-//     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
-// {
-//     async fn on_incoming_attach_as_acceptor(
-//         &mut self,
-//         mut remote_attach: Attach,
-//     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
-//         self.on_incoming_attach_inner(
-//             // Cloning is relatively cheap except for on target and source
-//             remote_attach.handle.clone(),
-//             remote_attach.target.take(),
-//             remote_attach.role.clone(),
-//             remote_attach.source.take(),
-//             remote_attach.snd_settle_mode.clone(),
-//             remote_attach.initial_delivery_count.clone(),
-//             remote_attach.rcv_settle_mode.clone(),
-//             remote_attach.max_message_size.clone(),
-//         )
-//         .await
-//         .map_err(|err| (err, Some(remote_attach)))
-//     }
-// }
-
-// #[async_trait]
-// impl<T> endpoint::LinkAttachAcceptorExt for SenderLink<T>
-// where
-//     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
-// {
-//     async fn on_incoming_attach_as_acceptor(
-//         &mut self,
-//         mut remote_attach: Attach,
-//     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
-//         // self.on_incoming_attach_inner(
-//         //     // Cloning is relatively cheap except for on target and source
-//         //     remote_attach.handle.clone(),
-//         //     remote_attach.target.take(),
-//         //     remote_attach.role.clone(),
-//         //     remote_attach.source.take(),
-//         //     remote_attach.snd_settle_mode.clone(),
-//         //     remote_attach.initial_delivery_count.clone(),
-//         //     remote_attach.rcv_settle_mode.clone(),
-//         //     remote_attach.max_message_size.clone(),
-//         // )
-//         // .await
-//         // .map_err(|err| (err, Some(remote_attach)))
-//         todo!()
-//     }
-// }
-
-// #[async_trait]
-// impl<T> endpoint::LinkAttachAcceptorExt for ReceiverLink<T>
-// where
-//     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
-// {
-//     async fn on_incoming_attach_as_acceptor(
-//         &mut self,
-//         mut remote_attach: Attach,
-//     ) -> Result<(), (Self::AttachError, Option<Attach>)> {
-//         // self.on_incoming_attach_inner(
-//         //     // Cloning is relatively cheap except for on target and source
-//         //     remote_attach.handle.clone(),
-//         //     remote_attach.target.take(),
-//         //     remote_attach.role.clone(),
-//         //     remote_attach.source.take(),
-//         //     remote_attach.snd_settle_mode.clone(),
-//         //     remote_attach.initial_delivery_count.clone(),
-//         //     remote_attach.rcv_settle_mode.clone(),
-//         //     remote_attach.max_message_size.clone(),
-//         // )
-//         // .await
-//         // .map_err(|err| (err, Some(remote_attach)))
-//         todo!()
-//     }
-// }

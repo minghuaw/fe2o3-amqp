@@ -135,7 +135,11 @@ pub enum ReceiverAttachError {
     /// When dynamic is set to true by the sending link endpoint, this field constitutes a request
     /// for the receiving peer to dynamically create a node at the target. In this case the address
     /// field MUST NOT be set.
-    AddressIsSomeWhenDynamicIsTrue,
+    TargetAddressIsSomeWhenDynamicIsTrue,
+
+    /// When set to true by the sending link endpoint this field indicates creation of a dynamically created
+    /// node. In this case the address field will contain the address of the created node
+    SourceAddressIsNoneWhenDynamicIsTrue,
 
     /// If the dynamic field is not set to true this field MUST be left unset.
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
@@ -164,7 +168,8 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             | ReceiverAttachError::IncomingTargetIsNone => return Err(value),
             ReceiverAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
             ReceiverAttachError::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
-            ReceiverAttachError::AddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
             ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
@@ -207,7 +212,11 @@ pub enum SenderAttachError {
     /// When set to true by the receiving link endpoint this field indicates creation of a
     /// dynamically created node. In this case the address field will contain the address of the
     /// created node.
-    AddressIsNoneWhenDynamicIsTrue,
+    TargetAddressIsNoneWhenDynamicIsTrue,
+
+    /// When set to true by the receiving link endpoint, this field constitutes a request for the sending
+    /// peer to dynamically create a node at the source. In this case the address field MUST NOT be set
+    SourceAddressIsSomeWhenDynamicIsTrue,
 
     /// If the dynamic field is not set to true this field MUST be left unset.
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
@@ -239,7 +248,8 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
-            SenderAttachError::AddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
 
             SenderAttachError::IncomingSourceIsNone
             | SenderAttachError::IncomingTargetIsNone
