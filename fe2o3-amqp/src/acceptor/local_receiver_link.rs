@@ -72,8 +72,8 @@ impl LocalReceiverLinkAcceptor<Symbol> {
         self.accept_incoming_attach_inner(
             shared,
             remote_attach,
-            &session.control,
-            &session.outgoing,
+            session.control.clone(),
+            session.outgoing.clone(),
         )
         .await
         .map(|inner| Receiver { inner })
@@ -89,8 +89,8 @@ where
         &self,
         shared: &SharedLinkAcceptorFields,
         remote_attach: Attach,
-        control: &mpsc::Sender<SessionControl>,
-        outgoing: &mpsc::Sender<LinkFrame>,
+        control: mpsc::Sender<SessionControl>,
+        outgoing: mpsc::Sender<LinkFrame>,
     ) -> Result<
         ReceiverInner<link::Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>,
         ReceiverAttachError,
@@ -147,7 +147,7 @@ where
         // Allocate link in session
         let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
-            control,
+            &control,
             remote_attach.name.clone(),
             link_handle,
             input_handle,
@@ -189,7 +189,7 @@ where
             unsettled,
         };
 
-        let outgoing = outgoing.clone();
+        // let outgoing = outgoing.clone();
         match (err, link.on_incoming_attach(remote_attach).await) {
             (Some(attach_error), _)
             | (_, Err(attach_error)) => {

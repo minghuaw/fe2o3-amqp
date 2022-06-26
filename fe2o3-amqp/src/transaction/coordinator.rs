@@ -42,8 +42,8 @@ impl ControlLinkAcceptor {
     pub(crate) async fn accept_incoming_attach(
         &self,
         remote_attach: Attach,
-        control: &mpsc::Sender<SessionControl>,
-        outgoing: &mpsc::Sender<LinkFrame>,
+        control: mpsc::Sender<SessionControl>,
+        outgoing: mpsc::Sender<LinkFrame>,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
         tracing::info!(control_link_attach = ?remote_attach);
         self

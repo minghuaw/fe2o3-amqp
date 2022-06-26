@@ -54,9 +54,7 @@ where
         let outgoing = self.txn_manager.control_link_outgoing.clone();
         
         tokio::spawn(async move {
-            let control = control;
-            let outgoing = outgoing;
-            match acceptor.accept_incoming_attach(remote_attach, &control, &outgoing).await {
+            match acceptor.accept_incoming_attach(remote_attach, control, outgoing).await {
                 Ok(coordinator) => coordinator.event_loop().await,
                 Err(_) => todo!(),
             }
