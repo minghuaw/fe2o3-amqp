@@ -12,7 +12,7 @@ use tracing::{instrument, trace};
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
-    link::{receiver::ReceiverInner, role, Link, LinkFrame, ReceiverFlowState, ReceiverAttachError, RecvError, shared_inner::LinkEndpointInnerDetach},
+    link::{receiver::ReceiverInner, role, Link, LinkFrame, ReceiverFlowState, ReceiverAttachError, RecvError, shared_inner::{LinkEndpointInnerDetach, LinkEndpointInner}},
     Delivery, util::Running,
 };
 
@@ -45,7 +45,7 @@ impl ControlLinkAcceptor {
         control: &mpsc::Sender<SessionControl>,
         outgoing: &mpsc::Sender<LinkFrame>,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
-        trace!(control_link_attach = ?remote_attach);
+        tracing::info!(control_link_attach = ?remote_attach);
         self
             .inner
             .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
@@ -107,10 +107,32 @@ impl TxnCoordinator {
     }
 
     async fn on_recv_error(&mut self, error: RecvError) -> Running {
-        todo!()
+        tracing::error!(?error);
+        
+        match error {
+            RecvError::LinkStateError(error) => match error {
+                crate::link::LinkStateError::IllegalState => todo!(),
+                crate::link::LinkStateError::IllegalSessionState => todo!(),
+                crate::link::LinkStateError::ExpectImmediateDetach => todo!(),
+                crate::link::LinkStateError::RemoteDetached 
+                | crate::link::LinkStateError::RemoteDetachedWithError(_) 
+                | crate::link::LinkStateError::RemoteClosed 
+                | crate::link::LinkStateError::RemoteClosedWithError(_) => {
+                    self.inner.send_detach(true, None).await
+                        .unwrap_or_else(|err| tracing::error!(error = ?err));
+                    Running::Stop
+                }
+            },
+            RecvError::TransferLimitExceeded => todo!(),
+            RecvError::DeliveryIdIsNone => todo!(),
+            RecvError::DeliveryTagIsNone => todo!(),
+            RecvError::MessageDecodeError => todo!(),
+            RecvError::IllegalRcvSettleModeInTransfer => todo!(),
+            RecvError::InconsistentFieldInMultiFrameDelivery => todo!(),
+        }
     }
 
-    #[instrument]
+    #[instrument(skip_all)]
     pub async fn event_loop(mut self) {
         tracing::info!("Coordinator started");
         loop {

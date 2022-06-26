@@ -49,19 +49,19 @@ where
         _channel: IncomingChannel,
         remote_attach: Attach,
     ) -> Result<(), Self::Error> {
-        let coordinator = self
-            .txn_manager
-            .control_link_acceptor
-            .accept_incoming_attach(
-                remote_attach,
-                self.session.control(),
-                &self.txn_manager.control_link_outgoing,
-            )
-            .await
-            .map_err(session::Error::CoordinatorAttachError)?;
+        let acceptor = self.txn_manager.control_link_acceptor.clone();
+        let control = self.session.control().clone();
+        let outgoing = self.txn_manager.control_link_outgoing.clone();
+        
+        tokio::spawn(async move {
+            let control = control;
+            let outgoing = outgoing;
+            match acceptor.accept_incoming_attach(remote_attach, &control, &outgoing).await {
+                Ok(coordinator) => coordinator.event_loop().await,
+                Err(_) => todo!(),
+            }
+        });
 
-        // TODO: store the joinhandle?
-        let _ = tokio::spawn(coordinator.event_loop());
         Ok(())
     }
 }

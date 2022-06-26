@@ -142,6 +142,8 @@ where
             more: false,
         };
 
+        tracing::info!("Allocating output_handle");
+
         // Allocate link in session
         let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
@@ -151,6 +153,8 @@ where
             input_handle,
         )
         .await?;
+
+        tracing::info!("Allocated output_handle");
 
         let mut err = None;
         // **the receiver is considered to hold the authoritative version of the target properties**,

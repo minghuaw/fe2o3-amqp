@@ -2,7 +2,7 @@ use fe2o3_amqp::{
     acceptor::{
         ConnectionAcceptor, LinkAcceptor, LinkEndpoint, SaslPlainMechanism, SessionAcceptor,
     },
-    types::primitives::Value,
+    types::primitives::Value, transaction::coordinator::ControlLinkAcceptor,
 };
 use tokio::net::TcpListener;
 use tracing::Level;
@@ -30,7 +30,9 @@ async fn main() {
         let mut connection = connection_acceptor.accept(stream).await.unwrap();
 
         let _ = tokio::spawn(async move {
-            let session_acceptor = SessionAcceptor::default();
+            let session_acceptor = SessionAcceptor::builder()
+                .control_link_acceptor(ControlLinkAcceptor::default())
+                .build();
 
             while let Ok(mut session) = session_acceptor.accept(&mut connection).await {
                 let _ = tokio::spawn(async move {

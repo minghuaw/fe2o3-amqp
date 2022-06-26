@@ -326,9 +326,9 @@ impl Builder<SessionAcceptor, Initialized> {
     #[cfg(feature = "transaction")]
     pub fn control_link_acceptor(
         mut self,
-        control_link_acceptor: Option<ControlLinkAcceptor>,
+        control_link_acceptor: impl Into<Option<ControlLinkAcceptor>>,
     ) -> Self {
-        self.inner.0.control_link_acceptor = control_link_acceptor;
+        self.inner.0.control_link_acceptor = control_link_acceptor.into();
         self
     }
 }

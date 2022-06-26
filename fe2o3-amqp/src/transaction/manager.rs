@@ -1,6 +1,6 @@
 //! Manages incoming transaction on the resource side
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -68,7 +68,7 @@ pub(crate) trait HandleTransactionalWork {
 pub(crate) struct TransactionManager {
     pub control_link_outgoing: mpsc::Sender<LinkFrame>,
     pub txns: BTreeMap<TransactionId, ResourceTransaction>,
-    pub control_link_acceptor: ControlLinkAcceptor,
+    pub control_link_acceptor: Arc<ControlLinkAcceptor>,
 }
 
 impl TransactionManager {
@@ -79,7 +79,7 @@ impl TransactionManager {
         Self {
             control_link_outgoing,
             txns: BTreeMap::new(),
-            control_link_acceptor,
+            control_link_acceptor: Arc::new(control_link_acceptor),
         }
     }
 }

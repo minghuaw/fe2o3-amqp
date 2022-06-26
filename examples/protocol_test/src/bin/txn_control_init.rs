@@ -33,12 +33,12 @@ async fn client_main() {
     match Controller::attach(&mut session, "controller").await {
         Ok(controller) => {
 
+            controller.close().await.unwrap();
         },
         Err(attach_error) => {
             tracing::error!(?attach_error)
         },
     }
-    // controller.close().await.unwrap();
     
     // receiver.close().await.unwrap();
     // sender.close().await.unwrap();
