@@ -536,6 +536,7 @@ where
         };
 
         // Create Link in Session
+        // Any error here will be on the Session level and thus it should immediately return with an error
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 

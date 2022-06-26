@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::Transaction, types::primitives::Value, Connection,
+    sasl_profile::SaslProfile, transaction::{Transaction, Controller}, types::primitives::Value, Connection,
     Delivery, Receiver, Session,
 };
 use tokio::net::TcpStream;
@@ -45,10 +45,18 @@ async fn main() {
         .await
         .unwrap();
 
+    let mut controller = match Controller::attach(&mut session, "controller-1").await {
+        Ok(controller) => controller,
+        Err(attach_error) => {
+            tracing::error!(?attach_error);
+            return
+        },
+    };
+
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
 
     // Transactionally retiring
-    let mut txn = Transaction::declare(&mut session, "controller-1", None)
+    let mut txn = Transaction::declare(&mut controller, None)
         .await
         .unwrap();
     txn.accept(&mut receiver, &delivery).await.unwrap();

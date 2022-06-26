@@ -12,8 +12,8 @@ use tracing::{instrument, trace};
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
-    link::{receiver::ReceiverInner, role, Link, LinkFrame, ReceiverFlowState, ReceiverAttachError, RecvError},
-    Delivery,
+    link::{receiver::ReceiverInner, role, Link, LinkFrame, ReceiverFlowState, ReceiverAttachError, RecvError, shared_inner::LinkEndpointInnerDetach},
+    Delivery, util::Running,
 };
 
 use super::control_link_frame::ControlMessageBody;
@@ -69,7 +69,7 @@ impl TxnCoordinator {
         todo!()
     }
 
-    async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) {
+    async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
         
         let body = match delivery.body() {
             fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
@@ -106,30 +106,22 @@ impl TxnCoordinator {
         todo!()
     }
 
+    async fn on_recv_error(&mut self, error: RecvError) -> Running {
+        todo!()
+    }
+
+    #[instrument]
     pub async fn event_loop(mut self) {
         tracing::info!("Coordinator started");
         loop {
-            let delivery: Delivery<ControlMessageBody> = match self.inner.recv().await {
-                Ok(d) => d,
-                Err(error) => {
-                    // TODO: How should error be handled?
-                    tracing::error!(?error);
-
-                    match error {
-                        RecvError::LinkStateError(_) => todo!(),
-                        RecvError::TransferLimitExceeded => todo!(),
-                        RecvError::DeliveryIdIsNone => todo!(),
-                        RecvError::DeliveryTagIsNone => todo!(),
-                        RecvError::MessageDecodeError => todo!(),
-                        RecvError::IllegalRcvSettleModeInTransfer => todo!(),
-                        RecvError::InconsistentFieldInMultiFrameDelivery => todo!(),
-                    }
-
-                    break;
-                }
+            let running = match self.inner.recv().await {
+                Ok(delivery) => self.on_delivery(delivery).await,
+                Err(error) => self.on_recv_error(error).await
             };
 
-            self.on_delivery(delivery).await
+            if let Running::Stop = running {
+                break;
+            }
         }
     }
 }

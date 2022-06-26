@@ -9,6 +9,7 @@ use fe2o3_amqp_types::{
     primitives::{Symbol},
 };
 use tokio::sync::{mpsc, RwLock};
+use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -83,6 +84,7 @@ impl<C> LocalReceiverLinkAcceptor<C>
 where
     C: Clone,
 {
+    #[instrument(skip_all)]
     pub async fn accept_incoming_attach_inner<T>(
         &self,
         shared: &SharedLinkAcceptorFields,
@@ -150,8 +152,8 @@ where
         )
         .await?;
 
+        let mut err = None;
         // **the receiver is considered to hold the authoritative version of the target properties**,
-        // Is this verification necessary?
         let local_target = remote_attach
             .target.clone()
             .map(|t| T::try_from(*t))
@@ -160,7 +162,10 @@ where
                 t.as_mut().map(|t| *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into));
                 t
             })
-            .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
+            .unwrap_or_else(|_| {
+                err = Some(ReceiverAttachError::CoordinatorIsNotImplemented);
+                None
+            });
 
         let mut link = link::Link::<role::Receiver, T, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
@@ -181,12 +186,13 @@ where
         };
 
         let outgoing = outgoing.clone();
-        match link.on_incoming_attach(remote_attach).await {
-            Ok(_) => link.send_attach(&outgoing).await?,
-            Err(attach_error) => {
+        match (err, link.on_incoming_attach(remote_attach).await) {
+            (Some(attach_error), _)
+            | (_, Err(attach_error)) => {
                 link.send_attach(&outgoing).await?;
                 return Err(link.handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control).await)
             },
+            (_, Ok(_)) => link.send_attach(&outgoing).await?,
         }
 
         let mut inner = ReceiverInner {

@@ -692,7 +692,8 @@ where
             ReceiverAttachError::IllegalSessionState
             | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
-            | ReceiverAttachError::ExpectImmediateDetach => attach_error,
+            | ReceiverAttachError::ExpectImmediateDetach 
+            | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
 
             ReceiverAttachError::DuplicatedLinkName => {
                 let error = definitions::Error::new(
@@ -707,15 +708,26 @@ where
                     .unwrap_or(ReceiverAttachError::IllegalSessionState)
             }
             ReceiverAttachError::IncomingSourceIsNone
-            | ReceiverAttachError::IncomingTargetIsNone => match reader.recv().await {
-                Some(LinkFrame::Detach(remote_detach)) => self
-                    .send_detach(writer, remote_detach.closed, None)
+            | ReceiverAttachError::IncomingTargetIsNone => {
+                // Just send detach immediately
+                let err = self
+                    .send_detach(writer, true, None)
                     .await
                     .map(|_| attach_error)
-                    .unwrap_or(ReceiverAttachError::IllegalSessionState),
-                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-                None => ReceiverAttachError::IllegalSessionState,
-            },
+                    .unwrap_or(ReceiverAttachError::IllegalSessionState);
+                match reader.recv().await {
+                    Some(LinkFrame::Detach(remote_detach)) => {
+                        match self.on_incoming_detach(remote_detach).await {
+                            Ok(_) => return err,
+                            Err(detach_error) => {
+                                return detach_error.try_into().unwrap_or_else(|_| err)
+                            }
+                        }
+                    }
+                    Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+                    None => ReceiverAttachError::IllegalSessionState,
+                }
+            }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
             | ReceiverAttachError::InitialDeliveryCountIsNone

@@ -140,6 +140,9 @@ pub enum ReceiverAttachError {
 
     /// If the dynamic field is not set to true this field MUST be left unset.
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
+
+    /// Remote peer closed the link with an error
+    RemoteClosedWithError(definitions::Error),
 }
 
 impl From<AllocLinkError> for ReceiverAttachError {
@@ -161,8 +164,6 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::IllegalState => AmqpError::IllegalState.into(),
             ReceiverAttachError::NonAttachFrameReceived => AmqpError::NotAllowed.into(),
             ReceiverAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
-            ReceiverAttachError::IncomingSourceIsNone
-            | ReceiverAttachError::IncomingTargetIsNone => return Err(value),
             ReceiverAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
             ReceiverAttachError::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
             ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
@@ -170,6 +171,9 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
+            ReceiverAttachError::IncomingSourceIsNone
+            | ReceiverAttachError::IncomingTargetIsNone
+            | ReceiverAttachError::RemoteClosedWithError(_) => return Err(value),
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))
@@ -220,6 +224,9 @@ pub enum SenderAttachError {
 
     /// Desired TransactionCapabilities is not supported
     DesireTxnCapabilitiesNotSupported,
+
+    /// Remote peer closed the link with an error
+    RemoteClosedWithError(definitions::Error),
 }
 
 impl From<AllocLinkError> for SenderAttachError {
@@ -227,6 +234,44 @@ impl From<AllocLinkError> for SenderAttachError {
         match value {
             AllocLinkError::IllegalSessionState => Self::IllegalSessionState,
             AllocLinkError::DuplicatedLinkName => Self::DuplicatedLinkName,
+        }
+    }
+}
+
+impl TryFrom<DetachError> for SenderAttachError {
+    type Error = DetachError;
+
+    fn try_from(value: DetachError) -> Result<Self, Self::Error> {
+        match value {
+            DetachError::IllegalState => Ok(Self::IllegalState),
+            DetachError::IllegalSessionState => Ok(Self::IllegalSessionState),
+            DetachError::RemoteDetachedWithError(error) 
+            | DetachError::RemoteClosedWithError(error) => {
+                // A closing detach is used for errors during attach anyway
+                Ok(Self::RemoteClosedWithError(error))
+            },
+            DetachError::NonDetachFrameReceived 
+            | DetachError::ClosedByRemote 
+            | DetachError::DetachedByRemote => Err(value),
+        }
+    }
+}
+
+impl TryFrom<DetachError> for ReceiverAttachError {
+    type Error = DetachError;
+
+    fn try_from(value: DetachError) -> Result<Self, Self::Error> {
+        match value {
+            DetachError::IllegalState => Ok(Self::IllegalState),
+            DetachError::IllegalSessionState => Ok(Self::IllegalSessionState),
+            DetachError::RemoteDetachedWithError(error) 
+            | DetachError::RemoteClosedWithError(error) => {
+                // A closing detach is used for errors during attach anyway
+                Ok(Self::RemoteClosedWithError(error))
+            },
+            DetachError::NonDetachFrameReceived 
+            | DetachError::ClosedByRemote 
+            | DetachError::DetachedByRemote => Err(value),
         }
     }
 }
@@ -251,6 +296,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::IncomingSourceIsNone
             | SenderAttachError::IncomingTargetIsNone
             | SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
+            SenderAttachError::RemoteClosedWithError(_) => return Err(value),
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))

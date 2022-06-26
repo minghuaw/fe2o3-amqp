@@ -30,9 +30,15 @@ async fn client_main() {
     // sender.send("hello").await.unwrap();
 
     // Test creating a control link
-    let controller = Controller::attach(&mut session, "controller")
-        .await.unwrap();
-    controller.close().await.unwrap();
+    match Controller::attach(&mut session, "controller").await {
+        Ok(controller) => {
+
+        },
+        Err(attach_error) => {
+            tracing::error!(?attach_error)
+        },
+    }
+    // controller.close().await.unwrap();
     
     // receiver.close().await.unwrap();
     // sender.close().await.unwrap();
@@ -44,7 +50,7 @@ async fn client_main() {
 #[tokio::main]
 async fn main() {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 

@@ -445,7 +445,6 @@ async fn send_disposition(
         .map_err(|_| IllegalLinkStateError::IllegalSessionState)
 }
 
-
 #[async_trait]
 impl<T> endpoint::LinkAttach for SenderLink<T>
 where
@@ -471,7 +470,7 @@ where
         match (&self.source, &remote_attach.source) {
             (Some(local_source), Some(remote_source)) => {
                 local_source.verify_as_sender(remote_source)?;
-            },
+            }
             (_, None) => return Err(SenderAttachError::IncomingSourceIsNone),
             _ => {}
         }
@@ -511,7 +510,6 @@ where
         Ok(())
     }
 }
-
 
 impl<T> endpoint::Link for SenderLink<T>
 where
@@ -580,6 +578,7 @@ where
         self.on_incoming_attach(remote_attach).await
     }
 
+    #[instrument(skip_all)]
     async fn handle_attach_error(
         &mut self,
         attach_error: SenderAttachError,
@@ -587,11 +586,14 @@ where
         reader: &mut mpsc::Receiver<LinkFrame>,
         session: &mpsc::Sender<SessionControl>,
     ) -> SenderAttachError {
+        tracing::debug!(?attach_error);
+
         match attach_error {
             SenderAttachError::IllegalSessionState
             | SenderAttachError::IllegalState
             | SenderAttachError::NonAttachFrameReceived
-            | SenderAttachError::ExpectImmediateDetach => attach_error,
+            | SenderAttachError::ExpectImmediateDetach
+            | SenderAttachError::RemoteClosedWithError(_) => attach_error,
 
             SenderAttachError::DuplicatedLinkName => {
                 let error = definitions::Error::new(
@@ -608,14 +610,19 @@ where
 
             SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
-                let err = self.send_detach(writer, true, None)
+                let err = self
+                    .send_detach(writer, true, None)
                     .await
                     .map(|_| attach_error)
                     .unwrap_or(SenderAttachError::IllegalSessionState);
                 match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
-                        err
+                        match self.on_incoming_detach(remote_detach).await {
+                            Ok(_) => return err,
+                            Err(detach_error) => {
+                                return detach_error.try_into().unwrap_or_else(|_| err)
+                            }
+                        }
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
                     None => SenderAttachError::IllegalSessionState,
