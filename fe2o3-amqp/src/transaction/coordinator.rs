@@ -1,13 +1,13 @@
 //! Control link coordinator
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, ErrorCondition},
+    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, ErrorCondition, LinkError},
     messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{Coordinator, Declare, Declared, Discharge, TransactionError, TxnCapability},
 };
 use tokio::sync::mpsc;
-use tracing::{instrument, trace};
+use tracing::{instrument};
 
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
@@ -59,6 +59,20 @@ impl ControlLinkAcceptor {
     }
 }
 
+enum SuccessfulOutcome {
+    Declared(Declared),
+    Accepted(Accepted),
+}
+
+impl From<SuccessfulOutcome> for DeliveryState {
+    fn from(value: SuccessfulOutcome) -> Self {
+        match value {
+            SuccessfulOutcome::Declared(declared) => DeliveryState::Declared(declared),
+            SuccessfulOutcome::Accepted(accepted) => DeliveryState::Accepted(accepted),
+        }
+    }
+}
+
 /// Transaction coordinator
 #[derive(Debug)]
 pub(crate) struct TxnCoordinator {
@@ -103,51 +117,28 @@ impl TxnCoordinator {
             fe2o3_amqp_types::messaging::Body::Sequence(_)
             | fe2o3_amqp_types::messaging::Body::Data(_) => {
                 // Message Decode Error?
-                todo!()
+                let error = definitions::Error::new(
+                    AmqpError::DecodeError,
+                    "The coordinator is only expecting Declare or Discharge frames".to_string(),
+                    None
+                );
+                // TODO: detach instead of closing
+                let _ = self.inner.close_with_error(Some(error)).await;
+                return Running::Stop
             }
         };
 
         let result = match body {
             ControlMessageBody::Declare(declare) => {
-                self.on_declare(declare).await.map(DeliveryState::Declared)
+                self.on_declare(declare).await.map(SuccessfulOutcome::Declared)
             }
             ControlMessageBody::Discharge(discharge) => self
                 .on_discharge(discharge)
                 .await
-                .map(DeliveryState::Accepted),
+                .map(SuccessfulOutcome::Accepted),
         };
 
-        match result {
-            Ok(delivery_state) => {
-                match self
-                    .inner
-                    .dispose(delivery.delivery_id, delivery.delivery_tag, delivery_state)
-                    .await
-                {
-                    Ok(_) => todo!(),
-                    Err(_) => todo!(),
-                }
-            }
-            Err(error) => match error {
-                CoordinatorError::GlobalIdNotImplemented => {
-                    let error = TransactionError::UnknownId;
-                    let description = "Global transaction ID is not implemented".to_string();
-                    self.reject(delivery.delivery_id, delivery.delivery_tag, error, description).await
-                },
-                CoordinatorError::InvalidSessionState => {
-                    // Session must have dropped
-                    Running::Stop
-                },
-                CoordinatorError::AllocTxnIdNotImplemented => {
-                    let error = TransactionError::UnknownId;
-                    let description = "Allocation of new transaction ID is not implemented".to_string();
-                    self.reject(delivery.delivery_id, delivery.delivery_tag, error, description).await
-                },
-                CoordinatorError::TransactionError(error) => {
-                    self.reject(delivery.delivery_id, delivery.delivery_tag, error, None).await
-                }
-            },
-        }
+        self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, result).await
     }
 
     async fn on_recv_error(&mut self, error: RecvError) -> Running {
@@ -155,9 +146,22 @@ impl TxnCoordinator {
 
         match error {
             RecvError::LinkStateError(error) => match error {
-                crate::link::LinkStateError::IllegalState => todo!(),
-                crate::link::LinkStateError::IllegalSessionState => todo!(),
-                crate::link::LinkStateError::ExpectImmediateDetach => todo!(),
+                crate::link::LinkStateError::IllegalState => {
+                    let error =
+                        definitions::Error::new(AmqpError::IllegalState, None, None);
+                    // TODO: detach instead of closing
+                    let _ = self.inner.close_with_error(Some(error)).await;
+                    Running::Stop
+                },
+                crate::link::LinkStateError::IllegalSessionState => {
+                    // Session must have already stopped
+                    Running::Stop
+                },
+                crate::link::LinkStateError::ExpectImmediateDetach => {
+                    let _ = self.inner.close_with_error(None).await;
+                    // TODO: detach instead of closing
+                    Running::Stop
+                },
                 crate::link::LinkStateError::RemoteDetached
                 | crate::link::LinkStateError::RemoteDetachedWithError(_)
                 | crate::link::LinkStateError::RemoteClosed
@@ -169,12 +173,73 @@ impl TxnCoordinator {
                     Running::Stop
                 }
             },
-            RecvError::TransferLimitExceeded => todo!(),
-            RecvError::DeliveryIdIsNone => todo!(),
-            RecvError::DeliveryTagIsNone => todo!(),
-            RecvError::MessageDecodeError => todo!(),
-            RecvError::IllegalRcvSettleModeInTransfer => todo!(),
-            RecvError::InconsistentFieldInMultiFrameDelivery => todo!(),
+            RecvError::TransferLimitExceeded => {
+                let error = definitions::Error::new(LinkError::TransferLimitExceeded, None, None);
+                // TODO: detach instead of closing
+                let _ = self.inner.close_with_error(Some(error)).await;
+                Running::Stop
+            },
+            RecvError::DeliveryIdIsNone 
+            | RecvError::DeliveryTagIsNone 
+            | RecvError::MessageDecodeError 
+            | RecvError::IllegalRcvSettleModeInTransfer 
+            | RecvError::InconsistentFieldInMultiFrameDelivery => {
+                let error = definitions::Error::new(
+                    AmqpError::NotAllowed,
+                    format!("{:?}", error),
+                    None
+                );
+                // TODO: detach instead of closing
+                let _ = self.inner.close_with_error(Some(error)).await;
+                Running::Stop
+            },
+        }
+    }
+
+    async fn handle_delivery_result(
+        &mut self, 
+        delivery_id: DeliveryNumber,
+        delivery_tag: DeliveryTag,
+        result: Result<SuccessfulOutcome, CoordinatorError>
+    ) -> Running {
+        let disposition_result = match result {
+            Ok(outcome) => self.inner.dispose(delivery_id, delivery_tag, outcome.into()).await,
+            Err(error) => match error {
+                CoordinatorError::GlobalIdNotImplemented => {
+                    let error = TransactionError::UnknownId;
+                    let description = "Global transaction ID is not implemented".to_string();
+                    self.reject(delivery_id, delivery_tag, error, description).await
+                },
+                CoordinatorError::InvalidSessionState => {
+                    // Session must have dropped
+                    return Running::Stop
+                },
+                CoordinatorError::AllocTxnIdNotImplemented => {
+                    let error = TransactionError::UnknownId;
+                    let description = "Allocation of new transaction ID is not implemented".to_string();
+                    self.reject(delivery_id, delivery_tag, error, description).await
+                },
+                CoordinatorError::TransactionError(error) => {
+                    self.reject(delivery_id, delivery_tag, error, None).await
+                }
+            },
+        };
+
+        match disposition_result {
+            Ok(_) => Running::Continue,
+            Err(disposition_error) => match disposition_error {
+                IllegalLinkStateError::IllegalState => {
+                    let error =
+                        definitions::Error::new(AmqpError::IllegalState, None, None);
+                    // TODO: detach instead of closing
+                    let _ = self.inner.close_with_error(Some(error)).await;
+                    Running::Stop
+                }
+                IllegalLinkStateError::IllegalSessionState => {
+                    // Session must have already dropped
+                    Running::Stop
+                }
+            },
         }
     }
 
@@ -184,30 +249,15 @@ impl TxnCoordinator {
         delivery_tag: DeliveryTag,
         error: TransactionError,
         description: impl Into<Option<String>>
-    ) -> Running {
+    ) -> Result<(), IllegalLinkStateError> {
         let condition = ErrorCondition::TransactionError(error);
         let error = definitions::Error::new(condition, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
-        match self
+        self
             .inner
             .dispose(delivery_id, delivery_tag, state)
             .await
-        {
-            Ok(_) => Running::Continue,
-            Err(disposition_error) => match disposition_error {
-                IllegalLinkStateError::IllegalState => {
-                    let error =
-                        definitions::Error::new(AmqpError::IllegalState, None, None);
-                    let _ = self.inner.detach_with_error(Some(error)).await;
-                    Running::Stop
-                }
-                IllegalLinkStateError::IllegalSessionState => {
-                    // Session must have already dropped
-                    Running::Stop
-                }
-            },
-        }
     }
 
     #[instrument(skip_all)]
