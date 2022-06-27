@@ -3,12 +3,13 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions,
-    messaging::DeliveryState,
+    messaging::{DeliveryState, Accepted},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
-    transaction::TransactionId,
+    transaction::{TransactionId, TransactionError},
 };
 use futures_util::Sink;
+use tokio::sync::{mpsc, oneshot};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -16,7 +17,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{target_archetype::VariantOfTargetArchetype, LinkRelay},
     session::{self, frame::SessionFrame},
-    Payload,
+    Payload, control::SessionControl,
 };
 
 use super::{
@@ -24,8 +25,42 @@ use super::{
     manager::{
         HandleControlLink, HandleTransactionalWork, ResourceTransaction, TransactionManager,
     },
-    TransactionManagerError, TXN_ID_KEY,
+    TransactionManagerError, TXN_ID_KEY, AllocTxnIdError, DischargeError,
 };
+
+pub(crate) async fn allocate_transaction_id(
+    control: &mpsc::Sender<SessionControl>,
+) -> Result<TransactionId, AllocTxnIdError> {
+    let (responder, result) = oneshot::channel();
+
+    control.send(SessionControl::AllocateTransactionId(responder)).await
+        .map_err(|_| AllocTxnIdError::InvalidSessionState)?;
+    result.await.map_err(|_| AllocTxnIdError::InvalidSessionState)?
+}
+
+pub(crate) async fn rollback_transaction(
+    control: &mpsc::Sender<SessionControl>,
+    txn_id: TransactionId
+) -> Result<Accepted, DischargeError> {
+    let (resp, result) = oneshot::channel();
+
+    control.send(SessionControl::RollbackTransaction { txn_id, resp }).await
+        .map_err(|_| DischargeError::InvalidSessionState)?;
+    result.await.map_err(|_| DischargeError::InvalidSessionState)?
+        .map_err(Into::into)
+}
+
+pub(crate) async fn commit_transaction(
+    control: &mpsc::Sender<SessionControl>,
+    txn_id: TransactionId
+) -> Result<Accepted, DischargeError> {
+    let (resp, result) = oneshot::channel();
+
+    control.send(SessionControl::CommitTransaction { txn_id, resp }).await
+        .map_err(|_| DischargeError::InvalidSessionState)?;
+    result.await.map_err(|_| DischargeError::InvalidSessionState)?
+        .map_err(Into::into)
+}
 
 ///
 #[derive(Debug)]
@@ -68,7 +103,7 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, TransactionManagerError> {
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         while self.txn_manager.txns.contains_key(&txn_id) {
             // TODO: timeout?
@@ -88,11 +123,11 @@ impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
+    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError> {
         todo!()
     }
 
-    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<(), Self::Error> {
+    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError> {
         todo!()
     }
 }

@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    states::SessionState,
+    states::SessionState, messaging::Accepted, transaction::TransactionError,
 };
 use futures_util::Sink;
 use tokio::sync::{mpsc, oneshot};
@@ -31,7 +31,7 @@ use crate::{
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
-    Payload,
+    Payload, transaction::AllocTxnIdError,
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
@@ -529,12 +529,12 @@ impl endpoint::HandleDeclare for ListenerSession {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, TransactionManagerError> {
+    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(
         //     AmqpError::NotImplemented,
         //     "Resource side transaction is not enabled".to_string(),
         // ))
-        Err(TransactionManagerError::AllocateTxnIdFailed)
+        Err(AllocTxnIdError::NotImplemented)
     }
 }
 
@@ -544,20 +544,16 @@ impl endpoint::HandleDischarge for ListenerSession {
     async fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<(), Self::Error> {
-        Err(Error::amqp_error(
-            AmqpError::NotImplemented,
-            "Resource side transaction is not enabled".to_string(),
-        ))
+    ) -> Result<Accepted, TransactionError> {
+        // FIXME: This should be impossible
+        Err(TransactionError::UnknownId)
     }
 
     async fn rollback_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<(), Self::Error> {
-        Err(Error::amqp_error(
-            AmqpError::NotImplemented,
-            "Resource side transaction is not enabled".to_string(),
-        ))
+    ) -> Result<Accepted, TransactionError> {
+        // FIXME: This should be impossible
+        Err(TransactionError::UnknownId)
     }
 }

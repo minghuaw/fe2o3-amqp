@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
-    performatives::Disposition,
+    performatives::Disposition, messaging::Accepted, transaction::TransactionError,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -17,7 +17,7 @@ use crate::{
 use fe2o3_amqp_types::transaction::TransactionId;
 
 #[cfg(feature = "transaction")]
-use crate::transaction::TransactionManagerError;
+use crate::transaction::AllocTxnIdError;
 
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {
@@ -65,13 +65,17 @@ pub(crate) enum SessionControl {
 
     // Transaction related controls
     #[cfg(feature = "transaction")]
-    AllocateTransactionId {
-        resp: oneshot::Sender<Result<TransactionId, TransactionManagerError>>,
+    AllocateTransactionId(oneshot::Sender<Result<TransactionId, AllocTxnIdError>>),
+    #[cfg(feature = "transaction")]
+    CommitTransaction {
+        txn_id: TransactionId,
+        resp: oneshot::Sender<Result<Accepted, TransactionError>>
     },
     #[cfg(feature = "transaction")]
-    CommitTransaction(TransactionId),
-    #[cfg(feature = "transaction")]
-    RollbackTransaction(TransactionId),
+    RollbackTransaction {
+        txn_id: TransactionId,
+        resp: oneshot::Sender<Result<Accepted, TransactionError>>
+    },
 }
 
 impl std::fmt::Display for SessionControl {
@@ -97,9 +101,9 @@ impl std::fmt::Display for SessionControl {
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { .. } => write!(f, "AllocateTransactionId"),
             #[cfg(feature = "transaction")]
-            SessionControl::CommitTransaction(_) => write!(f, "CommitTransaction"),
+            SessionControl::CommitTransaction{ txn_id, .. } => write!(f, "CommitTransaction(txn_id: {:?})", txn_id),
             #[cfg(feature = "transaction")]
-            SessionControl::RollbackTransaction(_) => write!(f, "RollbackTransaction"),
+            SessionControl::RollbackTransaction{ txn_id, .. } => write!(f, "RollbackTransaction(txn_id: {:?})", txn_id),
         }
     }
 }

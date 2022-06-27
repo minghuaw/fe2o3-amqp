@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::{Symbol, UInt},
-    states::SessionState,
+    states::SessionState, messaging::Accepted, transaction::TransactionError,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -29,7 +29,7 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
     util::Constant,
-    Payload,
+    Payload, transaction::AllocTxnIdError,
 };
 
 #[cfg(feature = "transaction")]
@@ -157,13 +157,12 @@ pub(crate) async fn allocate_link(
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
         .map_err(|_| AllocLinkError::IllegalSessionState)?;
-    let result = resp_rx
+    resp_rx
         .await
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?;
-    result
+        .map_err(|_| AllocLinkError::IllegalSessionState)?
 }
 
 /// AMQP1.0 Session
@@ -826,9 +825,9 @@ impl HandleDeclare for Session {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, TransactionManagerError> {
+    ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
-        Err(TransactionManagerError::AllocateTxnIdFailed)
+        Err(AllocTxnIdError::NotImplemented)
     }
 }
 
@@ -838,20 +837,16 @@ impl HandleDischarge for Session {
     async fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<(), Self::Error> {
-        Err(Error::amqp_error(
-            AmqpError::NotImplemented,
-            "Resource side transaction is not enabled".to_string(),
-        ))
+    ) -> Result<Accepted, TransactionError> {
+        // FIXME: This should be impossible
+        Err(TransactionError::UnknownId)
     }
 
     async fn rollback_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<(), Self::Error> {
-        Err(Error::amqp_error(
-            AmqpError::NotImplemented,
-            "Resource side transaction is not enabled".to_string(),
-        ))
+    ) -> Result<Accepted, TransactionError> {
+        // FIXME: This should be impossible
+        Err(TransactionError::UnknownId)
     }
 }
