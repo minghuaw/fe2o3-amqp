@@ -200,19 +200,13 @@ impl TxnCoordinator {
                     Running::Stop
                 }
                 crate::link::LinkStateError::RemoteDetached
-                | crate::link::LinkStateError::RemoteClosed => {
-                    self.inner
-                        .send_detach(true, None)
-                        .await
-                        .unwrap_or_else(|_| tracing::info!("ControlLink closed"));
-                    Running::Stop
-                }
-                crate::link::LinkStateError::RemoteDetachedWithError(_)
+                | crate::link::LinkStateError::RemoteClosed
+                | crate::link::LinkStateError::RemoteDetachedWithError(_)
                 | crate::link::LinkStateError::RemoteClosedWithError(_) => {
                     self.inner
-                        .send_detach(true, None)
+                        .close_with_error(None)
                         .await
-                        .unwrap_or_else(|err| tracing::error!(error = ?err));
+                        .unwrap_or_else(|err| tracing::error!(detach_error = ?err));
                     Running::Stop
                 }
             },
