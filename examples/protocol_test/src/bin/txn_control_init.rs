@@ -23,29 +23,29 @@ async fn client_main() {
     // tracing::info!(message = ?delivery.message());
     // receiver.accept(&delivery).await.unwrap();
     
-    // // Test a regular sender
-    // let mut sender = Sender::attach(&mut session, "sender-1", "q1")
-    //     .await
-    //     .unwrap();
-    // sender.send("hello").await.unwrap();
+    // Test a regular sender
+    let mut sender = Sender::attach(&mut session, "sender-1", "q1")
+        .await
+        .unwrap();
+    sender.send("hello").await.unwrap();
+    sender.close().await.unwrap();
 
-    // Test creating a control link
-    match Controller::attach(&mut session, "controller").await {
-        Ok(mut controller) => {
-            let txn = Transaction::declare(&mut controller, None).await.unwrap();
+    // // Test creating a control link
+    // match Controller::attach(&mut session, "controller").await {
+    //     Ok(mut controller) => {
+    //         let txn = Transaction::declare(&mut controller, None).await.unwrap();
 
-            tracing::info!("Transaction declared");
+    //         tracing::info!("Transaction declared");
 
-            txn.commit().await.unwrap();
-            controller.close().await.unwrap();
-        },
-        Err(attach_error) => {
-            tracing::error!(?attach_error)
-        },
-    }
+    //         txn.commit().await.unwrap();
+    //         controller.close().await.unwrap();
+    //     },
+    //     Err(attach_error) => {
+    //         tracing::error!(?attach_error)
+    //     },
+    // }
     
     // receiver.close().await.unwrap();
-    // sender.close().await.unwrap();
 
     session.end().await.unwrap();
     connection.close().await.unwrap();

@@ -52,6 +52,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
         let link_acceptor = LinkAcceptor::new();
 
         while let Ok(link) = link_acceptor.accept(&mut session).await {
+            tracing::info!("New link endpoint");
             match link {
                 LinkEndpoint::Sender(sender) => {
                     let _ = tokio::spawn(sender_main(sender));

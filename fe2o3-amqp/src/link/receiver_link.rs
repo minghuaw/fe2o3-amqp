@@ -637,6 +637,10 @@ where
     type Unsettled = Arc<RwLock<UnsettledMap<DeliveryState>>>;
     type Target = T;
 
+    fn local_state(&self) -> &LinkState {
+        &self.local_state
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

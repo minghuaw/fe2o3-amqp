@@ -135,6 +135,8 @@ where
                 match frame {
                     // If remote has detached the link
                     Some(LinkFrame::Detach(detach)) => {
+                        // FIXME: if the sender is not trying to send anything, this is 
+                        // probably not responsive enough
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
                         self.send_detach(writer, closed, None).await?;
@@ -528,6 +530,10 @@ where
     type FlowState = SenderFlowState;
     type Unsettled = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
     type Target = T;
+
+    fn local_state(&self) -> &LinkState {
+        &self.local_state
+    }
 
     fn name(&self) -> &str {
         &self.name

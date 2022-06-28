@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     control::SessionControl,
-    link::{delivery::Delivery, LinkFrame},
+    link::{delivery::Delivery, LinkFrame, state::LinkState},
     Payload,
 };
 
@@ -54,6 +54,8 @@ pub(crate) trait LinkExt: Link {
     type FlowState;
     type Unsettled;
     type Target;
+
+    fn local_state(&self) -> &LinkState;
 
     fn name(&self) -> &str;
 
