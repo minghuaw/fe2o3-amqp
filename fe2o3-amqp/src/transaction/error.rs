@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::{transaction::TransactionError};
 
-use crate::link::{SenderAttachError, SendError};
+use crate::link::{SenderAttachError, SendError, DetachError};
 
 
 /// Errors with allocation of new transacation ID
@@ -94,5 +94,27 @@ impl From<SenderAttachError> for OwnedDeclareError {
 impl From<SendError> for OwnedDeclareError {
     fn from(value: SendError) -> Self {
         Self::SendError(value)
+    }
+}
+
+/// Errors with discharging an OwnedTransaction
+#[derive(Debug)]
+pub enum OwnedDischargeError {
+    /// Error with sending Discharge
+    SendError(SendError),
+
+    /// Error with closing the control link
+    DetachError(DetachError),
+}
+
+impl From<SendError> for OwnedDischargeError {
+    fn from(value: SendError) -> Self {
+        Self::SendError(value)
+    }
+}
+
+impl From<DetachError> for OwnedDischargeError {
+    fn from(value: DetachError) -> Self {
+        Self::DetachError(value)
     }
 }

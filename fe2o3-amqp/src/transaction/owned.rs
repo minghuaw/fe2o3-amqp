@@ -6,7 +6,7 @@ use serde_amqp::Value;
 
 use crate::{session::SessionHandle, link::{SendError, DispositionError, FlowError}, Receiver, Delivery, endpoint::ReceiverLink};
 
-use super::{Controller, OwnedDeclareError, TransactionDischarge, TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY};
+use super::{Controller, OwnedDeclareError, TransactionDischarge, TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY, OwnedDischargeError};
 
 /// An owned transaction that has exclusive access to its own control link
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub struct OwnedTransaction {
 
 #[async_trait]
 impl TransactionDischarge for OwnedTransaction {
-    type Error = SendError;
+    type Error = OwnedDischargeError;
 
     fn is_discharged(&self) -> bool {
         self.is_discharged
@@ -29,6 +29,18 @@ impl TransactionDischarge for OwnedTransaction {
             self.controller.discharge(self.declared.txn_id.clone(), fail).await?;
             self.is_discharged = true;
         }
+        Ok(())
+    }
+
+    async fn rollback(mut self) -> Result<(), Self::Error> {
+        self.discharge(true).await?;
+        self.controller.close().await?;
+        Ok(())
+    }
+
+    async fn commit(mut self) -> Result<(), Self::Error> {
+        self.discharge(false).await?;
+        self.controller.close().await?;
         Ok(())
     }
 }
