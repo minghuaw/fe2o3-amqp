@@ -820,7 +820,7 @@ impl HandleDeclare for Session {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-        work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>,
+        work_frame_tx: mpsc::Sender<TxnWorkFrame>,
     ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
         Err(AllocTxnIdError::NotImplemented)

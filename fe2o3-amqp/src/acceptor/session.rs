@@ -524,7 +524,7 @@ impl endpoint::HandleDeclare for ListenerSession {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-        _work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>
+        _work_frame_tx: mpsc::Sender<TxnWorkFrame>
     ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(
         //     AmqpError::NotImplemented,

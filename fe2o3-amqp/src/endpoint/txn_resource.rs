@@ -7,7 +7,7 @@ use crate::transaction::{TransactionManagerError, AllocTxnIdError, manager::Reso
 use super::Session;
 
 pub(crate) trait HandleDeclare: Session {
-    fn allocate_transaction_id(&mut self, work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>) -> Result<TransactionId, AllocTxnIdError>;
+    fn allocate_transaction_id(&mut self, work_frame_tx: mpsc::Sender<TxnWorkFrame>) -> Result<TransactionId, AllocTxnIdError>;
 }
 
 #[async_trait]

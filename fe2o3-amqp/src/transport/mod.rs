@@ -407,7 +407,6 @@ where
 {
     type Item = Result<amqp::Frame, Error>;
 
-    #[instrument(skip_all)]
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -476,7 +475,7 @@ where
 
     // #[instrument(skip_all)]
     fn start_send(self: std::pin::Pin<&mut Self>, item: sasl::Frame) -> Result<(), Self::Error> {
-        // trace!(frame=?item);
+        // (frame=?item);
 
         // Needs to know the length, and thus cannot write directly to the IO
         let mut bytesmut = BytesMut::new();

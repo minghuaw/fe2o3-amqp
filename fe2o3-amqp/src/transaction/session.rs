@@ -30,7 +30,7 @@ use super::{
 
 pub(crate) async fn allocate_transaction_id(
     control: &mpsc::Sender<SessionControl>,
-    work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>,
+    work_frame_tx: mpsc::Sender<TxnWorkFrame>,
 ) -> Result<TransactionId, AllocTxnIdError> {
     let (resp, result) = oneshot::channel();
 
@@ -77,20 +77,7 @@ impl<S> TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_txn_work_frame(&mut self, work_frame: TxnWorkFrame) -> Result<Result<(), TransactionError>, session::Error> {
-        // How to guarantee delivery over the channel?
-        match work_frame {
-            TxnWorkFrame::Post { transfer, payload } => {
-                self.session.on_incoming_transfer(transfer, payload).await?;
-                Ok(Ok(()))
-            },
-            TxnWorkFrame::Retire(disposition) => {
-                self.session.on_incoming_disposition(disposition).await?;
-                Ok(Ok(()))
-            },
-            TxnWorkFrame::Acquire(_) => todo!(),
-        }
-    }
+    
 }
 
 #[async_trait]
@@ -123,16 +110,16 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self, work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>) -> Result<TransactionId, AllocTxnIdError> {
+    fn allocate_transaction_id(&mut self, work_frame_tx: mpsc::Sender<TxnWorkFrame>) -> Result<TransactionId, AllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
-        while self.txn_manager.txns.contains_key(&txn_id) {
+        while self.txn_manager.coordinator_by_txn_id.contains_key(&txn_id) {
             // TODO: timeout?
             txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         }
 
         let _ = self
             .txn_manager
-            .txns
+            .coordinator_by_txn_id
             .insert(txn_id.clone(), work_frame_tx);
         Ok(txn_id)
     }
@@ -153,23 +140,12 @@ where
             }
         }
 
-        self.txn_manager.txns.remove(&txn.txn_id);
+        self.txn_manager.coordinator_by_txn_id.remove(&txn.txn_id);
         Ok(Ok(Accepted {}))
-        // match self.txn_manager.txns.remove(&txn_id) {
-        //     Some(txn) => {
-        //         for work_frame in txn.frames {
-        //             if let Err(err) = self.commit_txn_work_frame(work_frame).await? {
-        //                 return Ok(Err(err))
-        //             }
-        //         }
-        //         Ok(Ok(Accepted {}))
-        //     },
-        //     None => Ok(Err(TransactionError::UnknownId)),
-        // }
     }
 
     async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        match self.txn_manager.txns.remove(&txn_id) {
+        match self.txn_manager.coordinator_by_txn_id.remove(&txn_id) {
             Some(_) => {
                 // TODO: Simply drop the frames?
                 Ok(Ok(Accepted {}))
@@ -325,9 +301,9 @@ where
         match &transfer.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
-                match self.txn_manager.txns.get_mut(txn_id) {
+                match self.txn_manager.coordinator_by_txn_id.get_mut(txn_id) {
                     Some(work_frame_tx) => {
-                        work_frame_tx.send(Some(TxnWorkFrame::Post { transfer, payload })).await
+                        work_frame_tx.send(TxnWorkFrame::Post { transfer, payload }).await
                             .map_err(|_| Self::Error::session_error(SessionError::ErrantLink, None))?;
                         Ok(())
                     },
@@ -354,9 +330,9 @@ where
         match &disposition.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
-                match self.txn_manager.txns.get_mut(txn_id) {
+                match self.txn_manager.coordinator_by_txn_id.get_mut(txn_id) {
                     Some(work_frame_tx) => {
-                        work_frame_tx.send(Some(TxnWorkFrame::Retire(disposition))).await
+                        work_frame_tx.send(TxnWorkFrame::Retire(disposition)).await
                             .map_err(|_| Self::Error::session_error(SessionError::ErrantLink, None))?;
                         Ok(())
                     },

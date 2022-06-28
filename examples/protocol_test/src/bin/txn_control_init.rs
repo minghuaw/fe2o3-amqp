@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{types::primitives::Value, Connection, Delivery, Receiver, Sender, Session, transaction::Controller};
+use fe2o3_amqp::{types::primitives::Value, Connection, Delivery, Receiver, Sender, Session, transaction::{Controller, Transaction}};
 use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -31,8 +31,10 @@ async fn client_main() {
 
     // Test creating a control link
     match Controller::attach(&mut session, "controller").await {
-        Ok(controller) => {
+        Ok(mut controller) => {
+            let txn = Transaction::declare(&mut controller, None).await.unwrap();
 
+            txn.rollback().await.unwrap();
             controller.close().await.unwrap();
         },
         Err(attach_error) => {
