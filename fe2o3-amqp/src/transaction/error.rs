@@ -1,6 +1,6 @@
-use fe2o3_amqp_types::{transaction::TransactionError};
+use fe2o3_amqp_types::{transaction::TransactionError, messaging::{Rejected, Released, Modified, DeliveryState, Outcome}};
 
-use crate::link::{SenderAttachError, SendError, DetachError};
+use crate::link::{SenderAttachError, SendError, DetachError, LinkStateError, IllegalLinkStateError, delivery::FromDeliveryState};
 
 
 /// Errors with allocation of new transacation ID
@@ -116,5 +116,74 @@ impl From<SendError> for OwnedDischargeError {
 impl From<DetachError> for OwnedDischargeError {
     fn from(value: DetachError) -> Self {
         Self::DetachError(value)
+    }
+}
+
+/// Error associated with sending a txn message
+#[derive(Debug, thiserror::Error)]
+pub enum PostError {
+    /// Errors found in link state
+    #[error("Local error: {:?}", .0)]
+    LinkStateError(#[from] LinkStateError),
+
+    /// The remote peer detached with error
+    #[error("Link is detached {:?}", .0)]
+    Detached(DetachError),
+
+    /// The message was rejected
+    #[error("Outcome Rejected: {:?}", .0)]
+    Rejected(Rejected),
+
+    /// The message was released
+    #[error("Outsome Released: {:?}", .0)]
+    Released(Released),
+
+    /// The message was modified
+    #[error("Outcome Modified: {:?}", .0)]
+    Modified(Modified),
+
+    /// Transactional state found on non-transactional delivery
+    #[error("Transactional state found on non-transactional delivery")]
+    IllegalDeliveryState,
+
+    /// Error serializing message
+    #[error("Error encoding message")]
+    MessageEncodeError,
+}
+
+impl From<DetachError> for PostError {
+    fn from(error: DetachError) -> Self {
+        Self::Detached(error)
+    }
+}
+
+impl From<IllegalLinkStateError> for PostError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
+            IllegalLinkStateError::IllegalSessionState => LinkStateError::IllegalSessionState.into(),
+        }
+    }
+}
+
+type PostResult = Result<(), PostError>;
+
+impl FromDeliveryState for PostResult {
+    fn from_delivery_state(state: DeliveryState) -> Self {
+        match state {
+            DeliveryState::Received(_)
+            | DeliveryState::Accepted(_)
+            | DeliveryState::Rejected(_)
+            | DeliveryState::Released(_)
+            | DeliveryState::Modified(_)
+            | DeliveryState::Declared(_) => Err(PostError::IllegalDeliveryState),
+            DeliveryState::TransactionalState(txn) => match txn.outcome {
+                Some(Outcome::Accepted(_)) => Ok(()),
+                Some(Outcome::Rejected(value)) => Err(PostError::Rejected(value)),
+                Some(Outcome::Released(value)) => Err(PostError::Released(value)),
+                Some(Outcome::Modified(value)) => Err(PostError::Modified(value)),
+                Some(Outcome::Declared(_)) | None => Err(PostError::IllegalDeliveryState),
+            },
+        }
     }
 }

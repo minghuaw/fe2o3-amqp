@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::Body, DeliveryState, Message, Received},
+    messaging::{message::Body, DeliveryState, Message, Received, Outcome},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -11,6 +11,8 @@ use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
+
+use super::{SendError, LinkStateError};
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -298,53 +300,59 @@ impl<O> From<Settlement> for DeliveryFut<O> {
     }
 }
 
-trait FromSettled {
+pub(crate) trait FromSettled {
     fn from_settled() -> Self;
 }
 
-trait FromDeliveryState {
+pub(crate) trait FromDeliveryState {
     fn from_delivery_state(state: DeliveryState) -> Self;
 }
 
-trait FromRecvError {
-    fn from_recv_error(err: RecvError) -> Self;
+pub(crate) trait FromOneshotRecvError {
+    fn from_oneshot_recv_error(err: RecvError) -> Self;
 }
 
-impl<T, E> FromRecvError for Result<T, E>
-where
-    E: From<RecvError>,
-{
-    fn from_recv_error(err: RecvError) -> Self {
-        Err(E::from(err))
+// impl<T, E> FromOneshotRecvError for Result<T, E>
+// where
+//     E: From<RecvError>,
+// {
+//     fn from_oneshot_recv_error(err: RecvError) -> Self {
+//         Err(E::from(err))
+//     }
+// }
+
+impl FromOneshotRecvError for SendResult {
+    fn from_oneshot_recv_error(_: RecvError) -> Self {
+        Err(LinkStateError::IllegalSessionState.into())
     }
 }
 
-// type NonTxnResult = Result<(), SendError>;
+type SendResult = Result<(), SendError>;
 
-// impl FromSettled for NonTxnResult {
-//     fn from_settled() -> Self {
-//         Ok(())
-//     }
-// }
+impl FromSettled for SendResult {
+    fn from_settled() -> Self {
+        Ok(())
+    }
+}
 
-// impl FromDeliveryState for NonTxnResult {
-//     fn from_delivery_state(state: DeliveryState) -> Self {
-//         match state {
-//             DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-//             DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
-//             DeliveryState::Released(released) => Err(SendError::Released(released)),
-//             DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
-//             #[cfg(feature = "transaction")]
-//             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-//                 Err(SendError::)
-//             }
-//         }
-//     }
-// }
+impl FromDeliveryState for SendResult {
+    fn from_delivery_state(state: DeliveryState) -> Self {
+        match state {
+            DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+            DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+            DeliveryState::Released(released) => Err(SendError::Released(released)),
+            DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
+            #[cfg(feature = "transaction")]
+            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+                Err(SendError::IllegalDeliveryState)
+            }
+        }
+    }
+}
 
 impl<O> Future for DeliveryFut<O>
 where
-    O: FromSettled + FromDeliveryState + FromRecvError,
+    O: FromSettled + FromDeliveryState + FromOneshotRecvError,
 {
     type Output = O;
 
@@ -369,7 +377,7 @@ where
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-                                Poll::Ready(O::from_recv_error(err))
+                                Poll::Ready(O::from_oneshot_recv_error(err))
                             }
                         }
                     }

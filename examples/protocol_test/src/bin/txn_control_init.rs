@@ -44,15 +44,18 @@ async fn client_main() {
                 .message("Hello World")
                 .settled(true)
                 .build();
-            txn.post(&mut sender, sendable).await.unwrap();
+            let fut1 = txn.post_batchable(&mut sender, sendable).await.unwrap();
 
             let sendable = Sendable::builder()
                 .message("Foo Bar")
                 .settled(true)
                 .build();
-            txn.post(&mut sender, sendable).await.unwrap();
+            let fut2 = txn.post_batchable(&mut sender, sendable).await.unwrap();
 
             txn.commit().await.unwrap();
+
+            fut1.await.unwrap();
+            fut2.await.unwrap();
             controller.close().await.unwrap();
         }
         Err(attach_error) => {

@@ -186,28 +186,31 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<(), SendError> {
-        let settlement = self.inner.send(sendable.into()).await?;
+        // let settlement = self.inner.send(sendable.into()).await?;
 
-        // If not settled, must wait for outcome
-        match settlement {
-            Settlement::Settled => Ok(()),
-            Settlement::Unsettled {
-                _delivery_tag: _,
-                outcome,
-            } => match outcome
-                .await
-                .map_err(|_| LinkStateError::IllegalSessionState)?
-            {
-                DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-                DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
-                DeliveryState::Released(released) => Err(SendError::Released(released)),
-                DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
-                #[cfg(feature = "transaction")]
-                DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                    Err(SendError::IllegalDeliveryState)
-                }
-            },
-        }
+        // // If not settled, must wait for outcome
+        // match settlement {
+        //     Settlement::Settled => Ok(()),
+        //     Settlement::Unsettled {
+        //         _delivery_tag: _,
+        //         outcome,
+        //     } => match outcome
+        //         .await
+        //         .map_err(|_| LinkStateError::IllegalSessionState)?
+        //     {
+        //         DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
+        //         DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+        //         DeliveryState::Released(released) => Err(SendError::Released(released)),
+        //         DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
+        //         #[cfg(feature = "transaction")]
+        //         DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
+        //             Err(SendError::IllegalDeliveryState)
+        //         }
+        //     },
+        // }
+
+        let fut = self.send_batchable(sendable).await?;
+        fut.await
     }
 
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
