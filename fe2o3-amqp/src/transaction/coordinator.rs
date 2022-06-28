@@ -177,29 +177,37 @@ impl TxnCoordinator {
             .await
     }
 
+    #[instrument(skip_all)]
     async fn on_recv_error(&mut self, error: RecvError) -> Running {
-        tracing::error!(?error);
-
         match error {
             RecvError::LinkStateError(error) => match error {
                 crate::link::LinkStateError::IllegalState => {
+                    tracing::error!(?error);
                     let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                     // TODO: detach instead of closing
                     let _ = self.inner.close_with_error(Some(error)).await;
                     Running::Stop
                 }
                 crate::link::LinkStateError::IllegalSessionState => {
+                    tracing::error!(?error);
                     // Session must have already stopped
                     Running::Stop
                 }
                 crate::link::LinkStateError::ExpectImmediateDetach => {
+                    tracing::error!(?error);
                     let _ = self.inner.close_with_error(None).await;
                     // TODO: detach instead of closing
                     Running::Stop
                 }
                 crate::link::LinkStateError::RemoteDetached
-                | crate::link::LinkStateError::RemoteDetachedWithError(_)
-                | crate::link::LinkStateError::RemoteClosed
+                | crate::link::LinkStateError::RemoteClosed => {
+                    self.inner
+                        .send_detach(true, None)
+                        .await
+                        .unwrap_or_else(|_| tracing::info!("ControlLink closed"));
+                    Running::Stop
+                }
+                crate::link::LinkStateError::RemoteDetachedWithError(_)
                 | crate::link::LinkStateError::RemoteClosedWithError(_) => {
                     self.inner
                         .send_detach(true, None)
@@ -209,6 +217,7 @@ impl TxnCoordinator {
                 }
             },
             RecvError::TransferLimitExceeded => {
+                tracing::error!(?error);
                 let error = definitions::Error::new(LinkError::TransferLimitExceeded, None, None);
                 // TODO: detach instead of closing
                 let _ = self.inner.close_with_error(Some(error)).await;
@@ -219,6 +228,7 @@ impl TxnCoordinator {
             | RecvError::MessageDecodeError
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery => {
+                tracing::error!(?error);
                 let error =
                     definitions::Error::new(AmqpError::NotAllowed, format!("{:?}", error), None);
                 // TODO: detach instead of closing
