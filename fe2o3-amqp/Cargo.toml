@@ -44,7 +44,7 @@ testcontainers = "0.14.0"
 [dependencies]
 serde_amqp = "0.0.8"
 # serde_amqp = { version = "0.0.8", path = "../serde_amqp" }
-fe2o3-amqp-types = "0.0.18"
+fe2o3-amqp-types = "0.0.19"
 # fe2o3-amqp-types = { version = "0.0.18", path = "../fe2o3-amqp-types" }
 
 bytes = "1"

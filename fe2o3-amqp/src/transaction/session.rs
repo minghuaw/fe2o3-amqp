@@ -167,63 +167,63 @@ where
     }
 }
 
-#[async_trait]
-impl<S> HandleTransactionalWork for TxnSession<S>
-where
-    S: endpoint::Session<Error = session::Error> + Send,
-{
-    type Error = S::Error;
+// #[async_trait]
+// impl<S> HandleTransactionalWork for TxnSession<S>
+// where
+//     S: endpoint::Session<Error = session::Error> + Send,
+// {
+//     type Error = S::Error;
 
-    async fn on_incoming_txn_transfer(
-        &mut self,
-        transfer: Transfer,
-        payload: Payload,
-    ) -> Result<(), Self::Error> {
-        let txn_id = match &transfer.state {
-            Some(DeliveryState::TransactionalState(txn_state)) => &txn_state.txn_id,
-            Some(_) | None => todo!(),
-        };
+//     async fn on_incoming_txn_transfer(
+//         &mut self,
+//         transfer: Transfer,
+//         payload: Payload,
+//     ) -> Result<(), Self::Error> {
+//         let txn_id = match &transfer.state {
+//             Some(DeliveryState::TransactionalState(txn_state)) => &txn_state.txn_id,
+//             Some(_) | None => todo!(),
+//         };
 
-        let txn = match self.txn_manager.txns.get_mut(txn_id) {
-            Some(txn) => txn,
-            None => todo!(), // TODO: Ignore?
-        };
+//         let txn = match self.txn_manager.txns.get_mut(txn_id) {
+//             Some(txn) => txn,
+//             None => todo!(), // TODO: Ignore?
+//         };
 
-        let work_frame = TxnWorkFrame::Post { transfer, payload };
-        txn.frames.push(work_frame);
+//         let work_frame = TxnWorkFrame::Post { transfer, payload };
+//         txn.frames.push(work_frame);
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    async fn on_incoming_txn_flow(
-        &mut self,
-        flow: Flow,
-    ) -> Result<(), Self::Error> {
-        todo!()
-    }
+//     async fn on_incoming_txn_flow(
+//         &mut self,
+//         flow: Flow,
+//     ) -> Result<(), Self::Error> {
+//         todo!()
+//     }
 
-    async fn on_incoming_txn_disposition(
-        &mut self,
-        disposition: Disposition,
-    ) -> Result<(), Self::Error> {
-        todo!()
-    }
+//     async fn on_incoming_txn_disposition(
+//         &mut self,
+//         disposition: Disposition,
+//     ) -> Result<(), Self::Error> {
+//         todo!()
+//     }
 
-    fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
-        todo!()
-    }
+//     fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
+//         todo!()
+//     }
 
-    fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
-        todo!()
-    }
+//     fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
+//         todo!()
+//     }
 
-    fn on_outgoing_txn_disposition(
-        &mut self,
-        disposition: Disposition,
-    ) -> Result<SessionFrame, Self::Error> {
-        todo!()
-    }
-}
+//     fn on_outgoing_txn_disposition(
+//         &mut self,
+//         disposition: Disposition,
+//     ) -> Result<SessionFrame, Self::Error> {
+//         todo!()
+//     }
+// }
 
 #[async_trait]
 impl<S> endpoint::Session for TxnSession<S>
@@ -297,7 +297,10 @@ where
             .as_ref()
             .map(|fields| fields.contains_key(&Symbol::from(TXN_ID_KEY)))
         {
-            Some(true) => self.on_incoming_txn_flow(flow).await,
+            Some(true) => {
+                // self.on_incoming_txn_flow(flow).await
+                todo!()
+            },
             Some(false) | None => self.session.on_incoming_flow(flow).await,
         }
     }
@@ -316,12 +319,12 @@ where
                         Ok(())
                     },
                     None => {
-                        let error = definitions::Error::new(TransactionError::UnknownId, None, None);
-                        Err(Self::Error::Local(error))
+                        // Should this stop the session or just the coordinator associated with the txn?
+                        todo!()
+                        // let error = definitions::Error::new(TransactionError::UnknownId, None, None);
+                        // Err(Self::Error::Local(error))
                     }
                 }
-                // self.on_incoming_txn_transfer(transfer, payload)
-                //     .await
             }
             Some(_) | None => {
                 self.session
@@ -335,9 +338,16 @@ where
         &mut self,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
-        match disposition.state {
-            Some(DeliveryState::TransactionalState(_)) => {
-                self.on_incoming_txn_disposition(disposition).await
+        match &disposition.state {
+            Some(DeliveryState::TransactionalState(state)) => {
+                let txn_id = &state.txn_id;
+                match self.txn_manager.txns.get_mut(txn_id) {
+                    Some(txn) => {
+                        txn.frames.push(TxnWorkFrame::Retire(disposition));
+                        Ok(())
+                    },
+                    None => todo!(),
+                }
             }
             Some(_) | None => {
                 self.session
