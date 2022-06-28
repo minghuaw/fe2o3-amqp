@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SessionError},
+    definitions::{self, SessionError},
     messaging::{DeliveryState, Accepted},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
@@ -23,7 +23,7 @@ use crate::{
 use super::{
     frame::TxnWorkFrame,
     manager::{
-        HandleControlLink, HandleTransactionalWork, ResourceTransaction, TransactionManager,
+        HandleControlLink, ResourceTransaction, TransactionManager,
     },
     TXN_ID_KEY, AllocTxnIdError, DischargeError,
 };

@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::{transaction::TransactionError, messaging::Rejected, definitions::{ErrorCondition, self}};
+use fe2o3_amqp_types::{transaction::TransactionError};
 
 
 /// Errors with allocation of new transacation ID

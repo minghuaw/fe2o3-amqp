@@ -5,12 +5,12 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     performatives::{Attach, Disposition, Flow, Transfer},
-    transaction::{TransactionId, TransactionError}, messaging::Accepted,
+    transaction::{TransactionId}, 
 };
 use tokio::sync::mpsc;
 
 use crate::{
-    endpoint::{IncomingChannel, LinkFlow, HandleDischarge},
+    endpoint::{LinkFlow},
     link::LinkFrame,
     session::frame::SessionFrame,
     Payload,

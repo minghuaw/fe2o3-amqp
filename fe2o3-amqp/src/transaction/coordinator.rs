@@ -1,9 +1,9 @@
 //! Control link coordinator
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, ErrorCondition, LinkError, ReceiverSettleMode},
+    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, LinkError, ReceiverSettleMode},
     messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{
