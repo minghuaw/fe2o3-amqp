@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions;
+use fe2o3_amqp_types::{definitions, performatives::Detach};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -114,16 +114,7 @@ where
                 // Send a non-closing detach
                 self.send_detach(false, error).await?;
 
-                let remote_detach = match self
-                    .reader_mut()
-                    .recv()
-                    .await
-                    .ok_or(DetachError::IllegalSessionState)?
-                {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(DetachError::NonDetachFrameReceived),
-                };
-
+                let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
                     // Note that one peer MAY send a closing detach while its partner is
                     // sending a non-closing detach. In this case, the partner MUST
@@ -141,16 +132,7 @@ where
                 }
             },
             LinkState::DetachSent => {
-                let remote_detach = match self
-                    .reader_mut()
-                    .recv()
-                    .await
-                    .ok_or(DetachError::IllegalSessionState)?
-                {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(DetachError::NonDetachFrameReceived),
-                };
-
+                let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
                     reattach_and_then_close(self).await?;
                     Err(DetachError::ClosedByRemote)
@@ -165,15 +147,7 @@ where
             LinkState::CloseSent => {
                 // This should be impossible.
                 // FIXME: treat it as if remote closed
-                let _remote_detach = match self
-                    .reader_mut()
-                    .recv()
-                    .await
-                    .ok_or(DetachError::IllegalSessionState)?
-                {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(DetachError::NonDetachFrameReceived),
-                };
+                let _remote_detach = recv_remote_detach(self).await?;
                 reattach_and_then_close(self).await?;
                 Err(DetachError::ClosedByRemote)
             },
@@ -202,16 +176,7 @@ where
                     .map_err(|_| DetachError::IllegalSessionState)?;
 
                 // Wait for remote detach
-                let remote_detach = match self
-                    .reader_mut()
-                    .recv()
-                    .await
-                    .ok_or(DetachError::IllegalSessionState)?
-                {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(DetachError::NonDetachFrameReceived),
-                };
-
+                let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
                     // If the remote detach contains an error, the error will be propagated
                     // back by `on_incoming_detach`
@@ -223,18 +188,8 @@ where
             LinkState::DetachSent => {
                 // FIXME: this should be impossible
                 // Wait for remote detach
-                let _remote_detach = match self
-                    .reader_mut()
-                    .recv()
-                    .await
-                    .ok_or(DetachError::IllegalSessionState)?
-                {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(DetachError::NonDetachFrameReceived),
-                };
-
+                let _remote_detach = recv_remote_detach(self).await?;
                 reattach_and_then_close(self).await?;
-
                 Err(DetachError::DetachedByRemote)
             },
             LinkState::DetachReceived => {
@@ -247,16 +202,7 @@ where
             },
             LinkState::CloseSent => {
                 // Wait for remote detach
-                let remote_detach = match self
-                    .reader_mut()
-                    .recv()
-                    .await
-                    .ok_or(DetachError::IllegalSessionState)?
-                {
-                    LinkFrame::Detach(detach) => detach,
-                    _ => return Err(DetachError::NonDetachFrameReceived),
-                };
-
+                let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
                     self.link_mut().on_incoming_detach(remote_detach).await
                 } else {
@@ -294,15 +240,23 @@ where
         .await
         .map_err(|_| DetachError::DetachedByRemote)?;
     link_inner.send_detach(true, None).await?;
-    let remote_detach = match link_inner
+    let remote_detach = recv_remote_detach(link_inner).await?;
+    link_inner.link_mut().on_incoming_detach(remote_detach).await?;
+    Ok(())
+}
+
+async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, DetachError>
+where
+    T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
+    T::Link: LinkDetach<DetachError = DetachError>,
+{
+    match link_inner
         .reader_mut()
         .recv()
         .await
         .ok_or(DetachError::IllegalSessionState)?
     {
-        LinkFrame::Detach(detach) => detach,
-        _ => return Err(DetachError::NonDetachFrameReceived),
-    };
-    link_inner.link_mut().on_incoming_detach(remote_detach).await?;
-    Ok(())
+        LinkFrame::Detach(detach) => Ok(detach),
+        _ => Err(DetachError::NonDetachFrameReceived),
+    }
 }
