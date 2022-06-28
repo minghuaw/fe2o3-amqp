@@ -1,6 +1,6 @@
 //! Control link coordinator
 
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, LinkError, ReceiverSettleMode},
@@ -64,19 +64,20 @@ impl ControlLinkAcceptor {
         outgoing: mpsc::Sender<LinkFrame>,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
         tracing::info!(control_link_attach = ?remote_attach);
-        let (work_frame_tx, work_frame_rx) = mpsc::channel(self.shared.buffer_size);
         self.inner
             .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
             .await
             .map(|inner| TxnCoordinator {
                 inner,
-                txns: HashMap::new(),
-                work_frame_rx,
-                work_frame_tx,
+                txn_ids: HashSet::new(),
+                // txns: HashMap::new(),
+                // work_frame_rx,
+                // work_frame_tx,
             })
     }
 }
 
+#[derive(Debug)]
 enum SuccessfulOutcome {
     Declared(Declared),
     Accepted(Accepted),
@@ -95,9 +96,10 @@ impl From<SuccessfulOutcome> for DeliveryState {
 #[derive(Debug)]
 pub(crate) struct TxnCoordinator {
     inner: ReceiverInner<CoordinatorLink>,
-    txns: HashMap<TransactionId, ResourceTransaction>,
-    work_frame_rx: mpsc::Receiver<TxnWorkFrame>,
-    work_frame_tx: mpsc::Sender<TxnWorkFrame>,
+    txn_ids: HashSet<TransactionId>,
+    // txns: HashMap<TransactionId, ResourceTransaction>,
+    // work_frame_rx: mpsc::Receiver<TxnWorkFrame>,
+    // work_frame_tx: mpsc::Sender<TxnWorkFrame>,
 }
 
 impl TxnCoordinator {
@@ -107,45 +109,49 @@ impl TxnCoordinator {
             None => {
                 let txn_id = super::session::allocate_transaction_id(
                     self.inner.session_control(),
-                    self.work_frame_tx.clone(),
                 )
                 .await?;
 
                 // The TxnManager has the authoratitive version of all active txns, so
                 // the txn-id obtained from the TxnManager should be "guaranteed" to be unique
-                self.txns
-                    .insert(txn_id.clone(), ResourceTransaction::new(txn_id.clone()));
+                self.txn_ids.insert(txn_id.clone());
                 Ok(Declared { txn_id })
             }
         }
     }
 
     async fn on_discharge(&mut self, discharge: &Discharge) -> Result<Accepted, CoordinatorError> {
-        let txn = match self.txns.remove(&discharge.txn_id) {
-            Some(txn) => txn,
-            None => {
-                return Err(CoordinatorError::TransactionError(
-                    TransactionError::UnknownId,
-                ))
-            }
-        };
+        // let txn = match self.txn_ids.remove(&discharge.txn_id) {
+        //     Some(txn) => txn,
+        //     None => {
+        //         return Err(CoordinatorError::TransactionError(
+        //             TransactionError::UnknownId,
+        //         ))
+        //     }
+        // };
+        if !self.txn_ids.remove(&discharge.txn_id) {
+            return Err(CoordinatorError::TransactionError(
+                TransactionError::UnknownId,
+            ))
+        }
 
+        let txn_id = discharge.txn_id.clone();
         match discharge.fail {
             Some(true) => {
-                super::session::rollback_transaction(self.inner.session_control(), txn.txn_id)
+                super::session::rollback_transaction(self.inner.session_control(), txn_id)
                     .await
                     .map_err(Into::into)
             }
             Some(false) | None => {
                 // The fail field is treated as a false if unset in AmqpNetLite
-                super::session::commit_transaction(self.inner.session_control(), txn)
+                super::session::commit_transaction(self.inner.session_control(), txn_id)
                     .await
                     .map_err(Into::into)
             }
         }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, delivery))]
     async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
         let body = match delivery.body() {
             fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
@@ -163,8 +169,6 @@ impl TxnCoordinator {
             }
         };
 
-        tracing::debug!(body = ?delivery.body());
-
         let result = match body {
             ControlMessageBody::Declare(declare) => self
                 .on_declare(declare)
@@ -176,11 +180,13 @@ impl TxnCoordinator {
                 .map(SuccessfulOutcome::Accepted),
         };
 
+        tracing::info!(?result);
+
         self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, result)
             .await
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, error))]
     async fn on_recv_error(&mut self, error: RecvError) -> Running {
         match error {
             RecvError::LinkStateError(error) => match error {
@@ -302,20 +308,7 @@ impl TxnCoordinator {
         self.inner.dispose(delivery_id, delivery_tag, Some(true), state).await
     }
 
-    fn on_txn_work_frame(&mut self, work_frame: TxnWorkFrame) -> Result<Running, TransactionError> {
-        match work_frame
-            .txn_id()
-            .and_then(|txn_id| self.txns.get_mut(txn_id))
-        {
-            Some(txn) => {
-                txn.frames.push(work_frame);
-                Ok(Running::Continue)
-            }
-            None => Err(TransactionError::UnknownId),
-        }
-    }
-
-    #[instrument(skip_all)]
+    #[instrument(name = "Coordinator::event_loop", skip(self))]
     pub async fn event_loop(mut self) {
         tracing::info!("Coordinator started");
         loop {
@@ -323,27 +316,18 @@ impl TxnCoordinator {
                 delivery = self.inner.recv() => {
                     match delivery {
                         Ok(delivery) => self.on_delivery(delivery).await,
-                        Err(error) => self.on_recv_error(error).await,
+                        Err(error) => {
+                            // Make sure Discharge is handled before detach
+                            self.inner.incoming.close();
+                            while let Ok(delivery) = self.inner.recv().await {
+                                tracing::info!("more frames coming");
+                                self.on_delivery(delivery).await;
+                            }
+
+                            self.on_recv_error(error).await
+                        },
                     }
                 },
-                work_frame = self.work_frame_rx.recv() => {
-                    tracing::info!(?work_frame);
-                    match work_frame {
-                        Some(work_frame) => {
-                            match self.on_txn_work_frame(work_frame) {
-                                Ok(running) => running,
-                                Err(error) => {
-                                    // Detach because work frame could be Transfer, Flow, or Disposition, and only
-                                    // Transfer can be rejected
-                                    let error = definitions::Error::new(error, None, None);
-                                    let _ = self.inner.close_with_error(Some(error)).await;
-                                    Running::Stop
-                                },
-                            }
-                        },
-                        None => Running::Stop,
-                    }
-                }
             };
 
             if let Running::Stop = running {
@@ -355,7 +339,7 @@ impl TxnCoordinator {
 
 impl Drop for TxnCoordinator {
     fn drop(&mut self) {
-        for (txn_id, _) in self.txns.drain() {
+        for txn_id in self.txn_ids.drain() {
             if let Err(_) = self
                 .inner
                 .session_control()

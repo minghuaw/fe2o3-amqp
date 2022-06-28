@@ -66,12 +66,11 @@ pub(crate) enum SessionControl {
     // Transaction related controls
     #[cfg(feature = "transaction")]
     AllocateTransactionId {
-        work_frame_tx: mpsc::Sender<TxnWorkFrame>,
         resp: oneshot::Sender<Result<TransactionId, AllocTxnIdError>>
     },
     #[cfg(feature = "transaction")]
     CommitTransaction {
-        txn: ResourceTransaction,
+        txn_id: TransactionId,
         resp: oneshot::Sender<Result<Accepted, TransactionError>>
     },
     #[cfg(feature = "transaction")]

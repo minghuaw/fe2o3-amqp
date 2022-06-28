@@ -524,7 +524,6 @@ impl endpoint::HandleDeclare for ListenerSession {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-        _work_frame_tx: mpsc::Sender<TxnWorkFrame>
     ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(
         //     AmqpError::NotImplemented,
@@ -539,7 +538,7 @@ impl endpoint::HandleDeclare for ListenerSession {
 impl endpoint::HandleDischarge for ListenerSession {
     async fn commit_transaction(
         &mut self,
-        _txn: ResourceTransaction,
+        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         // FIXME: This should be impossible
         Ok(Err(TransactionError::UnknownId))

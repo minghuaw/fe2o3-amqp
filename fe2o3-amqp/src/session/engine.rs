@@ -235,8 +235,8 @@ where
             }
 
             #[cfg(feature = "transaction")]
-            SessionControl::AllocateTransactionId { work_frame_tx, resp } => {
-                let result = self.session.allocate_transaction_id(work_frame_tx);
+            SessionControl::AllocateTransactionId { resp } => {
+                let result = self.session.allocate_transaction_id();
                 resp.send(result).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -245,9 +245,9 @@ where
                 })?;
             }
             #[cfg(feature = "transaction")]
-            SessionControl::CommitTransaction{ txn, resp } => {
+            SessionControl::CommitTransaction{ txn_id, resp } => {
                 let result = self.session
-                    .commit_transaction(txn)
+                    .commit_transaction(txn_id)
                     .await
                     .map_err(Into::into)?;
                 resp.send(result).map_err(|_| {

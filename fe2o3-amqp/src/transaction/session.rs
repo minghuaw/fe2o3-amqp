@@ -30,11 +30,10 @@ use super::{
 
 pub(crate) async fn allocate_transaction_id(
     control: &mpsc::Sender<SessionControl>,
-    work_frame_tx: mpsc::Sender<TxnWorkFrame>,
 ) -> Result<TransactionId, AllocTxnIdError> {
     let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::AllocateTransactionId { work_frame_tx, resp }).await
+    control.send(SessionControl::AllocateTransactionId { resp }).await
         .map_err(|_| AllocTxnIdError::InvalidSessionState)?;
     result.await.map_err(|_| AllocTxnIdError::InvalidSessionState)?
 }
@@ -53,11 +52,11 @@ pub(crate) async fn rollback_transaction(
 
 pub(crate) async fn commit_transaction(
     control: &mpsc::Sender<SessionControl>,
-    txn: ResourceTransaction
+    txn_id: TransactionId
 ) -> Result<Accepted, DischargeError> {
     let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::CommitTransaction { txn, resp }).await
+    control.send(SessionControl::CommitTransaction { txn_id, resp }).await
         .map_err(|_| DischargeError::InvalidSessionState)?;
     result.await.map_err(|_| DischargeError::InvalidSessionState)?
         .map_err(Into::into)
@@ -110,17 +109,17 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self, work_frame_tx: mpsc::Sender<TxnWorkFrame>) -> Result<TransactionId, AllocTxnIdError> {
+    fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
-        while self.txn_manager.coordinator_by_txn_id.contains_key(&txn_id) {
+        while self.txn_manager.txns.contains_key(&txn_id) {
             // TODO: timeout?
             txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         }
 
         let _ = self
             .txn_manager
-            .coordinator_by_txn_id
-            .insert(txn_id.clone(), work_frame_tx);
+            .txns
+            .insert(txn_id.clone(), ResourceTransaction::new());
         Ok(txn_id)
     }
 }
@@ -130,7 +129,11 @@ impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_transaction(&mut self, txn: ResourceTransaction) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+        let txn = match self.txn_manager.txns.remove(&txn_id) {
+            Some(txn) => txn,
+            None => return Ok(Err(TransactionError::UnknownId)),
+        };
 
         for work_frame in txn.frames {
             match work_frame {
@@ -140,12 +143,11 @@ where
             }
         }
 
-        self.txn_manager.coordinator_by_txn_id.remove(&txn.txn_id);
         Ok(Ok(Accepted {}))
     }
 
     async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        match self.txn_manager.coordinator_by_txn_id.remove(&txn_id) {
+        match self.txn_manager.txns.remove(&txn_id) {
             Some(_) => {
                 // TODO: Simply drop the frames?
                 Ok(Ok(Accepted {}))
@@ -301,17 +303,15 @@ where
         match &transfer.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
-                match self.txn_manager.coordinator_by_txn_id.get_mut(txn_id) {
-                    Some(work_frame_tx) => {
-                        work_frame_tx.send(TxnWorkFrame::Post { transfer, payload }).await
-                            .map_err(|_| Self::Error::session_error(SessionError::ErrantLink, None))?;
+                match self.txn_manager.txns.get_mut(txn_id) {
+                    Some(txn) => {
+                        txn.frames.push(TxnWorkFrame::Post { transfer, payload });
                         Ok(())
                     },
                     None => {
-                        // Should this stop the session or just the coordinator associated with the txn?
-                        todo!()
-                        // let error = definitions::Error::new(TransactionError::UnknownId, None, None);
-                        // Err(Self::Error::Local(error))
+                        // FIXME: Should this stop the session or just the coordinator associated with the txn?
+                        let error = definitions::Error::new(TransactionError::UnknownId, None, None);
+                        Err(Self::Error::Local(error))
                     }
                 }
             }
@@ -330,13 +330,16 @@ where
         match &disposition.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
-                match self.txn_manager.coordinator_by_txn_id.get_mut(txn_id) {
-                    Some(work_frame_tx) => {
-                        work_frame_tx.send(TxnWorkFrame::Retire(disposition)).await
-                            .map_err(|_| Self::Error::session_error(SessionError::ErrantLink, None))?;
+                match self.txn_manager.txns.get_mut(txn_id) {
+                    Some(txn) => {
+                        txn.frames.push(TxnWorkFrame::Retire(disposition));
                         Ok(())
                     },
-                    None => todo!(),
+                    None => {
+                        // FIXME: Should this stop the session or just the coordinator associated with the txn?
+                        let error = definitions::Error::new(TransactionError::UnknownId, None, None);
+                        Err(Self::Error::Local(error))
+                    }
                 }
             }
             Some(_) | None => {
