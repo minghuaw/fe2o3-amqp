@@ -36,7 +36,7 @@ async fn client_main() {
 
             tracing::info!("Transaction declared");
 
-            txn.rollback().await.unwrap();
+            txn.commit().await.unwrap();
             controller.close().await.unwrap();
         },
         Err(attach_error) => {
