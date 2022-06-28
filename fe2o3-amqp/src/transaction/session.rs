@@ -25,7 +25,7 @@ use super::{
     manager::{
         HandleControlLink, HandleTransactionalWork, ResourceTransaction, TransactionManager,
     },
-    TransactionManagerError, TXN_ID_KEY, AllocTxnIdError, DischargeError,
+    TXN_ID_KEY, AllocTxnIdError, DischargeError,
 };
 
 pub(crate) async fn allocate_transaction_id(

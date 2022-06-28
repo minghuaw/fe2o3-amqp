@@ -31,12 +31,6 @@ impl From<TransactionError> for DischargeError {
     }
 }
 
-/// The transaction manager was unable to allocate new transaction IDs
-#[derive(Debug)]
-pub enum TransactionManagerError {
-
-}
-
 /// Errors on the transacitonal resource side
 #[derive(Debug)]
 pub enum CoordinatorError {

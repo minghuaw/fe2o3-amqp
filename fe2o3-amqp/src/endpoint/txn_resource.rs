@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{transaction::{TransactionId, TransactionError}, messaging::Accepted};
 use tokio::sync::mpsc;
 
-use crate::transaction::{TransactionManagerError, AllocTxnIdError, manager::ResourceTransaction, frame::TxnWorkFrame};
+use crate::transaction::{AllocTxnIdError, manager::ResourceTransaction, frame::TxnWorkFrame};
 
 use super::Session;
 

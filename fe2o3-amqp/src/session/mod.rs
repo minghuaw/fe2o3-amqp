@@ -35,9 +35,6 @@ use crate::{
 #[cfg(feature = "transaction")]
 use crate::endpoint::{HandleDeclare, HandleDischarge};
 
-#[cfg(feature = "transaction")]
-use crate::transaction::TransactionManagerError;
-
 pub(crate) mod engine;
 pub(crate) mod frame;
 
