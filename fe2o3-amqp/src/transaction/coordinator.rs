@@ -145,6 +145,7 @@ impl TxnCoordinator {
         }
     }
 
+    #[instrument(skip_all)]
     async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
         let body = match delivery.body() {
             fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
@@ -161,6 +162,8 @@ impl TxnCoordinator {
                 return Running::Stop;
             }
         };
+
+        tracing::debug!(body = ?delivery.body());
 
         let result = match body {
             ControlMessageBody::Declare(declare) => self
@@ -324,6 +327,7 @@ impl TxnCoordinator {
                     }
                 },
                 work_frame = self.work_frame_rx.recv() => {
+                    tracing::info!(?work_frame);
                     match work_frame {
                         Some(work_frame) => {
                             match self.on_txn_work_frame(work_frame) {

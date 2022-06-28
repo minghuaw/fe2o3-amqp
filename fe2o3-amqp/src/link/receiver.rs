@@ -526,14 +526,19 @@ where
         match frame {
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
-                self.link.on_incoming_detach(detach).await?;
-                self.link.send_detach(&self.outgoing, closed, None).await
+                self.link.on_incoming_detach(detach).await
                     .map_err(Into::into)
                     .and_then(|_| match closed {
                         true => Err(LinkStateError::RemoteClosed.into()),
                         false => Err(LinkStateError::RemoteDetached.into()),
                     })
-                // match (detach.error, detach.closed) {
+                // self.link.send_detach(&self.outgoing, closed, None).await
+                //     .map_err(Into::into)
+                //     .and_then(|_| match closed {
+                //         true => Err(LinkStateError::RemoteClosed.into()),
+                //         false => Err(LinkStateError::RemoteDetached.into()),
+                //     })
+                // match (detach.error, closed) {
                 //     (Some(err), false) => Err(LinkStateError::RemoteDetachedWithError(err).into()),
                 //     (Some(err), true) => Err(LinkStateError::RemoteClosedWithError(err).into()),
                 //     (None, false) => Err(LinkStateError::RemoteDetached.into()),

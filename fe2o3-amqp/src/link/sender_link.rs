@@ -139,7 +139,8 @@ where
                         // probably not responsive enough
                         let closed = detach.closed;
                         let result = self.on_incoming_detach(detach).await;
-                        self.send_detach(writer, closed, None).await?;
+
+                        // self.send_detach(writer, closed, None).await?;
 
                         // return Err(Error::Detached(detach_err))
                         match (result, closed) {

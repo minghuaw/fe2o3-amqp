@@ -3,7 +3,7 @@ use std::time::Duration;
 use fe2o3_amqp::{
     transaction::{Controller, Transaction, TransactionDischarge},
     types::primitives::Value,
-    Connection, Delivery, Receiver, Sender, Session,
+    Connection, Delivery, Receiver, Sender, Session, Sendable,
 };
 use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -31,15 +31,26 @@ async fn client_main() {
     let mut sender = Sender::attach(&mut session, "sender-1", "q1")
         .await
         .unwrap();
-    sender.send("hello").await.unwrap();
-    sender.close().await.unwrap();
+    sender.send("hello AMQP").await.unwrap();
 
     // Test creating a control link
     match Controller::attach(&mut session, "controller").await {
         Ok(mut controller) => {
-            let txn = Transaction::declare(&mut controller, None).await.unwrap();
+            let mut txn = Transaction::declare(&mut controller, None).await.unwrap();
 
             tracing::info!("Transaction declared");
+
+            let sendable = Sendable::builder()
+                .message("Hello World")
+                .settled(true)
+                .build();
+            txn.post(&mut sender, sendable).await.unwrap();
+
+            let sendable = Sendable::builder()
+                .message("Foo Bar")
+                .settled(true)
+                .build();
+            txn.post(&mut sender, sendable).await.unwrap();
 
             txn.commit().await.unwrap();
             controller.close().await.unwrap();
@@ -49,6 +60,7 @@ async fn client_main() {
         }
     }
 
+    sender.close().await.unwrap();
     // receiver.close().await.unwrap();
 
     session.end().await.unwrap();

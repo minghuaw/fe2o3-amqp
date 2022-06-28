@@ -4,6 +4,7 @@ use serde::{
     ser,
 };
 
+#[derive(Debug)]
 pub enum ControlMessageBody {
     Declare(Declare),
     Discharge(Discharge),
