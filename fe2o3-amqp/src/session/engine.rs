@@ -110,13 +110,13 @@ where
             }
             SessionFrameBody::Attach(attach) => {
                 self.session
-                    .on_incoming_attach(channel, attach)
+                    .on_incoming_attach(attach)
                     .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Flow(flow) => {
                 self.session
-                    .on_incoming_flow(channel, flow)
+                    .on_incoming_flow(flow)
                     .await
                     .map_err(Into::into)?;
             }
@@ -125,19 +125,19 @@ where
                 payload,
             } => {
                 self.session
-                    .on_incoming_transfer(channel, performative, payload)
+                    .on_incoming_transfer(performative, payload)
                     .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Disposition(disposition) => {
                 self.session
-                    .on_incoming_disposition(channel, disposition)
+                    .on_incoming_disposition(disposition)
                     .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Detach(detach) => {
                 self.session
-                    .on_incoming_detach(channel, detach)
+                    .on_incoming_detach(detach)
                     .await
                     .map_err(Into::into)?;
             }
@@ -267,6 +267,10 @@ where
                         "Coorindator is dropped",
                     ))
                 })?;
+            }
+            #[cfg(feature = "transaction")]
+            SessionControl::AbandonTransaction(txn_id) => {
+                let _ = self.session.rollback_transaction(txn_id).await;
             }
         }
 

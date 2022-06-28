@@ -76,6 +76,9 @@ pub(crate) enum SessionControl {
         txn_id: TransactionId,
         resp: oneshot::Sender<Result<Accepted, TransactionError>>
     },
+    /// This would only occur when a control link is detached
+    #[cfg(feature = "transaction")]
+    AbandonTransaction(TransactionId),
 }
 
 impl std::fmt::Display for SessionControl {
@@ -104,6 +107,8 @@ impl std::fmt::Display for SessionControl {
             SessionControl::CommitTransaction{ txn_id, .. } => write!(f, "CommitTransaction(txn_id: {:?})", txn_id),
             #[cfg(feature = "transaction")]
             SessionControl::RollbackTransaction{ txn_id, .. } => write!(f, "RollbackTransaction(txn_id: {:?})", txn_id),
+            #[cfg(feature = "transaction")]
+            SessionControl::AbandonTransaction(txn_id) => write!(f, "AbandonTransaction(txn_id: {:?})", txn_id),
         }
     }
 }

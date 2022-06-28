@@ -1,10 +1,12 @@
 //! Control link coordinator
 
+use std::collections::{HashSet};
+
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, ErrorCondition, LinkError},
     messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
-    transaction::{Coordinator, Declare, Declared, Discharge, TransactionError, TxnCapability},
+    transaction::{Coordinator, Declare, Declared, Discharge, TransactionError, TxnCapability, TransactionId},
 };
 use tokio::sync::mpsc;
 use tracing::{instrument};
@@ -55,7 +57,7 @@ impl ControlLinkAcceptor {
         self.inner
             .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
             .await
-            .map(|inner| TxnCoordinator { inner })
+            .map(|inner| TxnCoordinator { inner, txns: HashSet::new() })
     }
 }
 
@@ -77,6 +79,7 @@ impl From<SuccessfulOutcome> for DeliveryState {
 #[derive(Debug)]
 pub(crate) struct TxnCoordinator {
     inner: ReceiverInner<CoordinatorLink>,
+    txns: HashSet<TransactionId>,
 }
 
 impl TxnCoordinator {
@@ -86,12 +89,20 @@ impl TxnCoordinator {
             None => {
                 let txn_id =
                     super::session::allocate_transaction_id(self.inner.session_control()).await?;
+                
+                // The TxnManager has the authoratitive version of all active txns, so 
+                // the txn-id obtained from the TxnManager should be "guaranteed" to be unique
+                self.txns.insert(txn_id.clone());
                 Ok(Declared { txn_id })
             }
         }
     }
 
     async fn on_discharge(&mut self, discharge: &Discharge) -> Result<Accepted, CoordinatorError> {
+        if !self.txns.remove(&discharge.txn_id) {
+            return Err(CoordinatorError::TransactionError(TransactionError::UnknownId))
+        }
+
         match discharge.fail {
             Some(true) => super::session::rollback_transaction(
                 self.inner.session_control(),
@@ -271,6 +282,17 @@ impl TxnCoordinator {
 
             if let Running::Stop = running {
                 break;
+            }
+        }
+    }
+}
+
+impl Drop for TxnCoordinator {
+    fn drop(&mut self) {
+        for txn_id in self.txns.drain() {
+            if let Err(_) = self.inner.session_control().try_send(SessionControl::AbandonTransaction(txn_id)) {
+                // Session must have dropped
+                return
             }
         }
     }

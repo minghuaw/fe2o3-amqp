@@ -362,7 +362,6 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_attach(
         &mut self,
-        _channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
         match self.link_by_name.get_mut(&attach.name) {
@@ -396,7 +395,6 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_flow(
         &mut self,
-        _channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error> {
         // Handle session flow control
@@ -449,7 +447,6 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_transfer(
         &mut self,
-        _channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
@@ -488,7 +485,6 @@ impl endpoint::Session for Session {
 
     async fn on_incoming_disposition(
         &mut self,
-        _channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         // TODO: what to do when session lost delivery_tag_by_id
@@ -577,10 +573,9 @@ impl endpoint::Session for Session {
     #[instrument(skip_all)]
     async fn on_incoming_detach(
         &mut self,
-        _channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
-        trace!(channel = ?_channel, frame = ?detach);
+        trace!(frame = ?detach);
         // Remove the link by input handle
         match self
             .link_by_input_handle

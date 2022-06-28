@@ -375,7 +375,6 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_attach(
         &mut self,
-        _channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
         match self.session.link_by_name.get_mut(&attach.name) {
@@ -431,39 +430,35 @@ impl endpoint::Session for ListenerSession {
 
     async fn on_incoming_flow(
         &mut self,
-        channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error> {
-        self.session.on_incoming_flow(channel, flow).await
+        self.session.on_incoming_flow(flow).await
     }
 
     async fn on_incoming_transfer(
         &mut self,
-        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
         self.session
-            .on_incoming_transfer(channel, transfer, payload)
+            .on_incoming_transfer(transfer, payload)
             .await
     }
 
     async fn on_incoming_disposition(
         &mut self,
-        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         self.session
-            .on_incoming_disposition(channel, disposition)
+            .on_incoming_disposition(disposition)
             .await
     }
 
     async fn on_incoming_detach(
         &mut self,
-        channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
-        self.session.on_incoming_detach(channel, detach).await
+        self.session.on_incoming_detach(detach).await
     }
 
     async fn on_incoming_end(

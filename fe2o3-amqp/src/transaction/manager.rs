@@ -5,12 +5,12 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     performatives::{Attach, Disposition, Flow, Transfer},
-    transaction::TransactionId,
+    transaction::{TransactionId, TransactionError}, messaging::Accepted,
 };
 use tokio::sync::mpsc;
 
 use crate::{
-    endpoint::{IncomingChannel, LinkFlow},
+    endpoint::{IncomingChannel, LinkFlow, HandleDischarge},
     link::LinkFrame,
     session::frame::SessionFrame,
     Payload,
@@ -24,7 +24,6 @@ pub(crate) trait HandleControlLink {
 
     async fn on_incoming_control_attach(
         &mut self,
-        channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error>;
 }
@@ -36,20 +35,17 @@ pub(crate) trait HandleTransactionalWork {
 
     async fn on_incoming_txn_transfer(
         &mut self,
-        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error>;
 
     async fn on_incoming_txn_flow(
         &mut self,
-        channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error>;
 
     async fn on_incoming_txn_disposition(
         &mut self,
-        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error>;
 

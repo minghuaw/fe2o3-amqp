@@ -48,32 +48,27 @@ pub(crate) trait Session {
 
     async fn on_incoming_attach(
         &mut self,
-        channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error>;
 
     async fn on_incoming_flow(
         &mut self,
-        channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error>;
 
     async fn on_incoming_transfer(
         &mut self,
-        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error>;
 
     async fn on_incoming_disposition(
         &mut self,
-        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error>;
 
     async fn on_incoming_detach(
         &mut self,
-        channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error>;
 

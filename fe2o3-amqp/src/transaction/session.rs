@@ -72,6 +72,24 @@ where
     pub(crate) txn_manager: TransactionManager,
 }
 
+impl<S> TxnSession<S> 
+where
+    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
+{
+    async fn commit_txn_work_frame(&mut self, work_frame: TxnWorkFrame) -> Result<(), TransactionError> {
+        // How to guarantee delivery over the channel?
+        match work_frame {
+            TxnWorkFrame::Post { transfer, payload } => {
+
+            },
+            TxnWorkFrame::Retire(_) => todo!(),
+            TxnWorkFrame::Acquire(_) => todo!(),
+        }
+
+        todo!()
+    }
+}
+
 #[async_trait]
 impl<S> HandleControlLink for TxnSession<S>
 where
@@ -81,7 +99,6 @@ where
 
     async fn on_incoming_control_attach(
         &mut self,
-        _channel: IncomingChannel,
         remote_attach: Attach,
     ) -> Result<(), Self::Error> {
         let acceptor = self.txn_manager.control_link_acceptor.clone();
@@ -124,7 +141,15 @@ where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
     async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError> {
-        todo!()
+        match self.txn_manager.txns.remove(&txn_id) {
+            Some(txn) => {
+                for work_frame in txn.frames {
+                    todo!()
+                }
+                todo!()
+            },
+            None => Err(TransactionError::UnknownId),
+        }
     }
 
     async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError> {
@@ -141,7 +166,6 @@ where
 
     async fn on_incoming_txn_transfer(
         &mut self,
-        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
@@ -163,7 +187,6 @@ where
 
     async fn on_incoming_txn_flow(
         &mut self,
-        channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error> {
         todo!()
@@ -171,7 +194,6 @@ where
 
     async fn on_incoming_txn_disposition(
         &mut self,
-        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         todo!()
@@ -247,19 +269,17 @@ where
 
     async fn on_incoming_attach(
         &mut self,
-        channel: IncomingChannel,
         attach: Attach,
     ) -> Result<(), Self::Error> {
         match attach.target.as_ref().map(|t| t.is_coordinator()) {
-            Some(true) => self.on_incoming_control_attach(channel, attach).await,
-            Some(false) | None => self.session.on_incoming_attach(channel, attach).await,
+            Some(true) => self.on_incoming_control_attach(attach).await,
+            Some(false) | None => self.session.on_incoming_attach(attach).await,
         }
     }
 
     #[instrument(skip_all, flow = ?flow)]
     async fn on_incoming_flow(
         &mut self,
-        channel: IncomingChannel,
         flow: Flow,
     ) -> Result<(), Self::Error> {
         match flow
@@ -267,25 +287,24 @@ where
             .as_ref()
             .map(|fields| fields.contains_key(&Symbol::from(TXN_ID_KEY)))
         {
-            Some(true) => self.on_incoming_txn_flow(channel, flow).await,
-            Some(false) | None => self.session.on_incoming_flow(channel, flow).await,
+            Some(true) => self.on_incoming_txn_flow(flow).await,
+            Some(false) | None => self.session.on_incoming_flow(flow).await,
         }
     }
 
     async fn on_incoming_transfer(
         &mut self,
-        channel: IncomingChannel,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
         match &transfer.state {
             Some(DeliveryState::TransactionalState(_)) => {
-                self.on_incoming_txn_transfer(channel, transfer, payload)
+                self.on_incoming_txn_transfer(transfer, payload)
                     .await
             }
             Some(_) | None => {
                 self.session
-                    .on_incoming_transfer(channel, transfer, payload)
+                    .on_incoming_transfer(transfer, payload)
                     .await
             }
         }
@@ -293,16 +312,15 @@ where
 
     async fn on_incoming_disposition(
         &mut self,
-        channel: IncomingChannel,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
         match disposition.state {
             Some(DeliveryState::TransactionalState(_)) => {
-                self.on_incoming_txn_disposition(channel, disposition).await
+                self.on_incoming_txn_disposition(disposition).await
             }
             Some(_) | None => {
                 self.session
-                    .on_incoming_disposition(channel, disposition)
+                    .on_incoming_disposition(disposition)
                     .await
             }
         }
@@ -310,10 +328,9 @@ where
 
     async fn on_incoming_detach(
         &mut self,
-        channel: IncomingChannel,
         detach: Detach,
     ) -> Result<(), Self::Error> {
-        self.session.on_incoming_detach(channel, detach).await
+        self.session.on_incoming_detach(detach).await
     }
 
     async fn on_incoming_end(
