@@ -8,6 +8,7 @@ use crate::{
     util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
+use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryTag, Fields, SequenceNo},
@@ -33,6 +34,9 @@ pub use acquisition::*;
 use tokio::sync::{mpsc::error::TryRecvError, oneshot};
 use tracing::instrument;
 
+mod owned;
+pub use owned::*;
+
 pub(crate) mod control_link_frame;
 
 #[cfg(feature = "acceptor")]
@@ -47,6 +51,112 @@ pub mod manager;
 pub mod session;
 
 const TXN_ID_KEY: &str = "txn-id";
+
+/// Trait for generics for TxnAcquisition
+#[async_trait]
+pub trait TransactionDischarge: Sized {
+    /// Errors with discharging
+    type Error: Send;
+
+    /// Whether the transaction is already discharged
+    fn is_discharged(&self) -> bool;
+
+    /// Discharge the transaction
+    async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error>;
+
+    
+    /// Rollback the transaction
+    ///
+    /// This will send a [`Discharge`] with the `fail` field set to true
+    ///
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
+    /// error to the controller as a transaction-error
+    async fn rollback(mut self) -> Result<(), Self::Error> {
+        self.discharge(true).await
+    }
+
+    /// Commit the transaction
+    ///
+    /// This will send a [`Discharge`] with the `fail` field set to false.
+    ///
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
+    /// error to the controller as a transaction-error
+    async fn commit(mut self) -> Result<(), Self::Error> {
+        self.discharge(false).await
+    }
+}
+
+/// Retiring a transaction
+#[async_trait]
+pub trait TransactionalRetirement {
+    /// Error with retirement
+    type RetireError: Send;
+
+    /// Associate an outcome with a transaction
+    ///
+    /// The delivery itself need not be associated with the same transaction as the outcome, or
+    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
+    /// different non-discharged transaction than the outcome. If this happens then the control link
+    /// MUST be terminated with a transaction-rollback error.
+    async fn retire<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        outcome: Outcome,
+    ) -> Result<(), Self::RetireError>
+    where T: Send + Sync;
+
+    
+    /// Associate an Accepted outcome with a transaction
+    async fn accept<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+        let outcome = Outcome::Accepted(Accepted {});
+        self.retire(recver, delivery, outcome).await
+    }
+
+    /// Associate a Rejected outcome with a transaction
+    async fn reject<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        error: Option<definitions::Error>,
+    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+        let outcome = Outcome::Rejected(Rejected {
+            error: error.into(),
+        });
+        self.retire(recver, delivery, outcome).await
+    }
+
+    /// Associate a Released outcome with a transaction
+    async fn release<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+        let outcome = Outcome::Released(Released {});
+        self.retire(recver, delivery, outcome).await
+    }
+
+    /// Associate a Modified outcome with a transaction
+    async fn modify<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        modified: Modified,
+    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+        let outcome = Outcome::Modified(modified.into());
+        self.retire(recver, delivery, outcome).await
+    }
+}
+
+/// Extension trait that also act as a trait bound for TxnAcquisition
+pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
+    /// Get the `txn-id` of the transaction
+    fn txn_id(&self) -> &TransactionId;
+}
 
 /// A transaction scope for the client side
 ///
@@ -119,12 +229,65 @@ pub struct Transaction<'t> {
     is_discharged: bool,
 }
 
-impl<'t> Transaction<'t> {
-    /// Get the transaction ID
-    pub fn txn_id(&self) -> &TransactionId {
-        &self.declared.txn_id
+#[async_trait]
+impl<'t> TransactionDischarge for Transaction<'t> {
+    type Error = SendError;
+
+    fn is_discharged(&self) -> bool {
+        self.is_discharged
     }
 
+    async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error> {
+        if !self.is_discharged {
+            self.controller.discharge(self.declared.txn_id.clone(), fail).await?;
+            self.is_discharged = true;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<'t> TransactionalRetirement for Transaction<'t> {
+    type RetireError = DispositionError;
+
+    /// Associate an outcome with a transaction
+    ///
+    /// The delivery itself need not be associated with the same transaction as the outcome, or
+    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
+    /// different non-discharged transaction than the outcome. If this happens then the control link
+    /// MUST be terminated with a transaction-rollback error.
+    async fn retire<T>(
+        &mut self,
+        recver: &mut Receiver,
+        delivery: &Delivery<T>,
+        outcome: Outcome,
+    ) -> Result<(), Self::RetireError> 
+    where T: Send + Sync,
+    {
+        let txn_state = TransactionalState {
+            txn_id: self.declared.txn_id.clone(),
+            outcome: Some(outcome),
+        };
+        let state = DeliveryState::TransactionalState(txn_state);
+        recver
+            .inner
+            .dispose(
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
+            .await
+    }
+}
+
+impl<'t> TransactionExt for Transaction<'t> {
+    fn txn_id(&self) -> &TransactionId {
+        &self.declared.txn_id
+    }
+}
+
+impl<'t> Transaction<'t> {
     /// Declares a transaction with a default controller
     ///
     /// The user needs to supply a name for the underlying control link.
@@ -138,46 +301,6 @@ impl<'t> Transaction<'t> {
             declared,
             is_discharged: false,
         })
-    }
-
-    /// Rollback the transaction
-    ///
-    /// This will send a [`Discharge`] with the `fail` field set to true
-    ///
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
-    /// error to the controller as a transaction-error
-    pub async fn rollback(mut self) -> Result<(), SendError> {
-        self.rollback_inner().await
-    }
-
-    pub(crate) async fn rollback_inner(&mut self) -> Result<(), SendError> {
-        if !self.is_discharged {
-            self.controller
-                .discharge(self.declared.txn_id.clone(), true)
-                .await?;
-            self.is_discharged = true;
-        }
-        Ok(())
-    }
-
-    /// Commit the transaction
-    ///
-    /// This will send a [`Discharge`] with the `fail` field set to false.
-    ///
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
-    /// error to the controller as a transaction-error
-    pub async fn commit(mut self) -> Result<(), SendError> {
-        self.commit_inner().await
-    }
-
-    pub(crate) async fn commit_inner(&mut self) -> Result<(), SendError> {
-        if !self.is_discharged {
-            self.controller
-                .discharge(self.declared.txn_id.clone(), false)
-                .await?;
-            self.is_discharged = true;
-        }
-        Ok(())
     }
 
     /// Post a transactional work
@@ -236,78 +359,6 @@ impl<'t> Transaction<'t> {
         }
     }
 
-    /// Associate an outcome with a transaction
-    ///
-    /// The delivery itself need not be associated with the same transaction as the outcome, or
-    /// indeed with any transaction at all. However, the delivery MUST NOT be associated with a
-    /// different non-discharged transaction than the outcome. If this happens then the control link
-    /// MUST be terminated with a transaction-rollback error.
-    pub async fn retire<T>(
-        &mut self,
-        recver: &mut Receiver,
-        delivery: &Delivery<T>,
-        outcome: Outcome,
-    ) -> Result<(), DispositionError> {
-        let txn_state = TransactionalState {
-            txn_id: self.declared.txn_id.clone(),
-            outcome: Some(outcome),
-        };
-        let state = DeliveryState::TransactionalState(txn_state);
-        recver
-            .inner
-            .dispose(
-                delivery.delivery_id.clone(),
-                delivery.delivery_tag.clone(),
-                None,
-                state,
-            )
-            .await
-    }
-
-    /// Associate an Accepted outcome with a transaction
-    pub async fn accept<T>(
-        &mut self,
-        recver: &mut Receiver,
-        delivery: &Delivery<T>,
-    ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Accepted(Accepted {});
-        self.retire(recver, delivery, outcome).await
-    }
-
-    /// Associate a Rejected outcome with a transaction
-    pub async fn reject<T>(
-        &mut self,
-        recver: &mut Receiver,
-        delivery: &Delivery<T>,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Rejected(Rejected {
-            error: error.into(),
-        });
-        self.retire(recver, delivery, outcome).await
-    }
-
-    /// Associate a Released outcome with a transaction
-    pub async fn release<T>(
-        &mut self,
-        recver: &mut Receiver,
-        delivery: &Delivery<T>,
-    ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Released(Released {});
-        self.retire(recver, delivery, outcome).await
-    }
-
-    /// Associate a Modified outcome with a transaction
-    pub async fn modify<T>(
-        &mut self,
-        recver: &mut Receiver,
-        delivery: &Delivery<T>,
-        modified: Modified,
-    ) -> Result<(), DispositionError> {
-        let outcome = Outcome::Modified(modified.into());
-        self.retire(recver, delivery, outcome).await
-    }
-
     /// Acquire a transactional work
     ///
     /// This will send
@@ -315,7 +366,7 @@ impl<'t> Transaction<'t> {
         self,
         recver: &'r mut Receiver,
         credit: SequenceNo,
-    ) -> Result<TxnAcquisition<'t, 'r>, FlowError> {
+    ) -> Result<TxnAcquisition<'r, Transaction<'t>>, FlowError> {
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
             let key = Symbol::from(TXN_ID_KEY);

@@ -1,6 +1,10 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{types::primitives::Value, Connection, Delivery, Receiver, Sender, Session, transaction::{Controller, Transaction}};
+use fe2o3_amqp::{
+    transaction::{Controller, Transaction, TransactionDischarge},
+    types::primitives::Value,
+    Connection, Delivery, Receiver, Sender, Session,
+};
 use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -22,7 +26,7 @@ async fn client_main() {
     // let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     // tracing::info!(message = ?delivery.message());
     // receiver.accept(&delivery).await.unwrap();
-    
+
     // Test a regular sender
     let mut sender = Sender::attach(&mut session, "sender-1", "q1")
         .await
@@ -30,21 +34,21 @@ async fn client_main() {
     sender.send("hello").await.unwrap();
     sender.close().await.unwrap();
 
-    // // Test creating a control link
-    // match Controller::attach(&mut session, "controller").await {
-    //     Ok(mut controller) => {
-    //         let txn = Transaction::declare(&mut controller, None).await.unwrap();
+    // Test creating a control link
+    match Controller::attach(&mut session, "controller").await {
+        Ok(mut controller) => {
+            let txn = Transaction::declare(&mut controller, None).await.unwrap();
 
-    //         tracing::info!("Transaction declared");
+            tracing::info!("Transaction declared");
 
-    //         txn.commit().await.unwrap();
-    //         controller.close().await.unwrap();
-    //     },
-    //     Err(attach_error) => {
-    //         tracing::error!(?attach_error)
-    //     },
-    // }
-    
+            txn.commit().await.unwrap();
+            controller.close().await.unwrap();
+        }
+        Err(attach_error) => {
+            tracing::error!(?attach_error)
+        }
+    }
+
     // receiver.close().await.unwrap();
 
     session.end().await.unwrap();

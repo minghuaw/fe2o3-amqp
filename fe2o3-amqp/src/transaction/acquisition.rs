@@ -13,7 +13,7 @@ use crate::{
     Delivery, Receiver,
 };
 
-use super::{Transaction, TXN_ID_KEY};
+use super::{TXN_ID_KEY, TransactionExt, TransactionDischarge};
 
 /// 4.4.3 Transactional Acquisition
 ///
@@ -22,22 +22,25 @@ use super::{Transaction, TXN_ID_KEY};
 /// 't: lifetime of the Transaction
 /// 'r: lifetime of the Receiver
 #[derive(Debug)]
-pub struct TxnAcquisition<'t, 'r> {
+pub struct TxnAcquisition<'r, Txn> where Txn: TransactionExt {
     /// The transaction context of this acquisition
-    pub(super) txn: Transaction<'t>,
+    pub(super) txn: Txn,
     /// The receiver that is associated with the acquisition
     pub(super) recver: &'r mut Receiver,
     // pub(super) cleaned_up: bool,
 }
 
-impl<'t, 'r> TxnAcquisition<'t, 'r> {
+impl<'r, Txn> TxnAcquisition<'r, Txn> 
+where 
+    Txn: TransactionExt + TransactionDischarge<Error = SendError>, 
+{
     /// Get an immutable reference to the underlying transaction
-    pub fn txn(&self) -> &Transaction {
+    pub fn txn(&self) -> &Txn {
         &self.txn
     }
 
     /// Get a mutable reference to the underlying transaction
-    pub fn txn_mut(&'t mut self) -> &'t mut Transaction {
+    pub fn txn_mut(&mut self) -> &mut Txn {
         &mut self.txn
     }
 
@@ -83,20 +86,21 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
     /// Commit the transactional acquisition
     pub async fn commit(mut self) -> Result<(), SendError> {
         self.cleanup().await?;
-        self.txn.commit_inner().await?;
+        self.txn.discharge(false).await?;
         Ok(())
     }
 
     /// Rollback the transactional acquisition
     pub async fn rollback(mut self) -> Result<(), SendError> {
         self.cleanup().await?;
-        self.txn.rollback_inner().await?;
+        self.txn.discharge(true).await?;
         Ok(())
     }
 
     /// Accept the message
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
-        self.txn.accept(self.recver, delivery).await
+        // self.txn.accept(self.recver, delivery).await
+        todo!()
     }
 
     /// Reject the message
@@ -105,12 +109,14 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
-        self.txn.reject(self.recver, delivery, error).await
+        // self.txn.reject(self.recver, delivery, error).await
+        todo!()
     }
 
     /// Release the message
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
-        self.txn.release(self.recver, delivery).await
+        // self.txn.release(self.recver, delivery).await
+        todo!()
     }
 
     /// Modify the message
@@ -119,13 +125,14 @@ impl<'t, 'r> TxnAcquisition<'t, 'r> {
         delivery: &Delivery<T>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
-        self.txn.modify(self.recver, delivery, modified).await
+        // self.txn.modify(self.recver, delivery, modified).await
+        todo!()
     }
 }
 
-impl<'t, 'r> Drop for TxnAcquisition<'t, 'r> {
+impl<'r, T> Drop for TxnAcquisition<'r, T> where T: TransactionExt {
     fn drop(&mut self) {
-        if !self.txn.is_discharged {
+        if !self.txn.is_discharged() {
             // clear txn-id from the link's properties
             {
                 let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();

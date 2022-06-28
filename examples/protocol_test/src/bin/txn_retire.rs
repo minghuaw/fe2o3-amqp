@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::{Transaction, Controller}, types::primitives::Value, Connection,
+    sasl_profile::SaslProfile, transaction::{Transaction, Controller, TransactionalRetirement, TransactionDischarge}, types::primitives::Value, Connection,
     Delivery, Receiver, Session,
 };
 use tokio::net::TcpStream;

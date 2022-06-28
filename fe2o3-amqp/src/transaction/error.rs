@@ -1,5 +1,7 @@
 use fe2o3_amqp_types::{transaction::TransactionError};
 
+use crate::link::{SenderAttachError, SendError};
+
 
 /// Errors with allocation of new transacation ID
 #[derive(Debug)]
@@ -70,5 +72,27 @@ impl From<DischargeError> for CoordinatorError {
             // },
             DischargeError::TransactionError(error) => Self::TransactionError(error)
         }
+    }
+}
+
+/// Errors with declaring an OwnedTransaction
+#[derive(Debug)]
+pub enum OwnedDeclareError {
+    /// Error with attaching the control link
+    AttachError(SenderAttachError),
+
+    /// Error with sending Declare
+    SendError(SendError)
+}
+
+impl From<SenderAttachError> for OwnedDeclareError {
+    fn from(value: SenderAttachError) -> Self {
+        Self::AttachError(value)
+    }
+}
+
+impl From<SendError> for OwnedDeclareError {
+    fn from(value: SendError) -> Self {
+        Self::SendError(value)
     }
 }

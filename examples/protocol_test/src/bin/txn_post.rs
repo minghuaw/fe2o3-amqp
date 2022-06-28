@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, transaction::{Transaction, Controller}, Connection, Sender, Session, types::transaction::Coordinator,
+    sasl_profile::SaslProfile, transaction::{Transaction, Controller, TransactionDischarge}, Connection, Sender, Session, types::transaction::Coordinator,
 };
 use tokio::net::TcpStream;
 use tracing::Level;
