@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.19
+
+1. Added impl of `From<TransactionError> for ErrorCondition`
+
 ## 0.0.18
 
 1. Fixed bug where multiple valued fields should be encoded as `Array` instead of `List`

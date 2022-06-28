@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-types"
-version = "0.0.18"
+version = "0.0.19"
 edition = "2021"
 description = "Implementation of AMQP1.0 data types"
 license = "MIT/Apache-2.0"
