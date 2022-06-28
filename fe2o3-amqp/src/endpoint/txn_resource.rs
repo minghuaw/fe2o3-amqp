@@ -5,12 +5,12 @@ use crate::transaction::{TransactionManagerError, AllocTxnIdError};
 
 use super::Session;
 
-pub(crate) trait HandleDeclare {
+pub(crate) trait HandleDeclare: Session {
     fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError>;
 }
 
 #[async_trait]
-pub(crate) trait HandleDischarge {
-    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError>;
-    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError>;
+pub(crate) trait HandleDischarge: Session {
+    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error>;
+    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error>;
 }

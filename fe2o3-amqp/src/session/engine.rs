@@ -248,7 +248,8 @@ where
             SessionControl::CommitTransaction{txn_id, resp} => {
                 let result = self.session
                     .commit_transaction(txn_id)
-                    .await;
+                    .await
+                    .map_err(Into::into)?;
                 resp.send(result).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -260,7 +261,8 @@ where
             SessionControl::RollbackTransaction{txn_id, resp} => {
                 let result = self.session
                     .rollback_transaction(txn_id)
-                    .await;
+                    .await
+                    .map_err(Into::into)?;
                 resp.send(result).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,

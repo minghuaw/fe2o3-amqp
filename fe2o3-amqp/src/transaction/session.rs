@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions,
+    definitions::{self, AmqpError},
     messaging::{DeliveryState, Accepted},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
@@ -76,17 +76,19 @@ impl<S> TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_txn_work_frame(&mut self, work_frame: TxnWorkFrame) -> Result<(), TransactionError> {
+    async fn commit_txn_work_frame(&mut self, work_frame: TxnWorkFrame) -> Result<Result<(), TransactionError>, session::Error> {
         // How to guarantee delivery over the channel?
         match work_frame {
             TxnWorkFrame::Post { transfer, payload } => {
-
+                self.session.on_incoming_transfer(transfer, payload).await?;
+                Ok(Ok(()))
             },
-            TxnWorkFrame::Retire(_) => todo!(),
+            TxnWorkFrame::Retire(disposition) => {
+                self.session.on_incoming_disposition(disposition).await?;
+                Ok(Ok(()))
+            },
             TxnWorkFrame::Acquire(_) => todo!(),
         }
-
-        todo!()
     }
 }
 
@@ -106,9 +108,9 @@ where
         let outgoing = self.txn_manager.control_link_outgoing.clone();
         
         tokio::spawn(async move {
-            match acceptor.accept_incoming_attach(remote_attach, control, outgoing).await {
-                Ok(coordinator) => coordinator.event_loop().await,
-                Err(_) => todo!(),
+            // Error accepting new control link is handled by acceptor
+            if let Ok(coordinator) = acceptor.accept_incoming_attach(remote_attach, control, outgoing).await {
+                coordinator.event_loop().await
             }
         });
 
@@ -140,20 +142,28 @@ impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError> {
+    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         match self.txn_manager.txns.remove(&txn_id) {
             Some(txn) => {
                 for work_frame in txn.frames {
-                    todo!()
+                    if let Err(err) = self.commit_txn_work_frame(work_frame).await? {
+                        return Ok(Err(err))
+                    }
                 }
-                todo!()
+                Ok(Ok(Accepted {}))
             },
-            None => Err(TransactionError::UnknownId),
+            None => Ok(Err(TransactionError::UnknownId)),
         }
     }
 
-    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Accepted, TransactionError> {
-        todo!()
+    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+        match self.txn_manager.txns.remove(&txn_id) {
+            Some(_) => {
+                // TODO: Simply drop the frames?
+                Ok(Ok(Accepted {}))
+            },
+            None => Ok(Err(TransactionError::UnknownId)),
+        }
     }
 }
 
@@ -298,9 +308,20 @@ where
         payload: Payload,
     ) -> Result<(), Self::Error> {
         match &transfer.state {
-            Some(DeliveryState::TransactionalState(_)) => {
-                self.on_incoming_txn_transfer(transfer, payload)
-                    .await
+            Some(DeliveryState::TransactionalState(state)) => {
+                let txn_id = &state.txn_id;
+                match self.txn_manager.txns.get_mut(txn_id) {
+                    Some(txn) => {
+                        txn.frames.push(TxnWorkFrame::Post { transfer, payload });
+                        Ok(())
+                    },
+                    None => {
+                        let error = definitions::Error::new(TransactionError::UnknownId, None, None);
+                        Err(Self::Error::Local(error))
+                    }
+                }
+                // self.on_incoming_txn_transfer(transfer, payload)
+                //     .await
             }
             Some(_) | None => {
                 self.session

@@ -832,16 +832,16 @@ impl HandleDischarge for Session {
     async fn commit_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Accepted, TransactionError> {
+    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         // FIXME: This should be impossible
-        Err(TransactionError::UnknownId)
+        Ok(Err(TransactionError::UnknownId))
     }
 
     async fn rollback_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
-    ) -> Result<Accepted, TransactionError> {
+    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         // FIXME: This should be impossible
-        Err(TransactionError::UnknownId)
+        Ok(Err(TransactionError::UnknownId))
     }
 }
