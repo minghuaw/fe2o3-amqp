@@ -4,13 +4,13 @@ use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
     performatives::Disposition, messaging::Accepted, transaction::TransactionError,
 };
-use tokio::sync::{mpsc::Sender, oneshot};
+use tokio::sync::{mpsc::{Sender, self}, oneshot};
 
 use crate::{
     connection::AllocSessionError,
     endpoint::{InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::LinkRelay,
-    session::{frame::SessionIncomingItem, AllocLinkError},
+    session::{frame::SessionIncomingItem, AllocLinkError}, transaction::{manager::ResourceTransaction, frame::TxnWorkFrame},
 };
 
 #[cfg(feature = "transaction")]
@@ -65,10 +65,13 @@ pub(crate) enum SessionControl {
 
     // Transaction related controls
     #[cfg(feature = "transaction")]
-    AllocateTransactionId(oneshot::Sender<Result<TransactionId, AllocTxnIdError>>),
+    AllocateTransactionId {
+        work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>,
+        resp: oneshot::Sender<Result<TransactionId, AllocTxnIdError>>
+    },
     #[cfg(feature = "transaction")]
     CommitTransaction {
-        txn_id: TransactionId,
+        txn: ResourceTransaction,
         resp: oneshot::Sender<Result<Accepted, TransactionError>>
     },
     #[cfg(feature = "transaction")]
@@ -76,9 +79,8 @@ pub(crate) enum SessionControl {
         txn_id: TransactionId,
         resp: oneshot::Sender<Result<Accepted, TransactionError>>
     },
-    /// This would only occur when a control link is detached
     #[cfg(feature = "transaction")]
-    AbandonTransaction(TransactionId),
+    AbortTransaction(TransactionId),
 }
 
 impl std::fmt::Display for SessionControl {
@@ -104,11 +106,11 @@ impl std::fmt::Display for SessionControl {
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { .. } => write!(f, "AllocateTransactionId"),
             #[cfg(feature = "transaction")]
-            SessionControl::CommitTransaction{ txn_id, .. } => write!(f, "CommitTransaction(txn_id: {:?})", txn_id),
+            SessionControl::CommitTransaction{ .. } => write!(f, "CommitTransaction"),
             #[cfg(feature = "transaction")]
-            SessionControl::RollbackTransaction{ txn_id, .. } => write!(f, "RollbackTransaction(txn_id: {:?})", txn_id),
+            SessionControl::RollbackTransaction{ .. } => write!(f, "RollbackTransaction"),
             #[cfg(feature = "transaction")]
-            SessionControl::AbandonTransaction(txn_id) => write!(f, "AbandonTransaction(txn_id: {:?})", txn_id),
+            SessionControl::AbortTransaction(_) => write!(f, "AbortTransaction"),
         }
     }
 }

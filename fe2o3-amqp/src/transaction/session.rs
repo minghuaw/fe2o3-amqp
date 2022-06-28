@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError},
+    definitions::{self, AmqpError, SessionError},
     messaging::{DeliveryState, Accepted},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
@@ -30,10 +30,11 @@ use super::{
 
 pub(crate) async fn allocate_transaction_id(
     control: &mpsc::Sender<SessionControl>,
+    work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>,
 ) -> Result<TransactionId, AllocTxnIdError> {
-    let (responder, result) = oneshot::channel();
+    let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::AllocateTransactionId(responder)).await
+    control.send(SessionControl::AllocateTransactionId { work_frame_tx, resp }).await
         .map_err(|_| AllocTxnIdError::InvalidSessionState)?;
     result.await.map_err(|_| AllocTxnIdError::InvalidSessionState)?
 }
@@ -52,11 +53,11 @@ pub(crate) async fn rollback_transaction(
 
 pub(crate) async fn commit_transaction(
     control: &mpsc::Sender<SessionControl>,
-    txn_id: TransactionId
+    txn: ResourceTransaction
 ) -> Result<Accepted, DischargeError> {
     let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::CommitTransaction { txn_id, resp }).await
+    control.send(SessionControl::CommitTransaction { txn, resp }).await
         .map_err(|_| DischargeError::InvalidSessionState)?;
     result.await.map_err(|_| DischargeError::InvalidSessionState)?
         .map_err(Into::into)
@@ -122,7 +123,7 @@ impl<S> endpoint::HandleDeclare for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError> {
+    fn allocate_transaction_id(&mut self, work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>) -> Result<TransactionId, AllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         while self.txn_manager.txns.contains_key(&txn_id) {
             // TODO: timeout?
@@ -132,7 +133,7 @@ where
         let _ = self
             .txn_manager
             .txns
-            .insert(txn_id.clone(), ResourceTransaction::new());
+            .insert(txn_id.clone(), work_frame_tx);
         Ok(txn_id)
     }
 }
@@ -142,18 +143,29 @@ impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        match self.txn_manager.txns.remove(&txn_id) {
-            Some(txn) => {
-                for work_frame in txn.frames {
-                    if let Err(err) = self.commit_txn_work_frame(work_frame).await? {
-                        return Ok(Err(err))
-                    }
-                }
-                Ok(Ok(Accepted {}))
-            },
-            None => Ok(Err(TransactionError::UnknownId)),
+    async fn commit_transaction(&mut self, txn: ResourceTransaction) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+
+        for work_frame in txn.frames {
+            match work_frame {
+                TxnWorkFrame::Post { transfer, payload } => self.session.on_incoming_transfer(transfer, payload).await?,
+                TxnWorkFrame::Retire(disposition) => self.session.on_incoming_disposition(disposition).await?,
+                TxnWorkFrame::Acquire(_) => todo!(),
+            }
         }
+
+        self.txn_manager.txns.remove(&txn.txn_id);
+        Ok(Ok(Accepted {}))
+        // match self.txn_manager.txns.remove(&txn_id) {
+        //     Some(txn) => {
+        //         for work_frame in txn.frames {
+        //             if let Err(err) = self.commit_txn_work_frame(work_frame).await? {
+        //                 return Ok(Err(err))
+        //             }
+        //         }
+        //         Ok(Ok(Accepted {}))
+        //     },
+        //     None => Ok(Err(TransactionError::UnknownId)),
+        // }
     }
 
     async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
@@ -314,8 +326,9 @@ where
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
                 match self.txn_manager.txns.get_mut(txn_id) {
-                    Some(txn) => {
-                        txn.frames.push(TxnWorkFrame::Post { transfer, payload });
+                    Some(work_frame_tx) => {
+                        work_frame_tx.send(Some(TxnWorkFrame::Post { transfer, payload })).await
+                            .map_err(|_| Self::Error::session_error(SessionError::ErrantLink, None))?;
                         Ok(())
                     },
                     None => {
@@ -342,8 +355,9 @@ where
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
                 match self.txn_manager.txns.get_mut(txn_id) {
-                    Some(txn) => {
-                        txn.frames.push(TxnWorkFrame::Retire(disposition));
+                    Some(work_frame_tx) => {
+                        work_frame_tx.send(Some(TxnWorkFrame::Retire(disposition))).await
+                            .map_err(|_| Self::Error::session_error(SessionError::ErrantLink, None))?;
                         Ok(())
                     },
                     None => todo!(),

@@ -235,8 +235,8 @@ where
             }
 
             #[cfg(feature = "transaction")]
-            SessionControl::AllocateTransactionId(resp ) => {
-                let result = self.session.allocate_transaction_id();
+            SessionControl::AllocateTransactionId { work_frame_tx, resp } => {
+                let result = self.session.allocate_transaction_id(work_frame_tx);
                 resp.send(result).map_err(|_| {
                     Error::Io(io::Error::new(
                         io::ErrorKind::Other,
@@ -245,9 +245,9 @@ where
                 })?;
             }
             #[cfg(feature = "transaction")]
-            SessionControl::CommitTransaction{txn_id, resp} => {
+            SessionControl::CommitTransaction{ txn, resp } => {
                 let result = self.session
-                    .commit_transaction(txn_id)
+                    .commit_transaction(txn)
                     .await
                     .map_err(Into::into)?;
                 resp.send(result).map_err(|_| {
@@ -258,7 +258,7 @@ where
                 })?;
             }
             #[cfg(feature = "transaction")]
-            SessionControl::RollbackTransaction{txn_id, resp} => {
+            SessionControl::RollbackTransaction{ txn_id, resp } => {
                 let result = self.session
                     .rollback_transaction(txn_id)
                     .await
@@ -271,7 +271,7 @@ where
                 })?;
             }
             #[cfg(feature = "transaction")]
-            SessionControl::AbandonTransaction(txn_id) => {
+            SessionControl::AbortTransaction(txn_id) => {
                 let _ = self.session.rollback_transaction(txn_id).await;
             }
         }

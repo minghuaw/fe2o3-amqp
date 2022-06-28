@@ -63,7 +63,7 @@ pub(crate) trait HandleTransactionalWork {
 #[derive(Debug)]
 pub(crate) struct TransactionManager {
     pub control_link_outgoing: mpsc::Sender<LinkFrame>,
-    pub txns: BTreeMap<TransactionId, ResourceTransaction>,
+    pub txns: BTreeMap<TransactionId, mpsc::Sender<Option<TxnWorkFrame>>>,
     pub control_link_acceptor: Arc<ControlLinkAcceptor>,
 }
 
@@ -82,12 +82,13 @@ impl TransactionManager {
 
 #[derive(Debug)]
 pub(crate) struct ResourceTransaction {
+    pub txn_id: TransactionId,
     pub frames: Vec<TxnWorkFrame>,
 }
 
 impl ResourceTransaction {
-    pub fn new() -> Self {
-        Self { frames: Vec::new() }
+    pub fn new(txn_id: TransactionId) -> Self {
+        Self { txn_id, frames: Vec::new() }
     }
 }
 
