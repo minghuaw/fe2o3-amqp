@@ -31,7 +31,7 @@ use crate::{
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
-    Payload, transaction::AllocTxnIdError,
+    Payload, transaction::{AllocTxnIdError, frame::TxnWorkFrame, manager::ResourceTransaction},
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
@@ -524,6 +524,7 @@ impl endpoint::HandleDeclare for ListenerSession {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
+        _work_frame_tx: mpsc::Sender<Option<TxnWorkFrame>>
     ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(
         //     AmqpError::NotImplemented,
@@ -538,7 +539,7 @@ impl endpoint::HandleDeclare for ListenerSession {
 impl endpoint::HandleDischarge for ListenerSession {
     async fn commit_transaction(
         &mut self,
-        _txn_id: fe2o3_amqp_types::transaction::TransactionId,
+        _txn: ResourceTransaction,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         // FIXME: This should be impossible
         Ok(Err(TransactionError::UnknownId))
