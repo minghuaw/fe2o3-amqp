@@ -490,6 +490,8 @@ impl endpoint::Session for Session {
         // TODO: what to do when session lost delivery_tag_by_id
         // and disposition only has delivery id?
 
+        tracing::debug!(?disposition);
+
         let first = disposition.first;
         let last = disposition.last.unwrap_or(first);
 
@@ -516,9 +518,12 @@ impl endpoint::Session for Session {
                 }
             }
         } else {
-            for delivery_id in first..last {
+            for delivery_id in first..=last {
+                tracing::debug!(?delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&delivery_id) {
+                    tracing::debug!(?handle);
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(handle) {
+                        tracing::debug!("Found link relay");
                         // In mode Second, the receiver will first send a non-settled disposition,
                         // and wait for sender's settled disposition
                         let echo = link_handle
@@ -529,6 +534,8 @@ impl endpoint::Session for Session {
                                 delivery_tag.clone(),
                             )
                             .await;
+
+                        tracing::debug!(?echo);
 
                         if echo {
                             if !prev {
@@ -820,7 +827,7 @@ impl HandleDeclare for Session {
     // This should be unreachable, but an error is probably a better way
     fn allocate_transaction_id(
         &mut self,
-        work_frame_tx: mpsc::Sender<TxnWorkFrame>,
+        _work_frame_tx: mpsc::Sender<TxnWorkFrame>,
     ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
         // Err(Error::amqp_error(AmqpError::NotImplemented, "Resource side transaction is not enabled".to_string()))
         Err(AllocTxnIdError::NotImplemented)

@@ -441,6 +441,7 @@ impl LinkRelay<OutputHandle> {
     }
 
     /// Returns whether an echo is needed
+    #[instrument(skip_all)]
     pub(crate) async fn on_incoming_disposition(
         &mut self,
         _role: Role, // Is a role check necessary?
@@ -465,9 +466,10 @@ impl LinkRelay<OutputHandle> {
 
                     // Since we are settling (ie. forgetting) this message, we don't care whether the
                     // receiving end is alive or not
-                    let _result = remove_from_unsettled(unsettled, &delivery_tag)
-                        .await
-                        .map(|msg| msg.settle_with_state(state));
+                    {
+                        let mut guard = unsettled.write().await;
+                        guard.remove(&delivery_tag).map(|msg| msg.settle_with_state(state));
+                    }
                     false
                 } else {
                     let is_terminal = match &state {
@@ -475,13 +477,13 @@ impl LinkRelay<OutputHandle> {
                         None => false, // Probably should not assume the state is not specified
                     };
                     {
+                        tracing::debug!(?is_terminal);
                         let mut guard = unsettled.write().await;
                         // Once the receiving application has finished processing the message,
                         // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
                         if is_terminal {
-                            let _result = remove_from_unsettled(unsettled, &delivery_tag)
-                                .await
+                            let _result = guard.remove(&delivery_tag)
                                 .map(|msg| msg.settle_with_state(state));
                         } else if let Some(msg) = guard.get_mut(&delivery_tag) {
                             if let Some(state) = state {
@@ -489,6 +491,7 @@ impl LinkRelay<OutputHandle> {
                             }
                         }
                     }
+
                     // If the receiver is in mode Second, it will send a non-settled terminal state
                     // to indicate end of processing
                     match receiver_settle_mode {
@@ -501,16 +504,21 @@ impl LinkRelay<OutputHandle> {
                             // the sender and receiving a disposition indicating settlement of the
                             // delivery from the sender.
 
-                            is_terminal
+                            // is_terminal
+                            true
                         }
                     }
                 };
+
+                tracing::debug!(?echo);
 
                 echo
             }
             LinkRelay::Receiver { unsettled, .. } => {
                 if settled {
-                    let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
+                    let mut guard = unsettled.write().await;
+                    // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
+                    let _state = guard.remove(&delivery_tag);
                 } else {
                     let mut guard = unsettled.write().await;
                     if let Some(msg_state) = guard.get_mut(&delivery_tag) {
@@ -609,14 +617,6 @@ impl LinkRelay<OutputHandle> {
         }
         Ok(())
     }
-}
-
-pub(crate) async fn remove_from_unsettled<M>(
-    unsettled: &RwLock<UnsettledMap<M>>,
-    key: &DeliveryTag,
-) -> Option<M> {
-    let mut lock = unsettled.write().await;
-    lock.remove(key)
 }
 
 pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {

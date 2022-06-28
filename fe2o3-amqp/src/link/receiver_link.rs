@@ -278,32 +278,37 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
-        // settled: bool,
+        settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
         // self.error_if_closed().map_err(|_| Error::IllegalState)?;
 
-        let settled = match self.rcv_settle_mode {
-            ReceiverSettleMode::First => {
-                // If first, this indicates that the receiver MUST settle
-                // the delivery once it has arrived without waiting
-                // for the sender to settle first.
+        let settled = settled.unwrap_or_else(|| {
+            match self.rcv_settle_mode {
+                ReceiverSettleMode::First => {
+                    // If first, this indicates that the receiver MUST settle
+                    // the delivery once it has arrived without waiting
+                    // for the sender to settle first.
 
-                // The delivery is not inserted into unsettled map if in First mode
-                true
+                    // The delivery is not inserted into unsettled map if in First mode
+                    true
+                }
+                ReceiverSettleMode::Second => {
+                    // If second, this indicates that the receiver MUST NOT settle until sending
+                    // its disposition to the sender and receiving a settled disposition from
+                    // the sender.
+                    false
+                }
             }
-            ReceiverSettleMode::Second => {
-                // If second, this indicates that the receiver MUST NOT settle until sending
-                // its disposition to the sender and receiving a settled disposition from
-                // the sender.
-                let mut lock = self.unsettled.write().await;
-                // If the key is present in the map, the old value will be returned, which
-                // we don't really need
-                let _ = lock.insert(delivery_tag.clone(), state.clone());
-                false
-            }
-        };
+        });
+
+        if !settled {
+            let mut lock = self.unsettled.write().await;
+            // If the key is present in the map, the old value will be returned, which
+            // we don't really need
+            let _ = lock.insert(delivery_tag.clone(), state.clone());
+        }
 
         let disposition = Disposition {
             role: Role::Receiver,

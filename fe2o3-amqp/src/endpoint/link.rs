@@ -188,7 +188,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
-        // settled: bool, // TODO: This should depend on ReceiverSettleMode?
+        settled: Option<bool>, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError>;

@@ -34,6 +34,8 @@ async fn client_main() {
         Ok(mut controller) => {
             let txn = Transaction::declare(&mut controller, None).await.unwrap();
 
+            tracing::info!("Transaction declared");
+
             txn.rollback().await.unwrap();
             controller.close().await.unwrap();
         },

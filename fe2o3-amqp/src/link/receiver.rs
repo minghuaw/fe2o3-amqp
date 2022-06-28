@@ -330,7 +330,7 @@ impl Receiver {
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
             .await
     }
 
@@ -345,7 +345,7 @@ impl Receiver {
             error: error.into(),
         });
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
             .await
     }
 
@@ -354,7 +354,7 @@ impl Receiver {
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
             .await
     }
 
@@ -367,7 +367,7 @@ impl Receiver {
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
+            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
             .await
     }
 }
@@ -627,7 +627,7 @@ where
         if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
             // let frame = LinkFrame::Disposition(disposition);
             // self.outgoing.send(frame).await?;
-            self.dispose(delivery_id, delivery_tag, delivery_state)
+            self.dispose(delivery_id, delivery_tag, None, delivery_state)
                 .await?;
         }
 
@@ -653,11 +653,12 @@ where
         &mut self,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
+        settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
         let _ = self
             .link
-            .dispose(&mut self.outgoing, delivery_id, delivery_tag, state, false)
+            .dispose(&mut self.outgoing, delivery_id, delivery_tag, settled, state, false)
             .await?;
 
         self.processed += 1;

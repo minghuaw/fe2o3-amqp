@@ -237,7 +237,7 @@ impl TxnCoordinator {
         let disposition_result = match result {
             Ok(outcome) => {
                 self.inner
-                    .dispose(delivery_id, delivery_tag, outcome.into())
+                    .dispose(delivery_id, delivery_tag, Some(true), outcome.into())
                     .await
             }
             Err(error) => match error {
@@ -292,7 +292,7 @@ impl TxnCoordinator {
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
-        self.inner.dispose(delivery_id, delivery_tag, state).await
+        self.inner.dispose(delivery_id, delivery_tag, Some(true), state).await
     }
 
     fn on_txn_work_frame(&mut self, work_frame: TxnWorkFrame) -> Result<Running, TransactionError> {

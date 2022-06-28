@@ -258,6 +258,7 @@ impl<'t> Transaction<'t> {
             .dispose(
                 delivery.delivery_id.clone(),
                 delivery.delivery_tag.clone(),
+                None,
                 state,
             )
             .await
