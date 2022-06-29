@@ -139,8 +139,22 @@ where
 
         for work_frame in txn.frames {
             match work_frame {
-                TxnWorkFrame::Post { transfer, payload } => self.session.on_incoming_transfer(transfer, payload).await?,
-                TxnWorkFrame::Retire(disposition) => self.session.on_incoming_disposition(disposition).await?,
+                TxnWorkFrame::Post { mut transfer, payload } => {
+                    // FIXME: This informs the controller of the outcome that will be in effect at the point that the 
+                    // transaction is successfully discharged
+                    if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
+                        transfer.state = txn_state.outcome.map(Into::into);
+                    };
+                    self.session.on_incoming_transfer(transfer, payload).await?
+                },
+                TxnWorkFrame::Retire(mut disposition) => {
+                    // On a successful discharge, the resource will apply the given outcome and can immediately settle the transfers.
+                    if let Some(DeliveryState::TransactionalState(txn_state)) = disposition.state {
+                        disposition.state = txn_state.outcome.map(Into::into)
+                    }
+                    disposition.settled = true;
+                    self.session.on_incoming_disposition(disposition).await?
+                },
                 TxnWorkFrame::Acquire(_) => todo!(),
             }
         }
@@ -158,64 +172,6 @@ where
         }
     }
 }
-
-// #[async_trait]
-// impl<S> HandleTransactionalWork for TxnSession<S>
-// where
-//     S: endpoint::Session<Error = session::Error> + Send,
-// {
-//     type Error = S::Error;
-
-//     async fn on_incoming_txn_transfer(
-//         &mut self,
-//         transfer: Transfer,
-//         payload: Payload,
-//     ) -> Result<(), Self::Error> {
-//         let txn_id = match &transfer.state {
-//             Some(DeliveryState::TransactionalState(txn_state)) => &txn_state.txn_id,
-//             Some(_) | None => todo!(),
-//         };
-
-//         let txn = match self.txn_manager.txns.get_mut(txn_id) {
-//             Some(txn) => txn,
-//             None => todo!(), // TODO: Ignore?
-//         };
-
-//         let work_frame = TxnWorkFrame::Post { transfer, payload };
-//         txn.frames.push(work_frame);
-
-//         Ok(())
-//     }
-
-//     async fn on_incoming_txn_flow(
-//         &mut self,
-//         flow: Flow,
-//     ) -> Result<(), Self::Error> {
-//         todo!()
-//     }
-
-//     async fn on_incoming_txn_disposition(
-//         &mut self,
-//         disposition: Disposition,
-//     ) -> Result<(), Self::Error> {
-//         todo!()
-//     }
-
-//     fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
-//         todo!()
-//     }
-
-//     fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
-//         todo!()
-//     }
-
-//     fn on_outgoing_txn_disposition(
-//         &mut self,
-//         disposition: Disposition,
-//     ) -> Result<SessionFrame, Self::Error> {
-//         todo!()
-//     }
-// }
 
 #[async_trait]
 impl<S> endpoint::Session for TxnSession<S>
