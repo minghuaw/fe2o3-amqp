@@ -38,12 +38,12 @@ async fn client_main() {
     let delivery1: Delivery<Value> = receiver.recv().await.unwrap();
     tracing::info!(message = ?delivery1.message());
     
-    // txn.accept(&mut receiver, &delivery1).await.unwrap();
+    txn.accept(&mut receiver, &delivery1).await.unwrap();
 
     let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
     tracing::info!(message = ?delivery2.message());
     
-    // txn.accept(&mut receiver, &delivery2).await.unwrap();
+    txn.accept(&mut receiver, &delivery2).await.unwrap();
 
     // Test a regular sender
     // let mut sender = Sender::attach(&mut session, "sender-1", "q1")
@@ -85,8 +85,8 @@ async fn client_main() {
     // txn.post(&mut sender, "Hello World").await.unwrap();
     // txn.post(&mut sender, "Foo Bar").await.unwrap();
     txn.rollback().await.unwrap();
-    receiver.accept(&delivery1).await.unwrap();
-    receiver.accept(&delivery2).await.unwrap();
+    receiver.reject(&delivery1, None).await.unwrap();
+    receiver.reject(&delivery2, None).await.unwrap();
     
     tracing::info!("closing control link");
     controller.close().await.unwrap();
@@ -104,7 +104,7 @@ async fn client_main() {
 #[tokio::main]
 async fn main() {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::TRACE)
+        .with_max_level(Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
