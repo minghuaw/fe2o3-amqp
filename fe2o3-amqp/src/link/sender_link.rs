@@ -118,14 +118,15 @@ where
         use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
-        tokio::select! {
-            _ = self.flow_state.consume(1) => {
+        let tag = tokio::select! {
+            tag = self.flow_state.consume(1) => {
                 // link-credit is defined as
                 // "The current maximum number of messages that can be handled
                 // at the receiver endpoint of the link"
 
                 // Draining should already set the link credit to 0, causing
                 // sender to wait for new link credit
+                tag
             },
             frame = detached => {
                 match frame {
@@ -149,7 +150,7 @@ where
                     }
                 }
             }
-        }
+        };
 
         tracing::debug!(input_handle = ?self.input_handle);
 
@@ -165,7 +166,7 @@ where
 
         // Delivery count is incremented when consuming credit
         // TODO: optimize to reduce one read
-        let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
+        // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);
 
         // TODO: Expose API to allow user to set this when the mode is MIXED?

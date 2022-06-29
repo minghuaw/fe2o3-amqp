@@ -306,17 +306,19 @@ impl Producer<Arc<LinkFlowState<role::Sender>>> {
 //     Drain,
 // }
 
+struct InsufficientCredit {}
+
 #[async_trait]
 impl Consume for SenderFlowState {
     type Item = u32;
-    type Outcome = ();
+    type Outcome = [u8; 4];
 
     /// Increment delivery count and decrement link_credit. Wait asynchronously
     /// if there is not enough credit
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
         loop {
             match consume_link_credit(&self.state().lock, item).await {
-                Ok(action) => return action,
+                Ok(outcome) => return outcome,
                 Err(_) => self.notifier.notified().await,
             }
         }
@@ -333,22 +335,20 @@ impl TryConsume for SenderFlowState {
         } else {
             state.delivery_count += item;
             state.link_credit -= item;
-            // Ok(SenderPermit::Send)
-            Ok(())
+            Ok(state.delivery_count.to_be_bytes())
         }
     }
 }
 
-async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
+async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<[u8; 4], InsufficientCredit> {
     // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
 
     if state.link_credit < count {
-        Err(())
+        Err(InsufficientCredit {})
     } else {
         state.delivery_count += count;
         state.link_credit -= count;
-        // Ok(SenderPermit::Send)
-        Ok(())
+        Ok(state.delivery_count.to_be_bytes())
     }
 }
