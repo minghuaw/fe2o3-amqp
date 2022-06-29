@@ -45,6 +45,7 @@ pub(crate) mod control_link_frame;
 #[cfg(feature = "acceptor")]
 pub mod coordinator;
 
+#[cfg(feature = "acceptor")]
 pub mod frame;
 
 #[cfg(feature = "acceptor")]
