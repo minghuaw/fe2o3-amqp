@@ -172,6 +172,10 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 }
 
 /// A transaction scope for the client side
+/// 
+/// [`Transaction`] holds a reference to a [`Controller`], which thus allow reusing the same 
+/// control link for declaring and discharging of multiple transactions. [`OwnedTransaction`]
+/// is an alternative that holds the ownership of a control link.
 ///
 /// # Examples
 ///
@@ -180,29 +184,30 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// ## Transactional posting
 ///
 /// ```rust
+/// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
 ///     .await
 ///     .unwrap();
 ///
 /// // Commit
-/// let mut txn = Transaction::declare(&mut session, "controller-1", None)
-///     .await
-///     .unwrap();
+/// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// txn.post(&mut sender, "hello").await.unwrap();
 /// txn.post(&mut sender, "world").await.unwrap();
 /// txn.commit().await.unwrap();
 ///
 /// // Rollback
-/// let mut txn = Transaction::declare(&mut session, "controller-2", None)
-///     .await
-///     .unwrap();
+/// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// txn.post(&mut sender, "foo").await.unwrap();
 /// txn.rollback().await.unwrap();
+/// 
+/// controller.close().await.unwrap();
+/// sender.close().await.unwrap();
 /// ```
 ///
 /// ## Transactional retirement
 ///
 /// ```rust
+/// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
@@ -210,30 +215,35 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
 ///
 /// // Transactionally retiring
-/// let mut txn = Transaction::declare(&mut session, "controller-1", None)
-///     .await
-///     .unwrap();
+/// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// txn.accept(&mut receiver, &delivery).await.unwrap();
 /// txn.commit().await.unwrap();
+/// 
+/// controller.close().await.unwrap();
+/// receiver.close().await.unwrap();
 /// ```
 ///
 /// ## Transactional acquisition
+/// 
+/// Please note that this is not supported on the resource side yet.
 ///
 /// ```rust
+/// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 ///     .await
 ///     .unwrap();
 ///
 /// // Transactionally retiring
-/// let txn = Transaction::declare(&mut session, "controller-1", None)
-///     .await
-///     .unwrap();
+/// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
 /// let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
 /// let delivery2: Delivery<Value> = txn_acq.recv().await.unwrap();
 /// txn_acq.accept(&delivery1).await.unwrap();
 /// txn_acq.accept(&delivery2).await.unwrap();
 /// txn_acq.commit().await.unwrap();
+/// 
+/// controller.close().await.unwrap();
+/// receiver.close().await.unwrap();
 /// ```
 #[derive(Debug)]
 pub struct Transaction<'t> {

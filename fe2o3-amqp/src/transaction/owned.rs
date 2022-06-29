@@ -21,7 +21,64 @@ use super::{
     TransactionalRetirement, TxnAcquisition, PostError, TXN_ID_KEY,
 };
 
-/// An owned transaction that has exclusive access to its own control link
+/// An owned transaction that has exclusive access to its own control link.
+///
+/// # Examples
+///
+/// Please note that only transactional posting has been tested.
+///
+/// ## Transactional posting
+///
+/// ```rust
+/// let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
+///     .await
+///     .unwrap();
+///
+/// // Commit
+/// let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+/// txn.post(&mut sender, "hello").await.unwrap();
+/// txn.post(&mut sender, "world").await.unwrap();
+/// txn.commit().await.unwrap();
+///
+/// // Rollback
+/// let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+/// txn.post(&mut sender, "foo").await.unwrap();
+/// txn.rollback().await.unwrap();
+/// ```
+///
+/// ## Transactional retirement
+///
+/// ```rust
+/// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
+///     .await
+///     .unwrap();
+///
+/// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+///
+/// // Transactionally retiring
+/// let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+/// txn.accept(&mut receiver, &delivery).await.unwrap();
+/// txn.commit().await.unwrap();
+/// ```
+///
+/// ## Transactional acquisition
+/// 
+/// Please note that this is not supported on the resource side yet.
+///
+/// ```rust
+/// let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
+///     .await
+///     .unwrap();
+///
+/// // Transactionally retiring
+/// let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+/// let mut txn_acq = txn.acquire(&mut receiver, 2).await.unwrap();
+/// let delivery1: Delivery<Value> = txn_acq.recv().await.unwrap();
+/// let delivery2: Delivery<Value> = txn_acq.recv().await.unwrap();
+/// txn_acq.accept(&delivery1).await.unwrap();
+/// txn_acq.accept(&delivery2).await.unwrap();
+/// txn_acq.commit().await.unwrap();
+/// ```
 #[derive(Debug)]
 pub struct OwnedTransaction {
     controller: Controller,

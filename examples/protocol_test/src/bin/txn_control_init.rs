@@ -19,9 +19,9 @@ async fn client_main() {
     let mut connection = Connection::open("connection-1", &url[..]).await.unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let controller = Controller::attach(&mut session, "controller").await.unwrap();
-    // let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
-    let mut txn = Transaction::declare(&controller, None).await.unwrap();
+    // let controller = Controller::attach(&mut session, "controller").await.unwrap();
+    let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+    // let mut txn = Transaction::declare(&controller, None).await.unwrap();
 
     // Test a regular receiver
     // let mut receiver = Receiver::attach(&mut session, "receiver-1", "q1")
@@ -88,8 +88,8 @@ async fn client_main() {
     receiver.reject(&delivery1, None).await.unwrap();
     receiver.reject(&delivery2, None).await.unwrap();
     
-    tracing::info!("closing control link");
-    controller.close().await.unwrap();
+    // tracing::info!("closing control link");
+    // controller.close().await.unwrap();
 
 
     tracing::info!("closing receiver");
