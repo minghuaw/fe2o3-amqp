@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
+    definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
@@ -32,6 +32,9 @@ use super::{
     LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
     RecvError, DEFAULT_CREDIT,
 };
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::definitions::AmqpError;
 
 macro_rules! or_assign {
     ($self:ident, $other:ident, $field:ident) => {
@@ -573,6 +576,13 @@ where
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
+            LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
+            LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
+                // Flow and Disposition are handled by LinkRelay which runs
+                // in the session loop
+                unreachable!()
+            }
+            #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
                 let error = definitions::Error::new(
                     AmqpError::NotImplemented,
@@ -581,12 +591,6 @@ where
                 );
                 self.close_with_error(Some(error)).await?;
                 Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
-            }
-            LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
-            LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
-                // Flow and Disposition are handled by LinkRelay which runs
-                // in the session loop
-                unreachable!()
             }
         }
     }

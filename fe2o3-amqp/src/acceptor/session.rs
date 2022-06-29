@@ -9,10 +9,8 @@ use std::io;
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
-    messaging::Accepted,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
-    transaction::TransactionError,
 };
 use futures_util::Sink;
 use tokio::sync::{mpsc, oneshot};
@@ -32,7 +30,6 @@ use crate::{
         frame::{SessionFrame, SessionIncomingItem},
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
-    transaction::AllocTxnIdError,
     util::Initialized,
     Payload,
 };
@@ -40,7 +37,10 @@ use crate::{
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{manager::TransactionManager, session::TxnSession};
+use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+
+#[cfg(feature = "transaction")]
+use crate::transaction::{manager::TransactionManager, session::TxnSession, AllocTxnIdError};
 
 /// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}

@@ -20,14 +20,13 @@ use crate::{
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{target_archetype::VariantOfTargetArchetype, LinkRelay},
     session::{self, frame::SessionFrame},
-    util::TXN_ID_KEY,
     Payload,
 };
 
 use super::{
     frame::TxnWorkFrame,
     manager::{HandleControlLink, ResourceTransaction, TransactionManager},
-    AllocTxnIdError, DischargeError,
+    AllocTxnIdError, DischargeError, TXN_ID_KEY,
 };
 
 pub(crate) async fn allocate_transaction_id(

@@ -8,11 +8,9 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo,
         SessionError, TransferNumber,
     },
-    messaging::Accepted,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::{Symbol, UInt},
     states::SessionState,
-    transaction::TransactionError,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -30,13 +28,15 @@ use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
-    transaction::AllocTxnIdError,
     util::Constant,
     Payload,
 };
 
 #[cfg(feature = "transaction")]
-use crate::endpoint::{HandleDeclare, HandleDischarge};
+use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
+
+#[cfg(feature = "transaction")]
+use crate::{transaction::AllocTxnIdError, endpoint::{HandleDeclare, HandleDischarge}};
 
 pub(crate) mod engine;
 pub(crate) mod frame;

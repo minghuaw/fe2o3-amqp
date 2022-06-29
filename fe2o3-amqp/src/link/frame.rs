@@ -1,12 +1,14 @@
 use fe2o3_amqp_types::{
     performatives::{Attach, Detach, Disposition, Transfer},
-    transaction::TransactionId,
 };
 
 use crate::{
     endpoint::{InputHandle, LinkFlow},
     Payload,
 };
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::transaction::TransactionId;
 
 pub(crate) type LinkIncomingItem = LinkFrame;
 
@@ -25,6 +27,7 @@ pub(crate) enum LinkFrame {
     Disposition(Disposition),
     Detach(Detach),
 
+    #[cfg(feature = "transaction")]
     /// Indicating to the receiver that Txn controller side is requesting for
     /// a transactional acquisition
     Acquisition(TransactionId),

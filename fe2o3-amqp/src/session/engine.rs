@@ -314,6 +314,8 @@ where
                 .session
                 .on_outgoing_detach(detach)
                 .map_err(Into::into)?,
+            
+            #[cfg(feature = "transaction")]
             LinkFrame::Acquisition(_) => {
                 return Err(Error::Local(definitions::Error::new(
                     AmqpError::InternalError,

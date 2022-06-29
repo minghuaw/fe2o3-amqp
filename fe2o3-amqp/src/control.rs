@@ -2,9 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
-    messaging::Accepted,
     performatives::Disposition,
-    transaction::TransactionError,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -16,10 +14,10 @@ use crate::{
 };
 
 #[cfg(feature = "transaction")]
-use fe2o3_amqp_types::transaction::TransactionId;
+use fe2o3_amqp_types::{transaction::TransactionId, transaction::TransactionError, messaging::Accepted};
 
 #[cfg(feature = "transaction")]
-use crate::transaction::AllocTxnIdError;
+use crate::transaction::{AllocTxnIdError};
 
 #[derive(Debug)]
 pub(crate) enum ConnectionControl {

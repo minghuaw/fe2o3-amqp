@@ -6,7 +6,7 @@ use crate::{
         delivery::{DeliveryFut, UnsettledMessage},
         DispositionError, FlowError, LinkFrame, SendError,
     },
-    util::{TryConsume, TXN_ID_KEY},
+    util::{TryConsume},
     Delivery, Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;
@@ -21,6 +21,8 @@ use fe2o3_amqp_types::{
     primitives::Symbol,
     transaction::{Declared, Discharge, TransactionId, TransactionalState},
 };
+
+pub(crate) const TXN_ID_KEY: &str = "txn-id";
 
 mod controller;
 pub use controller::*;
