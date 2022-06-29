@@ -4,17 +4,14 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    performatives::{Attach, Disposition, Flow, Transfer},
-    transaction::{TransactionId, TransactionalState}, definitions::Role, messaging::{DeliveryState, Accepted, Outcome}, 
+    definitions::Role,
+    messaging::{Accepted, DeliveryState, Outcome},
+    performatives::{Attach, Disposition, Transfer},
+    transaction::{TransactionId, TransactionalState},
 };
 use tokio::sync::mpsc;
 
-use crate::{
-    endpoint::{LinkFlow},
-    link::LinkFrame,
-    session::{frame::SessionFrame, self},
-    Payload,
-};
+use crate::{link::LinkFrame, Payload};
 
 use super::{coordinator::ControlLinkAcceptor, frame::TxnWorkFrame};
 
@@ -22,42 +19,39 @@ use super::{coordinator::ControlLinkAcceptor, frame::TxnWorkFrame};
 pub(crate) trait HandleControlLink {
     type Error: Send;
 
-    async fn on_incoming_control_attach(
-        &mut self,
-        attach: Attach,
-    ) -> Result<(), Self::Error>;
+    async fn on_incoming_control_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 }
 
-/// How an incoming transaction should be handled in a session
-#[async_trait]
-pub(crate) trait HandleTransactionalWork {
-    type Error: Send;
+// /// How an incoming transaction should be handled in a session
+// #[async_trait]
+// pub(crate) trait HandleTransactionalWork {
+//     type Error: Send;
 
-    async fn on_incoming_txn_transfer(
-        &mut self,
-        transfer: Transfer,
-        payload: Payload,
-    ) -> Result<(), Self::Error>;
+// async fn on_incoming_txn_transfer(
+//     &mut self,
+//     transfer: Transfer,
+//     payload: Payload,
+// ) -> Result<(), Self::Error>;
 
-    // async fn on_incoming_txn_flow(
-    //     &mut self,
-    //     flow: Flow,
-    // ) -> Result<(), Self::Error>;
+// async fn on_incoming_txn_flow(
+//     &mut self,
+//     flow: Flow,
+// ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_txn_disposition(
-        &mut self,
-        disposition: Disposition,
-    ) -> Result<(), Self::Error>;
+// async fn on_incoming_txn_disposition(
+//     &mut self,
+//     disposition: Disposition,
+// ) -> Result<(), Self::Error>;
 
-    // fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
+// fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
 
-    // fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
+// fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
 
-    // fn on_outgoing_txn_disposition(
-    //     &mut self,
-    //     disposition: Disposition,
-    // ) -> Result<SessionFrame, Self::Error>;
-}
+// fn on_outgoing_txn_disposition(
+//     &mut self,
+//     disposition: Disposition,
+// ) -> Result<SessionFrame, Self::Error>;
+// }
 
 /// Transaction manager
 #[derive(Debug)]
@@ -80,27 +74,6 @@ impl TransactionManager {
     }
 }
 
-// #[async_trait]
-// impl HandleTransactionalWork for TransactionManager {
-//     // TODO: decompose the error types
-//     type Error = session::Error;
-
-//     async fn on_incoming_txn_transfer(
-//         &mut self,
-//         transfer: Transfer,
-//         payload: Payload,
-//     ) -> Result<(), Self::Error> {
-
-//     }
-
-//     async fn on_incoming_txn_disposition(
-//         &mut self,
-//         disposition: Disposition,
-//     ) -> Result<(), Self::Error> {
-//         todo!()
-//     }
-// }
-
 #[derive(Debug)]
 pub(crate) struct ResourceTransaction {
     pub frames: Vec<TxnWorkFrame>,
@@ -111,7 +84,12 @@ impl ResourceTransaction {
         Self { frames: Vec::new() }
     }
 
-    pub(crate) fn on_incoming_post(&mut self, txn_id: TransactionId, transfer: Transfer, payload: Payload) -> Option<Disposition> {
+    pub(crate) fn on_incoming_post(
+        &mut self,
+        txn_id: TransactionId,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Option<Disposition> {
         let disposition = match transfer.settled {
             Some(true) => None,
             Some(false) | None => {
@@ -122,23 +100,22 @@ impl ResourceTransaction {
                 // transactional-state with the correct transaction identified, and a terminal outcome. This
                 // informs the controller of the outcome that will be in effect at the point that the
                 // transaction is successfully discharged.
-                transfer.delivery_id.clone()
-                    .map(|delivery_id| {
-                        let txn_state = TransactionalState {
-                            txn_id: txn_id.clone(),
-                            outcome: Some(Outcome::Accepted(Accepted {})),
-                        };
+                transfer.delivery_id.clone().map(|delivery_id| {
+                    let txn_state = TransactionalState {
+                        txn_id: txn_id.clone(),
+                        outcome: Some(Outcome::Accepted(Accepted {})),
+                    };
 
-                        Disposition {
-                            role: Role::Receiver,
-                            first: delivery_id,
-                            last: None,
-                            settled: true,
-                            state: Some(DeliveryState::TransactionalState(txn_state)),
-                            batchable: false,
-                        }
-                    })
-            },
+                    Disposition {
+                        role: Role::Receiver,
+                        first: delivery_id,
+                        last: None,
+                        settled: true,
+                        state: Some(DeliveryState::TransactionalState(txn_state)),
+                        batchable: false,
+                    }
+                })
+            }
         };
 
         let frame = TxnWorkFrame::Post { transfer, payload };

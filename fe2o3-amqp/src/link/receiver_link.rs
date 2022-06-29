@@ -33,8 +33,6 @@ where
         drain: Option<bool>,
         echo: bool,
     ) -> Result<(), Self::FlowError> {
-        // self.error_if_closed().map_err(|_| Error::NotAttached)?;
-
         let handle = self
             .output_handle
             .clone()
@@ -282,8 +280,6 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
-        // self.error_if_closed().map_err(|_| Error::IllegalState)?;
-
         let settled = settled.unwrap_or_else(|| {
             match self.rcv_settle_mode {
                 ReceiverSettleMode::First => {
@@ -405,8 +401,6 @@ impl ReceiverLink<Target> {
         drain: Option<bool>,
         echo: bool,
     ) -> Result<(), FlowError> {
-        // self.error_if_closed().map_err(|e| link::Error::Local(e))?;
-
         let handle = self
             .output_handle
             .clone()
@@ -538,7 +532,6 @@ mod tests {
     }
 }
 
-
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
@@ -617,7 +610,6 @@ where
         Ok(())
     }
 }
-
 
 impl<T> endpoint::Link for ReceiverLink<T>
 where
@@ -701,7 +693,7 @@ where
             ReceiverAttachError::IllegalSessionState
             | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
-            | ReceiverAttachError::ExpectImmediateDetach 
+            | ReceiverAttachError::ExpectImmediateDetach
             | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
 
             ReceiverAttachError::DuplicatedLinkName => {

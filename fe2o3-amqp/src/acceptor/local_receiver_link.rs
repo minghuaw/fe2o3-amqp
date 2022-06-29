@@ -3,10 +3,10 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{ReceiverSettleMode},
+    definitions::ReceiverSettleMode,
     messaging::{DeliveryState, TargetArchetype},
     performatives::Attach,
-    primitives::{Symbol},
+    primitives::Symbol,
 };
 use tokio::sync::{mpsc, RwLock};
 use tracing::instrument;
@@ -20,7 +20,7 @@ use crate::{
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
-        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverFlowState, ReceiverAttachError,
+        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverFlowState,
     },
     session::SessionHandle,
     Receiver,
@@ -100,7 +100,8 @@ where
             + TryFrom<TargetArchetype>
             + TargetArchetypeExt<Capability = C>
             + Clone
-            + Send + Sync,
+            + Send
+            + Sync,
     {
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
@@ -159,11 +160,14 @@ where
         let mut err = None;
         // **the receiver is considered to hold the authoritative version of the target properties**,
         let local_target = remote_attach
-            .target.clone()
+            .target
+            .clone()
             .map(|t| T::try_from(*t))
             .transpose()
             .map(|mut t| {
-                t.as_mut().map(|t| *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into));
+                t.as_mut().map(|t| {
+                    *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into)
+                });
                 t
             })
             .unwrap_or_else(|_| {
@@ -180,7 +184,7 @@ where
             input_handle: None, // will be set in `on_incoming_attach`
             snd_settle_mode: Default::default(), // Will take value from incoming attach
             rcv_settle_mode,
-            source: None, // Will take value from incoming attach
+            source: None,         // Will take value from incoming attach
             target: local_target, // Will take value from incoming attach
             max_message_size: shared.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: shared.offered_capabilities.clone(),
@@ -191,11 +195,12 @@ where
 
         // let outgoing = outgoing.clone();
         match (err, link.on_incoming_attach(remote_attach).await) {
-            (Some(attach_error), _)
-            | (_, Err(attach_error)) => {
+            (Some(attach_error), _) | (_, Err(attach_error)) => {
                 link.send_attach(&outgoing).await?;
-                return Err(link.handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control).await)
-            },
+                return Err(link
+                    .handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control)
+                    .await);
+            }
             (_, Ok(_)) => link.send_attach(&outgoing).await?,
         }
 
@@ -212,9 +217,7 @@ where
 
         if let CreditMode::Auto(credit) = inner.credit_mode {
             tracing::debug!("Setting credits");
-            inner
-                .set_credit(credit)
-                .await?;
+            inner.set_credit(credit).await?;
         }
 
         Ok(inner)

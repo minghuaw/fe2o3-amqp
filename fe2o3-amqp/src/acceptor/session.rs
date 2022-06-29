@@ -9,8 +9,10 @@ use std::io;
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
+    messaging::Accepted,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    states::SessionState, messaging::Accepted, transaction::TransactionError,
+    states::SessionState,
+    transaction::TransactionError,
 };
 use futures_util::Sink;
 use tokio::sync::{mpsc, oneshot};
@@ -30,16 +32,15 @@ use crate::{
         frame::{SessionFrame, SessionIncomingItem},
         AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
+    transaction::AllocTxnIdError,
     util::Initialized,
-    Payload, transaction::{AllocTxnIdError, frame::TxnWorkFrame, manager::ResourceTransaction},
+    Payload,
 };
 
 use super::{builder::Builder, IncomingSession, ListenerConnectionHandle};
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{
-    manager::TransactionManager, session::TxnSession, 
-};
+use crate::transaction::{manager::TransactionManager, session::TxnSession};
 
 /// An empty marker trait that acts as a constraint for session engine
 pub trait ListenerSessionEndpoint {}
@@ -373,10 +374,7 @@ impl endpoint::Session for ListenerSession {
         self.session.on_incoming_begin(channel, begin)
     }
 
-    async fn on_incoming_attach(
-        &mut self,
-        attach: Attach,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         match self.session.link_by_name.get_mut(&attach.name) {
             Some(link) => match link.take() {
                 Some(mut relay) => {
@@ -428,10 +426,7 @@ impl endpoint::Session for ListenerSession {
         }
     }
 
-    async fn on_incoming_flow(
-        &mut self,
-        flow: Flow,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
         self.session.on_incoming_flow(flow).await
     }
 
@@ -440,24 +435,17 @@ impl endpoint::Session for ListenerSession {
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
-        self.session
-            .on_incoming_transfer(transfer, payload)
-            .await
+        self.session.on_incoming_transfer(transfer, payload).await
     }
 
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<(), Self::Error> {
-        self.session
-            .on_incoming_disposition(disposition)
-            .await
+        self.session.on_incoming_disposition(disposition).await
     }
 
-    async fn on_incoming_detach(
-        &mut self,
-        detach: Detach,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
         self.session.on_incoming_detach(detach).await
     }
 

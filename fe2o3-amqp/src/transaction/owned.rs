@@ -1,19 +1,32 @@
 //! Implements OwnedTransaction
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::{transaction::{Declared, TransactionId, TransactionalState}, messaging::{Outcome, DeliveryState,}, definitions::{SequenceNo, Fields}, primitives::Symbol};
+use fe2o3_amqp_types::{
+    definitions::{Fields, SequenceNo},
+    messaging::{DeliveryState, Outcome},
+    primitives::Symbol,
+    transaction::{Declared, TransactionId, TransactionalState},
+};
 use serde_amqp::Value;
 
-use crate::{session::SessionHandle, link::{SendError, DispositionError, FlowError, delivery::DeliveryFut}, Receiver, Delivery, endpoint::ReceiverLink, Sender, Sendable};
+use crate::{
+    endpoint::ReceiverLink,
+    link::{delivery::DeliveryFut, DispositionError, FlowError, SendError},
+    session::SessionHandle,
+    Delivery, Receiver, Sendable, Sender,
+};
 
-use super::{Controller, OwnedDeclareError, TransactionDischarge, TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY, OwnedDischargeError};
+use super::{
+    Controller, OwnedDeclareError, OwnedDischargeError, TransactionDischarge, TransactionExt,
+    TransactionalRetirement, TxnAcquisition, TXN_ID_KEY,
+};
 
 /// An owned transaction that has exclusive access to its own control link
 #[derive(Debug)]
 pub struct OwnedTransaction {
     controller: Controller,
     declared: Declared,
-    is_discharged: bool
+    is_discharged: bool,
 }
 
 #[async_trait]
@@ -26,7 +39,9 @@ impl TransactionDischarge for OwnedTransaction {
 
     async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error> {
         if !self.is_discharged {
-            self.controller.discharge(self.declared.txn_id.clone(), fail).await?;
+            self.controller
+                .discharge(self.declared.txn_id.clone(), fail)
+                .await?;
             self.is_discharged = true;
         }
         Ok(())
@@ -60,8 +75,9 @@ impl TransactionalRetirement for OwnedTransaction {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         outcome: Outcome,
-    ) -> Result<(), Self::RetireError> 
-    where T: Send + Sync,
+    ) -> Result<(), Self::RetireError>
+    where
+        T: Send + Sync,
     {
         let txn_state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
@@ -89,18 +105,20 @@ impl TransactionExt for OwnedTransaction {
 impl OwnedTransaction {
     /// Declare an transaction with an owned control link
     pub async fn declare<R>(
-        session: &mut SessionHandle<R>, 
-        name: impl Into<String>, 
+        session: &mut SessionHandle<R>,
+        name: impl Into<String>,
         global_id: impl Into<Option<TransactionId>>,
     ) -> Result<OwnedTransaction, OwnedDeclareError> {
         let controller = Controller::attach(session, name).await?;
-        Self::declare_with_controller(controller, global_id).await.map_err(Into::into)
+        Self::declare_with_controller(controller, global_id)
+            .await
+            .map_err(Into::into)
     }
 
     /// Declare an transaction with an owned control link
     pub async fn declare_with_controller(
         controller: Controller,
-        global_id: impl Into<Option<TransactionId>>
+        global_id: impl Into<Option<TransactionId>>,
     ) -> Result<OwnedTransaction, SendError> {
         let declared = controller.declare_inner(global_id.into()).await?;
         Ok(Self {
@@ -110,13 +128,12 @@ impl OwnedTransaction {
         })
     }
 
-
     /// Post a transactional work without waiting for the acknowledgement.
     async fn post_batchable<T>(
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError> 
+    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError>
     where
         T: serde::Serialize,
     {
@@ -163,7 +180,7 @@ impl OwnedTransaction {
         // transaction is successfully discharged.
         fut.await
     }
-    
+
     /// Acquire a transactional work
     ///
     /// This will send

@@ -104,7 +104,7 @@ impl From<Outcome> for DeliveryState {
             Outcome::Modified(val) => Self::Modified(val),
 
             #[cfg(feature = "transaction")]
-            Outcome::Declared(val) => Self::Declared(val)
+            Outcome::Declared(val) => Self::Declared(val),
         }
     }
 }

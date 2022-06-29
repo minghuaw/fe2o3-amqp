@@ -1,11 +1,8 @@
 //! Transactional work frames
 
-use fe2o3_amqp_types::{performatives::{Disposition, Flow, Transfer}, transaction::TransactionId, messaging::DeliveryState, primitives::Symbol};
-use serde_amqp::Value;
+use fe2o3_amqp_types::performatives::{Disposition, Flow, Transfer};
 
 use crate::Payload;
-
-use super::TXN_ID_KEY;
 
 /// Transactional work
 #[derive(Debug)]
@@ -18,24 +15,24 @@ pub(crate) enum TxnWorkFrame {
     Acquire(Flow),
 }
 
-impl TxnWorkFrame {
-    pub fn txn_id(&self) -> Option<&TransactionId> {
-        match self {
-            TxnWorkFrame::Post { transfer, .. } => match &transfer.state {
-                Some(DeliveryState::TransactionalState(state)) => Some(&state.txn_id),
-                _ => None,
-            },
-            TxnWorkFrame::Retire(disposition) => match &disposition.state {
-                Some(DeliveryState::TransactionalState(state)) => Some(&state.txn_id),
-                _ => None,
-            },
-            TxnWorkFrame::Acquire(flow) => {
-                let key = Symbol::from(TXN_ID_KEY);
-                match flow.properties.as_ref().map(|m| m.get(&key)) {
-                    Some(Some(Value::Binary(value))) => Some(value),
-                    _ => None,
-                }
-            },
-        }
-    }
-}
+// impl TxnWorkFrame {
+//     pub fn txn_id(&self) -> Option<&TransactionId> {
+//         match self {
+//             TxnWorkFrame::Post { transfer, .. } => match &transfer.state {
+//                 Some(DeliveryState::TransactionalState(state)) => Some(&state.txn_id),
+//                 _ => None,
+//             },
+//             TxnWorkFrame::Retire(disposition) => match &disposition.state {
+//                 Some(DeliveryState::TransactionalState(state)) => Some(&state.txn_id),
+//                 _ => None,
+//             },
+//             TxnWorkFrame::Acquire(flow) => {
+//                 let key = Symbol::from(TXN_ID_KEY);
+//                 match flow.properties.as_ref().map(|m| m.get(&key)) {
+//                     Some(Some(Value::Binary(value))) => Some(value),
+//                     _ => None,
+//                 }
+//             },
+//         }
+//     }
+// }

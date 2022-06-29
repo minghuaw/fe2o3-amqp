@@ -170,8 +170,6 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
     ) -> Result<(), SendAttachErrorKind> {
-        // self.error_if_closed().map_err(|_| SendAttachErrorKind::LinkClosed)?; // This should be unreachable
-
         // Create Attach frame
         let handle = match &self.output_handle {
             Some(h) => h.clone(),
@@ -468,7 +466,9 @@ impl LinkRelay<OutputHandle> {
                     // receiving end is alive or not
                     {
                         let mut guard = unsettled.write().await;
-                        guard.remove(&delivery_tag).map(|msg| msg.settle_with_state(state));
+                        guard
+                            .remove(&delivery_tag)
+                            .map(|msg| msg.settle_with_state(state));
                     }
                     false
                 } else {
@@ -483,7 +483,8 @@ impl LinkRelay<OutputHandle> {
                         // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
                         if is_terminal {
-                            let _result = guard.remove(&delivery_tag)
+                            let _result = guard
+                                .remove(&delivery_tag)
                                 .map(|msg| msg.settle_with_state(state));
                         } else if let Some(msg) = guard.get_mut(&delivery_tag) {
                             if let Some(state) = state {

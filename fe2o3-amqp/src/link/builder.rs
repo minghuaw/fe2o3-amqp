@@ -572,9 +572,7 @@ where
         };
 
         if let CreditMode::Auto(credit) = inner.credit_mode {
-            inner
-                .set_credit(credit)
-                .await?;
+            inner.set_credit(credit).await?;
         }
 
         Ok(inner)
@@ -589,7 +587,7 @@ impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
         session: &mut SessionHandle<R>,
     ) -> Result<Controller, SenderAttachError> {
         use tokio::sync::Mutex;
-        
+
         self.attach_inner(session).await.map(|inner| Controller {
             inner: Mutex::new(inner),
         })

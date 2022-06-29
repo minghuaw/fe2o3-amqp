@@ -46,15 +46,9 @@ pub(crate) trait Session {
         begin: Begin,
     ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_attach(
-        &mut self,
-        attach: Attach,
-    ) -> Result<(), Self::Error>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 
-    async fn on_incoming_flow(
-        &mut self,
-        flow: Flow,
-    ) -> Result<(), Self::Error>;
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
 
     async fn on_incoming_transfer(
         &mut self,
@@ -67,10 +61,7 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<(), Self::Error>;
 
-    async fn on_incoming_detach(
-        &mut self,
-        detach: Detach,
-    ) -> Result<(), Self::Error>;
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
 
     async fn on_incoming_end(
         &mut self,

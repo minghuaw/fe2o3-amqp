@@ -8,9 +8,11 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo,
         SessionError, TransferNumber,
     },
+    messaging::Accepted,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::{Symbol, UInt},
-    states::SessionState, messaging::Accepted, transaction::TransactionError,
+    states::SessionState,
+    transaction::TransactionError,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -28,8 +30,9 @@ use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
+    transaction::AllocTxnIdError,
     util::Constant,
-    Payload, transaction::{AllocTxnIdError, manager::ResourceTransaction, frame::TxnWorkFrame},
+    Payload,
 };
 
 #[cfg(feature = "transaction")]
@@ -357,10 +360,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
-    async fn on_incoming_attach(
-        &mut self,
-        attach: Attach,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         match self.link_by_name.get_mut(&attach.name) {
             Some(link) => match link.take() {
                 Some(mut relay) => {
@@ -390,10 +390,7 @@ impl endpoint::Session for Session {
         }
     }
 
-    async fn on_incoming_flow(
-        &mut self,
-        flow: Flow,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
         // Handle session flow control
         //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
@@ -575,10 +572,7 @@ impl endpoint::Session for Session {
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_detach(
-        &mut self,
-        detach: Detach,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
         trace!(frame = ?detach);
         // Remove the link by input handle
         match self

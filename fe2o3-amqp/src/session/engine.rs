@@ -245,8 +245,9 @@ where
                 })?;
             }
             #[cfg(feature = "transaction")]
-            SessionControl::CommitTransaction{ txn_id, resp } => {
-                let result = self.session
+            SessionControl::CommitTransaction { txn_id, resp } => {
+                let result = self
+                    .session
                     .commit_transaction(txn_id)
                     .await
                     .map_err(Into::into)?;
@@ -258,8 +259,9 @@ where
                 })?;
             }
             #[cfg(feature = "transaction")]
-            SessionControl::RollbackTransaction{ txn_id, resp } => {
-                let result = self.session
+            SessionControl::RollbackTransaction { txn_id, resp } => {
+                let result = self
+                    .session
                     .rollback_transaction(txn_id)
                     .await
                     .map_err(Into::into)?;

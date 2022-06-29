@@ -1,9 +1,10 @@
 //! Transaction
 
 use crate::{
-    endpoint::{ReceiverLink, Settlement},
+    endpoint::ReceiverLink,
     link::{
-        self, delivery::{UnsettledMessage, DeliveryFut}, DispositionError, LinkFrame, LinkStateError, SendError, FlowError,
+        delivery::{DeliveryFut, UnsettledMessage},
+        DispositionError, FlowError, LinkFrame, SendError,
     },
     util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
@@ -64,7 +65,6 @@ pub trait TransactionDischarge: Sized {
     /// Discharge the transaction
     async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error>;
 
-    
     /// Rollback the transaction
     ///
     /// This will send a [`Discharge`] with the `fail` field set to true
@@ -104,15 +104,18 @@ pub trait TransactionalRetirement {
         delivery: &Delivery<T>,
         outcome: Outcome,
     ) -> Result<(), Self::RetireError>
-    where T: Send + Sync;
+    where
+        T: Send + Sync;
 
-    
     /// Associate an Accepted outcome with a transaction
     async fn accept<T>(
         &mut self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
-    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+    ) -> Result<(), Self::RetireError>
+    where
+        T: Send + Sync,
+    {
         let outcome = Outcome::Accepted(Accepted {});
         self.retire(recver, delivery, outcome).await
     }
@@ -123,7 +126,10 @@ pub trait TransactionalRetirement {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+    ) -> Result<(), Self::RetireError>
+    where
+        T: Send + Sync,
+    {
         let outcome = Outcome::Rejected(Rejected {
             error: error.into(),
         });
@@ -135,7 +141,10 @@ pub trait TransactionalRetirement {
         &mut self,
         recver: &mut Receiver,
         delivery: &Delivery<T>,
-    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+    ) -> Result<(), Self::RetireError>
+    where
+        T: Send + Sync,
+    {
         let outcome = Outcome::Released(Released {});
         self.retire(recver, delivery, outcome).await
     }
@@ -146,7 +155,10 @@ pub trait TransactionalRetirement {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), Self::RetireError> where T: Send + Sync {
+    ) -> Result<(), Self::RetireError>
+    where
+        T: Send + Sync,
+    {
         let outcome = Outcome::Modified(modified.into());
         self.retire(recver, delivery, outcome).await
     }
@@ -239,7 +251,9 @@ impl<'t> TransactionDischarge for Transaction<'t> {
 
     async fn discharge(&mut self, fail: bool) -> Result<(), Self::Error> {
         if !self.is_discharged {
-            self.controller.discharge(self.declared.txn_id.clone(), fail).await?;
+            self.controller
+                .discharge(self.declared.txn_id.clone(), fail)
+                .await?;
             self.is_discharged = true;
         }
         Ok(())
@@ -261,8 +275,9 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
         recver: &mut Receiver,
         delivery: &Delivery<T>,
         outcome: Outcome,
-    ) -> Result<(), Self::RetireError> 
-    where T: Send + Sync,
+    ) -> Result<(), Self::RetireError>
+    where
+        T: Send + Sync,
     {
         let txn_state = TransactionalState {
             txn_id: self.declared.txn_id.clone(),
@@ -308,7 +323,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError> 
+    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError>
     where
         T: serde::Serialize,
     {

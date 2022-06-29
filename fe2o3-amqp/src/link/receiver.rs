@@ -330,7 +330,12 @@ impl Receiver {
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
             .await
     }
 
@@ -345,7 +350,12 @@ impl Receiver {
             error: error.into(),
         });
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
             .await
     }
 
@@ -354,7 +364,12 @@ impl Receiver {
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
             .await
     }
 
@@ -367,7 +382,12 @@ impl Receiver {
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
         self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), None, state)
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
             .await
     }
 }
@@ -527,7 +547,9 @@ where
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
                 self.link.send_detach(&self.outgoing, closed, None).await?;
-                self.link.on_incoming_detach(detach).await
+                self.link
+                    .on_incoming_detach(detach)
+                    .await
                     .map_err(Into::into)
                     .and_then(|_| match closed {
                         true => Err(LinkStateError::RemoteClosed.into()),
@@ -545,7 +567,7 @@ where
                 //     (None, false) => Err(LinkStateError::RemoteDetached.into()),
                 //     (None, true) => Err(LinkStateError::RemoteClosed.into()),
                 // }
-            },
+            }
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
@@ -674,7 +696,14 @@ where
     ) -> Result<(), DispositionError> {
         let _ = self
             .link
-            .dispose(&mut self.outgoing, delivery_id, delivery_tag, settled, state, false)
+            .dispose(
+                &mut self.outgoing,
+                delivery_id,
+                delivery_tag,
+                settled,
+                state,
+                false,
+            )
             .await?;
 
         self.processed += 1;

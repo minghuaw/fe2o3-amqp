@@ -8,21 +8,16 @@ use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
     definitions::{Fields, Role},
-
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
 use tracing::instrument;
 
-use crate::{
-    connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    session::SessionHandle,
-    util::Initialized,
-};
+use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, util::Initialized};
 
 use super::{
-    builder::Builder, local_receiver_link::LocalReceiverLinkAcceptor,
-    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle, error::AcceptorAttachError,
+    builder::Builder, error::AcceptorAttachError, local_receiver_link::LocalReceiverLinkAcceptor,
+    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle,
 };
 
 /// Listener side link endpoint
@@ -157,14 +152,12 @@ impl LinkAcceptor {
                     .map(|receiver| LinkEndpoint::Receiver(receiver))
                     .map_err(Into::into)
             }
-            Role::Receiver => {
-                self
-                    .local_sender_acceptor
-                    .accept_incoming_attach(&self.shared, remote_attach, session)
-                    .await
-                    .map(|sender| LinkEndpoint::Sender(sender))
-                    .map_err(Into::into)
-            }
+            Role::Receiver => self
+                .local_sender_acceptor
+                .accept_incoming_attach(&self.shared, remote_attach, session)
+                .await
+                .map(|sender| LinkEndpoint::Sender(sender))
+                .map_err(Into::into),
         }
     }
 

@@ -8,7 +8,7 @@ use crate::{
     session::{self, AllocLinkError},
 };
 
-use super::{DetachError, LinkFrame, LinkRelay, state::LinkState};
+use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
 
 #[async_trait]
 pub(crate) trait LinkEndpointInner {
@@ -107,9 +107,9 @@ where
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         match self.link().local_state() {
-            LinkState::Unattached 
-            | LinkState::AttachSent 
-            | LinkState::AttachReceived 
+            LinkState::Unattached
+            | LinkState::AttachSent
+            | LinkState::AttachReceived
             | LinkState::Attached => {
                 // Send a non-closing detach
                 self.send_detach(false, error).await?;
@@ -130,7 +130,7 @@ where
                 } else {
                     self.link_mut().on_incoming_detach(remote_detach).await
                 }
-            },
+            }
             LinkState::DetachSent => {
                 let remote_detach = recv_remote_detach(self).await?;
                 if remote_detach.closed {
@@ -139,10 +139,8 @@ where
                 } else {
                     self.link_mut().on_incoming_detach(remote_detach).await
                 }
-            },
-            LinkState::DetachReceived => {
-                self.send_detach(false, error).await
-            },
+            }
+            LinkState::DetachReceived => self.send_detach(false, error).await,
             LinkState::Detached => Ok(()),
             LinkState::CloseSent => {
                 // This should be impossible.
@@ -150,14 +148,13 @@ where
                 let _remote_detach = recv_remote_detach(self).await?;
                 reattach_and_then_close(self).await?;
                 Err(DetachError::ClosedByRemote)
-            },
+            }
             LinkState::CloseReceived => {
                 self.send_detach(true, error).await?;
                 Err(DetachError::ClosedByRemote)
-            },
+            }
             LinkState::Closed => Err(DetachError::ClosedByRemote),
         }
-
     }
 
     async fn close_with_error(
@@ -184,22 +181,19 @@ where
                 } else {
                     reattach_and_then_close(self).await
                 }
-            },
+            }
             LinkState::DetachSent => {
                 // FIXME: this should be impossible
                 // Wait for remote detach
                 let _remote_detach = recv_remote_detach(self).await?;
                 reattach_and_then_close(self).await?;
                 Err(DetachError::DetachedByRemote)
-            },
-            LinkState::DetachReceived => {
-                self.send_detach(true, error)
-                    .await
-                    .map_err(|_| DetachError::IllegalSessionState)
-            },
-            LinkState::Detached => {
-                reattach_and_then_close(self).await
-            },
+            }
+            LinkState::DetachReceived => self
+                .send_detach(true, error)
+                .await
+                .map_err(|_| DetachError::IllegalSessionState),
+            LinkState::Detached => reattach_and_then_close(self).await,
             LinkState::CloseSent => {
                 // Wait for remote detach
                 let remote_detach = recv_remote_detach(self).await?;
@@ -208,15 +202,13 @@ where
                 } else {
                     reattach_and_then_close(self).await
                 }
-            },
-            LinkState::CloseReceived => {
-                self.send_detach(true, error)
-                    .await
-                    .map_err(|_| DetachError::IllegalSessionState)
-            },
+            }
+            LinkState::CloseReceived => self
+                .send_detach(true, error)
+                .await
+                .map_err(|_| DetachError::IllegalSessionState),
             LinkState::Closed => Ok(()),
         }
-
     }
 }
 
@@ -236,12 +228,16 @@ where
     // 3. wait for incoming closing detach
     // 4. detach
 
-    link_inner.reattach_inner()
+    link_inner
+        .reattach_inner()
         .await
         .map_err(|_| DetachError::DetachedByRemote)?;
     link_inner.send_detach(true, None).await?;
     let remote_detach = recv_remote_detach(link_inner).await?;
-    link_inner.link_mut().on_incoming_detach(remote_detach).await?;
+    link_inner
+        .link_mut()
+        .on_incoming_detach(remote_detach)
+        .await?;
     Ok(())
 }
 

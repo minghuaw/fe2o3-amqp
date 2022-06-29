@@ -1,13 +1,18 @@
-use fe2o3_amqp_types::{transaction::TransactionError, messaging::{Rejected, Released, Modified, DeliveryState, Outcome}};
+use fe2o3_amqp_types::{
+    messaging::{DeliveryState, Modified, Outcome, Rejected, Released},
+    transaction::TransactionError,
+};
 
-use crate::link::{SenderAttachError, SendError, DetachError, LinkStateError, IllegalLinkStateError, delivery::FromDeliveryState};
-
+use crate::link::{
+    delivery::FromDeliveryState, DetachError, IllegalLinkStateError, LinkStateError, SendError,
+    SenderAttachError,
+};
 
 /// Errors with allocation of new transacation ID
 #[derive(Debug)]
 pub enum AllocTxnIdError {
     /// Allocation of transaction ID is not implemented
-    /// 
+    ///
     /// This happens when transaction session is not enabled
     NotImplemented,
 
@@ -20,8 +25,8 @@ pub enum AllocTxnIdError {
 pub enum DischargeError {
     /// Session must have dropped
     InvalidSessionState,
-    
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller 
+
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
     /// as a transaction-error. If the source for the link to the coordinator supports the rejected outcome, then the
     /// message MUST be rejected with this outcome carrying the transaction-error.
     TransactionError(TransactionError),
@@ -42,10 +47,10 @@ pub enum CoordinatorError {
     /// Session must have dropped
     InvalidSessionState,
 
-    /// 
+    ///
     AllocTxnIdNotImplemented,
 
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller 
+    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
     /// as a transaction-error. If the source for the link to the coordinator supports the rejected outcome, then the
     /// message MUST be rejected with this outcome carrying the transaction-error.
     TransactionError(TransactionError),
@@ -70,7 +75,7 @@ impl From<DischargeError> for CoordinatorError {
             //     let rejected = Rejected { error: Some(error) };
             //     Self::Reject(rejected)
             // },
-            DischargeError::TransactionError(error) => Self::TransactionError(error)
+            DischargeError::TransactionError(error) => Self::TransactionError(error),
         }
     }
 }
@@ -82,7 +87,7 @@ pub enum OwnedDeclareError {
     AttachError(SenderAttachError),
 
     /// Error with sending Declare
-    SendError(SendError)
+    SendError(SendError),
 }
 
 impl From<SenderAttachError> for OwnedDeclareError {
@@ -161,7 +166,9 @@ impl From<IllegalLinkStateError> for PostError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::IllegalSessionState => LinkStateError::IllegalSessionState.into(),
+            IllegalLinkStateError::IllegalSessionState => {
+                LinkStateError::IllegalSessionState.into()
+            }
         }
     }
 }

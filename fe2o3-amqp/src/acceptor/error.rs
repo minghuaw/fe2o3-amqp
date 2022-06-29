@@ -1,6 +1,6 @@
 //! Implements errors for the acceptors
 
-use crate::link::{SenderAttachError, ReceiverAttachError};
+use crate::link::{ReceiverAttachError, SenderAttachError};
 
 /// Error accepting incoming attach
 #[derive(Debug, thiserror::Error)]

@@ -9,11 +9,11 @@ use fe2o3_amqp_types::{
 
 use crate::{
     endpoint::ReceiverLink,
-    link::{delivery, FlowError, RecvError, SendError, DispositionError},
+    link::{delivery, DispositionError, FlowError, RecvError, SendError},
     Delivery, Receiver,
 };
 
-use super::{TXN_ID_KEY, TransactionExt, TransactionDischarge};
+use super::{TransactionDischarge, TransactionExt, TXN_ID_KEY};
 
 /// 4.4.3 Transactional Acquisition
 ///
@@ -22,7 +22,10 @@ use super::{TXN_ID_KEY, TransactionExt, TransactionDischarge};
 /// 't: lifetime of the Transaction
 /// 'r: lifetime of the Receiver
 #[derive(Debug)]
-pub struct TxnAcquisition<'r, Txn> where Txn: TransactionExt {
+pub struct TxnAcquisition<'r, Txn>
+where
+    Txn: TransactionExt,
+{
     /// The transaction context of this acquisition
     pub(super) txn: Txn,
     /// The receiver that is associated with the acquisition
@@ -30,9 +33,9 @@ pub struct TxnAcquisition<'r, Txn> where Txn: TransactionExt {
     // pub(super) cleaned_up: bool,
 }
 
-impl<'r, Txn> TxnAcquisition<'r, Txn> 
-where 
-    Txn: TransactionExt + TransactionDischarge<Error = SendError>, 
+impl<'r, Txn> TxnAcquisition<'r, Txn>
+where
+    Txn: TransactionExt + TransactionDischarge<Error = SendError>,
 {
     /// Get an immutable reference to the underlying transaction
     pub fn txn(&self) -> &Txn {
@@ -130,7 +133,10 @@ where
     }
 }
 
-impl<'r, T> Drop for TxnAcquisition<'r, T> where T: TransactionExt {
+impl<'r, T> Drop for TxnAcquisition<'r, T>
+where
+    T: TransactionExt,
+{
     fn drop(&mut self) {
         if !self.txn.is_discharged() {
             // clear txn-id from the link's properties

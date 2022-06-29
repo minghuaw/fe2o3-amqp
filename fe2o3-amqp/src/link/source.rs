@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::messaging::Source;
 
-use super::{SenderAttachError, ReceiverAttachError};
+use super::{ReceiverAttachError, SenderAttachError};
 
 pub trait VerifySource {
     fn verify_as_sender(&self, other: &Self) -> Result<(), SenderAttachError>;

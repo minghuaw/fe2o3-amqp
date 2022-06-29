@@ -166,8 +166,12 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::ExpectImmediateDetach => AmqpError::NotAllowed.into(),
             ReceiverAttachError::CoordinatorIsNotImplemented => AmqpError::NotImplemented.into(),
             ReceiverAttachError::InitialDeliveryCountIsNone => AmqpError::InvalidField.into(),
-            ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
-            ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue => {
+                AmqpError::InvalidField.into()
+            }
+            ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue => {
+                AmqpError::InvalidField.into()
+            }
             ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
@@ -245,13 +249,13 @@ impl TryFrom<DetachError> for SenderAttachError {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
             DetachError::IllegalSessionState => Ok(Self::IllegalSessionState),
-            DetachError::RemoteDetachedWithError(error) 
+            DetachError::RemoteDetachedWithError(error)
             | DetachError::RemoteClosedWithError(error) => {
                 // A closing detach is used for errors during attach anyway
                 Ok(Self::RemoteClosedWithError(error))
-            },
-            DetachError::NonDetachFrameReceived 
-            | DetachError::ClosedByRemote 
+            }
+            DetachError::NonDetachFrameReceived
+            | DetachError::ClosedByRemote
             | DetachError::DetachedByRemote => Err(value),
         }
     }
@@ -264,13 +268,13 @@ impl TryFrom<DetachError> for ReceiverAttachError {
         match value {
             DetachError::IllegalState => Ok(Self::IllegalState),
             DetachError::IllegalSessionState => Ok(Self::IllegalSessionState),
-            DetachError::RemoteDetachedWithError(error) 
+            DetachError::RemoteDetachedWithError(error)
             | DetachError::RemoteClosedWithError(error) => {
                 // A closing detach is used for errors during attach anyway
                 Ok(Self::RemoteClosedWithError(error))
-            },
-            DetachError::NonDetachFrameReceived 
-            | DetachError::ClosedByRemote 
+            }
+            DetachError::NonDetachFrameReceived
+            | DetachError::ClosedByRemote
             | DetachError::DetachedByRemote => Err(value),
         }
     }
@@ -290,8 +294,12 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
-            SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue => AmqpError::InvalidField.into(),
-            SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue => AmqpError::InvalidField.into(),
+            SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue => {
+                AmqpError::InvalidField.into()
+            }
+            SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue => {
+                AmqpError::InvalidField.into()
+            }
 
             SenderAttachError::IncomingSourceIsNone
             | SenderAttachError::IncomingTargetIsNone
@@ -512,7 +520,9 @@ impl From<IllegalLinkStateError> for SendError {
     fn from(value: IllegalLinkStateError) -> Self {
         match value {
             IllegalLinkStateError::IllegalState => LinkStateError::IllegalState.into(),
-            IllegalLinkStateError::IllegalSessionState => LinkStateError::IllegalSessionState.into(),
+            IllegalLinkStateError::IllegalSessionState => {
+                LinkStateError::IllegalSessionState.into()
+            }
         }
     }
 }

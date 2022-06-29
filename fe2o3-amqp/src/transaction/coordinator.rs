@@ -1,6 +1,6 @@
 //! Control link coordinator
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, LinkError, ReceiverSettleMode},
@@ -14,7 +14,10 @@ use tokio::sync::mpsc;
 use tracing::instrument;
 
 use crate::{
-    acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor, SupportedReceiverSettleModes},
+    acceptor::{
+        link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor,
+        SupportedReceiverSettleModes,
+    },
     control::SessionControl,
     link::{
         receiver::ReceiverInner,
@@ -26,10 +29,7 @@ use crate::{
     Delivery,
 };
 
-use super::{
-    control_link_frame::ControlMessageBody, frame::TxnWorkFrame, manager::ResourceTransaction,
-    CoordinatorError,
-};
+use super::{control_link_frame::ControlMessageBody, CoordinatorError};
 
 pub(crate) type CoordinatorLink =
     Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
@@ -107,10 +107,8 @@ impl TxnCoordinator {
         match declare.global_id {
             Some(_) => Err(CoordinatorError::GlobalIdNotImplemented),
             None => {
-                let txn_id = super::session::allocate_transaction_id(
-                    self.inner.session_control(),
-                )
-                .await?;
+                let txn_id =
+                    super::session::allocate_transaction_id(self.inner.session_control()).await?;
 
                 // The TxnManager has the authoratitive version of all active txns, so
                 // the txn-id obtained from the TxnManager should be "guaranteed" to be unique
@@ -132,7 +130,7 @@ impl TxnCoordinator {
         if !self.txn_ids.remove(&discharge.txn_id) {
             return Err(CoordinatorError::TransactionError(
                 TransactionError::UnknownId,
-            ))
+            ));
         }
 
         let txn_id = discharge.txn_id.clone();
@@ -305,7 +303,9 @@ impl TxnCoordinator {
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
-        self.inner.dispose(delivery_id, delivery_tag, Some(true), state).await
+        self.inner
+            .dispose(delivery_id, delivery_tag, Some(true), state)
+            .await
     }
 
     #[instrument(name = "Coordinator::event_loop", skip(self))]

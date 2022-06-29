@@ -4,11 +4,11 @@ use std::io;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, SessionError},
-    messaging::{DeliveryState, Accepted},
+    definitions::{self},
+    messaging::{Accepted, DeliveryState},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::Symbol,
-    transaction::{TransactionId, TransactionError},
+    transaction::{TransactionError, TransactionId},
 };
 use futures_util::Sink;
 use tokio::sync::{mpsc, oneshot};
@@ -16,18 +16,17 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
+    control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{target_archetype::VariantOfTargetArchetype, LinkRelay},
     session::{self, frame::SessionFrame},
-    Payload, control::SessionControl,
+    Payload,
 };
 
 use super::{
     frame::TxnWorkFrame,
-    manager::{
-        HandleControlLink, ResourceTransaction, TransactionManager,
-    },
-    TXN_ID_KEY, AllocTxnIdError, DischargeError,
+    manager::{HandleControlLink, ResourceTransaction, TransactionManager},
+    AllocTxnIdError, DischargeError, TXN_ID_KEY,
 };
 
 pub(crate) async fn allocate_transaction_id(
@@ -35,32 +34,44 @@ pub(crate) async fn allocate_transaction_id(
 ) -> Result<TransactionId, AllocTxnIdError> {
     let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::AllocateTransactionId { resp }).await
+    control
+        .send(SessionControl::AllocateTransactionId { resp })
+        .await
         .map_err(|_| AllocTxnIdError::InvalidSessionState)?;
-    result.await.map_err(|_| AllocTxnIdError::InvalidSessionState)?
+    result
+        .await
+        .map_err(|_| AllocTxnIdError::InvalidSessionState)?
 }
 
 pub(crate) async fn rollback_transaction(
     control: &mpsc::Sender<SessionControl>,
-    txn_id: TransactionId
+    txn_id: TransactionId,
 ) -> Result<Accepted, DischargeError> {
     let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::RollbackTransaction { txn_id, resp }).await
+    control
+        .send(SessionControl::RollbackTransaction { txn_id, resp })
+        .await
         .map_err(|_| DischargeError::InvalidSessionState)?;
-    result.await.map_err(|_| DischargeError::InvalidSessionState)?
+    result
+        .await
+        .map_err(|_| DischargeError::InvalidSessionState)?
         .map_err(Into::into)
 }
 
 pub(crate) async fn commit_transaction(
     control: &mpsc::Sender<SessionControl>,
-    txn_id: TransactionId
+    txn_id: TransactionId,
 ) -> Result<Accepted, DischargeError> {
     let (resp, result) = oneshot::channel();
 
-    control.send(SessionControl::CommitTransaction { txn_id, resp }).await
+    control
+        .send(SessionControl::CommitTransaction { txn_id, resp })
+        .await
         .map_err(|_| DischargeError::InvalidSessionState)?;
-    result.await.map_err(|_| DischargeError::InvalidSessionState)?
+    result
+        .await
+        .map_err(|_| DischargeError::InvalidSessionState)?
         .map_err(Into::into)
 }
 
@@ -74,11 +85,9 @@ where
     pub(crate) txn_manager: TransactionManager,
 }
 
-impl<S> TxnSession<S> 
-where
-    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
+impl<S> TxnSession<S> where
+    S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync
 {
-    
 }
 
 #[async_trait]
@@ -95,10 +104,13 @@ where
         let acceptor = self.txn_manager.control_link_acceptor.clone();
         let control = self.session.control().clone();
         let outgoing = self.txn_manager.control_link_outgoing.clone();
-        
+
         tokio::spawn(async move {
             // Error accepting new control link is handled by acceptor
-            if let Ok(coordinator) = acceptor.accept_incoming_attach(remote_attach, control, outgoing).await {
+            if let Ok(coordinator) = acceptor
+                .accept_incoming_attach(remote_attach, control, outgoing)
+                .await
+            {
                 coordinator.event_loop().await
             }
         });
@@ -131,7 +143,10 @@ impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::Error> + endpoint::SessionExt + Send + Sync,
 {
-    async fn commit_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+    async fn commit_transaction(
+        &mut self,
+        txn_id: TransactionId,
+    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         let txn = match self.txn_manager.txns.remove(&txn_id) {
             Some(txn) => txn,
             None => return Ok(Err(TransactionError::UnknownId)),
@@ -139,14 +154,17 @@ where
 
         for work_frame in txn.frames {
             match work_frame {
-                TxnWorkFrame::Post { mut transfer, payload } => {
-                    // FIXME: This informs the controller of the outcome that will be in effect at the point that the 
+                TxnWorkFrame::Post {
+                    mut transfer,
+                    payload,
+                } => {
+                    // FIXME: This informs the controller of the outcome that will be in effect at the point that the
                     // transaction is successfully discharged
                     if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
                         transfer.state = txn_state.outcome.map(Into::into);
                     };
                     self.session.on_incoming_transfer(transfer, payload).await?
-                },
+                }
                 TxnWorkFrame::Retire(mut disposition) => {
                     // On a successful discharge, the resource will apply the given outcome and can immediately settle the transfers.
                     if let Some(DeliveryState::TransactionalState(txn_state)) = disposition.state {
@@ -154,7 +172,7 @@ where
                     }
                     disposition.settled = true;
                     self.session.on_incoming_disposition(disposition).await?
-                },
+                }
                 TxnWorkFrame::Acquire(_) => todo!(),
             }
         }
@@ -162,12 +180,15 @@ where
         Ok(Ok(Accepted {}))
     }
 
-    async fn rollback_transaction(&mut self, txn_id: TransactionId) -> Result<Result<Accepted, TransactionError>, Self::Error> {
+    async fn rollback_transaction(
+        &mut self,
+        txn_id: TransactionId,
+    ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
         match self.txn_manager.txns.remove(&txn_id) {
             Some(_) => {
                 // TODO: Simply drop the frames?
                 Ok(Ok(Accepted {}))
-            },
+            }
             None => Ok(Err(TransactionError::UnknownId)),
         }
     }
@@ -225,10 +246,7 @@ where
         self.session.on_incoming_begin(channel, begin)
     }
 
-    async fn on_incoming_attach(
-        &mut self,
-        attach: Attach,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error> {
         match attach.target.as_ref().map(|t| t.is_coordinator()) {
             Some(true) => self.on_incoming_control_attach(attach).await,
             Some(false) | None => self.session.on_incoming_attach(attach).await,
@@ -236,10 +254,7 @@ where
     }
 
     #[instrument(skip_all, flow = ?flow)]
-    async fn on_incoming_flow(
-        &mut self,
-        flow: Flow,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
         match flow
             .properties
             .as_ref()
@@ -248,7 +263,7 @@ where
             Some(true) => {
                 // self.on_incoming_txn_flow(flow).await
                 todo!()
-            },
+            }
             Some(false) | None => self.session.on_incoming_flow(flow).await,
         }
     }
@@ -261,21 +276,31 @@ where
         let (txn, txn_id) = match &transfer.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
-                self.txn_manager.txns.get_mut(txn_id)
+                self.txn_manager
+                    .txns
+                    .get_mut(txn_id)
                     .map(|txn| (txn, txn_id.clone()))
-                    .ok_or(definitions::Error::new(TransactionError::UnknownId, None, None))
+                    .ok_or(definitions::Error::new(
+                        TransactionError::UnknownId,
+                        None,
+                        None,
+                    ))
                     .map_err(Self::Error::Local)?
             }
-            Some(_) | None => {
-                return self.session
-                    .on_incoming_transfer(transfer, payload)
-                    .await
-            }
+            Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,
         };
 
         if let Some(disposition) = txn.on_incoming_post(txn_id, transfer, payload) {
-            self.session.control().send(SessionControl::Disposition(disposition)).await
-                .map_err(|_| Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Session engine must have dropped")))?;
+            self.session
+                .control()
+                .send(SessionControl::Disposition(disposition))
+                .await
+                .map_err(|_| {
+                    Self::Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Session engine must have dropped",
+                    ))
+                })?;
         }
         Ok(())
     }
@@ -291,26 +316,20 @@ where
                     Some(txn) => {
                         txn.frames.push(TxnWorkFrame::Retire(disposition));
                         Ok(())
-                    },
+                    }
                     None => {
                         // FIXME: Should this stop the session or just the coordinator associated with the txn?
-                        let error = definitions::Error::new(TransactionError::UnknownId, None, None);
+                        let error =
+                            definitions::Error::new(TransactionError::UnknownId, None, None);
                         Err(Self::Error::Local(error))
                     }
                 }
             }
-            Some(_) | None => {
-                self.session
-                    .on_incoming_disposition(disposition)
-                    .await
-            }
+            Some(_) | None => self.session.on_incoming_disposition(disposition).await,
         }
     }
 
-    async fn on_incoming_detach(
-        &mut self,
-        detach: Detach,
-    ) -> Result<(), Self::Error> {
+    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
         self.session.on_incoming_detach(detach).await
     }
 

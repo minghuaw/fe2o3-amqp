@@ -20,8 +20,6 @@ where
         available: Option<u32>,
         echo: bool,
     ) -> Result<(), Self::FlowError> {
-        // self.error_if_closed().map_err(|_| Error::IllegalState)?;
-
         let handle = self
             .output_handle
             .clone()
@@ -120,8 +118,6 @@ where
         use crate::endpoint::LinkDetach;
         use crate::util::Consume;
 
-        // self.error_if_closed().map_err(|_| Error::IllegalState)?;
-
         tokio::select! {
             _ = self.flow_state.consume(1) => {
                 // link-credit is defined as
@@ -135,13 +131,12 @@ where
                 match frame {
                     // If remote has detached the link
                     Some(LinkFrame::Detach(detach)) => {
-                        // FIXME: if the sender is not trying to send anything, this is 
+                        // FIXME: if the sender is not trying to send anything, this is
                         // probably not responsive enough
                         let closed = detach.closed;
                         self.send_detach(writer, closed, None).await?;
                         let result = self.on_incoming_detach(detach).await;
 
-                        // return Err(Error::Detached(detach_err))
                         match (result, closed) {
                             (Ok(_), true) => return Err(Self::TransferError::RemoteClosed),
                             (Ok(_), false) => return Err(Self::TransferError::RemoteDetached),
@@ -308,7 +303,6 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
-        // self.error_if_closed().map_err(Error::Local)?;
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }
@@ -335,8 +329,6 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
-        // self.error_if_closed().map_err(Error::Local)?;
-
         if let SenderSettleMode::Settled = self.snd_settle_mode {
             return Ok(());
         }

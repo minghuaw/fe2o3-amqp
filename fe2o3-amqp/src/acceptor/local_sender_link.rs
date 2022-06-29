@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
     definitions::{SenderSettleMode, SequenceNo},
     messaging::Target,
     performatives::Attach,
-    primitives::{Symbol},
+    primitives::Symbol,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 
@@ -118,12 +118,11 @@ impl LocalSenderLinkAcceptor<Symbol> {
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
-        let local_source = remote_attach.source.clone()
-            .map(|s| {
-                let mut source = *s;
-                source.capabilities = self.source_capabilities.clone().map(Into::into);
-                source
-            });
+        let local_source = remote_attach.source.clone().map(|s| {
+            let mut source = *s;
+            source.capabilities = self.source_capabilities.clone().map(Into::into);
+            source
+        });
 
         let mut link = SenderLink::<Target> {
             role: PhantomData,
@@ -135,7 +134,7 @@ impl LocalSenderLinkAcceptor<Symbol> {
             snd_settle_mode,
             rcv_settle_mode: Default::default(), // Will take value from incoming attach
             source: local_source,
-            target: None,                        // Will take value from incoming attach
+            target: None, // Will take value from incoming attach
             max_message_size: shared.max_message_size.unwrap_or_else(|| 0),
             offered_capabilities: shared.offered_capabilities.clone(),
             desired_capabilities: shared.desired_capabilities.clone(),
@@ -149,10 +148,17 @@ impl LocalSenderLinkAcceptor<Symbol> {
             Ok(_) => link.send_attach(&outgoing).await?,
             Err(attach_error) => {
                 link.send_attach(&outgoing).await?;
-                return Err(link.handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &session.control).await)
-            },
+                return Err(link
+                    .handle_attach_error(
+                        attach_error,
+                        &outgoing,
+                        &mut incoming_rx,
+                        &session.control,
+                    )
+                    .await);
+            }
         }
-        
+
         let inner = SenderInner {
             link,
             buffer_size: shared.buffer_size,

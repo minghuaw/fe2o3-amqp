@@ -2,7 +2,8 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::Body, DeliveryState, Message, Received, Outcome}, transaction::TransactionalState,
+    messaging::{message::Body, DeliveryState, Message, Outcome, Received},
+    transaction::TransactionalState,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -12,7 +13,7 @@ use tokio::sync::oneshot::{self, error::RecvError};
 use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
 
-use super::{SendError, LinkStateError};
+use super::{LinkStateError, SendError};
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -351,7 +352,7 @@ impl FromDeliveryState for SendResult {
                 Some(Outcome::Released(value)) => Err(SendError::Released(value)),
                 Some(Outcome::Modified(value)) => Err(SendError::Modified(value)),
                 Some(Outcome::Declared(_)) | None => Err(SendError::IllegalDeliveryState),
-            }
+            },
         }
     }
 }
