@@ -182,7 +182,7 @@ where
         Ok(Ok(Accepted {}))
     }
 
-    async fn rollback_transaction(
+    fn rollback_transaction(
         &mut self,
         txn_id: TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {

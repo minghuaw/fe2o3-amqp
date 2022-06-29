@@ -84,25 +84,27 @@ async fn sender_main(mut sender: Sender) {
         .settled(false)
         .build();
     let fut1 = sender.send_batchable(sendable).await.unwrap();
+    tokio::spawn(async move {
+        let first = fut1.await;
+        // let second = fut2.await;
+        tracing::info!(?first);
+        // tracing::info!(?second);
+    });
 
     let sendable = Sendable::builder()
         .message("foo bar")
         .settled(false)
         .build();
     let fut2 = sender.send_batchable(sendable).await.unwrap();
-    
-    
-    let handle = tokio::spawn(async move {
-        let first = fut1.await;
+    tokio::spawn(async move {
         let second = fut2.await;
-    
-        tracing::info!(?first);
         tracing::info!(?second);
     });
 
     let detached = sender.on_detach().await;
     tracing::info!(?detached);
-    handle.await.unwrap();
+    // let result = tokio::time::timeout(Duration::from_millis(500), handle).await;
+    // tracing::info!(?result);
     sender.close().await.unwrap();
 }
 

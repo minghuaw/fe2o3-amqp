@@ -263,7 +263,6 @@ where
                 let result = self
                     .session
                     .rollback_transaction(txn_id)
-                    .await
                     .map_err(Into::into)?;
                 resp.send(result).map_err(|_| {
                     Error::Io(io::Error::new(
@@ -274,7 +273,7 @@ where
             }
             #[cfg(feature = "transaction")]
             SessionControl::AbortTransaction(txn_id) => {
-                let _ = self.session.rollback_transaction(txn_id).await;
+                let _ = self.session.rollback_transaction(txn_id);
             }
         }
 

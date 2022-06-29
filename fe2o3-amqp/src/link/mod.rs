@@ -466,6 +466,7 @@ impl LinkRelay<OutputHandle> {
         // sessions
         delivery_tag: DeliveryTag,
     ) -> bool {
+        tracing::debug!(?delivery_tag, ?settled, ?state);
         match self {
             LinkRelay::Sender {
                 unsettled,
@@ -533,6 +534,7 @@ impl LinkRelay<OutputHandle> {
                 echo
             }
             LinkRelay::Receiver { unsettled, .. } => {
+                tracing::info!("LinkRelay::Receiver");
                 if settled {
                     let mut guard = unsettled.write().await;
                     // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;

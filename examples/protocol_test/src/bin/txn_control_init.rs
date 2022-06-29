@@ -34,15 +34,16 @@ async fn client_main() {
         .attach(&mut session)
         .await
         .unwrap();
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    tracing::info!(message = ?delivery.message());
-    // receiver.accept(&delivery).await.unwrap();
-    txn.accept(&mut receiver, &delivery).await.unwrap();
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    tracing::info!(message = ?delivery.message());
-    receiver.accept(&delivery).await.unwrap();
-    txn.accept(&mut receiver, &delivery).await.unwrap();
+    let delivery1: Delivery<Value> = receiver.recv().await.unwrap();
+    tracing::info!(message = ?delivery1.message());
+    
+    // txn.accept(&mut receiver, &delivery1).await.unwrap();
+
+    let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
+    tracing::info!(message = ?delivery2.message());
+    
+    // txn.accept(&mut receiver, &delivery2).await.unwrap();
 
     // Test a regular sender
     // let mut sender = Sender::attach(&mut session, "sender-1", "q1")
@@ -80,12 +81,17 @@ async fn client_main() {
     //     }
     // }
 
+    
     // txn.post(&mut sender, "Hello World").await.unwrap();
     // txn.post(&mut sender, "Foo Bar").await.unwrap();
-    txn.commit().await.unwrap();
-
+    txn.rollback().await.unwrap();
+    receiver.accept(&delivery1).await.unwrap();
+    receiver.accept(&delivery2).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(5000)).await;
     tracing::info!("closing control link");
     controller.close().await.unwrap();
+
 
     tracing::info!("closing receiver");
     // sender.close().await.unwrap();

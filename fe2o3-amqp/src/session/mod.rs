@@ -469,7 +469,7 @@ impl endpoint::Session for Session {
                     }
                 };
 
-                // If the unsettled map needs this
+                // FIXME: If the unsettled map needs this
                 if let Some((delivery_id, delivery_tag)) = id_and_tag {
                     self.delivery_tag_by_id
                         .insert(delivery_id, (input_handle, delivery_tag));
@@ -840,7 +840,7 @@ impl HandleDischarge for Session {
         Ok(Err(TransactionError::UnknownId))
     }
 
-    async fn rollback_transaction(
+    fn rollback_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {

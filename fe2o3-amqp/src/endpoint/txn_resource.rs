@@ -18,7 +18,7 @@ pub(crate) trait HandleDischarge: Session {
         &mut self,
         txn_id: TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error>;
-    async fn rollback_transaction(
+    fn rollback_transaction(
         &mut self,
         txn_id: TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error>;

@@ -532,7 +532,7 @@ impl endpoint::HandleDischarge for ListenerSession {
         Ok(Err(TransactionError::UnknownId))
     }
 
-    async fn rollback_transaction(
+    fn rollback_transaction(
         &mut self,
         _txn_id: fe2o3_amqp_types::transaction::TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
