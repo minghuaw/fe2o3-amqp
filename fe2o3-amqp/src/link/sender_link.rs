@@ -138,9 +138,8 @@ where
                         // FIXME: if the sender is not trying to send anything, this is 
                         // probably not responsive enough
                         let closed = detach.closed;
+                        self.send_detach(writer, closed, None).await?;
                         let result = self.on_incoming_detach(detach).await;
-
-                        // self.send_detach(writer, closed, None).await?;
 
                         // return Err(Error::Detached(detach_err))
                         match (result, closed) {

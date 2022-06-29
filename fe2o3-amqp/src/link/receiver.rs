@@ -526,6 +526,7 @@ where
         match frame {
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
+                self.link.send_detach(&self.outgoing, closed, None).await?;
                 self.link.on_incoming_detach(detach).await
                     .map_err(Into::into)
                     .and_then(|_| match closed {
