@@ -343,15 +343,15 @@ impl FromDeliveryState for SendResult {
             DeliveryState::Released(released) => Err(SendError::Released(released)),
             DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
             #[cfg(feature = "transaction")]
-            DeliveryState::Declared(_) => Err(SendError::IllegalDeliveryState),
-            #[cfg(feature = "transaction")]
-            DeliveryState::TransactionalState(txn_state) => match txn_state.outcome {
-                Some(Outcome::Accepted(_)) => Ok(()),
-                Some(Outcome::Rejected(value)) => Err(SendError::Rejected(value)),
-                Some(Outcome::Released(value)) => Err(SendError::Released(value)),
-                Some(Outcome::Modified(value)) => Err(SendError::Modified(value)),
-                Some(Outcome::Declared(_)) | None => Err(SendError::IllegalDeliveryState),
-            },
+            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
+            // #[cfg(feature = "transaction")]
+            // DeliveryState::TransactionalState(txn_state) => match txn_state.outcome {
+            //     Some(Outcome::Accepted(_)) => Ok(()),
+            //     Some(Outcome::Rejected(value)) => Err(SendError::Rejected(value)),
+            //     Some(Outcome::Released(value)) => Err(SendError::Released(value)),
+            //     Some(Outcome::Modified(value)) => Err(SendError::Modified(value)),
+            //     Some(Outcome::Declared(_)) | None => Err(SendError::IllegalDeliveryState),
+            // },
         }
     }
 }

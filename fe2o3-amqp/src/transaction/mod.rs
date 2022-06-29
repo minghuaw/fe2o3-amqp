@@ -321,7 +321,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError>
+    ) -> Result<DeliveryFut<Result<(), PostError>>, PostError>
     where
         T: serde::Serialize,
     {
@@ -347,7 +347,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), SendError>
+    ) -> Result<(), PostError>
     where
         T: serde::Serialize,
     {

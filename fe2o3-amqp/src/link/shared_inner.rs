@@ -241,7 +241,7 @@ where
     Ok(())
 }
 
-async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, DetachError>
+pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, DetachError>
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,

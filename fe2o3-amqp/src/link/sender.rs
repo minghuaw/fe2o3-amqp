@@ -26,7 +26,7 @@ use super::{
     delivery::{DeliveryFut, Sendable},
     error::DetachError,
     role,
-    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
+    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, recv_remote_detach},
     ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
     SenderFlowState, SenderLink,
 };
@@ -255,6 +255,24 @@ impl Sender {
     //     let fut = self.send_batchable(sendable).await?;
     //     Ok(timeout(duration, fut))
     // }
+
+    /// Returns when the remote peer detach/close the link
+    pub async fn on_detach(&mut self) -> DetachError {
+        match recv_remote_detach(&mut self.inner).await {
+            Ok(detach) => {
+                let closed = detach.closed;
+                match self.inner.link.on_incoming_detach(detach).await {
+                    Ok(_) => if closed {
+                        DetachError::ClosedByRemote
+                    } else {
+                        DetachError::DetachedByRemote
+                    },
+                    Err(err) => err,
+                }
+            },
+            Err(err) => err,
+        }
+    }
 }
 
 /// A detached sender

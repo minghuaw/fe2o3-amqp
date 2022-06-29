@@ -4,7 +4,7 @@ use fe2o3_amqp::{
     acceptor::{
         ConnectionAcceptor, LinkAcceptor, LinkEndpoint, SessionAcceptor, ListenerConnectionHandle, ListenerSessionHandle,
     },
-    types::primitives::Value, transaction::coordinator::ControlLinkAcceptor, Receiver, Sender,
+    types::primitives::Value, transaction::coordinator::ControlLinkAcceptor, Receiver, Sender, Sendable,
 };
 use tokio::net::TcpListener;
 use tracing::{Level, instrument};
@@ -15,7 +15,7 @@ const BASE_ADDR: &str = "localhost:5672";
 #[tokio::main]
 async fn main() {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
@@ -66,18 +66,44 @@ async fn session_main(mut session: ListenerSessionHandle) {
 }
 
 async fn sender_main(mut sender: Sender) {
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
-    loop {
-        interval.tick().await;
-        match sender.send("hello AMQP").await {
-            Ok(_) => {},
-            Err(error) => {
-                tracing::error!(?error);
-                sender.close().await.unwrap();
-                return
-            },
-        }
-    }
+    // let mut interval = tokio::time::interval(Duration::from_millis(500));
+    // loop {
+    //     interval.tick().await;
+    //     match sender.send("hello AMQP").await {
+    //         Ok(_) => {},
+    //         Err(error) => {
+    //             tracing::error!(?error);
+    //             sender.close().await.unwrap();
+    //             return
+    //         },
+    //     }
+    // }
+    
+    let sendable = Sendable::builder()
+        .message("hello world")
+        .settled(false)
+        .build();
+    let fut1 = sender.send_batchable(sendable).await.unwrap();
+
+    let sendable = Sendable::builder()
+        .message("foo bar")
+        .settled(false)
+        .build();
+    let fut2 = sender.send_batchable(sendable).await.unwrap();
+    
+    
+    let handle = tokio::spawn(async move {
+        let first = fut1.await;
+        let second = fut2.await;
+    
+        tracing::info!(?first);
+        tracing::info!(?second);
+    });
+
+    let detached = sender.on_detach().await;
+    tracing::info!(?detached);
+    handle.await.unwrap();
+    sender.close().await.unwrap();
 }
 
 #[instrument(skip_all)]

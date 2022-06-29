@@ -481,6 +481,7 @@ impl endpoint::Session for Session {
         Ok(())
     }
 
+    #[instrument(skip_all)]
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,

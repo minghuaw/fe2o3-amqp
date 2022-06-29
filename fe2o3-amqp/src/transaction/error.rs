@@ -4,8 +4,8 @@ use fe2o3_amqp_types::{
 };
 
 use crate::link::{
-    delivery::FromDeliveryState, DetachError, IllegalLinkStateError, LinkStateError, SendError,
-    SenderAttachError,
+    delivery::{FromDeliveryState, FromOneshotRecvError, FromSettled},
+    DetachError, IllegalLinkStateError, LinkStateError, SendError, SenderAttachError,
 };
 
 /// Errors with allocation of new transacation ID
@@ -125,6 +125,9 @@ impl From<DetachError> for OwnedDischargeError {
 }
 
 /// Error associated with sending a txn message
+///
+/// It is similar to [`SendError`] but differs in how transactional states
+/// are interpreted
 #[derive(Debug, thiserror::Error)]
 pub enum PostError {
     /// Errors found in link state
@@ -154,6 +157,20 @@ pub enum PostError {
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
+}
+
+impl From<SendError> for PostError {
+    fn from(value: SendError) -> Self {
+        match value {
+            SendError::LinkStateError(val) => PostError::LinkStateError(val),
+            SendError::Detached(val) => PostError::Detached(val),
+            SendError::Rejected(val) => PostError::Rejected(val),
+            SendError::Released(val) => PostError::Released(val),
+            SendError::Modified(val) => PostError::Modified(val),
+            SendError::IllegalDeliveryState => PostError::IllegalDeliveryState,
+            SendError::MessageEncodeError => PostError::MessageEncodeError,
+        }
+    }
 }
 
 impl From<DetachError> for PostError {
@@ -192,6 +209,20 @@ impl FromDeliveryState for PostResult {
                 Some(Outcome::Declared(_)) | None => Err(PostError::IllegalDeliveryState),
             },
         }
+    }
+}
+
+impl FromSettled for PostResult {
+    fn from_settled() -> Self {
+        Ok(())
+    }
+}
+
+impl FromOneshotRecvError for PostResult {
+    fn from_oneshot_recv_error(_: tokio::sync::oneshot::error::RecvError) -> Self {
+        Err(PostError::LinkStateError(
+            LinkStateError::IllegalSessionState,
+        ))
     }
 }
 

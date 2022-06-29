@@ -346,6 +346,7 @@ where
             }
             SessionFrameBody::Disposition(disposition) => {
                 // trace!(channel, frame = ?disposition);
+                tracing::info!(?disposition);
                 Frame::new(channel, FrameBody::Disposition(disposition))
             }
             SessionFrameBody::Detach(detach) => {

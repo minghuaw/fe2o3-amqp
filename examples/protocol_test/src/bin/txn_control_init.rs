@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use fe2o3_amqp::{
-    transaction::{Controller, Transaction, TransactionDischarge, OwnedTransaction},
-    types::primitives::Value,
+    transaction::{Controller, Transaction, TransactionDischarge, OwnedTransaction, TransactionalRetirement},
+    types::{primitives::Value, definitions::ReceiverSettleMode},
     Connection, Delivery, Receiver, Sender, Session, Sendable,
 };
 use tracing::{instrument, Level};
@@ -19,19 +19,36 @@ async fn client_main() {
     let mut connection = Connection::open("connection-1", &url[..]).await.unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    // // Test a regular receiver
+    let controller = Controller::attach(&mut session, "controller").await.unwrap();
+    // let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+    let mut txn = Transaction::declare(&controller, None).await.unwrap();
+
+    // Test a regular receiver
     // let mut receiver = Receiver::attach(&mut session, "receiver-1", "q1")
     //     .await
     //     .unwrap();
-    // let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    // tracing::info!(message = ?delivery.message());
-    // receiver.accept(&delivery).await.unwrap();
-
-    // Test a regular sender
-    let mut sender = Sender::attach(&mut session, "sender-1", "q1")
+    let mut receiver = Receiver::builder()
+        .name("receiver-1")
+        .source("q1")
+        .receiver_settle_mode(ReceiverSettleMode::Second)
+        .attach(&mut session)
         .await
         .unwrap();
-    sender.send("hello AMQP").await.unwrap();
+    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    tracing::info!(message = ?delivery.message());
+    // receiver.accept(&delivery).await.unwrap();
+    txn.accept(&mut receiver, &delivery).await.unwrap();
+
+    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    tracing::info!(message = ?delivery.message());
+    receiver.accept(&delivery).await.unwrap();
+    txn.accept(&mut receiver, &delivery).await.unwrap();
+
+    // Test a regular sender
+    // let mut sender = Sender::attach(&mut session, "sender-1", "q1")
+    //     .await
+    //     .unwrap();
+    // sender.send("hello AMQP").await.unwrap();
 
     // // Test creating a control link
     // match Controller::attach(&mut session, "controller").await {
@@ -63,14 +80,18 @@ async fn client_main() {
     //     }
     // }
 
-    let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
-    txn.post(&mut sender, "Hello World").await.unwrap();
-    txn.post(&mut sender, "Foo Bar").await.unwrap();
+    // txn.post(&mut sender, "Hello World").await.unwrap();
+    // txn.post(&mut sender, "Foo Bar").await.unwrap();
     txn.commit().await.unwrap();
 
-    sender.close().await.unwrap();
-    // receiver.close().await.unwrap();
+    tracing::info!("closing control link");
+    controller.close().await.unwrap();
 
+    tracing::info!("closing receiver");
+    // sender.close().await.unwrap();
+    receiver.close().await.unwrap();
+
+    tracing::info!("closing session");
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

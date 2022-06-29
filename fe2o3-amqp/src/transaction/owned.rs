@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     Controller, OwnedDeclareError, OwnedDischargeError, TransactionDischarge, TransactionExt,
-    TransactionalRetirement, TxnAcquisition,
+    TransactionalRetirement, TxnAcquisition, PostError,
 };
 
 /// An owned transaction that has exclusive access to its own control link
@@ -134,7 +134,7 @@ impl OwnedTransaction {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError>
+    ) -> Result<DeliveryFut<Result<(), PostError>>, PostError>
     where
         T: serde::Serialize,
     {
@@ -160,7 +160,7 @@ impl OwnedTransaction {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), SendError>
+    ) -> Result<(), PostError>
     where
         T: serde::Serialize,
     {
