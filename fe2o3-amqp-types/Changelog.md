@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.21
+
+1. Added derive trait of `PartialOrd, PartialEq, Eq, Ord, Hash` for `Role`
+
 ## 0.0.20
 
 1. Added impl of `From<Outcome> for DeliveryState`
