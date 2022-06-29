@@ -187,3 +187,9 @@ impl FromDeliveryState for PostResult {
         }
     }
 }
+
+// /// Errors with handling Post (Transfer) at the resource
+// #[derive(Debug)]
+// pub enum ResourcePostError {
+
+// }

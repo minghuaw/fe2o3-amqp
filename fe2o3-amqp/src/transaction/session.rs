@@ -1,5 +1,7 @@
 //! Implements session that can handle transaction
 
+use std::io;
+
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, SessionError},
@@ -300,27 +302,26 @@ where
         transfer: Transfer,
         payload: Payload,
     ) -> Result<(), Self::Error> {
-        match &transfer.state {
+        let (txn, txn_id) = match &transfer.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
-                match self.txn_manager.txns.get_mut(txn_id) {
-                    Some(txn) => {
-                        txn.frames.push(TxnWorkFrame::Post { transfer, payload });
-                        Ok(())
-                    },
-                    None => {
-                        // FIXME: Should this stop the session or just the coordinator associated with the txn?
-                        let error = definitions::Error::new(TransactionError::UnknownId, None, None);
-                        Err(Self::Error::Local(error))
-                    }
-                }
+                self.txn_manager.txns.get_mut(txn_id)
+                    .map(|txn| (txn, txn_id.clone()))
+                    .ok_or(definitions::Error::new(TransactionError::UnknownId, None, None))
+                    .map_err(Self::Error::Local)?
             }
             Some(_) | None => {
-                self.session
+                return self.session
                     .on_incoming_transfer(transfer, payload)
                     .await
             }
+        };
+
+        if let Some(disposition) = txn.on_incoming_post(txn_id, transfer, payload) {
+            self.session.control().send(SessionControl::Disposition(disposition)).await
+                .map_err(|_| Self::Error::Io(io::Error::new(io::ErrorKind::Other, "Session engine must have dropped")))?;
         }
+        Ok(())
     }
 
     async fn on_incoming_disposition(
