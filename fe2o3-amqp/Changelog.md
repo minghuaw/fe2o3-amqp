@@ -1,5 +1,21 @@
 # Change Log
 
+## 0.0.16
+
+1. Closing or detaching `Sender` and `Receiver` now takes ownership
+2. Bug fixes
+   1. Fixed bug where unsettled outgoing transfers in the session's map of unsettled delivery id and link handle may be overwritten by incoming transfer when `rcv_settle_mode` is set to `Second`
+   2. Fixed bug where duplicated detach may be sent when a link tries to detach after the remote peer detaches first
+   3. Fixed bug receiver builder not requiring `source` to be set to start attach [#44](https://github.com/minghuaw/fe2o3-amqp/issues/44)
+3. `Transaction` and `OwnedTransaction`
+   1. `commit()` and `rollback()` now takes ownership
+   2. `Transaction` now holds a reference to a `Controller`
+   3. `OwnedTransaction` is added to be a version of `Transaction` that owns a `Controller` instead
+4. Added transaction coordinator and establishment of control link on the resource side. The resource side now supports the following transactional work
+   1. Transactional posting
+   2. Transactional retirement
+5. Transactional acquisition on the resource side is set to not implemented because the exact behavior upon committing or rolling back of a transactional acquisition is not clear [#43](https://github.com/minghuaw/fe2o3-amqp/issues/43)
+
 ## 0.0.15
 
 1. Added type conversions to reflect bug fix in `fe2o3-amqp-types`
