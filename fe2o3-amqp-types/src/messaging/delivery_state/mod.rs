@@ -95,6 +95,20 @@ pub enum Outcome {
 
 mod outcome_impl;
 
+impl From<Outcome> for DeliveryState {
+    fn from(value: Outcome) -> Self {
+        match value {
+            Outcome::Accepted(val) => Self::Accepted(val),
+            Outcome::Rejected(val) => Self::Rejected(val),
+            Outcome::Released(val) => Self::Released(val),
+            Outcome::Modified(val) => Self::Modified(val),
+
+            #[cfg(feature = "transaction")]
+            Outcome::Declared(val) => Self::Declared(val)
+        }
+    }
+}
+
 /// 3.4.1 Received
 ///
 /// <type name="received" class="composite" source="list" provides="delivery-state">

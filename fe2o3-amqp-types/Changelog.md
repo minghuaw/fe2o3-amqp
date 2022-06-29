@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.20
+
+1. Added impl of `From<Outcome> for DeliveryState`
+
 ## 0.0.19
 
 1. Added impl of `From<TransactionError> for ErrorCondition`
