@@ -88,7 +88,6 @@ async fn client_main() {
     receiver.accept(&delivery1).await.unwrap();
     receiver.accept(&delivery2).await.unwrap();
     
-    tokio::time::sleep(Duration::from_millis(5000)).await;
     tracing::info!("closing control link");
     controller.close().await.unwrap();
 

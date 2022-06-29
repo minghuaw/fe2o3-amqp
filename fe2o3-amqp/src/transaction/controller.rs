@@ -9,7 +9,7 @@ use crate::{
     endpoint::Settlement,
     link::{
         self,
-        builder::{WithoutName, WithoutTarget},
+        builder::{WithoutName, WithoutTarget, WithSource},
         delivery::UnsettledMessage,
         role,
         sender::SenderInner,
@@ -49,9 +49,9 @@ where
 
 impl Controller {
     /// Creates a new builder for controller
-    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithoutTarget>
+    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>
     {
-        link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithoutTarget>::new()
+        link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>::new()
     }
 
     /// Close the control link with error

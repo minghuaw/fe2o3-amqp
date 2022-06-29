@@ -48,9 +48,17 @@ pub struct WithoutTarget;
 #[derive(Debug)]
 pub struct WithTarget;
 
+/// Type state for link::builder::Builder;
+#[derive(Debug)]
+pub struct WithoutSource;
+
+/// Type state for link::builder::Builder;
+#[derive(Debug)]
+pub struct WithSource;
+
 /// Builder for a Link
 #[derive(Debug, Clone)]
-pub struct Builder<Role, T, NameState, Addr> {
+pub struct Builder<Role, T, NameState, SS, TS> {
     /// The name of the link
     pub name: String,
 
@@ -92,10 +100,11 @@ pub struct Builder<Role, T, NameState, Addr> {
     // Type state markers
     role: PhantomData<Role>,
     name_state: PhantomData<NameState>,
-    addr_state: PhantomData<Addr>,
+    source_state: PhantomData<SS>,
+    target_state: PhantomData<TS>,
 }
 
-impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutTarget> {
+impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTarget> {
     fn default() -> Self {
         Self {
             name: Default::default(),
@@ -113,27 +122,27 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutTarget> {
             credit_mode: Default::default(),
             role: PhantomData,
             name_state: PhantomData,
-            addr_state: PhantomData,
+            source_state: PhantomData,
+            target_state: PhantomData,
         }
     }
 }
 
-impl<T> Builder<role::Sender, T, WithoutName, WithoutTarget> {
+impl<T> Builder<role::Sender, T, WithoutName, WithSource, WithoutTarget> {
     pub(crate) fn new() -> Self {
-        Self::default().source(Source::builder().build())
+        Builder::<role::Sender, T, _, _, _>::default().source(Source::builder().build())
     }
 }
 
-impl Builder<role::Receiver, Target, WithoutName, WithTarget> {
+impl Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::Receiver, Target, WithoutName, WithoutTarget>::default()
-            .target(Target::builder().build())
+        Builder::<role::Receiver, Target, _, _, _>::default().target(Target::builder().build())
     }
 }
 
-impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
+impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     /// The name of the link
-    pub fn name(self, name: impl Into<String>) -> Builder<Role, T, WithName, Addr> {
+    pub fn name(self, name: impl Into<String>) -> Builder<Role, T, WithName, SS, TS> {
         Builder {
             name: name.into(),
             snd_settle_mode: self.snd_settle_mode,
@@ -150,12 +159,13 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: self.role,
             name_state: PhantomData,
-            addr_state: self.addr_state,
+            source_state: self.source_state,
+            target_state: self.target_state,
         }
     }
 
     /// Set the link's role to sender
-    pub fn sender(self) -> Builder<role::Sender, T, NameState, Addr> {
+    pub fn sender(self) -> Builder<role::Sender, T, NameState, SS, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -172,12 +182,13 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: PhantomData,
             name_state: self.name_state,
-            addr_state: self.addr_state,
+            source_state: self.source_state,
+            target_state: self.target_state,
         }
     }
 
     /// Set the link's role to receiver
-    pub fn receiver(self) -> Builder<role::Receiver, T, NameState, Addr> {
+    pub fn receiver(self) -> Builder<role::Receiver, T, NameState, SS, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -194,7 +205,8 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: PhantomData,
             name_state: self.name_state,
-            addr_state: self.addr_state,
+            source_state: self.source_state,
+            target_state: self.target_state,
         }
     }
 
@@ -211,13 +223,36 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     }
 
     /// The source for messages
-    pub fn source(mut self, source: impl Into<Source>) -> Self {
-        self.source = Some(source.into());
-        self
+    pub fn source(
+        self,
+        source: impl Into<Source>,
+    ) -> Builder<Role, T, NameState, WithSource, TS> {
+        Builder {
+            name: self.name,
+            snd_settle_mode: self.snd_settle_mode,
+            rcv_settle_mode: self.rcv_settle_mode,
+            source: Some(source.into()),
+            target: self.target,
+            initial_delivery_count: self.initial_delivery_count,
+            max_message_size: self.max_message_size,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
+            buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
+
+            role: self.role,
+            name_state: self.name_state,
+            source_state: PhantomData,
+            target_state: self.target_state,
+        }
     }
 
     /// The target for messages
-    pub fn target(self, target: impl Into<Target>) -> Builder<Role, Target, NameState, WithTarget> {
+    pub fn target(
+        self,
+        target: impl Into<Target>,
+    ) -> Builder<Role, Target, NameState, SS, WithTarget> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -234,7 +269,8 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: self.role,
             name_state: self.name_state,
-            addr_state: PhantomData,
+            source_state: self.source_state,
+            target_state: PhantomData,
         }
     }
 
@@ -243,7 +279,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     pub fn coordinator(
         self,
         coordinator: Coordinator,
-    ) -> Builder<Role, Coordinator, NameState, WithTarget> {
+    ) -> Builder<Role, Coordinator, NameState, SS, WithTarget> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -260,7 +296,8 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: self.role,
             name_state: self.name_state,
-            addr_state: PhantomData,
+            source_state: self.source_state,
+            target_state: PhantomData,
         }
     }
 
@@ -342,7 +379,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     }
 }
 
-impl<T, NameState, Addr> Builder<role::Sender, T, NameState, Addr> {
+impl<T, NameState, SS, TS> Builder<role::Sender, T, NameState, SS, TS> {
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
@@ -352,9 +389,7 @@ impl<T, NameState, Addr> Builder<role::Sender, T, NameState, Addr> {
     }
 }
 
-impl<T, NameState, Addr> Builder<role::Receiver, T, NameState, Addr> {}
-
-impl Builder<role::Sender, Target, WithName, WithTarget> {
+impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a sender
     ///
     /// # Example
@@ -378,7 +413,7 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
     }
 }
 
-impl<T> Builder<role::Sender, T, WithName, WithTarget>
+impl<T> Builder<role::Sender, T, WithName, WithSource, WithTarget>
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
@@ -468,7 +503,7 @@ where
     }
 }
 
-impl Builder<role::Receiver, Target, WithName, WithTarget> {
+impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a receiver
     ///
     /// # Example
@@ -491,7 +526,7 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     }
 }
 
-impl<T> Builder<role::Receiver, T, WithName, WithTarget>
+impl<T> Builder<role::Receiver, T, WithName, WithSource, WithTarget>
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
@@ -580,7 +615,7 @@ where
 }
 
 #[cfg(feature = "transaction")]
-impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
+impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
     /// Attach the link as a transaction controller
     pub async fn attach<R>(
         self,

@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::Body, DeliveryState, Message, Outcome, Received},
+    messaging::{message::Body, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;

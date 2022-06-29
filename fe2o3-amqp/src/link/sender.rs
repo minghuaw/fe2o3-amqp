@@ -22,7 +22,7 @@ use crate::{
 };
 
 use super::{
-    builder::{self, WithoutName, WithoutTarget},
+    builder::{self, WithoutName, WithoutTarget, WithSource},
     delivery::{DeliveryFut, Sendable},
     error::DetachError,
     role,
@@ -85,8 +85,8 @@ impl std::fmt::Debug for Sender {
 
 impl Sender {
     /// Creates a builder for [`Sender`] link
-    pub fn builder() -> builder::Builder<role::Sender, Target, WithoutName, WithoutTarget> {
-        builder::Builder::<role::Sender, Target, _, _>::new()
+    pub fn builder() -> builder::Builder<role::Sender, Target, WithoutName, WithSource, WithoutTarget> {
+        builder::Builder::<role::Sender, Target, _, _, _>::new()
     }
 
     /// Attach the sender link to a session with default configuration

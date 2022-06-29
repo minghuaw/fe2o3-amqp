@@ -22,7 +22,7 @@ use crate::{
 };
 
 use super::{
-    builder::{self, WithTarget, WithoutName},
+    builder::{self, WithTarget, WithoutName, WithoutSource},
     delivery::Delivery,
     error::DetachError,
     receiver_link::section_number_and_offset,
@@ -202,8 +202,8 @@ pub struct Receiver {
 
 impl Receiver {
     /// Creates a builder for the [`ReceiverInner`]
-    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithTarget> {
-        builder::Builder::<role::Receiver, Target, _, _>::new()
+    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
+        builder::Builder::<role::Receiver, Target, _, _, _>::new()
     }
 
     /// Attach the receiver link to a session with the default configuration
