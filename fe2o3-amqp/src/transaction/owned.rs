@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{transaction::{Declared, TransactionId, TransactionalState}, messaging::{Outcome, DeliveryState,}, definitions::{SequenceNo, Fields}, primitives::Symbol};
 use serde_amqp::Value;
 
-use crate::{session::SessionHandle, link::{SendError, DispositionError, FlowError}, Receiver, Delivery, endpoint::ReceiverLink};
+use crate::{session::SessionHandle, link::{SendError, DispositionError, FlowError, delivery::DeliveryFut}, Receiver, Delivery, endpoint::ReceiverLink, Sender, Sendable};
 
 use super::{Controller, OwnedDeclareError, TransactionDischarge, TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY, OwnedDischargeError};
 
@@ -108,6 +108,60 @@ impl OwnedTransaction {
             declared,
             is_discharged: false,
         })
+    }
+
+
+    /// Post a transactional work without waiting for the acknowledgement.
+    async fn post_batchable<T>(
+        &mut self,
+        sender: &mut Sender,
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError> 
+    where
+        T: serde::Serialize,
+    {
+        // If the transaction controller wishes to associate an outgoing transfer with a
+        // transaction, it MUST set the state of the transfer with a transactional-state carrying
+        // the appropriate transaction identifier
+
+        // Note that if delivery is split across several transfer frames then all frames MUST be
+        // explicitly associated with the same transaction.
+        let sendable = sendable.into();
+        let state = TransactionalState {
+            txn_id: self.declared.txn_id.clone(),
+            outcome: None,
+        };
+        let state = DeliveryState::TransactionalState(state);
+        let settlement = sender.inner.send_with_state(sendable, Some(state)).await?;
+
+        Ok(DeliveryFut::from(settlement))
+    }
+
+    /// Post a transactional work
+    pub async fn post<T>(
+        &mut self,
+        sender: &mut Sender,
+        sendable: impl Into<Sendable<T>>,
+    ) -> Result<(), SendError>
+    where
+        T: serde::Serialize,
+    {
+        // If the transaction controller wishes to associate an outgoing transfer with a
+        // transaction, it MUST set the state of the transfer with a transactional-state carrying
+        // the appropriate transaction identifier
+
+        // Note that if delivery is split across several transfer frames then all frames MUST be
+        // explicitly associated with the same transaction.
+        let fut = self.post_batchable(sender, sendable).await?;
+
+        // On receiving a non-settled delivery associated with a live transaction, the transactional
+        // resource MUST inform the controller of the presumptive terminal outcome before it can
+        // successfully discharge the transaction. That is, the resource MUST send a disposition
+        // performative which covers the posted transfer with the state of the delivery being a
+        // transactional-state with the correct transaction identified, and a terminal outcome. This
+        // informs the controller of the outcome that will be in effect at the point that the
+        // transaction is successfully discharged.
+        fut.await
     }
     
     /// Acquire a transactional work

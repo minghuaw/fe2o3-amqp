@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use fe2o3_amqp::{
-    transaction::{Controller, Transaction, TransactionDischarge},
+    transaction::{Controller, Transaction, TransactionDischarge, OwnedTransaction},
     types::primitives::Value,
     Connection, Delivery, Receiver, Sender, Session, Sendable,
 };
@@ -33,35 +33,40 @@ async fn client_main() {
         .unwrap();
     sender.send("hello AMQP").await.unwrap();
 
-    // Test creating a control link
-    match Controller::attach(&mut session, "controller").await {
-        Ok(mut controller) => {
-            let mut txn = Transaction::declare(&mut controller, None).await.unwrap();
+    // // Test creating a control link
+    // match Controller::attach(&mut session, "controller").await {
+    //     Ok(mut controller) => {
+    //         let mut txn = Transaction::declare(&mut controller, None).await.unwrap();
 
-            tracing::info!("Transaction declared");
+    //         tracing::info!("Transaction declared");
 
-            let sendable = Sendable::builder()
-                .message("Hello World")
-                .settled(false)
-                .build();
-            let fut1 = txn.post_batchable(&mut sender, sendable).await.unwrap();
-            fut1.await.unwrap();
+    //         let sendable = Sendable::builder()
+    //             .message("Hello World")
+    //             .settled(false)
+    //             .build();
+    //         let fut1 = txn.post_batchable(&mut sender, sendable).await.unwrap();
+    //         fut1.await.unwrap();
 
-            let sendable = Sendable::builder()
-                .message("Foo Bar")
-                .settled(false)
-                .build();
-            let fut2 = txn.post_batchable(&mut sender, sendable).await.unwrap();
-            fut2.await.unwrap();
+    //         let sendable = Sendable::builder()
+    //             .message("Foo Bar")
+    //             .settled(false)
+    //             .build();
+    //         let fut2 = txn.post_batchable(&mut sender, sendable).await.unwrap();
+    //         fut2.await.unwrap();
                 
-            txn.commit().await.unwrap();
+    //         txn.commit().await.unwrap();
 
-            controller.close().await.unwrap();
-        }
-        Err(attach_error) => {
-            tracing::error!(?attach_error)
-        }
-    }
+    //         controller.close().await.unwrap();
+    //     }
+    //     Err(attach_error) => {
+    //         tracing::error!(?attach_error)
+    //     }
+    // }
+
+    let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
+    txn.post(&mut sender, "Hello World").await.unwrap();
+    txn.post(&mut sender, "Foo Bar").await.unwrap();
+    txn.commit().await.unwrap();
 
     sender.close().await.unwrap();
     // receiver.close().await.unwrap();

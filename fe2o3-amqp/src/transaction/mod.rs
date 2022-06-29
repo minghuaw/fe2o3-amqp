@@ -304,7 +304,7 @@ impl<'t> Transaction<'t> {
     }
 
     /// Post a transactional work without waiting for the acknowledgement.
-    pub async fn post_batchable<T>(
+    async fn post_batchable<T>(
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
