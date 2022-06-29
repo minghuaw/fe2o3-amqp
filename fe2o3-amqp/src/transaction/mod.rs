@@ -6,7 +6,7 @@ use crate::{
         delivery::{DeliveryFut, UnsettledMessage},
         DispositionError, FlowError, LinkFrame, SendError,
     },
-    util::TryConsume,
+    util::{TryConsume, TXN_ID_KEY},
     Delivery, Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;
@@ -50,8 +50,6 @@ pub mod manager;
 
 #[cfg(feature = "acceptor")]
 pub mod session;
-
-const TXN_ID_KEY: &str = "txn-id";
 
 /// Trait for generics for TxnAcquisition
 #[async_trait]

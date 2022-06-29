@@ -1,4 +1,7 @@
-use fe2o3_amqp_types::performatives::{Attach, Detach, Disposition, Transfer};
+use fe2o3_amqp_types::{
+    performatives::{Attach, Detach, Disposition, Transfer},
+    transaction::TransactionId,
+};
 
 use crate::{
     endpoint::{InputHandle, LinkFlow},
@@ -21,6 +24,10 @@ pub(crate) enum LinkFrame {
     },
     Disposition(Disposition),
     Detach(Detach),
+
+    /// Indicating to the receiver that Txn controller side is requesting for
+    /// a transactional acquisition
+    Acquisition(TransactionId),
 }
 
 /// Regular Attach for non-transactional links

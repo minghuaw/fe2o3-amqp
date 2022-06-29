@@ -42,7 +42,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, InputHandle, LinkAttach, LinkDetach, LinkFlow, OutputHandle, Settlement},
     link::delivery::UnsettledMessage,
-    util::{Consumer, Producer},
+    util::{Consumer, Produce, Producer, TXN_ID_KEY},
     Payload,
 };
 
@@ -415,25 +415,42 @@ impl LinkRelay<OutputHandle> {
         }
     }
 
-    pub(crate) async fn on_incoming_flow(&mut self, flow: LinkFlow) -> Option<LinkFlow> {
+    pub(crate) async fn on_incoming_flow(
+        &mut self,
+        flow: LinkFlow,
+    ) -> Result<Option<LinkFlow>, definitions::Error> {
+        use serde_amqp::Value;
+
         match self {
             LinkRelay::Sender {
                 flow_state,
                 output_handle,
+                tx,
                 ..
             } => {
-                flow_state
-                    .on_incoming_flow(flow, output_handle.clone())
-                    .await
+                let key = Symbol::from(TXN_ID_KEY);
+                match flow.properties.as_ref().map(|m| m.get(&key)).flatten() {
+                    Some(Value::Binary(txn_id)) => {
+                        let frame = LinkFrame::Acquisition(txn_id.clone());
+                        tx.send(frame).await.map_err(|_| {
+                            definitions::Error::new(SessionError::UnattachedHandle, None, None)
+                        })?;
+                    }
+                    Some(_) | None => {}
+                }
+
+                let ret = flow_state.produce((flow, output_handle.clone())).await;
+                Ok(ret)
             }
             LinkRelay::Receiver {
                 flow_state,
                 output_handle,
                 ..
             } => {
-                flow_state
+                let ret = flow_state
                     .on_incoming_flow(flow, output_handle.clone())
-                    .await
+                    .await;
+                Ok(ret)
             }
         }
     }

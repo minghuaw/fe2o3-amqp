@@ -11,6 +11,8 @@ mod producer;
 pub use consumer::*;
 pub use producer::*;
 
+pub(crate) const TXN_ID_KEY: &str = "txn-id";
+
 #[derive(Debug)]
 pub(crate) enum Running {
     Continue,

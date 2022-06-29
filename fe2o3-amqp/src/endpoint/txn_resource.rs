@@ -4,7 +4,7 @@ use fe2o3_amqp_types::{
     transaction::{TransactionError, TransactionId},
 };
 
-use crate::transaction::{AllocTxnIdError};
+use crate::transaction::AllocTxnIdError;
 
 use super::Session;
 

@@ -13,12 +13,13 @@ use crate::{
     endpoint::ReceiverLink,
     link::{delivery::DeliveryFut, DispositionError, FlowError, SendError},
     session::SessionHandle,
+    util::TXN_ID_KEY,
     Delivery, Receiver, Sendable, Sender,
 };
 
 use super::{
     Controller, OwnedDeclareError, OwnedDischargeError, TransactionDischarge, TransactionExt,
-    TransactionalRetirement, TxnAcquisition, TXN_ID_KEY,
+    TransactionalRetirement, TxnAcquisition,
 };
 
 /// An owned transaction that has exclusive access to its own control link

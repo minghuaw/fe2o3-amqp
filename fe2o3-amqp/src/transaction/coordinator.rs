@@ -228,7 +228,8 @@ impl TxnCoordinator {
             | RecvError::DeliveryTagIsNone
             | RecvError::MessageDecodeError
             | RecvError::IllegalRcvSettleModeInTransfer
-            | RecvError::InconsistentFieldInMultiFrameDelivery => {
+            | RecvError::InconsistentFieldInMultiFrameDelivery
+            | RecvError::TransactionalAcquisitionIsNotImeplemented => {
                 tracing::error!(?error);
                 let error =
                     definitions::Error::new(AmqpError::NotAllowed, format!("{:?}", error), None);

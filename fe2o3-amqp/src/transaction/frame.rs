@@ -1,6 +1,6 @@
 //! Transactional work frames
 
-use fe2o3_amqp_types::performatives::{Disposition, Flow, Transfer};
+use fe2o3_amqp_types::performatives::{Disposition, Transfer};
 
 use crate::Payload;
 
@@ -12,7 +12,7 @@ pub(crate) enum TxnWorkFrame {
         payload: Payload,
     },
     Retire(Disposition),
-    Acquire(Flow),
+    // Acquire(Flow), // Not implemented for now
 }
 
 // impl TxnWorkFrame {

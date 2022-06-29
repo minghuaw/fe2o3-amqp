@@ -141,7 +141,7 @@ impl Sender {
     /// the Sender will re-attach and send a closing detach
     pub async fn detach(mut self) -> Result<DetachedSender, DetachError> {
         self.inner.detach_with_error(None).await?;
-        Ok(DetachedSender { inner: self.inner })
+        Ok(DetachedSender { _inner: self.inner })
     }
 
     /// Detach the link with an error
@@ -150,7 +150,7 @@ impl Sender {
         error: definitions::Error,
     ) -> Result<DetachedSender, DetachError> {
         self.inner.detach_with_error(Some(error)).await?;
-        Ok(DetachedSender { inner: self.inner })
+        Ok(DetachedSender { _inner: self.inner })
     }
 
     /// Detach the link with a timeout
@@ -264,7 +264,7 @@ impl Sender {
 /// TODO
 #[derive(Debug)]
 pub struct DetachedSender {
-    inner: SenderInner<SenderLink<Target>>,
+    _inner: SenderInner<SenderLink<Target>>,
 }
 
 /// This is so that the transaction controller can re-use

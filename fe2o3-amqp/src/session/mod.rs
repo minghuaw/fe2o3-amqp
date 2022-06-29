@@ -420,7 +420,11 @@ impl endpoint::Session for Session {
             let input_handle = InputHandle::from(link_flow.handle.clone());
             match self.link_by_input_handle.get_mut(&input_handle) {
                 Some(link_relay) => {
-                    if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await {
+                    if let Some(echo_flow) = link_relay
+                        .on_incoming_flow(link_flow)
+                        .await
+                        .map_err(Self::Error::Local)?
+                    {
                         self.control
                             .send(SessionControl::LinkFlow(echo_flow))
                             .await

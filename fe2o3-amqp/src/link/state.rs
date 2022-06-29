@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},
-    util::{Consume, Produce, Producer, ProducerState, TryConsume},
+    util::{Consume, ProducerState, TryConsume},
 };
 
 use super::{role, ReceiverTransferError, SenderFlowState, SenderTryConsumeError};
@@ -291,15 +291,15 @@ impl ProducerState for Arc<LinkFlowState<role::Sender>> {
     }
 }
 
-impl Producer<Arc<LinkFlowState<role::Sender>>> {
-    pub(crate) async fn on_incoming_flow(
-        &mut self,
-        flow: LinkFlow,
-        output_handle: OutputHandle,
-    ) -> Option<LinkFlow> {
-        self.produce((flow, output_handle)).await
-    }
-}
+// impl Producer<Arc<LinkFlowState<role::Sender>>> {
+//     pub(crate) async fn on_incoming_flow(
+//         &mut self,
+//         flow: LinkFlow,
+//         output_handle: OutputHandle,
+//     ) -> Option<LinkFlow> {
+//         self.produce((flow, output_handle)).await
+//     }
+// }
 
 // pub enum SenderPermit {
 //     Send,
@@ -340,7 +340,10 @@ impl TryConsume for SenderFlowState {
     }
 }
 
-async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<[u8; 4], InsufficientCredit> {
+async fn consume_link_credit(
+    lock: &RwLock<LinkFlowStateInner>,
+    count: u32,
+) -> Result<[u8; 4], InsufficientCredit> {
     // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
 

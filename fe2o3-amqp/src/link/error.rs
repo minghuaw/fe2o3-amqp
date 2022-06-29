@@ -449,6 +449,10 @@ pub enum RecvError {
     /// Field is inconsisten in multi-frame delivery
     #[error("Field is inconsisten in multi-frame delivery")]
     InconsistentFieldInMultiFrameDelivery,
+
+    /// Transactional acquision is not supported yet
+    #[error("Transactional acquisition is not implemented")]
+    TransactionalAcquisitionIsNotImeplemented,
 }
 
 impl From<ReceiverTransferError> for RecvError {

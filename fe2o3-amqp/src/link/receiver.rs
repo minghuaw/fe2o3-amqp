@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
+    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
@@ -282,7 +282,7 @@ impl Receiver {
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(mut self) -> Result<DetachedReceiver, DetachError> {
         self.inner.detach_with_error(None).await?;
-        Ok(DetachedReceiver { inner: self.inner })
+        Ok(DetachedReceiver { _inner: self.inner })
     }
 
     /// Detach the link with an error.
@@ -295,7 +295,7 @@ impl Receiver {
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<DetachedReceiver, DetachError> {
         self.inner.detach_with_error(error.into()).await?;
-        Ok(DetachedReceiver { inner: self.inner })
+        Ok(DetachedReceiver { _inner: self.inner })
     }
 
     /// Detach the link with a timeout
@@ -399,7 +399,7 @@ impl Receiver {
 /// TODO
 #[derive(Debug)]
 pub struct DetachedReceiver {
-    inner: ReceiverInner<ReceiverLink<Target>>,
+    _inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
 #[derive(Debug)]
@@ -573,6 +573,15 @@ where
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
+            LinkFrame::Acquisition(_) => {
+                let error = definitions::Error::new(
+                    AmqpError::NotImplemented,
+                    "Transactional acquisition is not implemented".to_string(),
+                    None,
+                );
+                self.close_with_error(Some(error)).await?;
+                Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
+            }
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs

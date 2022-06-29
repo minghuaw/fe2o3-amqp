@@ -315,6 +315,13 @@ where
                 .session
                 .on_outgoing_detach(detach)
                 .map_err(Into::into)?,
+            LinkFrame::Acquisition(_) => {
+                return Err(Error::Local(definitions::Error::new(
+                    AmqpError::InternalError,
+                    "Acquisition is not expected in outgoing link frames".to_string(),
+                    None,
+                )))
+            }
         };
 
         self.outgoing

@@ -13,7 +13,7 @@ use crate::{
     Delivery, Receiver,
 };
 
-use super::{TransactionDischarge, TransactionExt, TXN_ID_KEY};
+use super::{TransactionDischarge, TransactionExt, TransactionalRetirement, TXN_ID_KEY};
 
 /// 4.4.3 Transactional Acquisition
 ///
@@ -35,7 +35,11 @@ where
 
 impl<'r, Txn> TxnAcquisition<'r, Txn>
 where
-    Txn: TransactionExt + TransactionDischarge<Error = SendError>,
+    Txn: TransactionExt
+        + TransactionDischarge<Error = SendError>
+        + TransactionalRetirement<RetireError = DispositionError>
+        + Send
+        + Sync,
 {
     /// Get an immutable reference to the underlying transaction
     pub fn txn(&self) -> &Txn {
@@ -101,9 +105,11 @@ where
     }
 
     /// Accept the message
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
-        // self.txn.accept(self.recver, delivery).await
-        todo!()
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError>
+    where
+        T: Send + Sync,
+    {
+        self.txn.accept(self.recver, delivery).await
     }
 
     /// Reject the message
@@ -111,15 +117,19 @@ where
         &mut self,
         delivery: &Delivery<T>,
         error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DispositionError> {
-        // self.txn.reject(self.recver, delivery, error).await
-        todo!()
+    ) -> Result<(), DispositionError>
+    where
+        T: Send + Sync,
+    {
+        self.txn.reject(self.recver, delivery, error.into()).await
     }
 
     /// Release the message
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
-        // self.txn.release(self.recver, delivery).await
-        todo!()
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError>
+    where
+        T: Send + Sync,
+    {
+        self.txn.release(self.recver, delivery).await
     }
 
     /// Modify the message
@@ -127,9 +137,11 @@ where
         &mut self,
         delivery: &Delivery<T>,
         modified: Modified,
-    ) -> Result<(), DispositionError> {
-        // self.txn.modify(self.recver, delivery, modified).await
-        todo!()
+    ) -> Result<(), DispositionError>
+    where
+        T: Send + Sync,
+    {
+        self.txn.modify(self.recver, delivery, modified).await
     }
 }
 
