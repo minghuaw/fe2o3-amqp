@@ -165,8 +165,6 @@ where
             .into();
 
         // Delivery count is incremented when consuming credit
-        // TODO: optimize to reduce one read
-        // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
         let delivery_tag = DeliveryTag::from(tag);
 
         // TODO: Expose API to allow user to set this when the mode is MIXED?

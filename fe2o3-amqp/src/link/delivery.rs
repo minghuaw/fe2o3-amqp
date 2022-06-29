@@ -3,7 +3,6 @@
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{message::Body, DeliveryState, Message, Outcome, Received},
-    transaction::TransactionalState,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;

@@ -3,9 +3,8 @@ use fe2o3_amqp_types::{
     messaging::Accepted,
     transaction::{TransactionError, TransactionId},
 };
-use tokio::sync::mpsc;
 
-use crate::transaction::{frame::TxnWorkFrame, manager::ResourceTransaction, AllocTxnIdError};
+use crate::transaction::{AllocTxnIdError};
 
 use super::Session;
 
