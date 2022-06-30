@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.17
+
+1. Remove `"txn-id"` field from receiver link properties if error encountered while sending flow
+
 ## 0.0.16
 
 1. Closing or detaching `Sender` and `Receiver` now takes ownership
