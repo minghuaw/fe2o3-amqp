@@ -7,7 +7,6 @@ use fe2o3_amqp_types::{
     definitions::{self},
     messaging::{Accepted, DeliveryState},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::Symbol,
     transaction::{TransactionError, TransactionId},
 };
 use futures_util::Sink;
@@ -26,7 +25,7 @@ use crate::{
 use super::{
     frame::TxnWorkFrame,
     manager::{HandleControlLink, ResourceTransaction, TransactionManager},
-    AllocTxnIdError, DischargeError, TXN_ID_KEY,
+    AllocTxnIdError, DischargeError,
 };
 
 pub(crate) async fn allocate_transaction_id(
@@ -256,17 +255,18 @@ where
 
     #[instrument(skip_all, flow = ?flow)]
     async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
-        match flow
-            .properties
-            .as_ref()
-            .map(|fields| fields.contains_key(&Symbol::from(TXN_ID_KEY)))
-        {
-            Some(true) => {
-                // self.on_incoming_txn_flow(flow).await
-                todo!()
-            }
-            Some(false) | None => self.session.on_incoming_flow(flow).await,
-        }
+        // TODO: implement transactional acquisition
+        // match flow
+        //     .properties
+        //     .as_ref()
+        //     .map(|fields| fields.contains_key(&Symbol::from(TXN_ID_KEY)))
+        // {
+        //     Some(true) => {
+        //         // self.on_incoming_txn_flow(flow).await
+        //     }
+        //     Some(false) | None => self.session.on_incoming_flow(flow).await,
+        // }
+        self.session.on_incoming_flow(flow).await
     }
 
     async fn on_incoming_transfer(
