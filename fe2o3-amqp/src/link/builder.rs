@@ -4,34 +4,30 @@ use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
-    messaging::{DeliveryState, Source, Target, TargetArchetype},
+    messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::PollSender;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    endpoint::OutputHandle,
+    endpoint::{LinkExt, OutputHandle},
     link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
     util::{Consumer, Producer},
 };
 
 use super::{
-    delivery::UnsettledMessage,
-    error::AttachError,
     receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverFlowState, Sender, SenderFlowState,
+    Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderLink,
 };
 
 #[cfg(feature = "transaction")]
-use crate::transaction::{Controller, Undeclared};
+use crate::transaction::Controller;
 
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::transaction::Coordinator;
@@ -52,9 +48,17 @@ pub struct WithoutTarget;
 #[derive(Debug)]
 pub struct WithTarget;
 
+/// Type state for link::builder::Builder;
+#[derive(Debug)]
+pub struct WithoutSource;
+
+/// Type state for link::builder::Builder;
+#[derive(Debug)]
+pub struct WithSource;
+
 /// Builder for a Link
 #[derive(Debug, Clone)]
-pub struct Builder<Role, T, NameState, Addr> {
+pub struct Builder<Role, T, NameState, SS, TS> {
     /// The name of the link
     pub name: String,
 
@@ -96,10 +100,11 @@ pub struct Builder<Role, T, NameState, Addr> {
     // Type state markers
     role: PhantomData<Role>,
     name_state: PhantomData<NameState>,
-    addr_state: PhantomData<Addr>,
+    source_state: PhantomData<SS>,
+    target_state: PhantomData<TS>,
 }
 
-impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutTarget> {
+impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTarget> {
     fn default() -> Self {
         Self {
             name: Default::default(),
@@ -117,27 +122,27 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutTarget> {
             credit_mode: Default::default(),
             role: PhantomData,
             name_state: PhantomData,
-            addr_state: PhantomData,
+            source_state: PhantomData,
+            target_state: PhantomData,
         }
     }
 }
 
-impl<T> Builder<role::Sender, T, WithoutName, WithoutTarget> {
+impl<T> Builder<role::Sender, T, WithoutName, WithSource, WithoutTarget> {
     pub(crate) fn new() -> Self {
-        Self::default().source(Source::builder().build())
+        Builder::<role::Sender, T, _, _, _>::default().source(Source::builder().build())
     }
 }
 
-impl Builder<role::Receiver, Target, WithoutName, WithTarget> {
+impl Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::Receiver, Target, WithoutName, WithoutTarget>::default()
-            .target(Target::builder().build())
+        Builder::<role::Receiver, Target, _, _, _>::default().target(Target::builder().build())
     }
 }
 
-impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
+impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     /// The name of the link
-    pub fn name(self, name: impl Into<String>) -> Builder<Role, T, WithName, Addr> {
+    pub fn name(self, name: impl Into<String>) -> Builder<Role, T, WithName, SS, TS> {
         Builder {
             name: name.into(),
             snd_settle_mode: self.snd_settle_mode,
@@ -154,12 +159,13 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: self.role,
             name_state: PhantomData,
-            addr_state: self.addr_state,
+            source_state: self.source_state,
+            target_state: self.target_state,
         }
     }
 
     /// Set the link's role to sender
-    pub fn sender(self) -> Builder<role::Sender, T, NameState, Addr> {
+    pub fn sender(self) -> Builder<role::Sender, T, NameState, SS, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -176,12 +182,13 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: PhantomData,
             name_state: self.name_state,
-            addr_state: self.addr_state,
+            source_state: self.source_state,
+            target_state: self.target_state,
         }
     }
 
     /// Set the link's role to receiver
-    pub fn receiver(self) -> Builder<role::Receiver, T, NameState, Addr> {
+    pub fn receiver(self) -> Builder<role::Receiver, T, NameState, SS, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -198,7 +205,8 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: PhantomData,
             name_state: self.name_state,
-            addr_state: self.addr_state,
+            source_state: self.source_state,
+            target_state: self.target_state,
         }
     }
 
@@ -215,13 +223,36 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     }
 
     /// The source for messages
-    pub fn source(mut self, source: impl Into<Source>) -> Self {
-        self.source = Some(source.into());
-        self
+    pub fn source(
+        self,
+        source: impl Into<Source>,
+    ) -> Builder<Role, T, NameState, WithSource, TS> {
+        Builder {
+            name: self.name,
+            snd_settle_mode: self.snd_settle_mode,
+            rcv_settle_mode: self.rcv_settle_mode,
+            source: Some(source.into()),
+            target: self.target,
+            initial_delivery_count: self.initial_delivery_count,
+            max_message_size: self.max_message_size,
+            offered_capabilities: self.offered_capabilities,
+            desired_capabilities: self.desired_capabilities,
+            properties: self.properties,
+            buffer_size: self.buffer_size,
+            credit_mode: self.credit_mode,
+
+            role: self.role,
+            name_state: self.name_state,
+            source_state: PhantomData,
+            target_state: self.target_state,
+        }
     }
 
     /// The target for messages
-    pub fn target(self, target: impl Into<Target>) -> Builder<Role, Target, NameState, WithTarget> {
+    pub fn target(
+        self,
+        target: impl Into<Target>,
+    ) -> Builder<Role, Target, NameState, SS, WithTarget> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -238,7 +269,8 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: self.role,
             name_state: self.name_state,
-            addr_state: PhantomData,
+            source_state: self.source_state,
+            target_state: PhantomData,
         }
     }
 
@@ -247,7 +279,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     pub fn coordinator(
         self,
         coordinator: Coordinator,
-    ) -> Builder<Role, Coordinator, NameState, WithTarget> {
+    ) -> Builder<Role, Coordinator, NameState, SS, WithTarget> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -264,7 +296,8 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
 
             role: self.role,
             name_state: self.name_state,
-            addr_state: PhantomData,
+            source_state: self.source_state,
+            target_state: PhantomData,
         }
     }
 
@@ -346,7 +379,7 @@ impl<Role, T, NameState, Addr> Builder<Role, T, NameState, Addr> {
     }
 }
 
-impl<T, NameState, Addr> Builder<role::Sender, T, NameState, Addr> {
+impl<T, NameState, SS, TS> Builder<role::Sender, T, NameState, SS, TS> {
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
@@ -356,9 +389,7 @@ impl<T, NameState, Addr> Builder<role::Sender, T, NameState, Addr> {
     }
 }
 
-impl<T, NameState, Addr> Builder<role::Receiver, T, NameState, Addr> {}
-
-impl Builder<role::Sender, Target, WithName, WithTarget> {
+impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a sender
     ///
     /// # Example
@@ -372,16 +403,24 @@ impl Builder<role::Sender, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Sender, AttachError> {
+    pub async fn attach<R>(
+        self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Sender, SenderAttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Sender { inner })
     }
 }
 
-impl<T> Builder<role::Sender, T, WithName, WithTarget>
+impl<T> Builder<role::Sender, T, WithName, WithSource, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     fn create_flow_state_containers(
         &mut self,
@@ -408,11 +447,10 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<SenderInner<Link<role::Sender, T, SenderFlowState, UnsettledMessage>>, AttachError>
-    {
+    ) -> Result<SenderInner<SenderLink<T>>, SenderAttachError> {
         let buffer_size = self.buffer_size;
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = PollSender::new(session.outgoing.clone());
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
         let (producer, consumer) = self.create_flow_state_containers();
 
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
@@ -433,11 +471,24 @@ where
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
         // Get writer to session
-        let writer = session.outgoing.clone();
-        let mut writer = PollSender::new(writer);
-        let mut reader = ReceiverStream::new(incoming_rx);
         // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        // super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
+        if let Err(attach_error) = link
+            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+            .await
+        {
+            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            // return Err(DetachError::new(false, Some(err)));
+            let err = link
+                .handle_attach_error(
+                    attach_error,
+                    &session.outgoing,
+                    &mut incoming_rx,
+                    &session.control,
+                )
+                .await;
+            return Err(err);
+        }
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -445,14 +496,14 @@ where
             buffer_size,
             session: session.control.clone(),
             outgoing,
-            incoming: reader,
+            incoming: incoming_rx,
             // marker: PhantomData,
         };
         Ok(inner)
     }
 }
 
-impl Builder<role::Receiver, Target, WithName, WithTarget> {
+impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a receiver
     ///
     /// # Example
@@ -465,27 +516,34 @@ impl Builder<role::Receiver, Target, WithName, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    pub async fn attach<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, AttachError> {
+    pub async fn attach<R>(
+        self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Receiver, ReceiverAttachError> {
         self.attach_inner(session)
             .await
             .map(|inner| Receiver { inner })
     }
 }
 
-impl<T> Builder<role::Receiver, T, WithName, WithTarget>
+impl<T> Builder<role::Receiver, T, WithName, WithSource, WithTarget>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<ReceiverInner<Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>, AttachError>
-    {
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
         let credit_mode = self.credit_mode.clone();
-        let (incoming_tx, incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = PollSender::new(session.outgoing.clone());
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
 
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
@@ -513,17 +571,29 @@ where
         };
 
         // Create Link in Session
+        // Any error here will be on the Session level and thus it should immediately return with an error
         let output_handle =
             session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
 
         let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 
         // Get writer to session
-        let writer = session.outgoing.clone();
-        let mut writer = PollSender::new(writer);
-        let mut reader = ReceiverStream::new(incoming_rx);
-        // Send an Attach frame
-        super::do_attach(&mut link, &mut writer, &mut reader).await?;
+        if let Err(attach_error) = link
+            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+            .await
+        {
+            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
+            // return Err(DetachError::new(false, Some(err)));
+            let err = link
+                .handle_attach_error(
+                    attach_error,
+                    &session.outgoing,
+                    &mut incoming_rx,
+                    &session.control,
+                )
+                .await;
+            return Err(err);
+        }
 
         let mut inner = ReceiverInner {
             link,
@@ -532,18 +602,12 @@ where
             processed: 0,
             session: session.control.clone(),
             outgoing,
-            incoming: reader,
+            incoming: incoming_rx,
             incomplete_transfer: None,
         };
 
         if let CreditMode::Auto(credit) = inner.credit_mode {
-            inner
-                .set_credit(credit)
-                .await
-                .map_err(|error| match AttachError::try_from(error) {
-                    Ok(error) => error,
-                    Err(_) => unreachable!(),
-                })?;
+            inner.set_credit(credit).await?;
         }
 
         Ok(inner)
@@ -551,17 +615,16 @@ where
 }
 
 #[cfg(feature = "transaction")]
-impl Builder<role::Sender, Coordinator, WithName, WithTarget> {
+impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
     /// Attach the link as a transaction controller
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Controller<Undeclared>, AttachError> {
-        self.attach_inner(session)
-            .await
-            .map(|inner| Controller::<Undeclared> {
-                inner,
-                declared: Undeclared {},
-            })
+    ) -> Result<Controller, SenderAttachError> {
+        use tokio::sync::Mutex;
+
+        self.attach_inner(session).await.map(|inner| Controller {
+            inner: Mutex::new(inner),
+        })
     }
 }

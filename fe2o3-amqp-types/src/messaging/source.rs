@@ -1,5 +1,5 @@
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
-use serde_amqp::primitives::{Boolean, Symbol, Array};
+use serde_amqp::primitives::{Array, Boolean, Symbol};
 
 use crate::definitions::{Fields, Seconds};
 

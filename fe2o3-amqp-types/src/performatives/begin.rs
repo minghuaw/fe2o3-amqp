@@ -1,6 +1,6 @@
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Symbol, UInt, UShort, Array},
+    primitives::{Array, Symbol, UInt, UShort},
 };
 
 use crate::definitions::{Fields, Handle, TransferNumber};

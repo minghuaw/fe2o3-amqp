@@ -4,7 +4,6 @@ use futures_util::Future;
 use std::ops::Deref;
 use std::{pin::Pin, task::Poll, time::Duration};
 use tokio::time::Instant;
-
 use tokio::time::Sleep;
 
 mod consumer;

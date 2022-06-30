@@ -1,44 +1,47 @@
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SenderSettleMode},
+    definitions::{self, SenderSettleMode},
     messaging::{DeliveryState, Message},
     transaction::{Coordinator, Declare, Declared, Discharge, TransactionId},
 };
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex};
 
 use crate::{
     endpoint::Settlement,
     link::{
         self,
-        builder::{WithoutName, WithoutTarget},
+        builder::{WithoutName, WithoutTarget, WithSource},
         delivery::UnsettledMessage,
         role,
         sender::SenderInner,
-        AttachError, Link, SenderFlowState,
+        shared_inner::LinkEndpointInnerDetach,
+        Link, LinkStateError, SendError, SenderAttachError, SenderFlowState,
     },
     session::SessionHandle,
     Sendable,
 };
 
-use super::DeclareError;
+#[cfg(docsrs)]
+use super::{Transaction, OwnedTransaction};
 
 pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, UnsettledMessage>;
 
-/// Zero-sized type state representing a controller that has not declared a transaction
-#[derive(Debug)]
-pub struct Undeclared {}
-
 /// Transaction controller
 ///
-/// # Type parameter `S`
-///
-/// This is a type state with two possible values
-///
-/// 1. [`Undeclared`] representing a controller that
-/// 2. [`Declared`]
+/// This represents the controller side of a control link. The usage is similar to that of [`crate::Sender`]
+/// but doesn't allow user to send any custom messages as the control link is purely used for declaring
+/// and discharging transactions. Please also see [`Transaction`] and [`OwnedTransaction`]
+/// 
+/// # Example
+/// 
+/// ```rust
+/// let controller = Controller::attach(&mut session, "controller").await.unwrap();
+/// let mut txn = Transaction::declare(&controller, None).await.unwrap();
+/// txn.commit().await.unwrap();
+/// controller.close().await.unwrap();
+/// ```
 #[derive(Debug)]
-pub struct Controller<D> {
-    pub(crate) inner: SenderInner<ControlLink>,
-    pub(crate) declared: D,
+pub struct Controller {
+    pub(crate) inner: Mutex<SenderInner<ControlLink>>,
 }
 
 #[inline]
@@ -50,14 +53,7 @@ where
     T: serde::Serialize,
 {
     match sender.send(sendable).await? {
-        Settlement::Settled => {
-            let err = link::SendError::Local(definitions::Error::new(
-                AmqpError::InternalError,
-                "Declare cannot be sent settled".to_string(),
-                None,
-            ));
-            return Err(err);
-        }
+        Settlement::Settled => Err(SendError::IllegalDeliveryState),
         Settlement::Unsettled {
             _delivery_tag,
             outcome,
@@ -65,34 +61,40 @@ where
     }
 }
 
-impl<D> Controller<D> {
+impl Controller {
+    /// Creates a new builder for controller
+    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>
+    {
+        link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>::new()
+    }
+
     /// Close the control link with error
     pub async fn close_with_error(
-        &mut self,
+        mut self,
         error: definitions::Error,
     ) -> Result<(), link::DetachError> {
-        self.inner.close_with_error(Some(error)).await
+        self.inner.get_mut().close_with_error(Some(error)).await
     }
 
     /// Close the link
-    pub async fn close(&mut self) -> Result<(), link::DetachError> {
-        self.inner.close_with_error(None).await
-    }
-}
-
-impl Controller<Undeclared> {
-    /// Creates a new builder for controller
-    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithoutTarget>
-    {
-        link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithoutTarget>::new()
+    pub async fn close(mut self) -> Result<(), link::DetachError> {
+        self.inner.get_mut().close_with_error(None).await
     }
 
-    /// Attach the controller
+    /// Attach the controller with the default [`Coordinator`]
     pub async fn attach<R>(
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
+    ) -> Result<Self, SenderAttachError> {
+        Self::attach_with_coordinator(session, name, Coordinator::default()).await
+    }
+
+    /// Attach the controller with a customized [`Coordinator`]
+    pub async fn attach_with_coordinator<R>(
+        session: &mut SessionHandle<R>,
+        name: impl Into<String>,
         coordinator: Coordinator,
-    ) -> Result<Self, AttachError> {
+    ) -> Result<Self, SenderAttachError> {
         Self::builder()
             .name(name)
             .coordinator(coordinator)
@@ -101,24 +103,21 @@ impl Controller<Undeclared> {
             .await
     }
 
-    /// Declare a transaction
-    pub async fn declare(
-        mut self,
-        global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Controller<Declared>, DeclareError> {
-        match self.declare_inner(global_id.into()).await {
-            Ok(declared) => Ok(Controller {
-                inner: self.inner,
-                declared,
-            }),
-            Err(error) => Err(DeclareError::from((self, error))),
-        }
-    }
+    // /// Declare a transaction
+    // pub async fn declare<'a>(
+    //     &'a mut self,
+    //     global_id: impl Into<Option<TransactionId>>,
+    // ) -> Result<Transaction<'a>, DeclareError> {
+    //     match self.declare_inner(global_id.into()).await {
+    //         Ok(declared) => Ok(Transaction { controller: self, declared }),
+    //         Err(error) => Err(DeclareError::from((self, error))),
+    //     }
+    // }
 
-    async fn declare_inner(
-        &mut self,
+    pub(crate) async fn declare_inner(
+        &self,
         global_id: Option<TransactionId>,
-    ) -> Result<Declared, link::SendError> {
+    ) -> Result<Declared, SendError> {
         // To begin transactional work, the transaction controller needs to obtain a transaction
         // identifier from the resource. It does this by sending a message to the coordinator whose
         // body consists of the declare type in a single amqp-value section. Other standard message
@@ -129,78 +128,49 @@ impl Controller<Undeclared> {
         // the outcome of the declare from the receiver
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut self.inner, sendable).await?;
-        match outcome.await? {
+        let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
+        match outcome
+            .await
+            .map_err(|_| LinkStateError::IllegalSessionState)?
+        {
             DeliveryState::Declared(declared) => Ok(declared),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Accepted(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
-            | DeliveryState::TransactionalState(_) => {
-                Err(link::SendError::Local(definitions::Error::new(
-                    AmqpError::NotAllowed,
-                    "Controller is expecting either a Declared outcome or a Rejeccted outcome"
-                        .to_string(),
-                    None,
-                )))
-            }
+            | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
         }
-    }
-}
-
-impl Controller<Declared> {
-    /// Gets the transaction ID
-    pub fn txn_id(&self) -> &TransactionId {
-        &self.declared.txn_id
-    }
-
-    /// Commit the transaction
-    ///
-    /// This will send a [`Discharge`] with the `fail` field set to false.
-    ///
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
-    /// error to the controller as a transaction-error
-    pub async fn commit(&mut self) -> Result<(), link::SendError> {
-        self.discharge(false).await
-    }
-
-    /// Rollback the transaction
-    ///
-    /// This will send a [`Discharge`] with the `fail` field set to true
-    ///
-    /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the
-    /// error to the controller as a transaction-error
-    pub async fn rollback(&mut self) -> Result<(), link::SendError> {
-        self.discharge(true).await
     }
 
     /// Discharge
-    async fn discharge(&mut self, fail: impl Into<Option<bool>>) -> Result<(), link::SendError> {
+    pub(crate) async fn discharge(
+        &self,
+        txn_id: TransactionId,
+        fail: impl Into<Option<bool>>,
+    ) -> Result<(), link::SendError> {
         let discharge = Discharge {
-            txn_id: self.declared.txn_id.clone(),
+            txn_id,
             fail: fail.into(),
         };
         // As with the declare message, it is an error if the sender sends the transfer pre-settled.
         let message = Message::<Discharge>::builder().value(discharge).build();
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut self.inner, sendable).await?;
-        match outcome.await? {
+        let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
+        match outcome
+            .await
+            .map_err(|_| LinkStateError::IllegalSessionState)?
+        {
             DeliveryState::Accepted(_) => Ok(()),
             DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
             | DeliveryState::Declared(_)
-            | DeliveryState::TransactionalState(_) => {
-                Err(link::SendError::Local(definitions::Error::new(
-                    AmqpError::NotAllowed,
-                    "Controller is expecting either an Accepted outcome or a Rejected outcome"
-                        .to_string(),
-                    None,
-                )))
-            }
+            | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
         }
     }
 }
+
+// TODO: implement Drop for controller to drop all non-committed transactions

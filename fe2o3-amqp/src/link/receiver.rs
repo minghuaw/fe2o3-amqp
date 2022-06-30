@@ -1,32 +1,40 @@
 //! Implementation of AMQP1.0 receiver
 
+use std::time::Duration;
+
+use async_trait::async_trait;
 use bytes::BytesMut;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, SequenceNo},
+    definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
     performatives::{Detach, Transfer},
 };
-use futures_util::StreamExt;
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::sync::PollSender;
+use tokio::{
+    sync::mpsc,
+    time::{error::Elapsed, timeout},
+};
 
 use crate::{
     control::SessionControl,
-    endpoint::{self, LinkExt},
-    link::error::detach_error_expecting_frame,
-    session::{self, SessionHandle},
+    endpoint::{self, LinkAttach, LinkDetach, LinkExt},
+    session::SessionHandle,
     Payload,
 };
 
 use super::{
-    builder::{self, WithTarget, WithoutName},
+    builder::{self, WithTarget, WithoutName, WithoutSource},
     delivery::Delivery,
-    error::{AttachError, DetachError},
+    error::DetachError,
     receiver_link::section_number_and_offset,
-    role, ArcReceiverUnsettledMap, Error, LinkFrame, LinkRelay, ReceiverFlowState, ReceiverLink,
-    DEFAULT_CREDIT,
+    role,
+    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
+    ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
+    LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
+    RecvError, DEFAULT_CREDIT,
 };
+
+#[cfg(feature = "transaction")]
+use fe2o3_amqp_types::definitions::AmqpError;
 
 macro_rules! or_assign {
     ($self:ident, $other:ident, $field:ident) => {
@@ -34,14 +42,7 @@ macro_rules! or_assign {
             Some(value) => {
                 if let Some(other_value) = $other.$field {
                     if *value != other_value {
-                        return Err(Error::Local(
-                            definitions::Error::new(
-                                AmqpError::NotAllowed,
-                                Some(format!("Inconsistent {:?} in multi-frame delivery", value)),
-                                None
-                            )
-                        ))
-
+                        return Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery)
                     }
                 }
             },
@@ -79,7 +80,7 @@ impl IncompleteTransfer {
     }
 
     /// Like `|=` operator but works on the field level
-    pub fn or_assign(&mut self, other: Transfer) -> Result<(), Error> {
+    pub fn or_assign(&mut self, other: Transfer) -> Result<(), ReceiverTransferError> {
         or_assign! {
             self, other,
             delivery_id,
@@ -168,6 +169,11 @@ impl Default for CreditMode {
 ///     "rust-receiver-link-1", // link name
 ///     "q1"                    // Source address
 /// ).await.unwrap();
+/// 
+/// // Receiver defaults to `ReceiverSettleMode::First` which spontaneously settles incoming delivery
+/// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
+/// 
+/// receiver.close().await.unwrap();
 /// ```
 ///
 /// ## Default configuration
@@ -194,18 +200,19 @@ impl Default for CreditMode {
 ///     .name("rust-receiver-link-1")
 ///     .source("q1")
 ///     .attach(&mut session)
+///     .receiver_settle_mode(ReceiverSettleMode::Second)
 ///     .await
 ///     .unwrap();
 /// ```
 #[derive(Debug)]
 pub struct Receiver {
-    pub(crate) inner: ReceiverInner<ReceiverLink>,
+    pub(crate) inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
 impl Receiver {
     /// Creates a builder for the [`ReceiverInner`]
-    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithTarget> {
-        builder::Builder::<role::Receiver, Target, _, _>::new()
+    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
+        builder::Builder::<role::Receiver, Target, _, _, _>::new()
     }
 
     /// Attach the receiver link to a session with the default configuration
@@ -241,13 +248,167 @@ impl Receiver {
         session: &mut SessionHandle<R>,
         name: impl Into<String>,
         addr: impl Into<Address>,
-    ) -> Result<Receiver, AttachError> {
+    ) -> Result<Receiver, ReceiverAttachError> {
         Self::builder()
             .name(name)
             .source(addr)
             .attach(session)
             .await
     }
+
+    /// Receive a message from the link
+    ///
+    /// # Example
+    ///
+    /// ```rust, ignore
+    /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
+        self.inner.recv().await
+    }
+
+    /// Set the link credit. This will stop draining if the link is in a draining cycle
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
+        self.inner.set_credit(credit).await
+    }
+
+    /// Drain the link.
+    ///
+    /// This will send a `Flow` performative with the `drain` field set to true.
+    /// Setting the credit will set the `drain` field to false and stop draining
+    pub async fn drain(&mut self) -> Result<(), IllegalLinkStateError> {
+        self.inner.drain().await
+    }
+
+    /// Detach the link.
+    ///
+    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
+    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
+    /// re-attach and then close by exchanging closing Detach performatives.
+    pub async fn detach(mut self) -> Result<DetachedReceiver, DetachError> {
+        self.inner.detach_with_error(None).await?;
+        Ok(DetachedReceiver { _inner: self.inner })
+    }
+
+    /// Detach the link with an error.
+    ///
+    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
+    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
+    /// re-attach and then close by exchanging closing Detach performatives.
+    pub async fn detach_with_error(
+        mut self,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<DetachedReceiver, DetachError> {
+        self.inner.detach_with_error(error.into()).await?;
+        Ok(DetachedReceiver { _inner: self.inner })
+    }
+
+    /// Detach the link with a timeout
+    ///
+    /// This simply wraps [`detach`] with a `timeout`
+    pub async fn detach_with_timeout(
+        self,
+        duration: Duration,
+    ) -> Result<Result<DetachedReceiver, DetachError>, Elapsed> {
+        timeout(duration, self.detach()).await
+    }
+
+    /// Close the link.
+    ///
+    /// This will send a Detach performative with the `closed` field set to true.
+    pub async fn close(mut self) -> Result<(), DetachError> {
+        self.inner.close_with_error(None).await
+    }
+
+    /// Close the link with an error.
+    ///
+    /// This will send a Detach performative with the `closed` field set to true.
+    pub async fn close_with_error(
+        mut self,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), DetachError> {
+        self.inner.close_with_error(error.into()).await
+    }
+
+    /// Accept the message by sending a disposition with the `delivery_state` field set
+    /// to `Accept`
+    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
+        let state = DeliveryState::Accepted(Accepted {});
+        self.inner
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
+            .await
+    }
+
+    /// Reject the message by sending a disposition with the `delivery_state` field set
+    /// to `Reject`
+    pub async fn reject<T>(
+        &mut self,
+        delivery: &Delivery<T>,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), DispositionError> {
+        let state = DeliveryState::Rejected(Rejected {
+            error: error.into(),
+        });
+        self.inner
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
+            .await
+    }
+
+    /// Release the message by sending a disposition with the `delivery_state` field set
+    /// to `Release`
+    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
+        let state = DeliveryState::Released(Released {});
+        self.inner
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
+            .await
+    }
+
+    /// Modify the message by sending a disposition with the `delivery_state` field set
+    /// to `Modify`
+    pub async fn modify<T>(
+        &mut self,
+        delivery: &Delivery<T>,
+        modified: Modified,
+    ) -> Result<(), DispositionError> {
+        let state = DeliveryState::Modified(modified);
+        self.inner
+            .dispose(
+                delivery.delivery_id,
+                delivery.delivery_tag.clone(),
+                None,
+                state,
+            )
+            .await
+    }
+}
+
+/// A detached receiver
+///
+/// # Link re-attachment
+///
+/// TODO
+#[derive(Debug)]
+pub struct DetachedReceiver {
+    _inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
 #[derive(Debug)]
@@ -255,125 +416,187 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
-    // pub(crate) flow_threshold: SequenceNo,
     pub(crate) processed: SequenceNo,
 
     // Control sender to the session
     pub(crate) session: mpsc::Sender<SessionControl>,
 
     // Outgoing mpsc channel to send the Link Frames
-    pub(crate) outgoing: PollSender<LinkFrame>,
-    pub(crate) incoming: ReceiverStream<LinkFrame>,
+    pub(crate) outgoing: mpsc::Sender<LinkFrame>,
+    pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 
-    // pub(crate) marker: PhantomData<S>,
     pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
 }
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
     fn drop(&mut self) {
-        if let Some(handle) = self.link.output_handle() {
-            if let Some(sender) = self.outgoing.get_ref() {
-                let detach = Detach {
-                    handle: handle.clone().into(),
-                    closed: true,
-                    error: None,
-                };
-                let _ = sender.try_send(LinkFrame::Detach(detach));
-            }
+        if let Some(handle) = self.link.output_handle_mut().take() {
+            let detach = Detach {
+                handle: handle.into(),
+                closed: true,
+                error: None,
+            };
+            let _ = self.outgoing.try_send(LinkFrame::Detach(detach));
         }
+    }
+}
+
+#[async_trait]
+impl<L> LinkEndpointInner for ReceiverInner<L>
+where
+    L: endpoint::ReceiverLink<AttachError = ReceiverAttachError, DetachError = DetachError>
+        + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+        + Send
+        + Sync,
+{
+    type Link = L;
+
+    fn link(&self) -> &Self::Link {
+        &self.link
+    }
+
+    fn link_mut(&mut self) -> &mut Self::Link {
+        &mut self.link
+    }
+
+    fn writer(&self) -> &mpsc::Sender<LinkFrame> {
+        &self.outgoing
+    }
+
+    fn reader_mut(&mut self) -> &mut mpsc::Receiver<LinkFrame> {
+        &mut self.incoming
+    }
+
+    fn buffer_size(&self) -> usize {
+        self.buffer_size
+    }
+
+    fn as_new_link_relay(&self, tx: mpsc::Sender<LinkFrame>) -> LinkRelay<()> {
+        LinkRelay::Receiver {
+            tx,
+            output_handle: (),
+            flow_state: self.link.flow_state().clone(),
+            unsettled: self.link.unsettled().clone(),
+            receiver_settle_mode: self.link.rcv_settle_mode().clone(),
+            // This only controls whether a multi-transfer delivery id
+            // will be added to sessions map
+            more: false,
+        }
+    }
+
+    fn session_control(&self) -> &mpsc::Sender<SessionControl> {
+        &self.session
+    }
+
+    async fn negotiate_attach(&mut self) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
+        self.link
+            .negotiate_attach(&self.outgoing, &mut self.incoming)
+            .await
+    }
+
+    async fn handle_attach_error(
+        &mut self,
+        attach_error: <Self::Link as LinkAttach>::AttachError,
+    ) -> <Self::Link as LinkAttach>::AttachError {
+        self.link
+            .handle_attach_error(
+                attach_error,
+                &self.outgoing,
+                &mut self.incoming,
+                &self.session,
+            )
+            .await
+    }
+
+    async fn send_detach(
+        &mut self,
+        closed: bool,
+        error: Option<definitions::Error>,
+    ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
+        self.link.send_detach(&self.outgoing, closed, error).await
     }
 }
 
 impl<L> ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<
-            Error = Error,
-            AttachError = AttachError,
-            DetachError = definitions::Error,
-        > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>,
+            FlowError = IllegalLinkStateError,
+            TransferError = ReceiverTransferError,
+            DispositionError = IllegalLinkStateError,
+            AttachError = ReceiverAttachError,
+            DetachError = DetachError,
+        > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+        + Send
+        + Sync,
 {
-    #[inline]
-    async fn reattach_inner(
-        &mut self,
-        mut session_control: mpsc::Sender<SessionControl>,
-    ) -> Result<&mut Self, DetachError> {
-        if self.link.output_handle().is_none() {
-            let (tx, incoming) = mpsc::channel(self.buffer_size);
-            let link_handle = LinkRelay::Receiver {
-                tx,
-                output_handle: (),
-                flow_state: self.link.flow_state().clone(),
-                unsettled: self.link.unsettled().clone(),
-                receiver_settle_mode: self.link.rcv_settle_mode().clone(),
-                // state_code: self.link.state_code.clone(),
-                // This only controls whether a multi-transfer delivery id
-                // will be added to sessions map
-                more: false,
-            };
-            self.incoming = ReceiverStream::new(incoming);
-            let handle = match session::allocate_link(
-                &mut session_control,
-                self.link.name().into(),
-                link_handle,
-            )
-            .await
-            {
-                Ok(handle) => handle,
-                Err(err) => {
-                    return Err(DetachError {
-                        is_closed_by_remote: false,
-                        error: Some(definitions::Error::from(err)),
-                    })
-                }
-            };
-            *self.link.output_handle_mut() = Some(handle);
-        }
-
-        if let Err(_err) =
-            super::do_attach(&mut self.link, &mut self.outgoing, &mut self.incoming).await
-        {
-            let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            return Err(DetachError::new(false, Some(err)));
-        }
-
-        Ok(self)
-    }
-
-    #[inline]
-    pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, Error>
+    pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
-        let frame = self.incoming.next().await.ok_or_else(|| {
-            Error::Local(definitions::Error::new(
-                AmqpError::IllegalState,
-                Some("Session is dropped".into()),
-                None,
-            ))
-        })?;
+        loop {
+            match self.recv_inner().await? {
+                Some(delivery) => return Ok(delivery),
+                None => continue, // Incomplete transfer, there are more transfer frames coming
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
+    where
+        T: for<'de> serde::Deserialize<'de> + Send,
+    {
+        let frame = self
+            .incoming
+            .recv()
+            .await
+            .ok_or(LinkStateError::IllegalSessionState)?;
 
         match frame {
             LinkFrame::Detach(detach) => {
-                let err = DetachError {
-                    is_closed_by_remote: detach.closed,
-                    error: detach.error,
-                };
-                Err(Error::Detached(err))
+                let closed = detach.closed;
+                self.link.send_detach(&self.outgoing, closed, None).await?;
+                self.link
+                    .on_incoming_detach(detach)
+                    .await
+                    .map_err(Into::into)
+                    .and_then(|_| match closed {
+                        true => Err(LinkStateError::RemoteClosed.into()),
+                        false => Err(LinkStateError::RemoteDetached.into()),
+                    })
+                // self.link.send_detach(&self.outgoing, closed, None).await
+                //     .map_err(Into::into)
+                //     .and_then(|_| match closed {
+                //         true => Err(LinkStateError::RemoteClosed.into()),
+                //         false => Err(LinkStateError::RemoteDetached.into()),
+                //     })
+                // match (detach.error, closed) {
+                //     (Some(err), false) => Err(LinkStateError::RemoteDetachedWithError(err).into()),
+                //     (Some(err), true) => Err(LinkStateError::RemoteClosedWithError(err).into()),
+                //     (None, false) => Err(LinkStateError::RemoteDetached.into()),
+                //     (None, true) => Err(LinkStateError::RemoteClosed.into()),
+                // }
             }
             LinkFrame::Transfer {
                 input_handle: _,
                 performative,
                 payload,
             } => self.on_incoming_transfer(performative, payload).await,
-            LinkFrame::Attach(_) => Err(Error::Local(definitions::Error::new(
-                AmqpError::IllegalState,
-                Some("Received Attach on an attached link".into()),
-                None,
-            ))),
+            LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
                 // in the session loop
                 unreachable!()
+            }
+            #[cfg(feature = "transaction")]
+            LinkFrame::Acquisition(_) => {
+                let error = definitions::Error::new(
+                    AmqpError::NotImplemented,
+                    "Transactional acquisition is not implemented".to_string(),
+                    None,
+                );
+                self.close_with_error(Some(error)).await?;
+                Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
             }
         }
     }
@@ -383,7 +606,7 @@ where
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<Delivery<T>>, Error>
+    ) -> Result<Option<Delivery<T>>, RecvError>
     where
         T: for<'de> serde::Deserialize<'de> + Send,
     {
@@ -443,14 +666,14 @@ where
                     } = incomplete;
                     buffer.extend(payload);
                     self.link
-                        .on_incoming_transfer(performative, buffer.freeze())
+                        .on_complete_transfer(performative, buffer.freeze())
                         .await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;
                     // TODO: Is there any way to optimize this?
                     // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
-                    self.link.on_incoming_transfer(transfer, payload).await?
+                    self.link.on_complete_transfer(transfer, payload).await?
                 }
             }
         };
@@ -461,7 +684,7 @@ where
         if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
             // let frame = LinkFrame::Disposition(disposition);
             // self.outgoing.send(frame).await?;
-            self.dispose(delivery_id, delivery_tag, delivery_state)
+            self.dispose(delivery_id, delivery_tag, None, delivery_state)
                 .await?;
         }
 
@@ -470,7 +693,7 @@ where
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
     #[inline]
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
+    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
         self.processed = 0;
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
@@ -487,11 +710,19 @@ where
         &mut self,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
+        settled: Option<bool>,
         state: DeliveryState,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DispositionError> {
         let _ = self
             .link
-            .dispose(&mut self.outgoing, delivery_id, delivery_tag, state, false)
+            .dispose(
+                &mut self.outgoing,
+                delivery_id,
+                delivery_tag,
+                settled,
+                state,
+                false,
+            )
             .await?;
 
         self.processed += 1;
@@ -509,7 +740,7 @@ where
     /// This will send a `Flow` performative with the `drain` field set to true.
     /// Setting the credit will set the `drain` field to false and stop draining
     #[inline]
-    pub async fn drain(&mut self) -> Result<(), Error> {
+    pub async fn drain(&mut self) -> Result<(), DispositionError> {
         self.processed = 0;
 
         // Return if already draining
@@ -520,244 +751,6 @@ where
         // Send a flow with Drain set to true
         self.link
             .send_flow(&mut self.outgoing, None, Some(true), false)
-            .await
-    }
-
-    /// Detach the link.
-    ///
-    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
-    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
-    /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach_with_error(
-        &mut self,
-        error: Option<definitions::Error>,
-    ) -> Result<(), DetachError> {
-        // Send a non-closing detach
-        if let Err(e) = self
-            .link
-            .send_detach(&mut self.outgoing, false, error)
-            .await
-        {
-            return Err(DetachError::new(false, Some(e)));
-        }
-
-        // Wait for remote detach
-        let frame = match self.incoming.next().await {
-            Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame()),
-        };
-
-        let remote_detach = match frame {
-            LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame()),
-        };
-
-        if remote_detach.closed {
-            // Note that one peer MAY send a closing detach while its partner is
-            // sending a non-closing detach. In this case, the partner MUST
-            // signal that it has closed the link by reattaching and then sending
-            // a closing detach.
-            let session_control = self.session.clone();
-            self.reattach_inner(session_control).await?;
-
-            self.close_with_error(None).await?; // TODO: should error be resent?
-
-            // A peer closes a link by sending the detach frame with the handle for the
-            // specified link, and the closed flag set to true. The partner will destroy
-            // the corresponding link endpoint, and reply with its own detach frame with
-            // the closed flag set to true.
-            return Err(DetachError {
-                is_closed_by_remote: true,
-                error: None,
-            });
-        } else if let Err(e) = self.link.on_incoming_detach(remote_detach).await {
-            return Err(DetachError::new(false, Some(e)));
-        }
-
-        Ok(())
-    }
-
-    /// Close the link.
-    ///
-    /// This will send a Detach performative with the `closed` field set to true.
-    #[inline]
-    pub async fn close_with_error(
-        &mut self,
-        error: Option<definitions::Error>,
-    ) -> Result<(), DetachError> {
-        // Send detach with closed=true and wait for remote closing detach
-        // The sender will be dropped after close
-        if let Err(e) = self.link.send_detach(&mut self.outgoing, true, error).await {
-            return Err(DetachError::new(false, Some(e)));
-        }
-
-        // Wait for remote detach
-        let frame = match self.incoming.next().await {
-            Some(frame) => frame,
-            None => return Err(detach_error_expecting_frame()),
-        };
-        let remote_detach = match frame {
-            LinkFrame::Detach(detach) => detach,
-            _ => return Err(detach_error_expecting_frame()),
-        };
-
-        if remote_detach.closed {
-            // If the remote detach contains an error, the error will be propagated
-            // back by `on_incoming_detach`
-            match self.link.on_incoming_detach(remote_detach).await {
-                Ok(_) => {}
-                Err(e) => return Err(DetachError::new(false, Some(e))),
-            }
-        } else {
-            // Note that one peer MAY send a closing detach while its partner is
-            // sending a non-closing detach. In this case, the partner MUST
-            // signal that it has closed the link by reattaching and then sending
-            // a closing detach.
-
-            // Probably something like below
-            // 1. wait for incoming attach
-            // 2. send back attach
-            // 3. wait for incoming closing detach
-            // 4. detach
-
-            let session_control = self.session.clone();
-            self.reattach_inner(session_control).await?;
-            let frame = match self.incoming.next().await {
-                Some(frame) => frame,
-                None => return Err(detach_error_expecting_frame()),
-            };
-
-            // TODO: is checking closing still necessary?
-            let _remote_detach = match frame {
-                LinkFrame::Detach(detach) => detach,
-                _ => return Err(detach_error_expecting_frame()),
-            };
-            match self.link.send_detach(&mut self.outgoing, true, None).await {
-                Ok(_) => {}
-                Err(e) => return Err(DetachError::new(false, Some(e))),
-            }
-        };
-
-        Ok(())
-    }
-}
-
-// TODO: Use type state to differentiate Mode First and Mode Second?
-impl Receiver {
-    /// Receive a message from the link
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
-    /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
-    /// receiver.accept(&delivery).await.unwrap();
-    /// ```
-    pub async fn recv<T>(&mut self) -> Result<Delivery<T>, Error>
-    where
-        T: for<'de> serde::Deserialize<'de> + Send,
-    {
-        loop {
-            match self.inner.recv_inner().await? {
-                Some(delivery) => return Ok(delivery),
-                None => continue,
-            }
-        }
-    }
-
-    /// Set the link credit. This will stop draining if the link is in a draining cycle
-    pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), Error> {
-        self.inner.set_credit(credit).await
-    }
-
-    /// Drain the link.
-    ///
-    /// This will send a `Flow` performative with the `drain` field set to true.
-    /// Setting the credit will set the `drain` field to false and stop draining
-    pub async fn drain(&mut self) -> Result<(), Error> {
-        self.inner.drain().await
-    }
-
-    /// Detach the link.
-    ///
-    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
-    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
-    /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach(&mut self) -> Result<(), DetachError> {
-        self.inner.detach_with_error(None).await
-    }
-
-    /// Detach the link with an error.
-    ///
-    /// This will send a `Detach` performative with the `closed` field set to false. If the remote
-    /// peer responds with a Detach performative whose `closed` field is set to true, the link will
-    /// re-attach and then close by exchanging closing Detach performatives.
-    pub async fn detach_with_error(
-        &mut self,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DetachError> {
-        self.inner.detach_with_error(error.into()).await
-    }
-
-    /// Close the link.
-    ///
-    /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close(&mut self) -> Result<(), DetachError> {
-        self.inner.close_with_error(None).await
-    }
-
-    /// Close the link with an error.
-    ///
-    /// This will send a Detach performative with the `closed` field set to true.
-    pub async fn close_with_error(
-        &mut self,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), DetachError> {
-        self.inner.close_with_error(error.into()).await
-    }
-
-    /// Accept the message by sending a disposition with the `delivery_state` field set
-    /// to `Accept`
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
-        let state = DeliveryState::Accepted(Accepted {});
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-
-    /// Reject the message by sending a disposition with the `delivery_state` field set
-    /// to `Reject`
-    pub async fn reject<T>(
-        &mut self,
-        delivery: &Delivery<T>,
-        error: impl Into<Option<definitions::Error>>,
-    ) -> Result<(), Error> {
-        let state = DeliveryState::Rejected(Rejected {
-            error: error.into(),
-        });
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-
-    /// Release the message by sending a disposition with the `delivery_state` field set
-    /// to `Release`
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), Error> {
-        let state = DeliveryState::Released(Released {});
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
-            .await
-    }
-
-    /// Modify the message by sending a disposition with the `delivery_state` field set
-    /// to `Modify`
-    pub async fn modify<T>(
-        &mut self,
-        delivery: &Delivery<T>,
-        modified: Modified,
-    ) -> Result<(), Error> {
-        let state = DeliveryState::Modified(modified);
-        self.inner
-            .dispose(delivery.delivery_id, delivery.delivery_tag.clone(), state)
             .await
     }
 }

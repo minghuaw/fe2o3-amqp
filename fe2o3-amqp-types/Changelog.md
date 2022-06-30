@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.0.21
+
+1. Added derive trait of `PartialOrd, PartialEq, Eq, Ord, Hash` for `Role`
+
+## 0.0.20
+
+1. Added impl of `From<Outcome> for DeliveryState`
+
+## 0.0.19
+
+1. Added impl of `From<TransactionError> for ErrorCondition`
+
 ## 0.0.18
 
 1. Fixed bug where multiple valued fields should be encoded as `Array` instead of `List`

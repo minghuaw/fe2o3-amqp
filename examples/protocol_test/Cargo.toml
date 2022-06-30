@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fe2o3-amqp = { version = "0.0.15", path = "../../fe2o3-amqp", features = ["acceptor", "transaction"] }
+fe2o3-amqp = { version = "0.0.16", path = "../../fe2o3-amqp", default-features = false, features = ["acceptor", "transaction"] }
 # fe2o3-amqp = { version = "0.0.13", features = ["acceptor", "transaction"] }
-tokio = { version = "1.11.0", features = ["net", "macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["net", "macros", "rt-multi-thread", "rt", "time"] }
 tracing = "0.1.31"
 tracing-subscriber = "0.3.9"
 tokio-native-tls = "0.3.0"

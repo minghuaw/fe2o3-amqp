@@ -4,7 +4,7 @@ use serde::{de, ser};
 ///
 /// <type name="role" class="restricted" source="boolean">
 /// </type>
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Role {
     /// <choice name="sender" value="false"/>
     Sender,

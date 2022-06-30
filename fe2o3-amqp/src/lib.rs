@@ -61,9 +61,14 @@
 //!         "q1"                    // source address
 //!     ).await.unwrap();
 //!     
-//!     // Send a message to the broker
+//!     // Send a message to the broker and wait for outcome (Disposition)
 //!     sender.send("hello AMQP").await.unwrap();
-//!     
+//!
+//!     // Send a message
+//!     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
+//!     // Wait for outcome (Disposition)
+//!     fut.await.unwrap();    
+//!
 //!     // Receive the message from the broker
 //!     let delivery = receiver.recv::<String>().await.unwrap();
 //!     receiver.accept(&delivery).await.unwrap();
@@ -135,13 +140,16 @@
 //!   - [x] TLS acceptor integration with `tokio-native-tls`
 //!   - [x] Naive PLAIN SASL acceptor
 //!   - [ ] ~~Listener that provide coarse control~~
-//! - [ ] Transaction
-//!   - [x] client side
-//!   - [ ] client side testing
+//! - [x] Transaction
+//!   - [x] controller side
+//!   - [x] controller side testing
 //!     - [x] posting
-//!     - [ ] retirement
-//!     - [ ] acquisition
-//!   - [ ] listener side
+//!     - [x] retirement
+//!     - [ ] ~~acquisition~~ #43
+//!   - [x] resource side and testing
+//!     - [x] posting
+//!     - [x] retirement
+//!     - [ ] ~~acquisition~~ #43
 //! - [ ] qpid interoperability test (this will be 0.1.0 release)
 //! - [ ] Link re-attachment
 //! - [ ] Message batch disposition

@@ -3,15 +3,15 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, LinkError, SequenceNo};
+use fe2o3_amqp_types::definitions::{DeliveryTag, Fields, SequenceNo};
 use tokio::sync::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},
-    util::{Consume, Produce, Producer, ProducerState},
+    util::{Consume, ProducerState, TryConsume},
 };
 
-use super::{role, SenderFlowState};
+use super::{role, ReceiverTransferError, SenderFlowState, SenderTryConsumeError};
 
 /// Link state.
 ///
@@ -75,7 +75,7 @@ impl LinkFlowStateInner {
 
 /// The Sender and Receiver handle link flow control differently
 #[derive(Debug)]
-pub(crate) struct LinkFlowState<R> {
+pub struct LinkFlowState<R> {
     // Sender(RwLock<LinkFlowStateInner>),
     // Receiver(RwLock<LinkFlowStateInner>),
     pub(crate) lock: RwLock<LinkFlowStateInner>,
@@ -83,7 +83,7 @@ pub(crate) struct LinkFlowState<R> {
 }
 
 impl<R> LinkFlowState<R> {
-    pub fn new(inner: LinkFlowStateInner) -> Self {
+    pub(crate) fn new(inner: LinkFlowStateInner) -> Self {
         Self {
             lock: RwLock::new(inner),
             role: PhantomData,
@@ -92,13 +92,13 @@ impl<R> LinkFlowState<R> {
 }
 
 impl LinkFlowState<role::Sender> {
-    pub fn sender(inner: LinkFlowStateInner) -> Self {
+    pub(crate) fn sender(inner: LinkFlowStateInner) -> Self {
         Self::new(inner)
     }
 }
 
 impl LinkFlowState<role::Receiver> {
-    pub fn receiver(inner: LinkFlowStateInner) -> Self {
+    pub(crate) fn receiver(inner: LinkFlowStateInner) -> Self {
         Self::new(inner)
     }
 }
@@ -264,10 +264,10 @@ impl<R> LinkFlowState<R> {
 impl LinkFlowState<role::Receiver> {
     /// Consume one link credit if available. Returns an error if there is
     /// not enough link credit
-    pub async fn consume(&self, count: u32) -> Result<(), super::Error> {
+    pub async fn consume(&self, count: u32) -> Result<(), ReceiverTransferError> {
         let mut state = self.lock.write().await;
         if state.link_credit < count {
-            Err(LinkError::TransferLimitExceeded.into())
+            Err(ReceiverTransferError::TransferLimitExceeded)
         } else {
             state.delivery_count += count;
             state.link_credit -= count;
@@ -291,58 +291,67 @@ impl ProducerState for Arc<LinkFlowState<role::Sender>> {
     }
 }
 
-impl Producer<Arc<LinkFlowState<role::Sender>>> {
-    pub async fn on_incoming_flow(
-        &mut self,
-        flow: LinkFlow,
-        output_handle: OutputHandle,
-    ) -> Option<LinkFlow> {
-        self.produce((flow, output_handle)).await
-    }
-}
+// impl Producer<Arc<LinkFlowState<role::Sender>>> {
+//     pub(crate) async fn on_incoming_flow(
+//         &mut self,
+//         flow: LinkFlow,
+//         output_handle: OutputHandle,
+//     ) -> Option<LinkFlow> {
+//         self.produce((flow, output_handle)).await
+//     }
+// }
 
 // pub enum SenderPermit {
 //     Send,
 //     Drain,
 // }
 
+struct InsufficientCredit {}
+
 #[async_trait]
 impl Consume for SenderFlowState {
     type Item = u32;
-    type Outcome = ();
+    type Outcome = [u8; 4];
 
     /// Increment delivery count and decrement link_credit. Wait asynchronously
     /// if there is not enough credit
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
         loop {
             match consume_link_credit(&self.state().lock, item).await {
-                Ok(action) => return action,
+                Ok(outcome) => return outcome,
                 Err(_) => self.notifier.notified().await,
             }
         }
     }
 }
 
-async fn consume_link_credit(lock: &RwLock<LinkFlowStateInner>, count: u32) -> Result<(), ()> {
+impl TryConsume for SenderFlowState {
+    type Error = SenderTryConsumeError;
+
+    fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
+        let mut state = self.state().lock.try_write()?;
+        if state.link_credit < item {
+            Err(Self::Error::InsufficientCredit)
+        } else {
+            state.delivery_count += item;
+            state.link_credit -= item;
+            Ok(state.delivery_count.to_be_bytes())
+        }
+    }
+}
+
+async fn consume_link_credit(
+    lock: &RwLock<LinkFlowStateInner>,
+    count: u32,
+) -> Result<[u8; 4], InsufficientCredit> {
     // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
-    // if state.drain {
-    //     Ok(SenderPermit::Drain)
-    // } else {
-    //     if state.link_credit < count {
-    //         Err(())
-    //     } else {
-    //         state.delivery_count += count;
-    //         state.link_credit -= count;
-    //         Ok(SenderPermit::Send)
-    //     }
-    // }
+
     if state.link_credit < count {
-        Err(())
+        Err(InsufficientCredit {})
     } else {
         state.delivery_count += count;
         state.link_credit -= count;
-        // Ok(SenderPermit::Send)
-        Ok(())
+        Ok(state.delivery_count.to_be_bytes())
     }
 }

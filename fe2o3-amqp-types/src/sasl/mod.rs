@@ -1,7 +1,7 @@
 //! Types defined in AMQP 1.0 specification Part 5.3: SASL
 
 use serde_amqp::{
-    primitives::{Binary, Symbol, Array},
+    primitives::{Array, Binary, Symbol},
     DeserializeComposite, SerializeComposite,
 };
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -15,9 +15,9 @@ mod mechanisms;
 ///     <field name="sasl-server-mechanisms" type="symbol" multiple="true" mandatory="true"/>
 /// </type>
 /// Advertises the available SASL mechanisms that can be used for authentication.
-/// 
-/// NOTE: Serialize and Deserialize are manually implemented because 
-/// > A field which is defined as both multiple and mandatory MUST contain at least one value 
+///
+/// NOTE: Serialize and Deserialize are manually implemented because
+/// > A field which is defined as both multiple and mandatory MUST contain at least one value
 /// (i.e. for such a field both null and an array with no entries are invalid).
 #[derive(Debug, Clone)]
 pub struct SaslMechanisms {

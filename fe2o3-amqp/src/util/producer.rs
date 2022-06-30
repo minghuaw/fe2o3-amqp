@@ -16,7 +16,7 @@ impl<State> Producer<State> {
 }
 
 #[async_trait]
-pub trait Produce {
+pub(crate) trait Produce {
     type Item: Send;
     type Outcome: Send;
 
@@ -24,7 +24,7 @@ pub trait Produce {
 }
 
 #[async_trait]
-pub trait ProducerState {
+pub(crate) trait ProducerState {
     type Item: Send;
     type Outcome: Send;
 

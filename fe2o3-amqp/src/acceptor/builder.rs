@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
         SequenceNo, TransferNumber, MIN_MAX_FRAME_SIZE,
     },
     performatives::{ChannelMax, MaxFrameSize, Open},
-    primitives::{Symbol, ULong, Array},
+    primitives::{Array, Symbol, ULong},
 };
 
 use crate::{
@@ -20,6 +20,9 @@ use super::{
     link::LinkAcceptor, session::SessionAcceptor, ConnectionAcceptor, SupportedReceiverSettleModes,
     SupportedSenderSettleModes,
 };
+
+#[cfg(feature = "transaction")]
+use crate::transaction::coordinator::ControlLinkAcceptor;
 
 /// A generic builder for listener connection, session and link acceptors
 #[derive(Debug)]
@@ -158,7 +161,9 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.local_open.offered_capabilities {
             Some(capabilities) => capabilities.0.push(capability.into()),
-            None => self.inner.local_open.offered_capabilities = Some(vec![capability.into()].into()),
+            None => {
+                self.inner.local_open.offered_capabilities = Some(vec![capability.into()].into())
+            }
         }
         self
     }
@@ -173,7 +178,9 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
         match &mut self.inner.local_open.desired_capabilities {
             Some(capabilities) => capabilities.0.push(capability.into()),
-            None => self.inner.local_open.desired_capabilities = Some(vec![capability.into()].into()),
+            None => {
+                self.inner.local_open.desired_capabilities = Some(vec![capability.into()].into())
+            }
         }
         self
     }
@@ -313,6 +320,18 @@ impl Builder<SessionAcceptor, Initialized> {
         self.inner.0.buffer_size = buffer_size;
         self
     }
+
+    /// Enable handling remotely initiated control link and transaction by setting the
+    /// `control_link_acceptor` field
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "transaction", feature = "acceptor"))))]
+    #[cfg(feature = "transaction")]
+    pub fn control_link_acceptor(
+        mut self,
+        control_link_acceptor: impl Into<Option<ControlLinkAcceptor>>,
+    ) -> Self {
+        self.inner.0.control_link_acceptor = control_link_acceptor.into();
+        self
+    }
 }
 
 // =============================================================================
@@ -323,17 +342,7 @@ impl Builder<LinkAcceptor, Initialized> {
     /// Creates a new builder for [`LinkAcceptor`]
     pub fn new() -> Self {
         let inner = LinkAcceptor {
-            supported_snd_settle_modes: Default::default(),
-            fallback_snd_settle_mode: Default::default(),
-            supported_rcv_settle_modes: Default::default(),
-            fallback_rcv_settle_mode: Default::default(),
-            initial_delivery_count: Default::default(),
-            max_message_size: Default::default(),
-            offered_capabilities: Default::default(),
-            desired_capabilities: Default::default(),
-            properties: Default::default(),
-            buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
-            credit_mode: Default::default(),
+            ..Default::default()
         };
 
         Self {
@@ -344,27 +353,29 @@ impl Builder<LinkAcceptor, Initialized> {
 
     /// Settlement policy for the sender
     pub fn supported_sender_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
-        self.inner.supported_snd_settle_modes = modes;
+        self.inner.local_sender_acceptor.supported_snd_settle_modes = modes;
         self
     }
 
     /// The sender settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
-    pub fn fallback_sender_settle_mode(mut self, mode: Option<SenderSettleMode>) -> Self {
-        self.inner.fallback_snd_settle_mode = mode;
+    pub fn fallback_sender_settle_mode(mut self, mode: SenderSettleMode) -> Self {
+        self.inner.local_sender_acceptor.fallback_snd_settle_mode = mode;
         self
     }
 
     /// The settlement policy of the receiver
     pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
-        self.inner.supported_rcv_settle_modes = modes;
+        self.inner
+            .local_receiver_acceptor
+            .supported_rcv_settle_modes = modes;
         self
     }
 
     /// The receiver settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
-    pub fn fallback_receiver_settle_mode(mut self, mode: Option<ReceiverSettleMode>) -> Self {
-        self.inner.fallback_rcv_settle_mode = mode;
+    pub fn fallback_receiver_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
+        self.inner.local_receiver_acceptor.fallback_rcv_settle_mode = mode;
         self
     }
 
@@ -372,49 +383,67 @@ impl Builder<LinkAcceptor, Initialized> {
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
     pub fn initial_delivery_count(mut self, count: SequenceNo) -> Self {
-        self.inner.initial_delivery_count = count;
+        self.inner.local_sender_acceptor.initial_delivery_count = count;
         self
     }
 
     /// The maximum message size supported by the link endpoint
     pub fn max_message_size(mut self, max_size: impl Into<ULong>) -> Self {
-        self.inner.max_message_size = Some(max_size.into());
+        self.inner.shared.max_message_size = Some(max_size.into());
         self
     }
 
     /// Add one extension capability the sender supports
     pub fn add_offered_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
-        match &mut self.inner.offered_capabilities {
+        match &mut self.inner.shared.offered_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
-            None => self.inner.offered_capabilities = Some(vec![capability.into()]),
+            None => self.inner.shared.offered_capabilities = Some(vec![capability.into()]),
         }
         self
     }
 
     /// Set the extension capabilities the sender supports
     pub fn set_offered_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.inner.offered_capabilities = Some(capabilities);
+        self.inner.shared.offered_capabilities = Some(capabilities);
         self
     }
 
     /// Add one extension capability the sender can use if the receiver supports
     pub fn add_desired_capabilities(mut self, capability: impl Into<Symbol>) -> Self {
-        match &mut self.inner.desired_capabilities {
+        match &mut self.inner.shared.desired_capabilities {
             Some(capabilities) => capabilities.push(capability.into()),
-            None => self.inner.desired_capabilities = Some(vec![capability.into()]),
+            None => self.inner.shared.desired_capabilities = Some(vec![capability.into()]),
         }
         self
     }
 
     /// Set the extension capabilities the sender can use if the receiver supports them
     pub fn set_desired_capabilities(mut self, capabilities: Vec<Symbol>) -> Self {
-        self.inner.desired_capabilities = Some(capabilities);
+        self.inner.shared.desired_capabilities = Some(capabilities);
         self
     }
 
     /// Link properties
     pub fn properties(mut self, properties: Fields) -> Self {
-        self.inner.properties = Some(properties);
+        self.inner.shared.properties = Some(properties);
+        self
+    }
+
+    /// Set the target capabilities field
+    pub fn target_capabilities(
+        mut self,
+        target_capabilities: impl Into<Option<Vec<Symbol>>>,
+    ) -> Self {
+        self.inner.local_receiver_acceptor.target_capabilities = target_capabilities.into();
+        self
+    }
+
+    /// Set the source capabilities field
+    pub fn source_capabilities(
+        mut self,
+        source_capabilities: impl Into<Option<Vec<Symbol>>>,
+    ) -> Self {
+        self.inner.local_sender_acceptor.source_capabilities = source_capabilities.into();
         self
     }
 }

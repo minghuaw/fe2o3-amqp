@@ -1,7 +1,7 @@
 use std::{fmt::Debug, io};
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, Handle},
+    definitions::{self, AmqpError, ConnectionError, Handle},
     performatives::Detach,
 };
 use futures_util::SinkExt;
@@ -32,10 +32,13 @@ pub(crate) struct SessionEngine<S: Session> {
     pub outgoing_link_frames: mpsc::Receiver<LinkFrame>,
 }
 
-impl SessionEngine<super::Session> {
-    pub async fn begin(
+impl<S> SessionEngine<S>
+where
+    S: endpoint::Session<Error = Error>,
+{
+    pub(crate) async fn begin_client_session(
         conn: mpsc::Sender<ConnectionControl>,
-        session: super::Session,
+        session: S,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: PollSender<SessionFrame>,
@@ -85,7 +88,8 @@ impl SessionEngine<super::Session> {
 
 impl<S> SessionEngine<S>
 where
-    S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
+    // S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
+    S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
     S::Error: Into<Error> + Debug,
     S::AllocError: Into<AllocLinkError>,
 {
@@ -106,13 +110,13 @@ where
             }
             SessionFrameBody::Attach(attach) => {
                 self.session
-                    .on_incoming_attach(channel, attach)
+                    .on_incoming_attach(attach)
                     .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Flow(flow) => {
                 self.session
-                    .on_incoming_flow(channel, flow)
+                    .on_incoming_flow(flow)
                     .await
                     .map_err(Into::into)?;
             }
@@ -121,19 +125,19 @@ where
                 payload,
             } => {
                 self.session
-                    .on_incoming_transfer(channel, performative, payload)
+                    .on_incoming_transfer(performative, payload)
                     .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Disposition(disposition) => {
                 self.session
-                    .on_incoming_disposition(channel, disposition)
+                    .on_incoming_disposition(disposition)
                     .await
                     .map_err(Into::into)?;
             }
             SessionFrameBody::Detach(detach) => {
                 self.session
-                    .on_incoming_detach(channel, detach)
+                    .on_incoming_detach(detach)
                     .await
                     .map_err(Into::into)?;
             }
@@ -221,6 +225,56 @@ where
                     // event loop has stopped. It should be treated as an io error
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
+            SessionControl::CloseConnectionWithError((condition, description)) => {
+                let error = definitions::Error::new(condition, description, None);
+                let control = ConnectionControl::Close(Some(error));
+                self.conn
+                    .send(control)
+                    .await
+                    .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            }
+
+            #[cfg(feature = "transaction")]
+            SessionControl::AllocateTransactionId { resp } => {
+                let result = self.session.allocate_transaction_id();
+                resp.send(result).map_err(|_| {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Coorindator is dropped",
+                    ))
+                })?;
+            }
+            #[cfg(feature = "transaction")]
+            SessionControl::CommitTransaction { txn_id, resp } => {
+                let result = self
+                    .session
+                    .commit_transaction(txn_id)
+                    .await
+                    .map_err(Into::into)?;
+                resp.send(result).map_err(|_| {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Coorindator is dropped",
+                    ))
+                })?;
+            }
+            #[cfg(feature = "transaction")]
+            SessionControl::RollbackTransaction { txn_id, resp } => {
+                let result = self
+                    .session
+                    .rollback_transaction(txn_id)
+                    .map_err(Into::into)?;
+                resp.send(result).map_err(|_| {
+                    Error::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Coorindator is dropped",
+                    ))
+                })?;
+            }
+            #[cfg(feature = "transaction")]
+            SessionControl::AbortTransaction(txn_id) => {
+                let _ = self.session.rollback_transaction(txn_id);
+            }
         }
 
         match self.session.local_state() {
@@ -260,6 +314,15 @@ where
                 .session
                 .on_outgoing_detach(detach)
                 .map_err(Into::into)?,
+            
+            #[cfg(feature = "transaction")]
+            LinkFrame::Acquisition(_) => {
+                return Err(Error::Local(definitions::Error::new(
+                    AmqpError::InternalError,
+                    "Acquisition is not expected in outgoing link frames".to_string(),
+                    None,
+                )))
+            }
         };
 
         self.outgoing
@@ -294,6 +357,21 @@ where
                 closed,
                 error,
             } => self.on_link_handle_error(handle, closed, error).await,
+            Error::HandleMaxExceeded => {
+                let error = definitions::Error::new(
+                    ConnectionError::FramingError,
+                    "A handle outside the supported range is received".to_string(),
+                    None,
+                );
+                let _ = self.conn.send(ConnectionControl::Close(Some(error))).await;
+                Running::Stop
+            }
+            #[cfg(feature = "transaction")]
+            Error::CoordinatorAttachError(error) => {
+                // TODO: just log the error?
+                tracing::error!(?error);
+                Running::Continue
+            }
         }
     }
 

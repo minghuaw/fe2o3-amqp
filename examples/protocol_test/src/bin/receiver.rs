@@ -1,4 +1,6 @@
-use fe2o3_amqp::{connection::Connection, link::Receiver, session::Session, Delivery, sasl_profile::SaslProfile};
+use fe2o3_amqp::{
+    connection::Connection, link::Receiver, sasl_profile::SaslProfile, session::Session, Delivery,
+};
 use tokio::net::TcpStream;
 
 #[tokio::main]

@@ -17,29 +17,26 @@ const AMQP_VAL_CODE: u8 = 0x77;
 const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
-impl<Tar> endpoint::ReceiverLink for Link<role::Receiver, Tar, ReceiverFlowState, DeliveryState>
+impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
     Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
 {
-    type Error = link::Error;
+    type FlowError = FlowError;
+    type TransferError = ReceiverTransferError;
+    type DispositionError = DispositionError;
 
     /// Set and send flow state
-    async fn send_flow<W>(
+    async fn send_flow(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
-        self.error_if_closed().map_err(Self::Error::Local)?;
-
+    ) -> Result<(), Self::FlowError> {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?
+            .ok_or(Self::FlowError::IllegalState)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -123,7 +120,7 @@ where
         writer
             .send(LinkFrame::Flow(flow))
             .await
-            .map_err(|_| Error::sending_to_session())
+            .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
     async fn on_incomplete_transfer(
@@ -149,7 +146,7 @@ where
         }
     }
 
-    async fn on_incoming_transfer<T>(
+    async fn on_complete_transfer<T>(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -160,7 +157,7 @@ where
             Delivery<T>,
             Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
         ),
-        Self::Error,
+        Self::TransferError,
     >
     where
         T: for<'de> serde::Deserialize<'de> + Send,
@@ -177,25 +174,18 @@ where
         // This only takes care of whether the message is considered
         // sett
         let settled_by_sender = transfer.settled.unwrap_or(false);
-        let delivery_id = transfer.delivery_id.ok_or_else(|| {
-            Error::Local(definitions::Error::new(
-                AmqpError::NotAllowed,
-                Some("The delivery-id is not found".into()),
-                None,
-            ))
-        })?;
-        let delivery_tag = transfer.delivery_tag.ok_or_else(|| {
-            Error::Local(definitions::Error::new(
-                AmqpError::NotAllowed,
-                Some("The delivery-tag is not found".into()),
-                None,
-            ))
-        })?;
+        let delivery_id = transfer
+            .delivery_id
+            .ok_or(Self::TransferError::DeliveryIdIsNone)?;
+        let delivery_tag = transfer
+            .delivery_tag
+            .ok_or(Self::TransferError::DeliveryTagIsNone)?;
 
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
+            let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                .map_err(|_| Self::TransferError::MessageDecodeError)?;
             (message.0, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
@@ -205,11 +195,7 @@ where
                 // field to second.
                 if let ReceiverSettleMode::First = &self.rcv_settle_mode {
                     if let ReceiverSettleMode::Second = mode {
-                        return Err(Error::Local(definitions::Error::new(
-                            AmqpError::NotAllowed,
-                            Some("Negotiated link value is First".into()),
-                            None,
-                        )));
+                        return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
                     }
                 }
                 mode
@@ -227,16 +213,9 @@ where
                     // let reader = IoReader::new(payload.reader());
                     // let deserializer = Deserializer::new(reader);
                     // let message: Message<T> = Message::<T>::deserialize(&mut deserializer)?;
-                    let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
+                    let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
 
-                    // let disposition = Disposition {
-                    //     role: Role::Receiver,
-                    //     first: delivery_id,
-                    //     last: None,
-                    //     settled: true,
-                    //     state: Some(DeliveryState::Accepted(Accepted {})),
-                    //     batchable: false,
-                    // };
                     (message.0, Some(DeliveryState::Accepted(Accepted {})))
                 }
                 // If second, this indicates that the receiver MUST NOT settle until
@@ -245,8 +224,9 @@ where
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(payload.as_ref())
-                        .ok_or(AmqpError::DecodeError)?;
-                    let message: Deserializable<Message<T>> = from_reader(payload.reader())?;
+                        .ok_or(Self::TransferError::MessageDecodeError)?;
+                    let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
                     let message = message.0;
                     let section_number = message.sections();
 
@@ -275,7 +255,7 @@ where
         let link_output_handle = self
             .output_handle
             .clone()
-            .ok_or_else(Error::not_attached)?
+            .ok_or(ReceiverTransferError::IllegalState)?
             .into();
 
         let delivery = Delivery {
@@ -291,40 +271,40 @@ where
         ))
     }
 
-    async fn dispose<W>(
+    async fn dispose(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<LinkFrame>,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
-        // settled: bool,
+        settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<LinkFrame> + Send + Unpin,
-    {
-        self.error_if_closed().map_err(Self::Error::Local)?;
+    ) -> Result<(), Self::DispositionError> {
+        let settled = settled.unwrap_or_else(|| {
+            match self.rcv_settle_mode {
+                ReceiverSettleMode::First => {
+                    // If first, this indicates that the receiver MUST settle
+                    // the delivery once it has arrived without waiting
+                    // for the sender to settle first.
 
-        let settled = match self.rcv_settle_mode {
-            ReceiverSettleMode::First => {
-                // If first, this indicates that the receiver MUST settle
-                // the delivery once it has arrived without waiting
-                // for the sender to settle first.
+                    // The delivery is not inserted into unsettled map if in First mode
+                    true
+                }
+                ReceiverSettleMode::Second => {
+                    // If second, this indicates that the receiver MUST NOT settle until sending
+                    // its disposition to the sender and receiving a settled disposition from
+                    // the sender.
+                    false
+                }
+            }
+        });
 
-                // The delivery is not inserted into unsettled map if in First mode
-                true
-            }
-            ReceiverSettleMode::Second => {
-                // If second, this indicates that the receiver MUST NOT settle until sending
-                // its disposition to the sender and receiving a settled disposition from
-                // the sender.
-                let mut lock = self.unsettled.write().await;
-                // If the key is present in the map, the old value will be returned, which
-                // we don't really need
-                let _ = lock.insert(delivery_tag.clone(), state.clone());
-                false
-            }
-        };
+        if !settled {
+            let mut lock = self.unsettled.write().await;
+            // If the key is present in the map, the old value will be returned, which
+            // we don't really need
+            let _ = lock.insert(delivery_tag.clone(), state.clone());
+        }
 
         let disposition = Disposition {
             role: Role::Receiver,
@@ -338,7 +318,7 @@ where
         writer
             .send(frame)
             .await
-            .map_err(|_| Error::sending_to_session())?;
+            .map_err(|_| Self::DispositionError::IllegalSessionState)?;
 
         // This is a unit enum, clone should be really cheap
         Ok(())
@@ -411,7 +391,7 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
     (section_numbers, offset as u64)
 }
 
-impl ReceiverLink {
+impl ReceiverLink<Target> {
     /// Set and send flow state
     #[cfg(feature = "transaction")]
     pub(crate) fn blocking_send_flow(
@@ -420,13 +400,11 @@ impl ReceiverLink {
         link_credit: Option<u32>,
         drain: Option<bool>,
         echo: bool,
-    ) -> Result<(), link::Error> {
-        self.error_if_closed().map_err(|e| link::Error::Local(e))?;
-
+    ) -> Result<(), FlowError> {
         let handle = self
             .output_handle
             .clone()
-            .ok_or_else(|| Error::not_attached())?
+            .ok_or(FlowError::IllegalState)?
             .into();
 
         let flow = match (link_credit, drain) {
@@ -509,7 +487,7 @@ impl ReceiverLink {
         };
         writer
             .blocking_send(LinkFrame::Flow(flow))
-            .map_err(|_| Error::sending_to_session())
+            .map_err(|_| FlowError::IllegalSessionState)
     }
 }
 
@@ -551,5 +529,229 @@ mod tests {
         let buf = to_vec(&Serializable(message)).unwrap();
         let (nums, offset) = section_number_and_offset(&buf);
         println!("{:?}, {:?}", nums, offset);
+    }
+}
+
+#[async_trait]
+impl<T> endpoint::LinkAttach for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    type AttachError = ReceiverAttachError;
+
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+        use self::source::VerifySource;
+
+        match self.local_state {
+            LinkState::AttachSent => self.local_state = LinkState::Attached,
+            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
+            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+            _ => return Err(ReceiverAttachError::IllegalState),
+        };
+
+        self.input_handle = Some(InputHandle::from(remote_attach.handle));
+
+        // In this case, the sender is considered to hold the authoritative version of the
+        // version of the source properties
+        let remote_source = remote_attach
+            .source
+            .ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
+        if let Some(local_source) = &self.source {
+            local_source.verify_as_receiver(&remote_source)?;
+        }
+        self.source = Some(*remote_source);
+
+        // The receiver SHOULD respect the sender’s desired settlement mode if the sender
+        // initiates the attach exchange and the receiver supports the desired mode.
+        self.snd_settle_mode = remote_attach.snd_settle_mode;
+
+        // The delivery-count is initialized by the sender when a link endpoint is
+        // created, and is incremented whenever a message is sent
+        let initial_delivery_count = remote_attach
+            .initial_delivery_count
+            .ok_or(ReceiverAttachError::InitialDeliveryCountIsNone)?;
+
+        let target = remote_attach
+            .target
+            .map(|t| T::try_from(*t))
+            .transpose()
+            .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
+
+        // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+        // Is this verification necessary?
+        match (&self.target, &target) {
+            (Some(local_target), Some(remote_target)) => {
+                local_target.verify_as_receiver(remote_target)?
+            }
+            (_, None) => return Err(ReceiverAttachError::IncomingTargetIsNone),
+            _ => {}
+        }
+
+        self.max_message_size =
+            get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+
+        self.flow_state
+            .as_ref()
+            .initial_delivery_count_mut(|_| initial_delivery_count)
+            .await;
+        self.flow_state
+            .as_ref()
+            .delivery_count_mut(|_| initial_delivery_count)
+            .await;
+
+        Ok(())
+    }
+
+    async fn send_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+    ) -> Result<(), Self::AttachError> {
+        self.send_attach_inner(writer).await?;
+        Ok(())
+    }
+}
+
+impl<T> endpoint::Link for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    fn role() -> Role {
+        Role::Receiver
+    }
+}
+
+#[async_trait]
+impl<T> endpoint::LinkExt for ReceiverLink<T>
+where
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+{
+    type FlowState = ReceiverFlowState;
+    type Unsettled = Arc<RwLock<UnsettledMap<DeliveryState>>>;
+    type Target = T;
+
+    fn local_state(&self) -> &LinkState {
+        &self.local_state
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn output_handle(&self) -> &Option<OutputHandle> {
+        &self.output_handle
+    }
+
+    fn output_handle_mut(&mut self) -> &mut Option<OutputHandle> {
+        &mut self.output_handle
+    }
+
+    fn flow_state(&self) -> &Self::FlowState {
+        &self.flow_state
+    }
+
+    fn unsettled(&self) -> &Self::Unsettled {
+        &self.unsettled
+    }
+
+    fn rcv_settle_mode(&self) -> &ReceiverSettleMode {
+        &self.rcv_settle_mode
+    }
+
+    fn target(&self) -> &Option<Self::Target> {
+        &self.target
+    }
+
+    async fn negotiate_attach(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        reader: &mut mpsc::Receiver<LinkFrame>,
+    ) -> Result<(), ReceiverAttachError> {
+        // Send out local attach
+        self.send_attach(writer).await?;
+
+        // Wait for remote attach
+        let remote_attach = match reader
+            .recv()
+            .await
+            .ok_or(ReceiverAttachError::IllegalSessionState)?
+        {
+            LinkFrame::Attach(attach) => attach,
+            _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
+        };
+
+        self.on_incoming_attach(remote_attach).await
+    }
+
+    async fn handle_attach_error(
+        &mut self,
+        attach_error: ReceiverAttachError,
+        writer: &mpsc::Sender<LinkFrame>,
+        reader: &mut mpsc::Receiver<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+    ) -> ReceiverAttachError {
+        match attach_error {
+            ReceiverAttachError::IllegalSessionState
+            | ReceiverAttachError::IllegalState
+            | ReceiverAttachError::NonAttachFrameReceived
+            | ReceiverAttachError::ExpectImmediateDetach
+            | ReceiverAttachError::RemoteClosedWithError(_) => attach_error,
+
+            ReceiverAttachError::DuplicatedLinkName => {
+                let error = definitions::Error::new(
+                    SessionError::HandleInUse,
+                    "Link name is in use".to_string(),
+                    None,
+                );
+                session
+                    .send(SessionControl::End(Some(error)))
+                    .await
+                    .map(|_| attach_error)
+                    .unwrap_or(ReceiverAttachError::IllegalSessionState)
+            }
+            ReceiverAttachError::IncomingSourceIsNone
+            | ReceiverAttachError::IncomingTargetIsNone => {
+                // Just send detach immediately
+                let err = self
+                    .send_detach(writer, true, None)
+                    .await
+                    .map(|_| attach_error)
+                    .unwrap_or(ReceiverAttachError::IllegalSessionState);
+                match reader.recv().await {
+                    Some(LinkFrame::Detach(remote_detach)) => {
+                        match self.on_incoming_detach(remote_detach).await {
+                            Ok(_) => return err,
+                            Err(detach_error) => {
+                                return detach_error.try_into().unwrap_or_else(|_| err)
+                            }
+                        }
+                    }
+                    Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+                    None => ReceiverAttachError::IllegalSessionState,
+                }
+            }
+
+            ReceiverAttachError::CoordinatorIsNotImplemented
+            | ReceiverAttachError::InitialDeliveryCountIsNone
+            | ReceiverAttachError::SourceAddressIsNoneWhenDynamicIsTrue
+            | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
+            | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
+                match (&attach_error).try_into() {
+                    Ok(error) => {
+                        match self.send_detach(writer, true, Some(error)).await {
+                            Ok(_) => match reader.recv().await {
+                                Some(LinkFrame::Detach(remote_detach)) => {
+                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: how to handle this?
+                                    attach_error
+                                }
+                                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+                                None => ReceiverAttachError::IllegalSessionState,
+                            },
+                            Err(_) => ReceiverAttachError::IllegalSessionState,
+                        }
+                    }
+                    Err(_) => attach_error,
+                }
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.0.15"
+version = "0.0.16"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -27,8 +27,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 #     "transaction",
 # ]
 
-
-transaction = ["fe2o3-amqp-types/transaction"]
+transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
 # TLS related features
 rustls = ["tokio-rustls", "librustls", "webpki-roots"]
@@ -45,8 +44,8 @@ testcontainers = "0.14.0"
 [dependencies]
 serde_amqp = "0.0.8"
 # serde_amqp = { version = "0.0.8", path = "../serde_amqp" }
-fe2o3-amqp-types = "0.0.18"
-# fe2o3-amqp-types = { version = "0.0.18", path = "../fe2o3-amqp-types" }
+fe2o3-amqp-types = "0.0.21"
+# fe2o3-amqp-types = { version = "0.0.21", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio = { version = "^1.16.1", features = ["io-util", "net", "rt", "macros"] }
@@ -69,3 +68,4 @@ librustls = { package = "rustls", version = "0.20", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
 libnative-tls = { package = "native-tls", version = "0.2.8", optional = true }
+uuid = { version = "1.1.2", features = ["v4"], optional = true }

@@ -3,6 +3,8 @@
 use serde::{de, ser};
 use serde_amqp::primitives::Symbol;
 
+use crate::definitions::ErrorCondition;
+
 /// 4.5.8 Transaction Error
 ///
 /// Symbols used to indicate transaction errors.
@@ -83,5 +85,11 @@ impl<'de> de::Deserialize<'de> for TransactionError {
         Symbol::deserialize(deserializer)?
             .try_into()
             .map_err(|_| de::Error::custom("Invalid symbol value for TransactionError"))
+    }
+}
+
+impl From<TransactionError> for ErrorCondition {
+    fn from(value: TransactionError) -> Self {
+        ErrorCondition::TransactionError(value)
     }
 }

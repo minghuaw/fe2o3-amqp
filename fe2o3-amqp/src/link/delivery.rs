@@ -1,7 +1,7 @@
 //! Helper types differentiating message delivery
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, Handle, MessageFormat},
+    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{message::Body, DeliveryState, Message, Received},
 };
 use futures_util::FutureExt;
@@ -9,10 +9,10 @@ use pin_project_lite::pin_project;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
+use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
-use crate::{link, Payload};
 
-use super::SendError;
+use super::{LinkStateError, SendError};
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -300,37 +300,42 @@ impl<O> From<Settlement> for DeliveryFut<O> {
     }
 }
 
-trait FromSettled {
+pub(crate) trait FromSettled {
     fn from_settled() -> Self;
 }
 
-trait FromDeliveryState {
+pub(crate) trait FromDeliveryState {
     fn from_delivery_state(state: DeliveryState) -> Self;
 }
 
-trait FromRecvError {
-    fn from_recv_error(err: RecvError) -> Self;
+pub(crate) trait FromOneshotRecvError {
+    fn from_oneshot_recv_error(err: RecvError) -> Self;
 }
 
-impl<T> FromRecvError for Result<T, link::Error> {
-    fn from_recv_error(_: RecvError) -> Self {
-        Err(link::Error::Local(definitions::Error::new(
-            AmqpError::IllegalState,
-            Some("Outcome sender is dropped".into()),
-            None,
-        )))
+// impl<T, E> FromOneshotRecvError for Result<T, E>
+// where
+//     E: From<RecvError>,
+// {
+//     fn from_oneshot_recv_error(err: RecvError) -> Self {
+//         Err(E::from(err))
+//     }
+// }
+
+impl FromOneshotRecvError for SendResult {
+    fn from_oneshot_recv_error(_: RecvError) -> Self {
+        Err(LinkStateError::IllegalSessionState.into())
     }
 }
 
-type NonTxnResult = Result<(), SendError>;
+type SendResult = Result<(), SendError>;
 
-impl FromSettled for NonTxnResult {
+impl FromSettled for SendResult {
     fn from_settled() -> Self {
         Ok(())
     }
 }
 
-impl FromDeliveryState for NonTxnResult {
+impl FromDeliveryState for SendResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
@@ -338,16 +343,22 @@ impl FromDeliveryState for NonTxnResult {
             DeliveryState::Released(released) => Err(SendError::Released(released)),
             DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
             #[cfg(feature = "transaction")]
-            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
-                Err(SendError::not_implemented(None))
-            }
+            DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
+            // #[cfg(feature = "transaction")]
+            // DeliveryState::TransactionalState(txn_state) => match txn_state.outcome {
+            //     Some(Outcome::Accepted(_)) => Ok(()),
+            //     Some(Outcome::Rejected(value)) => Err(SendError::Rejected(value)),
+            //     Some(Outcome::Released(value)) => Err(SendError::Released(value)),
+            //     Some(Outcome::Modified(value)) => Err(SendError::Modified(value)),
+            //     Some(Outcome::Declared(_)) | None => Err(SendError::IllegalDeliveryState),
+            // },
         }
     }
 }
 
 impl<O> Future for DeliveryFut<O>
 where
-    O: FromSettled + FromDeliveryState + FromRecvError,
+    O: FromSettled + FromDeliveryState + FromOneshotRecvError,
 {
     type Output = O;
 
@@ -372,7 +383,7 @@ where
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user
-                                Poll::Ready(O::from_recv_error(err))
+                                Poll::Ready(O::from_oneshot_recv_error(err))
                             }
                         }
                     }

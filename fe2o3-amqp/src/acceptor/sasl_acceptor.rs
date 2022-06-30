@@ -1,8 +1,8 @@
 //! Supported SASL mechanisms
 
 use fe2o3_amqp_types::{
-    primitives::{Symbol, Array},
-    sasl::{SaslChallenge, SaslCode, SaslInit, SaslOutcome, SaslResponse, SaslMechanisms},
+    primitives::{Array, Symbol},
+    sasl::{SaslChallenge, SaslCode, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
 };
 
 use crate::sasl_profile::PLAIN;
@@ -32,25 +32,27 @@ pub trait SaslAcceptor {
 /// Extension trait of SaslAcceptor
 pub trait SaslAcceptorExt: SaslAcceptor {
     /// Collects the supported sasl-server-mechanisms into a SaslMechanism frame.
-    /// 
-    /// A list of one element with its value as the SASL mechanism ANONYMOUS will be 
+    ///
+    /// A list of one element with its value as the SASL mechanism ANONYMOUS will be
     /// returned if there is ZERO supported mechanism.
-    /// 
-    /// It is invalid for this list to be null or empty. If the sending peer does not require 
-    /// its partner to authenticate with it, then it SHOULD send a list of one element with 
+    ///
+    /// It is invalid for this list to be null or empty. If the sending peer does not require
+    /// its partner to authenticate with it, then it SHOULD send a list of one element with
     /// its value as the SASL mechanism ANONYMOUS.
     fn sasl_mechanisms(&self) -> SaslMechanisms {
         let server_mechanisms = self.mechanisms();
-        
+
         if server_mechanisms.0.is_empty() {
             SaslMechanisms::default()
         } else {
-            SaslMechanisms { sasl_server_mechanisms: server_mechanisms }
+            SaslMechanisms {
+                sasl_server_mechanisms: server_mechanisms,
+            }
         }
     }
 }
 
-impl<T: SaslAcceptor> SaslAcceptorExt for T { }
+impl<T: SaslAcceptor> SaslAcceptorExt for T {}
 
 // /// Supported SASL mechanism
 // #[derive(Debug)]
