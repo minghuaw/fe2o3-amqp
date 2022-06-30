@@ -323,6 +323,7 @@ impl Builder<SessionAcceptor, Initialized> {
 
     /// Enable handling remotely initiated control link and transaction by setting the
     /// `control_link_acceptor` field
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "transaction", feature = "acceptor"))))]
     #[cfg(feature = "transaction")]
     pub fn control_link_acceptor(
         mut self,

@@ -24,7 +24,6 @@
 //! ```
 //! 
 
-
 use crate::{
     endpoint::ReceiverLink,
     link::{
@@ -67,15 +66,19 @@ pub use owned::*;
 
 pub(crate) mod control_link_frame;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
 pub mod coordinator;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
 pub mod frame;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
 pub mod manager;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
 pub mod session;
 

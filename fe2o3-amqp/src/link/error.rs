@@ -6,6 +6,9 @@ use tokio::sync::TryLockError;
 
 use crate::session::AllocLinkError;
 
+#[cfg(docsrs)]
+use fe2o3_amqp_types::transaction::Coordinator;
+
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
 pub enum DetachError {
