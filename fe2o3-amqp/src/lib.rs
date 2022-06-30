@@ -140,13 +140,16 @@
 //!   - [x] TLS acceptor integration with `tokio-native-tls`
 //!   - [x] Naive PLAIN SASL acceptor
 //!   - [ ] ~~Listener that provide coarse control~~
-//! - [ ] Transaction
-//!   - [x] client side
-//!   - [ ] client side testing
+//! - [x] Transaction
+//!   - [x] controller side
+//!   - [x] controller side testing
 //!     - [x] posting
-//!     - [ ] retirement
-//!     - [ ] acquisition
-//!   - [ ] listener side
+//!     - [x] retirement
+//!     - [ ] ~~acquisition~~ #43
+//!   - [x] resource side and testing
+//!     - [x] posting
+//!     - [x] retirement
+//!     - [ ] ~~acquisition~~ #43
 //! - [ ] qpid interoperability test (this will be 0.1.0 release)
 //! - [ ] Link re-attachment
 //! - [ ] Message batch disposition
