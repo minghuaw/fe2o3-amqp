@@ -20,12 +20,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 # default = []
 
 ## dev defaults
-# default = [
-#     "acceptor",
-#     "rustls",
-#     "native-tls",
-#     "transaction",
-# ]
+default = [
+    "acceptor",
+    "rustls",
+    "native-tls",
+    "transaction",
+]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 

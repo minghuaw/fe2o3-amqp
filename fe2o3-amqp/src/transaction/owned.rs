@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    Controller, OwnedDeclareError, OwnedDischargeError, TransactionDischarge, TransactionExt,
-    TransactionalRetirement, TxnAcquisition, PostError, TXN_ID_KEY,
+    Controller, OwnedDeclareError, OwnedDischargeError, PostError, TransactionDischarge,
+    TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY,
 };
 
 /// An owned transaction that has exclusive access to its own control link.
@@ -62,7 +62,7 @@ use super::{
 /// ```
 ///
 /// ## Transactional acquisition
-/// 
+///
 /// Please note that this is not supported on the resource side yet.
 ///
 /// ```rust
@@ -265,11 +265,21 @@ impl OwnedTransaction {
             }
         }
 
-        recver
+        match recver
             .inner
             .link
             .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
-            .await?;
-        Ok(TxnAcquisition { txn: self, recver })
+            .await
+        {
+            Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
+            Err(error) => {
+                let mut writer = recver.inner.link.flow_state.lock.write().await;
+                if let Some(fields) = &mut writer.properties {
+                    let key = Symbol::from(TXN_ID_KEY);
+                    fields.remove(&key);
+                }
+                Err(error)
+            }
+        }
     }
 }

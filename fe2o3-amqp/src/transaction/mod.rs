@@ -1,28 +1,28 @@
 //! Transaction
-//! 
+//!
 //! > For every transactional interaction, one container acts as the transactional resource, and the
 //! > other container acts as the transaction controller. The transactional resource performs
 //! > transactional work as requested by the transaction controller.
-//! 
-//! # Controller side 
-//! 
+//!
+//! # Controller side
+//!
 //! Please see [`Controller`], [`Transaction`], and [`OwnedTransaction`]
-//! 
+//!
 //! # Resource side
-//! 
-//! Accepting incoming control links is currently only supported on the listerner side. 
-//! 
+//!
+//! Accepting incoming control links is currently only supported on the listerner side.
+//!
 //! By default, the session will not accept remotely initiated control links even with both
 //! `"acceptor"` and `"transaction"` features enabled. In order to allow remotely initiated control
 //! links and thus allow remotely declared transactions, the user needs to assign a `ControlLinkAcceptor`
 //! to a session acceptor.
-//! 
+//!
 //! ```rust
 //! let session_acceptor = SessionAcceptor::builder()
 //!     .control_link_acceptor(ControlLinkAcceptor::default())
 //!     .build();
 //! ```
-//! 
+//!
 
 use crate::{
     endpoint::ReceiverLink,
@@ -30,7 +30,7 @@ use crate::{
         delivery::{DeliveryFut, UnsettledMessage},
         DispositionError, FlowError, LinkFrame, SendError,
     },
-    util::{TryConsume},
+    util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;
@@ -200,8 +200,8 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 }
 
 /// A transaction scope for the client side
-/// 
-/// [`Transaction`] holds a reference to a [`Controller`], which thus allow reusing the same 
+///
+/// [`Transaction`] holds a reference to a [`Controller`], which thus allow reusing the same
 /// control link for declaring and discharging of multiple transactions. [`OwnedTransaction`]
 /// is an alternative that holds the ownership of a control link.
 ///
@@ -227,7 +227,7 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// txn.post(&mut sender, "foo").await.unwrap();
 /// txn.rollback().await.unwrap();
-/// 
+///
 /// controller.close().await.unwrap();
 /// sender.close().await.unwrap();
 /// ```
@@ -246,13 +246,13 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// let mut txn = Transaction::declare(&controller, None).await.unwrap();
 /// txn.accept(&mut receiver, &delivery).await.unwrap();
 /// txn.commit().await.unwrap();
-/// 
+///
 /// controller.close().await.unwrap();
 /// receiver.close().await.unwrap();
 /// ```
 ///
 /// ## Transactional acquisition
-/// 
+///
 /// Please note that this is not supported on the resource side yet.
 ///
 /// ```rust
@@ -269,7 +269,7 @@ pub trait TransactionExt: TransactionDischarge + TransactionalRetirement {
 /// txn_acq.accept(&delivery1).await.unwrap();
 /// txn_acq.accept(&delivery2).await.unwrap();
 /// txn_acq.commit().await.unwrap();
-/// 
+///
 /// controller.close().await.unwrap();
 /// receiver.close().await.unwrap();
 /// ```
@@ -418,10 +418,10 @@ impl<'t> Transaction<'t> {
         recver: &'r mut Receiver,
         credit: SequenceNo,
     ) -> Result<TxnAcquisition<'r, Transaction<'t>>, FlowError> {
+        let key = Symbol::from(TXN_ID_KEY);
+        let value = Value::Binary(self.declared.txn_id.clone());
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
-            let key = Symbol::from(TXN_ID_KEY);
-            let value = Value::Binary(self.declared.txn_id.clone());
             match &mut writer.properties {
                 Some(fields) => {
                     if fields.contains_key(&key) {
@@ -437,12 +437,22 @@ impl<'t> Transaction<'t> {
             }
         }
 
-        recver
+        match recver
             .inner
             .link
             .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
-            .await?;
-        Ok(TxnAcquisition { txn: self, recver })
+            .await
+        {
+            Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
+            Err(error) => {
+                let mut writer = recver.inner.link.flow_state.lock.write().await;
+                if let Some(fields) = &mut writer.properties {
+                    let key = Symbol::from(TXN_ID_KEY);
+                    fields.remove(&key);
+                }
+                Err(error)
+            }
+        }
     }
 }
 
