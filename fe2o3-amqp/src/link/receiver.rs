@@ -169,6 +169,11 @@ impl Default for CreditMode {
 ///     "rust-receiver-link-1", // link name
 ///     "q1"                    // Source address
 /// ).await.unwrap();
+/// 
+/// // Receiver defaults to `ReceiverSettleMode::First` which spontaneously settles incoming delivery
+/// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
+/// 
+/// receiver.close().await.unwrap();
 /// ```
 ///
 /// ## Default configuration
@@ -195,6 +200,7 @@ impl Default for CreditMode {
 ///     .name("rust-receiver-link-1")
 ///     .source("q1")
 ///     .attach(&mut session)
+///     .receiver_settle_mode(ReceiverSettleMode::Second)
 ///     .await
 ///     .unwrap();
 /// ```

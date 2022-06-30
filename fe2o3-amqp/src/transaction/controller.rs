@@ -20,11 +20,25 @@ use crate::{
     Sendable,
 };
 
+#[cfg(docsrs)]
+use super::{Transaction, OwnedTransaction};
+
 pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, UnsettledMessage>;
 
 /// Transaction controller
 ///
-/// # Type parameter `S`
+/// This represents the controller side of a control link. The usage is similar to that of [`crate::Sender`]
+/// but doesn't allow user to send any custom messages as the control link is purely used for declaring
+/// and discharging transactions. Please also see [`Transaction`] and [`OwnedTransaction`]
+/// 
+/// # Example
+/// 
+/// ```rust
+/// let controller = Controller::attach(&mut session, "controller").await.unwrap();
+/// let mut txn = Transaction::declare(&controller, None).await.unwrap();
+/// txn.commit().await.unwrap();
+/// controller.close().await.unwrap();
+/// ```
 #[derive(Debug)]
 pub struct Controller {
     pub(crate) inner: Mutex<SenderInner<ControlLink>>,

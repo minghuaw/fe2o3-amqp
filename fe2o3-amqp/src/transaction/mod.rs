@@ -1,4 +1,29 @@
 //! Transaction
+//! 
+//! > For every transactional interaction, one container acts as the transactional resource, and the
+//! > other container acts as the transaction controller. The transactional resource performs
+//! > transactional work as requested by the transaction controller.
+//! 
+//! # Controller side 
+//! 
+//! Please see [`Controller`], [`Transaction`], and [`OwnedTransaction`]
+//! 
+//! # Resource side
+//! 
+//! Accepting incoming control links is currently only supported on the listerner side. 
+//! 
+//! By default, the session will not accept remotely initiated control links even with both
+//! `"acceptor"` and `"transaction"` features enabled. In order to allow remotely initiated control
+//! links and thus allow remotely declared transactions, the user needs to assign a `ControlLinkAcceptor`
+//! to a session acceptor.
+//! 
+//! ```rust
+//! let session_acceptor = SessionAcceptor::builder()
+//!     .control_link_acceptor(ControlLinkAcceptor::default())
+//!     .build();
+//! ```
+//! 
+
 
 use crate::{
     endpoint::ReceiverLink,

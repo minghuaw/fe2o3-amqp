@@ -36,11 +36,15 @@ use super::{
 /// # Attach a new sender with default configurations
 ///
 /// ```rust, ignore
-/// let sender = Sender::attach(
+/// let mut sender = Sender::attach(
 ///     &mut session,           // mutable reference to SessionHandle
 ///     "rust-sender-link-1",   // link name
 ///     "q1"                    // Target address
 /// ).await.unwrap();
+/// 
+/// sender.send("hello AMQP").await.unwrap();
+/// 
+/// sender.close().await.unwrap();
 /// ```
 ///
 /// ## Default configuration

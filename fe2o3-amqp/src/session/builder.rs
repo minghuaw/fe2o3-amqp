@@ -58,7 +58,7 @@ pub struct Builder {
 
     /// Acceptor for incoming transaction control links
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    pub control_link_acceptor: Option<ControlLinkAcceptor>,
+    pub(crate) control_link_acceptor: Option<ControlLinkAcceptor>,
 }
 
 impl Default for Builder {
@@ -298,16 +298,17 @@ impl Builder {
         self
     }
 
-    /// Enable handling remotely initiated control link and transaction by setting the
-    /// `control_link_acceptor` field
-    #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    pub fn control_link_acceptor(
-        mut self,
-        control_link_acceptor: Option<ControlLinkAcceptor>,
-    ) -> Self {
-        self.control_link_acceptor = control_link_acceptor;
-        self
-    }
+    // TODO
+    // /// Enable handling remotely initiated control link and transaction by setting the
+    // /// `control_link_acceptor` field
+    // #[cfg(all(feature = "transaction", feature = "acceptor"))]
+    // pub fn control_link_acceptor(
+    //     mut self,
+    //     control_link_acceptor: impl Into<Option<ControlLinkAcceptor>>,
+    // ) -> Self {
+    //     self.control_link_acceptor = control_link_acceptor.into();
+    //     self
+    // }
 
     /// Begins a new session
     ///

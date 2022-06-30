@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use fe2o3_amqp::{
-    transaction::{Controller, Transaction, TransactionDischarge, OwnedTransaction, TransactionalRetirement},
+    transaction::{Controller, Transaction, TransactionDischarge, OwnedTransaction, TransactionalRetirement, coordinator::ControlLinkAcceptor},
     types::{primitives::Value, definitions::ReceiverSettleMode},
     Connection, Delivery, Receiver, Sender, Session, Sendable,
 };
@@ -17,7 +17,10 @@ async fn client_main() {
     let url = format!("amqp://{}@{}", SASL_PLAIN, BASE_ADDR);
 
     let mut connection = Connection::open("connection-1", &url[..]).await.unwrap();
-    let mut session = Session::begin(&mut connection).await.unwrap();
+    // let mut session = Session::begin(&mut connection).await.unwrap();
+    let mut session = Session::builder()
+        .control_link_acceptor(ControlLinkAcceptor::default())
+        .begin(&mut connection).await.unwrap();
 
     // let controller = Controller::attach(&mut session, "controller").await.unwrap();
     let mut txn = OwnedTransaction::declare(&mut session, "owned-controller", None).await.unwrap();
