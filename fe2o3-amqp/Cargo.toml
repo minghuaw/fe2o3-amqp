@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.0.15"
+version = "0.0.16"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -20,12 +20,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 # default = []
 
 ## dev defaults
-default = [
-    "acceptor",
-    "rustls",
-    "native-tls",
-    "transaction",
-]
+# default = [
+#     "acceptor",
+#     "rustls",
+#     "native-tls",
+#     "transaction",
+# ]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
