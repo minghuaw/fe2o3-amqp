@@ -1,6 +1,4 @@
-use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, ErrorCondition, SessionError},
-};
+use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, SessionError};
 use tokio::sync::TryLockError;
 
 use crate::session::AllocLinkError;
@@ -62,8 +60,7 @@ pub enum SendError {
     // /// The message was modified
     // #[error("Outcome Modified: {:?}", .0)]
     // Modified(Modified),
-
-    /// A non-terminal delivery state is received while expecting 
+    /// A non-terminal delivery state is received while expecting
     /// an outcome
     #[error("A non-terminal delivery state is received when an outcome is expected")]
     NonTerminalDeliveryState,
@@ -578,7 +575,7 @@ where
 
 /// Message body is not AmqpValue
 #[derive(Debug)]
-pub struct BodyIsNotValue { }
+pub struct BodyIsNotValue {}
 
 impl std::fmt::Display for BodyIsNotValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -586,11 +583,11 @@ impl std::fmt::Display for BodyIsNotValue {
     }
 }
 
-impl std::error::Error for BodyIsNotValue { }
+impl std::error::Error for BodyIsNotValue {}
 
 /// Message body is not AmqpValue
 #[derive(Debug)]
-pub struct BodyIsNotSequence { }
+pub struct BodyIsNotSequence {}
 
 impl std::fmt::Display for BodyIsNotSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -598,11 +595,11 @@ impl std::fmt::Display for BodyIsNotSequence {
     }
 }
 
-impl std::error::Error for BodyIsNotSequence { }
+impl std::error::Error for BodyIsNotSequence {}
 
 /// Message body is not AmqpValue
 #[derive(Debug)]
-pub struct BodyIsNotData { }
+pub struct BodyIsNotData {}
 
 impl std::fmt::Display for BodyIsNotData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -610,4 +607,4 @@ impl std::fmt::Display for BodyIsNotData {
     }
 }
 
-impl std::error::Error for BodyIsNotData { }
+impl std::error::Error for BodyIsNotData {}

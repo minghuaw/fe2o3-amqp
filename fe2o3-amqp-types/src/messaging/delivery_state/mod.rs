@@ -56,6 +56,116 @@ impl DeliveryState {
             DeliveryState::TransactionalState(_) => false,
         }
     }
+
+    /// Returns true if the result is [`Received`].
+    pub fn is_received(&self) -> bool {
+        match self {
+            DeliveryState::Received(_) => true,
+            DeliveryState::Accepted(_) => false,
+            DeliveryState::Rejected(_) => false,
+            DeliveryState::Released(_) => false,
+            DeliveryState::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Accepted`].
+    pub fn is_accepted(&self) -> bool {
+        match self {
+            DeliveryState::Received(_) => false,
+            DeliveryState::Accepted(_) => true,
+            DeliveryState::Rejected(_) => false,
+            DeliveryState::Released(_) => false,
+            DeliveryState::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Rejected`].
+    pub fn is_rejected(&self) -> bool {
+        match self {
+            DeliveryState::Received(_) => false,
+            DeliveryState::Accepted(_) => false,
+            DeliveryState::Rejected(_) => true,
+            DeliveryState::Released(_) => false,
+            DeliveryState::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Released`].
+    pub fn is_released(&self) -> bool {
+        match self {
+            DeliveryState::Received(_) => false,
+            DeliveryState::Accepted(_) => false,
+            DeliveryState::Rejected(_) => false,
+            DeliveryState::Released(_) => true,
+            DeliveryState::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Modified`].
+    pub fn is_modified(&self) -> bool {
+        match self {
+            DeliveryState::Received(_) => false,
+            DeliveryState::Accepted(_) => false,
+            DeliveryState::Rejected(_) => false,
+            DeliveryState::Released(_) => false,
+            DeliveryState::Modified(_) => true,
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Received, E>`,
+    /// mapping Received(received) to Ok(received) and other variants to Err(err).
+    pub fn received_or<E>(self, err: E) -> Result<Received, E> {
+        match self {
+            Self::Received(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Accepted, E>`,
+    /// mapping Accepted(accepted) to Ok(accepted) and other variants to Err(err).
+    pub fn accepted_or<E>(self, err: E) -> Result<Accepted, E> {
+        match self {
+            Self::Accepted(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Rejected, E>`,
+    /// mapping Rejected(rejected) to Ok(rejected) and other variants to Err(err).
+    pub fn rejected_or<E>(self, err: E) -> Result<Rejected, E> {
+        match self {
+            Self::Rejected(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Released, E>`,
+    /// mapping Released(released) to Ok(released) and other variants to Err(err).
+    pub fn released_or<E>(self, err: E) -> Result<Released, E> {
+        match self {
+            Self::Released(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Modified, E>`,
+    /// mapping Modified(modified) to Ok(modified) and other variants to Err(err).
+    pub fn modified_or<E>(self, err: E) -> Result<Modified, E> {
+        match self {
+            Self::Modified(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Declared, E>`,
+    /// mapping Declared(declared) to Ok(declared) and other variants to Err(err).
+    #[cfg(feature = "transaction")]
+    pub fn declared_or<E>(self, err: E) -> Result<Declared, E> {
+        match self {
+            Self::Declared(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
 }
 
 impl AsRef<DeliveryState> for DeliveryState {
@@ -91,6 +201,155 @@ pub enum Outcome {
     #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
     #[cfg(feature = "transaction")]
     Declared(Declared),
+}
+
+impl Outcome {
+    /// Returns true if the result is [`Accepted`].
+    pub fn is_accepted(&self) -> bool {
+        match self {
+            Self::Accepted(_) => true,
+            Self::Rejected(_) => false,
+            Self::Released(_) => false,
+            Self::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Rejected`].
+    pub fn is_rejected(&self) -> bool {
+        match self {
+            Self::Accepted(_) => false,
+            Self::Rejected(_) => true,
+            Self::Released(_) => false,
+            Self::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Released`].
+    pub fn is_released(&self) -> bool {
+        match self {
+            Self::Accepted(_) => false,
+            Self::Rejected(_) => false,
+            Self::Released(_) => true,
+            Self::Modified(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Modified`].
+    pub fn is_modified(&self) -> bool {
+        match self {
+            Self::Accepted(_) => false,
+            Self::Rejected(_) => false,
+            Self::Released(_) => false,
+            Self::Modified(_) => true,
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Accepted, E>`,
+    /// mapping Accepted(accepted) to Ok(accepted) and other variants to Err(err).
+    pub fn accepted_or<E>(self, err: E) -> Result<Accepted, E> {
+        match self {
+            Self::Accepted(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Rejected, E>`,
+    /// mapping Rejected(rejected) to Ok(rejected) and other variants to Err(err).
+    pub fn rejected_or<E>(self, err: E) -> Result<Rejected, E> {
+        match self {
+            Self::Rejected(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Released, E>`,
+    /// mapping Released(released) to Ok(released) and other variants to Err(err).
+    pub fn released_or<E>(self, err: E) -> Result<Released, E> {
+        match self {
+            Self::Released(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Modified, E>`,
+    /// mapping Modified(modified) to Ok(modified) and other variants to Err(err).
+    pub fn modified_or<E>(self, err: E) -> Result<Modified, E> {
+        match self {
+            Self::Modified(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Declared, E>`,
+    /// mapping Declared(declared) to Ok(declared) and other variants to Err(err).
+    #[cfg(feature = "transaction")]
+    pub fn declared_or<E>(self, err: E) -> Result<Declared, E> {
+        match self {
+            Self::Declared(value) => Ok(value),
+            _ => Err(err),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Accepted, E>`,
+    /// mapping Accepted(accepted) to Ok(accepted) and other variants to Err(err).
+    pub fn accepted_or_else<E, F>(self, op: F) -> Result<Accepted, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Accepted(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Rejected, E>`,
+    /// mapping Rejected(rejected) to Ok(rejected) and other variants to Err(err).
+    pub fn rejected_or_else<E, F>(self, op: F) -> Result<Rejected, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Rejected(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Released, E>`,
+    /// mapping Released(released) to Ok(released) and other variants to Err(err).
+    pub fn released_or_else<E, F>(self, op: F) -> Result<Released, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Released(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Modified, E>`,
+    /// mapping Modified(modified) to Ok(modified) and other variants to Err(err).
+    pub fn modified_or_else<E, F>(self, op: F) -> Result<Modified, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Modified(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Declared, E>`,
+    /// mapping Declared(declared) to Ok(declared) and other variants to Err(err).
+    #[cfg(feature = "transaction")]
+    pub fn declared_or_else<E, F>(self, op: F) -> Result<Declared, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Declared(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
 }
 
 mod outcome_impl;

@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    Controller, OwnedDeclareError, OwnedDischargeError, PostError, TransactionDischarge,
-    TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY, ControllerSendError,
+    Controller, ControllerSendError, OwnedDeclareError, OwnedDischargeError, PostError,
+    TransactionDischarge, TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY,
 };
 
 /// An owned transaction that has exclusive access to its own control link.

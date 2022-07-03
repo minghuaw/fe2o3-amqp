@@ -11,7 +11,7 @@ use tokio::{
 
 use fe2o3_amqp_types::{
     definitions::{self},
-    messaging::{message::__private::Serializable, Address, DeliveryState, Target, Outcome},
+    messaging::{message::__private::Serializable, Address, DeliveryState, Outcome, Target},
     performatives::Detach,
 };
 

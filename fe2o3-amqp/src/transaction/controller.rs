@@ -141,7 +141,9 @@ impl Controller {
             | DeliveryState::Accepted(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
-            | DeliveryState::TransactionalState(_) => Err(ControllerSendError::IllegalDeliveryState),
+            | DeliveryState::TransactionalState(_) => {
+                Err(ControllerSendError::IllegalDeliveryState)
+            }
         }
     }
 
@@ -170,7 +172,9 @@ impl Controller {
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
             | DeliveryState::Declared(_)
-            | DeliveryState::TransactionalState(_) => Err(ControllerSendError::IllegalDeliveryState),
+            | DeliveryState::TransactionalState(_) => {
+                Err(ControllerSendError::IllegalDeliveryState)
+            }
         }
     }
 }
