@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.18
+
+1. Added `std::error::Error` impl for public error types
+2. Removed redundant tracing that were initially added for debugging purpose.
+
 ## 0.0.17
 
 1. Remove `"txn-id"` field from receiver link properties if error encountered while sending flow
