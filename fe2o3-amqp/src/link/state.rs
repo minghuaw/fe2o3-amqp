@@ -291,21 +291,6 @@ impl ProducerState for Arc<LinkFlowState<role::Sender>> {
     }
 }
 
-// impl Producer<Arc<LinkFlowState<role::Sender>>> {
-//     pub(crate) async fn on_incoming_flow(
-//         &mut self,
-//         flow: LinkFlow,
-//         output_handle: OutputHandle,
-//     ) -> Option<LinkFlow> {
-//         self.produce((flow, output_handle)).await
-//     }
-// }
-
-// pub enum SenderPermit {
-//     Send,
-//     Drain,
-// }
-
 struct InsufficientCredit {}
 
 #[async_trait]

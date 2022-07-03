@@ -100,51 +100,64 @@ impl From<TryLockError> for SenderTryConsumeError {
 }
 
 /// Errors associated with attaching a link as receiver
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ReceiverAttachError {
     // Errors that should end the session
     /// The associated session has dropped
+    #[error("Illegal session state. Session might have stopped.")]
     IllegalSessionState,
 
     /// Link name is already in use
+    #[error("Link name is not unique.")]
     DuplicatedLinkName,
 
     /// Illegal link state
+    #[error("Illegal session state")]
     IllegalState,
 
     /// The local terminus is expecting an Attach from the remote peer
+    #[error("Expecting an Attach frame but received a non-Attach frame")]
     NonAttachFrameReceived,
 
     /// The link is expected to be detached immediately but didn't receive
     /// an incoming Detach frame
+    #[error("Expecting the remote peer to immediately detach")]
     ExpectImmediateDetach,
 
     // Errors that should reject Attach
     /// Incoming Attach frame's Source field is None
+    #[error("Source field is None")]
     IncomingSourceIsNone,
 
     /// Incoming Attach frame's Target field is None
+    #[error("Target field is None")]
     IncomingTargetIsNone,
 
     /// The remote Attach contains a [`Coordinator`] in the Target
+    #[error("Control link is not implemented without enabling the `transaction` feature")]
     CoordinatorIsNotImplemented,
 
     /// This MUST NOT be null if role is sender
+    #[error("Initial delivery field must be set if the role is sender")]
     InitialDeliveryCountIsNone,
 
     /// When dynamic is set to true by the sending link endpoint, this field constitutes a request
     /// for the receiving peer to dynamically create a node at the target. In this case the address
     /// field MUST NOT be set.
+    #[error("Target address MUST not be set when dynamic is set to by a sending link endpoint")]
     TargetAddressIsSomeWhenDynamicIsTrue,
 
     /// When set to true by the sending link endpoint this field indicates creation of a dynamically created
     /// node. In this case the address field will contain the address of the created node
+    #[error("When set to true by the sending link endpoint this field indicates creation of a dynamically created node")]
     SourceAddressIsNoneWhenDynamicIsTrue,
 
     /// If the dynamic field is not set to true this field MUST be left unset.
+    #[error("If the dynamic field is not set to true this field MUST be left unset")]
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
 
     /// Remote peer closed the link with an error
+    #[error("Remote peer closed with error {:?}", .0)]
     RemoteClosedWithError(definitions::Error),
 }
 
@@ -188,51 +201,65 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
 }
 
 /// Errors associated with attaching a link as sender
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum SenderAttachError {
     // Illegal session state
     /// Session stopped
+    #[error("Illegal session state. Session might have stopped.")]
     IllegalSessionState,
 
     /// Link name duplicated
+    #[error("Link name is not unique.")]
     DuplicatedLinkName,
 
     /// Illegal link state
+    #[error("Illegal session state")]
     IllegalState,
 
     /// The local terminus is expecting an Attach from the remote peer
+    #[error("Expecting an Attach frame but received a non-Attach frame")]
     NonAttachFrameReceived,
 
     /// The link is expected to be detached immediately but didn't receive
     /// an incoming Detach frame
+    #[error("Expecting the remote peer to immediately detach")]
     ExpectImmediateDetach,
 
     // Errors that should reject Attach
     /// Incoming Attach frame's Source field is None
+    #[error("Source field is None")]
     IncomingSourceIsNone,
 
     /// Incoming Attach frame's Target field is None
+    #[error("Target field is None")]
     IncomingTargetIsNone,
 
     /// The remote Attach contains a [`Coordinator`] in the Target
+    #[error("Control link is not implemented without enabling the `transaction` feature")]
     CoordinatorIsNotImplemented,
 
     /// When set to true by the receiving link endpoint this field indicates creation of a
     /// dynamically created node. In this case the address field will contain the address of the
     /// created node.
+    #[error("The address field contins the address of the created node when dynamic is set by the receiving endpoint")]
     TargetAddressIsNoneWhenDynamicIsTrue,
 
     /// When set to true by the receiving link endpoint, this field constitutes a request for the sending
     /// peer to dynamically create a node at the source. In this case the address field MUST NOT be set
+    #[error("Source address must not be set when dynamic is set by the receiving endpoint")]
     SourceAddressIsSomeWhenDynamicIsTrue,
 
     /// If the dynamic field is not set to true this field MUST be left unset.
+    #[error("If the dynamic field is not set to true this field MUST be left unset")]
     DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
 
     /// Desired TransactionCapabilities is not supported
+    #[cfg(feature = "transaction")]
+    #[error("Desired transaction capability is not supported")]
     DesireTxnCapabilitiesNotSupported,
 
     /// Remote peer closed the link with an error
+    #[error("Remote peer closed with error {:?}", .0)]
     RemoteClosedWithError(definitions::Error),
 }
 
@@ -305,8 +332,9 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             }
 
             SenderAttachError::IncomingSourceIsNone
-            | SenderAttachError::IncomingTargetIsNone
-            | SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
+            | SenderAttachError::IncomingTargetIsNone => return Err(value),
+            #[cfg(feature = "transaction")]
+            SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
             SenderAttachError::RemoteClosedWithError(_) => return Err(value),
         };
 

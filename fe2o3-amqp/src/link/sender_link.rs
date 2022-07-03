@@ -629,25 +629,40 @@ where
             SenderAttachError::CoordinatorIsNotImplemented
             | SenderAttachError::SourceAddressIsSomeWhenDynamicIsTrue
             | SenderAttachError::TargetAddressIsNoneWhenDynamicIsTrue
-            | SenderAttachError::DesireTxnCapabilitiesNotSupported
             | SenderAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
-                match (&attach_error).try_into() {
-                    Ok(error) => {
-                        match self.send_detach(writer, true, Some(error)).await {
-                            Ok(_) => match reader.recv().await {
-                                Some(LinkFrame::Detach(remote_detach)) => {
-                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
-                                    attach_error
-                                }
-                                Some(_) => SenderAttachError::NonAttachFrameReceived,
-                                None => SenderAttachError::IllegalSessionState,
-                            },
-                            Err(_) => SenderAttachError::IllegalSessionState,
-                        }
-                    }
-                    Err(_) => attach_error,
-                }
+                try_detach_with_error(self, attach_error, writer, reader).await
+            }
+            #[cfg(feature = "transaction")]
+            SenderAttachError::DesireTxnCapabilitiesNotSupported => {
+                try_detach_with_error(self, attach_error, writer, reader).await
             }
         }
+    }
+}
+
+async fn try_detach_with_error<L>(
+    link: &mut L,
+    attach_error: SenderAttachError,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+) -> SenderAttachError
+where
+    L: LinkDetach,
+{
+    match (&attach_error).try_into() {
+        Ok(err) => {
+            match link.send_detach(writer, true, Some(err)).await {
+                Ok(_) => match reader.recv().await {
+                    Some(LinkFrame::Detach(remote_detach)) => {
+                        let _ = link.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
+                        attach_error
+                    }
+                    Some(_) => SenderAttachError::NonAttachFrameReceived,
+                    None => SenderAttachError::IllegalSessionState,
+                },
+                Err(_) => SenderAttachError::IllegalSessionState,
+            }
+        }
+        Err(_) => attach_error,
     }
 }

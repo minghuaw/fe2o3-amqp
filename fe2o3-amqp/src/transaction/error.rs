@@ -10,7 +10,7 @@ use crate::link::{
 
 /// Errors with allocation of new transacation ID
 #[derive(Debug)]
-pub enum AllocTxnIdError {
+pub(crate) enum AllocTxnIdError {
     /// Allocation of transaction ID is not implemented
     ///
     /// This happens when transaction session is not enabled
@@ -22,7 +22,7 @@ pub enum AllocTxnIdError {
 
 /// Errors with discharging a transaction at the transaction manager
 #[derive(Debug)]
-pub enum DischargeError {
+pub(crate) enum DischargeError {
     /// Session must have dropped
     InvalidSessionState,
 
@@ -40,7 +40,7 @@ impl From<TransactionError> for DischargeError {
 
 /// Errors on the transacitonal resource side
 #[derive(Debug)]
-pub enum CoordinatorError {
+pub (crate) enum CoordinatorError {
     /// The global transaction ID is not implemented yet
     GlobalIdNotImplemented,
 
@@ -69,24 +69,20 @@ impl From<DischargeError> for CoordinatorError {
     fn from(value: DischargeError) -> Self {
         match value {
             DischargeError::InvalidSessionState => Self::InvalidSessionState,
-            // DischargeError::TransactionError(error) => {
-            //     let condition = ErrorCondition::TransactionError(error);
-            //     let error = definitions::Error::new(condition, None, None);
-            //     let rejected = Rejected { error: Some(error) };
-            //     Self::Reject(rejected)
-            // },
             DischargeError::TransactionError(error) => Self::TransactionError(error),
         }
     }
 }
 
 /// Errors with declaring an OwnedTransaction
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum OwnedDeclareError {
     /// Error with attaching the control link
+    #[error(transparent)]
     AttachError(SenderAttachError),
 
     /// Error with sending Declare
+    #[error(transparent)]
     SendError(SendError),
 }
 
@@ -103,12 +99,14 @@ impl From<SendError> for OwnedDeclareError {
 }
 
 /// Errors with discharging an OwnedTransaction
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum OwnedDischargeError {
     /// Error with sending Discharge
+    #[error(transparent)]
     SendError(SendError),
 
     /// Error with closing the control link
+    #[error(transparent)]
     DetachError(DetachError),
 }
 
@@ -225,9 +223,3 @@ impl FromOneshotRecvError for PostResult {
         ))
     }
 }
-
-// /// Errors with handling Post (Transfer) at the resource
-// #[derive(Debug)]
-// pub enum ResourcePostError {
-
-// }

@@ -20,12 +20,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 # default = []
 
 ## dev defaults
-# default = [
-#     "acceptor",
-#     "rustls",
-#     "native-tls",
-#     "transaction",
-# ]
+default = [
+    "acceptor",
+    "rustls",
+    "native-tls",
+    "transaction",
+]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
@@ -52,7 +52,7 @@ tokio = { version = "^1.16.1", features = ["io-util", "net", "rt", "macros"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 thiserror = "1"
 serde = "1"
-erased-serde = "^0.3.16"
+# erased-serde = "^0.3.16"
 futures-util = { version = "0.3", features = ["sink"] }
 pin-project-lite = "0.2"
 url = "2"

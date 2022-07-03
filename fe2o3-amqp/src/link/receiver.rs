@@ -564,18 +564,6 @@ where
                         true => Err(LinkStateError::RemoteClosed.into()),
                         false => Err(LinkStateError::RemoteDetached.into()),
                     })
-                // self.link.send_detach(&self.outgoing, closed, None).await
-                //     .map_err(Into::into)
-                //     .and_then(|_| match closed {
-                //         true => Err(LinkStateError::RemoteClosed.into()),
-                //         false => Err(LinkStateError::RemoteDetached.into()),
-                //     })
-                // match (detach.error, closed) {
-                //     (Some(err), false) => Err(LinkStateError::RemoteDetachedWithError(err).into()),
-                //     (Some(err), true) => Err(LinkStateError::RemoteClosedWithError(err).into()),
-                //     (None, false) => Err(LinkStateError::RemoteDetached.into()),
-                //     (None, true) => Err(LinkStateError::RemoteClosed.into()),
-                // }
             }
             LinkFrame::Transfer {
                 input_handle: _,

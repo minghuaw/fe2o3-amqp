@@ -312,15 +312,6 @@ pub(crate) trait FromOneshotRecvError {
     fn from_oneshot_recv_error(err: RecvError) -> Self;
 }
 
-// impl<T, E> FromOneshotRecvError for Result<T, E>
-// where
-//     E: From<RecvError>,
-// {
-//     fn from_oneshot_recv_error(err: RecvError) -> Self {
-//         Err(E::from(err))
-//     }
-// }
-
 impl FromOneshotRecvError for SendResult {
     fn from_oneshot_recv_error(_: RecvError) -> Self {
         Err(LinkStateError::IllegalSessionState.into())
