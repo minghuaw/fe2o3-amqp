@@ -152,8 +152,6 @@ where
             }
         };
 
-        tracing::debug!(input_handle = ?self.input_handle);
-
         let input_handle = self
             .input_handle
             .clone()
@@ -583,8 +581,6 @@ where
         reader: &mut mpsc::Receiver<LinkFrame>,
         session: &mpsc::Sender<SessionControl>,
     ) -> SenderAttachError {
-        tracing::debug!(?attach_error);
-
         match attach_error {
             SenderAttachError::IllegalSessionState
             | SenderAttachError::IllegalState

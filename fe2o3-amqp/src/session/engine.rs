@@ -434,7 +434,6 @@ where
 
                         }
                     };
-                    // tracing::info!(task="on_incoming", result = ?result);
                     result
                 },
                 control = self.control.recv() => {
@@ -447,7 +446,6 @@ where
                             Ok(Running::Stop)
                         }
                     };
-                    // tracing::info!(task="on_control", result = ?result);
                     result
                 },
                 frame = self.outgoing_link_frames.recv() => {
@@ -461,7 +459,6 @@ where
                             Ok(Running::Continue)
                         }
                     };
-                    // tracing::info!(task="on_outgoing_link_frames", result = ?result);
                     result
                 }
             };

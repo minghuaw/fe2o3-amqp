@@ -324,18 +324,15 @@ where
                 .on_outgoing_begin(channel, begin)
                 .map_err(Into::into)?,
             SessionFrameBody::Attach(attach) => {
-                // trace!(channel, frame = ?attach);
                 Frame::new(channel, FrameBody::Attach(attach))
             }
             SessionFrameBody::Flow(flow) => {
-                // trace!(channel, frame = ?flow);
                 Frame::new(channel, FrameBody::Flow(flow))
             }
             SessionFrameBody::Transfer {
                 performative,
                 payload,
             } => {
-                // trace!(channel, frame = ?performative, payload_len = payload.len());
                 Frame::new(
                     channel,
                     FrameBody::Transfer {
@@ -345,12 +342,9 @@ where
                 )
             }
             SessionFrameBody::Disposition(disposition) => {
-                // trace!(channel, frame = ?disposition);
-                tracing::info!(?disposition);
                 Frame::new(channel, FrameBody::Disposition(disposition))
             }
             SessionFrameBody::Detach(detach) => {
-                // trace!(channel, frame = ?detach);
                 Frame::new(channel, FrameBody::Detach(detach))
             }
             SessionFrameBody::End(end) => self

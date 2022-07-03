@@ -147,7 +147,6 @@ where
         &mut self,
         txn_id: TransactionId,
     ) -> Result<Result<Accepted, TransactionError>, Self::Error> {
-        tracing::debug!(?txn_id);
         let txn = match self.txn_manager.txns.remove(&txn_id) {
             Some(txn) => txn,
             None => return Ok(Err(TransactionError::UnknownId)),

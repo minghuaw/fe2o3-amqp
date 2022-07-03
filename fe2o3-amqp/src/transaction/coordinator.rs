@@ -63,16 +63,12 @@ impl ControlLinkAcceptor {
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
     ) -> Result<TxnCoordinator, ReceiverAttachError> {
-        tracing::info!(control_link_attach = ?remote_attach);
         self.inner
             .accept_incoming_attach_inner(&self.shared, remote_attach, control, outgoing)
             .await
             .map(|inner| TxnCoordinator {
                 inner,
                 txn_ids: HashSet::new(),
-                // txns: HashMap::new(),
-                // work_frame_rx,
-                // work_frame_tx,
             })
     }
 }
@@ -119,14 +115,6 @@ impl TxnCoordinator {
     }
 
     async fn on_discharge(&mut self, discharge: &Discharge) -> Result<Accepted, CoordinatorError> {
-        // let txn = match self.txn_ids.remove(&discharge.txn_id) {
-        //     Some(txn) => txn,
-        //     None => {
-        //         return Err(CoordinatorError::TransactionError(
-        //             TransactionError::UnknownId,
-        //         ))
-        //     }
-        // };
         if !self.txn_ids.remove(&discharge.txn_id) {
             return Err(CoordinatorError::TransactionError(
                 TransactionError::UnknownId,
@@ -161,6 +149,7 @@ impl TxnCoordinator {
                     "The coordinator is only expecting Declare or Discharge frames".to_string(),
                     None,
                 );
+                tracing::error!(?error);
                 // TODO: detach instead of closing
                 let _ = self.inner.close_with_error(Some(error)).await;
                 return Running::Stop;
@@ -177,8 +166,6 @@ impl TxnCoordinator {
                 .await
                 .map(SuccessfulOutcome::Accepted),
         };
-
-        tracing::info!(?result);
 
         self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, result)
             .await
@@ -252,28 +239,31 @@ impl TxnCoordinator {
                     .dispose(delivery_id, delivery_tag, Some(true), outcome.into())
                     .await
             }
-            Err(error) => match error {
-                CoordinatorError::GlobalIdNotImplemented => {
-                    let error = TransactionError::UnknownId;
-                    let description = "Global transaction ID is not implemented".to_string();
-                    self.reject(delivery_id, delivery_tag, error, description)
-                        .await
+            Err(error) => {
+                tracing::error!(?error);
+                match error {
+                    CoordinatorError::GlobalIdNotImplemented => {
+                        let error = TransactionError::UnknownId;
+                        let description = "Global transaction ID is not implemented".to_string();
+                        self.reject(delivery_id, delivery_tag, error, description)
+                            .await
+                    }
+                    CoordinatorError::InvalidSessionState => {
+                        // Session must have dropped
+                        return Running::Stop;
+                    }
+                    CoordinatorError::AllocTxnIdNotImplemented => {
+                        let error = TransactionError::UnknownId;
+                        let description =
+                            "Allocation of new transaction ID is not implemented".to_string();
+                        self.reject(delivery_id, delivery_tag, error, description)
+                            .await
+                    }
+                    CoordinatorError::TransactionError(error) => {
+                        self.reject(delivery_id, delivery_tag, error, None).await
+                    }
                 }
-                CoordinatorError::InvalidSessionState => {
-                    // Session must have dropped
-                    return Running::Stop;
-                }
-                CoordinatorError::AllocTxnIdNotImplemented => {
-                    let error = TransactionError::UnknownId;
-                    let description =
-                        "Allocation of new transaction ID is not implemented".to_string();
-                    self.reject(delivery_id, delivery_tag, error, description)
-                        .await
-                }
-                CoordinatorError::TransactionError(error) => {
-                    self.reject(delivery_id, delivery_tag, error, None).await
-                }
-            },
+            }
         };
 
         match disposition_result {
@@ -300,7 +290,6 @@ impl TxnCoordinator {
         error: TransactionError,
         description: impl Into<Option<String>>,
     ) -> Result<(), IllegalLinkStateError> {
-        // let condition = ErrorCondition::TransactionError(error);
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
@@ -311,17 +300,16 @@ impl TxnCoordinator {
 
     #[instrument(name = "Coordinator::event_loop", skip(self))]
     pub async fn event_loop(mut self) {
-        tracing::info!("Coordinator started");
         loop {
             let running = tokio::select! {
                 delivery = self.inner.recv() => {
+                    tracing::trace!(name = ?self.inner.link.name, ?delivery);
                     match delivery {
                         Ok(delivery) => self.on_delivery(delivery).await,
                         Err(error) => {
                             // Make sure Discharge is handled before detach
                             self.inner.incoming.close();
                             while let Ok(delivery) = self.inner.recv().await {
-                                tracing::info!("more frames coming");
                                 self.on_delivery(delivery).await;
                             }
 

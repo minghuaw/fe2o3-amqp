@@ -132,18 +132,14 @@ where
 
         // Comparing unsettled should be taken care of in `on_incoming_attach`
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
             output_handle: (),
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: rcv_settle_mode.clone(),
-            // state_code: state_code.clone(),
             more: false,
         };
-
-        tracing::info!("Allocating output_handle");
 
         // Allocate link in session
         let input_handle = InputHandle::from(remote_attach.handle.clone());
@@ -154,8 +150,6 @@ where
             input_handle,
         )
         .await?;
-
-        tracing::info!("Allocated output_handle");
 
         let mut err = None;
         // **the receiver is considered to hold the authoritative version of the target properties**,
@@ -178,7 +172,6 @@ where
         let mut link = link::Link::<role::Receiver, T, ReceiverFlowState, DeliveryState> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
-            // state_code,
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // will be set in `on_incoming_attach`
@@ -193,7 +186,6 @@ where
             unsettled,
         };
 
-        // let outgoing = outgoing.clone();
         match (err, link.on_incoming_attach(remote_attach).await) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 link.send_attach(&outgoing).await?;
