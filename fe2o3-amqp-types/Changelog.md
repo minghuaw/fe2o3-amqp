@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.24
+
+1. Added convenience functions to handle delivery `DeliveryState`
+
 ## 0.0.23
 
 1. Added convenience functions to handle delivery `Outcome`

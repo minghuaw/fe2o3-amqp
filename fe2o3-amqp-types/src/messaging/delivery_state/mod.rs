@@ -194,6 +194,67 @@ impl DeliveryState {
             _ => Err(err),
         }
     }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Accepted, E>`,
+    /// mapping Accepted(accepted) to Ok(accepted) and other variants to Err(err).
+    pub fn accepted_or_else<E, F>(self, op: F) -> Result<Accepted, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Accepted(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Rejected, E>`,
+    /// mapping Rejected(rejected) to Ok(rejected) and other variants to Err(err).
+    pub fn rejected_or_else<E, F>(self, op: F) -> Result<Rejected, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Rejected(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Released, E>`,
+    /// mapping Released(released) to Ok(released) and other variants to Err(err).
+    pub fn released_or_else<E, F>(self, op: F) -> Result<Released, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Released(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Modified, E>`,
+    /// mapping Modified(modified) to Ok(modified) and other variants to Err(err).
+    pub fn modified_or_else<E, F>(self, op: F) -> Result<Modified, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Modified(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
+
+    /// Transforms the [`DeliveryState`] into a `Result<Declared, E>`,
+    /// mapping Declared(declared) to Ok(declared) and other variants to Err(err).
+    #[cfg(feature = "transaction")]
+    pub fn declared_or_else<E, F>(self, op: F) -> Result<Declared, E>
+    where
+        F: FnOnce(Self) -> E,
+    {
+        match self {
+            Self::Declared(value) => Ok(value),
+            _ => Err(op(self)),
+        }
+    }
 }
 
 impl AsRef<DeliveryState> for DeliveryState {
