@@ -11,14 +11,14 @@ use serde_amqp::Value;
 
 use crate::{
     endpoint::ReceiverLink,
-    link::{delivery::DeliveryFut, DispositionError, FlowError, SendError},
+    link::{delivery::DeliveryFut, DispositionError, FlowError},
     session::SessionHandle,
     Delivery, Receiver, Sendable, Sender,
 };
 
 use super::{
     Controller, OwnedDeclareError, OwnedDischargeError, PostError, TransactionDischarge,
-    TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY,
+    TransactionExt, TransactionalRetirement, TxnAcquisition, TXN_ID_KEY, ControllerSendError,
 };
 
 /// An owned transaction that has exclusive access to its own control link.
@@ -176,7 +176,7 @@ impl OwnedTransaction {
     pub async fn declare_with_controller(
         controller: Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<OwnedTransaction, SendError> {
+    ) -> Result<OwnedTransaction, ControllerSendError> {
         let declared = controller.declare_inner(global_id.into()).await?;
         Ok(Self {
             controller,
@@ -190,7 +190,7 @@ impl OwnedTransaction {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), PostError>>, PostError>
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
     where
         T: serde::Serialize,
     {
@@ -216,7 +216,7 @@ impl OwnedTransaction {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), PostError>
+    ) -> Result<Outcome, PostError>
     where
         T: serde::Serialize,
     {

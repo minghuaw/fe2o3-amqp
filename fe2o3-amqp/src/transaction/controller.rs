@@ -20,6 +20,7 @@ use crate::{
     Sendable,
 };
 
+use super::ControllerSendError;
 #[cfg(docsrs)]
 use super::{OwnedTransaction, Transaction};
 
@@ -118,7 +119,7 @@ impl Controller {
     pub(crate) async fn declare_inner(
         &self,
         global_id: Option<TransactionId>,
-    ) -> Result<Declared, SendError> {
+    ) -> Result<Declared, ControllerSendError> {
         // To begin transactional work, the transaction controller needs to obtain a transaction
         // identifier from the resource. It does this by sending a message to the coordinator whose
         // body consists of the declare type in a single amqp-value section. Other standard message
@@ -135,12 +136,12 @@ impl Controller {
             .map_err(|_| LinkStateError::IllegalSessionState)?
         {
             DeliveryState::Declared(declared) => Ok(declared),
-            DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
+            DeliveryState::Rejected(rejected) => Err(ControllerSendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Accepted(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
-            | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
+            | DeliveryState::TransactionalState(_) => Err(ControllerSendError::IllegalDeliveryState),
         }
     }
 
@@ -149,7 +150,7 @@ impl Controller {
         &self,
         txn_id: TransactionId,
         fail: impl Into<Option<bool>>,
-    ) -> Result<(), link::SendError> {
+    ) -> Result<(), ControllerSendError> {
         let discharge = Discharge {
             txn_id,
             fail: fail.into(),
@@ -164,12 +165,12 @@ impl Controller {
             .map_err(|_| LinkStateError::IllegalSessionState)?
         {
             DeliveryState::Accepted(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(link::SendError::Rejected(rejected)),
+            DeliveryState::Rejected(rejected) => Err(ControllerSendError::Rejected(rejected)),
             DeliveryState::Received(_)
             | DeliveryState::Released(_)
             | DeliveryState::Modified(_)
             | DeliveryState::Declared(_)
-            | DeliveryState::TransactionalState(_) => Err(SendError::IllegalDeliveryState),
+            | DeliveryState::TransactionalState(_) => Err(ControllerSendError::IllegalDeliveryState),
         }
     }
 }

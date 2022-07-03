@@ -28,7 +28,7 @@ use crate::{
     endpoint::ReceiverLink,
     link::{
         delivery::{DeliveryFut, UnsettledMessage},
-        DispositionError, FlowError, LinkFrame, SendError,
+        DispositionError, FlowError, LinkFrame,
     },
     util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
@@ -282,7 +282,7 @@ pub struct Transaction<'t> {
 
 #[async_trait]
 impl<'t> TransactionDischarge for Transaction<'t> {
-    type Error = SendError;
+    type Error = ControllerSendError;
 
     fn is_discharged(&self) -> bool {
         self.is_discharged
@@ -348,7 +348,7 @@ impl<'t> Transaction<'t> {
     pub async fn declare(
         controller: &'t Controller,
         global_id: impl Into<Option<TransactionId>>,
-    ) -> Result<Transaction<'t>, SendError> {
+    ) -> Result<Transaction<'t>, ControllerSendError> {
         let declared = controller.declare_inner(global_id.into()).await?;
         Ok(Self {
             controller,
@@ -362,7 +362,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), PostError>>, PostError>
+    ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
     where
         T: serde::Serialize,
     {
@@ -388,7 +388,7 @@ impl<'t> Transaction<'t> {
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), PostError>
+    ) -> Result<Outcome, PostError>
     where
         T: serde::Serialize,
     {

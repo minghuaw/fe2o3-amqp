@@ -11,7 +11,7 @@ use tokio::{
 
 use fe2o3_amqp_types::{
     definitions::{self},
-    messaging::{message::__private::Serializable, Address, DeliveryState, Target},
+    messaging::{message::__private::Serializable, Address, DeliveryState, Target, Outcome},
     performatives::Detach,
 };
 
@@ -190,7 +190,7 @@ impl Sender {
     pub async fn send<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<(), SendError> {
+    ) -> Result<Outcome, SendError> {
         let fut = self.send_batchable(sendable).await?;
         fut.await
     }
@@ -202,7 +202,7 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
         duration: Duration,
-    ) -> Result<Result<(), SendError>, Elapsed> {
+    ) -> Result<Result<Outcome, SendError>, Elapsed> {
         timeout(duration, self.send(sendable)).await
     }
 
@@ -220,7 +220,7 @@ impl Sender {
     pub async fn send_batchable<T: serde::Serialize>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
-    ) -> Result<DeliveryFut<Result<(), SendError>>, SendError> {
+    ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
         let settlement = self.inner.send(sendable.into()).await?;
 
         Ok(DeliveryFut::from(settlement))

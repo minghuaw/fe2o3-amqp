@@ -1,10 +1,10 @@
 use fe2o3_amqp_types::{
-    messaging::{DeliveryState, Modified, Outcome, Rejected, Released},
+    messaging::{Accepted, DeliveryState, Outcome, Rejected},
     transaction::TransactionError,
 };
 
 use crate::link::{
-    delivery::{FromDeliveryState, FromOneshotRecvError, FromSettled},
+    delivery::{FromDeliveryState, FromOneshotRecvError, FromPreSettled},
     DetachError, IllegalLinkStateError, LinkStateError, SendError, SenderAttachError,
 };
 
@@ -80,6 +80,47 @@ impl From<DischargeError> for CoordinatorError {
     }
 }
 
+/// Errors with sending message on the control link
+#[derive(Debug, thiserror::Error)]
+pub enum ControllerSendError {
+    /// Errors found in link state
+    #[error("Local error: {:?}", .0)]
+    LinkStateError(#[from] LinkStateError),
+
+    /// The remote peer detached with error
+    #[error("Link is detached {:?}", .0)]
+    Detached(DetachError),
+
+    /// The message was rejected
+    #[error("Outcome Rejected: {:?}", .0)]
+    Rejected(Rejected),
+
+    /// A non-terminal delivery state is received while expecting
+    /// an outcome
+    #[error("A non-terminal delivery state is received when an outcome is expected")]
+    NonTerminalDeliveryState,
+
+    /// Transactional state found on non-transactional delivery
+    #[error("Transactional state found on non-transactional delivery")]
+    IllegalDeliveryState,
+
+    /// Error serializing message
+    #[error("Error encoding message")]
+    MessageEncodeError,
+}
+
+impl From<SendError> for ControllerSendError {
+    fn from(value: SendError) -> Self {
+        match value {
+            SendError::LinkStateError(state) => Self::LinkStateError(state),
+            SendError::Detached(value) => Self::Detached(value),
+            SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
+            SendError::IllegalDeliveryState => Self::IllegalDeliveryState,
+            SendError::MessageEncodeError => Self::MessageEncodeError,
+        }
+    }
+}
+
 /// Errors with declaring an OwnedTransaction
 #[derive(Debug, thiserror::Error)]
 pub enum OwnedDeclareError {
@@ -89,7 +130,7 @@ pub enum OwnedDeclareError {
 
     /// Error with sending Declare
     #[error(transparent)]
-    SendError(SendError),
+    ControllerSendError(ControllerSendError),
 }
 
 impl From<SenderAttachError> for OwnedDeclareError {
@@ -98,9 +139,9 @@ impl From<SenderAttachError> for OwnedDeclareError {
     }
 }
 
-impl From<SendError> for OwnedDeclareError {
-    fn from(value: SendError) -> Self {
-        Self::SendError(value)
+impl From<ControllerSendError> for OwnedDeclareError {
+    fn from(value: ControllerSendError) -> Self {
+        Self::ControllerSendError(value)
     }
 }
 
@@ -109,16 +150,16 @@ impl From<SendError> for OwnedDeclareError {
 pub enum OwnedDischargeError {
     /// Error with sending Discharge
     #[error(transparent)]
-    SendError(SendError),
+    ControllerSendError(ControllerSendError),
 
     /// Error with closing the control link
     #[error(transparent)]
     DetachError(DetachError),
 }
 
-impl From<SendError> for OwnedDischargeError {
-    fn from(value: SendError) -> Self {
-        Self::SendError(value)
+impl From<ControllerSendError> for OwnedDischargeError {
+    fn from(value: ControllerSendError) -> Self {
+        Self::ControllerSendError(value)
     }
 }
 
@@ -142,17 +183,21 @@ pub enum PostError {
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError),
 
-    /// The message was rejected
-    #[error("Outcome Rejected: {:?}", .0)]
-    Rejected(Rejected),
+    // /// The message was rejected
+    // #[error("Outcome Rejected: {:?}", .0)]
+    // Rejected(Rejected),
 
-    /// The message was released
-    #[error("Outsome Released: {:?}", .0)]
-    Released(Released),
+    // /// The message was released
+    // #[error("Outsome Released: {:?}", .0)]
+    // Released(Released),
 
-    /// The message was modified
-    #[error("Outcome Modified: {:?}", .0)]
-    Modified(Modified),
+    // /// The message was modified
+    // #[error("Outcome Modified: {:?}", .0)]
+    // Modified(Modified),
+    /// A non-terminal delivery state is received while expecting
+    /// an outcome
+    #[error("A non-terminal delivery state is received when an outcome is expected")]
+    NonTerminalDeliveryState,
 
     /// Transactional state found on non-transactional delivery
     #[error("Transactional state found on non-transactional delivery")]
@@ -168,11 +213,9 @@ impl From<SendError> for PostError {
         match value {
             SendError::LinkStateError(val) => PostError::LinkStateError(val),
             SendError::Detached(val) => PostError::Detached(val),
-            SendError::Rejected(val) => PostError::Rejected(val),
-            SendError::Released(val) => PostError::Released(val),
-            SendError::Modified(val) => PostError::Modified(val),
             SendError::IllegalDeliveryState => PostError::IllegalDeliveryState,
             SendError::MessageEncodeError => PostError::MessageEncodeError,
+            SendError::NonTerminalDeliveryState => Self::NonTerminalDeliveryState,
         }
     }
 }
@@ -194,7 +237,7 @@ impl From<IllegalLinkStateError> for PostError {
     }
 }
 
-type PostResult = Result<(), PostError>;
+type PostResult = Result<Outcome, PostError>;
 
 impl FromDeliveryState for PostResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
@@ -206,19 +249,19 @@ impl FromDeliveryState for PostResult {
             | DeliveryState::Modified(_)
             | DeliveryState::Declared(_) => Err(PostError::IllegalDeliveryState),
             DeliveryState::TransactionalState(txn) => match txn.outcome {
-                Some(Outcome::Accepted(_)) => Ok(()),
-                Some(Outcome::Rejected(value)) => Err(PostError::Rejected(value)),
-                Some(Outcome::Released(value)) => Err(PostError::Released(value)),
-                Some(Outcome::Modified(value)) => Err(PostError::Modified(value)),
+                Some(Outcome::Accepted(value)) => Ok(Outcome::Accepted(value)),
+                Some(Outcome::Rejected(value)) => Ok(Outcome::Rejected(value)),
+                Some(Outcome::Released(value)) => Ok(Outcome::Released(value)),
+                Some(Outcome::Modified(value)) => Ok(Outcome::Modified(value)),
                 Some(Outcome::Declared(_)) | None => Err(PostError::IllegalDeliveryState),
             },
         }
     }
 }
 
-impl FromSettled for PostResult {
+impl FromPreSettled for PostResult {
     fn from_settled() -> Self {
-        Ok(())
+        Ok(Outcome::Accepted(Accepted {}))
     }
 }
 

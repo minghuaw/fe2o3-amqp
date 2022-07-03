@@ -1,6 +1,5 @@
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, ErrorCondition, SessionError},
-    messaging::{Modified, Rejected, Released},
 };
 use tokio::sync::TryLockError;
 
@@ -52,17 +51,22 @@ pub enum SendError {
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError),
 
-    /// The message was rejected
-    #[error("Outcome Rejected: {:?}", .0)]
-    Rejected(Rejected),
+    // /// The message was rejected
+    // #[error("Outcome Rejected: {:?}", .0)]
+    // Rejected(Rejected),
 
-    /// The message was released
-    #[error("Outsome Released: {:?}", .0)]
-    Released(Released),
+    // /// The message was released
+    // #[error("Outsome Released: {:?}", .0)]
+    // Released(Released),
 
-    /// The message was modified
-    #[error("Outcome Modified: {:?}", .0)]
-    Modified(Modified),
+    // /// The message was modified
+    // #[error("Outcome Modified: {:?}", .0)]
+    // Modified(Modified),
+
+    /// A non-terminal delivery state is received while expecting 
+    /// an outcome
+    #[error("A non-terminal delivery state is received when an outcome is expected")]
+    NonTerminalDeliveryState,
 
     /// Transactional state found on non-transactional delivery
     #[error("Transactional state found on non-transactional delivery")]

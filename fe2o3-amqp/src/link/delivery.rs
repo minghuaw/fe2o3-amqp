@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::Body, DeliveryState, Message, Received, AmqpValue, Data, AmqpSequence}, primitives::Binary,
+    messaging::{message::Body, DeliveryState, Message, Received, AmqpValue, Data, AmqpSequence, Accepted, Outcome}, primitives::Binary,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -360,7 +360,7 @@ impl<O> From<Settlement> for DeliveryFut<O> {
     }
 }
 
-pub(crate) trait FromSettled {
+pub(crate) trait FromPreSettled {
     fn from_settled() -> Self;
 }
 
@@ -378,40 +378,38 @@ impl FromOneshotRecvError for SendResult {
     }
 }
 
-type SendResult = Result<(), SendError>;
+type SendResult = Result<Outcome, SendError>;
 
-impl FromSettled for SendResult {
+impl FromPreSettled for SendResult {
     fn from_settled() -> Self {
-        Ok(())
+        Ok(Outcome::Accepted(Accepted {}))
     }
 }
 
 impl FromDeliveryState for SendResult {
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
-            DeliveryState::Accepted(_) | DeliveryState::Received(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
-            DeliveryState::Released(released) => Err(SendError::Released(released)),
-            DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
+            // DeliveryState::Accepted(accepted) | DeliveryState::Received(_) => Ok(accepted),
+            // DeliveryState::Rejected(rejected) => Err(SendError::Rejected(rejected)),
+            // DeliveryState::Released(released) => Err(SendError::Released(released)),
+            // DeliveryState::Modified(modified) => Err(SendError::Modified(modified)),
+
+            DeliveryState::Accepted(accepted) => Ok(Outcome::Accepted(accepted)),
+            DeliveryState::Rejected(rejected) => Ok(Outcome::Rejected(rejected)),
+            DeliveryState::Released(released) => Ok(Outcome::Released(released)),
+            DeliveryState::Modified(modified) => Ok(Outcome::Modified(modified)),
+            DeliveryState::Received(_) => Err(SendError::NonTerminalDeliveryState),
             #[cfg(feature = "transaction")]
             DeliveryState::Declared(_) | DeliveryState::TransactionalState(_) => {
                 Err(SendError::IllegalDeliveryState)
             }
-            // #[cfg(feature = "transaction")]
-            // DeliveryState::TransactionalState(txn_state) => match txn_state.outcome {
-            //     Some(Outcome::Accepted(_)) => Ok(()),
-            //     Some(Outcome::Rejected(value)) => Err(SendError::Rejected(value)),
-            //     Some(Outcome::Released(value)) => Err(SendError::Released(value)),
-            //     Some(Outcome::Modified(value)) => Err(SendError::Modified(value)),
-            //     Some(Outcome::Declared(_)) | None => Err(SendError::IllegalDeliveryState),
-            // },
         }
     }
 }
 
 impl<O> Future for DeliveryFut<O>
 where
-    O: FromSettled + FromDeliveryState + FromOneshotRecvError,
+    O: FromPreSettled + FromDeliveryState + FromOneshotRecvError,
 {
     type Output = O;
 
