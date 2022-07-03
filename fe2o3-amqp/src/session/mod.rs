@@ -36,7 +36,10 @@ use crate::{
 use fe2o3_amqp_types::{messaging::Accepted, transaction::TransactionError};
 
 #[cfg(feature = "transaction")]
-use crate::{transaction::AllocTxnIdError, endpoint::{HandleDeclare, HandleDischarge}};
+use crate::{
+    endpoint::{HandleDeclare, HandleDischarge},
+    transaction::AllocTxnIdError,
+};
 
 pub(crate) mod engine;
 pub(crate) mod frame;
@@ -770,8 +773,10 @@ impl endpoint::Session for Session {
 
             // Disposition doesn't carry delivery tag
             if !settled {
-                self.delivery_tag_by_id
-                    .insert((Role::Receiver, delivery_id), (input_handle, delivery_tag.clone()));
+                self.delivery_tag_by_id.insert(
+                    (Role::Receiver, delivery_id),
+                    (input_handle, delivery_tag.clone()),
+                );
             }
         }
 

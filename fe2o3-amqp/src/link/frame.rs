@@ -1,6 +1,4 @@
-use fe2o3_amqp_types::{
-    performatives::{Attach, Detach, Disposition, Transfer},
-};
+use fe2o3_amqp_types::performatives::{Attach, Detach, Disposition, Transfer};
 
 use crate::{
     endpoint::{InputHandle, LinkFlow},

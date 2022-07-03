@@ -223,10 +223,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     }
 
     /// The source for messages
-    pub fn source(
-        self,
-        source: impl Into<Source>,
-    ) -> Builder<Role, T, NameState, WithSource, TS> {
+    pub fn source(self, source: impl Into<Source>) -> Builder<Role, T, NameState, WithSource, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,

@@ -331,8 +331,9 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
                 AmqpError::InvalidField.into()
             }
 
-            SenderAttachError::IncomingSourceIsNone
-            | SenderAttachError::IncomingTargetIsNone => return Err(value),
+            SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
+                return Err(value)
+            }
             #[cfg(feature = "transaction")]
             SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
             SenderAttachError::RemoteClosedWithError(_) => return Err(value),

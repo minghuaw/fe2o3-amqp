@@ -22,11 +22,11 @@ use crate::{
 };
 
 use super::{
-    builder::{self, WithoutName, WithoutTarget, WithSource},
+    builder::{self, WithSource, WithoutName, WithoutTarget},
     delivery::{DeliveryFut, Sendable},
     error::DetachError,
     role,
-    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, recv_remote_detach},
+    shared_inner::{recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach},
     ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
     SenderFlowState, SenderLink,
 };
@@ -41,9 +41,9 @@ use super::{
 ///     "rust-sender-link-1",   // link name
 ///     "q1"                    // Target address
 /// ).await.unwrap();
-/// 
+///
 /// sender.send("hello AMQP").await.unwrap();
-/// 
+///
 /// sender.close().await.unwrap();
 /// ```
 ///
@@ -89,7 +89,8 @@ impl std::fmt::Debug for Sender {
 
 impl Sender {
     /// Creates a builder for [`Sender`] link
-    pub fn builder() -> builder::Builder<role::Sender, Target, WithoutName, WithSource, WithoutTarget> {
+    pub fn builder(
+    ) -> builder::Builder<role::Sender, Target, WithoutName, WithSource, WithoutTarget> {
         builder::Builder::<role::Sender, Target, _, _, _>::new()
     }
 
@@ -243,14 +244,16 @@ impl Sender {
             Ok(detach) => {
                 let closed = detach.closed;
                 match self.inner.link.on_incoming_detach(detach).await {
-                    Ok(_) => if closed {
-                        DetachError::ClosedByRemote
-                    } else {
-                        DetachError::DetachedByRemote
-                    },
+                    Ok(_) => {
+                        if closed {
+                            DetachError::ClosedByRemote
+                        } else {
+                            DetachError::DetachedByRemote
+                        }
+                    }
                     Err(err) => err,
                 }
-            },
+            }
             Err(err) => err,
         }
     }

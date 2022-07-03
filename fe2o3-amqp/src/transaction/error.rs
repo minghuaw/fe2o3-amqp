@@ -17,6 +17,7 @@ pub(crate) enum AllocTxnIdError {
     NotImplemented,
 
     /// Session must have dropped
+    #[cfg(feature = "acceptor")]
     InvalidSessionState,
 }
 
@@ -24,6 +25,7 @@ pub(crate) enum AllocTxnIdError {
 #[derive(Debug)]
 pub(crate) enum DischargeError {
     /// Session must have dropped
+    #[cfg(feature = "acceptor")]
     InvalidSessionState,
 
     /// If the coordinator is unable to complete the discharge, the coordinator MUST convey the error to the controller
@@ -40,11 +42,13 @@ impl From<TransactionError> for DischargeError {
 
 /// Errors on the transacitonal resource side
 #[derive(Debug)]
-pub (crate) enum CoordinatorError {
+pub(crate) enum CoordinatorError {
     /// The global transaction ID is not implemented yet
+    #[cfg(feature = "acceptor")]
     GlobalIdNotImplemented,
 
     /// Session must have dropped
+    #[cfg(feature = "acceptor")]
     InvalidSessionState,
 
     ///
@@ -60,6 +64,7 @@ impl From<AllocTxnIdError> for CoordinatorError {
     fn from(value: AllocTxnIdError) -> Self {
         match value {
             AllocTxnIdError::NotImplemented => Self::AllocTxnIdNotImplemented,
+            #[cfg(feature = "acceptor")]
             AllocTxnIdError::InvalidSessionState => Self::InvalidSessionState,
         }
     }
@@ -68,6 +73,7 @@ impl From<AllocTxnIdError> for CoordinatorError {
 impl From<DischargeError> for CoordinatorError {
     fn from(value: DischargeError) -> Self {
         match value {
+            #[cfg(feature = "acceptor")]
             DischargeError::InvalidSessionState => Self::InvalidSessionState,
             DischargeError::TransactionError(error) => Self::TransactionError(error),
         }

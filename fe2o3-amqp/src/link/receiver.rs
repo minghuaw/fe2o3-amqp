@@ -169,10 +169,10 @@ impl Default for CreditMode {
 ///     "rust-receiver-link-1", // link name
 ///     "q1"                    // Source address
 /// ).await.unwrap();
-/// 
+///
 /// // Receiver defaults to `ReceiverSettleMode::First` which spontaneously settles incoming delivery
 /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
-/// 
+///
 /// receiver.close().await.unwrap();
 /// ```
 ///
@@ -211,7 +211,8 @@ pub struct Receiver {
 
 impl Receiver {
     /// Creates a builder for the [`ReceiverInner`]
-    pub fn builder() -> builder::Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
+    pub fn builder(
+    ) -> builder::Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
         builder::Builder::<role::Receiver, Target, _, _, _>::new()
     }
 

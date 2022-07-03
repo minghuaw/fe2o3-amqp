@@ -9,7 +9,7 @@ use crate::{
     endpoint::Settlement,
     link::{
         self,
-        builder::{WithoutName, WithoutTarget, WithSource},
+        builder::{WithSource, WithoutName, WithoutTarget},
         delivery::UnsettledMessage,
         role,
         sender::SenderInner,
@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[cfg(docsrs)]
-use super::{Transaction, OwnedTransaction};
+use super::{OwnedTransaction, Transaction};
 
 pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, UnsettledMessage>;
 
@@ -30,9 +30,9 @@ pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, U
 /// This represents the controller side of a control link. The usage is similar to that of [`crate::Sender`]
 /// but doesn't allow user to send any custom messages as the control link is purely used for declaring
 /// and discharging transactions. Please also see [`Transaction`] and [`OwnedTransaction`]
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// let controller = Controller::attach(&mut session, "controller").await.unwrap();
 /// let mut txn = Transaction::declare(&controller, None).await.unwrap();
@@ -63,7 +63,8 @@ where
 
 impl Controller {
     /// Creates a new builder for controller
-    pub fn builder() -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>
+    pub fn builder(
+    ) -> link::builder::Builder<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>
     {
         link::builder::Builder::<role::Sender, Coordinator, WithoutName, WithSource, WithoutTarget>::new()
     }
