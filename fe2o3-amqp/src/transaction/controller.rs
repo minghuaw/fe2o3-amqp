@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::{
     definitions::{self, SenderSettleMode},
-    messaging::{DeliveryState, Message},
+    messaging::{Accepted, DeliveryState, Message},
     transaction::{Coordinator, Declare, Declared, Discharge, TransactionId},
 };
 use tokio::sync::{oneshot, Mutex};
@@ -105,17 +105,6 @@ impl Controller {
             .await
     }
 
-    // /// Declare a transaction
-    // pub async fn declare<'a>(
-    //     &'a mut self,
-    //     global_id: impl Into<Option<TransactionId>>,
-    // ) -> Result<Transaction<'a>, DeclareError> {
-    //     match self.declare_inner(global_id.into()).await {
-    //         Ok(declared) => Ok(Transaction { controller: self, declared }),
-    //         Err(error) => Err(DeclareError::from((self, error))),
-    //     }
-    // }
-
     pub(crate) async fn declare_inner(
         &self,
         global_id: Option<TransactionId>,
@@ -130,21 +119,16 @@ impl Controller {
         // the outcome of the declare from the receiver
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
-        match outcome
+        send_on_control_link(&mut *self.inner.lock().await, sendable).await?
             .await
             .map_err(|_| LinkStateError::IllegalSessionState)?
-        {
-            DeliveryState::Declared(declared) => Ok(declared),
-            DeliveryState::Rejected(rejected) => Err(ControllerSendError::Rejected(rejected)),
-            DeliveryState::Received(_)
-            | DeliveryState::Accepted(_)
-            | DeliveryState::Released(_)
-            | DeliveryState::Modified(_)
-            | DeliveryState::TransactionalState(_) => {
-                Err(ControllerSendError::IllegalDeliveryState)
-            }
-        }
+            .declared_or_else(|state| {
+                if let DeliveryState::Rejected(rejected) = state {
+                    ControllerSendError::Rejected(rejected)
+                } else {
+                    ControllerSendError::IllegalDeliveryState
+                }
+            })
     }
 
     /// Discharge
@@ -152,7 +136,7 @@ impl Controller {
         &self,
         txn_id: TransactionId,
         fail: impl Into<Option<bool>>,
-    ) -> Result<(), ControllerSendError> {
+    ) -> Result<Accepted, ControllerSendError> {
         let discharge = Discharge {
             txn_id,
             fail: fail.into(),
@@ -161,21 +145,16 @@ impl Controller {
         let message = Message::<Discharge>::builder().value(discharge).build();
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        let outcome = send_on_control_link(&mut *self.inner.lock().await, sendable).await?;
-        match outcome
+        send_on_control_link(&mut *self.inner.lock().await, sendable).await?
             .await
             .map_err(|_| LinkStateError::IllegalSessionState)?
-        {
-            DeliveryState::Accepted(_) => Ok(()),
-            DeliveryState::Rejected(rejected) => Err(ControllerSendError::Rejected(rejected)),
-            DeliveryState::Received(_)
-            | DeliveryState::Released(_)
-            | DeliveryState::Modified(_)
-            | DeliveryState::Declared(_)
-            | DeliveryState::TransactionalState(_) => {
-                Err(ControllerSendError::IllegalDeliveryState)
-            }
-        }
+            .accepted_or_else(|state| {
+                if let DeliveryState::Rejected(rejected) = state {
+                    ControllerSendError::Rejected(rejected)
+                } else {
+                    ControllerSendError::IllegalDeliveryState
+                }
+            })
     }
 }
 

@@ -117,9 +117,9 @@ async fn receiver_main(mut receiver: Receiver) {
     loop {
         match receiver.recv::<Value>().await {
             Ok(delivery) => {
-                tracing::info!(body = ?delivery.body());
+                // tracing::info!(body = ?delivery.body());
                 match receiver.accept(&delivery).await {
-                    Ok(_) => {},
+                    Ok(outcome) => {tracing::info!(?outcome)},
                     Err(error) => {
                         tracing::error!(?error);
                         receiver.close().await.unwrap();

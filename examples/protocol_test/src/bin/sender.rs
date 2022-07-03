@@ -91,7 +91,10 @@ async fn main() {
 
     // handle.await;
 
-    sender.send(message).await.unwrap();
+    let outcome = sender.send(message).await.unwrap();
+
+    // Checks the outcome of delivery
+    outcome.accepted_or_else(|state| state).unwrap();
     
     // sender.send("world").await.unwrap();
     sender.close().await.unwrap();
