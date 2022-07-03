@@ -65,10 +65,16 @@ impl DeliveryState {
             DeliveryState::Rejected(_) => false,
             DeliveryState::Released(_) => false,
             DeliveryState::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::TransactionalState(_) => false,
         }
     }
 
     /// Returns true if the result is [`Accepted`].
+    /// 
+    /// A transactional state will always return false
     pub fn is_accepted(&self) -> bool {
         match self {
             DeliveryState::Received(_) => false,
@@ -76,10 +82,16 @@ impl DeliveryState {
             DeliveryState::Rejected(_) => false,
             DeliveryState::Released(_) => false,
             DeliveryState::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::TransactionalState(_) => false,
         }
     }
 
     /// Returns true if the result is [`Rejected`].
+    /// 
+    /// A transactional state will always return false
     pub fn is_rejected(&self) -> bool {
         match self {
             DeliveryState::Received(_) => false,
@@ -87,10 +99,16 @@ impl DeliveryState {
             DeliveryState::Rejected(_) => true,
             DeliveryState::Released(_) => false,
             DeliveryState::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::TransactionalState(_) => false,
         }
     }
 
     /// Returns true if the result is [`Released`].
+    /// 
+    /// A transactional state will always return false
     pub fn is_released(&self) -> bool {
         match self {
             DeliveryState::Received(_) => false,
@@ -98,10 +116,16 @@ impl DeliveryState {
             DeliveryState::Rejected(_) => false,
             DeliveryState::Released(_) => true,
             DeliveryState::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::TransactionalState(_) => false,
         }
     }
 
     /// Returns true if the result is [`Modified`].
+    /// 
+    /// A transactional state will always return false
     pub fn is_modified(&self) -> bool {
         match self {
             DeliveryState::Received(_) => false,
@@ -109,6 +133,10 @@ impl DeliveryState {
             DeliveryState::Rejected(_) => false,
             DeliveryState::Released(_) => false,
             DeliveryState::Modified(_) => true,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::TransactionalState(_) => false,
         }
     }
 
@@ -211,6 +239,8 @@ impl Outcome {
             Self::Rejected(_) => false,
             Self::Released(_) => false,
             Self::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
         }
     }
 
@@ -221,6 +251,8 @@ impl Outcome {
             Self::Rejected(_) => true,
             Self::Released(_) => false,
             Self::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
         }
     }
 
@@ -231,6 +263,8 @@ impl Outcome {
             Self::Rejected(_) => false,
             Self::Released(_) => true,
             Self::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
         }
     }
 
@@ -241,6 +275,20 @@ impl Outcome {
             Self::Rejected(_) => false,
             Self::Released(_) => false,
             Self::Modified(_) => true,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => false,
+        }
+    }
+
+    /// Returns true if the result is [`Declared`].
+    pub fn is_declared(&self) -> bool {
+        match self {
+            Self::Accepted(_) => false,
+            Self::Rejected(_) => false,
+            Self::Released(_) => false,
+            Self::Modified(_) => false,
+            #[cfg(feature = "transaction")]
+            Self::Declared(_) => true,
         }
     }
 
