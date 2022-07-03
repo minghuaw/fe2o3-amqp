@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.23
+
+1. Added convenience functions to handle delivery `Outcome`
+
 ## 0.0.22
 
 1. Added convenience functions `is_value()`, `is_sequence()`, `is_data` for message `Body`
