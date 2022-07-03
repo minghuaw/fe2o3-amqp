@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
-    messaging::{message::Body, DeliveryState, Message, Received},
+    messaging::{message::Body, DeliveryState, Message, Received, AmqpValue, Data, AmqpSequence}, primitives::Binary,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -12,7 +12,7 @@ use tokio::sync::oneshot::{self, error::RecvError};
 use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
 
-use super::{LinkStateError, SendError};
+use super::{LinkStateError, SendError, BodyIsNotValue, BodyIsNotData, BodyIsNotSequence};
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -58,6 +58,66 @@ impl<T> Delivery<T> {
     /// Consume the delivery into the message body section
     pub fn into_body(self) -> Body<T> {
         self.message.body
+    }
+
+    /// Consume the delivery into the body if the body is an [`AmqpValue`]. 
+    /// An error will be returned if the body isnot an [`AmqpValue`]
+    pub fn try_into_value(self) -> Result<T, BodyIsNotValue> {
+        match self.into_body() {
+            Body::Value(AmqpValue(value)) => Ok(value),
+            Body::Data(_) 
+            | Body::Sequence(_) => Err(BodyIsNotValue {}),
+        }
+    }
+
+    /// Consume the delivery into the body if the body is an [`Data`]. 
+    /// An error will be returned if the body isnot an [`Data`]
+    pub fn try_into_data(self) -> Result<Binary, BodyIsNotData> {
+        match self.into_body() {
+            Body::Data(Data(data)) => Ok(data),
+            Body::Value(_) 
+            | Body::Sequence(_) => Err(BodyIsNotData {}),
+        }
+    }
+
+    /// Consume the delivery into the body if the body is an [`AmqpSequence`]. 
+    /// An error will be returned if the body isnot an [`AmqpSequence`]
+    pub fn try_into_sequence(self) -> Result<Vec<T>, BodyIsNotSequence> {
+        match self.into_body() {
+            Body::Data(_) => Err(BodyIsNotSequence {}),
+            Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
+            Body::Value(_) => Err(BodyIsNotSequence {}),
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is an [`AmqpValue`]. 
+    /// An error will be returned if the body isnot an [`AmqpValue`]
+    pub fn try_as_value(&self) -> Result<&T, BodyIsNotValue> {
+        match self.body() {
+            Body::Value(AmqpValue(value)) => Ok(value),
+            Body::Data(_) 
+            | Body::Sequence(_) => Err(BodyIsNotValue {}),
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is an [`Data`]. 
+    /// An error will be returned if the body isnot an [`Data`]
+    pub fn try_as_data(&self) -> Result<&Binary, BodyIsNotData> {
+        match self.body() {
+            Body::Data(Data(data)) => Ok(data),
+            Body::Value(_) 
+            | Body::Sequence(_) => Err(BodyIsNotData {}),
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is an [`AmqpSequence`]. 
+    /// An error will be returned if the body isnot an [`AmqpSequence`]
+    pub fn try_as_sequence(&self) -> Result<&Vec<T>, BodyIsNotSequence> {
+        match self.body() {
+            Body::Data(_) => Err(BodyIsNotSequence {}),
+            Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
+            Body::Value(_) => Err(BodyIsNotSequence {}),
+        }
     }
 }
 

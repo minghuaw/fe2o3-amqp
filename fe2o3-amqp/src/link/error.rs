@@ -571,3 +571,39 @@ where
         Self::LinkStateError(value.into())
     }
 }
+
+/// Message body is not AmqpValue
+#[derive(Debug)]
+pub struct BodyIsNotValue { }
+
+impl std::fmt::Display for BodyIsNotValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Message body is not AmqpValue")
+    }
+}
+
+impl std::error::Error for BodyIsNotValue { }
+
+/// Message body is not AmqpValue
+#[derive(Debug)]
+pub struct BodyIsNotSequence { }
+
+impl std::fmt::Display for BodyIsNotSequence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Message body is not AmqpSequence")
+    }
+}
+
+impl std::error::Error for BodyIsNotSequence { }
+
+/// Message body is not AmqpValue
+#[derive(Debug)]
+pub struct BodyIsNotData { }
+
+impl std::fmt::Display for BodyIsNotData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Message body is not Data")
+    }
+}
+
+impl std::error::Error for BodyIsNotData { }

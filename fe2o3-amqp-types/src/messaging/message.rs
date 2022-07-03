@@ -530,6 +530,35 @@ pub enum Body<T> {
     Value(AmqpValue<T>),
 }
 
+impl<T> Body<T> {
+    /// Whether the body section is a [`Data`]
+    pub fn is_data(&self) -> bool {
+        match self {
+            Body::Data(_) => true,
+            Body::Sequence(_) => false,
+            Body::Value(_) => false,
+        }
+    }
+
+    /// Whether the body section is a [`AmqpSequence`]
+    pub fn is_sequence(&self) -> bool {
+        match self {
+            Body::Data(_) => false,
+            Body::Sequence(_) => true,
+            Body::Value(_) => false,
+        }
+    }
+
+    /// Whether the body section is a [`AmqpValue`]
+    pub fn is_value(&self) -> bool {
+        match self {
+            Body::Data(_) => false,
+            Body::Sequence(_) => false,
+            Body::Value(_) => true,
+        }
+    }
+}
+
 impl<T> Display for Body<T>
 where
     T: Display,

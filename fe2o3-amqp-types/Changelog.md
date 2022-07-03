@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.22
+
+1. Added convenience functions `is_value()`, `is_sequence()`, `is_data` for message `Body`
+
 ## 0.0.21
 
 1. Added derive trait of `PartialOrd, PartialEq, Eq, Ord, Hash` for `Role`

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.19
+
+1. Added convenience functions to get ownership of or reference to the value/sequence/data from a `Delivery`
+
 ## 0.0.18
 
 1. Added `std::error::Error` impl for public error types

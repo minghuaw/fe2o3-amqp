@@ -48,8 +48,9 @@ async fn main() {
         //     password: "guest".into(),
         // })
         // .open_with_stream(tls_stream)
-        // .open("amqp://localhost:5672")
-        .open("amqp://guest:guest@localhost:5672")
+        .open("amqp://localhost:5672")
+        // .open("amqp://guest:guest@localhost:5672")
+        // .open("localhost:5672")
         .await
         .unwrap();
 
