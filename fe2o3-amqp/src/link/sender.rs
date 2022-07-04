@@ -42,7 +42,14 @@ use super::{
 ///     "q1"                    // Target address
 /// ).await.unwrap();
 ///
-/// sender.send("hello AMQP").await.unwrap();
+/// let outcome = sender.send("hello AMQP").await.unwrap();
+/// 
+/// // Checks the outcome of delivery
+/// if outcome.is_accepted() {
+///     tracing::info!("Outcome: {:?}", outcome)
+/// } else {
+///     tracing::error!("Outcome: {:?}", outcome)
+/// }
 ///
 /// sender.close().await.unwrap();
 /// ```
@@ -185,7 +192,7 @@ impl Sender {
     /// # Example
     ///
     /// ```rust, ignore
-    /// sender.send("hello").await.unwrap();
+    /// let outcome = sender.send("hello").await.unwrap();
     /// ```
     pub async fn send<T: serde::Serialize>(
         &mut self,

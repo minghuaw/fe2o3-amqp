@@ -94,7 +94,11 @@ async fn main() {
     let outcome = sender.send(message).await.unwrap();
 
     // Checks the outcome of delivery
-    outcome.accepted_or_else(|state| state).unwrap();
+    if outcome.is_accepted() {
+        tracing::info!("Outcome: {:?}", outcome)
+    } else {
+        tracing::error!("Outcome: {:?}", outcome)
+    }
     
     // sender.send("world").await.unwrap();
     sender.close().await.unwrap();
