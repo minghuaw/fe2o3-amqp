@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.25
+
+1. Updated `serde_amqp` to version 0.0.9
+
 ## 0.0.24
 
 1. Added convenience functions to handle delivery `DeliveryState`

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.21
+
+1. Updated `serde_amqp` to version 0.0.9
+
 ## 0.0.20
 
 1. API changes
