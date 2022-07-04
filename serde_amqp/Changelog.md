@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.9
+
+1. Fixed bug in macro where a described value of Null will be treated as if it is a field that has default value and then end up returning an error.
+
 ## 0.0.8
 
 1. Updated dependencies

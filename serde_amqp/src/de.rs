@@ -1346,10 +1346,6 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
         }
         let code = self.de.reader.peek()?.try_into()?;
         let result = match code {
-            EncodingCodes::Null => {
-                let _ = self.de.reader.next(); // consume the Null byte
-                Ok(None)
-            }
             EncodingCodes::DescribedType => {
                 let result = seed.deserialize(self.as_mut()).map(Some);
                 // The list header should only be consume once for each list

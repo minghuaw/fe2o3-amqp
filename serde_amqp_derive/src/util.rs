@@ -305,7 +305,7 @@ pub(crate) fn macro_rules_unwrap_or_default() -> proc_macro2::TokenStream {
             ($fident: ident, $seq: expr, $ftype: ty) => {
                 let $fident: $ftype = match $seq {
                     Some(val) => val,
-                    None => Default::default(),
+                    None => <$ftype as Default>::default(),
                 };
             };
         }

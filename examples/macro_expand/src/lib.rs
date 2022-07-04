@@ -8,190 +8,93 @@ use serde_amqp::{
     primitives::{Array, Boolean, Symbol, UInt, ULong},
 };
 
-#[derive(SerializeComposite, DeserializeComposite)]
+use fe2o3_amqp_types::{
+    definitions::{
+        DeliveryTag, Fields, Handle, ReceiverSettleMode, Role, SenderSettleMode, SequenceNo,
+    },
+    messaging::{DeliveryState, Source, TargetArchetype},
+};
+
+#[derive(DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
-    name = "amqp:sasl-mechanisms:list",
-    code = 0x0000_0000_0000_0040,
+    name = "amqp:attach:list",
+    code = 0x0000_0000_0000_0012,
     encoding = "list",
     rename_all = "kebab-case"
 )]
-pub struct SaslMechanisms {
-    /// sasl-server-mechanisms supported sasl mechanisms
+pub struct Attach {
+    /// <field name="name" type="string" mandatory="true"/>
+    pub name: String,
+
+    /// <field name="handle" type="handle" mandatory="true"/>
+    pub handle: Handle,
+
+    /// <field name="role" type="role" mandatory="true"/>
+    pub role: Role,
+
+    /// <field name="snd-settle-mode" type="sender-settle-mode" default="mixed"/>
     ///
-    /// A list of the sasl security mechanisms supported by the sending peer. It is invalid for
-    /// this list to be null or empty. If the sending peer does not require its partner to
-    /// authenticate with it, then it SHOULD send a list of one element with its value as the
-    /// SASL mechanism ANONYMOUS. The server mechanisms are ordered in decreasing level of
-    /// preference.
-    pub sasl_server_mechanisms: Array<Symbol>,
+    /// The delivery settlement policy for the sender. When set at the receiver this
+    /// indicates the desired value for the settlement mode at the sender. When set at
+    /// the sender this indicates the actual settlement mode in use. The sender SHOULD
+    /// respect the receiver’s desired settlement mode if the receiver initiates the
+    /// attach exchange and the sender supports the desired mode.
+    #[amqp_contract(default)]
+    pub snd_settle_mode: SenderSettleMode,
+
+    /// <field name="rcv-settle-mode" type="receiver-settle-mode" default="first"/>
+    ///
+    /// The delivery settlement policy for the receiver. When set at the sender this
+    /// indicates the desired value for the settlement mode at the receiver. When set
+    /// at the receiver this indicates the actual settlement mode in use. The receiver
+    /// SHOULD respect the sender’s desired settlement mode if the sender initiates the
+    /// attach exchange and the receiver supports the desired mode.
+    #[amqp_contract(default)]
+    pub rcv_settle_mode: ReceiverSettleMode,
+
+    /// <field name="source" type="*" requires="source"/>
+    ///
+    /// If no source is specified on an outgoing link, then there is no source currently
+    /// attached to the link. A link with no source will never produce outgoing messages
+    ///
+    /// This is put inside a `Box` to reduce the variant size of `Performative`.
+    /// The use of `Attach` frame and access to this field should be fairly infrequent,
+    /// and thus the performance penalty should be negligible (not tested yet).
+    pub source: Option<Box<Source>>,
+
+    /// <field name="target" type="*" requires="target"/>
+    ///
+    /// If no target is specified on an incoming link, then there is no target currently
+    /// attached to the link. A link with no target will never permit incoming messages.
+    ///
+    /// This is put inside a `Box` to reduce the variant size of `Performative`.
+    /// The use of `Attach` frame and access to this field should be fairly infrequent,
+    /// and thus the performance penalty should be negligible (not tested yet).
+    pub target: Option<Box<TargetArchetype>>,
+
+    /// <field name="unsettled" type="map"/>
+    pub unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>>,
+
+    /// <field name="incomplete-unsettled" type="boolean" default="false"/>
+    #[amqp_contract(default)]
+    pub incomplete_unsettled: Boolean,
+
+    /// <field name="initial-delivery-count" type="sequence-no"/>
+    ///
+    /// This MUST NOT be null if role is sender,
+    /// and it is ignored if the role is receiver.
+    /// See subsection 2.6.7.
+    pub initial_delivery_count: Option<SequenceNo>,
+
+    /// <field name="max-message-size" type="ulong"/>
+    pub max_message_size: Option<ULong>,
+
+    /// <field name="offered-capabilities" type="symbol" multiple="true"/>
+    pub offered_capabilities: Option<Array<Symbol>>,
+
+    /// <field name="desired-capabilities" type="symbol" multiple="true"/>
+    pub desired_capabilities: Option<Array<Symbol>>,
+
+    /// <field name="properties" type="fields"/>
+    pub properties: Option<Fields>,
 }
-
-// #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(
-//     name = "amqp:amqp-value:*",
-//     code = 0x0000_0000_0000_0077,
-//     encoding = "list"
-// )]
-// // pub struct AmqpValue<T>(pub T);
-// pub struct Foo<A, B> {
-//     a: A,
-//     b: B,
-// }
-// pub struct A(i32);
-
-// #[derive(Serialize, Deserialize)]
-// pub struct AnotherNewType<T> {
-//     inner: T,
-// }
-
-// #[derive(SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(code = 0x13, encoding = "list", rename_all = "kebab-case")]
-// struct Foo {
-//     b: u64,
-//     is_fool: Option<bool>,
-//     #[amqp_contract(default)]
-//     a: i32,
-// }
-
-// #[derive(SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(encoding="list")]
-// struct Unit { }
-
-// #[derive(SerializeComposite, DeserializeComposite)]
-// struct TupleStruct(Option<i32>, bool);
-
-// #[derive(Debug, SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(code = 0x01, encoding = "basic")]
-// struct Wrapper {
-//     map: BTreeMap<String, i32>,
-// }
-
-// #[derive(Debug, SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(code = 0x01, encoding = "basic")]
-// struct Wrapper(BTreeMap<String, i32>);
-
-// #[derive(Debug, SerializeComposite, DeserializeComposite)]
-// #[amqp_contract(name = "ab", encoding = "map")]
-// struct Test {
-//     a: Option<i32>,
-//     #[amqp_contract(default)]
-//     b: bool,
-// }
-
-// use std::collections::BTreeMap;
-
-// use serde::{Deserialize, Serialize};
-// use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
-// use serde_amqp::primitives::{Boolean, UInt, ULong};
-
-// // use crate::definitions::{Error, Fields};
-
-// /// 3.4 Delivery State
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// #[serde(untagged)]
-// pub enum DeliveryState {
-//     Accepted(Accepted),
-//     Rejected(Rejected),
-//     Released(Released),
-//     Modified(Modified),
-//     Received(Received),
-// }
-
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// #[serde(untagged)]
-// pub enum Outcome {
-//     Accepted(Accepted),
-//     Rejected(Rejected),
-//     Released(Released),
-//     Modified(Modified),
-// }
-
-// /// 3.4.1 Received
-// ///
-// /// <type name="received" class="composite" source="list" provides="delivery-state">
-// /// <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
-// /// </type>
-// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-// #[amqp_contract(
-//     name = "amqp:received:list",
-//     code = 0x0000_0000_0000_0023,
-//     encoding = "list",
-//     rename_all = "kebab-case"
-// )]
-// pub struct Received {
-//     /// <field name="section-number" type="uint" mandatory="true"/>
-//     pub section_number: UInt,
-
-//     /// <field name="section-offset" type="ulong" mandatory="true"/>
-//     pub section_offset: ULong,
-// }
-
-// /// 3.4.2 Accepted
-// /// The accepted outcome
-// ///
-// /// <type name="accepted" class="composite" source="list" provides="delivery-state, outcome">
-// ///     <descriptor name="amqp:accepted:list" code="0x00000000:0x00000024"/>
-// /// </type>
-// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-// #[amqp_contract(
-//     name = "amqp:accepted:list",
-//     code = 0x0000_0000_0000_0024,
-//     encoding = "list",
-//     rename_all = "kebab-case"
-// )]
-// pub struct Accepted {}
-
-// /// 3.4.3 Rejected
-// /// The rejected outcome.
-// ///
-// /// <type name="rejected" class="composite" source="list" provides="delivery-state, outcome">
-// ///     <descriptor name="amqp:rejected:list" code="0x00000000:0x00000025"/>
-// /// </type>
-// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-// #[amqp_contract(
-//     name = "amqp:rejected:list",
-//     code = 0x0000_0000_0000_0025,
-//     encoding = "list",
-//     rename_all = "kebab-case"
-// )]
-// pub struct Rejected {
-//     /// <field name="error" type="error"/>
-//     pub error: Option<bool>,
-// }
-
-// /// 3.4.4 Released
-// /// The released outcome.
-// /// <type name="released" class="composite" source="list" provides="delivery-state, outcome">
-// ///     <descriptor name="amqp:released:list" code="0x00000000:0x00000026"/>
-// /// </type>
-// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-// #[amqp_contract(
-//     name = "amqp:released:list",
-//     code = 0x000_0000_0000_0026,
-//     encoding = "list",
-//     rename_all = "kebab-case"
-// )]
-// pub struct Released {}
-
-// /// 3.4.5 Modified
-// /// The modified outcome.
-// /// <type name="modified" class="composite" source="list" provides="delivery-state, outcome">
-// ///     <descriptor name="amqp:modified:list" code="0x00000000:0x00000027"/>
-// /// </type>
-// #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
-// #[amqp_contract(
-//     name = "amqp:modified:list",
-//     code = 0x0000_0000_0000_0027,
-//     encoding = "list",
-//     rename_all = "kebab-case"
-// )]
-// pub struct Modified {
-//     /// <field name="delivery-failed" type="boolean"/>
-//     pub delivery_failed: Option<Boolean>,
-
-//     /// <field name="undeliverable-here" type="boolean"/>
-//     pub undeliverable_here: Option<Boolean>,
-
-//     /// <field name="message-annotations" type="fields"/>
-//     pub message_annotations: Option<BTreeMap<String, String>>,
-// }

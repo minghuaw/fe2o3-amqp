@@ -466,7 +466,7 @@ fn impl_visit_seq_for_struct(
     for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
         let token = match attr.default {
             true => {
-                quote! { unwrap_or_default!(#id, __seq.next_element()?, #ty) }
+                quote! { unwrap_or_default!(#id, __seq.next_element::<Option<#ty>>()?.unwrap_or_default(), #ty) }
             }
             false => {
                 quote! { unwrap_or_none!(#id, __seq.next_element()?, #ty) }

@@ -769,6 +769,16 @@ mod tests {
     use super::Message;
 
     #[test]
+    fn test_serialize_deserialize_null() {
+        let body = AmqpValue(Value::Null);
+        let buf = to_vec(&body).unwrap();
+        println!("{:#x?}", buf);
+
+        let body2: AmqpValue<Value> = from_slice(&buf).unwrap();
+        println!("{:?}", body2.0)
+    }
+
+    #[test]
     fn test_serialize_deserialize_body() {
         let data = b"amqp".to_vec();
         let data = Data(ByteBuf::from(data));

@@ -135,7 +135,7 @@ mod tests {
             snd_settle_mode: SenderSettleMode::Unsettled,
             rcv_settle_mode: ReceiverSettleMode::First,
             source: Some(Box::new(Source::default())),
-            target: Some(Box::new("q1".into())),
+            target: None,
             unsettled: None,
             incomplete_unsettled: false,
             initial_delivery_count: Some(0),
