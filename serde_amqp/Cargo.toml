@@ -29,11 +29,11 @@ json = ["serde_json"]
 
 [dev-dependencies]
 serde_json = "1"
-# serde_amqp_derive = "0.0.2"
+serde_amqp_derive = "0.0.3"
 
 [dependencies.serde_amqp_derive]
 version = "0.0.3"
-path = "../serde_amqp_derive"
+# path = "../serde_amqp_derive"
 optional = true
 
 [dependencies]
