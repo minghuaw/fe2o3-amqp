@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.10
+
+1. Fixed a bug with deserializing small and negative values for `i32` and `i64`
+
 ## 0.0.9
 
 1. Fixed bug in macro where a described value of Null will be treated as if it is a field that has default value and then end up returning an error.

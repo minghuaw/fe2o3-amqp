@@ -121,8 +121,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 Ok(i32::from_be_bytes(bytes))
             }
             EncodingCodes::SmallInt => {
-                let byte = self.reader.next()?;
-                Ok(byte as i32)
+                let signed = self.reader.next()? as i8;
+                Ok(signed as i32)
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -136,8 +136,8 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 Ok(i64::from_be_bytes(bytes))
             }
             EncodingCodes::SmallLong => {
-                let byte = self.reader.next()?;
-                Ok(byte as i64)
+                let signed = self.reader.next()? as i8;
+                Ok(signed as i64)
             }
             _ => Err(Error::InvalidFormatCode),
         }
@@ -1501,6 +1501,11 @@ mod tests {
 
     #[test]
     fn test_deserialize_i32() {
+        let expected = -1i32;
+        let buf = crate::to_vec(&expected).unwrap();
+        let deserialized: i32 = from_slice(&buf).unwrap();
+        assert_eq!(expected, deserialized);
+
         let buf = &[EncodingCodes::SmallInt as u8, 7i32 as u8];
         let expected = 7i32;
         assert_eq_from_reader_vs_expected(buf, expected);
@@ -1508,6 +1513,11 @@ mod tests {
 
     #[test]
     fn test_deserialize_i64() {
+        let expected = -1i64;
+        let buf = crate::to_vec(&expected).unwrap();
+        let deserialized: i64 = from_slice(&buf).unwrap();
+        assert_eq!(expected, deserialized);
+
         let buf = &[EncodingCodes::SmallLong as u8, 7i64 as u8];
         let expected = 7i64;
         assert_eq_from_reader_vs_expected(buf, expected);
