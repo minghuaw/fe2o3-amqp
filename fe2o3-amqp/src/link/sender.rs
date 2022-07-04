@@ -396,13 +396,14 @@ where
         self.send_with_state(sendable, None).await
     }
 
-    pub(crate) async fn send_with_state<T>(
+    pub(crate) async fn send_with_state<T, E>(
         &mut self,
         sendable: Sendable<T>,
         state: Option<DeliveryState>,
-    ) -> Result<Settlement, SendError>
+    ) -> Result<Settlement, E>
     where
         T: serde::Serialize,
+        E: From<L::TransferError> + From<serde_amqp::Error>, 
     {
         use bytes::BufMut;
         use serde::Serialize;
@@ -419,8 +420,7 @@ where
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
         Serializable(message)
-            .serialize(&mut serializer)
-            .map_err(|_| SendError::MessageEncodeError)?;
+            .serialize(&mut serializer)?;
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 

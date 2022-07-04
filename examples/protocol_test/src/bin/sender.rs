@@ -91,7 +91,9 @@ async fn main() {
 
     // handle.await;
 
-    let outcome = sender.send(message).await.unwrap();
+    // let outcome = sender.send(message).await.unwrap();
+    let fut = sender.send_batchable(message).await.unwrap();
+    let outcome = fut.await.unwrap();
 
     // Checks the outcome of delivery
     if outcome.is_accepted() {

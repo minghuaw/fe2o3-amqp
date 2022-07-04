@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.20
+
+1. API changes
+   1. `Sender`'s `send()`, `send_batchable()`, and `send_with_timeout()` now returns the `Result<Outcome, SendError>` which carries the outcome of the delivery. `SendError` no longer has variants that marks failed delivery state. It is the user's responsibility to check whether the delivery is accepted or not
+   2. `Transaction`'s and `OwnedTransaction`'s `post()` now returns `Result<Outcome, PostError>` which carries the outcome of the delivery. `PostError` no longer has variants that marks failed delivery state. It is the user's responsibility to check whether the delivery is accepted or not
+
 ## 0.0.19
 
 1. Added convenience functions to get ownership of or reference to the value/sequence/data from a `Delivery`

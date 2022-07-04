@@ -62,13 +62,15 @@
 //!     ).await.unwrap();
 //!     
 //!     // Send a message to the broker and wait for outcome (Disposition)
-//!     sender.send("hello AMQP").await.unwrap();
+//!     let outcome: Outcome = sender.send("hello AMQP").await.unwrap();
+//!     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 //!
 //!     // Send a message
 //!     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
 //!     // Wait for outcome (Disposition)
-//!     fut.await.unwrap();    
-//!
+//!     let outcome: Outcome = fut.await.unwrap();
+//!     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
+//! 
 //!     // Receive the message from the broker
 //!     let delivery = receiver.recv::<String>().await.unwrap();
 //!     receiver.accept(&delivery).await.unwrap();

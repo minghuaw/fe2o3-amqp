@@ -49,17 +49,6 @@ pub enum SendError {
     #[error("Link is detached {:?}", .0)]
     Detached(DetachError),
 
-    // /// The message was rejected
-    // #[error("Outcome Rejected: {:?}", .0)]
-    // Rejected(Rejected),
-
-    // /// The message was released
-    // #[error("Outsome Released: {:?}", .0)]
-    // Released(Released),
-
-    // /// The message was modified
-    // #[error("Outcome Modified: {:?}", .0)]
-    // Modified(Modified),
     /// A non-terminal delivery state is received while expecting
     /// an outcome
     #[error("A non-terminal delivery state is received when an outcome is expected")]
@@ -72,6 +61,12 @@ pub enum SendError {
     /// Error serializing message
     #[error("Error encoding message")]
     MessageEncodeError,
+}
+
+impl From<serde_amqp::Error> for SendError {
+    fn from(_: serde_amqp::Error) -> Self {
+        Self::MessageEncodeError
+    }
 }
 
 impl From<DetachError> for SendError {
