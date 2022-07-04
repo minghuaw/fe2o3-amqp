@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.22
+
+1. Updated `serde_amqp` to version 0.0.10
+2. Updated `fe2o3-amqp-types` to version 0.0.26
+
 ## 0.0.21
 
 1. Updated `serde_amqp` to version 0.0.9
