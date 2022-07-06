@@ -755,18 +755,21 @@ mod body {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, vec};
+    use std::{vec};
 
-    use serde_amqp::{from_slice, to_vec, value::Value, primitives::Symbol};
+    use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::{messaging::{
-        message::{
-            Body,
-            __private::{Deserializable, Serializable},
+    use crate::{
+        messaging::{
+            message::{
+                Body,
+                __private::{Deserializable, Serializable},
+            },
+            AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Header,
+            MessageAnnotations, Properties,
         },
-        AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header, MessageAnnotations, ApplicationProperties, Properties,
-    }, primitives::SimpleValue};
+    };
 
     use super::Message;
 
@@ -826,31 +829,18 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_message() {
-        let mut delivery_annotations = BTreeMap::new();
-        delivery_annotations.insert(Symbol::from("sn"), Value::Int(1));
-
-        let mut message_annotations = BTreeMap::new();
-        message_annotations.insert(Symbol::from("sn"), Value::Int(2));
-
-        let properties = Properties::builder()
-            .message_id(1u64)
-            .build();
-
-        let mut application_properties = BTreeMap::new();
-        application_properties.insert(String::from("sn"), SimpleValue::UInt(1));
-        
         let message = Message {
             header: Some(Header {
                 durable: true,
                 ..Default::default()
             }),
-            // header: None,
-            delivery_annotations: Some(DeliveryAnnotations(delivery_annotations)),
-            // delivery_annotations: None,
-            message_annotations: Some(MessageAnnotations(message_annotations)),
+            delivery_annotations: Some(DeliveryAnnotations::builder().insert("key", 1u32).build()),
+            message_annotations: Some(MessageAnnotations::builder().insert("key2", "v").build()),
             // message_annotations: None,
-            properties: Some(properties),
-            application_properties: Some(ApplicationProperties(application_properties)),
+            properties: Some(Properties::builder().message_id(1u64).build()),
+            application_properties: Some(
+                ApplicationProperties::builder().insert("sn", 1i32).build(),
+            ),
             body: Body::Value(AmqpValue(Value::Bool(true))),
             footer: None,
         };

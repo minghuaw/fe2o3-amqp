@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.11
+
+1. Fixed a bug where deserializing a `Value` type doesn't reset `Deserializer`'s `enum_type` field.
+
 ## 0.0.10
 
 1. Fixed a bug with deserializing small and negative values for `i32` and `i64`
