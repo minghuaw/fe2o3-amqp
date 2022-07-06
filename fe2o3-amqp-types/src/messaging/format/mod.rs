@@ -131,7 +131,7 @@ impl ApplicationProperties {
 /// <type name="data" class="restricted" source="binary" provides="section">
 ///     <descriptor name="amqp:data:binary" code="0x00000000:0x00000075"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq)]
 #[amqp_contract(
     name = "amqp:data:binary",
     code = 0x0000_0000_0000_0075,
@@ -161,7 +161,7 @@ impl Display for Data {
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq)]
 #[amqp_contract(
     name = "amqp:amqp-sequence:list",
     code = 0x0000_0000_0000_0076,
@@ -190,7 +190,7 @@ where
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
 ///     <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq)]
 #[amqp_contract(
     name = "amqp:amqp-value:*",
     code = 0x0000_0000_0000_0077,

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.27
+
+1. Updated `serde_amqp` to version 0.0.11
+
 ## 0.0.26
 
 1. Updated `serde_amqp` to version 0.0.10

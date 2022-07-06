@@ -522,7 +522,7 @@ impl<T> Builder<Body<T>> {
 
 /// Only one section of Data and one section of AmqpSequence
 /// is supported for now
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Body<T> {
     /// A data section contains opaque binary data
     Data(Data),
@@ -845,8 +845,14 @@ mod tests {
         let mut buf = Vec::new();
         let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         message.serialize(&mut serializer).unwrap();
-        println!("{:x?}", buf);
         let deserialized: Deserializable<Message<Value>> = from_slice(&buf).unwrap();
-        println!("{:?}", deserialized);
+
+        assert!(deserialized.0.header.is_some());
+        assert!(deserialized.0.delivery_annotations.is_some());
+        assert!(deserialized.0.message_annotations.is_some());
+        assert!(deserialized.0.properties.is_some());
+        assert!(deserialized.0.application_properties.is_some());
+        assert_eq!(deserialized.0.body, Body::Value(AmqpValue(Value::Bool(true))));
+        assert!(deserialized.0.footer.is_none());
     }
 }
