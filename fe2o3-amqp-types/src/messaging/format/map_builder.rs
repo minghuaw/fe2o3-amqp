@@ -9,8 +9,7 @@ use crate::primitives::SimpleValue;
 use super::{ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotations};
 
 /// Builder for types that are simply a wrapper around map
-/// [`Annotation`]
-/// ([`DeliveryAnnotations`], [`MessageAnnotations`], and [`Footer`])
+/// ([`DeliveryAnnotations`], [`MessageAnnotations`], [`Footer`], [`ApplicationProperties`])
 ///
 /// This simply provides a convenient way of inserting entries into the map
 #[derive(Debug)]

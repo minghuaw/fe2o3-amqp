@@ -3,6 +3,7 @@
 ## 0.0.27
 
 1. Updated `serde_amqp` to version 0.0.11
+2. Added convenience builder functions for ([`DeliveryAnnotations`], [`MessageAnnotations`], [`Footer`], [`ApplicationProperties`])
 
 ## 0.0.26
 
