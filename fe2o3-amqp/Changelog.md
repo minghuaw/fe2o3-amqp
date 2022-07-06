@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.25
+
+1. Updated `fe2o3-amqp-types` to version "0.0.29" which added `Maybe` to allow no-body section message.
+
 ## 0.0.24
 
 1. Removed debug printouts

@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
     },
-    messaging::{DeliveryState, Message, message::DecodeIntoMessage},
+    messaging::{DeliveryState, message::DecodeIntoMessage},
     performatives::{Attach, Detach, Transfer},
 };
 use futures_util::Future;
@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     control::SessionControl,
-    link::{delivery::Delivery, state::LinkState, LinkFrame, ReceiverTransferError},
+    link::{delivery::Delivery, state::LinkState, LinkFrame},
     Payload,
 };
 

@@ -3,13 +3,12 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::{BytesMut, Buf};
+use bytes::{BytesMut};
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
-    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target, message::{__private::Deserializable, Maybe, DecodeIntoMessage}, Message},
+    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target, message::DecodeIntoMessage},
     performatives::{Detach, Transfer},
 };
-use serde_amqp::from_reader;
 use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},

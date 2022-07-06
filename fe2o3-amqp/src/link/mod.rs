@@ -11,7 +11,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
         SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Message, Received, Source, Target, TargetArchetype},
+    messaging::{Accepted, DeliveryState, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -34,7 +34,6 @@ pub use error::*;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
-use serde_amqp::from_reader;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
