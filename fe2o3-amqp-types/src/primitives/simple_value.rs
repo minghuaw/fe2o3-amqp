@@ -366,7 +366,7 @@ macro_rules! impl_from_for_simple_value {
     }
 }
 
-impl_from_for_simple_value!{
+impl_from_for_simple_value! {
     Bool, bool,
     UByte, u8,
     UShort, u16,

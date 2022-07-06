@@ -206,7 +206,10 @@ impl OwnedTransaction {
             outcome: None,
         };
         let state = DeliveryState::TransactionalState(state);
-        let settlement = sender.inner.send_with_state::<T, PostError>(sendable, Some(state)).await?;
+        let settlement = sender
+            .inner
+            .send_with_state::<T, PostError>(sendable, Some(state))
+            .await?;
 
         Ok(DeliveryFut::from(settlement))
     }

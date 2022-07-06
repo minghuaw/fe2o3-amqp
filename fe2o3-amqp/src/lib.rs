@@ -70,7 +70,7 @@
 //!     // Wait for outcome (Disposition)
 //!     let outcome: Outcome = fut.await.unwrap();
 //!     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
-//! 
+//!
 //!     // Receive the message from the broker
 //!     let delivery = receiver.recv::<String>().await.unwrap();
 //!     receiver.accept(&delivery).await.unwrap();

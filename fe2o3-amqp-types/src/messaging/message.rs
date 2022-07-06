@@ -755,20 +755,18 @@ mod body {
 
 #[cfg(test)]
 mod tests {
-    use std::{vec};
+    use std::vec;
 
     use serde_amqp::{from_slice, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
-    use crate::{
-        messaging::{
-            message::{
-                Body,
-                __private::{Deserializable, Serializable},
-            },
-            AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Header,
-            MessageAnnotations, Properties,
+    use crate::messaging::{
+        message::{
+            Body,
+            __private::{Deserializable, Serializable},
         },
+        AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Header,
+        MessageAnnotations, Properties,
     };
 
     use super::Message;

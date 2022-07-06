@@ -91,7 +91,7 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp_derive::{SerializeComposite, DeserializeComposite};
+    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     use crate::{descriptor::Descriptor, from_slice, to_vec};
 

@@ -1,28 +1,37 @@
 //! AnnotationBuilder for types that are simply a wrapper around Annotation
 
-use std::{marker::PhantomData, collections::BTreeMap};
+use std::{collections::BTreeMap, marker::PhantomData};
 
 use serde_amqp::{primitives::Symbol, Value};
 
 use crate::primitives::SimpleValue;
 
-use super::{DeliveryAnnotations, MessageAnnotations, Footer, ApplicationProperties};
+use super::{ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotations};
 
 /// Builder for types that are simply a wrapper around map
-/// [`Annotation`] 
+/// [`Annotation`]
 /// ([`DeliveryAnnotations`], [`MessageAnnotations`], and [`Footer`])
-/// 
+///
 /// This simply provides a convenient way of inserting entries into the map
 #[derive(Debug)]
-pub struct MapBuilder<K, V, T> where K: Ord {
+pub struct MapBuilder<K, V, T>
+where
+    K: Ord,
+{
     map: BTreeMap<K, V>,
     marker: PhantomData<T>,
 }
 
-impl<K, V, T> MapBuilder<K, V, T> where K: Ord {
+impl<K, V, T> MapBuilder<K, V, T>
+where
+    K: Ord,
+{
     /// Creates a new builder for annotation types
     pub fn new() -> Self {
-        Self { map: BTreeMap::new(), marker: PhantomData }
+        Self {
+            map: BTreeMap::new(),
+            marker: PhantomData,
+        }
     }
 
     /// A convenience method to insert an entry into the annotation map
@@ -62,7 +71,7 @@ impl MapBuilder<String, SimpleValue, ApplicationProperties> {
 
 #[cfg(test)]
 mod tests {
-    use crate::messaging::{MessageAnnotations, ApplicationProperties};
+    use crate::messaging::{ApplicationProperties, MessageAnnotations};
 
     #[test]
     fn test_message_annotation_builder() {

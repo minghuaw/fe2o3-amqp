@@ -119,7 +119,8 @@ impl Controller {
         // the outcome of the declare from the receiver
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        send_on_control_link(&mut *self.inner.lock().await, sendable).await?
+        send_on_control_link(&mut *self.inner.lock().await, sendable)
+            .await?
             .await
             .map_err(|_| LinkStateError::IllegalSessionState)?
             .declared_or_else(|state| {
@@ -145,7 +146,8 @@ impl Controller {
         let message = Message::<Discharge>::builder().value(discharge).build();
         let sendable = Sendable::builder().message(message).settled(false).build();
 
-        send_on_control_link(&mut *self.inner.lock().await, sendable).await?
+        send_on_control_link(&mut *self.inner.lock().await, sendable)
+            .await?
             .await
             .map_err(|_| LinkStateError::IllegalSessionState)?
             .accepted_or_else(|state| {
