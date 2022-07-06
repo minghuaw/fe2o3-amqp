@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::message::__private::Deserializable;
+use fe2o3_amqp_types::messaging::message::{__private::Deserializable, DecodeIntoMessage};
 use serde_amqp::format_code::EncodingCodes;
 
 use super::*;
@@ -146,8 +146,8 @@ where
         }
     }
 
-    async fn on_complete_transfer<T>(
-        &mut self,
+    async fn on_complete_transfer<'a, T>(
+        &'a mut self,
         transfer: Transfer,
         payload: Payload,
         // section_number: u32,
@@ -160,7 +160,7 @@ where
         Self::TransferError,
     >
     where
-        T: for<'de> serde::Deserialize<'de> + Send,
+        T: DecodeIntoMessage + Send,
     {
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
@@ -184,9 +184,12 @@ where
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let message: Deserializable<Message<T>> = from_reader(payload.reader())
+            // let message: Deserializable<Message<T>> = from_reader(payload.reader())
+            //     .map_err(|_| Self::TransferError::MessageDecodeError)?;
+            // (message.0, None)
+            let message = T::decode_into_message(payload.reader())
                 .map_err(|_| Self::TransferError::MessageDecodeError)?;
-            (message.0, None)
+            (message, None)
         } else {
             // If the message is being sent settled by the sender, the value of this
             // field is ignored.
@@ -213,10 +216,12 @@ where
                     // let reader = IoReader::new(payload.reader());
                     // let deserializer = Deserializer::new(reader);
                     // let message: Message<T> = Message::<T>::deserialize(&mut deserializer)?;
-                    let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                    // let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                    //     .map_err(|_| Self::TransferError::MessageDecodeError)?;
+                    let message = T::decode_into_message(payload.reader())
                         .map_err(|_| Self::TransferError::MessageDecodeError)?;
 
-                    (message.0, Some(DeliveryState::Accepted(Accepted {})))
+                    (message, Some(DeliveryState::Accepted(Accepted {})))
                 }
                 // If second, this indicates that the receiver MUST NOT settle until
                 // sending its disposition to the sender and receiving a settled
@@ -225,9 +230,11 @@ where
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(payload.as_ref())
                         .ok_or(Self::TransferError::MessageDecodeError)?;
-                    let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                    // let message: Deserializable<Message<T>> = from_reader(payload.reader())
+                    //     .map_err(|_| Self::TransferError::MessageDecodeError)?;
+                    // let message = message.0;
+                    let message = T::decode_into_message(payload.reader())
                         .map_err(|_| Self::TransferError::MessageDecodeError)?;
-                    let message = message.0;
                     let section_number = message.sections();
 
                     let state = DeliveryState::Received(Received {

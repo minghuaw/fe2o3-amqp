@@ -1,13 +1,13 @@
 //! Implements a workaround when no body section is found in message
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, io};
 
 use serde::{Serialize, de};
 use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use crate::messaging::{Data, AmqpSequence, AmqpValue};
 
-use super::{__private::{Deserializable}, Message, Visitor, Body};
+use super::{__private::{Deserializable}, Message, Visitor, Body, DecodeIntoMessage};
 
 /// A wrapper type that allows deserializing a message that doesn't have any body section.
 /// 
@@ -184,6 +184,15 @@ where
     {
         let value = Message::<Maybe<T>>::deserialize(deserializer)?;
         Ok(Deserializable(value))
+    }
+}
+
+impl<T> DecodeIntoMessage for Maybe<T> where for<'de> T: de::Deserialize<'de> {
+    type DecodeError = serde_amqp::Error;
+
+    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
+        let message: Deserializable<Message<Maybe<T>>> = serde_amqp::from_reader(reader)?;
+        Ok(message.0)
     }
 }
 

@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    connection::Connection, link::Receiver, sasl_profile::SaslProfile, session::Session, Delivery, types::primitives::Value
+    connection::Connection, link::Receiver, sasl_profile::SaslProfile, session::Session, Delivery, types::{primitives::Value, messaging::message::Maybe}
 };
 use tokio::net::TcpStream;
 
@@ -48,11 +48,11 @@ async fn main() {
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery: Delivery<Option<Value>> = receiver.recv().await.unwrap();
+    let delivery: Delivery<Maybe<Value>> = receiver.recv().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery);
 
-    let delivery = receiver.recv::<Option<Value>>().await.unwrap();
+    let delivery = receiver.recv::<Maybe<Value>>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     // let body = delivery.into_body();
     println!("{:?}", delivery);

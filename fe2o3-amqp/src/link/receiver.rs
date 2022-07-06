@@ -3,12 +3,13 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::{BytesMut, Buf};
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
-    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target},
+    messaging::{Accepted, Address, DeliveryState, Modified, Rejected, Released, Target, message::{__private::Deserializable, Maybe, DecodeIntoMessage}, Message},
     performatives::{Detach, Transfer},
 };
+use serde_amqp::from_reader;
 use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
@@ -267,7 +268,7 @@ impl Receiver {
     /// ```
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
-        T: for<'de> serde::Deserialize<'de> + Send,
+        T: DecodeIntoMessage + Send,
     {
         self.inner.recv().await
     }
@@ -532,7 +533,7 @@ where
 {
     pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
-        T: for<'de> serde::Deserialize<'de> + Send,
+        T: DecodeIntoMessage + Send,
     {
         loop {
             match self.recv_inner().await? {
@@ -545,7 +546,7 @@ where
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: for<'de> serde::Deserialize<'de> + Send,
+        T: DecodeIntoMessage + Send,
     {
         let frame = self
             .incoming
@@ -597,7 +598,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: for<'de> serde::Deserialize<'de> + Send,
+        T: DecodeIntoMessage + Send,
     {
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
