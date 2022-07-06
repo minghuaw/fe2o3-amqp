@@ -16,7 +16,7 @@ use tokio::sync::oneshot::{self, error::RecvError};
 use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
 
-use super::{BodyIsNotData, BodyIsNotSequence, BodyIsNotValue, LinkStateError, SendError};
+use super::{LinkStateError, SendError, BodyError};
 
 /// Reserved for receiver side
 #[derive(Debug)]
@@ -66,57 +66,67 @@ impl<T> Delivery<T> {
 
     /// Consume the delivery into the body if the body is an [`AmqpValue`].
     /// An error will be returned if the body isnot an [`AmqpValue`]
-    pub fn try_into_value(self) -> Result<T, BodyIsNotValue> {
+    pub fn try_into_value(self) -> Result<T, BodyError> {
         match self.into_body() {
             Body::Value(AmqpValue(value)) => Ok(value),
-            Body::Data(_) | Body::Sequence(_) => Err(BodyIsNotValue {}),
+            Body::Data(_)  => Err(BodyError::IsData),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Nothing => Err(BodyError::IsNothing),
         }
     }
 
     /// Consume the delivery into the body if the body is an [`Data`].
     /// An error will be returned if the body isnot an [`Data`]
-    pub fn try_into_data(self) -> Result<Binary, BodyIsNotData> {
+    pub fn try_into_data(self) -> Result<Binary, BodyError> {
         match self.into_body() {
             Body::Data(Data(data)) => Ok(data),
-            Body::Value(_) | Body::Sequence(_) => Err(BodyIsNotData {}),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Nothing => Err(BodyError::IsNothing)
         }
     }
 
     /// Consume the delivery into the body if the body is an [`AmqpSequence`].
     /// An error will be returned if the body isnot an [`AmqpSequence`]
-    pub fn try_into_sequence(self) -> Result<Vec<T>, BodyIsNotSequence> {
+    pub fn try_into_sequence(self) -> Result<Vec<T>, BodyError> {
         match self.into_body() {
-            Body::Data(_) => Err(BodyIsNotSequence {}),
+            Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
-            Body::Value(_) => Err(BodyIsNotSequence {}),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Nothing => Err(BodyError::IsNothing)
         }
     }
 
     /// Get a reference to the delivery body if the body is an [`AmqpValue`].
     /// An error will be returned if the body isnot an [`AmqpValue`]
-    pub fn try_as_value(&self) -> Result<&T, BodyIsNotValue> {
+    pub fn try_as_value(&self) -> Result<&T, BodyError> {
         match self.body() {
             Body::Value(AmqpValue(value)) => Ok(value),
-            Body::Data(_) | Body::Sequence(_) => Err(BodyIsNotValue {}),
+            Body::Data(_) => Err(BodyError::IsData),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Nothing => Err(BodyError::IsNothing)
         }
     }
 
     /// Get a reference to the delivery body if the body is an [`Data`].
     /// An error will be returned if the body isnot an [`Data`]
-    pub fn try_as_data(&self) -> Result<&Binary, BodyIsNotData> {
+    pub fn try_as_data(&self) -> Result<&Binary, BodyError> {
         match self.body() {
             Body::Data(Data(data)) => Ok(data),
-            Body::Value(_) | Body::Sequence(_) => Err(BodyIsNotData {}),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Nothing => Err(BodyError::IsNothing)
         }
     }
 
     /// Get a reference to the delivery body if the body is an [`AmqpSequence`].
     /// An error will be returned if the body isnot an [`AmqpSequence`]
-    pub fn try_as_sequence(&self) -> Result<&Vec<T>, BodyIsNotSequence> {
+    pub fn try_as_sequence(&self) -> Result<&Vec<T>, BodyError> {
         match self.body() {
-            Body::Data(_) => Err(BodyIsNotSequence {}),
+            Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
-            Body::Value(_) => Err(BodyIsNotSequence {}),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Nothing => Err(BodyError::IsNothing)
         }
     }
 }
@@ -128,6 +138,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
+            Body::Nothing => write!(f, "Nothing")
         }
     }
 }

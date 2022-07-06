@@ -568,38 +568,22 @@ where
     }
 }
 
-/// Message body is not AmqpValue
-#[derive(Debug)]
-pub struct BodyIsNotValue {}
+/// Error trying to unwrap the body section
+#[derive(Debug, thiserror::Error)]
+pub enum BodyError {
+    /// Attempting to unwrap the body as either sequence or data but body is value
+    #[error("Body is Value")]
+    IsValue,
 
-impl std::fmt::Display for BodyIsNotValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Message body is not AmqpValue")
-    }
+    /// Attempting to unwrap the body as either sequence or value but body is Data
+    #[error("Body is Data")]
+    IsData,
+
+    /// Attempting to unwrap the body as either value or data but body is sequence
+    #[error("Body is Sequence")]
+    IsSequence,
+
+    /// Attempting to unwrap the body but no body section is found
+    #[error("Body is nothing")]
+    IsNothing,
 }
-
-impl std::error::Error for BodyIsNotValue {}
-
-/// Message body is not AmqpValue
-#[derive(Debug)]
-pub struct BodyIsNotSequence {}
-
-impl std::fmt::Display for BodyIsNotSequence {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Message body is not AmqpSequence")
-    }
-}
-
-impl std::error::Error for BodyIsNotSequence {}
-
-/// Message body is not AmqpValue
-#[derive(Debug)]
-pub struct BodyIsNotData {}
-
-impl std::fmt::Display for BodyIsNotData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Message body is not Data")
-    }
-}
-
-impl std::error::Error for BodyIsNotData {}
