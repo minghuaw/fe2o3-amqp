@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.0.29
+
+1. Moved `trait DecodeIntoMessage` from `fe2o3-amqp` into `fe2o3-amqp-types`
+
+## 0.0.28
+
+1. Added `Maybe` type, which is like `Option`, to allow deserializing no-body section messages. [#49](https://github.com/minghuaw/fe2o3-amqp/issues/49)
+
 ## 0.0.27
 
 1. Updated `serde_amqp` to version 0.0.11

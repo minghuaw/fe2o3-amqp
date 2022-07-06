@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
     },
-    messaging::DeliveryState,
+    messaging::{DeliveryState, message::DecodeIntoMessage},
     performatives::{Attach, Detach, Transfer},
 };
 use futures_util::Future;
@@ -163,8 +163,8 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_complete_transfer<T>(
-        &mut self,
+    async fn on_complete_transfer<'a, T>(
+        &'a mut self,
         transfer: Transfer,
         payload: Payload,
     ) -> Result<
@@ -175,7 +175,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         Self::TransferError,
     >
     where
-        T: for<'de> serde::Deserialize<'de> + Send;
+        T: DecodeIntoMessage + Send;
 
     async fn dispose(
         &mut self,
