@@ -43,7 +43,7 @@ use super::{
 /// ).await.unwrap();
 ///
 /// let outcome = sender.send("hello AMQP").await.unwrap();
-/// 
+///
 /// // Checks the outcome of delivery
 /// if outcome.is_accepted() {
 ///     tracing::info!("Outcome: {:?}", outcome)
@@ -403,7 +403,7 @@ where
     ) -> Result<Settlement, E>
     where
         T: serde::Serialize,
-        E: From<L::TransferError> + From<serde_amqp::Error>, 
+        E: From<L::TransferError> + From<serde_amqp::Error>,
     {
         use bytes::BufMut;
         use serde::Serialize;
@@ -419,8 +419,7 @@ where
         // serialize message
         let mut payload = BytesMut::new();
         let mut serializer = Serializer::from((&mut payload).writer());
-        Serializable(message)
-            .serialize(&mut serializer)?;
+        Serializable(message).serialize(&mut serializer)?;
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 

@@ -351,3 +351,58 @@ impl From<SimpleValue> for Value {
         }
     }
 }
+
+macro_rules! impl_from_for_simple_value {
+    ($variant:ident, $variant_ty:ty) => {
+        impl From<$variant_ty> for SimpleValue {
+            fn from(val: $variant_ty) -> Self {
+                Self::$variant(val)
+            }
+        }
+    };
+
+    ($($variant:ident, $variant_ty:ty),*) => {
+        $(impl_from_for_simple_value!($variant, $variant_ty);)*
+    }
+}
+
+impl_from_for_simple_value! {
+    Bool, bool,
+    UByte, u8,
+    UShort, u16,
+    UInt, u32,
+    ULong, u64,
+    Byte, i8,
+    Short, i16,
+    Int, i32,
+    Long, i64,
+    Float, OrderedFloat<f32>,
+    Double, OrderedFloat<f64>,
+    Decimal32, Dec32,
+    Decimal64, Dec64,
+    Decimal128, Dec128,
+    Char, char,
+    Timestamp, Timestamp,
+    Uuid, Uuid,
+    Binary, ByteBuf,
+    String, String,
+    Symbol, Symbol
+}
+
+impl From<f32> for SimpleValue {
+    fn from(val: f32) -> Self {
+        Self::Float(OrderedFloat::from(val))
+    }
+}
+
+impl From<f64> for SimpleValue {
+    fn from(val: f64) -> Self {
+        Self::Double(OrderedFloat::from(val))
+    }
+}
+
+impl From<&str> for SimpleValue {
+    fn from(val: &str) -> Self {
+        Self::String(val.to_string())
+    }
+}

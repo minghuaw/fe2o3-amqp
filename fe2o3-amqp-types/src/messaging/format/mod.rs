@@ -8,6 +8,8 @@ use std::{collections::BTreeMap, fmt::Display};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
+pub mod map_builder;
+
 /// 3.2.1 Header
 /// Transport headers for a message.
 /// <type name="header" class="composite" source="list" provides="section">
@@ -75,6 +77,13 @@ impl From<Priority> for UByte {
 )]
 pub struct DeliveryAnnotations(pub Annotations);
 
+impl DeliveryAnnotations {
+    /// Creates a builder for [`DeliveryAnnotations`]
+    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+        MapBuilder::new()
+    }
+}
+
 /// 3.2.3 Message Annotations
 /// <type name="message-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:message-annotations:map" code="0x00000000:0x00000072"/>
@@ -87,8 +96,17 @@ pub struct DeliveryAnnotations(pub Annotations);
 )]
 pub struct MessageAnnotations(pub Annotations);
 
+impl MessageAnnotations {
+    /// Creates a builder for [`MessageAnnotations`]
+    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+        MapBuilder::new()
+    }
+}
+
 pub mod properties;
 pub use properties::Properties;
+
+use self::map_builder::MapBuilder;
 
 /// 3.2.5 Application Properties
 /// <type name="application-properties" class="restricted" source="map" provides="section">
@@ -101,6 +119,13 @@ pub use properties::Properties;
     encoding = "basic"
 )]
 pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
+
+impl ApplicationProperties {
+    /// Creates a builder for ApplicationProperties
+    pub fn builder() -> MapBuilder<String, SimpleValue, Self> {
+        MapBuilder::new()
+    }
+}
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
@@ -161,18 +186,6 @@ where
     }
 }
 
-// impl TryFrom<Value> for AmqpSequence {
-//     type Error = Value;
-
-//     fn try_from(value: Value) -> Result<Self, Self::Error> {
-//         if let Value::List(vals) = value {
-//             Ok(AmqpSequence(vals))
-//         } else {
-//             Err(value)
-//         }
-//     }
-// }
-
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
 ///     <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
@@ -194,12 +207,6 @@ where
     }
 }
 
-// impl<T: Into<Value>> From<T> for AmqpValue {
-//     fn from(val: T) -> Self {
-//         Self(val.into())
-//     }
-// }
-
 /// 3.2.9 Footer
 /// Transport footers for a message.
 /// <type name="footer" class="restricted" source="annotations" provides="section">
@@ -212,6 +219,13 @@ where
     encoding = "basic"
 )]
 pub struct Footer(pub Annotations);
+
+impl Footer {
+    /// Creates a builder for [`Footer`]
+    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+        MapBuilder::new()
+    }
+}
 
 /// 3.2.10 Annotations
 /// <type name="annotations" class="restricted" source="map"/>

@@ -73,7 +73,7 @@ impl DeliveryState {
     }
 
     /// Returns true if the result is [`Accepted`].
-    /// 
+    ///
     /// A transactional state will always return false
     pub fn is_accepted(&self) -> bool {
         match self {
@@ -90,7 +90,7 @@ impl DeliveryState {
     }
 
     /// Returns true if the result is [`Rejected`].
-    /// 
+    ///
     /// A transactional state will always return false
     pub fn is_rejected(&self) -> bool {
         match self {
@@ -107,7 +107,7 @@ impl DeliveryState {
     }
 
     /// Returns true if the result is [`Released`].
-    /// 
+    ///
     /// A transactional state will always return false
     pub fn is_released(&self) -> bool {
         match self {
@@ -124,7 +124,7 @@ impl DeliveryState {
     }
 
     /// Returns true if the result is [`Modified`].
-    /// 
+    ///
     /// A transactional state will always return false
     pub fn is_modified(&self) -> bool {
         match self {

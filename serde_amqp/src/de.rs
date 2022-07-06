@@ -921,7 +921,7 @@ where
         V: de::Visitor<'de>,
     {
         use crate::__constants::UNTAGGED_ENUM;
-        
+
         let curr_enum_type = self.enum_type.clone();
 
         let result = if name == VALUE {
