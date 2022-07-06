@@ -48,11 +48,11 @@ async fn main() {
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    let delivery: Delivery<Option<Value>> = receiver.recv().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery);
 
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<Option<Value>>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     // let body = delivery.into_body();
     println!("{:?}", delivery);

@@ -18,6 +18,9 @@ use super::{
     MessageAnnotations, Properties,
 };
 
+mod maybe;
+pub use maybe::*;
+
 #[doc(hidden)]
 pub mod __private {
     ///
@@ -131,42 +134,7 @@ impl<T> Message<T> {
             0x77
         }
     }
-
-    // // This should only need to check for Footer or Body
-    // pub fn last_section_offset(descriptor_code: u8, bytes: &[u8]) -> Option<u64> {
-    //     const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
-    //     const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
-    //     const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
-
-    //     let len = bytes.len();
-    //     let mut iter = bytes.iter().zip(
-    //         bytes.iter().skip(1).zip(
-    //             bytes.iter().skip(2)
-    //         )
-    //     );
-
-    //     iter.rposition(|(&b0, (&b1, &b2))| {
-    //         match (b0, b1, b2) {
-    //             (DESCRIBED_TYPE, SMALL_ULONG_TYPE, code)
-    //             | (DESCRIBED_TYPE, ULONG_TYPE, code) => {
-    //                 code == descriptor_code
-    //             },
-    //             _ => false
-    //         }
-    //     }).map(|val| (len - val) as u64)
-    // }
 }
-
-// impl<T> Message<T>
-// where
-//     T: for<'de> de::Deserialize<'de>
-// {
-//     pub fn from_reader(reader: impl std::io::Read) -> Result<Self, serde_amqp::Error> {
-//         let reader = serde_amqp::read::IoReader::new(reader);
-//         let mut de = serde_amqp::de::Deserializer::new(reader);
-//         Self::deserialize(&mut de)
-//     }
-// }
 
 // impl<T> Serialize for Message<T>
 impl<T> Message<T>
@@ -268,17 +236,21 @@ struct Visitor<T> {
     marker: PhantomData<T>,
 }
 
-impl<'de, T> de::Visitor<'de> for Visitor<T>
+impl<'de, T> Visitor<T>
 where
     T: de::Deserialize<'de>,
 {
-    type Value = Message<T>;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("struct Message")
-    }
-
-    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    #[inline]
+    fn visit_fields<A>(
+        self,
+        mut seq: A,
+    ) -> Result<(Option<Header>,
+        Option<DeliveryAnnotations>,
+        Option<MessageAnnotations>,
+        Option<Properties>,
+        Option<ApplicationProperties>,
+        Option<Deserializable<Body<T>>>,
+        Option<Footer>,), A::Error>
     where
         A: de::SeqAccess<'de>,
     {
@@ -311,6 +283,37 @@ where
                 Field::Footer => footer = seq.next_element()?,
             }
         }
+        Ok((header,
+            delivery_annotations,
+            message_annotations,
+            properties,
+            application_properties,
+            body,
+            footer))
+    }
+}
+
+impl<'de, T> de::Visitor<'de> for Visitor<T>
+where
+    T: de::Deserialize<'de>,
+{
+    type Value = Message<T>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("struct Message")
+    }
+
+    fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let (header,
+            delivery_annotations,
+            message_annotations,
+            properties,
+            application_properties,
+            body,
+            footer) = self.visit_fields(seq)?;
 
         Ok(Message {
             header,
@@ -351,7 +354,7 @@ where
                 DESCRIPTOR,
                 "footer",
             ],
-            Visitor {
+            Visitor::<T> {
                 marker: PhantomData,
             },
         )
@@ -852,7 +855,10 @@ mod tests {
         assert!(deserialized.0.message_annotations.is_some());
         assert!(deserialized.0.properties.is_some());
         assert!(deserialized.0.application_properties.is_some());
-        assert_eq!(deserialized.0.body, Body::Value(AmqpValue(Value::Bool(true))));
+        assert_eq!(
+            deserialized.0.body,
+            Body::Value(AmqpValue(Value::Bool(true)))
+        );
         assert!(deserialized.0.footer.is_none());
     }
 }

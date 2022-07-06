@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fe2o3-amqp-types = { version = "0.0.27", path = "../../fe2o3-amqp-types" }
+fe2o3-amqp-types = { version = "0.0.28", path = "../../fe2o3-amqp-types" }
 serde_amqp = { version = "0.0.11", path = "../../serde_amqp", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
