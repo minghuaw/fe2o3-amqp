@@ -607,6 +607,8 @@ where
             return Ok(None);
         }
 
+        println!("{:#x?}", payload.as_ref());
+
         let (delivery, disposition) = if transfer.more {
             // Partial transfer of the delivery
             match &mut self.incomplete_transfer {

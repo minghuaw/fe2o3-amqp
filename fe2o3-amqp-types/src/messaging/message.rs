@@ -87,12 +87,14 @@ where
     }
 }
 
-impl<T> Message<T> {
+impl Message<EmptyBody> {
     /// Creates a Builder for [`Message`]
     pub fn builder() -> Builder<EmptyBody> {
         Builder::new()
     }
+}
 
+impl<T> Message<T> {
     /// Count number of sections
     pub fn sections(&self) -> u32 {
         // The body section must be present
@@ -755,16 +757,16 @@ mod body {
 mod tests {
     use std::{collections::BTreeMap, vec};
 
-    use serde_amqp::{from_slice, to_vec, value::Value};
+    use serde_amqp::{from_slice, to_vec, value::Value, primitives::Symbol};
     use serde_bytes::ByteBuf;
 
-    use crate::messaging::{
+    use crate::{messaging::{
         message::{
             Body,
             __private::{Deserializable, Serializable},
         },
-        AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header, MessageAnnotations,
-    };
+        AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header, MessageAnnotations, ApplicationProperties,
+    }, primitives::SimpleValue};
 
     use super::Message;
 
@@ -824,18 +826,24 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_message() {
+        // let mut delivery_annotations = BTreeMap::new();
+        // delivery_annotations.insert(Symbol::from("sn"), Value::Int(1));
+
+        let mut application_properties = BTreeMap::new();
+        application_properties.insert(String::from("sn"), SimpleValue::UInt(1));
+        
         let message = Message {
             header: Some(Header {
                 durable: true,
                 ..Default::default()
             }),
             // header: None,
-            delivery_annotations: Some(DeliveryAnnotations(BTreeMap::new())),
-            // delivery_annotations: None,
-            message_annotations: Some(MessageAnnotations(BTreeMap::new())),
-            // message_annotations: None,
+            // delivery_annotations: Some(DeliveryAnnotations(delivery_annotations)),
+            delivery_annotations: None,
+            // message_annotations: Some(MessageAnnotations(BTreeMap::new())),
+            message_annotations: None,
             properties: None,
-            application_properties: None,
+            application_properties: Some(ApplicationProperties(application_properties)),
             body: Body::Value(AmqpValue(Value::Bool(true))),
             footer: None,
         };

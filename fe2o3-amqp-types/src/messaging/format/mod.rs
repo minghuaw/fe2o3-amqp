@@ -241,6 +241,30 @@ pub enum MessageId {
     String(String),
 }
 
+impl From<u64> for MessageId {
+    fn from(value: u64) -> Self {
+        Self::ULong(value)
+    }
+}
+
+impl From<Uuid> for MessageId {
+    fn from(value: Uuid) -> Self {
+        Self::Uuid(value)
+    }
+}
+
+impl From<Binary> for MessageId {
+    fn from(value: Binary) -> Self {
+        Self::Binary(value)
+    }
+}
+
+impl From<String> for MessageId {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
 /// 3.2.15 Address String
 /// Address of a node.
 /// <type name="address-string" class="restricted" source="string" provides="address"/>

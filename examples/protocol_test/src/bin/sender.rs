@@ -1,12 +1,17 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use fe2o3_amqp::sasl_profile::SaslProfile;
+use fe2o3_amqp::types::messaging::ApplicationProperties;
+use fe2o3_amqp::types::messaging::MessageId;
+use fe2o3_amqp::types::messaging::Properties;
 use fe2o3_amqp::types::messaging::message::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sendable;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
+use fe2o3_amqp::types::primitives::SimpleValue;
 use tokio::net::TcpStream;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -73,9 +78,18 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    let body = Body::from("hello");
+    // let body = Body::from(());
     // let message = Message::from("hello");
-    let message = Message::from(body);
+    let props = Properties::builder()
+            .message_id(MessageId::ULong(1))
+            .build();
+    let mut application_properties = BTreeMap::new();
+    application_properties.insert(String::from("sn"), SimpleValue::UInt(1));
+    let message = Message::<()>::builder()
+            .properties(props)
+            .application_properties(ApplicationProperties(application_properties))
+            .value(())
+            .build();
     let message = Sendable::from(message);
     // let message = Sendable::builder()
     //     .message("hello world")

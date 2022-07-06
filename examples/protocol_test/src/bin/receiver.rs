@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    connection::Connection, link::Receiver, sasl_profile::SaslProfile, session::Session, Delivery,
+    connection::Connection, link::Receiver, sasl_profile::SaslProfile, session::Session, Delivery, types::primitives::Value
 };
 use tokio::net::TcpStream;
 
@@ -28,8 +28,8 @@ async fn main() {
         //     password: "guest".into(),
         // })
         // .open_with_stream(tls_stream)
-        // .open("amqp://localhost:5672")
-        .open("amqp://guest:guest@localhost:5672")
+        .open("amqp://localhost:5672")
+        // .open("amqp://guest:guest@localhost:5672")
         .await
         .unwrap();
 
@@ -48,14 +48,14 @@ async fn main() {
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery: Delivery<String> = receiver.recv().await.unwrap();
-    println!("<<< Message >>> {}", delivery);
+    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
+    println!("{:?}", delivery);
 
-    let delivery = receiver.recv::<String>().await.unwrap();
+    let delivery = receiver.recv::<Value>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
-    let body = delivery.into_body();
-    println!("<<< Message >>> {}", body);
+    // let body = delivery.into_body();
+    println!("{:?}", delivery);
 
     if let Err(err) = receiver.close().await {
         println!("{}", err);
