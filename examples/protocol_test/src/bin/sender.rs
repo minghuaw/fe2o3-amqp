@@ -85,7 +85,7 @@ async fn main() {
             .build();
     let mut application_properties = BTreeMap::new();
     application_properties.insert(String::from("sn"), SimpleValue::UInt(1));
-    let message = Message::<()>::builder()
+    let message = Message::builder()
             .properties(props)
             .application_properties(ApplicationProperties(application_properties))
             .value(())

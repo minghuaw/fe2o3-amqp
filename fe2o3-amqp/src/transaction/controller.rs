@@ -114,7 +114,7 @@ impl Controller {
         // body consists of the declare type in a single amqp-value section. Other standard message
         // sections such as the header section SHOULD be ignored.
         let declare = Declare { global_id };
-        let message = Message::<Declare>::builder().value(declare).build();
+        let message = Message::builder().value(declare).build();
         // This message MUST NOT be sent settled as the sender is REQUIRED to receive and interpret
         // the outcome of the declare from the receiver
         let sendable = Sendable::builder().message(message).settled(false).build();
@@ -143,7 +143,7 @@ impl Controller {
             fail: fail.into(),
         };
         // As with the declare message, it is an error if the sender sends the transfer pre-settled.
-        let message = Message::<Discharge>::builder().value(discharge).build();
+        let message = Message::builder().value(discharge).build();
         let sendable = Sendable::builder().message(message).settled(false).build();
 
         send_on_control_link(&mut *self.inner.lock().await, sendable)

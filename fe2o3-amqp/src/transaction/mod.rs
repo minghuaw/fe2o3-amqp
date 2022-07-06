@@ -469,7 +469,7 @@ impl<'t> Drop for Transaction<'t> {
                 fail: Some(true),
             };
             // As with the declare message, it is an error if the sender sends the transfer pre-settled.
-            let message = Message::<Discharge>::builder().value(discharge).build();
+            let message = Message::builder().value(discharge).build();
             let mut payload = BytesMut::new();
             let mut serializer = Serializer::from((&mut payload).writer());
             if let Err(error) = Serializable(message).serialize(&mut serializer) {

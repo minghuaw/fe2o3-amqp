@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.24
+
+1. Removed debug printouts
+
 ## 0.0.23
 
 1. Updated `serde_amqp` to 0.0.11
