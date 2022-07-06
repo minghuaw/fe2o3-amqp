@@ -921,8 +921,10 @@ where
         V: de::Visitor<'de>,
     {
         use crate::__constants::UNTAGGED_ENUM;
+        
+        let curr_enum_type = self.enum_type.clone();
 
-        if name == VALUE {
+        let result = if name == VALUE {
             self.enum_type = EnumType::Value;
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == DESCRIPTOR {
@@ -969,7 +971,12 @@ where
                 EncodingCodes::DescribedType => visitor.visit_enum(VariantAccess::new(self)),
                 _ => Err(Error::InvalidFormatCode),
             }
-        }
+        };
+
+        // Revert self.enum_type
+        self.enum_type = curr_enum_type;
+
+        result
     }
 
     // an identifier is either a field of a struct or a variant of an eunm

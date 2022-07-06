@@ -116,50 +116,50 @@ impl Builder {
     }
 
     /// Set the "message-id" field
-    pub fn message_id(mut self, message_id: impl Into<Option<MessageId>>) -> Self {
-        self.inner.message_id = message_id.into();
+    pub fn message_id(mut self, message_id: impl Into<MessageId>) -> Self {
+        self.inner.message_id = Some(message_id.into());
         self
     }
 
     /// Set the "user-id" field
-    pub fn user_id(mut self, user_id: impl Into<Option<Binary>>) -> Self {
-        self.inner.user_id = user_id.into();
+    pub fn user_id(mut self, user_id: impl Into<Binary>) -> Self {
+        self.inner.user_id = Some(user_id.into());
         self
     }
 
     /// Set the "to" field
-    pub fn to(mut self, to: impl Into<Option<Address>>) -> Self {
-        self.inner.to = to.into();
+    pub fn to(mut self, to: impl Into<Address>) -> Self {
+        self.inner.to = Some(to.into());
         self
     }
 
     /// Set the "subject" field
-    pub fn subject(mut self, subject: impl Into<Option<String>>) -> Self {
-        self.inner.subject = subject.into();
+    pub fn subject(mut self, subject: impl Into<String>) -> Self {
+        self.inner.subject = Some(subject.into());
         self
     }
 
     /// Set the "reply-to" field
-    pub fn reply_to(mut self, reply_to: impl Into<Option<Address>>) -> Self {
-        self.inner.reply_to = reply_to.into();
+    pub fn reply_to(mut self, reply_to: impl Into<Address>) -> Self {
+        self.inner.reply_to = Some(reply_to.into());
         self
     }
 
     /// Set the "correlation-id" field
-    pub fn correlation_id(mut self, correlation_id: impl Into<Option<MessageId>>) -> Self {
-        self.inner.correlation_id = correlation_id.into();
+    pub fn correlation_id(mut self, correlation_id: impl Into<MessageId>) -> Self {
+        self.inner.correlation_id = Some(correlation_id.into());
         self
     }
 
     /// Set the "content-type" field
-    pub fn content_type(mut self, content_type: impl Into<Option<Symbol>>) -> Self {
-        self.inner.content_type = content_type.into();
+    pub fn content_type(mut self, content_type: impl Into<Symbol>) -> Self {
+        self.inner.content_type = Some(content_type.into());
         self
     }
 
     /// Set the "content-encoding" field
-    pub fn content_encoding(mut self, content_encoding: impl Into<Option<Symbol>>) -> Self {
-        self.inner.content_encoding = content_encoding.into();
+    pub fn content_encoding(mut self, content_encoding: impl Into<Symbol>) -> Self {
+        self.inner.content_encoding = Some(content_encoding.into());
         self
     }
 

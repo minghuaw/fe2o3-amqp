@@ -765,7 +765,7 @@ mod tests {
             Body,
             __private::{Deserializable, Serializable},
         },
-        AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header, MessageAnnotations, ApplicationProperties,
+        AmqpSequence, AmqpValue, Data, DeliveryAnnotations, Header, MessageAnnotations, ApplicationProperties, Properties,
     }, primitives::SimpleValue};
 
     use super::Message;
@@ -826,8 +826,15 @@ mod tests {
 
     #[test]
     fn test_serialize_deserialize_message() {
-        // let mut delivery_annotations = BTreeMap::new();
-        // delivery_annotations.insert(Symbol::from("sn"), Value::Int(1));
+        let mut delivery_annotations = BTreeMap::new();
+        delivery_annotations.insert(Symbol::from("sn"), Value::Int(1));
+
+        let mut message_annotations = BTreeMap::new();
+        message_annotations.insert(Symbol::from("sn"), Value::Int(2));
+
+        let properties = Properties::builder()
+            .message_id(1u64)
+            .build();
 
         let mut application_properties = BTreeMap::new();
         application_properties.insert(String::from("sn"), SimpleValue::UInt(1));
@@ -838,11 +845,11 @@ mod tests {
                 ..Default::default()
             }),
             // header: None,
-            // delivery_annotations: Some(DeliveryAnnotations(delivery_annotations)),
-            delivery_annotations: None,
-            // message_annotations: Some(MessageAnnotations(BTreeMap::new())),
-            message_annotations: None,
-            properties: None,
+            delivery_annotations: Some(DeliveryAnnotations(delivery_annotations)),
+            // delivery_annotations: None,
+            message_annotations: Some(MessageAnnotations(message_annotations)),
+            // message_annotations: None,
+            properties: Some(properties),
             application_properties: Some(ApplicationProperties(application_properties)),
             body: Body::Value(AmqpValue(Value::Bool(true))),
             footer: None,
