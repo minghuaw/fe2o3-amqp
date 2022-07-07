@@ -594,8 +594,6 @@ mod tests {
         let mut framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
-            // Prior to any explicit negotiation,
-            // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
             .max_frame_length(512) // change max frame size later in negotiation
             .length_adjustment(-4)
             .new_write(&mut writer);
@@ -604,24 +602,10 @@ mod tests {
         let mut encoder = FrameEncoder::new(512);
         let mut buf = BytesMut::new();
         encoder.encode(frame, &mut buf).unwrap();
-        println!("{:#x?}", &buf[..]);
+        assert_eq!(&buf[..], &[0x2u8, 0x0, 0x0, 0x0]);
 
         framed.send(buf.freeze()).await.unwrap();
-        println!("{:#x?}", writer);
-
-        // let mut header = [0u8; 4];
-        // header.copy_from_slice(&writer[..4]);
-        // println!("length header {:?}", u32::from_be_bytes(header));
-
-        // // test read
-        // let reader = &writer[..];
-        // let mut framed = LengthDelimitedCodec::builder()
-        //     .big_endian()
-        //     .length_field_length(4)
-        //     .length_adjustment(-4)
-        //     .new_read(reader);
-        // let outcome = framed.next().await.unwrap().unwrap();
-        // println!("{:?}", outcome.len())
+        assert_eq!(&writer[..], &[0x0u8, 0x0, 0x0, 0x8, 0x2, 0x0, 0x0, 0x0]);
     }
 
     #[tokio::test]
