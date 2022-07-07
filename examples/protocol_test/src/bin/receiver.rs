@@ -7,10 +7,18 @@ use fe2o3_amqp::{
     Delivery,
 };
 use tokio::net::TcpStream;
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
-    println!("Starting connection");
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    tracing::info!("Starting connection");
 
     // let addr = "localhost:5671";
     // let domain = "localhost";
@@ -25,7 +33,7 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("connection-1")
         .scheme("amqp")
-        .max_frame_size(1000)
+        // .max_frame_size(1000)
         .channel_max(9)
         .idle_time_out(50_000 as u32)
         // .sasl_profile(SaslProfile::Plain {
@@ -55,12 +63,12 @@ async fn main() {
 
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
-    println!("{:?}", delivery);
+    println!("{:?}", delivery.delivery_id());
 
     let delivery = receiver.recv::<Value>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     // let body = delivery.into_body();
-    println!("{:?}", delivery);
+    println!("{:?}", delivery.delivery_id());
 
     if let Err(err) = receiver.close().await {
         println!("{}", err);

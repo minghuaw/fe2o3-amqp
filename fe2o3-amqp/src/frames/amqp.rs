@@ -187,7 +187,10 @@ impl Encoder<Frame> for FrameEncoder {
                 let mut serializer = Serializer::from(dst.writer());
                 performative.serialize(&mut serializer)
             }
-            FrameBody::Empty => Ok(()),
+            FrameBody::Empty => {
+                write_header(dst, item.channel);
+                Ok(())
+            },
         }
         .map_err(Into::into)
     }
@@ -249,7 +252,7 @@ impl Decoder for FrameDecoder {
 }
 
 /// AMQP frame body
-#[derive(Debug)]
+// #[derive(Debug)]
 pub enum FrameBody {
     // Frames handled by Link
     /// Attach performative
@@ -289,6 +292,23 @@ pub enum FrameBody {
 
     /// An empty frame used only for resetting idle timeout
     Empty,
+}
+
+impl std::fmt::Debug for FrameBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Attach(arg0) => f.debug_tuple("Attach").field(arg0).finish(),
+            Self::Flow(arg0) => f.debug_tuple("Flow").field(arg0).finish(),
+            Self::Transfer { performative, payload } => f.debug_struct("Transfer").field("performative", performative).field("payload.len", &payload.len()).finish(),
+            Self::Disposition(arg0) => f.debug_tuple("Disposition").field(arg0).finish(),
+            Self::Detach(arg0) => f.debug_tuple("Detach").field(arg0).finish(),
+            Self::Begin(arg0) => f.debug_tuple("Begin").field(arg0).finish(),
+            Self::End(arg0) => f.debug_tuple("End").field(arg0).finish(),
+            Self::Open(arg0) => f.debug_tuple("Open").field(arg0).finish(),
+            Self::Close(arg0) => f.debug_tuple("Close").field(arg0).finish(),
+            Self::Empty => write!(f, "Empty"),
+        }
+    }
 }
 
 #[cfg(test)]

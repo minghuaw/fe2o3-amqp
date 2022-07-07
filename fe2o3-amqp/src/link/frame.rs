@@ -13,7 +13,7 @@ pub(crate) type LinkIncomingItem = LinkFrame;
 /// Link frames.
 ///
 /// This is a subset of the AMPQ frames
-#[derive(Debug)]
+// #[derive(Debug)]
 pub(crate) enum LinkFrame {
     Attach(Attach),
     Flow(LinkFlow),
@@ -31,10 +31,25 @@ pub(crate) enum LinkFrame {
     Acquisition(TransactionId),
 }
 
-/// Regular Attach for non-transactional links
-#[derive(Debug)]
-pub struct RegAttach {}
-
-/// Attach frame for control links
-#[derive(Debug)]
-pub struct TxnAttach {}
+impl std::fmt::Debug for LinkFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Attach(arg0) => f.debug_tuple("Attach").field(arg0).finish(),
+            Self::Flow(arg0) => f.debug_tuple("Flow").field(arg0).finish(),
+            Self::Transfer {
+                input_handle,
+                performative,
+                payload,
+            } => f
+                .debug_struct("Transfer")
+                .field("input_handle", input_handle)
+                .field("performative", performative)
+                .field("payload.len", &payload.len())
+                .finish(),
+            Self::Disposition(arg0) => f.debug_tuple("Disposition").field(arg0).finish(),
+            Self::Detach(arg0) => f.debug_tuple("Detach").field(arg0).finish(),
+            #[cfg(feature = "transaction")]
+            Self::Acquisition(arg0) => f.debug_tuple("Acquisition").field(arg0).finish(),
+        }
+    }
+}

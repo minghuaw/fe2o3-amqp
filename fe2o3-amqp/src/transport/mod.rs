@@ -542,11 +542,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
+    use bytes::{Bytes, BytesMut};
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
-    use tokio_util::codec::{Framed, LengthDelimitedCodec};
+    use tokio_util::codec::{Framed, LengthDelimitedCodec, Encoder};
+
+    use crate::frames::amqp::FrameEncoder;
 
     use super::{
         amqp::{Frame, FrameBody},
@@ -583,6 +585,43 @@ mod tests {
             .new_read(reader);
         let outcome = framed.next().await.unwrap().unwrap();
         println!("{:?}", outcome.len())
+    }
+
+    #[tokio::test]
+    async fn test_length_delimited_codec_on_empty_frame() {
+        // test write
+        let mut writer = vec![];
+        let mut framed = LengthDelimitedCodec::builder()
+            .big_endian()
+            .length_field_length(4)
+            // Prior to any explicit negotiation,
+            // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
+            .max_frame_length(512) // change max frame size later in negotiation
+            .length_adjustment(-4)
+            .new_write(&mut writer);
+
+        let frame = Frame::empty();
+        let mut encoder = FrameEncoder::new(512);
+        let mut buf = BytesMut::new();
+        encoder.encode(frame, &mut buf).unwrap();
+        println!("{:#x?}", &buf[..]);
+
+        framed.send(buf.freeze()).await.unwrap();
+        println!("{:#x?}", writer);
+
+        // let mut header = [0u8; 4];
+        // header.copy_from_slice(&writer[..4]);
+        // println!("length header {:?}", u32::from_be_bytes(header));
+
+        // // test read
+        // let reader = &writer[..];
+        // let mut framed = LengthDelimitedCodec::builder()
+        //     .big_endian()
+        //     .length_field_length(4)
+        //     .length_adjustment(-4)
+        //     .new_read(reader);
+        // let outcome = framed.next().await.unwrap().unwrap();
+        // println!("{:?}", outcome.len())
     }
 
     #[tokio::test]
