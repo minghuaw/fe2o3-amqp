@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.27
+
+1. Fixed a bug where link doesnt have max-message-size set and a large message exceeds the connection's max-frame-size. The frame encoder now automatically splits outgoing transfer + payload frame into multiple transfers
+
 ## 0.0.26
 
 1. Updated `fe2o3-amqp-types` to version 0.0.30 which removed `Maybe` but added `Body::Nothing` variant to deal with no-body section message.
