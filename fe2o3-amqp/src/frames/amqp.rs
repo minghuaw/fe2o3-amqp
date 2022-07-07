@@ -56,26 +56,148 @@ impl Frame {
     }
 }
 
-/// Encoder and Decoder of the AMQP frames
+/// Encoder of the AMQP frames
 #[derive(Debug)]
-pub struct FrameCodec {}
+pub struct FrameEncoder {
+    /// Max frame size for the transport
+    max_frame_body_size: usize,
+}
 
-impl Encoder<Frame> for FrameCodec {
-    type Error = Error;
+fn write_header(dst: &mut BytesMut, channel: u16) {
+    // AMQP frame ignores extended header, thus doff should always be 2
+    dst.put_u8(2); // doff
+    dst.put_u8(FRAME_TYPE_AMQP); // frame type
+    dst.put_u16(channel);
+}
 
-    fn encode(&mut self, item: Frame, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        // AMQP frame ignores extended header, thus doff should always be 2
-        dst.put_u8(2); // doff
-        dst.put_u8(FRAME_TYPE_AMQP); // frame type
-        dst.put_u16(item.channel);
+impl FrameEncoder {
+    pub(crate) fn new(max_frame_size: usize) -> Self {
+        Self { max_frame_body_size: max_frame_size - 4 }
+    }
 
-        // encode frame body
-        let mut encoder = FrameBodyCodec {};
-        encoder.encode(item.body, dst)
+    fn encode_transfer(
+        &self,
+        dst: &mut BytesMut,
+        channel: u16,
+        mut transfer: Transfer,
+        mut payload: Payload,
+    ) -> Result<(), serde_amqp::Error> {
+        use serde_amqp::ser::Serializer;
+
+        // First test the size
+        let mut buf = BytesMut::new();
+        let writer = (&mut buf).writer();
+        let mut buf_serializer = Serializer::from(writer);
+        transfer.serialize(&mut buf_serializer)?;
+        let mut remaining_bytes = buf.len() + payload.len();
+        let more = remaining_bytes > self.max_frame_body_size;
+        tracing::debug!(?more);
+        if more {
+            let orig_more = transfer.more; // If the transfer is pre-split at link
+            transfer.more = true;
+            buf.clear();
+            let writer = (&mut buf).writer();
+            let mut serializer = Serializer::from(writer);
+            transfer.serialize(&mut serializer)?;
+            let split_index = self.max_frame_body_size - buf.len();
+
+            while remaining_bytes > self.max_frame_body_size {
+                let partial = payload.split_to(split_index);
+                // The transfer performative can be kept the same for the first n-1 frames
+                
+                write_header(dst, channel);
+                dst.put(&buf[..]);
+                dst.put(partial);
+                remaining_bytes -= self.max_frame_body_size;
+            }
+
+            // Send last frame
+            transfer.more = orig_more;
+            buf.clear();
+            let writer = (&mut buf).writer();
+            let mut serializer = Serializer::from(writer);
+            transfer.serialize(&mut serializer)?;
+
+            write_header(dst, channel);
+            dst.put(buf);
+            dst.put(payload);
+        } else {
+            write_header(dst, channel);
+            dst.put(buf);
+            dst.put(payload);
+        }
+
+        Ok(())
     }
 }
 
-impl Decoder for FrameCodec {
+impl Encoder<Frame> for FrameEncoder {
+    type Error = Error;
+
+    fn encode(&mut self, item: Frame, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        use serde_amqp::ser::Serializer;
+        
+        match item.body {
+            FrameBody::Open(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Begin(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Attach(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Flow(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Transfer {
+                performative,
+                payload,
+            } => {
+                // performative.serialize(&mut serializer)?;
+                // dst.put(payload);
+                // Ok(())
+                self.encode_transfer(dst, item.channel, performative, payload)
+            }
+            FrameBody::Disposition(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Detach(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::End(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Close(performative) => {
+                write_header(dst, item.channel);
+                let mut serializer = Serializer::from(dst.writer());
+                performative.serialize(&mut serializer)
+            }
+            FrameBody::Empty => Ok(()),
+        }
+        .map_err(Into::into)
+    }
+}
+
+/// Decoder of the AMQP frames
+#[derive(Debug)]
+pub struct FrameDecoder {}
+
+impl Decoder for FrameDecoder {
     type Item = Frame;
     type Error = Error;
 
@@ -96,12 +218,32 @@ impl Decoder for FrameCodec {
             _ => return Err(Error::NotImplemented),
         }
 
-        // decode body
-        let mut decoder = FrameBodyCodec {};
-        let body = match decoder.decode(src)? {
-            Some(b) => b,
-            None => return Ok(None),
+        let body = if src.is_empty() {
+            FrameBody::Empty
+        } else {
+            let reader = IoReader::new(src.reader());
+            let mut deserializer = Deserializer::new(reader);
+            let performative: Performative = Deserialize::deserialize(&mut deserializer)?;
+
+            match performative {
+                Performative::Open(performative) => FrameBody::Open(performative),
+                Performative::Begin(performative) => FrameBody::Begin(performative),
+                Performative::Attach(performative) => FrameBody::Attach(performative),
+                Performative::Transfer(performative) => {
+                    let payload = src.split().into();
+                    FrameBody::Transfer {
+                        performative,
+                        payload,
+                    }
+                }
+                Performative::Flow(performative) => FrameBody::Flow(performative),
+                Performative::Disposition(performative) => FrameBody::Disposition(performative),
+                Performative::Detach(performative) => FrameBody::Detach(performative),
+                Performative::End(performative) => FrameBody::End(performative),
+                Performative::Close(performative) => FrameBody::Close(performative),
+            }
         };
+
         Ok(Some(Frame { channel, body }))
     }
 }
@@ -149,109 +291,19 @@ pub enum FrameBody {
     Empty,
 }
 
-/// Encoder and Decoder for AMQP frame body
-#[derive(Debug)]
-pub struct FrameBodyCodec {}
-
-impl Encoder<FrameBody> for FrameBodyCodec {
-    type Error = Error;
-
-    fn encode(&mut self, item: FrameBody, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        use serde_amqp::ser::Serializer;
-
-        let mut serializer = Serializer::from(dst.writer());
-        match item {
-            FrameBody::Open(performative) => performative.serialize(&mut serializer),
-            FrameBody::Begin(performative) => performative.serialize(&mut serializer),
-            FrameBody::Attach(performative) => performative.serialize(&mut serializer),
-            FrameBody::Flow(performative) => performative.serialize(&mut serializer),
-            FrameBody::Transfer {
-                performative,
-                payload,
-            } => {
-                performative.serialize(&mut serializer)?;
-                dst.put(payload);
-                Ok(())
-            }
-            FrameBody::Disposition(performative) => performative.serialize(&mut serializer),
-            FrameBody::Detach(performative) => performative.serialize(&mut serializer),
-            FrameBody::End(performative) => performative.serialize(&mut serializer),
-            FrameBody::Close(performative) => performative.serialize(&mut serializer),
-            FrameBody::Empty => Ok(()),
-        }
-        .map_err(Into::into)
-    }
-}
-
-impl Decoder for FrameBodyCodec {
-    type Item = FrameBody;
-    type Error = Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.is_empty() {
-            return Ok(Some(FrameBody::Empty));
-        }
-        let reader = IoReader::new(src.reader());
-        let mut deserializer = Deserializer::new(reader);
-        let performative: Performative = Deserialize::deserialize(&mut deserializer)?;
-
-        let frame_body = match performative {
-            Performative::Open(performative) => FrameBody::Open(performative),
-            Performative::Begin(performative) => FrameBody::Begin(performative),
-            Performative::Attach(performative) => FrameBody::Attach(performative),
-            Performative::Transfer(performative) => {
-                let payload = src.split().into();
-                FrameBody::Transfer {
-                    performative,
-                    payload,
-                }
-            }
-            Performative::Flow(performative) => FrameBody::Flow(performative),
-            Performative::Disposition(performative) => FrameBody::Disposition(performative),
-            Performative::Detach(performative) => FrameBody::Detach(performative),
-            Performative::End(performative) => FrameBody::End(performative),
-            Performative::Close(performative) => FrameBody::Close(performative),
-        };
-
-        Ok(Some(frame_body))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use bytes::BytesMut;
-    use fe2o3_amqp_types::performatives::Open;
     use tokio_util::codec::{Decoder, Encoder};
 
-    use super::{Frame, FrameBody, FrameBodyCodec, FrameCodec};
+    use crate::frames::amqp::{FrameEncoder, FrameDecoder};
 
-    #[test]
-    fn test_encoding_frame_body() {
-        let open = Open {
-            container_id: "1234".into(),
-            hostname: Some("127.0.0.1".into()),
-            max_frame_size: 100.into(),
-            channel_max: 9.into(),
-            idle_time_out: Some(10),
-            outgoing_locales: None,
-            incoming_locales: None,
-            offered_capabilities: None,
-            desired_capabilities: None,
-            properties: None,
-        };
-
-        let body = FrameBody::Open(open);
-
-        let mut encoder = FrameBodyCodec {};
-        let mut dst = BytesMut::new();
-        encoder.encode(body, &mut dst).unwrap();
-        println!("{:?}", dst);
-    }
+    use super::{Frame};
 
     #[test]
     fn test_encoding_empty_frame() {
         let empty = Frame::empty();
-        let mut encoder = FrameCodec {};
+        let mut encoder = FrameEncoder::new(512);
         let mut dst = BytesMut::new();
         encoder.encode(empty, &mut dst).unwrap();
         println!("{:x?}", dst);
@@ -259,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_decode_empty_frame() {
-        let mut decoder = FrameCodec {};
+        let mut decoder = FrameDecoder {};
         let mut src = BytesMut::from(&[0x02, 0x00, 0x00, 0x00][..]);
         let frame = decoder.decode(&mut src).unwrap();
         println!("{:?}", frame);

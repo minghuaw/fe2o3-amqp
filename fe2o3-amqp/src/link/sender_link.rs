@@ -185,7 +185,11 @@ where
         // Check message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
-        // let single_transfer = (self.max_message_size == 0) || (payload.len() as u64 <= self.max_message_size);
+
+        tracing::debug!(max_message_size=?self.max_message_size);
+        tracing::debug!(payload_len=?payload.len());
+        tracing::debug!(?more);
+        
         if !more {
             let transfer = Transfer {
                 handle,
@@ -209,7 +213,7 @@ where
             // Need multiple transfers
             // Number of transfers needed
             let mut n = payload.len() / self.max_message_size as usize;
-            if payload.len() > self.max_message_size as usize {
+            if payload.len() % self.max_message_size as usize > 0 {
                 n += 1
             }
 
