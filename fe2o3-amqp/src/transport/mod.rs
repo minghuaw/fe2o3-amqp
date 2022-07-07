@@ -60,11 +60,6 @@ impl<Io, Ftype> Transport<Io, Ftype>
 where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
-    // /// Consume the transport and return the wrapped IO
-    // pub fn into_inner_io(self) -> Io {
-    //     self.framed.into_inner()
-    // }
-
     /// Consume the transport and return the underlying codec
     pub fn into_framed_codec(self) -> Framed<Io, LengthDelimitedCodec> {
         self.framed
@@ -369,13 +364,22 @@ where
             .map_err(Into::into)
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: amqp::Frame) -> Result<(), Self::Error> {
+    fn start_send(mut self: std::pin::Pin<&mut Self>, item: amqp::Frame) -> Result<(), Self::Error> {
+        use std::pin::Pin;
+
         let mut bytesmut = BytesMut::new();
-        let mut encoder = amqp::FrameCodec {};
+        let max_frame_size = self.framed.codec().max_frame_length();
+        let mut encoder = amqp::FrameEncoder::new(max_frame_size);
         encoder.encode(item, &mut bytesmut)?;
 
-        let this = self.project();
-        this.framed
+        while bytesmut.len() > max_frame_size {
+            let partial = bytesmut.split_to(max_frame_size);
+            let framed = Pin::new(&mut self.framed);
+            framed.start_send(partial.freeze())?;
+        }
+        
+        let framed = Pin::new(&mut self.framed);
+        framed
             .start_send(bytesmut.freeze()) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
@@ -438,7 +442,7 @@ where
                                 }
                             }
                         };
-                        let mut decoder = amqp::FrameCodec {};
+                        let mut decoder = amqp::FrameDecoder {};
                         Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
                     }
                     None => Poll::Ready(None),
@@ -563,8 +567,12 @@ mod tests {
             .length_adjustment(-4)
             .new_write(&mut writer);
 
-        let payload = Bytes::from("AMQP");
+        let payload = Bytes::from(vec![b'a'; 512]);
         framed.send(payload).await.unwrap();
+
+        let mut header = [0u8; 4];
+        header.copy_from_slice(&writer[..4]);
+        println!("length header {:?}", u32::from_be_bytes(header));
 
         // test read
         let reader = &writer[..];
@@ -573,7 +581,8 @@ mod tests {
             .length_field_length(4)
             .length_adjustment(-4)
             .new_read(reader);
-        let _outcome = framed.next().await.unwrap();
+        let outcome = framed.next().await.unwrap().unwrap();
+        println!("{:?}", outcome.len())
     }
 
     #[tokio::test]
