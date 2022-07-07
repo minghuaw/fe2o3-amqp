@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.29
+
+1. Updated doc to make it clear that the exposed `max_frame_size` API includes the 8 bytes taken by the frame header
+
 ## 0.0.28
 
 1. Fixed a bug where empty frame (heartbeat frame)'s header is not encoded by the new encoder introduced in v0.0.27.

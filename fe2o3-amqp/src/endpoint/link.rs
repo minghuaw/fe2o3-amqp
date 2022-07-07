@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
     },
-    messaging::{DeliveryState, message::DecodeIntoMessage},
+    messaging::{message::DecodeIntoMessage, DeliveryState},
     performatives::{Attach, Detach, Transfer},
 };
 use futures_util::Future;

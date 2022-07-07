@@ -213,7 +213,10 @@ where
 
     /// Change the max_frame_size for the transport
     pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
-        self.framed.codec_mut().set_max_frame_length(max_frame_size);
+        let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);
+        self.framed
+            .codec_mut()
+            .set_max_frame_length(max_frame_size - 4);
         self
     }
 
@@ -236,7 +239,7 @@ fn length_delimited_codec(max_frame_size: usize) -> LengthDelimitedCodec {
         .length_field_length(4)
         // Prior to any explicit negotiation,
         // the maximum frame size is 512 (MIN-MAX-FRAME-SIZE)
-        .max_frame_length(max_frame_size) // change max frame size later in negotiation
+        .max_frame_length(max_frame_size - 4) // change max frame size later in negotiation
         .length_adjustment(-4)
         .new_codec()
 }
@@ -364,7 +367,10 @@ where
             .map_err(Into::into)
     }
 
-    fn start_send(mut self: std::pin::Pin<&mut Self>, item: amqp::Frame) -> Result<(), Self::Error> {
+    fn start_send(
+        mut self: std::pin::Pin<&mut Self>,
+        item: amqp::Frame,
+    ) -> Result<(), Self::Error> {
         use std::pin::Pin;
 
         let mut bytesmut = BytesMut::new();
@@ -377,7 +383,7 @@ where
             let framed = Pin::new(&mut self.framed);
             framed.start_send(partial.freeze())?;
         }
-        
+
         let framed = Pin::new(&mut self.framed);
         framed
             .start_send(bytesmut.freeze()) // Result<_, std::io::Error>
@@ -546,7 +552,7 @@ mod tests {
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
-    use tokio_util::codec::{Framed, LengthDelimitedCodec, Encoder};
+    use tokio_util::codec::{Encoder, Framed, LengthDelimitedCodec};
 
     use crate::frames::amqp::FrameEncoder;
 

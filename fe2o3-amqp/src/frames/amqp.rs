@@ -72,7 +72,9 @@ fn write_header(dst: &mut BytesMut, channel: u16) {
 
 impl FrameEncoder {
     pub(crate) fn new(max_frame_size: usize) -> Self {
-        Self { max_frame_body_size: max_frame_size - 4 }
+        Self {
+            max_frame_body_size: max_frame_size - 4,
+        }
     }
 
     fn encode_transfer(
@@ -104,7 +106,7 @@ impl FrameEncoder {
             while remaining_bytes > self.max_frame_body_size {
                 let partial = payload.split_to(split_index);
                 // The transfer performative can be kept the same for the first n-1 frames
-                
+
                 write_header(dst, channel);
                 dst.put(&buf[..]);
                 dst.put(partial);
@@ -136,7 +138,7 @@ impl Encoder<Frame> for FrameEncoder {
 
     fn encode(&mut self, item: Frame, dst: &mut BytesMut) -> Result<(), Self::Error> {
         use serde_amqp::ser::Serializer;
-        
+
         match item.body {
             FrameBody::Open(performative) => {
                 write_header(dst, item.channel);
@@ -190,7 +192,7 @@ impl Encoder<Frame> for FrameEncoder {
             FrameBody::Empty => {
                 write_header(dst, item.channel);
                 Ok(())
-            },
+            }
         }
         .map_err(Into::into)
     }
@@ -299,7 +301,14 @@ impl std::fmt::Debug for FrameBody {
         match self {
             Self::Attach(arg0) => f.debug_tuple("Attach").field(arg0).finish(),
             Self::Flow(arg0) => f.debug_tuple("Flow").field(arg0).finish(),
-            Self::Transfer { performative, payload } => f.debug_struct("Transfer").field("performative", performative).field("payload.len", &payload.len()).finish(),
+            Self::Transfer {
+                performative,
+                payload,
+            } => f
+                .debug_struct("Transfer")
+                .field("performative", performative)
+                .field("payload.len", &payload.len())
+                .finish(),
             Self::Disposition(arg0) => f.debug_tuple("Disposition").field(arg0).finish(),
             Self::Detach(arg0) => f.debug_tuple("Detach").field(arg0).finish(),
             Self::Begin(arg0) => f.debug_tuple("Begin").field(arg0).finish(),
@@ -316,9 +325,9 @@ mod tests {
     use bytes::BytesMut;
     use tokio_util::codec::{Decoder, Encoder};
 
-    use crate::frames::amqp::{FrameEncoder, FrameDecoder};
+    use crate::frames::amqp::{FrameDecoder, FrameEncoder};
 
-    use super::{Frame};
+    use super::Frame;
 
     #[test]
     fn test_encoding_empty_frame() {

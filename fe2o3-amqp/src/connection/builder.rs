@@ -69,6 +69,8 @@ pub struct Builder<'a, Mode, Tls> {
     pub domain: Option<&'a str>,
 
     /// Proposed maximum frame size
+    ///
+    /// This includes the 8 bytes taken by the frame header
     pub max_frame_size: MaxFrameSize,
 
     /// The maximum channel number that can be used on the connection
@@ -128,10 +130,14 @@ pub struct Builder<'a, Mode, Tls> {
 
 impl<'a, Tls> From<Builder<'a, mode::ConnectorWithId, Tls>> for Open {
     fn from(builder: Builder<'a, mode::ConnectorWithId, Tls>) -> Self {
+        let max_frame_size = MaxFrameSize(std::cmp::max(
+            MIN_MAX_FRAME_SIZE as u32,
+            builder.max_frame_size.0,
+        ));
         Open {
             container_id: builder.container_id,
             hostname: builder.hostname.map(Into::into),
-            max_frame_size: builder.max_frame_size,
+            max_frame_size,
             channel_max: builder.channel_max,
             // To avoid spurious timeouts, the value in idle-time-out SHOULD be half the peer’s actual timeout threshold.
             idle_time_out: builder.idle_time_out.map(|v| v / 2),
@@ -394,9 +400,10 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
     }
 
     /// Proposed maximum frame size
+    ///
+    /// This includes the 8 bytes taken by the frame header
     pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
         let max_frame_size = max_frame_size.into();
-        let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE as u32, max_frame_size.0);
         self.max_frame_size = MaxFrameSize::from(max_frame_size);
         self
     }

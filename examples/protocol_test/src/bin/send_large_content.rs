@@ -41,8 +41,9 @@ impl TestSender {
         .await?;
 
         for message in self.message_iter.into_iter() {
-            println!("sending new message");
-            let _outcome = sender.send(message).await?;
+            tracing::info!("sending new message");
+            let outcome = sender.send(message).await?;
+            tracing::info!(?outcome);
         }
 
         sender.close().await?;
@@ -198,7 +199,7 @@ async fn main() -> Result<()> {
 
     // let args: Vec<String> = env::args().collect();
     // let test_sender = TestSender::try_from(args)?;
-    let message_iter = create_message_sizes("binary", "[1, 10]")?;
+    let message_iter = create_message_sizes("string", "[1]")?;
     let test_sender = TestSender {
         broker_addr: "localhost:5672".to_string(),
         target_addr: "q1".to_string(),

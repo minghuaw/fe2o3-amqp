@@ -189,7 +189,7 @@ where
         tracing::debug!(max_message_size=?self.max_message_size);
         tracing::debug!(payload_len=?payload.len());
         tracing::debug!(?more);
-        
+
         if !more {
             let transfer = Transfer {
                 handle,

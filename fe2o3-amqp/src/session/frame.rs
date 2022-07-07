@@ -43,7 +43,14 @@ impl std::fmt::Debug for SessionFrameBody {
         match self {
             Self::Attach(arg0) => f.debug_tuple("Attach").field(arg0).finish(),
             Self::Flow(arg0) => f.debug_tuple("Flow").field(arg0).finish(),
-            Self::Transfer { performative, payload } => f.debug_struct("Transfer").field("performative", performative).field("payload.len", &payload.len()).finish(),
+            Self::Transfer {
+                performative,
+                payload,
+            } => f
+                .debug_struct("Transfer")
+                .field("performative", performative)
+                .field("payload.len", &payload.len())
+                .finish(),
             Self::Disposition(arg0) => f.debug_tuple("Disposition").field(arg0).finish(),
             Self::Detach(arg0) => f.debug_tuple("Detach").field(arg0).finish(),
             Self::Begin(arg0) => f.debug_tuple("Begin").field(arg0).finish(),

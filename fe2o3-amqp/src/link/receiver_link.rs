@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::message::{DecodeIntoMessage};
+use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
 use super::*;
