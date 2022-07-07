@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.28
+
+1. Fixed a bug where empty frame (heartbeat frame)'s header is not encoded by the new encoder introduced in v0.0.27.
+
 ## 0.0.27
 
 1. Fixed a bug where link doesnt have max-message-size set and a large message exceeds the connection's max-frame-size. The frame encoder now automatically splits outgoing transfer + payload frame into multiple transfers
