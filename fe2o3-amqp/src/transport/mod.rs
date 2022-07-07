@@ -542,11 +542,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
+    use bytes::{Bytes, BytesMut};
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
-    use tokio_util::codec::{Framed, LengthDelimitedCodec};
+    use tokio_util::codec::{Framed, LengthDelimitedCodec, Encoder};
+
+    use crate::frames::amqp::FrameEncoder;
 
     use super::{
         amqp::{Frame, FrameBody},
@@ -583,6 +585,27 @@ mod tests {
             .new_read(reader);
         let outcome = framed.next().await.unwrap().unwrap();
         println!("{:?}", outcome.len())
+    }
+
+    #[tokio::test]
+    async fn test_length_delimited_codec_on_empty_frame() {
+        // test write
+        let mut writer = vec![];
+        let mut framed = LengthDelimitedCodec::builder()
+            .big_endian()
+            .length_field_length(4)
+            .max_frame_length(512) // change max frame size later in negotiation
+            .length_adjustment(-4)
+            .new_write(&mut writer);
+
+        let frame = Frame::empty();
+        let mut encoder = FrameEncoder::new(512);
+        let mut buf = BytesMut::new();
+        encoder.encode(frame, &mut buf).unwrap();
+        assert_eq!(&buf[..], &[0x2u8, 0x0, 0x0, 0x0]);
+
+        framed.send(buf.freeze()).await.unwrap();
+        assert_eq!(&writer[..], &[0x0u8, 0x0, 0x0, 0x8, 0x2, 0x0, 0x0, 0x0]);
     }
 
     #[tokio::test]

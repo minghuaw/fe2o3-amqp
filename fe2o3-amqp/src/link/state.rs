@@ -318,9 +318,10 @@ impl TryConsume for SenderFlowState {
         if state.link_credit < item {
             Err(Self::Error::InsufficientCredit)
         } else {
+            let tag = state.delivery_count.to_be_bytes();
             state.delivery_count += item;
             state.link_credit -= item;
-            Ok(state.delivery_count.to_be_bytes())
+            Ok(tag)
         }
     }
 }
@@ -335,8 +336,9 @@ async fn consume_link_credit(
     if state.link_credit < count {
         Err(InsufficientCredit {})
     } else {
+        let tag = state.delivery_count.to_be_bytes();
         state.delivery_count += count;
         state.link_credit -= count;
-        Ok(state.delivery_count.to_be_bytes())
+        Ok(tag)
     }
 }

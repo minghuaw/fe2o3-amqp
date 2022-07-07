@@ -145,7 +145,6 @@ async fn main() {
     session.end().await.unwrap();
     // let result = session.on_end().await;
     // println!("{:?}", result);
-    tokio::time::sleep(Duration::from_millis(500)).await;
     connection.close().await.unwrap();
     // let result = connection.on_close().await;
     // println!("{:?}", result);

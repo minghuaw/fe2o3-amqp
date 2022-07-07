@@ -114,7 +114,7 @@ where
         };
 
         // Handle incoming remote_open
-        let remote_max_frame_size = remote_open.max_frame_size.0;
+        let remote_max_frame_size = remote_open.max_frame_size.0 - 4; // FIXME: length delimited codec has an additional 4 bytes
         let remote_idle_timeout = remote_open.idle_time_out;
         if let Err(error) = engine
             .connection
@@ -167,7 +167,6 @@ where
         channel: IncomingChannel,
         frame: SessionFrame,
     ) -> Result<(), Error> {
-        trace!(frame = ?frame);
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
