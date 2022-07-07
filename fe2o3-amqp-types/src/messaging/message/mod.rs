@@ -618,4 +618,13 @@ mod tests {
         );
         assert!(deserialized.0.footer.is_none());
     }
+
+    #[test]
+    fn test_decoding_message_with_no_body_section() {
+        let buf: [u8; 8] = [ 0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45 ];
+        let result: Result<Deserializable<Message<Value>>, _> = from_slice(&buf);
+        assert!(result.is_ok());
+        let message = result.unwrap().0;
+        println!("{:?}", message);
+    }
 }

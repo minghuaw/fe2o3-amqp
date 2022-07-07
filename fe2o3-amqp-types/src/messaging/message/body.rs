@@ -56,6 +56,14 @@ impl<T> Body<T> {
             Body::Nothing => false,
         }
     }
+
+    /// Whether the body section is `Nothing`
+    pub fn is_nothing(&self) -> bool {
+        match self {
+            Body::Nothing => true,
+            _ => false,
+        }
+    }
 }
 
 impl<T> Display for Body<T>

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.26
+
+1. Updated `fe2o3-amqp-types` to version 0.0.30 which removed `Maybe` but added `Body::Nothing` variant to deal with no-body section message.
+
 ## 0.0.25
 
 1. Updated `fe2o3-amqp-types` to version "0.0.29" which added `Maybe` to allow no-body section message.

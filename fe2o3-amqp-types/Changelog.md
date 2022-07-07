@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.0.30
+
+1. Removed `Maybe` type but kept `trait DecodeIntoMessage` for potentially allowing user to customize message decoding
+   1. `Maybe` is removed because it makes AmqpSequence a vec of `Maybe<T>` when it doesn't have to
+2. Added `Body::Nothing` variant
+
 ## 0.0.29
 
 1. Moved `trait DecodeIntoMessage` from `fe2o3-amqp` into `fe2o3-amqp-types`
