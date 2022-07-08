@@ -415,6 +415,13 @@ pub struct DetachedReceiver {
     _inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
+impl DetachedReceiver {
+    /// Resume the receiver link
+    pub async fn resume<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, ReceiverAttachError> {
+        todo!()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,

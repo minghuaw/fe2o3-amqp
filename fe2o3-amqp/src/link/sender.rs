@@ -276,6 +276,13 @@ pub struct DetachedSender {
     _inner: SenderInner<SenderLink<Target>>,
 }
 
+impl DetachedSender {
+    /// Resume the sender link
+    pub async fn resume<R>(self, session: &mut SessionHandle<R>) -> Sender {
+        todo!()
+    }
+}
+
 /// This is so that the transaction controller can re-use
 /// the sender
 #[derive(Debug)]
