@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.31
+
+1. Somehow fixed #56 (which is sending multiple 10 MB messages in a row fails on qdrouterd) by
+   - setting the `delivery_id`, `delivery_tag`, `message_format`, `settled`, and `rcv_settle_mode` fields of the intermediate transfer performative to `None` for a multiple transfer delivery at the transport encoder.
+
 ## 0.0.30
 
 1. Fixed large content transfer problem by

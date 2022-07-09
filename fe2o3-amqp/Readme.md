@@ -61,12 +61,14 @@ async fn main() {
     ).await.unwrap();
 
     // Send a message to the broker and wait for outcome (Disposition)
-    sender.send("hello AMQP").await.unwrap();
+    let outcome: Outcome = sender.send("hello AMQP").await.unwrap();
+    outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 
     // Send a message
     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
     // Wait for outcome (Disposition)
-    fut.await.unwrap();
+    let outcome: Outcome = fut.await.unwrap();
+    outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 
     // Receive the message from the broker
     let delivery = receiver.recv::<String>().await.unwrap();
@@ -149,7 +151,7 @@ The items below are listed in the order of priority.
     - [x] posting
     - [x] retirement
     - [ ] ~~acquisition~~ #43
-- [ ] qpid interoperability test (this will be 0.1.0 release)
+- [ ] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test) (this will be 0.1.0 release)
 - [ ] Link re-attachment
 - [ ] Message batch disposition
 - [ ] Pipelined open

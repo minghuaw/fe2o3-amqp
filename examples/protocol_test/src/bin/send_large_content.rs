@@ -206,7 +206,7 @@ async fn main() -> Result<()> {
 
     // let args: Vec<String> = env::args().collect();
     // let test_sender = TestSender::try_from(args)?;
-    let message_iter = create_message_sizes("string", "[10, 10, 10, 10, 10, 10]")?;
+    let message_iter = create_message_sizes("string", "[10, 10, 10, 10]")?;
     let test_sender = TestSender {
         broker_addr: "localhost:5672".to_string(),
         target_addr: "q1".to_string(),
