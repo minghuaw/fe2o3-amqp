@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.0.30
+
+1. Fixed large content transfer problem by
+   1. Separating the length delimited codec into encoder and decoder to deal with potentially a bug upstream (tokio-rs/tokio#4815)
+   2. The length delimited encoder's max frame length is set to the remote max frame size
+   3. The length delimited decoder's max frame length is set to the local max frame size
+
 ## 0.0.29
 
 1. Updated doc to make it clear that the exposed `max_frame_size` API includes the 8 bytes taken by the frame header

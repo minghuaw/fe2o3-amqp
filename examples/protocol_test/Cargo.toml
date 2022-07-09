@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1"
 serde = "1"
 serde_json = "1"
-fe2o3-amqp = { version = "0.0.29", path = "../../fe2o3-amqp", default-features = false, features = ["acceptor", "transaction"] }
+fe2o3-amqp = { version = "0.0.30", path = "../../fe2o3-amqp", default-features = false, features = ["acceptor", "transaction"] }
 # fe2o3-amqp = { version = "0.0.13", features = ["acceptor", "transaction"] }
 tokio = { version = "1", features = ["net", "macros", "rt-multi-thread", "rt", "time"] }
 tracing = "0.1.31"
