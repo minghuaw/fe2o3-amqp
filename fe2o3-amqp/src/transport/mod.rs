@@ -11,7 +11,7 @@ pub(crate) mod error;
 pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
+    definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
 use tracing::{event, instrument, span, trace, Level};
@@ -25,7 +25,7 @@ use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
 use pin_project_lite::pin_project;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, WriteHalf, ReadHalf};
 use tokio_util::codec::{
-    Decoder, Encoder, LengthDelimitedCodec, LengthDelimitedCodecError, FramedRead, FramedWrite
+    Decoder, Encoder, LengthDelimitedCodec, FramedRead, FramedWrite
 };
 
 use crate::{
@@ -489,19 +489,7 @@ where
                     Some(item) => {
                         let mut src = match item {
                             Ok(b) => b,
-                            Err(err) => {
-                                use std::any::Any;
-                                let any = &err as &dyn Any;
-                                if any.is::<LengthDelimitedCodecError>() {
-                                    // This should be the only error type
-                                    return Poll::Ready(Some(Err(Error::amqp_error(
-                                        AmqpError::FrameSizeTooSmall,
-                                        None,
-                                    ))));
-                                } else {
-                                    return Poll::Ready(Some(Err(err.into())));
-                                }
-                            }
+                            Err(err) => return Poll::Ready(Some(Err(err.into()))),
                         };
                         let mut decoder = amqp::FrameDecoder {};
                         Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
