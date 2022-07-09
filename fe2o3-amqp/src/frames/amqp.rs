@@ -209,6 +209,8 @@ impl Decoder for FrameDecoder {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
 
+        tracing::debug!(frame_len=?src.len());
+
         let doff = src.get_u8();
         let ftype = src.get_u8();
         let channel = src.get_u16();
