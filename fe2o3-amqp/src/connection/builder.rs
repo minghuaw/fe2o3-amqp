@@ -10,11 +10,11 @@ use fe2o3_amqp_types::{
 use futures_util::{SinkExt, StreamExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, WriteHalf, ReadHalf},
     net::TcpStream,
     sync::mpsc::{self},
 };
-use tokio_util::codec::Framed;
+use tokio_util::codec::{FramedWrite, FramedRead};
 use tracing::instrument;
 use url::Url;
 
@@ -574,18 +574,20 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     {
         match self.sasl_profile.take() {
             Some(profile) => {
-                let framed = Framed::new(stream, ProtocolHeaderCodec::new());
-                let mut transport = Transport::negotiate_sasl_header(framed).await?;
+                let (reader, writer) = tokio::io::split(stream);
+                let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+                let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+                let mut transport = Transport::negotiate_sasl_header(framed_write, framed_read).await?;
                 self.negotiate_sasl(&mut transport, profile).await?;
 
                 // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
                 // it should be fine to simply drop it.
-                let framed = transport
-                    .into_framed_codec()
-                    .map_codec(|_| ProtocolHeaderCodec::new());
+                let (framed_write, framed_read) = transport.into_framed_codec();
+                let framed_write = framed_write.map_encoder(|_| ProtocolHeaderCodec::new());
+                let framed_read = framed_read.map_decoder(|_| ProtocolHeaderCodec::new());
 
                 // Then perform AMQP negotiation
-                self.connect_amqp_with_framed(framed).await
+                self.connect_amqp_with_framed(framed_write, framed_read).await
             }
             None => self.connect_amqp_with_stream(stream).await,
         }
@@ -593,7 +595,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
     async fn connect_amqp_with_framed<Io>(
         self,
-        framed: Framed<Io, ProtocolHeaderCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -605,7 +608,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
             .map(|millis| Duration::from_millis(millis as u64));
         let buffer_size = self.buffer_size;
         let transport =
-            Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
+            Transport::negotiate_amqp_header(framed_write, framed_read, &mut local_state, idle_timeout).await?;
 
         let local_open = Open::from(self);
 
@@ -634,8 +637,10 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
-        self.connect_amqp_with_framed(framed).await
+        let (reader, writer) = tokio::io::split(stream);
+        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+        self.connect_amqp_with_framed(framed_write, framed_read).await
     }
 }
 

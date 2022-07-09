@@ -190,7 +190,7 @@ async fn main() -> Result<()> {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::DEBUG)
+        .with_max_level(Level::TRACE)
         // .with_max_level(Level::DEBUG)
         // completes the builder.
         .finish();
