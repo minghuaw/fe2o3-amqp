@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.32
+
+1. Relaxing `tokio-util` version requirement to `"<=0.7.3"
+
 ## 0.0.31
 
 1. Somehow fixed #56 (which is sending multiple 10 MB messages in a row fails on qdrouterd) by
