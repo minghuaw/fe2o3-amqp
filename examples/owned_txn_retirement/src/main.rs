@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    transaction::{Controller, Transaction, TransactionDischarge, TransactionalRetirement},
+    transaction::{TransactionDischarge, TransactionalRetirement, OwnedTransaction},
     types::primitives::Value,
     Connection, Delivery, Receiver, Session,
 };
@@ -14,18 +14,13 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut controller = Controller::attach(&mut session, "controller-1")
-        .await
-        .unwrap();
-
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
 
     // Transactionally retiring
-    let mut txn = Transaction::declare(&mut controller, None).await.unwrap();
+    let mut txn = OwnedTransaction::declare(&mut session, "controller", None).await.unwrap();
     txn.accept(&mut receiver, &delivery).await.unwrap();
     txn.commit().await.unwrap();
 
-    controller.close().await.unwrap();
     receiver.close().await.unwrap();
     session.close().await.unwrap();
     connection.close().await.unwrap();
