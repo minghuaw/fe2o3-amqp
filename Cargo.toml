@@ -14,5 +14,19 @@ members = [
 ]
 
 exclude = [
-    "examples/protocol_test"
+    "examples/protocol_test",
+    "examples/sasl_connection",
+    "examples/tls_connection",
+    "examples/alternative_tls_connection",
+    "examples/tls_sasl_connection",
+    "examples/sender",
+    "examples/receiver",
+    "examples/listener",
+    "examples/sasl_listener",
+    "examples/tls_listener",
+    "examples/alternative_tls_listener",
+    "examples/tls_sasl_listener",
+    "examples/txn_posting",
+    "examples/txn_retirement",
+    "examples/txn_enabled_listener",
 ]
