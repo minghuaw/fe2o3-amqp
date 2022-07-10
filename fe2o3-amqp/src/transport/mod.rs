@@ -630,6 +630,7 @@ mod tests {
         let mut framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
+            .max_frame_length(512 + 4)
             .length_adjustment(-4)
             .new_read(reader);
         let outcome = framed.next().await.unwrap().unwrap();
