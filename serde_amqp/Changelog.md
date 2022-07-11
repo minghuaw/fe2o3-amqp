@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.0
+
+1. Passed `amqp-types-test` and `amqp-large-content-test`
+
 ## 0.0.11
 
 1. Fixed a bug where deserializing a `Value` type doesn't reset `Deserializer`'s `enum_type` field.
