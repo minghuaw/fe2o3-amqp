@@ -152,7 +152,7 @@
 //!     - [x] posting
 //!     - [x] retirement
 //!     - [ ] ~~acquisition~~ #43
-//! - [ ] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test) (this will be 0.1.0 release) 
+//! - [x] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test)
 //! - [ ] Link re-attachment
 //! - [ ] Message batch disposition
 //! - [ ] Pipelined open
