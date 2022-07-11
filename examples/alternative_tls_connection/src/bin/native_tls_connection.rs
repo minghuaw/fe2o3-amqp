@@ -5,13 +5,10 @@ use tokio::net::TcpStream;
 
 #[tokio::main]
 async fn main() {
-    let addr = "localhost:5672";
+    let addr = "localhost:5671";
     let domain = "localhost";
     let stream = TcpStream::connect(addr).await.unwrap();
-    let connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
+    let connector = native_tls::TlsConnector::new().unwrap();
     let connector = tokio_native_tls::TlsConnector::from(connector);
     let tls_stream = connector.connect(domain, stream).await.unwrap();
 

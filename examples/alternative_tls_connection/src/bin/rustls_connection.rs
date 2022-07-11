@@ -8,7 +8,7 @@ use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {
-    let addr = "localhost:5672";
+    let addr = "localhost:5671";
     let domain = rustls::ServerName::try_from("localhost").unwrap();
     let stream = TcpStream::connect(addr).await.unwrap();
 
@@ -23,7 +23,7 @@ async fn main() {
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
-        .with_no_client_auth(); // i guess this was previously the default?
+        .with_no_client_auth();
     let connector = TlsConnector::from(Arc::new(config));
     let tls_stream = connector.connect(domain, stream).await.unwrap();
 

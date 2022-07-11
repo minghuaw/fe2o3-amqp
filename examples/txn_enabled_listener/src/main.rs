@@ -57,6 +57,7 @@ async fn sender_main(mut sender: Sender) {
     let outcome = sender.send(sendable).await.unwrap();
     outcome.accepted_or_else(|outcome| outcome).unwrap();
 
+    sender.on_detach().await;
     sender.close().await.unwrap();
 }
 
