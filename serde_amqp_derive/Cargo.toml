@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp_derive"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 description = "Custom derive macros for serde_amqp"
 license = "MIT/Apache-2.0"
