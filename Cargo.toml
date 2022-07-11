@@ -1,18 +1,28 @@
 [workspace]
 members = [
-    # serde 
     "serde_amqp_derive",
-    "serde_amqp",
-
-    # frame transport
+    "serde_amqp", 
     "fe2o3-amqp",
     "fe2o3-amqp-ext",
-    "fe2o3-amqp-types",
-
-    # examples
+    "fe2o3-amqp-types", 
     "examples/macro_expand",
 ]
 
 exclude = [
-    "examples/protocol_test"
+    "examples/alternative_tls_connection",
+    "examples/batchable_send",
+    "examples/listener",
+    "examples/native_tls_connection",
+    "examples/owned_txn_posting",
+    "examples/owned_txn_retirement",
+    "examples/protocol_test",
+    "examples/receiver",
+    "examples/rustls_connection",
+    "examples/sasl_connection",
+    "examples/sasl_listener",
+    "examples/sender",
+    "examples/tls_sasl_connection",
+    "examples/txn_enabled_listener",
+    "examples/txn_posting",
+    "examples/txn_retirement",
 ]

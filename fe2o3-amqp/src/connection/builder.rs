@@ -380,7 +380,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     }
 }
 
-impl<'a, Mode> Builder<'a, Mode, ()> {
+impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// The name of the target host
     pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
         self.hostname = hostname.into();
