@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.0
+
+1. Passed `amqp-types-test` and `amqp-large-content-test`
+
 ## 0.0.32
 
 1. Relaxing `tokio-util` version requirement to `"<=0.7.3"
