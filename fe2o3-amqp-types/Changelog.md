@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.0
+
+1. Passed `amqp-types-test` and `amqp-large-content-test`
+
 ## 0.0.30
 
 1. Removed `Maybe` type but kept `trait DecodeIntoMessage` for potentially allowing user to customize message decoding
