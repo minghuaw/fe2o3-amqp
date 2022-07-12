@@ -1,3 +1,6 @@
+//! Define filters from AMQP Capabilities Registry: Filters
+//! https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
+
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::primitives::SimpleValue;
@@ -5,9 +8,6 @@ use serde_amqp::{
     described::Described, descriptor::Descriptor, value::Value, DeserializeComposite,
     SerializeComposite,
 };
-
-// Define filters from AMQP Capabilities Registry: Filters
-// https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
 
 /// 1.1 Legacy Amqp Direct Binding
 /// <type name="legacy-amqp-direct-binding" class="restricted" source="string" provides="filter">
@@ -20,6 +20,13 @@ use serde_amqp::{
     encoding = "basic"
 )]
 pub struct LegacyAmqpDirectBinding(pub String);
+
+impl LegacyAmqpDirectBinding {
+    /// Creates a new `LegacyAmqpDirectBinding`
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
 
 impl From<LegacyAmqpDirectBinding> for Described<String> {
     fn from(value: LegacyAmqpDirectBinding) -> Self {
@@ -39,6 +46,12 @@ impl From<LegacyAmqpDirectBinding> for Described<Value> {
     }
 }
 
+impl From<LegacyAmqpDirectBinding> for Option<Described<Value>> {
+    fn from(value: LegacyAmqpDirectBinding) -> Self {
+        Some(value.into())
+    }
+}
+
 /// 1.2 Legacy Amqp Topic Binding
 /// <type name="legacy-amqp-topic-binding" class="restricted" source="string" provides="filter">
 ///     <descriptor name="apache.org:legacy-amqp-topic-binding:string" code="0x0000468C:0x00000001"/>
@@ -50,6 +63,13 @@ impl From<LegacyAmqpDirectBinding> for Described<Value> {
     encoding = "basic"
 )]
 pub struct LegacyAmqpTopicBinding(pub String);
+
+impl LegacyAmqpTopicBinding {
+    /// Creates a new `LegacyAmqpTopicBinding`
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
 
 impl From<LegacyAmqpTopicBinding> for Described<String> {
     fn from(value: LegacyAmqpTopicBinding) -> Self {
@@ -68,6 +88,13 @@ impl From<LegacyAmqpTopicBinding> for Described<Value> {
         }
     }
 }
+
+impl From<LegacyAmqpTopicBinding> for Option<Described<Value>> {
+    fn from(value: LegacyAmqpTopicBinding) -> Self {
+        Some(value.into())
+    }
+}
+
 
 /// 1.3 Legacy Amqp Headers Binding
 /// <type name="legacy-amqp-headers-binding" class="restricted" source="map" provides="filter">
@@ -108,6 +135,12 @@ impl From<LegacyAmqpHeadersBinding> for Described<Value> {
     }
 }
 
+impl From<LegacyAmqpHeadersBinding> for Option<Described<Value>> {
+    fn from(value: LegacyAmqpHeadersBinding) -> Self {
+        Some(value.into())
+    }
+}
+
 /// 2.1 No Local Filter
 /// <type name="no-local-filter" class="composite" source="list" provides="filter">
 ///     <descriptor name="apache.org:no-local-filter:list" code="0x0000468C:0x00000003"/>
@@ -138,6 +171,12 @@ impl From<NoLocalFilter> for Described<Value> {
     }
 }
 
+impl From<NoLocalFilter> for Option<Described<Value>> {
+    fn from(value: NoLocalFilter) -> Self {
+        Some(value.into())
+    }
+}
+
 /// 2.2 Selector Filter
 /// <type name="selector-filter" class="restricted" source="string" provides="filter">
 ///     <descriptor name="apache.org:selector-filter:string" code="0x0000468C:0x00000004"/>
@@ -149,6 +188,14 @@ impl From<NoLocalFilter> for Described<Value> {
     encoding = "basic"
 )]
 pub struct SelectorFilter(pub String);
+
+impl SelectorFilter {
+    /// Creates a new `SelectorFilter`
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
+
 
 impl From<SelectorFilter> for Described<String> {
     fn from(value: SelectorFilter) -> Self {
@@ -168,6 +215,12 @@ impl From<SelectorFilter> for Described<Value> {
     }
 }
 
+impl From<SelectorFilter> for Option<Described<Value>> {
+    fn from(value: SelectorFilter) -> Self {
+        Some(value.into())
+    }
+}
+
 /// 3.1 Xquery
 /// <type name="xquery" class="restricted" source="string" provides="filter">
 ///     <descriptor name="apache.org:xquery-filter:string" code="0x0000468C:0x00000005"/>
@@ -179,6 +232,13 @@ impl From<SelectorFilter> for Described<Value> {
     encoding = "basic"
 )]
 pub struct Xquery(pub String);
+
+impl Xquery {
+    /// Creates a new `Xquery`
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
 
 impl From<Xquery> for Described<String> {
     fn from(value: Xquery) -> Self {
@@ -195,5 +255,11 @@ impl From<Xquery> for Described<Value> {
             descriptor: Descriptor::Code(0x0000_468c_0000_0005),
             value: Value::String(value.0),
         }
+    }
+}
+
+impl From<Xquery> for Option<Described<Value>> {
+    fn from(value: Xquery) -> Self {
+        Some(value.into())
     }
 }
