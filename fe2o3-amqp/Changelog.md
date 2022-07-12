@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.1
+
+1. Added `SaslAnonymousMechanism` to SASL acceptor
+
 ## 0.1.0
 
 1. Passed `amqp-types-test` and `amqp-large-content-test`
