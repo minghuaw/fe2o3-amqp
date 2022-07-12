@@ -46,13 +46,13 @@
 //! let foo = Foo(Some(true), Some(3));
 //! let buf = to_vec(&foo).unwrap();
 //! let value: Value = from_slice(&buf).unwrap();
-//! let expected = Value::Described(
+//! let expected = Value::from(
 //!     Described {
 //!         descriptor: Descriptor::Code(0x13),
-//!         value: Box::new(Value::List(vec![
+//!         value: Value::List(vec![
 //!             Value::Bool(true),
 //!             Value::Int(3)
-//!         ]))
+//!         ])
 //!     }
 //! );
 //! assert_eq!(value, expected);
