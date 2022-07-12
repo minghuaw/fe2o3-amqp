@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+
+use serde_amqp::described::Described;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Array, Boolean, Symbol};
+use serde_amqp::Value;
 
 use crate::definitions::{Fields, Seconds};
 
@@ -131,6 +135,19 @@ impl Builder {
     /// Set the "filter" field
     pub fn filter(mut self, filter_set: FilterSet) -> Self {
         self.source.filter = Some(filter_set.into());
+        self
+    }
+
+    /// Add an entryto the "filter" field
+    pub fn add_to_filter(
+        mut self,
+        key: impl Into<Symbol>,
+        value: impl Into<Option<Described<Value>>>,
+    ) -> Self {
+        self.source
+            .filter
+            .get_or_insert(BTreeMap::new())
+            .insert(key.into(), value.into());
         self
     }
 
