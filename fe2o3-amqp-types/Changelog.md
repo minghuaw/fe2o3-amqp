@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.2
+
+1. Change `serde_amqp` version requirement to "^0.1.1";
+
 ## 0.1.1
 
 1. Relaxed `serde_amqp` version requirement to "0.1"  
