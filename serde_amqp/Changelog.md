@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.1
+
+1. Moved `Box` outside the `Described`
+
 ## 0.1.0
 
 1. Passed `amqp-types-test` and `amqp-large-content-test`
