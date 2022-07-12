@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.1.2
+
+1. Changed `serde_amqp` version requirement to "^0.1.1"
+2. Changed `fe2o3-amqp-types` version requirement to "^0.1.2"
+3. Relaxed optional dep `uuid` version requirement to "1.1"
+4. Relaxed optional dep `native-tls` version requirement to "0.2"
+
 ## 0.1.1
 
 1. Added `SaslAnonymousMechanism` to SASL acceptor
