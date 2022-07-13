@@ -130,7 +130,8 @@ where
 
         // update transport setting
         let local_max_frame_size = engine.connection.local_open().max_frame_size.0 as usize;
-        engine.transport
+        engine
+            .transport
             .set_encoder_max_frame_size(remote_max_frame_size)
             .set_decoder_max_frame_size(local_max_frame_size);
 

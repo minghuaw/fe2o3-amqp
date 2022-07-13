@@ -60,6 +60,8 @@ pub const DEFAULT_CREDIT: SequenceNo = 200;
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
+pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::Sender>>>;
+
 /// Type alias for sender link that ONLY represents the inner state of a Sender
 pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
 
@@ -348,7 +350,7 @@ pub(crate) enum LinkRelay<O> {
         output_handle: O,
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
-        flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
+        flow_state: SenderRelayFlowState,
         unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
         receiver_settle_mode: ReceiverSettleMode,
         // state_code: Arc<AtomicU8>,

@@ -16,7 +16,7 @@ use fe2o3_amqp_types::{
 
 pub use self::connection::{ConnectionAcceptor, ListenerConnectionHandle};
 pub use self::link::{LinkAcceptor, LinkEndpoint};
-pub use self::sasl_acceptor::{SaslAcceptor, SaslPlainMechanism, SaslAnonymousMechanism};
+pub use self::sasl_acceptor::{SaslAcceptor, SaslAnonymousMechanism, SaslPlainMechanism};
 pub use self::session::{ListenerSessionHandle, SessionAcceptor};
 
 /// A half established session that is initiated by the remote peer

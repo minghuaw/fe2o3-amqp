@@ -23,10 +23,8 @@ use std::{convert::TryFrom, io, marker::PhantomData, task::Poll, time::Duration}
 use bytes::BytesMut;
 use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, WriteHalf, ReadHalf};
-use tokio_util::codec::{
-    Decoder, Encoder, LengthDelimitedCodec, FramedRead, FramedWrite
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::{
     frames::{amqp, sasl},
@@ -52,7 +50,7 @@ pin_project! {
 
         #[pin]
         framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
-        
+
         #[pin]
         framed_read: FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
 
@@ -68,7 +66,12 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     /// Consume the transport and return the underlying codec
-    pub fn into_framed_codec(self) -> (FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>, FramedRead<ReadHalf<Io>, LengthDelimitedCodec>) {
+    pub fn into_framed_codec(
+        self,
+    ) -> (
+        FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
+        FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
+    ) {
         (self.framed_write, self.framed_read)
     }
 
@@ -180,14 +183,12 @@ where
         framed_write.send(proto_header).await?;
 
         let span = span!(Level::TRACE, "RECV");
-        let incoming_header =
-            framed_read
-                .next()
-                .await
-                .ok_or(NegotiationError::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Waiting for SASL header exchange",
-                )))??;
+        let incoming_header = framed_read.next().await.ok_or_else(|| {
+            NegotiationError::Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Waiting for SASL header exchange",
+            ))
+        })??;
         event!(parent: &span, Level::TRACE, ?incoming_header);
 
         if !incoming_header.is_sasl()
@@ -264,7 +265,6 @@ where
             .set_max_frame_length(max_frame_size - 4);
         self
     }
-
 
     /// Set the idle timeout of the transport
     pub fn set_idle_timeout(&mut self, duration: Duration) -> &mut Self {
@@ -389,13 +389,12 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     // check header
-    let incoming_header = framed_read
-        .next()
-        .await
-        .ok_or(NegotiationError::Io(io::Error::new(
+    let incoming_header = framed_read.next().await.ok_or_else(|| {
+        NegotiationError::Io(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "Waiting for header exchange",
-        )))??;
+        ))
+    })??;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
         return Err(NegotiationError::NotImplemented(Some(format!(
@@ -595,7 +594,7 @@ mod tests {
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
-    use tokio_util::codec::{Encoder, LengthDelimitedCodec, FramedRead, FramedWrite};
+    use tokio_util::codec::{Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
     use crate::frames::amqp::FrameEncoder;
 
@@ -666,7 +665,7 @@ mod tests {
             .read(b"AMQP")
             .read(&[0, 1, 0, 0])
             .build();
-        
+
         let (reader, writer) = tokio::io::split(mock);
         let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
         let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());

@@ -694,7 +694,7 @@ where
         }
 
         self.link
-            .send_flow(&mut self.outgoing, Some(credit), Some(false), false)
+            .send_flow(&self.outgoing, Some(credit), Some(false), false)
             .await
     }
 
@@ -707,10 +707,9 @@ where
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
-        let _ = self
-            .link
+        self.link
             .dispose(
-                &mut self.outgoing,
+                &self.outgoing,
                 delivery_id,
                 delivery_tag,
                 settled,

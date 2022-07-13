@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     sasl::{SaslChallenge, SaslCode, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
 };
 
-use crate::sasl_profile::{PLAIN, ANONYMOUS};
+use crate::sasl_profile::{ANONYMOUS, PLAIN};
 
 /// SASL frames sent by server, excluding the initial mechanism frame
 #[derive(Debug)]
@@ -124,12 +124,12 @@ impl SaslAcceptor for SaslPlainMechanism {
 
 /// A SASL Anonymous acceptor that is going to accept anything
 #[derive(Debug)]
-pub struct SaslAnonymousMechanism { }
+pub struct SaslAnonymousMechanism {}
 
 impl SaslAnonymousMechanism {
     /// Creates a new SASL Anonymouse mechanism
     pub fn new() -> Self {
-        Self {  }
+        Self {}
     }
 }
 

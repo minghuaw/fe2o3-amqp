@@ -274,7 +274,7 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
-        let settled = settled.unwrap_or_else(|| {
+        let settled = settled.unwrap_or({
             match self.rcv_settle_mode {
                 ReceiverSettleMode::First => {
                     // If first, this indicates that the receiver MUST settle
@@ -714,9 +714,7 @@ where
                     Some(LinkFrame::Detach(remote_detach)) => {
                         match self.on_incoming_detach(remote_detach).await {
                             Ok(_) => return err,
-                            Err(detach_error) => {
-                                return detach_error.try_into().unwrap_or_else(|_| err)
-                            }
+                            Err(detach_error) => return detach_error.try_into().unwrap_or(err),
                         }
                     }
                     Some(_) => ReceiverAttachError::NonAttachFrameReceived,

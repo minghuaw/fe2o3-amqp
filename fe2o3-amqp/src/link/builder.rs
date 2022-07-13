@@ -23,7 +23,8 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderLink,
+    Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderFlowState,
+    SenderLink, SenderRelayFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -419,12 +420,7 @@ where
         + Send
         + Sync,
 {
-    fn create_flow_state_containers(
-        &mut self,
-    ) -> (
-        Producer<Arc<LinkFlowState<role::Sender>>>,
-        Consumer<Arc<LinkFlowState<role::Sender>>>,
-    ) {
+    fn create_flow_state_containers(&mut self) -> (SenderRelayFlowState, SenderFlowState) {
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -463,7 +459,7 @@ where
 
         // Create Link in Session
         let output_handle =
-            session::allocate_link(&mut session.control, self.name.clone(), link_relay).await?;
+            session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
 
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
@@ -570,7 +566,7 @@ where
         // Create Link in Session
         // Any error here will be on the Session level and thus it should immediately return with an error
         let output_handle =
-            session::allocate_link(&mut session.control, self.name.clone(), link_handle).await?;
+            session::allocate_link(&session.control, self.name.clone(), link_handle).await?;
 
         let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
 

@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    link::LinkAcceptor, session::SessionAcceptor, ConnectionAcceptor, SupportedReceiverSettleModes,
-    SupportedSenderSettleModes, SaslAcceptor,
+    link::LinkAcceptor, session::SessionAcceptor, ConnectionAcceptor, SaslAcceptor,
+    SupportedReceiverSettleModes, SupportedSenderSettleModes,
 };
 
 #[cfg(feature = "transaction")]
@@ -212,7 +212,7 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
     }
 
     /// Sets the SASL acceptor
-    pub fn sasl_acceptor<S>(self, sasl_acceptor: S) -> Builder<ConnectionAcceptor<Tls, S>, M> 
+    pub fn sasl_acceptor<S>(self, sasl_acceptor: S) -> Builder<ConnectionAcceptor<Tls, S>, M>
     where
         S: SaslAcceptor,
     {

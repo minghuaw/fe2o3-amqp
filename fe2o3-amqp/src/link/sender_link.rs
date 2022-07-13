@@ -616,9 +616,7 @@ where
                     Some(LinkFrame::Detach(remote_detach)) => {
                         match self.on_incoming_detach(remote_detach).await {
                             Ok(_) => return err,
-                            Err(detach_error) => {
-                                return detach_error.try_into().unwrap_or_else(|_| err)
-                            }
+                            Err(detach_error) => return detach_error.try_into().unwrap_or(err),
                         }
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
