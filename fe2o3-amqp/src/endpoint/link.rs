@@ -1,6 +1,7 @@
 //! Defines traits for link implementations
 
 use async_trait::async_trait;
+use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
@@ -163,10 +164,10 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_complete_transfer<'a, T>(
+    async fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
-        payload: Payload,
+        payload: P,
     ) -> Result<
         (
             Delivery<T>,
@@ -175,7 +176,8 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         Self::TransferError,
     >
     where
-        T: DecodeIntoMessage + Send;
+        T: DecodeIntoMessage + Send,
+        P: Buf + Send;
 
     async fn dispose(
         &mut self,

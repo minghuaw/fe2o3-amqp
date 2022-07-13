@@ -146,10 +146,10 @@ where
         }
     }
 
-    async fn on_complete_transfer<'a, T>(
+    async fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
-        payload: Payload,
+        payload: P,
     ) -> Result<
         (
             Delivery<T>,
@@ -159,6 +159,7 @@ where
     >
     where
         T: DecodeIntoMessage + Send,
+        P: Buf + Send,
     {
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
@@ -218,7 +219,7 @@ where
                 // disposition from the sender.
                 ReceiverSettleMode::Second => {
                     // Add to unsettled map
-                    let section_offset = rfind_offset_of_complete_message(payload.as_ref())
+                    let section_offset = rfind_offset_of_complete_message(payload.chunk())
                         .ok_or(Self::TransferError::MessageDecodeError)?;
                     let message = T::decode_into_message(payload.reader())
                         .map_err(|_| Self::TransferError::MessageDecodeError)?;
