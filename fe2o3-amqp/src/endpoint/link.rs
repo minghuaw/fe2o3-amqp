@@ -1,5 +1,7 @@
 //! Defines traits for link implementations
 
+use std::io;
+
 use async_trait::async_trait;
 use bytes::Buf;
 use fe2o3_amqp_types::{
@@ -15,7 +17,7 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
-    Payload,
+    Payload, util::AsByteIterator,
 };
 
 use super::{OutputHandle, Settlement};
@@ -177,7 +179,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     >
     where
         T: DecodeIntoMessage + Send,
-        P: Buf + Send;
+        for<'b> P: io::Read + AsByteIterator<'b> + Send + 'a;
 
     async fn dispose(
         &mut self,

@@ -21,7 +21,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload,
+    Payload, util::BytesReader,
 };
 
 use super::{
@@ -63,7 +63,7 @@ macro_rules! or_assign {
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
     pub performative: Transfer,
-    pub buffer: BytesMut,
+    pub buffer: Vec<Payload>,
     pub section_number: u32,
     pub section_offset: u64,
 }
@@ -71,12 +71,12 @@ pub(crate) struct IncompleteTransfer {
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
         let (number, offset) = section_number_and_offset(partial_payload.as_ref());
-        let mut buffer = BytesMut::new();
-        // TODO: anyway to make this not copying the bytes?
-        buffer.extend(partial_payload);
+        // let mut buffer = BytesMut::new();
+        // // TODO: anyway to make this not copying the bytes?
+        // buffer.extend(partial_payload);
         Self {
             performative: transfer,
-            buffer,
+            buffer: vec![partial_payload],
             section_number: number,
             section_offset: offset,
         }
@@ -140,7 +140,7 @@ impl IncompleteTransfer {
             self.section_offset = offset;
         }
 
-        self.buffer.extend(other);
+        self.buffer.push(other);
     }
 }
 
@@ -654,14 +654,17 @@ where
             match self.incomplete_transfer.take() {
                 Some(mut incomplete) => {
                     incomplete.or_assign(transfer)?;
-                    incomplete.buffer.extend(payload);
+                    incomplete.buffer.push(payload);
+                    let complete_payload = BytesReader(incomplete.buffer);
+
                     self.link
-                        .on_complete_transfer(incomplete.performative, incomplete.buffer.freeze())
+                        .on_complete_transfer(incomplete.performative, complete_payload)
                         .await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;
                     // TODO: Is there any way to optimize this?
+                    let payload = BytesReader(payload);
                     // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
                     self.link.on_complete_transfer(transfer, payload).await?
                 }
