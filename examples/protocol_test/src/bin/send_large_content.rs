@@ -40,6 +40,13 @@ impl TestSender {
         )
         .await?;
 
+        // let mut sender = Sender::builder()
+        //     .name("fe2o3-amqp-amqp-large-content-test-sender")
+        //     .target(self.target_addr)
+        //     .max_message_size(1 * MEGABYTE as u64)
+        //     .attach(&mut session)
+        //     .await?;
+
         for message in self.message_iter.into_iter() {
             tracing::info!("sending new message");
             let outcome = sender.send(message).await?;
@@ -190,7 +197,7 @@ async fn main() -> Result<()> {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::DEBUG)
+        .with_max_level(Level::TRACE)
         // .with_max_level(Level::DEBUG)
         // completes the builder.
         .finish();
@@ -199,7 +206,7 @@ async fn main() -> Result<()> {
 
     // let args: Vec<String> = env::args().collect();
     // let test_sender = TestSender::try_from(args)?;
-    let message_iter = create_message_sizes("string", "[1]")?;
+    let message_iter = create_message_sizes("string", "[10, 10, 10, 10]")?;
     let test_sender = TestSender {
         broker_addr: "localhost:5672".to_string(),
         target_addr: "q1".to_string(),

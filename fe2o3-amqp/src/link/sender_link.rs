@@ -212,10 +212,10 @@ where
         } else {
             // Need multiple transfers
             // Number of transfers needed
-            let mut n = payload.len() / self.max_message_size as usize;
-            if payload.len() % self.max_message_size as usize > 0 {
-                n += 1
-            }
+            // let mut n = payload.len() / self.max_message_size as usize;
+            // if payload.len() % self.max_message_size as usize > 0 {
+            //     n += 1
+            // }
 
             // Send the first frame
             let partial = payload.split_to(self.max_message_size as usize);
@@ -237,7 +237,7 @@ where
             send_transfer(writer, input_handle.clone(), transfer, partial).await?;
 
             // Send the transfers in the middle
-            for _ in 1..n - 1 {
+            while payload.len() > self.max_message_size as usize {
                 let partial = payload.split_to(self.max_message_size as usize);
                 let transfer = Transfer {
                     handle: handle.clone(),

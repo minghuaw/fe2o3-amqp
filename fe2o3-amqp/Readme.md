@@ -61,12 +61,14 @@ async fn main() {
     ).await.unwrap();
 
     // Send a message to the broker and wait for outcome (Disposition)
-    sender.send("hello AMQP").await.unwrap();
+    let outcome: Outcome = sender.send("hello AMQP").await.unwrap();
+    outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 
     // Send a message
     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
     // Wait for outcome (Disposition)
-    fut.await.unwrap();
+    let outcome: Outcome = fut.await.unwrap();
+    outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 
     // Receive the message from the broker
     let delivery = receiver.recv::<String>().await.unwrap();
@@ -115,8 +117,8 @@ async fn main() {
 
 ## More examples
 
-More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/protocol_test).
-The example has been used for testing with a local [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
+More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/).
+Please note that most examples requires a local broker running. One broker that can be used on Windows is [TestAmqpBroker](https://azure.github.io/amqpnetlite/articles/hello_amqp.html).
 
 ## Components
 
@@ -149,7 +151,7 @@ The items below are listed in the order of priority.
     - [x] posting
     - [x] retirement
     - [ ] ~~acquisition~~ #43
-- [ ] qpid interoperability test (this will be 0.1.0 release)
+- [x] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test)
 - [ ] Link re-attachment
 - [ ] Message batch disposition
 - [ ] Pipelined open

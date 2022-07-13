@@ -1,5 +1,21 @@
 # Change Log
 
+## 0.1.3
+
+1. Added convenience fn `add_to_filter` to source builder
+
+## 0.1.2
+
+1. Change `serde_amqp` version requirement to "^0.1.1";
+
+## 0.1.1
+
+1. Relaxed `serde_amqp` version requirement to "0.1"  
+
+## 0.1.0
+
+1. Passed `amqp-types-test` and `amqp-large-content-test`
+
 ## 0.0.30
 
 1. Removed `Maybe` type but kept `trait DecodeIntoMessage` for potentially allowing user to customize message decoding
