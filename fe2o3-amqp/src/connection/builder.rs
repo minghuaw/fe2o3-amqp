@@ -325,7 +325,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            tls_connector: tls_connector,
+            tls_connector,
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
@@ -371,7 +371,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            tls_connector: tls_connector,
+            tls_connector,
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
@@ -925,7 +925,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
 
         // Url info will override the builder fields
         self.hostname = url.host_str().map(Into::into);
-        self.scheme = url.scheme().into();
+        self.scheme = url.scheme();
         self.domain = url.domain().map(Into::into);
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);
@@ -951,7 +951,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
-                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
                     Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
                 self.connect_with_stream(tls_stream).await
@@ -1036,7 +1036,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
 
         // Url info will override the builder fields
         self.hostname = url.host_str().map(Into::into);
-        self.scheme = url.scheme().into();
+        self.scheme = url.scheme();
         self.domain = url.domain().map(Into::into);
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);

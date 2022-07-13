@@ -147,14 +147,11 @@ impl Builder {
             link_by_input_handle: BTreeMap::new(),
             delivery_tag_by_id: BTreeMap::new(),
         };
-        // let session = self.into_session(control, outgoing_channel, local_state);
 
-        let txn_session = TxnSession {
+        TxnSession {
             session,
             txn_manager,
-        };
-
-        txn_session
+        }
     }
 
     #[cfg(not(all(feature = "transaction", feature = "acceptor")))]

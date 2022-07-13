@@ -283,7 +283,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
             source: self.source,
-            target: Some(coordinator.into()), // setting target
+            target: Some(coordinator), // setting target
             initial_delivery_count: self.initial_delivery_count,
             max_message_size: self.max_message_size,
             offered_capabilities: self.offered_capabilities,

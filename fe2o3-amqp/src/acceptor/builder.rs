@@ -42,6 +42,12 @@ impl<T> Builder<T, Initialized> {
 // ConnectionAccpetor builder
 // =============================================================================
 
+impl Default for Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Builder<ConnectionAcceptor<(), ()>, Uninitialized> {
     /// Creates a new Builder for `ConnectionAccptor`
     pub fn new() -> Self {
@@ -239,6 +245,12 @@ impl<M, Tls, Sasl> Builder<ConnectionAcceptor<Tls, Sasl>, M> {
 // SessionAcceptor builder
 // =============================================================================
 
+impl Default for Builder<SessionAcceptor, Initialized> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Builder<SessionAcceptor, Initialized> {
     /// Creates a builder for [`SessionAcceptor`]
     pub fn new() -> Self {
@@ -333,6 +345,12 @@ impl Builder<SessionAcceptor, Initialized> {
 // =============================================================================
 // LinkAcceptor builder
 // =============================================================================
+
+impl Default for Builder<LinkAcceptor, Initialized> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Builder<LinkAcceptor, Initialized> {
     /// Creates a new builder for [`LinkAcceptor`]

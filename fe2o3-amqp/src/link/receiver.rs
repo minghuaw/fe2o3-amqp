@@ -429,7 +429,8 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 
-    pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
+    // Wrap in a box to avoid clippy warning large_enum_variant on link acceptor's output
+    pub(crate) incomplete_transfer: Option<Box<IncompleteTransfer>>,
 }
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
@@ -642,7 +643,7 @@ where
                             )
                             .await;
                     }
-                    self.incomplete_transfer = Some(incomplete);
+                    self.incomplete_transfer = Some(Box::new(incomplete));
                 }
             }
 
@@ -653,14 +654,9 @@ where
             match self.incomplete_transfer.take() {
                 Some(mut incomplete) => {
                     incomplete.or_assign(transfer)?;
-                    let IncompleteTransfer {
-                        performative,
-                        mut buffer,
-                        ..
-                    } = incomplete;
-                    buffer.extend(payload);
+                    incomplete.buffer.extend(payload);
                     self.link
-                        .on_complete_transfer(performative, buffer.freeze())
+                        .on_complete_transfer(incomplete.performative, incomplete.buffer.freeze())
                         .await?
                 }
                 None => {
@@ -743,7 +739,7 @@ where
 
         // Send a flow with Drain set to true
         self.link
-            .send_flow(&mut self.outgoing, None, Some(true), false)
+            .send_flow(&self.outgoing, None, Some(true), false)
             .await
     }
 }
