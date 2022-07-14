@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{
@@ -21,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload,
+    Payload, 
 };
 
 use super::{
@@ -63,7 +62,7 @@ macro_rules! or_assign {
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
     pub performative: Transfer,
-    pub buffer: BytesMut,
+    pub buffer: Vec<Payload>,
     pub section_number: u32,
     pub section_offset: u64,
 }
@@ -71,12 +70,12 @@ pub(crate) struct IncompleteTransfer {
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
         let (number, offset) = section_number_and_offset(partial_payload.as_ref());
-        let mut buffer = BytesMut::new();
-        // TODO: anyway to make this not copying the bytes?
-        buffer.extend(partial_payload);
+        // let mut buffer = BytesMut::new();
+        // // TODO: anyway to make this not copying the bytes?
+        // buffer.extend(partial_payload);
         Self {
             performative: transfer,
-            buffer,
+            buffer: vec![partial_payload],
             section_number: number,
             section_offset: offset,
         }
@@ -140,7 +139,7 @@ impl IncompleteTransfer {
             self.section_offset = offset;
         }
 
-        self.buffer.extend(other);
+        self.buffer.push(other);
     }
 }
 
@@ -654,9 +653,10 @@ where
             match self.incomplete_transfer.take() {
                 Some(mut incomplete) => {
                     incomplete.or_assign(transfer)?;
-                    incomplete.buffer.extend(payload);
+                    incomplete.buffer.push(payload);
+
                     self.link
-                        .on_complete_transfer(incomplete.performative, incomplete.buffer.freeze())
+                        .on_complete_transfer(incomplete.performative, incomplete.buffer)
                         .await?
                 }
                 None => {

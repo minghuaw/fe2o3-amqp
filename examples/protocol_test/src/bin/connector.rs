@@ -4,8 +4,8 @@ use fe2o3_amqp::{types::primitives::Value, Connection, Delivery, Receiver, Sende
 use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
-// const SASL_PLAIN: &str = "";
-const SASL_PLAIN: &str = "guest:guest";
+const SASL_PLAIN: &str = "";
+// const SASL_PLAIN: &str = "guest:guest";
 const BASE_ADDR: &str = "localhost:5672";
 
 #[instrument]

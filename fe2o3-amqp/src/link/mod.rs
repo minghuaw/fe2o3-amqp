@@ -5,7 +5,6 @@ mod source;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,

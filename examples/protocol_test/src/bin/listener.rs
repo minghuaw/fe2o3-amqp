@@ -34,7 +34,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
                 let handle = tokio::spawn(async move {
                     tracing::info!("Incoming link is connected (remote: sender, local: receiver");
                     let delivery = recver.recv::<Value>().await.unwrap();
-                    tracing::info!(message = ?delivery.message());
+                    tracing::info!(id = ?delivery.delivery_id());
                     recver.accept(&delivery).await.unwrap();
                     if let Err(e) = recver.close().await {
                         // The remote may close the session
@@ -72,7 +72,7 @@ async fn main() {
     // let connection_acceptor = ConnectionAcceptor::new("test_conn_listener");
     let connection_acceptor = ConnectionAcceptor::builder()
         .container_id("example_connection_acceptor")
-        .sasl_acceptor(SaslPlainMechanism::new("guest", "guest"))
+        // .sasl_acceptor(SaslPlainMechanism::new("guest", "guest"))
         .build();
 
     while let Ok((stream, addr)) = tcp_listener.accept().await {
