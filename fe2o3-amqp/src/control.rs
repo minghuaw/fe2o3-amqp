@@ -87,7 +87,7 @@ pub(crate) enum SessionControl {
 impl std::fmt::Display for SessionControl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SessionControl::End(_) => write!(f, "End"),
+            SessionControl::End(err) => write!(f, "End({:?})", err),
             SessionControl::AllocateLink {
                 link_name: _,
                 link_relay: _,
