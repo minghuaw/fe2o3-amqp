@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
-    Payload, util::AsByteIterator,
+    Payload, util::{AsByteIterator, IntoReader},
 };
 
 use super::{OutputHandle, Settlement};
@@ -179,7 +179,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     >
     where
         T: DecodeIntoMessage + Send,
-        for<'b> P: io::Read + AsByteIterator<'b> + Send + 'a;
+        for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
 
     async fn dispose(
         &mut self,

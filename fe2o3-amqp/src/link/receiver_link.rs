@@ -1,9 +1,7 @@
-use std::io;
-
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::AsByteIterator;
+use crate::util::{AsByteIterator, IntoReader};
 
 use super::*;
 
@@ -163,7 +161,7 @@ where
     >
     where
         T: DecodeIntoMessage + Send,
-        for<'b> P: io::Read + AsByteIterator<'b> + Send + 'a,
+        for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a,
     {
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
@@ -187,7 +185,7 @@ where
         let (message, delivery_state) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
-            let message = T::decode_into_message(payload)
+            let message = T::decode_into_message(payload.into_reader())
                 .map_err(|_| Self::TransferError::MessageDecodeError)?;
             (message, None)
         } else {
@@ -213,7 +211,7 @@ where
                 // once it has arrived without waiting for the sender to settle first.
                 ReceiverSettleMode::First => {
                     // Spontaneously settle the message with an Accept
-                    let message = T::decode_into_message(payload)
+                    let message = T::decode_into_message(payload.into_reader())
                         .map_err(|_| Self::TransferError::MessageDecodeError)?;
 
                     (message, Some(DeliveryState::Accepted(Accepted {})))
@@ -225,7 +223,7 @@ where
                     // Add to unsettled map
                     let section_offset = rfind_offset_of_complete_message(&payload)
                         .ok_or(Self::TransferError::MessageDecodeError)?;
-                    let message = T::decode_into_message(payload)
+                    let message = T::decode_into_message(payload.into_reader())
                         .map_err(|_| Self::TransferError::MessageDecodeError)?;
                     let section_number = message.sections();
 
@@ -336,7 +334,7 @@ where
     let len = b0.len();
     let mut iter = b0.zip(b1.zip(b2));
 
-    iter.rposition(|(b0, (b1, b2))| {
+    iter.rposition(|(&b0, (&b1, &b2))| {
         matches!(
             (b0, b1, b2),
             (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)

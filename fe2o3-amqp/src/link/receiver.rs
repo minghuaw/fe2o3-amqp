@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{
@@ -21,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload, util::BytesReader,
+    Payload, 
 };
 
 use super::{
@@ -655,16 +654,14 @@ where
                 Some(mut incomplete) => {
                     incomplete.or_assign(transfer)?;
                     incomplete.buffer.push(payload);
-                    let complete_payload = BytesReader(incomplete.buffer);
 
                     self.link
-                        .on_complete_transfer(incomplete.performative, complete_payload)
+                        .on_complete_transfer(incomplete.performative, incomplete.buffer)
                         .await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;
                     // TODO: Is there any way to optimize this?
-                    let payload = BytesReader(payload);
                     // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
                     self.link.on_complete_transfer(transfer, payload).await?
                 }
