@@ -1,9 +1,6 @@
 //! Defines traits for link implementations
 
-use std::io;
-
 use async_trait::async_trait;
-use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,

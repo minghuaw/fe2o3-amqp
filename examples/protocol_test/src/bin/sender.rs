@@ -22,40 +22,41 @@ async fn main() {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::TRACE)
+        .with_max_level(Level::DEBUG)
         // .with_max_level(Level::DEBUG)
         // completes the builder.
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let addr = "localhost:5671";
-    let domain = "localhost";
-    let stream = TcpStream::connect(addr).await.unwrap();
-    let connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
-    let connector = tokio_native_tls::TlsConnector::from(connector);
-    let tls_stream = connector.connect(domain, stream).await.unwrap();
+    // let addr = "localhost:5671";
+    // let domain = "localhost";
+    // let stream = TcpStream::connect(addr).await.unwrap();
+    // let connector = native_tls::TlsConnector::builder()
+    //     .danger_accept_invalid_certs(true)
+    //     .build()
+    //     .unwrap();
+    // let connector = tokio_native_tls::TlsConnector::from(connector);
+    // let tls_stream = connector.connect(domain, stream).await.unwrap();
 
-    // let mut connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5671")
+    // let mut connection = Connection::builder()
+    //     .container_id("connection-1")
+    //     .scheme("amqp")
+    //     .max_frame_size(1000)
+    //     .channel_max(9)
+    //     .idle_time_out(50_000 as u32)
+    //     // .sasl_profile(SaslProfile::Plain {
+    //     //     username: "guest".into(),
+    //     //     password: "guest".into(),
+    //     // })
+    //     .open_with_stream(tls_stream)
+    //     // .open("amqp://localhost:5672")
+    //     // .open("amqp://guest:guest@localhost:5672")
+    //     // .open("localhost:5672")
     //     .await
     //     .unwrap();
-    let mut connection = Connection::builder()
-        .container_id("connection-1")
-        .scheme("amqp")
-        .max_frame_size(1000)
-        .channel_max(9)
-        .idle_time_out(50_000 as u32)
-        // .sasl_profile(SaslProfile::Plain {
-        //     username: "guest".into(),
-        //     password: "guest".into(),
-        // })
-        .open_with_stream(tls_stream)
-        // .open("amqp://localhost:5672")
-        // .open("amqp://guest:guest@localhost:5672")
-        // .open("localhost:5672")
+
+    let mut connection = Connection::open("connection-1", "amqp://localhost:5672")
         .await
         .unwrap();
 
