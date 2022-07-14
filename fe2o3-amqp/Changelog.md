@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.3
+
+1. #66. Avoided copying partial payload into the buffer for multi-frame delivery. In a non-scientific test, this improved performance for large content from around 1.2s to 0.8s.
+
 ## 0.1.2
 
 1. Changed `serde_amqp` version requirement to "^0.1.1"
