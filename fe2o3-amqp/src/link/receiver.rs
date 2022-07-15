@@ -27,7 +27,7 @@ use super::{
     builder::{self, WithTarget, WithoutName, WithoutSource},
     delivery::Delivery,
     error::DetachError,
-    receiver_link::section_number_and_offset,
+    receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
@@ -63,20 +63,20 @@ macro_rules! or_assign {
 pub(crate) struct IncompleteTransfer {
     pub performative: Transfer,
     pub buffer: Vec<Payload>,
-    pub section_number: u32,
+    pub section_number: Option<u32>,
     pub section_offset: u64,
 }
 
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
-        let (number, offset) = section_number_and_offset(partial_payload.as_ref());
+        let (number, offset) = count_number_of_sections_and_offset(partial_payload.as_ref());
         // let mut buffer = BytesMut::new();
         // // TODO: anyway to make this not copying the bytes?
         // buffer.extend(partial_payload);
         Self {
             performative: transfer,
             buffer: vec![partial_payload],
-            section_number: number,
+            section_number: Some(number),
             section_offset: offset,
         }
     }
@@ -129,14 +129,22 @@ impl IncompleteTransfer {
     pub fn append(&mut self, other: Payload) {
         // TODO: append section number and re-count section-offset
         // Count section numbers
-        let (number, offset) = section_number_and_offset(other.as_ref());
-        self.section_number += number;
-        if number == 0 {
-            // No new sections has been transmitted
-            self.section_offset += offset;
-        } else {
-            // New section(s) has been transmitted
-            self.section_offset = offset;
+        let (number, offset) = count_number_of_sections_and_offset(other.as_ref());
+        match (&mut self.section_number, number) {
+            (_, 0) => self.section_offset += offset,
+            (None, 1) => {
+                // The first section
+                self.section_number = Some(0);
+                self.section_offset = offset;
+            },
+            (None, _) => {
+                self.section_number = Some(number - 1);
+                self.section_offset = offset;
+            },
+            (Some(val), _) => {
+                *val += number;
+                self.section_offset = offset;
+            }
         }
 
         self.buffer.push(other);
@@ -637,7 +645,7 @@ where
                         self.link
                             .on_incomplete_transfer(
                                 delivery_tag,
-                                incomplete.section_number,
+                                incomplete.section_number.unwrap_or(0),
                                 incomplete.section_offset,
                             )
                             .await;
@@ -650,7 +658,7 @@ where
                         self.link
                             .on_incomplete_transfer(
                                 delivery_tag,
-                                incomplete.section_number,
+                                incomplete.section_number.unwrap_or(0),
                                 incomplete.section_offset,
                             )
                             .await;

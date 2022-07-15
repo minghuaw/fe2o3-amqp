@@ -5,18 +5,18 @@ use crate::util::{AsByteIterator, IntoReader};
 
 use super::*;
 
-const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
-const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
-const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
-const HEADER_CODE: u8 = 0x70;
-const DELIV_ANNOT_CODE: u8 = 0x71;
-const MSG_ANNOT_CODE: u8 = 0x72;
-const PROP_CODE: u8 = 0x73;
-const APP_PROP_CODE: u8 = 0x74;
-const DATA_CODE: u8 = 0x75;
-const AMQP_SEQ_CODE: u8 = 0x76;
-const AMQP_VAL_CODE: u8 = 0x77;
-const FOOTER_CODE: u8 = 0x78;
+pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
+pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
+pub(crate) const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
+pub(crate) const HEADER_CODE: u8 = 0x70;
+pub(crate) const DELIV_ANNOT_CODE: u8 = 0x71;
+pub(crate) const MSG_ANNOT_CODE: u8 = 0x72;
+pub(crate) const PROP_CODE: u8 = 0x73;
+pub(crate) const APP_PROP_CODE: u8 = 0x74;
+pub(crate) const DATA_CODE: u8 = 0x75;
+pub(crate) const AMQP_SEQ_CODE: u8 = 0x76;
+pub(crate) const AMQP_VAL_CODE: u8 = 0x77;
+pub(crate) const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
 impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
@@ -357,7 +357,7 @@ where
 }
 
 /// Count number of sections in encoded message
-pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
+pub(crate) fn count_number_of_sections_and_offset(bytes: &[u8]) -> (u32, u64) {
     let mut last_pos = 0;
     let mut section_numbers = 0;
 
@@ -365,35 +365,39 @@ pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
         .iter()
         .zip(bytes.iter().skip(1).zip(bytes.iter().skip(2)));
     for (i, (&b0, (&b1, &b2))) in iter.enumerate() {
-        match (b0, b1, b2) {
-            (DESCRIBED_TYPE, SMALL_ULONG_TYPE, HEADER_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DELIV_ANNOT_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, MSG_ANNOT_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, PROP_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, APP_PROP_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
-            // Some implementation may use ULong for all u64 numbers
-            | (DESCRIBED_TYPE, ULONG_TYPE, HEADER_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, DELIV_ANNOT_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, MSG_ANNOT_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, PROP_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, APP_PROP_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE) => {
-                section_numbers += 1;
-                last_pos = i;
-            },
-            _ => {}
+        if is_section_header(b0, b1, b2) {
+            section_numbers += 1;
+            last_pos = i;
         }
     }
 
     let offset = bytes.len() - last_pos;
     (section_numbers, offset as u64)
+}
+
+pub(crate) fn is_section_header(b0: u8, b1: u8, b2: u8) -> bool {
+    matches!(
+        (b0, b1, b2),
+        (DESCRIBED_TYPE, SMALL_ULONG_TYPE, HEADER_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DELIV_ANNOT_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, MSG_ANNOT_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, PROP_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, APP_PROP_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
+        // Some implementation may use ULong for all u64 numbers
+        | (DESCRIBED_TYPE, ULONG_TYPE, HEADER_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, DELIV_ANNOT_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, MSG_ANNOT_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, PROP_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, APP_PROP_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE)
+    )
 }
 
 impl ReceiverLink<Target> {
@@ -509,7 +513,7 @@ mod tests {
     };
     use serde_amqp::to_vec;
 
-    use crate::link::receiver_link::section_number_and_offset;
+    use crate::link::receiver_link::count_number_of_sections_and_offset;
 
     #[test]
     fn test_section_numbers() {
@@ -532,7 +536,7 @@ mod tests {
         // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         // message.serialize(&mut serializer).unwrap();
         let buf = to_vec(&Serializable(message)).unwrap();
-        let (nums, offset) = section_number_and_offset(&buf);
+        let (nums, offset) = count_number_of_sections_and_offset(&buf);
         println!("{:?}, {:?}", nums, offset);
     }
 }

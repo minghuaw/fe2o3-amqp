@@ -183,8 +183,7 @@ pub mod types {
     pub use fe2o3_amqp_types::*;
 }
 
-pub use connection::Connection;
-use fe2o3_amqp_types::performatives::Transfer;
+use link::resumption::ResumingDelivery;
 pub use link::{
     delivery::{Delivery, Sendable},
     Receiver, Sender,
@@ -195,5 +194,5 @@ type Payload = bytes::Bytes;
 
 enum AttachExchange {
     Copmplete,
-    Resume(Vec<(Transfer, Payload)>),
+    Resume(Vec<ResumingDelivery>),
 }
