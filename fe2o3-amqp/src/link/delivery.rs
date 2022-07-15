@@ -12,8 +12,8 @@ use pin_project_lite::pin_project;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
-use crate::{Payload, util::AsDeliveryState};
 use crate::{endpoint::Settlement, util::Uninitialized};
+use crate::{util::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
 
@@ -323,7 +323,10 @@ impl UnsettledMessage {
         self.sender.send(self.state)
     }
 
-    pub fn settle_with_state(self, state: Option<DeliveryState>) -> Result<(), Option<DeliveryState>> {
+    pub fn settle_with_state(
+        self,
+        state: Option<DeliveryState>,
+    ) -> Result<(), Option<DeliveryState>> {
         self.sender.send(state)
     }
 }

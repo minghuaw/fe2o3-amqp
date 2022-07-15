@@ -6,7 +6,12 @@ use super::*;
 #[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowError = FlowError;
     type TransferError = LinkStateError;
@@ -443,7 +448,12 @@ async fn send_disposition(
 #[async_trait]
 impl<T> endpoint::LinkAttach for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type AttachError = SenderAttachError;
 
@@ -509,7 +519,12 @@ where
 
 impl<T> endpoint::Link for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     fn role() -> Role {
         Role::Sender
@@ -519,7 +534,12 @@ where
 #[async_trait]
 impl<T> endpoint::LinkExt for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowState = SenderFlowState;
     type Unsettled = ArcSenderUnsettledMap;

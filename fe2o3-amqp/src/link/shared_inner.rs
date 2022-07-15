@@ -28,7 +28,10 @@ pub(crate) trait LinkEndpointInner {
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
 
-    async fn negotiate_attach(&mut self, is_reattaching: bool) -> Result<(), <Self::Link as LinkAttach>::AttachError>;
+    async fn negotiate_attach(
+        &mut self,
+        is_reattaching: bool,
+    ) -> Result<(), <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(
         &mut self,

@@ -159,9 +159,7 @@ pub trait TransactionalRetirement {
     where
         T: Send + Sync,
     {
-        let outcome = Outcome::Rejected(Rejected {
-            error,
-        });
+        let outcome = Outcome::Rejected(Rejected { error });
         self.retire(recver, delivery, outcome).await
     }
 
@@ -569,7 +567,9 @@ impl<'t> Drop for Transaction<'t> {
                                 tracing::error!(error = ?state);
                             }
                         },
-                        Ok(None) => tracing::error!(error = ?ControllerSendError::IllegalDeliveryState),
+                        Ok(None) => {
+                            tracing::error!(error = ?ControllerSendError::IllegalDeliveryState)
+                        }
                         Err(error) => {
                             tracing::error!(?error);
                         }

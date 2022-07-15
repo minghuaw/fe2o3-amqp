@@ -156,7 +156,7 @@ impl LinkAcceptor {
                 .local_sender_acceptor
                 .accept_incoming_attach(&self.shared, remote_attach, session)
                 .await
-                .map( LinkEndpoint::Sender)
+                .map(LinkEndpoint::Sender)
                 .map_err(Into::into),
         }
     }

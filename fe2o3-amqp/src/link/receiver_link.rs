@@ -21,7 +21,12 @@ const FOOTER_CODE: u8 = 0x78;
 #[async_trait]
 impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
-    Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    Tar: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowError = FlowError;
     type TransferError = ReceiverTransferError;
@@ -323,7 +328,7 @@ where
 }
 
 /// Finds offset of a complete message
-fn rfind_offset_of_complete_message<'a, B>(bytes: &'a B) -> Option<u64> 
+fn rfind_offset_of_complete_message<'a, B>(bytes: &'a B) -> Option<u64>
 where
     B: AsByteIterator<'a>,
 {
@@ -535,7 +540,12 @@ mod tests {
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type AttachError = ReceiverAttachError;
 
@@ -614,7 +624,12 @@ where
 
 impl<T> endpoint::Link for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     fn role() -> Role {
         Role::Receiver
@@ -624,7 +639,12 @@ where
 #[async_trait]
 impl<T> endpoint::LinkExt for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowState = ReceiverFlowState;
     type Unsettled = ArcReceiverUnsettledMap;

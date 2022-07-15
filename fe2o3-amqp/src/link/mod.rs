@@ -40,7 +40,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, InputHandle, LinkAttach, LinkDetach, LinkFlow, OutputHandle, Settlement},
     link::delivery::UnsettledMessage,
-    util::{Consumer, Produce, Producer, AsDeliveryState},
+    util::{AsDeliveryState, Consumer, Produce, Producer},
     Payload,
 };
 
@@ -170,10 +170,13 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsDeliveryState + Send + Sync,
 {
-    async fn get_unsettled_map(&self, is_reattaching: bool) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
+    async fn get_unsettled_map(
+        &self,
+        is_reattaching: bool,
+    ) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
         // When reattaching (as opposed to resuming), the unsettled map MUST be null.
         if is_reattaching {
-            return None
+            return None;
         }
 
         let guard = self.unsettled.read().await;
@@ -181,10 +184,11 @@ where
         match guard.len() {
             0 => None,
             _ => Some(
-                guard.iter()
+                guard
+                    .iter()
                     .map(|(key, val)| (key.clone(), val.as_delivery_state().clone()))
-                    .collect()
-            )
+                    .collect(),
+            ),
         }
     }
 
@@ -448,7 +452,7 @@ impl LinkRelay<OutputHandle> {
                 {
                     use serde_amqp::Value;
                     let key = Symbol::from(TXN_ID_KEY);
-                    match flow.properties.as_ref().and_then(|m| m.get(&key)){
+                    match flow.properties.as_ref().and_then(|m| m.get(&key)) {
                         Some(Value::Binary(txn_id)) => {
                             let frame = LinkFrame::Acquisition(txn_id.clone());
                             tx.send(frame).await.map_err(|_| {
@@ -668,7 +672,9 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 mod tests {
     use fe2o3_amqp_types::messaging::Target;
 
-    use crate::link::{state::LinkFlowStateInner, ReceiverLink, sender::SenderInner, receiver::ReceiverInner};
+    use crate::link::{
+        receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,
+    };
 
     use super::SenderLink;
 

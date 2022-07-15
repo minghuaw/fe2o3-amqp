@@ -23,8 +23,8 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderFlowState,
-    SenderLink, SenderRelayFlowState, ArcUnsettledMap,
+    ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError,
+    SenderFlowState, SenderLink, SenderRelayFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -618,8 +618,10 @@ impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
     ) -> Result<Controller, SenderAttachError> {
         use tokio::sync::Mutex;
 
-        self.attach_inner(session, false).await.map(|inner| Controller {
-            inner: Mutex::new(inner),
-        })
+        self.attach_inner(session, false)
+            .await
+            .map(|inner| Controller {
+                inner: Mutex::new(inner),
+            })
     }
 }

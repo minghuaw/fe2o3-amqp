@@ -20,7 +20,8 @@ use crate::{
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
-        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
+        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverFlowState,
+        ReceiverLink,
     },
     session::SessionHandle,
     Receiver,
@@ -91,10 +92,7 @@ where
         remote_attach: Attach,
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
-    ) -> Result<
-        ReceiverInner<ReceiverLink<T>>,
-        ReceiverAttachError,
-    >
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError>
     where
         T: Into<TargetArchetype>
             + TryFrom<TargetArchetype>

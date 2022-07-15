@@ -20,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload, 
+    Payload,
 };
 
 use super::{
@@ -416,7 +416,10 @@ pub struct DetachedReceiver {
 
 impl DetachedReceiver {
     /// Resume the receiver link
-    pub async fn resume<R>(self, session: &mut SessionHandle<R>) -> Result<Receiver, ReceiverAttachError> {
+    pub async fn resume<R>(
+        self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Receiver, ReceiverAttachError> {
         todo!()
     }
 }
@@ -499,7 +502,10 @@ where
         &self.session
     }
 
-    async fn negotiate_attach(&mut self, is_reattaching: bool) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
+    async fn negotiate_attach(
+        &mut self,
+        is_reattaching: bool,
+    ) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
         self.link
             .negotiate_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await

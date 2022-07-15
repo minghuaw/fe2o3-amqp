@@ -14,7 +14,8 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
-    Payload, util::{AsByteIterator, IntoReader},
+    util::{AsByteIterator, IntoReader},
+    Payload,
 };
 
 use super::{OutputHandle, Settlement};
