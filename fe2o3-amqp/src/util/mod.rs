@@ -1,6 +1,7 @@
 //! Common utilities
 
 use bytes::{Buf, buf};
+use fe2o3_amqp_types::messaging::DeliveryState;
 use futures_util::Future;
 use std::io;
 use std::ops::Deref;
@@ -177,6 +178,22 @@ impl<'a> ExactSizeIterator for ByteReaderIter<'a> {
 impl<'a> DoubleEndedIterator for ByteReaderIter<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner.iter_mut().flat_map(|iter| iter.next_back()).next_back()
+    }
+}
+
+pub(crate) trait AsDeliveryState {
+    fn as_delivery_state(&self) -> &Option<DeliveryState>;
+
+    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState>;
+}
+
+impl AsDeliveryState for Option<DeliveryState> {
+    fn as_delivery_state(&self) -> &Option<DeliveryState> {
+        self
+    }
+
+    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
+        self
     }
 }
 

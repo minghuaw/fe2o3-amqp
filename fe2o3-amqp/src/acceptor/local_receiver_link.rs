@@ -20,7 +20,7 @@ use crate::{
         role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
-        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverFlowState,
+        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
     },
     session::SessionHandle,
     Receiver,
@@ -84,7 +84,7 @@ impl<C> LocalReceiverLinkAcceptor<C>
 where
     C: Clone,
 {
-    #[instrument(skip_all)]
+    // #[instrument(skip_all)]
     pub async fn accept_incoming_attach_inner<T>(
         &self,
         shared: &SharedLinkAcceptorFields,
@@ -92,7 +92,7 @@ where
         control: mpsc::Sender<SessionControl>,
         outgoing: mpsc::Sender<LinkFrame>,
     ) -> Result<
-        ReceiverInner<link::Link<role::Receiver, T, ReceiverFlowState, DeliveryState>>,
+        ReceiverInner<ReceiverLink<T>>,
         ReceiverAttachError,
     >
     where
@@ -169,7 +169,7 @@ where
                 None
             });
 
-        let mut link = link::Link::<role::Receiver, T, ReceiverFlowState, DeliveryState> {
+        let mut link = ReceiverLink::<T> {
             role: PhantomData,
             local_state: LinkState::Unattached, // State change will be taken care of in `on_incoming_attach`
             name: remote_attach.name.clone(),

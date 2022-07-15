@@ -144,7 +144,7 @@ where
         {
             let mut lock = self.unsettled.write().await;
             // The same key may be writter multiple times
-            let _ = lock.insert(delivery_tag, state);
+            let _ = lock.insert(delivery_tag, Some(state));
         }
     }
 
@@ -239,7 +239,7 @@ where
                     {
                         let mut lock = self.unsettled.write().await;
                         // There may be records of incomplete delivery
-                        let _ = lock.insert(delivery_tag.clone(), state);
+                        let _ = lock.insert(delivery_tag.clone(), Some(state));
                     }
 
                     // Mode Second requires user to explicitly acknowledge the delivery
@@ -300,7 +300,7 @@ where
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            let _ = lock.insert(delivery_tag.clone(), state.clone());
+            let _ = lock.insert(delivery_tag.clone(), Some(state.clone()));
         }
 
         let disposition = Disposition {
@@ -627,7 +627,7 @@ where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     type FlowState = ReceiverFlowState;
-    type Unsettled = Arc<RwLock<UnsettledMap<DeliveryState>>>;
+    type Unsettled = ArcReceiverUnsettledMap;
     type Target = T;
 
     fn local_state(&self) -> &LinkState {

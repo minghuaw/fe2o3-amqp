@@ -10,11 +10,10 @@ use crate::{
     link::{
         self,
         builder::{WithSource, WithoutName, WithoutTarget},
-        delivery::UnsettledMessage,
         role,
         sender::SenderInner,
         shared_inner::LinkEndpointInnerDetach,
-        Link, LinkStateError, SendError, SenderAttachError, SenderFlowState,
+        LinkStateError, SendError, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
     Sendable,
@@ -24,7 +23,7 @@ use super::ControllerSendError;
 #[cfg(docsrs)]
 use super::{OwnedTransaction, Transaction};
 
-pub(crate) type ControlLink = Link<role::Sender, Coordinator, SenderFlowState, UnsettledMessage>;
+pub(crate) type ControlLink = SenderLink<Coordinator>;
 
 /// Transaction controller
 ///
@@ -49,7 +48,7 @@ pub struct Controller {
 async fn send_on_control_link<T>(
     sender: &mut SenderInner<ControlLink>,
     sendable: Sendable<T>,
-) -> Result<oneshot::Receiver<DeliveryState>, link::SendError>
+) -> Result<oneshot::Receiver<Option<DeliveryState>>, link::SendError>
 where
     T: serde::Serialize,
 {
@@ -123,6 +122,7 @@ impl Controller {
             .await?
             .await
             .map_err(|_| LinkStateError::IllegalSessionState)?
+            .ok_or(ControllerSendError::NonTerminalDeliveryState)?
             .declared_or_else(|state| {
                 if let DeliveryState::Rejected(rejected) = state {
                     ControllerSendError::Rejected(rejected)
@@ -150,6 +150,7 @@ impl Controller {
             .await?
             .await
             .map_err(|_| LinkStateError::IllegalSessionState)?
+            .ok_or(ControllerSendError::NonTerminalDeliveryState)?
             .accepted_or_else(|state| {
                 if let DeliveryState::Rejected(rejected) = state {
                     ControllerSendError::Rejected(rejected)

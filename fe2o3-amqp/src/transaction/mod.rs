@@ -563,12 +563,13 @@ impl<'t> Drop for Transaction<'t> {
                         guard.insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {
-                        Ok(state) => match state {
+                        Ok(Some(state)) => match state {
                             DeliveryState::Accepted(_) => {}
                             _ => {
                                 tracing::error!(error = ?state);
                             }
                         },
+                        Ok(None) => tracing::error!(error = ?ControllerSendError::IllegalDeliveryState),
                         Err(error) => {
                             tracing::error!(?error);
                         }

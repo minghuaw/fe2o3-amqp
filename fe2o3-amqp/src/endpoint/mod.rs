@@ -147,6 +147,6 @@ pub(crate) enum Settlement {
     Settled,
     Unsettled {
         _delivery_tag: [u8; 4],
-        outcome: oneshot::Receiver<DeliveryState>,
+        outcome: oneshot::Receiver<Option<DeliveryState>>,
     },
 }

@@ -315,7 +315,7 @@ where
                     let _ = msg.settle();
                 }
             } else if let Some(msg) = lock.get_mut(&delivery_tag) {
-                *msg.state_mut() = state.clone();
+                *msg.state_mut() = Some(state.clone());
             }
         }
 
@@ -349,7 +349,7 @@ where
                     let _ = msg.settle();
                 }
             } else if let Some(msg) = lock.get_mut(&delivery_tag) {
-                *msg.state_mut() = state.clone();
+                *msg.state_mut() = Some(state.clone());
             }
 
             match (first, last) {
@@ -522,7 +522,7 @@ where
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     type FlowState = SenderFlowState;
-    type Unsettled = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
+    type Unsettled = ArcSenderUnsettledMap;
     type Target = T;
 
     fn local_state(&self) -> &LinkState {

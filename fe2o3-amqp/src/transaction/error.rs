@@ -223,6 +223,10 @@ impl From<IllegalLinkStateError> for PostError {
 type PostResult = Result<Outcome, PostError>;
 
 impl FromDeliveryState for PostResult {
+    fn from_none() -> Self {
+        Err(PostError::IllegalDeliveryState)
+    }
+
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             DeliveryState::Received(_)

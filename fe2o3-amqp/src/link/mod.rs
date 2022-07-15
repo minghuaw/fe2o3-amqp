@@ -40,7 +40,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, InputHandle, LinkAttach, LinkDetach, LinkFlow, OutputHandle, Settlement},
     link::delivery::UnsettledMessage,
-    util::{Consumer, Produce, Producer},
+    util::{Consumer, Produce, Producer, AsDeliveryState},
     Payload,
 };
 
@@ -65,10 +65,11 @@ pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::Sender>>
 pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
 
 /// Type alias for receiver link that ONLY represents the inner state of receiver
-pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, DeliveryState>;
+pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, Option<DeliveryState>>;
 
-pub(crate) type ArcSenderUnsettledMap = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
-pub(crate) type ArcReceiverUnsettledMap = Arc<RwLock<UnsettledMap<DeliveryState>>>;
+pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<UnsettledMap<S>>>;
+pub(crate) type ArcSenderUnsettledMap = ArcUnsettledMap<UnsettledMessage>;
+pub(crate) type ArcReceiverUnsettledMap = ArcUnsettledMap<Option<DeliveryState>>;
 
 // const CLOSED: u8 = 0b0000_0100;
 // const DETACHED: u8 = 0b0000_0010;
@@ -129,7 +130,7 @@ pub mod role {
 ///
 /// M: unsettledMessage type
 #[derive(Debug)]
-pub struct Link<R, T, F, M> {
+pub(crate) struct Link<R, T, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
@@ -159,7 +160,7 @@ pub struct Link<R, T, F, M> {
     // pub(crate) properties: Option<Fields>,
     // pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
     pub(crate) flow_state: F,
-    pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
+    pub(crate) unsettled: ArcUnsettledMap<M>,
 }
 
 impl<R, T, F, M> Link<R, T, F, M>
@@ -167,9 +168,9 @@ where
     R: role::IntoRole + Send + Sync,
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
-    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+    M: AsDeliveryState + Send + Sync,
 {
-    async fn get_unsettled_map(&self, is_reattaching: bool) -> Option<BTreeMap<DeliveryTag, DeliveryState>> {
+    async fn get_unsettled_map(&self, is_reattaching: bool) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
         // When reattaching (as opposed to resuming), the unsettled map MUST be null.
         if is_reattaching {
             return None
@@ -181,7 +182,7 @@ where
             0 => None,
             _ => Some(
                 guard.iter()
-                    .map(|(key, val)| (key.clone(), val.as_ref().clone()))
+                    .map(|(key, val)| (key.clone(), val.as_delivery_state().clone()))
                     .collect()
             )
         }
@@ -261,7 +262,7 @@ where
     R: role::IntoRole + Send + Sync,
     T: Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
-    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+    M: AsDeliveryState + Send + Sync,
 {
     type DetachError = DetachError;
 
@@ -363,7 +364,7 @@ pub(crate) enum LinkRelay<O> {
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
         flow_state: SenderRelayFlowState,
-        unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
+        unsettled: ArcSenderUnsettledMap,
         receiver_settle_mode: ReceiverSettleMode,
         // state_code: Arc<AtomicU8>,
     },
@@ -371,7 +372,7 @@ pub(crate) enum LinkRelay<O> {
         tx: mpsc::Sender<LinkIncomingItem>,
         output_handle: O,
         flow_state: ReceiverFlowState,
-        unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
+        unsettled: ArcReceiverUnsettledMap,
         receiver_settle_mode: ReceiverSettleMode,
         // state_code: Arc<AtomicU8>,
         more: bool,
@@ -522,9 +523,7 @@ impl LinkRelay<OutputHandle> {
                                 .remove(&delivery_tag)
                                 .map(|msg| msg.settle_with_state(state));
                         } else if let Some(msg) = guard.get_mut(&delivery_tag) {
-                            if let Some(state) = state {
-                                *msg.state_mut() = state;
-                            }
+                            *msg.state_mut() = state;
                         }
                     }
 
@@ -556,9 +555,7 @@ impl LinkRelay<OutputHandle> {
                 } else {
                     let mut guard = unsettled.write().await;
                     if let Some(msg_state) = guard.get_mut(&delivery_tag) {
-                        if let Some(state) = state {
-                            *msg_state = state;
-                        }
+                        *msg_state = state;
                     }
                 }
 

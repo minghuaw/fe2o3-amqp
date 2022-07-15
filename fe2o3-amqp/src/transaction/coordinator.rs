@@ -23,7 +23,7 @@ use crate::{
         receiver::ReceiverInner,
         role,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, Link, LinkFrame, ReceiverAttachError, ReceiverFlowState, RecvError,
+        IllegalLinkStateError, Link, LinkFrame, ReceiverAttachError, ReceiverFlowState, RecvError, ReceiverLink,
     },
     util::Running,
     Delivery,
@@ -31,8 +31,7 @@ use crate::{
 
 use super::{control_link_frame::ControlMessageBody, CoordinatorError};
 
-pub(crate) type CoordinatorLink =
-    Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
+pub(crate) type CoordinatorLink = ReceiverLink<Coordinator>;
 
 /// An acceptor that handles incoming control links
 #[derive(Debug, Clone)]

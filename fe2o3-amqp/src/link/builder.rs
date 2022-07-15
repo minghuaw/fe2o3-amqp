@@ -24,7 +24,7 @@ use super::{
     state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
     Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderFlowState,
-    SenderLink, SenderRelayFlowState,
+    SenderLink, SenderRelayFlowState, ArcUnsettledMap,
 };
 
 #[cfg(feature = "transaction")]
@@ -343,7 +343,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
 
     pub(crate) fn create_link<C, M>(
         self,
-        unsettled: Arc<RwLock<UnsettledMap<M>>>,
+        unsettled: ArcUnsettledMap<M>,
         output_handle: OutputHandle,
         flow_state_consumer: C,
         // state_code: Arc<AtomicU8>,
