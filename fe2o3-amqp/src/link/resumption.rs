@@ -10,11 +10,11 @@ pub(crate) struct ResumingDelivery {
     payload: Payload,
 }
 
-fn should_resume_delivery(
-    local: &UnsettledMessage,
-    remote: &Option<DeliveryState>,
+fn resume_delivery(
+    local: UnsettledMessage,
+    remote: Option<DeliveryState>,
 ) -> Result<Option<ResumingDelivery>, SendError> {
-    let outcome = match (local.state(), remote) {
+    let outcome = match (&local.state(), &remote) {
         // Illegal delivery states?
         (_, Some(DeliveryState::Declared(_)))
         | (_, Some(DeliveryState::TransactionalState(_)))
@@ -60,7 +60,13 @@ fn should_resume_delivery(
         (None, Some(DeliveryState::Accepted(_)))
         | (None, Some(DeliveryState::Modified(_)))
         | (None, Some(DeliveryState::Rejected(_)))
-        | (None, Some(DeliveryState::Released(_))) => todo!(),
+        | (None, Some(DeliveryState::Released(_))) => {
+            // This will fail if the oneshot receiver is already dropped
+            // which means the application probably doesn't care about the 
+            // delivery state anyway
+            let _ = local.settle_with_state(remote);
+            None
+        },
 
         // delivery-tag 5 example
         (Some(DeliveryState::Received(_)), None) => todo!(),

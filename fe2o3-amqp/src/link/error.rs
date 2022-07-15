@@ -587,3 +587,28 @@ pub enum BodyError {
     #[error("Body is nothing")]
     IsNothing,
 }
+
+// /// Errors associated with resuming a sender link endpoint
+// #[derive(Debug, thiserror::Error)]
+// pub enum SenderResumeError {
+//     /// Errors found in link state
+//     #[error("Local error: {:?}", .0)]
+//     LinkStateError(#[from] LinkStateError),
+
+//     /// The remote peer detached with error
+//     #[error("Link is detached {:?}", .0)]
+//     Detached(DetachError),
+
+//     /// A non-terminal delivery state is received while expecting
+//     /// an outcome
+//     #[error("A non-terminal delivery state is received when an outcome is expected")]
+//     NonTerminalDeliveryState,
+
+//     /// Transactional state found on non-transactional delivery
+//     #[error("Transactional state found on non-transactional delivery")]
+//     IllegalDeliveryState,
+
+//     /// Error serializing message
+//     #[error("Error encoding message")]
+//     MessageEncodeError,
+// }
