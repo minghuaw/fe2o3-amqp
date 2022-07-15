@@ -456,7 +456,7 @@ impl ReceiverLink<Target> {
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count.clone()),
+                    delivery_count: Some(writer.delivery_count),
                     link_credit: Some(writer.link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),

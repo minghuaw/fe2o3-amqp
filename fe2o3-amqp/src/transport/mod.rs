@@ -45,9 +45,6 @@ pin_project! {
     /// Frame transport
     #[derive(Debug)]
     pub struct Transport<Io, Ftype> {
-        // #[pin]
-        // framed: Framed<Io, LengthDelimitedCodec>,
-
         #[pin]
         framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
 

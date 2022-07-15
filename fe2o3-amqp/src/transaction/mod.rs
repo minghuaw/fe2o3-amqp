@@ -160,7 +160,7 @@ pub trait TransactionalRetirement {
         T: Send + Sync,
     {
         let outcome = Outcome::Rejected(Rejected {
-            error: error.into(),
+            error,
         });
         self.retire(recver, delivery, outcome).await
     }
@@ -188,7 +188,7 @@ pub trait TransactionalRetirement {
     where
         T: Send + Sync,
     {
-        let outcome = Outcome::Modified(modified.into());
+        let outcome = Outcome::Modified(modified);
         self.retire(recver, delivery, outcome).await
     }
 }
@@ -326,7 +326,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
         recver
             .inner
             .dispose(
-                delivery.delivery_id.clone(),
+                delivery.delivery_id,
                 delivery.delivery_tag.clone(),
                 None,
                 state,
@@ -443,7 +443,7 @@ impl<'t> Transaction<'t> {
         match recver
             .inner
             .link
-            .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
+            .send_flow(&recver.inner.outgoing, Some(credit), None, false)
             .await
         {
             Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
@@ -542,7 +542,7 @@ impl<'t> Drop for Transaction<'t> {
                         performative: transfer,
                         payload,
                     };
-                    if let Err(_) = inner.outgoing.blocking_send(frame) {
+                    if inner.outgoing.blocking_send(frame).is_err() {
                         // Channel is already closed
                         return;
                     }
@@ -567,18 +567,15 @@ impl<'t> Drop for Transaction<'t> {
                             DeliveryState::Accepted(_) => {}
                             _ => {
                                 tracing::error!(error = ?state);
-                                return;
                             }
                         },
                         Err(error) => {
                             tracing::error!(?error);
-                            return;
                         }
                     };
                 }
                 Err(error) => {
                     tracing::error!(?error);
-                    return;
                 }
             }
         }

@@ -109,7 +109,7 @@ impl LocalSenderLinkAcceptor<Symbol> {
         // Allocate link in session
         let input_handle = InputHandle::from(remote_attach.handle.clone());
         let output_handle = super::session::allocate_incoming_link(
-            &mut session.control,
+            &session.control,
             remote_attach.name.clone(),
             link_handle,
             input_handle,
@@ -135,7 +135,7 @@ impl LocalSenderLinkAcceptor<Symbol> {
             rcv_settle_mode: Default::default(), // Will take value from incoming attach
             source: local_source,
             target: None, // Will take value from incoming attach
-            max_message_size: shared.max_message_size.unwrap_or_else(|| 0),
+            max_message_size: shared.max_message_size.unwrap_or(0),
             offered_capabilities: shared.offered_capabilities.clone(),
             desired_capabilities: shared.desired_capabilities.clone(),
             flow_state: flow_state_consumer,

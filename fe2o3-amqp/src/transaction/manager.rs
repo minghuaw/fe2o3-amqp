@@ -100,7 +100,7 @@ impl ResourceTransaction {
                 // transactional-state with the correct transaction identified, and a terminal outcome. This
                 // informs the controller of the outcome that will be in effect at the point that the
                 // transaction is successfully discharged.
-                transfer.delivery_id.clone().map(|delivery_id| {
+                transfer.delivery_id.map(|delivery_id| {
                     let txn_state = TransactionalState {
                         txn_id: txn_id.clone(),
                         outcome: Some(Outcome::Accepted(Accepted {})),

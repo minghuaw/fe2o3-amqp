@@ -330,10 +330,11 @@ impl TxnCoordinator {
 impl Drop for TxnCoordinator {
     fn drop(&mut self) {
         for txn_id in self.txn_ids.drain() {
-            if let Err(_) = self
+            if self
                 .inner
                 .session_control()
                 .try_send(SessionControl::AbortTransaction(txn_id))
+                .is_err()
             {
                 // Session must have dropped
                 return;
