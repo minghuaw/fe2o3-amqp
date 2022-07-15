@@ -42,6 +42,7 @@ pub(crate) trait LinkAttach {
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        is_reattaching: bool,
     ) -> Result<(), Self::AttachError>;
 }
 
@@ -75,6 +76,7 @@ pub(crate) trait LinkExt: Link {
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
+        is_reattaching: bool,
     ) -> Result<(), Self::AttachError>;
 
     async fn handle_attach_error(

@@ -405,7 +405,7 @@ impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
         self,
         session: &mut SessionHandle<R>,
     ) -> Result<Sender, SenderAttachError> {
-        self.attach_inner(session)
+        self.attach_inner(session, false)
             .await
             .map(|inner| Sender { inner })
     }
@@ -440,6 +440,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
+        is_reattaching: bool,
     ) -> Result<SenderInner<SenderLink<T>>, SenderAttachError> {
         let buffer_size = self.buffer_size;
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
@@ -467,7 +468,7 @@ where
         // Send an Attach frame
         // super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
         if let Err(attach_error) = link
-            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+            .negotiate_attach(&session.outgoing, &mut incoming_rx, is_reattaching)
             .await
         {
             // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
@@ -513,7 +514,7 @@ impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
         self,
         session: &mut SessionHandle<R>,
     ) -> Result<Receiver, ReceiverAttachError> {
-        self.attach_inner(session)
+        self.attach_inner(session, false)
             .await
             .map(|inner| Receiver { inner })
     }
@@ -531,6 +532,7 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
+        is_reattaching: bool,
     ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
         // TODO: how to avoid clone?
         let buffer_size = self.buffer_size;
@@ -572,7 +574,7 @@ where
 
         // Get writer to session
         if let Err(attach_error) = link
-            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+            .negotiate_attach(&session.outgoing, &mut incoming_rx, is_reattaching)
             .await
         {
             // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
@@ -616,7 +618,7 @@ impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
     ) -> Result<Controller, SenderAttachError> {
         use tokio::sync::Mutex;
 
-        self.attach_inner(session).await.map(|inner| Controller {
+        self.attach_inner(session, false).await.map(|inner| Controller {
             inner: Mutex::new(inner),
         })
     }

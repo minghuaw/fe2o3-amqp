@@ -21,7 +21,7 @@ const FOOTER_CODE: u8 = 0x78;
 #[async_trait]
 impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
-    Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     type FlowError = FlowError;
     type TransferError = ReceiverTransferError;
@@ -535,7 +535,7 @@ mod tests {
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     type AttachError = ReceiverAttachError;
 
@@ -605,15 +605,16 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer).await?;
+        self.send_attach_inner(writer, is_reattaching).await?;
         Ok(())
     }
 }
 
 impl<T> endpoint::Link for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     fn role() -> Role {
         Role::Receiver
@@ -623,7 +624,7 @@ where
 #[async_trait]
 impl<T> endpoint::LinkExt for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send + Sync,
 {
     type FlowState = ReceiverFlowState;
     type Unsettled = Arc<RwLock<UnsettledMap<DeliveryState>>>;
@@ -665,9 +666,10 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
+        is_reattaching: bool,
     ) -> Result<(), ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer).await?;
+        self.send_attach(writer, is_reattaching).await?;
 
         // Wait for remote attach
         let remote_attach = match reader

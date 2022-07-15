@@ -145,9 +145,9 @@ impl LocalSenderLinkAcceptor<Symbol> {
         let outgoing = session.outgoing.clone();
 
         match link.on_incoming_attach(remote_attach).await {
-            Ok(_) => link.send_attach(&outgoing).await?,
+            Ok(_) => link.send_attach(&outgoing, false).await?,
             Err(attach_error) => {
-                link.send_attach(&outgoing).await?;
+                link.send_attach(&outgoing, false).await?;
                 return Err(link
                     .handle_attach_error(
                         attach_error,

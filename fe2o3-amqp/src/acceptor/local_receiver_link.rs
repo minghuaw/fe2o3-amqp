@@ -188,12 +188,12 @@ where
 
         match (err, link.on_incoming_attach(remote_attach).await) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
-                link.send_attach(&outgoing).await?;
+                link.send_attach(&outgoing, false).await?;
                 return Err(link
                     .handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control)
                     .await);
             }
-            (_, Ok(_)) => link.send_attach(&outgoing).await?,
+            (_, Ok(_)) => link.send_attach(&outgoing, false).await?,
         }
 
         let mut inner = ReceiverInner {

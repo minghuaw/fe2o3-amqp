@@ -28,7 +28,7 @@ pub(crate) trait LinkEndpointInner {
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
 
-    async fn negotiate_attach(&mut self) -> Result<(), <Self::Link as LinkAttach>::AttachError>;
+    async fn negotiate_attach(&mut self, is_reattaching: bool) -> Result<(), <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(
         &mut self,
@@ -68,7 +68,7 @@ where
             *self.link_mut().output_handle_mut() = Some(handle);
         }
 
-        match self.negotiate_attach().await {
+        match self.negotiate_attach(true).await {
             Ok(_) => Ok(self),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
         }

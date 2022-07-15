@@ -499,9 +499,9 @@ where
         &self.session
     }
 
-    async fn negotiate_attach(&mut self) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
+    async fn negotiate_attach(&mut self, is_reattaching: bool) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .negotiate_attach(&self.outgoing, &mut self.incoming)
+            .negotiate_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await
     }
 

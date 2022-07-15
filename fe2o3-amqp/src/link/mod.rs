@@ -169,27 +169,26 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
 {
-    pub(crate) async fn send_attach_inner(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-    ) -> Result<(), SendAttachErrorKind> {
-        // Create Attach frame
-        let handle = match &self.output_handle {
-            Some(h) => h.clone(),
-            None => return Err(SendAttachErrorKind::IllegalState),
-        };
-        let unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>> = {
-            let guard = self.unsettled.read().await;
-            match guard.len() {
-                0 => None,
-                _ => Some(
-                    guard
-                        .iter()
-                        .map(|(key, val)| (key.clone(), val.as_ref().clone()))
-                        .collect(),
-                ),
-            }
-        };
+    async fn get_unsettled_map(&self, is_reattaching: bool) -> Option<BTreeMap<DeliveryTag, DeliveryState>> {
+        // When reattaching (as opposed to resuming), the unsettled map MUST be null.
+        if is_reattaching {
+            return None
+        }
+
+        let guard = self.unsettled.read().await;
+
+        match guard.len() {
+            0 => None,
+            _ => Some(
+                guard.iter()
+                    .map(|(key, val)| (key.clone(), val.as_ref().clone()))
+                    .collect()
+            )
+        }
+    }
+
+    async fn as_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
+        let unsettled = self.get_unsettled_map(is_reattaching).await;
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -198,7 +197,7 @@ where
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
         let properties = self.flow_state.as_ref().properties().await;
 
-        let attach = Attach {
+        Attach {
             name: self.name.clone(),
             handle: handle.into(),
             role: R::into_role(),
@@ -218,7 +217,21 @@ where
             offered_capabilities: self.offered_capabilities.clone().map(Into::into),
             desired_capabilities: self.desired_capabilities.clone().map(Into::into),
             properties,
+        }
+    }
+
+    pub(crate) async fn send_attach_inner(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        is_reattaching: bool,
+    ) -> Result<(), SendAttachErrorKind> {
+        // Create Attach frame
+        let handle = match &self.output_handle {
+            Some(h) => h.clone(),
+            None => return Err(SendAttachErrorKind::IllegalState),
         };
+
+        let attach = self.as_attach(handle, is_reattaching).await;
         let frame = LinkFrame::Attach(attach);
 
         match self.local_state {
