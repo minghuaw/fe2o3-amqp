@@ -1,7 +1,5 @@
 //! Implements AMQP1.0 Link
 
-mod frame;
-mod source;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
@@ -14,20 +12,6 @@ use fe2o3_amqp_types::{
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
-pub(crate) use frame::*;
-pub mod builder;
-pub mod delivery;
-mod error;
-pub mod receiver;
-mod receiver_link;
-pub mod sender;
-mod sender_link;
-
-pub(crate) mod state;
-
-pub(crate) mod target_archetype;
-
-pub(crate) mod shared_inner;
 
 pub use error::*;
 
@@ -52,6 +36,21 @@ use self::{
 
 #[cfg(feature = "transaction")]
 use crate::transaction::TXN_ID_KEY;
+
+mod frame;
+pub(crate) use frame::*;
+pub mod builder;
+pub mod delivery;
+mod error;
+pub mod receiver;
+mod receiver_link;
+pub mod sender;
+mod sender_link;
+pub(crate) mod shared_inner;
+mod source;
+pub(crate) mod state;
+pub(crate) mod target_archetype;
+pub(crate) mod resumption;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;

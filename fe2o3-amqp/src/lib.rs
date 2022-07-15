@@ -184,6 +184,7 @@ pub mod types {
 }
 
 pub use connection::Connection;
+use fe2o3_amqp_types::performatives::Transfer;
 pub use link::{
     delivery::{Delivery, Sendable},
     Receiver, Sender,
@@ -191,3 +192,8 @@ pub use link::{
 pub use session::Session;
 
 type Payload = bytes::Bytes;
+
+enum AttachExchange {
+    Copmplete,
+    Resume(Vec<(Transfer, Payload)>),
+}

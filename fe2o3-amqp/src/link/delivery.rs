@@ -307,17 +307,17 @@ impl UnsettledMessage {
         }
     }
 
-    // pub fn state(&self) -> &DeliveryState {
-    //     &self.state
-    // }
+    pub fn state(&self) -> &Option<DeliveryState> {
+        &self.state
+    }
 
     pub fn state_mut(&mut self) -> &mut Option<DeliveryState> {
         &mut self.state
     }
 
-    // pub fn payload(&self) -> &Payload {
-    //     &self._payload
-    // }
+    pub fn payload(&self) -> &Payload {
+        &self.payload
+    }
 
     pub fn settle(self) -> Result<(), Option<DeliveryState>> {
         self.sender.send(self.state)
