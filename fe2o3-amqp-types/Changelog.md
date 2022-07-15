@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.2.0
+
+1. Bug fix
+   1. `Attach`'s unsettled map should allow `Null` for the values
+2. Fixed clippy warnings
+
 ## 0.1.3
 
 1. Added convenience fn `add_to_filter` to source builder
