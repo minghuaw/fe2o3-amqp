@@ -133,6 +133,12 @@ impl SaslAnonymousMechanism {
     }
 }
 
+impl Default for SaslAnonymousMechanism {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SaslAcceptor for SaslAnonymousMechanism {
     fn mechanisms(&self) -> Array<Symbol> {
         Array::from(vec![Symbol::from(ANONYMOUS)])

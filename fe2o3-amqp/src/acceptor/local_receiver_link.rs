@@ -159,9 +159,9 @@ where
             .map(|t| T::try_from(*t))
             .transpose()
             .map(|mut t| {
-                t.as_mut().map(|t| {
-                    *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into)
-                });
+                if let Some(target) = t.as_mut() {
+                    *target.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
+                }
                 t
             })
             .unwrap_or_else(|_| {
@@ -179,7 +179,7 @@ where
             rcv_settle_mode,
             source: None,         // Will take value from incoming attach
             target: local_target, // Will take value from incoming attach
-            max_message_size: shared.max_message_size.unwrap_or_else(|| 0),
+            max_message_size: shared.max_message_size.unwrap_or(0),
             offered_capabilities: shared.offered_capabilities.clone(),
             desired_capabilities: shared.desired_capabilities.clone(),
             flow_state: flow_state_consumer,

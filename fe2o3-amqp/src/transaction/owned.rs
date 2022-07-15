@@ -144,7 +144,7 @@ impl TransactionalRetirement for OwnedTransaction {
         recver
             .inner
             .dispose(
-                delivery.delivery_id.clone(),
+                delivery.delivery_id,
                 delivery.delivery_tag.clone(),
                 None,
                 state,
@@ -244,11 +244,11 @@ impl OwnedTransaction {
     /// Acquire a transactional work
     ///
     /// This will send
-    pub async fn acquire<'r>(
+    pub async fn acquire(
         self,
-        recver: &'r mut Receiver,
+        recver: &mut Receiver,
         credit: SequenceNo,
-    ) -> Result<TxnAcquisition<'r, OwnedTransaction>, FlowError> {
+    ) -> Result<TxnAcquisition<'_, OwnedTransaction>, FlowError> {
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
             let key = Symbol::from(TXN_ID_KEY);
@@ -271,7 +271,7 @@ impl OwnedTransaction {
         match recver
             .inner
             .link
-            .send_flow(&mut recver.inner.outgoing, Some(credit), None, false)
+            .send_flow(&recver.inner.outgoing, Some(credit), None, false)
             .await
         {
             Ok(_) => Ok(TxnAcquisition { txn: self, recver }),

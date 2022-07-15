@@ -280,7 +280,7 @@ where
                     .txns
                     .get_mut(txn_id)
                     .map(|txn| (txn, txn_id.clone()))
-                    .ok_or(definitions::Error::new(
+                    .ok_or_else(|| definitions::Error::new(
                         TransactionError::UnknownId,
                         None,
                         None,

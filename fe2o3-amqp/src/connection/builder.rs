@@ -1062,7 +1062,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
-                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
                     Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector)
                         .await?;

@@ -149,14 +149,14 @@ impl LinkAcceptor {
                 self.local_receiver_acceptor
                     .accept_incoming_attach(&self.shared, remote_attach, session)
                     .await
-                    .map(|receiver| LinkEndpoint::Receiver(receiver))
+                    .map(LinkEndpoint::Receiver)
                     .map_err(Into::into)
             }
             Role::Receiver => self
                 .local_sender_acceptor
                 .accept_incoming_attach(&self.shared, remote_attach, session)
                 .await
-                .map(|sender| LinkEndpoint::Sender(sender))
+                .map( LinkEndpoint::Sender)
                 .map_err(Into::into),
         }
     }

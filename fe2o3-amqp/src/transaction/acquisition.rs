@@ -69,7 +69,7 @@ where
         self.recver
             .inner
             .link
-            .send_flow(&mut self.recver.inner.outgoing, Some(0), Some(true), true)
+            .send_flow(&self.recver.inner.outgoing, Some(0), Some(true), true)
             .await?;
 
         // self.cleaned_up = true;
