@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::BytesMut;
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
     messaging::{
@@ -21,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload,
+    Payload, 
 };
 
 use super::{
@@ -63,7 +62,7 @@ macro_rules! or_assign {
 #[derive(Debug)]
 pub(crate) struct IncompleteTransfer {
     pub performative: Transfer,
-    pub buffer: BytesMut,
+    pub buffer: Vec<Payload>,
     pub section_number: u32,
     pub section_offset: u64,
 }
@@ -71,12 +70,12 @@ pub(crate) struct IncompleteTransfer {
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
         let (number, offset) = section_number_and_offset(partial_payload.as_ref());
-        let mut buffer = BytesMut::new();
-        // TODO: anyway to make this not copying the bytes?
-        buffer.extend(partial_payload);
+        // let mut buffer = BytesMut::new();
+        // // TODO: anyway to make this not copying the bytes?
+        // buffer.extend(partial_payload);
         Self {
             performative: transfer,
-            buffer,
+            buffer: vec![partial_payload],
             section_number: number,
             section_offset: offset,
         }
@@ -140,7 +139,7 @@ impl IncompleteTransfer {
             self.section_offset = offset;
         }
 
-        self.buffer.extend(other);
+        self.buffer.push(other);
     }
 }
 
@@ -436,7 +435,8 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
     pub(crate) incoming: mpsc::Receiver<LinkFrame>,
 
-    pub(crate) incomplete_transfer: Option<IncompleteTransfer>,
+    // Wrap in a box to avoid clippy warning large_enum_variant on link acceptor's output
+    pub(crate) incomplete_transfer: Option<Box<IncompleteTransfer>>,
 }
 
 impl<L: endpoint::ReceiverLink> Drop for ReceiverInner<L> {
@@ -649,7 +649,7 @@ where
                             )
                             .await;
                     }
-                    self.incomplete_transfer = Some(incomplete);
+                    self.incomplete_transfer = Some(Box::new(incomplete));
                 }
             }
 
@@ -660,14 +660,10 @@ where
             match self.incomplete_transfer.take() {
                 Some(mut incomplete) => {
                     incomplete.or_assign(transfer)?;
-                    let IncompleteTransfer {
-                        performative,
-                        mut buffer,
-                        ..
-                    } = incomplete;
-                    buffer.extend(payload);
+                    incomplete.buffer.push(payload);
+
                     self.link
-                        .on_complete_transfer(performative, buffer.freeze())
+                        .on_complete_transfer(incomplete.performative, incomplete.buffer)
                         .await?
                 }
                 None => {
@@ -701,7 +697,7 @@ where
         }
 
         self.link
-            .send_flow(&mut self.outgoing, Some(credit), Some(false), false)
+            .send_flow(&self.outgoing, Some(credit), Some(false), false)
             .await
     }
 
@@ -714,10 +710,9 @@ where
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
-        let _ = self
-            .link
+        self.link
             .dispose(
-                &mut self.outgoing,
+                &self.outgoing,
                 delivery_id,
                 delivery_tag,
                 settled,
@@ -751,7 +746,7 @@ where
 
         // Send a flow with Drain set to true
         self.link
-            .send_flow(&mut self.outgoing, None, Some(true), false)
+            .send_flow(&self.outgoing, None, Some(true), false)
             .await
     }
 }

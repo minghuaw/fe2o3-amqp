@@ -1,5 +1,40 @@
 # Change Log
 
+## 0.1.3
+
+1. #66. Avoided copying partial payload into the buffer for multi-frame delivery. In a non-scientific test, this improved performance for large content from around 1.2s to 0.8s.
+
+## 0.1.2
+
+1. Changed `serde_amqp` version requirement to "^0.1.1"
+2. Changed `fe2o3-amqp-types` version requirement to "^0.1.2"
+3. Relaxed optional dep `uuid` version requirement to "1.1"
+4. Relaxed optional dep `native-tls` version requirement to "0.2"
+
+## 0.1.1
+
+1. Added `SaslAnonymousMechanism` to SASL acceptor
+
+## 0.1.0
+
+1. Passed `amqp-types-test` and `amqp-large-content-test`
+
+## 0.0.32
+
+1. Relaxing `tokio-util` version requirement to `"<=0.7.3"
+
+## 0.0.31
+
+1. Somehow fixed #56 (which is sending multiple 10 MB messages in a row fails on qdrouterd) by
+   - setting the `delivery_id`, `delivery_tag`, `message_format`, `settled`, and `rcv_settle_mode` fields of the intermediate transfer performative to `None` for a multiple transfer delivery at the transport encoder.
+
+## 0.0.30
+
+1. Fixed large content transfer problem by
+   1. Separating the length delimited codec into encoder and decoder to deal with potentially a bug upstream (tokio-rs/tokio#4815)
+   2. The length delimited encoder's max frame length is set to the remote max frame size
+   3. The length delimited decoder's max frame length is set to the local max frame size
+
 ## 0.0.29
 
 1. Updated doc to make it clear that the exposed `max_frame_size` API includes the 8 bytes taken by the frame header

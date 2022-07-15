@@ -435,7 +435,7 @@ where
         let settlement = self
             .link
             .send_payload(
-                &mut self.outgoing,
+                &self.outgoing,
                 detached_fut,
                 payload,
                 message_format,

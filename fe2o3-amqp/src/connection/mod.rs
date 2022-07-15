@@ -276,7 +276,7 @@ pub(crate) async fn deallocate_session(
 /// Start TLS connection negotiation with default TLS connector
 ///
 /// ```rust,ignore
-/// let connector = Connection::open("amqps://guest:guest@localhost:5671").await.unwrap();
+/// let connection = Connection::open("example-connection", "amqps://guest:guest@localhost:5671").await.unwrap();
 /// ```
 ///
 /// Below shows how to use a custom `tokio_rustls::TlsConnector` for TLS.

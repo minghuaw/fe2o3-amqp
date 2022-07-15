@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+
+use serde_amqp::described::Described;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Array, Boolean, Symbol};
+use serde_amqp::Value;
 
 use crate::definitions::{Fields, Seconds};
 
@@ -134,6 +138,19 @@ impl Builder {
         self
     }
 
+    /// Add an entryto the "filter" field
+    pub fn add_to_filter(
+        mut self,
+        key: impl Into<Symbol>,
+        value: impl Into<Option<Described<Value>>>,
+    ) -> Self {
+        self.source
+            .filter
+            .get_or_insert(BTreeMap::new())
+            .insert(key.into(), value.into());
+        self
+    }
+
     /// Set the "default-outcome" field
     pub fn default_outcome(mut self, outcome: Outcome) -> Self {
         self.source.default_outcome = Some(outcome);
@@ -161,22 +178,5 @@ impl Builder {
 impl<T: Into<Address>> From<T> for Source {
     fn from(val: T) -> Self {
         Self::builder().address(val.into()).build()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_amqp::to_vec;
-
-    use super::Source;
-
-    #[test]
-    fn test_serialize_source() {
-        let source = Source::builder()
-            // .address("q1")
-            .build();
-        let buf = to_vec(&source).unwrap();
-        println!("{:#01x?}", buf);
-        // println!("{:#01?}", buf);
     }
 }

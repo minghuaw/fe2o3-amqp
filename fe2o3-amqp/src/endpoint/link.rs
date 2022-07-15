@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
-    Payload,
+    Payload, util::{AsByteIterator, IntoReader},
 };
 
 use super::{OutputHandle, Settlement};
@@ -163,10 +163,10 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_complete_transfer<'a, T>(
+    async fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
-        payload: Payload,
+        payload: P,
     ) -> Result<
         (
             Delivery<T>,
@@ -175,7 +175,8 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         Self::TransferError,
     >
     where
-        T: DecodeIntoMessage + Send;
+        T: DecodeIntoMessage + Send,
+        for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
 
     async fn dispose(
         &mut self,

@@ -20,7 +20,9 @@ pub mod ser;
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     /// Described type
-    Described(Described<Value>),
+    /// 
+    /// Box is used to reduce the memory size of the Value type.
+    Described(Box<Described<Value>>),
 
     /// Indicates an empty value
     ///
@@ -323,7 +325,6 @@ macro_rules! impl_from_for_value {
 }
 
 impl_from_for_value! {
-    Described, Described<Value>,
     Bool, bool,
     UByte, u8,
     UShort, u16,
@@ -344,6 +345,12 @@ impl_from_for_value! {
     Binary, ByteBuf,
     String, String,
     Symbol, Symbol
+}
+
+impl From<Described<Value>> for Value {
+    fn from(value: Described<Value>) -> Self {
+        Self::Described(Box::new(value))
+    }
 }
 
 impl From<f32> for Value {

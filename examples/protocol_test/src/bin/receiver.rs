@@ -70,10 +70,7 @@ async fn main() {
     // let body = delivery.into_body();
     println!("{:?}", delivery.delivery_id());
 
-    if let Err(err) = receiver.close().await {
-        println!("{}", err);
-    }
-
+    receiver.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

@@ -6,20 +6,30 @@ use serde::{de, ser};
 
 use crate::{
     __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    descriptor::Descriptor,
+    descriptor::Descriptor, Value,
 };
 
-/// Contains a Box to descriptor and a Box to value T.
+/// Contains a descriptor and a wrapped value T.
 ///
 /// This should usually be avoided other than in Value type.
-/// Two pointers are used to reduce the memory size of the Value type.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Described<T> {
     /// Descriptor of descriptor
     pub descriptor: Descriptor,
 
     /// Value of described
-    pub value: Box<T>,
+    pub value: T,
+}
+
+impl<T> Described<T> 
+where
+    T: Into<Value>,
+{
+    /// Convert `Described<T>` to `Described<Value>`
+    pub fn into_described_value(self) -> Described<Value> {
+        let value: Value = self.value.into();
+        Described { descriptor: self.descriptor, value: value }
+    }
 }
 
 impl<T: ser::Serialize> ser::Serialize for Described<T> {
@@ -67,7 +77,7 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<'de, T> {
 
         Ok(Described {
             descriptor: descriptor,
-            value: Box::new(value),
+            value: value,
         })
     }
 }

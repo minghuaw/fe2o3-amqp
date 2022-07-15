@@ -2120,43 +2120,4 @@ mod tests {
         let buf = to_vec(&expected).unwrap();
         assert_eq_from_reader_vs_expected(&buf, expected);
     }
-
-    #[test]
-    fn test_simply_taking_byte_buf() {
-        use crate::{Value, to_vec};
-            
-        struct Blob(pub Vec<u8>);
-
-        struct Visitor {}
-
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = Blob;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                writeln!(formatter, "Blob")
-            }
-
-            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(Blob(v))
-            }
-        }
-
-        impl<'de> serde::de::Deserialize<'de> for Blob {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                deserializer.deserialize_byte_buf(Visitor {})
-            }
-        }
-
-        let value = Value::from("hello world");
-        let buf = to_vec(&value).unwrap();
-        println!("{:#x?}", buf);
-        let blob: Blob = from_slice(&buf).unwrap();
-        println!("{:#x?}", blob.0)
-    }
 }

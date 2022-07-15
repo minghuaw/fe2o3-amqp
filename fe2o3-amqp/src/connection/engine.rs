@@ -1,7 +1,6 @@
 //! The engine handles incoming and outgoing frames and messages to reduce
 //! transferring frames/messages over channels
 
-use std::cmp::min;
 use std::io;
 use std::time::Duration;
 
@@ -114,7 +113,7 @@ where
         };
 
         // Handle incoming remote_open
-        let remote_max_frame_size = remote_open.max_frame_size.0;
+        let remote_max_frame_size = remote_open.max_frame_size.0 as usize;
         let remote_idle_timeout = remote_open.idle_time_out;
         if let Err(error) = engine
             .connection
@@ -130,11 +129,11 @@ where
         }
 
         // update transport setting
-        let max_frame_size = min(
-            engine.connection.local_open().max_frame_size.0,
-            remote_max_frame_size,
-        );
-        engine.transport.set_max_frame_size(max_frame_size as usize);
+        let local_max_frame_size = engine.connection.local_open().max_frame_size.0 as usize;
+        engine
+            .transport
+            .set_encoder_max_frame_size(remote_max_frame_size)
+            .set_decoder_max_frame_size(local_max_frame_size);
 
         // Set heartbeat here because in pipelined-open, the Open frame
         // may be recved after mux loop is started
@@ -187,19 +186,11 @@ where
         let channel = IncomingChannel(channel);
         match body {
             FrameBody::Open(open) => {
-                let remote_max_frame_size = open.max_frame_size.0;
                 let remote_idle_timeout = open.idle_time_out;
                 self.connection
                     .on_incoming_open(channel, open)
                     .await
                     .map_err(Into::into)?;
-
-                // update transport setting
-                let max_frame_size = min(
-                    self.connection.local_open().max_frame_size.0,
-                    remote_max_frame_size,
-                );
-                self.transport.set_max_frame_size(max_frame_size as usize);
 
                 // Set heartbeat here because in pipelined-open, the Open frame
                 // may be recved after mux loop is started

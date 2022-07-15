@@ -1,1 +1,1 @@
-fe2o3-amqp/Readme.md
+./fe2o3-amqp/Readme.md

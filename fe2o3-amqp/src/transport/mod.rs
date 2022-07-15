@@ -11,7 +11,7 @@ pub(crate) mod error;
 pub mod protocol_header;
 pub use error::Error;
 use fe2o3_amqp_types::{
-    definitions::{AmqpError, MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
+    definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
 use tracing::{event, instrument, span, trace, Level};
@@ -23,10 +23,8 @@ use std::{convert::TryFrom, io, marker::PhantomData, task::Poll, time::Duration}
 use bytes::BytesMut;
 use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_util::codec::{
-    Decoder, Encoder, Framed, LengthDelimitedCodec, LengthDelimitedCodecError,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::{
     frames::{amqp, sasl},
@@ -47,8 +45,15 @@ pin_project! {
     /// Frame transport
     #[derive(Debug)]
     pub struct Transport<Io, Ftype> {
+        // #[pin]
+        // framed: Framed<Io, LengthDelimitedCodec>,
+
         #[pin]
-        framed: Framed<Io, LengthDelimitedCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
+
+        #[pin]
+        framed_read: FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
+
         #[pin]
         idle_timeout: Option<IdleTimeout>,
         // frame type
@@ -61,21 +66,35 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     /// Consume the transport and return the underlying codec
-    pub fn into_framed_codec(self) -> Framed<Io, LengthDelimitedCodec> {
-        self.framed
+    pub fn into_framed_codec(
+        self,
+    ) -> (
+        FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
+        FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
+    ) {
+        (self.framed_write, self.framed_read)
     }
 
     /// Bind to an IO
     pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
-        let codec = length_delimited_codec(max_frame_size);
-        let framed = Framed::new(io, codec);
+        // let codec = length_delimited_codec(max_frame_size);
+        // let framed = Framed::new(io, codec);
+        let (reader, writer) = tokio::io::split(io);
 
-        Self::bind_to_framed_codec(framed, idle_timeout)
+        let encoder = length_delimited_encoder(max_frame_size);
+        let framed_write = FramedWrite::new(writer, encoder);
+
+        let decoder = length_delimited_decoder(max_frame_size);
+        let framed_read = FramedRead::new(reader, decoder);
+
+        Self::bind_to_framed_codec(framed_write, framed_read, idle_timeout)
     }
 
     /// Bind transport a framed codec
     pub fn bind_to_framed_codec(
-        framed: Framed<Io, LengthDelimitedCodec>,
+        // framed: Framed<Io, LengthDelimitedCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
         idle_timeout: Option<Duration>,
     ) -> Self {
         let idle_timeout = match idle_timeout {
@@ -87,7 +106,8 @@ where
         };
 
         Self {
-            framed,
+            framed_write,
+            framed_read,
             idle_timeout,
             ftype: PhantomData,
         }
@@ -153,22 +173,22 @@ where
     /// This is separate from negotiate_amqp_header because SASL header exchange
     /// doesn't modify the connection state
     pub async fn negotiate_sasl_header(
-        mut framed: Framed<Io, ProtocolHeaderCodec>,
+        // mut framed: Framed<Io, ProtocolHeaderCodec>,
+        mut framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        mut framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<Self, NegotiationError> {
         let span = span!(Level::TRACE, "SEND");
         let proto_header = ProtocolHeader::sasl();
         event!(parent: &span, Level::TRACE, ?proto_header);
-        framed.send(proto_header).await?;
+        framed_write.send(proto_header).await?;
 
         let span = span!(Level::TRACE, "RECV");
-        let incoming_header =
-            framed
-                .next()
-                .await
-                .ok_or(NegotiationError::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Waiting for SASL header exchange",
-                )))??;
+        let incoming_header = framed_read.next().await.ok_or_else(|| {
+            NegotiationError::Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Waiting for SASL header exchange",
+            ))
+        })??;
         event!(parent: &span, Level::TRACE, ?incoming_header);
 
         if !incoming_header.is_sasl()
@@ -181,9 +201,11 @@ where
             ));
         }
 
-        let codec = length_delimited_codec(MIN_MAX_FRAME_SIZE);
-        let framed = framed.map_codec(|_| codec);
-        let transport = Self::bind_to_framed_codec(framed, None);
+        let encoder = length_delimited_encoder(MIN_MAX_FRAME_SIZE);
+        let framed_write = framed_write.map_encoder(|_| encoder);
+        let decoder = length_delimited_decoder(MIN_MAX_FRAME_SIZE);
+        let framed_read = framed_read.map_decoder(|_| decoder);
+        let transport = Self::bind_to_framed_codec(framed_write, framed_read, None);
 
         Ok(transport)
     }
@@ -196,26 +218,50 @@ where
     /// Performs AMQP negotiation
     #[instrument(skip_all)]
     pub async fn negotiate_amqp_header(
-        mut framed: Framed<Io, ProtocolHeaderCodec>,
+        mut framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        mut framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
         local_state: &mut ConnectionState,
         idle_timeout: Option<Duration>,
     ) -> Result<Self, NegotiationError> {
         let proto_header = ProtocolHeader::amqp();
-        send_amqp_proto_header(&mut framed, local_state, proto_header.clone()).await?;
-        let _ = recv_amqp_proto_header(&mut framed, local_state, proto_header).await?;
+        send_amqp_proto_header(&mut framed_write, local_state, proto_header.clone()).await?;
+        let _ = recv_amqp_proto_header(&mut framed_read, local_state, proto_header).await?;
 
-        let codec = length_delimited_codec(MIN_MAX_FRAME_SIZE);
-        let framed = framed.map_codec(|_| codec);
-        let transport = Transport::bind_to_framed_codec(framed, idle_timeout);
+        let encoder = length_delimited_encoder(MIN_MAX_FRAME_SIZE);
+        let framed_write = framed_write.map_encoder(|_| encoder);
+        let decoder = length_delimited_decoder(MIN_MAX_FRAME_SIZE);
+        let framed_read = framed_read.map_decoder(|_| decoder);
+        let transport = Transport::bind_to_framed_codec(framed_write, framed_read, idle_timeout);
 
         Ok(transport)
     }
 
-    /// Change the max_frame_size for the transport
-    pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
+    // /// Change the max_frame_size for the transport
+    // pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
+    //     let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);
+    //     self.framed_write
+    //         .encoder_mut()
+    //         .set_max_frame_length(max_frame_size - 4);
+    //     self.framed_read
+    //         .decoder_mut()
+    //         .set_max_frame_length(max_frame_size);
+    //     self
+    // }
+
+    /// Change the max_frame_size for the transport length delimited encoder
+    pub fn set_decoder_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);
-        self.framed
-            .codec_mut()
+        self.framed_read
+            .decoder_mut()
+            .set_max_frame_length(max_frame_size);
+        self
+    }
+
+    /// Change the max_frame_size for the transport length delimited decoder
+    pub fn set_encoder_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
+        let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);
+        self.framed_write
+            .encoder_mut()
             .set_max_frame_length(max_frame_size - 4);
         self
     }
@@ -233,7 +279,7 @@ where
 }
 
 /// Creates a LengthDelimitedCodec that can handle the AMQP and SASL frames
-fn length_delimited_codec(max_frame_size: usize) -> LengthDelimitedCodec {
+fn length_delimited_encoder(max_frame_size: usize) -> LengthDelimitedCodec {
     LengthDelimitedCodec::builder()
         .big_endian()
         .length_field_length(4)
@@ -244,9 +290,18 @@ fn length_delimited_codec(max_frame_size: usize) -> LengthDelimitedCodec {
         .new_codec()
 }
 
+fn length_delimited_decoder(max_frame_size: usize) -> LengthDelimitedCodec {
+    LengthDelimitedCodec::builder()
+        .big_endian()
+        .length_field_length(4)
+        .max_frame_length(max_frame_size)
+        .length_adjustment(-4)
+        .new_codec()
+}
+
 #[instrument(name = "SEND", skip_all)]
 pub(crate) async fn send_amqp_proto_header<Io>(
-    framed: &mut Framed<Io, ProtocolHeaderCodec>,
+    framed_write: &mut FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
 ) -> Result<(), NegotiationError>
@@ -256,11 +311,11 @@ where
     trace!(?proto_header);
     match local_state {
         ConnectionState::Start => {
-            framed.send(proto_header).await?;
+            framed_write.send(proto_header).await?;
             *local_state = ConnectionState::HeaderSent;
         }
         ConnectionState::HeaderReceived => {
-            framed.send(proto_header).await?;
+            framed_write.send(proto_header).await?;
             *local_state = ConnectionState::HeaderExchange;
         }
         _ => return Err(NegotiationError::IllegalState), // TODO: is this necessary?
@@ -270,7 +325,7 @@ where
 
 #[instrument(name = "RECV", skip_all)]
 async fn recv_amqp_proto_header<Io>(
-    framed: &mut Framed<Io, ProtocolHeaderCodec>,
+    framed_read: &mut FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     local_state: &mut ConnectionState,
     proto_header: ProtocolHeader,
 ) -> Result<ProtocolHeader, NegotiationError>
@@ -281,13 +336,13 @@ where
     let proto_header = match local_state {
         ConnectionState::Start => {
             let incoming_header =
-                read_and_compare_amqp_proto_header(framed, local_state, &proto_header).await?;
+                read_and_compare_amqp_proto_header(framed_read, local_state, &proto_header).await?;
             *local_state = ConnectionState::HeaderReceived;
             incoming_header
         }
         ConnectionState::HeaderSent => {
             let incoming_header =
-                read_and_compare_amqp_proto_header(framed, local_state, &proto_header).await?;
+                read_and_compare_amqp_proto_header(framed_read, local_state, &proto_header).await?;
             *local_state = ConnectionState::HeaderExchange;
             incoming_header
         }
@@ -326,7 +381,7 @@ where
 }
 
 async fn read_and_compare_amqp_proto_header<Io>(
-    framed: &mut Framed<Io, ProtocolHeaderCodec>,
+    framed_read: &mut FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     local_state: &mut ConnectionState,
     proto_header: &ProtocolHeader,
 ) -> Result<ProtocolHeader, NegotiationError>
@@ -334,13 +389,12 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     // check header
-    let incoming_header = framed
-        .next()
-        .await
-        .ok_or(NegotiationError::Io(io::Error::new(
+    let incoming_header = framed_read.next().await.ok_or_else(|| {
+        NegotiationError::Io(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "Waiting for header exchange",
-        )))??;
+        ))
+    })??;
     if incoming_header != *proto_header {
         *local_state = ConnectionState::End;
         return Err(NegotiationError::NotImplemented(Some(format!(
@@ -362,7 +416,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed
+        this.framed_write
             .poll_ready(cx) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
@@ -374,18 +428,18 @@ where
         use std::pin::Pin;
 
         let mut bytesmut = BytesMut::new();
-        let max_frame_size = self.framed.codec().max_frame_length();
+        let max_frame_size = self.framed_write.encoder().max_frame_length();
         let mut encoder = amqp::FrameEncoder::new(max_frame_size);
         encoder.encode(item, &mut bytesmut)?;
 
         while bytesmut.len() > max_frame_size {
             let partial = bytesmut.split_to(max_frame_size);
-            let framed = Pin::new(&mut self.framed);
-            framed.start_send(partial.freeze())?;
+            let writer = Pin::new(&mut self.framed_write);
+            writer.start_send(partial.freeze())?;
         }
 
-        let framed = Pin::new(&mut self.framed);
-        framed
+        let writer = Pin::new(&mut self.framed_write);
+        writer
             .start_send(bytesmut.freeze()) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
@@ -395,7 +449,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed
+        this.framed_write
             .poll_flush(cx) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
@@ -405,7 +459,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed
+        this.framed_write
             .poll_close(cx) // Result<_, std::io::Error>
             .map_err(Into::into)
     }
@@ -424,7 +478,7 @@ where
         let this = self.project();
 
         // First poll codec
-        match this.framed.poll_next(cx) {
+        match this.framed_read.poll_next(cx) {
             Poll::Ready(next) => {
                 if let Some(mut delay) = this.idle_timeout.as_pin_mut() {
                     delay.reset();
@@ -434,19 +488,7 @@ where
                     Some(item) => {
                         let mut src = match item {
                             Ok(b) => b,
-                            Err(err) => {
-                                use std::any::Any;
-                                let any = &err as &dyn Any;
-                                if any.is::<LengthDelimitedCodecError>() {
-                                    // This should be the only error type
-                                    return Poll::Ready(Some(Err(Error::amqp_error(
-                                        AmqpError::FrameSizeTooSmall,
-                                        None,
-                                    ))));
-                                } else {
-                                    return Poll::Ready(Some(Err(err.into())));
-                                }
-                            }
+                            Err(err) => return Poll::Ready(Some(Err(err.into()))),
                         };
                         let mut decoder = amqp::FrameDecoder {};
                         Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
@@ -480,7 +522,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_ready(cx).map_err(Into::into)
+        this.framed_write.poll_ready(cx).map_err(Into::into)
     }
 
     // #[instrument(skip_all)]
@@ -493,7 +535,7 @@ where
         encoder.encode(item, &mut bytesmut)?;
 
         let this = self.project();
-        this.framed
+        this.framed_write
             .start_send(bytesmut.freeze())
             .map_err(Into::into)
     }
@@ -503,7 +545,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_flush(cx).map_err(Into::into)
+        this.framed_write.poll_flush(cx).map_err(Into::into)
     }
 
     fn poll_close(
@@ -511,7 +553,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let this = self.project();
-        this.framed.poll_close(cx).map_err(Into::into)
+        this.framed_write.poll_close(cx).map_err(Into::into)
     }
 }
 
@@ -527,7 +569,7 @@ where
     ) -> Poll<Option<Self::Item>> {
         let this = self.project();
 
-        match this.framed.poll_next(cx) {
+        match this.framed_read.poll_next(cx) {
             Poll::Ready(next) => match next {
                 Some(item) => {
                     let mut src = match item {
@@ -552,7 +594,7 @@ mod tests {
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
     use tokio_test::io::Builder;
-    use tokio_util::codec::{Encoder, Framed, LengthDelimitedCodec};
+    use tokio_util::codec::{Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
     use crate::frames::amqp::FrameEncoder;
 
@@ -587,6 +629,7 @@ mod tests {
         let mut framed = LengthDelimitedCodec::builder()
             .big_endian()
             .length_field_length(4)
+            .max_frame_length(512 + 4)
             .length_adjustment(-4)
             .new_read(reader);
         let outcome = framed.next().await.unwrap().unwrap();
@@ -623,9 +666,12 @@ mod tests {
             .read(&[0, 1, 0, 0])
             .build();
 
-        let framed = Framed::new(mock, ProtocolHeaderCodec::new());
+        let (reader, writer) = tokio::io::split(mock);
+        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+
         let mut local_state = ConnectionState::Start;
-        Transport::negotiate_amqp_header(framed, &mut local_state, None)
+        Transport::negotiate_amqp_header(framed_write, framed_read, &mut local_state, None)
             .await
             .unwrap();
     }

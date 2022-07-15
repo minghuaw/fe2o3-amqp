@@ -217,6 +217,12 @@ impl ProtocolHeaderCodec {
     }
 }
 
+impl Default for ProtocolHeaderCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Encoder<ProtocolHeader> for ProtocolHeaderCodec {
     type Error = io::Error;
 
@@ -246,6 +252,6 @@ impl Decoder for ProtocolHeaderCodec {
         let bytes = src.split_to(8).freeze();
         ProtocolHeader::try_from(bytes)
             .map(Some)
-            .map_err(|b| NegotiationError::ProtocolHeaderMismatch(b))
+            .map_err(NegotiationError::ProtocolHeaderMismatch)
     }
 }

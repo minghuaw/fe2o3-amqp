@@ -31,17 +31,17 @@ pub enum Error {
     FramingError,
 }
 
-impl Error {
-    pub(crate) fn amqp_error(
-        condition: impl Into<AmqpError>,
-        description: impl Into<Option<String>>,
-    ) -> Self {
-        Self::AmqpError {
-            condition: condition.into(),
-            description: description.into(),
-        }
-    }
-}
+// impl Error {
+//     pub(crate) fn amqp_error(
+//         condition: impl Into<AmqpError>,
+//         description: impl Into<Option<String>>,
+//     ) -> Self {
+//         Self::AmqpError {
+//             condition: condition.into(),
+//             description: description.into(),
+//         }
+//     }
+// }
 
 // TODO: What about encode error?
 impl From<serde_amqp::Error> for Error {

@@ -5,7 +5,6 @@ mod source;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::Buf;
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
@@ -59,6 +58,8 @@ pub const DEFAULT_CREDIT: SequenceNo = 200;
 
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
+
+pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::Sender>>>;
 
 /// Type alias for sender link that ONLY represents the inner state of a Sender
 pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
@@ -348,7 +349,7 @@ pub(crate) enum LinkRelay<O> {
         output_handle: O,
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
-        flow_state: Producer<Arc<LinkFlowState<role::Sender>>>,
+        flow_state: SenderRelayFlowState,
         unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
         receiver_settle_mode: ReceiverSettleMode,
         // state_code: Arc<AtomicU8>,
@@ -433,7 +434,7 @@ impl LinkRelay<OutputHandle> {
                 {
                     use serde_amqp::Value;
                     let key = Symbol::from(TXN_ID_KEY);
-                    match flow.properties.as_ref().map(|m| m.get(&key)).flatten() {
+                    match flow.properties.as_ref().and_then(|m| m.get(&key)){
                         Some(Value::Binary(txn_id)) => {
                             let frame = LinkFrame::Acquisition(txn_id.clone());
                             tx.send(frame).await.map_err(|_| {
@@ -655,7 +656,11 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::link::state::LinkFlowStateInner;
+    use fe2o3_amqp_types::messaging::Target;
+
+    use crate::link::{state::LinkFlowStateInner, ReceiverLink, sender::SenderInner, receiver::ReceiverInner};
+
+    use super::SenderLink;
 
     #[tokio::test]
     async fn test_producer_notify() {
@@ -687,5 +692,20 @@ mod tests {
         println!("wait passed");
 
         handle.await.unwrap();
+    }
+
+    #[test]
+    fn test_size_of_sender_and_receiver_links() {
+        let size = std::mem::size_of::<SenderLink<Target>>();
+        println!("SenderLink: {:?}", size);
+
+        let size = std::mem::size_of::<ReceiverLink<Target>>();
+        println!("ReceiverLink: {:?}", size);
+
+        let size = std::mem::size_of::<SenderInner<SenderLink<Target>>>();
+        println!("SenderInner: {:?}", size);
+
+        let size = std::mem::size_of::<ReceiverInner<ReceiverLink<Target>>>();
+        println!("ReceiverInner: {:?}", size);
     }
 }

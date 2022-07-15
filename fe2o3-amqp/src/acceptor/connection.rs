@@ -11,10 +11,10 @@ use fe2o3_amqp_types::{
 };
 use futures_util::{Sink, SinkExt, StreamExt};
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf},
     sync::mpsc::{self, Receiver},
 };
-use tokio_util::codec::Framed;
+use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::instrument;
 
 use crate::{
@@ -176,7 +176,8 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
 
     async fn negotiate_amqp_with_framed<Io>(
         &self,
-        framed: Framed<Io, ProtocolHeaderCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<ListenerConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -186,8 +187,13 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
             .local_open
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
-        let transport =
-            Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
+        let transport = Transport::negotiate_amqp_header(
+            framed_write,
+            framed_read,
+            &mut local_state,
+            idle_timeout,
+        )
+        .await?;
 
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
@@ -220,8 +226,11 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
-        self.negotiate_amqp_with_framed(framed).await
+        let (reader, writer) = tokio::io::split(stream);
+        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+        self.negotiate_amqp_with_framed(framed_write, framed_read)
+            .await
     }
 }
 
@@ -232,12 +241,13 @@ where
     #[instrument(skip_all)]
     async fn negotiate_sasl_with_framed<Io>(
         &self,
-        framed: Framed<Io, ProtocolHeaderCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<ListenerConnectionHandle, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let mut transport = Transport::negotiate_sasl_header(framed).await?;
+        let mut transport = Transport::negotiate_sasl_header(framed_write, framed_read).await?;
 
         // Send mechanisms
         let frame = sasl::Frame::Mechanisms(self.sasl_acceptor.sasl_mechanisms());
@@ -281,10 +291,11 @@ where
 
         // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
         // it should be fine to simply drop it.
-        let framed = transport
-            .into_framed_codec()
-            .map_codec(|_| ProtocolHeaderCodec::new());
-        self.negotiate_amqp_with_framed(framed).await
+        let (framed_write, framed_read) = transport.into_framed_codec();
+        let framed_write = framed_write.map_encoder(|_| ProtocolHeaderCodec::new());
+        let framed_read = framed_read.map_decoder(|_| ProtocolHeaderCodec::new());
+        self.negotiate_amqp_with_framed(framed_write, framed_read)
+            .await
     }
 
     async fn negotiate_sasl_with_stream<Io>(
@@ -294,8 +305,11 @@ where
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
-        self.negotiate_sasl_with_framed(framed).await
+        let (reader, writer) = tokio::io::split(stream);
+        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+        self.negotiate_sasl_with_framed(framed_write, framed_read)
+            .await
     }
 
     async fn negotiate_sasl_challenge<Io>(

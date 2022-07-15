@@ -91,7 +91,7 @@ impl FrameEncoder {
         let writer = (&mut buf).writer();
         let mut buf_serializer = Serializer::from(writer);
         transfer.serialize(&mut buf_serializer)?;
-        let mut remaining_bytes = buf.len() + payload.len();
+        let remaining_bytes = buf.len() + payload.len();
         let more = remaining_bytes > self.max_frame_body_size;
         tracing::debug!(?more);
         if more {
@@ -103,14 +103,34 @@ impl FrameEncoder {
             transfer.serialize(&mut serializer)?;
             let split_index = self.max_frame_body_size - buf.len();
 
-            while remaining_bytes > self.max_frame_body_size {
-                let partial = payload.split_to(split_index);
-                // The transfer performative can be kept the same for the first n-1 frames
+            // Send first frame
+            let partial = payload.split_to(split_index);
+            write_header(dst, channel);
+            dst.put(&buf[..]);
+            dst.put(partial);
 
+            // Send middle frames
+            transfer.delivery_id = None;
+            transfer.delivery_tag = None;
+            transfer.message_format = None;
+            transfer.settled = None;
+            transfer.rcv_settle_mode = None;
+            buf.clear();
+            let writer = (&mut buf).writer();
+            let mut serializer = Serializer::from(writer);
+            transfer.serialize(&mut serializer)?;
+
+            let mut remaining_bytes = buf.len() + payload.len();
+            let split_index = self.max_frame_body_size - buf.len();
+
+            while remaining_bytes > self.max_frame_body_size {
+                // The transfer performative can be kept the same for the first n-1 frames
+                let partial = payload.split_to(split_index);
                 write_header(dst, channel);
                 dst.put(&buf[..]);
                 dst.put(partial);
-                remaining_bytes -= self.max_frame_body_size;
+
+                remaining_bytes = buf.len() + payload.len();
             }
 
             // Send last frame
@@ -208,6 +228,8 @@ impl Decoder for FrameDecoder {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
+
+        tracing::debug!(frame_len=?src.len());
 
         let doff = src.get_u8();
         let ftype = src.get_u8();

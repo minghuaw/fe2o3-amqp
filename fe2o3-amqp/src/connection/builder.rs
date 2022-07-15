@@ -10,11 +10,11 @@ use fe2o3_amqp_types::{
 use futures_util::{SinkExt, StreamExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf},
     net::TcpStream,
     sync::mpsc::{self},
 };
-use tokio_util::codec::Framed;
+use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::instrument;
 use url::Url;
 
@@ -325,7 +325,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            tls_connector: tls_connector,
+            tls_connector,
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
@@ -371,7 +371,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
             desired_capabilities: self.desired_capabilities,
             properties: self.properties,
 
-            tls_connector: tls_connector,
+            tls_connector,
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
@@ -380,7 +380,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     }
 }
 
-impl<'a, Mode> Builder<'a, Mode, ()> {
+impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// The name of the target host
     pub fn hostname(mut self, hostname: impl Into<Option<&'a str>>) -> Self {
         self.hostname = hostname.into();
@@ -403,8 +403,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
     ///
     /// This includes the 8 bytes taken by the frame header
     pub fn max_frame_size(mut self, max_frame_size: impl Into<MaxFrameSize>) -> Self {
-        let max_frame_size = max_frame_size.into();
-        self.max_frame_size = MaxFrameSize::from(max_frame_size);
+        self.max_frame_size = max_frame_size.into();
         self
     }
 
@@ -574,18 +573,22 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     {
         match self.sasl_profile.take() {
             Some(profile) => {
-                let framed = Framed::new(stream, ProtocolHeaderCodec::new());
-                let mut transport = Transport::negotiate_sasl_header(framed).await?;
+                let (reader, writer) = tokio::io::split(stream);
+                let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+                let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+                let mut transport =
+                    Transport::negotiate_sasl_header(framed_write, framed_read).await?;
                 self.negotiate_sasl(&mut transport, profile).await?;
 
                 // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
                 // it should be fine to simply drop it.
-                let framed = transport
-                    .into_framed_codec()
-                    .map_codec(|_| ProtocolHeaderCodec::new());
+                let (framed_write, framed_read) = transport.into_framed_codec();
+                let framed_write = framed_write.map_encoder(|_| ProtocolHeaderCodec::new());
+                let framed_read = framed_read.map_decoder(|_| ProtocolHeaderCodec::new());
 
                 // Then perform AMQP negotiation
-                self.connect_amqp_with_framed(framed).await
+                self.connect_amqp_with_framed(framed_write, framed_read)
+                    .await
             }
             None => self.connect_amqp_with_stream(stream).await,
         }
@@ -593,7 +596,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
     async fn connect_amqp_with_framed<Io>(
         self,
-        framed: Framed<Io, ProtocolHeaderCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -604,8 +608,13 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
             .idle_time_out
             .map(|millis| Duration::from_millis(millis as u64));
         let buffer_size = self.buffer_size;
-        let transport =
-            Transport::negotiate_amqp_header(framed, &mut local_state, idle_timeout).await?;
+        let transport = Transport::negotiate_amqp_header(
+            framed_write,
+            framed_read,
+            &mut local_state,
+            idle_timeout,
+        )
+        .await?;
 
         let local_open = Open::from(self);
 
@@ -634,8 +643,11 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
-        let framed = Framed::new(stream, ProtocolHeaderCodec::new());
-        self.connect_amqp_with_framed(framed).await
+        let (reader, writer) = tokio::io::split(stream);
+        let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+        let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+        self.connect_amqp_with_framed(framed_write, framed_read)
+            .await
     }
 }
 
@@ -913,7 +925,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
 
         // Url info will override the builder fields
         self.hostname = url.host_str().map(Into::into);
-        self.scheme = url.scheme().into();
+        self.scheme = url.scheme();
         self.domain = url.domain().map(Into::into);
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);
@@ -939,7 +951,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
-                let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
                     Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
                 self.connect_with_stream(tls_stream).await
@@ -1024,7 +1036,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
 
         // Url info will override the builder fields
         self.hostname = url.host_str().map(Into::into);
-        self.scheme = url.scheme().into();
+        self.scheme = url.scheme();
         self.domain = url.domain().map(Into::into);
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);
