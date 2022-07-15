@@ -245,9 +245,9 @@ impl<R> LinkFlowState<R> {
         guard.initial_delivery_count = new;
     }
 
-    pub async fn delivery_count(&self) -> SequenceNo {
-        self.lock.read().await.delivery_count
-    }
+    // pub async fn delivery_count(&self) -> SequenceNo {
+    //     self.lock.read().await.delivery_count
+    // }
 
     pub async fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
         let mut guard = self.lock.write().await;

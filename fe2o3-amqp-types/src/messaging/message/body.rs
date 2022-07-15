@@ -1,10 +1,11 @@
-use std::fmt::Display;
+use std::{fmt::Display, marker::PhantomData};
 
-use serde::Serialize;
+use serde::{Serialize, de::{self, VariantAccess}};
 use serde_amqp::Value;
 
-use crate::messaging::{Data, AmqpSequence, AmqpValue};
+use crate::messaging::{AmqpSequence, AmqpValue, Data};
 
+use super::__private::{Serializable, Deserializable};
 
 /// Only one section of Data and one section of AmqpSequence
 /// is supported for now
@@ -18,10 +19,10 @@ pub enum Body<T> {
     Value(AmqpValue<T>),
 
     /// There is no body section at all
-    /// 
+    ///
     /// The core specification states that **at least one** body section should be present in
-    /// the message. However, this is not the way `proton` is implemented, and according to 
-    /// [PROTON-2574](https://issues.apache.org/jira/browse/PROTON-2574), the wording in the 
+    /// the message. However, this is not the way `proton` is implemented, and according to
+    /// [PROTON-2574](https://issues.apache.org/jira/browse/PROTON-2574), the wording in the
     /// core specification was an unintended.
     Nothing,
 }
@@ -29,40 +30,22 @@ pub enum Body<T> {
 impl<T> Body<T> {
     /// Whether the body section is a [`Data`]
     pub fn is_data(&self) -> bool {
-        match self {
-            Body::Data(_) => true,
-            Body::Sequence(_) => false,
-            Body::Value(_) => false,
-            Body::Nothing => false,
-        }
+        matches!(self, Body::Data(_))
     }
 
     /// Whether the body section is a [`AmqpSequence`]
     pub fn is_sequence(&self) -> bool {
-        match self {
-            Body::Data(_) => false,
-            Body::Sequence(_) => true,
-            Body::Value(_) => false,
-            Body::Nothing => false,
-        }
+        matches!(self, Body::Sequence(_))
     }
 
     /// Whether the body section is a [`AmqpValue`]
     pub fn is_value(&self) -> bool {
-        match self {
-            Body::Data(_) => false,
-            Body::Sequence(_) => false,
-            Body::Value(_) => true,
-            Body::Nothing => false,
-        }
+        matches!(self, Body::Value(_))
     }
 
     /// Whether the body section is `Nothing`
     pub fn is_nothing(&self) -> bool {
-        match self {
-            Body::Nothing => true,
-            _ => false,
-        }
+        matches!(self, Body::Nothing)
     }
 }
 
@@ -104,162 +87,152 @@ impl From<Data> for Body<Value> {
     }
 }
 
-mod body {
-    use std::marker::PhantomData;
-
-    use serde::de::{self, VariantAccess};
-
-    use crate::messaging::message::__private::{Serializable, Deserializable};
-
-    use super::*;
-
-    impl<T: Serialize> Serialize for Serializable<Body<T>> {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
-        {
-            self.0.serialize(serializer)
-        }
-    }
-
-    impl<T: Serialize> Serialize for Serializable<&Body<T>> {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
-        {
-            self.0.serialize(serializer)
-        }
-    }
-
-    impl<'de, T> de::Deserialize<'de> for Deserializable<Body<T>>
+impl<T: Serialize> Serialize for Serializable<Body<T>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        T: de::Deserialize<'de>,
+        S: serde::Serializer,
     {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de>,
-        {
-            let value = Body::<T>::deserialize(deserializer)?;
-            Ok(Deserializable(value))
-        }
+        self.0.serialize(serializer)
     }
+}
 
-    impl<T: Serialize> Body<T> {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
-        {
-            match self {
-                Body::Data(data) => data.serialize(serializer),
-                Body::Sequence(seq) => seq.serialize(serializer),
-                Body::Value(val) => val.serialize(serializer),
-                Body::Nothing => ().serialize(serializer),
-            }
-        }
-    }
-
-    struct FieldVisitor {}
-
-    #[derive(Debug)]
-    enum Field {
-        Data,
-        Sequence,
-        Value,
-    }
-
-    impl<'de> de::Visitor<'de> for FieldVisitor {
-        type Value = Field;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("Body variant. One of Vec<Data>, Vec<AmqpSequence>, AmqpValue")
-        }
-
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            match v {
-                "amqp:data:binary" => Ok(Field::Data),
-                "amqp:amqp-sequence:list" => Ok(Field::Sequence),
-                "amqp:amqp-value:*" => Ok(Field::Value),
-                _ => Err(de::Error::custom("Invalid descriptor code")),
-            }
-        }
-
-        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            match v {
-                0x0000_0000_0000_0075 => Ok(Field::Data),
-                0x0000_0000_0000_0076 => Ok(Field::Sequence),
-                0x0000_0000_0000_0077 => Ok(Field::Value),
-                _ => Err(de::Error::custom("Invalid descriptor code")),
-            }
-        }
-    }
-
-    impl<'de> de::Deserialize<'de> for Field {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de>,
-        {
-            deserializer.deserialize_identifier(FieldVisitor {})
-        }
-    }
-
-    struct Visitor<T> {
-        marker: PhantomData<T>,
-    }
-
-    impl<'de, T> de::Visitor<'de> for Visitor<T>
+impl<T: Serialize> Serialize for Serializable<&Body<T>> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        T: de::Deserialize<'de>,
+        S: serde::Serializer,
     {
-        type Value = Body<T>;
+        self.0.serialize(serializer)
+    }
+}
 
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("enum Body")
+impl<'de, T> de::Deserialize<'de> for Deserializable<Body<T>>
+where
+    T: de::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Body::<T>::deserialize(deserializer)?;
+        Ok(Deserializable(value))
+    }
+}
+
+impl<T: Serialize> Body<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Body::Data(data) => data.serialize(serializer),
+            Body::Sequence(seq) => seq.serialize(serializer),
+            Body::Value(val) => val.serialize(serializer),
+            Body::Nothing => ().serialize(serializer),
         }
+    }
+}
 
-        fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-        where
-            A: de::EnumAccess<'de>,
-        {
-            let (val, variant) = data.variant()?;
+struct FieldVisitor {}
 
-            match val {
-                Field::Data => {
-                    let data = variant.newtype_variant()?;
-                    Ok(Body::Data(data))
-                }
-                Field::Sequence => {
-                    let sequence = variant.newtype_variant()?;
-                    Ok(Body::Sequence(sequence))
-                }
-                Field::Value => {
-                    let value = variant.newtype_variant()?;
-                    Ok(Body::Value(value))
-                }
-            }
+#[derive(Debug)]
+enum Field {
+    Data,
+    Sequence,
+    Value,
+}
+
+impl<'de> de::Visitor<'de> for FieldVisitor {
+    type Value = Field;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("Body variant. One of Vec<Data>, Vec<AmqpSequence>, AmqpValue")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        match v {
+            "amqp:data:binary" => Ok(Field::Data),
+            "amqp:amqp-sequence:list" => Ok(Field::Sequence),
+            "amqp:amqp-value:*" => Ok(Field::Value),
+            _ => Err(de::Error::custom("Invalid descriptor code")),
         }
     }
 
-    impl<'de, T> Body<T>
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
     where
-        T: de::Deserialize<'de>,
+        E: de::Error,
     {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de>,
-        {
-            deserializer.deserialize_enum(
-                serde_amqp::__constants::UNTAGGED_ENUM,
-                &["Data", "Sequence", "Value"],
-                Visitor {
-                    marker: PhantomData,
-                },
-            )
+        match v {
+            0x0000_0000_0000_0075 => Ok(Field::Data),
+            0x0000_0000_0000_0076 => Ok(Field::Sequence),
+            0x0000_0000_0000_0077 => Ok(Field::Value),
+            _ => Err(de::Error::custom("Invalid descriptor code")),
         }
+    }
+}
+
+impl<'de> de::Deserialize<'de> for Field {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_identifier(FieldVisitor {})
+    }
+}
+
+struct Visitor<T> {
+    marker: PhantomData<T>,
+}
+
+impl<'de, T> de::Visitor<'de> for Visitor<T>
+where
+    T: de::Deserialize<'de>,
+{
+    type Value = Body<T>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("enum Body")
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::EnumAccess<'de>,
+    {
+        let (val, variant) = data.variant()?;
+
+        match val {
+            Field::Data => {
+                let data = variant.newtype_variant()?;
+                Ok(Body::Data(data))
+            }
+            Field::Sequence => {
+                let sequence = variant.newtype_variant()?;
+                Ok(Body::Sequence(sequence))
+            }
+            Field::Value => {
+                let value = variant.newtype_variant()?;
+                Ok(Body::Value(value))
+            }
+        }
+    }
+}
+
+impl<'de, T> Body<T>
+where
+    T: de::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_enum(
+            serde_amqp::__constants::UNTAGGED_ENUM,
+            &["Data", "Sequence", "Value"],
+            Visitor {
+                marker: PhantomData,
+            },
+        )
     }
 }

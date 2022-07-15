@@ -3,9 +3,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::ReceiverSettleMode,
-    messaging::{DeliveryState, TargetArchetype},
-    performatives::Attach,
+    definitions::ReceiverSettleMode, messaging::TargetArchetype, performatives::Attach,
     primitives::Symbol,
 };
 use tokio::sync::{mpsc, RwLock};
@@ -15,13 +13,10 @@ use crate::{
     control::SessionControl,
     endpoint::{InputHandle, LinkAttach, LinkExt},
     link::{
-        self,
         receiver::{CreditMode, ReceiverInner},
-        role,
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
         target_archetype::TargetArchetypeExt,
-        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverFlowState,
-        ReceiverLink,
+        LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
     },
     session::SessionHandle,
     Receiver,
@@ -85,7 +80,7 @@ impl<C> LocalReceiverLinkAcceptor<C>
 where
     C: Clone,
 {
-    // #[instrument(skip_all)]
+    #[instrument(skip_all)]
     pub async fn accept_incoming_attach_inner<T>(
         &self,
         shared: &SharedLinkAcceptorFields,

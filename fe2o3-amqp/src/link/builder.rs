@@ -21,7 +21,7 @@ use super::{
     receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
-    state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
+    state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
     ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError,
     SenderFlowState, SenderLink, SenderRelayFlowState,

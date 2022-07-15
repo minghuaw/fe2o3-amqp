@@ -21,10 +21,8 @@ use crate::{
     control::SessionControl,
     link::{
         receiver::ReceiverInner,
-        role,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, Link, LinkFrame, ReceiverAttachError, ReceiverFlowState,
-        ReceiverLink, RecvError,
+        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
     util::Running,
     Delivery,
