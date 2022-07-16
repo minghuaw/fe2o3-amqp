@@ -4,16 +4,28 @@ use crate::Payload;
 
 use super::{delivery::UnsettledMessage, receiver_link::is_section_header, SendError};
 
-pub(crate) struct ResumingDelivery {
-    resume: bool,
-    state: Option<DeliveryState>,
-    payload: Payload,
+pub(crate) enum ResumingDelivery {
+    Abort,
+    Resend(Payload),
+    Resume {
+        state: Option<DeliveryState>,
+        payload: Payload,
+    },
 }
 
 fn resume_delivery(
     local: UnsettledMessage,
-    remote: Option<DeliveryState>,
+    remote: Option<Option<DeliveryState>>,
 ) -> Result<Option<ResumingDelivery>, SendError> {
+    // The outer None indicates absence of entry
+    let remote = remote.map(|inner| {
+        // The inner None indicates absence of DeliveryState, which is equivalent to
+        // no recorded data
+        inner.unwrap_or(DeliveryState::Received(Received {
+            section_number: 0,
+            section_offset: 0,
+        }))
+    });
     let outcome = match (&local.state(), &remote) {
         // Illegal delivery states?
         (_, Some(DeliveryState::Declared(_)))
@@ -24,15 +36,13 @@ fn resume_delivery(
         } // TODO: IllegalDeliveryState?
 
         // delivery-tag 1 example
-        (None, None) => {
-            Some(ResumingDelivery {
-                resume: false,
-                state: None,
-                payload: local.payload().clone(), // cloning `Bytes` is cheap
-            })
-        }
+        (None, None) => Some(ResumingDelivery::Resend(local.payload().clone())),
 
-        // delivery-tag 2 example
+        // delivery-tag 2 and 4 example
+        //
+        // delivery-tag 4 has a null in the remote value, which is equivalent to (0,0) Unlike the
+        // case with delivery-tag 1 the resent delivery MUST be sent with the resume flag set to
+        // true and the delivery-tag set to 4
         (
             None,
             Some(DeliveryState::Received(Received {
@@ -46,12 +56,8 @@ fn resume_delivery(
                 *section_offset as usize,
             )
             .unwrap_or(local.payload().clone());
-            Some(ResumingDelivery {
-                resume: true,
-                state: Some(DeliveryState::Received(Received {
-                    section_number: *section_number,
-                    section_offset: *section_offset,
-                })),
+            Some(ResumingDelivery::Resume {
+                state: remote,
                 payload: remaining,
             })
         }
@@ -62,20 +68,57 @@ fn resume_delivery(
         | (None, Some(DeliveryState::Rejected(_)))
         | (None, Some(DeliveryState::Released(_))) => {
             // This will fail if the oneshot receiver is already dropped
-            // which means the application probably doesn't care about the 
+            // which means the application probably doesn't care about the
             // delivery state anyway
             let _ = local.settle_with_state(remote);
             tracing::error!(error = "Delivery handles are already dropped");
             None
-        },
+        }
 
         // delivery-tag 5 example
         (Some(DeliveryState::Received(_)), None) => {
-            Some(ResumingDelivery {
-                resume: false,
-                state: None,
-                payload: local.payload().clone(),
-            })
+            Some(ResumingDelivery::Resend(local.payload().clone()))
+        }
+
+        // delivery-tag 6, 7 and 9 examples
+        (
+            Some(DeliveryState::Received(local_recved)),
+            Some(DeliveryState::Received(remote_recved)),
+        ) => {
+            if local_recved <= remote_recved {
+                // delivery-tag 6 case
+                let remaining = split_off_at_section_and_offset(
+                    local.payload(),
+                    remote_recved.section_number as usize,
+                    remote_recved.section_offset as usize,
+                )
+                .unwrap_or(local.payload().clone());
+                Some(ResumingDelivery::Resume {
+                    state: remote,
+                    payload: remaining,
+                })
+            } else {
+                // delivery-tag 7 and 9 case 
+                // 
+                // delivery-tag 9 has a null in the remote value,
+                // which is equivalent to (0, 0)
+                Some(ResumingDelivery::Abort)
+            }
+        }
+
+        // delivery-tag 8 example
+        //
+        // This is just like case 3
+        (Some(DeliveryState::Received(_)), Some(DeliveryState::Accepted(_)))
+        | (Some(DeliveryState::Received(_)), Some(DeliveryState::Modified(_)))
+        | (Some(DeliveryState::Received(_)), Some(DeliveryState::Rejected(_)))
+        | (Some(DeliveryState::Received(_)), Some(DeliveryState::Released(_))) => {
+            // This will fail if the oneshot receiver is already dropped
+            // which means the application probably doesn't care about the
+            // delivery state anyway
+            let _ = local.settle_with_state(remote);
+            tracing::error!(error = "Delivery handles are already dropped");
+            None
         },
 
         // delivery-tag 10 example
@@ -84,20 +127,11 @@ fn resume_delivery(
         | (Some(DeliveryState::Rejected(_)), None)
         | (Some(DeliveryState::Released(_)), None) => todo!(),
 
-        // delivery-tag 6 and 7 examples
-        (Some(DeliveryState::Received(_)), Some(DeliveryState::Received(_))) => todo!(),
-
         // delivery-tag 11 example
         (Some(DeliveryState::Accepted(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Modified(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Rejected(_)), Some(DeliveryState::Received(_)))
         | (Some(DeliveryState::Released(_)), Some(DeliveryState::Received(_))) => todo!(),
-
-        // delivery-tag 8 example
-        (Some(DeliveryState::Received(_)), Some(DeliveryState::Accepted(_)))
-        | (Some(DeliveryState::Received(_)), Some(DeliveryState::Modified(_)))
-        | (Some(DeliveryState::Received(_)), Some(DeliveryState::Rejected(_)))
-        | (Some(DeliveryState::Received(_)), Some(DeliveryState::Released(_))) => todo!(),
 
         // local_state is terminal, remote state is terminal
         // delivery-tag 13 example

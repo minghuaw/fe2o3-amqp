@@ -482,7 +482,7 @@ impl From<Outcome> for DeliveryState {
 /// <type name="received" class="composite" source="list" provides="delivery-state">
 /// <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord)]
 #[amqp_contract(
     name = "amqp:received:list",
     code = 0x0000_0000_0000_0023,
@@ -747,5 +747,48 @@ mod tests {
         println!("{:#x?}", buf);
         let modified: DeliveryState = from_reader(&buf[..]).unwrap();
         println!("{:?}", modified);
+    }
+
+    #[test]
+    fn test_compare_received() {
+        let smaller = Received {
+            section_number: 0,
+            section_offset: 10,
+        };
+        let larger = Received {
+            section_number: 0,
+            section_offset: 11,
+        };
+        assert!(smaller < larger);
+
+        let smaller = Received {
+            section_number: 0,
+            section_offset: 11,
+        };
+        let larger = Received {
+            section_number: 1,
+            section_offset: 11,
+        };
+        assert!(smaller < larger);
+
+        let smaller = Received {
+            section_number: 0,
+            section_offset: 11,
+        };
+        let larger = Received {
+            section_number: 1,
+            section_offset: 1,
+        };
+        assert!(smaller < larger);
+
+        let smaller = Received {
+            section_number: 1,
+            section_offset: 11,
+        };
+        let larger = Received {
+            section_number: 1,
+            section_offset: 11,
+        };
+        assert!(smaller == larger);
     }
 }
