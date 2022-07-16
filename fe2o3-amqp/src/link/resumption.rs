@@ -65,11 +65,18 @@ fn resume_delivery(
             // which means the application probably doesn't care about the 
             // delivery state anyway
             let _ = local.settle_with_state(remote);
+            tracing::error!(error = "Delivery handles are already dropped");
             None
         },
 
         // delivery-tag 5 example
-        (Some(DeliveryState::Received(_)), None) => todo!(),
+        (Some(DeliveryState::Received(_)), None) => {
+            Some(ResumingDelivery {
+                resume: false,
+                state: None,
+                payload: local.payload().clone(),
+            })
+        },
 
         // delivery-tag 10 example
         (Some(DeliveryState::Accepted(_)), None)

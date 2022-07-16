@@ -183,6 +183,9 @@ pub mod types {
     pub use fe2o3_amqp_types::*;
 }
 
+use std::collections::BTreeMap;
+
+use fe2o3_amqp_types::{definitions::DeliveryTag, messaging::DeliveryState};
 use link::resumption::ResumingDelivery;
 pub use link::{
     delivery::{Delivery, Sendable},
@@ -194,5 +197,6 @@ type Payload = bytes::Bytes;
 
 enum AttachExchange {
     Copmplete,
+    IncompleteUnsettled(BTreeMap<DeliveryTag, Option<DeliveryState>>),
     Resume(Vec<ResumingDelivery>),
 }
