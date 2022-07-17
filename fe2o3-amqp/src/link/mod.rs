@@ -30,6 +30,7 @@ use crate::{
 
 use self::{
     delivery::Delivery,
+    resumption::ResumingDelivery,
     state::{LinkFlowState, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
 };
@@ -67,7 +68,7 @@ pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, Unsettled
 /// Type alias for receiver link that ONLY represents the inner state of receiver
 pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, Option<DeliveryState>>;
 
-pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<UnsettledMap<S>>>;
+pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<Option<UnsettledMap<S>>>>;
 pub(crate) type ArcSenderUnsettledMap = ArcUnsettledMap<UnsettledMessage>;
 pub(crate) type ArcReceiverUnsettledMap = ArcUnsettledMap<Option<DeliveryState>>;
 
@@ -111,20 +112,23 @@ pub mod role {
     }
 }
 
+// pub(crate) struct Transferable {
+//     input_handle: InputHandle,
+//     transfer: Transfer,
+//     payload: Payload,
+// }
+
 pub(crate) enum AttachExchange {
     Copmplete,
-    IncompleteUnsettled {
-        resume: Vec<(InputHandle, Transfer, Payload)>,
-        resend: Vec<(InputHandle, Transfer, Payload)>,
-    },
-    Resume(Vec<(InputHandle, Transfer, Payload)>),
+    IncompleteUnsettled(Vec<(DeliveryTag, ResumingDelivery)>),
+    Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
 
 impl AttachExchange {
     pub fn complete_or<E>(self, err: E) -> Result<(), E> {
         match self {
             Self::Copmplete => Ok(()),
-            _ => Err(err)
+            _ => Err(err),
         }
     }
 }
@@ -191,12 +195,11 @@ where
         }
 
         let guard = self.unsettled.read().await;
-
-        match guard.len() {
+        let map = guard.as_ref()?;
+        match map.len() {
             0 => None,
             _ => Some(
-                guard
-                    .iter()
+                map.iter()
                     .map(|(key, val)| (key.clone(), val.as_delivery_state().clone()))
                     .collect(),
             ),
@@ -546,8 +549,8 @@ impl LinkRelay<OutputHandle> {
                     // receiving end is alive or not
                     {
                         let mut guard = unsettled.write().await;
-                        guard
-                            .remove(&delivery_tag)
+                        guard.as_mut()
+                            .and_then(|m| m.remove(&delivery_tag))
                             .map(|msg| msg.settle_with_state(state));
                     }
                     false
@@ -562,10 +565,10 @@ impl LinkRelay<OutputHandle> {
                         // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
                         if is_terminal {
-                            let _result = guard
-                                .remove(&delivery_tag)
+                            let _result = guard.as_mut()
+                                .and_then(|m| m.remove(&delivery_tag))
                                 .map(|msg| msg.settle_with_state(state));
-                        } else if let Some(msg) = guard.get_mut(&delivery_tag) {
+                        } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
                             *msg.state_mut() = state;
                         }
                     }
@@ -594,10 +597,10 @@ impl LinkRelay<OutputHandle> {
                 if settled {
                     let mut guard = unsettled.write().await;
                     // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
-                    let _state = guard.remove(&delivery_tag);
+                    let _state = guard.as_mut().and_then(|m| m.remove(&delivery_tag));
                 } else {
                     let mut guard = unsettled.write().await;
-                    if let Some(msg_state) = guard.get_mut(&delivery_tag) {
+                    if let Some(msg_state) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
                         *msg_state = state;
                     }
                 }

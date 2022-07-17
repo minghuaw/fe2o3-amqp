@@ -149,7 +149,7 @@ where
         {
             let mut lock = self.unsettled.write().await;
             // The same key may be writter multiple times
-            let _ = lock.insert(delivery_tag, Some(state));
+            let _ = lock.get_or_insert(BTreeMap::new()).insert(delivery_tag, Some(state));
         }
     }
 
@@ -244,7 +244,7 @@ where
                     {
                         let mut lock = self.unsettled.write().await;
                         // There may be records of incomplete delivery
-                        let _ = lock.insert(delivery_tag.clone(), Some(state));
+                        let _ = lock.get_or_insert(BTreeMap::new()).insert(delivery_tag.clone(), Some(state));
                     }
 
                     // Mode Second requires user to explicitly acknowledge the delivery
@@ -305,7 +305,7 @@ where
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            let _ = lock.insert(delivery_tag.clone(), Some(state.clone()));
+            let _ = lock.get_or_insert(BTreeMap::new()).insert(delivery_tag.clone(), Some(state.clone()));
         }
 
         let disposition = Disposition {

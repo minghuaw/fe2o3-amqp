@@ -1,8 +1,8 @@
-use fe2o3_amqp_types::messaging::{DeliveryState, Received};
+use fe2o3_amqp_types::{messaging::{DeliveryState, Received},};
 
-use crate::Payload;
+use crate::{Payload,};
 
-use super::{delivery::UnsettledMessage, receiver_link::is_section_header, SendError};
+use super::{delivery::UnsettledMessage, receiver_link::is_section_header};
 
 pub(crate) enum ResumingDelivery {
     Abort,
@@ -16,10 +16,10 @@ pub(crate) enum ResumingDelivery {
     }
 }
 
-fn resume_delivery(
+pub(crate) fn resume_delivery(
     local: UnsettledMessage,
     remote: Option<Option<DeliveryState>>,
-) -> Result<Option<ResumingDelivery>, SendError> {
+) -> Option<ResumingDelivery> {
     // The outer None indicates absence of entry
     let remote = remote.map(|inner| {
         // The inner None indicates absence of DeliveryState, which is equivalent to
@@ -29,13 +29,13 @@ fn resume_delivery(
             section_offset: 0,
         }))
     });
-    let outcome = match (&local.state(), &remote) {
-        // Illegal delivery states?
+    match (&local.state(), &remote) {
         (_, Some(DeliveryState::Declared(_)))
         | (_, Some(DeliveryState::TransactionalState(_)))
         | (Some(DeliveryState::Declared(_)), _)
         | (Some(DeliveryState::TransactionalState(_)), _) => {
-            return Err(SendError::IllegalDeliveryState)
+            // Illegal delivery states?
+            Some(ResumingDelivery::Abort)
         }
 
         // delivery-tag 1 example
@@ -173,8 +173,7 @@ fn resume_delivery(
         // is the sender’s view that is definitive. The sender thus MUST restate this as the
         // terminal outcome, and the receiver SHOULD then echo this and settle.
         (Some(local_state), Some(_)) => Some(ResumingDelivery::RestateOutcome { local_state: local_state.clone() }),
-    };
-    Ok(outcome)
+    }
 }
 
 fn split_off_at_section_and_offset(

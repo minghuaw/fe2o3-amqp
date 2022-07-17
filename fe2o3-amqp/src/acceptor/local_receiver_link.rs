@@ -124,7 +124,7 @@ where
         let flow_state_consumer = flow_state;
 
         // Comparing unsettled should be taken care of in `on_incoming_attach`
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let unsettled = Arc::new(RwLock::new(None));
         let link_handle = LinkRelay::Receiver {
             tx: incoming_tx,
             output_handle: (),

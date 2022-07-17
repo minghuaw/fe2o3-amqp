@@ -95,7 +95,7 @@ impl LocalSenderLinkAcceptor<Symbol> {
         let flow_state_producer = Producer::new(notifier.clone(), flow_state.clone());
         let flow_state_consumer = Consumer::new(notifier, flow_state);
 
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let unsettled = Arc::new(RwLock::new(None));
         // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Sender {
             tx: incoming_tx,

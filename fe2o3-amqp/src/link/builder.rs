@@ -447,7 +447,7 @@ where
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
         let (producer, consumer) = self.create_flow_state_containers();
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let unsettled = Arc::new(RwLock::new(None));
 
         let link_relay = LinkRelay::new_sender(incoming_tx, producer, unsettled.clone());
         let output_handle =
@@ -532,7 +532,7 @@ where
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
         let (relay_flow_state, flow_state) = self.create_flow_state_containers();
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
+        let unsettled = Arc::new(RwLock::new(None));
 
         let link_relay = LinkRelay::new_receiver(
             incoming_tx,

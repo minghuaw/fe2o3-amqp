@@ -24,6 +24,8 @@
 //! ```
 //!
 
+use std::collections::BTreeMap;
+
 use crate::{
     endpoint::ReceiverLink,
     link::{
@@ -558,7 +560,7 @@ impl<'t> Drop for Transaction<'t> {
                                 return;
                             }
                         };
-                        guard.insert(delivery_tag, unsettled);
+                        guard.get_or_insert(BTreeMap::new()).insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {
                         Ok(Some(state)) => match state {

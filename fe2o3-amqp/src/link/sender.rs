@@ -403,7 +403,7 @@ where
         match outcome {
             AttachExchange::Copmplete => Ok(self),
             //  Re-attach should have None valued unsettled, so this should be invalid
-            AttachExchange::IncompleteUnsettled{..}
+            AttachExchange::IncompleteUnsettled(_)
             | AttachExchange::Resume(_) => Err(SenderAttachError::IllegalState),
         }
     }

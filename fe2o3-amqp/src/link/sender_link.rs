@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::definitions::SequenceNo;
 use futures_util::Future;
 
-use super::*;
+use super::{resumption::resume_delivery, *};
 
 #[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
@@ -285,7 +285,9 @@ where
                 let unsettled = UnsettledMessage::new(payload_copy, tx);
                 {
                     let mut guard = self.unsettled.write().await;
-                    guard.insert(delivery_tag, unsettled);
+                    guard
+                        .get_or_insert(BTreeMap::new())
+                        .insert(delivery_tag, unsettled);
                 }
 
                 Ok(Settlement::Unsettled {
@@ -312,10 +314,10 @@ where
         {
             let mut lock = self.unsettled.write().await;
             if settled {
-                if let Some(msg) = lock.remove(&delivery_tag) {
+                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                     let _ = msg.settle();
                 }
-            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
+            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
                 *msg.state_mut() = Some(state.clone());
             }
         }
@@ -346,10 +348,10 @@ where
         // Find continuous ranges
         for (delivery_id, delivery_tag) in ids_and_tags {
             if settled {
-                if let Some(msg) = lock.remove(&delivery_tag) {
+                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                     let _ = msg.settle();
                 }
-            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
+            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
                 *msg.state_mut() = Some(state.clone());
             }
 
@@ -441,6 +443,42 @@ async fn send_disposition(
         .map_err(|_| IllegalLinkStateError::IllegalSessionState)
 }
 
+impl<T> SenderLink<T> {
+    async fn handle_unsettled(
+        &mut self,
+        remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+        incomplete_unsettled: bool,
+    ) -> Result<AttachExchange, SenderAttachError> {
+        let mut guard = self.unsettled.write().await;
+        // let is_empty = guard.as_ref().map_or_else(|| true, |m| m.is_empty());
+        let v = match (guard.take(), remote_unsettled) {
+            (None, None) => return Ok(AttachExchange::Copmplete),
+            (None, Some(remote_map)) => remote_map
+                .into_iter()
+                .map(|(delivery_tag, _)| (delivery_tag, ResumingDelivery::Abort))
+                .collect(),
+            (Some(map), None) => {
+                if map.is_empty() {
+                    return Ok(AttachExchange::Copmplete);
+                } else {
+                    map.into_iter()
+                        .filter_map(|(tag, unsettled_msg)| {
+                            resume_delivery(unsettled_msg, None).map(|resume| (tag, resume))
+                        })
+                        .collect()
+                }
+            }
+            (Some(_), Some(_)) => todo!(),
+        };
+
+        if incomplete_unsettled {
+            Ok(AttachExchange::IncompleteUnsettled(v))
+        } else {
+            Ok(AttachExchange::Resume(v))
+        }
+    }
+}
+
 #[async_trait]
 impl<T> endpoint::LinkAttach for SenderLink<T>
 where
@@ -453,7 +491,10 @@ where
 {
     type AttachError = SenderAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<AttachExchange, Self::AttachError> {
+    async fn on_incoming_attach(
+        &mut self,
+        remote_attach: Attach,
+    ) -> Result<AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
         match self.local_state {
@@ -499,6 +540,12 @@ where
 
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
+
+        {
+            if remote_attach.incomplete_unsettled {
+            } else {
+            }
+        }
 
         Ok(AttachExchange::Copmplete)
     }
