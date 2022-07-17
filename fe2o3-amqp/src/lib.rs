@@ -196,18 +196,3 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{definitions::DeliveryTag, messaging::DeliveryState};
 use link::resumption::ResumingDelivery;
-
-enum AttachExchange {
-    Copmplete,
-    IncompleteUnsettled(BTreeMap<DeliveryTag, Option<DeliveryState>>),
-    Resume(Vec<ResumingDelivery>),
-}
-
-impl AttachExchange {
-    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
-        match self {
-            Self::Copmplete => Ok(()),
-            _ => Err(err)
-        }
-    }
-}

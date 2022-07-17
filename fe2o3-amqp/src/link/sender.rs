@@ -18,7 +18,7 @@ use fe2o3_amqp_types::{
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt, Settlement},
-    session::SessionHandle, AttachExchange,
+    session::SessionHandle, 
 };
 
 use super::{
@@ -28,7 +28,7 @@ use super::{
     role,
     shared_inner::{recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
-    SenderFlowState, SenderLink,
+    SenderFlowState, SenderLink, AttachExchange,
 };
 
 /// An AMQP1.0 sender
@@ -402,7 +402,8 @@ where
     fn handle_reattach_outcome(&mut self, outcome: AttachExchange) -> Result<&mut Self, L::AttachError> {
         match outcome {
             AttachExchange::Copmplete => Ok(self),
-            AttachExchange::IncompleteUnsettled(_)
+            //  Re-attach should have None valued unsettled, so this should be invalid
+            AttachExchange::IncompleteUnsettled{..}
             | AttachExchange::Resume(_) => Err(SenderAttachError::IllegalState),
         }
     }

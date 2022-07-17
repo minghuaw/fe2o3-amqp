@@ -20,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload, AttachExchange,
+    Payload, 
 };
 
 use super::{
@@ -32,7 +32,7 @@ use super::{
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
     LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
-    RecvError, DEFAULT_CREDIT,
+    RecvError, DEFAULT_CREDIT, AttachExchange,
 };
 
 #[cfg(feature = "transaction")]
@@ -555,7 +555,8 @@ where
     fn handle_reattach_outcome(&mut self, outcome: AttachExchange) -> Result<&mut Self, L::AttachError> {
         match outcome {
             AttachExchange::Copmplete => Ok(self),
-            AttachExchange::IncompleteUnsettled(_)
+            //  Re-attach should have None valued unsettled, so this should be invalid
+            AttachExchange::IncompleteUnsettled{..}
             | AttachExchange::Resume(_) => Err(ReceiverAttachError::IllegalState),
         }
     }

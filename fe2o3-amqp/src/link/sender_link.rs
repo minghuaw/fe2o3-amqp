@@ -1,8 +1,6 @@
 use fe2o3_amqp_types::definitions::SequenceNo;
 use futures_util::Future;
 
-use crate::AttachExchange;
-
 use super::*;
 
 #[async_trait]
@@ -192,10 +190,6 @@ where
         // Check message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
-
-        tracing::debug!(max_message_size=?self.max_message_size);
-        tracing::debug!(payload_len=?payload.len());
-        tracing::debug!(?more);
 
         if !more {
             let transfer = Transfer {

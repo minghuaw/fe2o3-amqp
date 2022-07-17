@@ -6,10 +6,9 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::{self, AllocLinkError},
-    AttachExchange,
 };
 
-use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
+use super::{state::LinkState, DetachError, LinkFrame, LinkRelay, AttachExchange};
 
 #[async_trait]
 pub(crate) trait LinkEndpointInner {

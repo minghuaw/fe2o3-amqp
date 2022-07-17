@@ -109,13 +109,24 @@ pub mod role {
             Role::Receiver
         }
     }
+}
 
-    // #[cfg(feature = "transaction")]
-    // impl IntoRole for Controller {
-    //     fn into_role() -> Role {
-    //         Role::Sender
-    //     }
-    // }
+pub(crate) enum AttachExchange {
+    Copmplete,
+    IncompleteUnsettled {
+        resume: Vec<(InputHandle, Transfer, Payload)>,
+        resend: Vec<(InputHandle, Transfer, Payload)>,
+    },
+    Resume(Vec<(InputHandle, Transfer, Payload)>),
+}
+
+impl AttachExchange {
+    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+        match self {
+            Self::Copmplete => Ok(()),
+            _ => Err(err)
+        }
+    }
 }
 
 /// Manages the link state
