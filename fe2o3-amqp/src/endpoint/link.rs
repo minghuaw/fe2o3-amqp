@@ -15,7 +15,7 @@ use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
     util::{AsByteIterator, IntoReader},
-    Payload,
+    Payload, AttachExchange,
 };
 
 use super::{OutputHandle, Settlement};
@@ -38,7 +38,7 @@ pub(crate) trait LinkDetach {
 pub(crate) trait LinkAttach {
     type AttachError: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<AttachExchange, Self::AttachError>;
 
     async fn send_attach(
         &mut self,
@@ -73,12 +73,12 @@ pub(crate) trait LinkExt: Link {
 
     fn target(&self) -> &Option<Self::Target>;
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         is_reattaching: bool,
-    ) -> Result<(), Self::AttachError>;
+    ) -> Result<AttachExchange, Self::AttachError>;
 
     async fn handle_attach_error(
         &mut self,

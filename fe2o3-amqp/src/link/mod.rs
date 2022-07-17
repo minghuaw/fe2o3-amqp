@@ -44,13 +44,13 @@ pub mod delivery;
 mod error;
 pub mod receiver;
 mod receiver_link;
+pub(crate) mod resumption;
 pub mod sender;
 mod sender_link;
 pub(crate) mod shared_inner;
 mod source;
 pub(crate) mod state;
 pub(crate) mod target_archetype;
-pub(crate) mod resumption;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
@@ -59,6 +59,7 @@ pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::Sender>>>;
+pub(crate) type ReceiverRelayFlowState = ReceiverFlowState;
 
 /// Type alias for sender link that ONLY represents the inner state of a Sender
 pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
@@ -369,20 +370,48 @@ pub(crate) enum LinkRelay<O> {
         flow_state: SenderRelayFlowState,
         unsettled: ArcSenderUnsettledMap,
         receiver_settle_mode: ReceiverSettleMode,
-        // state_code: Arc<AtomicU8>,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
         output_handle: O,
-        flow_state: ReceiverFlowState,
+        flow_state: ReceiverRelayFlowState,
         unsettled: ArcReceiverUnsettledMap,
         receiver_settle_mode: ReceiverSettleMode,
-        // state_code: Arc<AtomicU8>,
         more: bool,
     },
 }
 
 impl LinkRelay<()> {
+    pub fn new_sender(
+        tx: mpsc::Sender<LinkIncomingItem>,
+        flow_state: SenderRelayFlowState,
+        unsettled: ArcSenderUnsettledMap,
+    ) -> Self {
+        Self::Sender {
+            tx,
+            output_handle: (),
+            flow_state,
+            unsettled,
+            receiver_settle_mode: Default::default(),
+        }
+    }
+
+    pub fn new_receiver(
+        tx: mpsc::Sender<LinkIncomingItem>,
+        flow_state: ReceiverRelayFlowState,
+        unsettled: ArcReceiverUnsettledMap,
+        receiver_settle_mode: ReceiverSettleMode,
+    ) -> Self {
+        Self::Receiver {
+            tx,
+            output_handle: (),
+            flow_state,
+            unsettled,
+            receiver_settle_mode,
+            more: false,
+        }
+    }
+
     pub fn with_output_handle(self, output_handle: OutputHandle) -> LinkRelay<OutputHandle> {
         match self {
             LinkRelay::Sender {

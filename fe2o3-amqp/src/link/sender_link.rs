@@ -1,6 +1,8 @@
 use fe2o3_amqp_types::definitions::SequenceNo;
 use futures_util::Future;
 
+use crate::AttachExchange;
+
 use super::*;
 
 #[async_trait]
@@ -457,7 +459,7 @@ where
 {
     type AttachError = SenderAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
         match self.local_state {
@@ -504,7 +506,7 @@ where
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
-        Ok(())
+        Ok(AttachExchange::Copmplete)
     }
 
     async fn send_attach(
@@ -577,12 +579,12 @@ where
         &self.target
     }
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         is_reattaching: bool,
-    ) -> Result<(), SenderAttachError> {
+    ) -> Result<AttachExchange, SenderAttachError> {
         // Send out local attach
         self.send_attach(writer, is_reattaching).await?;
 

@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{AsByteIterator, IntoReader};
+use crate::{util::{AsByteIterator, IntoReader}, AttachExchange};
 
 use super::*;
 
@@ -553,7 +553,7 @@ where
 {
     type AttachError = ReceiverAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
         match self.local_state {
@@ -613,7 +613,7 @@ where
             .delivery_count_mut(|_| initial_delivery_count)
             .await;
 
-        Ok(())
+        Ok(AttachExchange::Copmplete)
     }
 
     async fn send_attach(
@@ -686,12 +686,12 @@ where
         &self.target
     }
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         is_reattaching: bool,
-    ) -> Result<(), ReceiverAttachError> {
+    ) -> Result<AttachExchange, ReceiverAttachError> {
         // Send out local attach
         self.send_attach(writer, is_reattaching).await?;
 

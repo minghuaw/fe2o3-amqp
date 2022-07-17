@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
-    session::{self, AllocLinkError},
+    session::{self, AllocLinkError}, AttachExchange,
 };
 
 use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
@@ -28,10 +28,10 @@ pub(crate) trait LinkEndpointInner {
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
-    ) -> Result<(), <Self::Link as LinkAttach>::AttachError>;
+    ) -> Result<AttachExchange, <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(
         &mut self,
@@ -71,7 +71,7 @@ where
             *self.link_mut().output_handle_mut() = Some(handle);
         }
 
-        match self.negotiate_attach(true).await {
+        match self.exchange_attach(true).await {
             Ok(_) => Ok(self),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
         }

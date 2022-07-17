@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, Notify, RwLock};
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
+    control::SessionControl,
     endpoint::{LinkExt, OutputHandle},
     link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
@@ -23,8 +24,9 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
-    ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError,
-    SenderFlowState, SenderLink, SenderRelayFlowState,
+    ArcUnsettledMap, LinkFrame, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
+    ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
+    SenderRelayFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -405,7 +407,7 @@ impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
         self,
         session: &mut SessionHandle<R>,
     ) -> Result<Sender, SenderAttachError> {
-        self.attach_inner(session, false)
+        self.attach_inner(session)
             .await
             .map(|inner| Sender { inner })
     }
@@ -440,49 +442,26 @@ where
     async fn attach_inner<R>(
         mut self,
         session: &mut SessionHandle<R>,
-        is_reattaching: bool,
     ) -> Result<SenderInner<SenderLink<T>>, SenderAttachError> {
         let buffer_size = self.buffer_size;
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
         let (producer, consumer) = self.create_flow_state_containers();
-
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
 
-        let link_relay = LinkRelay::Sender {
-            tx: incoming_tx,
-            output_handle: (),
-            flow_state: producer,
-            unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach in session
-                                                      // state_code: state_code.clone(),
-        };
-
-        // Create Link in Session
+        let link_relay = LinkRelay::new_sender(incoming_tx, producer, unsettled.clone());
         let output_handle =
             session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
-
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
-        // Get writer to session
-        // Send an Attach frame
-        // super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
-        if let Err(attach_error) = link
-            .negotiate_attach(&session.outgoing, &mut incoming_rx, is_reattaching)
-            .await
-        {
-            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            // return Err(DetachError::new(false, Some(err)));
-            let err = link
-                .handle_attach_error(
-                    attach_error,
-                    &session.outgoing,
-                    &mut incoming_rx,
-                    &session.control,
-                )
-                .await;
-            return Err(err);
-        }
+        perform_attach_exchange(
+            &mut link,
+            &session.outgoing,
+            &mut incoming_rx,
+            &session.control,
+            SenderAttachError::IllegalState,
+        )
+        .await?;
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -514,7 +493,7 @@ impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
         self,
         session: &mut SessionHandle<R>,
     ) -> Result<Receiver, ReceiverAttachError> {
-        self.attach_inner(session, false)
+        self.attach_inner(session)
             .await
             .map(|inner| Receiver { inner })
     }
@@ -529,17 +508,7 @@ where
         + Send
         + Sync,
 {
-    async fn attach_inner<R>(
-        mut self,
-        session: &mut SessionHandle<R>,
-        is_reattaching: bool,
-    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
-        // TODO: how to avoid clone?
-        let buffer_size = self.buffer_size;
-        let credit_mode = self.credit_mode.clone();
-        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = session.outgoing.clone();
-
+    fn create_flow_state_containers(&mut self) -> (ReceiverRelayFlowState, ReceiverFlowState) {
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -550,45 +519,41 @@ where
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
+        (flow_state.clone(), flow_state)
+    }
 
+    async fn attach_inner<R>(
+        mut self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
+        // TODO: how to avoid clone?
+        let buffer_size = self.buffer_size;
+        let credit_mode = self.credit_mode.clone();
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
+        let (relay_flow_state, flow_state) = self.create_flow_state_containers();
         let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let flow_state_producer = flow_state.clone();
-        let flow_state_consumer = flow_state;
-        // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkRelay::Receiver {
-            tx: incoming_tx,
-            output_handle: (),
-            flow_state: flow_state_producer,
-            unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach
-            // state_code: state_code.clone(),
-            more: false,
-        };
 
+        let link_relay = LinkRelay::new_receiver(
+            incoming_tx,
+            relay_flow_state,
+            unsettled.clone(),
+            self.rcv_settle_mode.clone(),
+        );
         // Create Link in Session
         // Any error here will be on the Session level and thus it should immediately return with an error
         let output_handle =
-            session::allocate_link(&session.control, self.name.clone(), link_handle).await?;
+            session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
+        let mut link = self.create_link(unsettled, output_handle, flow_state);
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
-
-        // Get writer to session
-        if let Err(attach_error) = link
-            .negotiate_attach(&session.outgoing, &mut incoming_rx, is_reattaching)
-            .await
-        {
-            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            // return Err(DetachError::new(false, Some(err)));
-            let err = link
-                .handle_attach_error(
-                    attach_error,
-                    &session.outgoing,
-                    &mut incoming_rx,
-                    &session.control,
-                )
-                .await;
-            return Err(err);
-        }
+        perform_attach_exchange(
+            &mut link,
+            &session.outgoing,
+            &mut incoming_rx,
+            &session.control,
+            ReceiverAttachError::IllegalState,
+        )
+        .await?;
 
         let mut inner = ReceiverInner {
             link,
@@ -609,6 +574,27 @@ where
     }
 }
 
+async fn perform_attach_exchange<L, E>(
+    link: &mut L,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+    session: &mpsc::Sender<SessionControl>,
+    complete_or_err: E,
+) -> Result<(), E>
+where
+    L: LinkExt<AttachError = E>,
+{
+    match link.exchange_attach(writer, reader, false).await {
+        Ok(outcome) => outcome.complete_or(complete_or_err),
+        Err(attach_error) => {
+            let err = link
+                .handle_attach_error(attach_error, writer, reader, session)
+                .await;
+            Err(err)
+        }
+    }
+}
+
 #[cfg(feature = "transaction")]
 impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
     /// Attach the link as a transaction controller
@@ -618,10 +604,8 @@ impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
     ) -> Result<Controller, SenderAttachError> {
         use tokio::sync::Mutex;
 
-        self.attach_inner(session, false)
-            .await
-            .map(|inner| Controller {
-                inner: Mutex::new(inner),
-            })
+        self.attach_inner(session).await.map(|inner| Controller {
+            inner: Mutex::new(inner),
+        })
     }
 }

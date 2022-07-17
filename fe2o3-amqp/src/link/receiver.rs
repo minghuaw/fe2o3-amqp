@@ -20,7 +20,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload,
+    Payload, AttachExchange,
 };
 
 use super::{
@@ -510,12 +510,12 @@ where
         &self.session
     }
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
-    ) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
+    ) -> Result<AttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .negotiate_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await
     }
 

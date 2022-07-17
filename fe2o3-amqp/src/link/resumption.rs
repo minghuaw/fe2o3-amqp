@@ -36,7 +36,7 @@ fn resume_delivery(
         | (Some(DeliveryState::Declared(_)), _)
         | (Some(DeliveryState::TransactionalState(_)), _) => {
             return Err(SendError::IllegalDeliveryState)
-        } // TODO: IllegalDeliveryState?
+        }
 
         // delivery-tag 1 example
         (None, None) => Some(ResumingDelivery::Resend(local.payload().clone())),

@@ -200,3 +200,12 @@ enum AttachExchange {
     IncompleteUnsettled(BTreeMap<DeliveryTag, Option<DeliveryState>>),
     Resume(Vec<ResumingDelivery>),
 }
+
+impl AttachExchange {
+    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+        match self {
+            Self::Copmplete => Ok(()),
+            _ => Err(err)
+        }
+    }
+}
