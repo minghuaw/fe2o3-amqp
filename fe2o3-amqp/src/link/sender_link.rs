@@ -444,31 +444,43 @@ async fn send_disposition(
 }
 
 impl<T> SenderLink<T> {
-    async fn handle_unsettled(
+    async fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
         incomplete_unsettled: bool,
     ) -> Result<AttachExchange, SenderAttachError> {
         let mut guard = self.unsettled.write().await;
         // let is_empty = guard.as_ref().map_or_else(|| true, |m| m.is_empty());
-        let v = match (guard.take(), remote_unsettled) {
+        let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
             (None, None) => return Ok(AttachExchange::Copmplete),
             (None, Some(remote_map)) => remote_map
-                .into_iter()
-                .map(|(delivery_tag, _)| (delivery_tag, ResumingDelivery::Abort))
+                .into_keys()
+                .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
                 .collect(),
             (Some(map), None) => {
                 if map.is_empty() {
                     return Ok(AttachExchange::Copmplete);
                 } else {
                     map.into_iter()
-                        .filter_map(|(tag, unsettled_msg)| {
-                            resume_delivery(unsettled_msg, None).map(|resume| (tag, resume))
+                        .filter_map(|(tag, local)| {
+                            resume_delivery(local, None).map(|resume| (tag, resume))
                         })
                         .collect()
                 }
             }
-            (Some(_), Some(_)) => todo!(),
+            (Some(local_map), Some(mut remote_map)) => {
+                let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
+                    .into_iter()
+                    .filter_map(|(tag, local)| {
+                        let remote = remote_map.remove(&tag);
+                        resume_delivery(local, remote).map(|resume| (tag, resume))
+                    })
+                    .collect();
+                let remote = remote_map
+                    .into_keys()
+                    .map(|tag| (tag, ResumingDelivery::Abort));
+                local.into_iter().chain(remote).collect()
+            }
         };
 
         if incomplete_unsettled {
@@ -541,13 +553,8 @@ where
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
-        {
-            if remote_attach.incomplete_unsettled {
-            } else {
-            }
-        }
-
-        Ok(AttachExchange::Copmplete)
+        self.handle_unsettled_in_attach(remote_attach.unsettled, remote_attach.incomplete_unsettled)
+            .await
     }
 
     async fn send_attach(
