@@ -26,7 +26,7 @@ use super::{
     delivery::{DeliveryFut, Sendable},
     error::DetachError,
     role,
-    shared_inner::{recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach},
+    shared_inner::{recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
     SenderFlowState, SenderLink,
 };
@@ -386,6 +386,25 @@ where
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         self.link.send_detach(&self.outgoing, closed, error).await
+    }
+}
+
+#[async_trait]
+impl<L> LinkEndpointInnerReattach for SenderInner<L> 
+where
+    L: endpoint::SenderLink<
+            AttachError = SenderAttachError,
+            DetachError = DetachError,
+        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + Send
+        + Sync,
+{
+    fn handle_reattach_outcome(&mut self, outcome: AttachExchange) -> Result<&mut Self, L::AttachError> {
+        match outcome {
+            AttachExchange::Copmplete => Ok(self),
+            AttachExchange::IncompleteUnsettled(_)
+            | AttachExchange::Resume(_) => Err(SenderAttachError::IllegalState),
+        }
     }
 }
 

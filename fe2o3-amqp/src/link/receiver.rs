@@ -29,7 +29,7 @@ use super::{
     error::DetachError,
     receiver_link::count_number_of_sections_and_offset,
     role,
-    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
+    shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
     LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
     RecvError, DEFAULT_CREDIT,
@@ -539,6 +539,25 @@ where
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
         self.link.send_detach(&self.outgoing, closed, error).await
+    }
+}
+
+#[async_trait]
+impl<L> LinkEndpointInnerReattach for ReceiverInner<L> 
+where
+    L: endpoint::ReceiverLink<
+            AttachError = ReceiverAttachError,
+            DetachError = DetachError,
+        > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+        + Send
+        + Sync,
+{
+    fn handle_reattach_outcome(&mut self, outcome: AttachExchange) -> Result<&mut Self, L::AttachError> {
+        match outcome {
+            AttachExchange::Copmplete => Ok(self),
+            AttachExchange::IncompleteUnsettled(_)
+            | AttachExchange::Resume(_) => Err(ReceiverAttachError::IllegalState),
+        }
     }
 }
 

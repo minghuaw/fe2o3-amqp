@@ -241,7 +241,7 @@ where
 
         match self.local_state {
             LinkState::Unattached
-            | LinkState::Detached // May attempt to re-attach
+            | LinkState::Detached // May attempt to resume
             | LinkState::DetachSent => {
                 writer.send(frame).await
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;

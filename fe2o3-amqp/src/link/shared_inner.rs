@@ -5,7 +5,8 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
-    session::{self, AllocLinkError}, AttachExchange,
+    session::{self, AllocLinkError},
+    AttachExchange,
 };
 
 use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
@@ -46,21 +47,19 @@ pub(crate) trait LinkEndpointInner {
 }
 
 #[async_trait]
-pub(crate) trait LinkEndpointInnerReattach {
-    type ReattachError: Send + From<AllocLinkError>;
-
-    async fn reattach_inner(&mut self) -> Result<&mut Self, Self::ReattachError>;
-}
-
-#[async_trait]
-impl<T> LinkEndpointInnerReattach for T
+pub(crate) trait LinkEndpointInnerReattach
 where
-    T: LinkEndpointInner + Send + Sync,
-    <T::Link as LinkAttach>::AttachError: From<AllocLinkError>,
+    Self: LinkEndpointInner + Send + Sync,
+    <Self::Link as LinkAttach>::AttachError: From<AllocLinkError> + Send + Sync,
 {
-    type ReattachError = <T::Link as LinkAttach>::AttachError;
+    // type ReattachError: Send + From<AllocLinkError>;
 
-    async fn reattach_inner(&mut self) -> Result<&mut Self, Self::ReattachError> {
+    fn handle_reattach_outcome(
+        &mut self,
+        outcome: AttachExchange,
+    ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError>;
+
+    async fn reattach_inner(&mut self) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
         if self.link().output_handle().is_none() {
             let (tx, incoming) = mpsc::channel(self.buffer_size());
             let link_relay = self.as_new_link_relay(tx);
@@ -72,14 +71,18 @@ where
         }
 
         match self.exchange_attach(true).await {
-            Ok(_) => Ok(self),
+            Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
         }
     }
 }
 
 #[async_trait]
-pub(crate) trait LinkEndpointInnerDetach: LinkEndpointInner {
+pub(crate) trait LinkEndpointInnerDetach
+where
+    Self: LinkEndpointInner,
+    <Self::Link as LinkAttach>::AttachError: From<AllocLinkError>,
+{
     /// Detach the link.
     ///
     /// This will send a `Detach` performative with the `closed` field set to false. If the remote
@@ -104,6 +107,7 @@ impl<T> LinkEndpointInnerDetach for T
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
+    <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
     async fn detach_with_error(
         &mut self,
@@ -219,6 +223,7 @@ async fn reattach_and_then_close<T>(link_inner: &mut T) -> Result<(), DetachErro
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
+    <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
     // Note that one peer MAY send a closing detach while its partner is
     // sending a non-closing detach. In this case, the partner MUST
@@ -248,6 +253,7 @@ pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, 
 where
     T: LinkEndpointInner + LinkEndpointInnerReattach + Send + Sync,
     T::Link: LinkDetach<DetachError = DetachError>,
+    <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
     match link_inner
         .reader_mut()
