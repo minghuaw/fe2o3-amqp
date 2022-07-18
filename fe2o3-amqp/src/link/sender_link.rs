@@ -195,7 +195,8 @@ where
             batchable,
         };
 
-        self.send_payload_with_transfer(writer, transfer, payload, delivery_tag, settled).await
+        self.send_payload_with_transfer(writer, transfer, payload)
+            .await
     }
 
     async fn send_payload_with_transfer(
@@ -203,11 +204,18 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         mut transfer: Transfer,
         mut payload: Payload,
-
-        // These are just a copy of the same value in transfer to avoid unnecessary error handling
-        delivery_tag: DeliveryTag,
-        settled: bool,
     ) -> Result<Settlement, Self::TransferError> {
+        let settled = transfer
+            .settled
+            .unwrap_or_else(|| match self.snd_settle_mode {
+                SenderSettleMode::Settled => true,
+                SenderSettleMode::Unsettled => false,
+                SenderSettleMode::Mixed => false,
+            });
+        let delivery_tag = transfer
+            .delivery_tag
+            .clone()
+            .ok_or(Self::TransferError::IllegalState)?;
         let input_handle = self
             .input_handle
             .clone()

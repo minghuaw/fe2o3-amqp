@@ -128,10 +128,6 @@ pub(crate) trait SenderLink: Link + LinkExt {
         writer: &mpsc::Sender<LinkFrame>,
         transfer: Transfer,
         payload: Payload,
-
-        // These are just a copy of the same value in transfer to avoid unnecessary error handling
-        delivery_tag: DeliveryTag,
-        settled: bool,
     ) -> Result<Settlement, Self::TransferError>;
 
     async fn dispose(
