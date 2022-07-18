@@ -55,7 +55,7 @@ where
     match sender.send(sendable).await? {
         Settlement::Settled => Err(SendError::IllegalDeliveryState),
         Settlement::Unsettled {
-            _delivery_tag,
+            delivery_tag: _,
             outcome,
         } => Ok(outcome),
     }

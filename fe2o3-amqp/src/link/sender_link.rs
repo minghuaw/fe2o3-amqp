@@ -111,7 +111,7 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         detached: Fut,
-        mut payload: Payload,
+        payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
         state: Option<DeliveryState>,
@@ -183,6 +183,37 @@ where
         // unsettled delivery from a dissociated link endpoint
         let resume = false;
 
+        let transfer = Transfer {
+            handle,
+            delivery_id: None, // This will be set by the session
+            delivery_tag: Some(delivery_tag.clone()),
+            message_format: Some(message_format),
+            settled: Some(settled),
+            more: false, // This will be changed later
+
+            // If not set, this value is defaulted to the value negotiated
+            // on link attach.
+            rcv_settle_mode: None,
+            state,
+            resume,
+            aborted: false,
+            batchable,
+        };
+
+        self.send_payload_with_transfer(writer, input_handle, transfer, payload, delivery_tag, settled).await
+    }
+
+    async fn send_payload_with_transfer(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        input_handle: InputHandle,
+        mut transfer: Transfer,
+        mut payload: Payload,
+
+        // These are just a copy of the same value in transfer to avoid unnecessary error handling
+        delivery_tag: DeliveryTag,
+        settled: bool,
+    ) -> Result<Settlement, Self::TransferError> {
         // Keep a copy for unsettled message
         // Clone should be very cheap on Bytes
         let payload_copy = payload.clone();
@@ -190,89 +221,30 @@ where
         // Check message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
-
         if !more {
-            let transfer = Transfer {
-                handle,
-                delivery_id: None, // This will be set by the session
-                delivery_tag: Some(delivery_tag.clone()),
-                message_format: Some(message_format),
-                settled: Some(settled),
-                more: false,
-                // If not set, this value is defaulted to the value negotiated
-                // on link attach.
-                rcv_settle_mode: None,
-                state,
-                resume,
-                aborted: false,
-                batchable,
-            };
-
             // TODO: Clone should be very cheap on Bytes
+            transfer.more = false;
             send_transfer(writer, input_handle, transfer, payload.clone()).await?;
         } else {
-            // Need multiple transfers
-            // Number of transfers needed
-            // let mut n = payload.len() / self.max_message_size as usize;
-            // if payload.len() % self.max_message_size as usize > 0 {
-            //     n += 1
-            // }
-
             // Send the first frame
             let partial = payload.split_to(self.max_message_size as usize);
-            let transfer = Transfer {
-                handle: handle.clone(),
-                delivery_id: None, // This will be set by the session
-                delivery_tag: Some(delivery_tag.clone()),
-                message_format: Some(message_format),
-                settled: Some(settled), // Having this always set in first frame helps debugging
-                more: true,             // There are more content
-                // If not set, this value is defaulted to the value negotiated
-                // on link attach.
-                rcv_settle_mode: None,
-                state: state.clone(), // This is None for all transfers for now
-                resume,
-                aborted: false,
-                batchable,
-            };
-            send_transfer(writer, input_handle.clone(), transfer, partial).await?;
+            transfer.more = true;
+            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
 
             // Send the transfers in the middle
             while payload.len() > self.max_message_size as usize {
                 let partial = payload.split_to(self.max_message_size as usize);
-                let transfer = Transfer {
-                    handle: handle.clone(),
-                    delivery_id: None,
-                    delivery_tag: None,
-                    message_format: None,
-                    settled: None,
-                    more: true,
-                    rcv_settle_mode: None,
-                    state: state.clone(), // This is None for all transfers for now
-                    resume: false,
-                    aborted: false,
-                    batchable,
-                };
-                send_transfer(writer, input_handle.clone(), transfer, partial).await?;
+                transfer.delivery_tag = None;
+                transfer.message_format = None;
+                transfer.settled = None;
+                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
             }
 
             // Send the last transfer
             // For messages that are too large to fit within the maximum frame size, additional
             // data MAY be trans- ferred in additional transfer frames by setting the more flag on
             // all but the last transfer frame
-            let transfer = Transfer {
-                handle,
-                delivery_id: None,
-                delivery_tag: None,
-                message_format: None,
-                settled: None,
-                more: false, // The
-                rcv_settle_mode: None,
-                state, // This is None for all transfers for now
-                resume: false,
-                aborted: false,
-                batchable,
-            };
+            transfer.more = false;
             send_transfer(writer, input_handle, transfer, payload).await?;
         }
 
@@ -287,11 +259,11 @@ where
                     let mut guard = self.unsettled.write().await;
                     guard
                         .get_or_insert(BTreeMap::new())
-                        .insert(delivery_tag, unsettled);
+                        .insert(delivery_tag.clone(), unsettled);
                 }
 
                 Ok(Settlement::Unsettled {
-                    _delivery_tag: tag,
+                    delivery_tag,
                     outcome: rx,
                 })
             }

@@ -18,7 +18,7 @@ use crate::{
     Payload,
 };
 
-use super::{OutputHandle, Settlement};
+use super::{OutputHandle, Settlement, InputHandle};
 
 #[async_trait]
 pub(crate) trait LinkDetach {
@@ -121,6 +121,19 @@ pub(crate) trait SenderLink: Link + LinkExt {
     ) -> Result<Settlement, Self::TransferError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send;
+
+    /// Send message with delivery tag that is obtained by consuming a link credit
+    async fn send_payload_with_transfer(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        input_handle: InputHandle,
+        transfer: Transfer,
+        payload: Payload,
+
+        // These are just a copy of the same value in transfer to avoid unnecessary error handling
+        delivery_tag: DeliveryTag,
+        settled: bool,
+    ) -> Result<Settlement, Self::TransferError>;
 
     async fn dispose(
         &mut self,

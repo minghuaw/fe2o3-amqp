@@ -510,6 +510,10 @@ where
         &self.session
     }
 
+    fn session_control_mut(&mut self) -> &mut mpsc::Sender<SessionControl> {
+        &mut self.session
+    }
+
     async fn exchange_attach(
         &mut self,
         is_reattaching: bool,

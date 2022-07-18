@@ -6,6 +6,8 @@ use crate::session::AllocLinkError;
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
+use super::sender::DetachedSender;
+
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
 pub enum DetachError {
@@ -37,6 +39,71 @@ pub enum DetachError {
     #[error("Remote peer closed the link with an error: {}", .0)]
     RemoteClosedWithError(definitions::Error),
 }
+
+
+/// Errors associated with attaching a link as sender
+#[derive(Debug, thiserror::Error)]
+pub enum SenderAttachError {
+    // Illegal session state
+    /// Session stopped
+    #[error("Illegal session state. Session might have stopped.")]
+    IllegalSessionState,
+
+    /// Link name duplicated
+    #[error("Link name is not unique.")]
+    DuplicatedLinkName,
+
+    /// Illegal link state
+    #[error("Illegal session state")]
+    IllegalState,
+
+    /// The local terminus is expecting an Attach from the remote peer
+    #[error("Expecting an Attach frame but received a non-Attach frame")]
+    NonAttachFrameReceived,
+
+    /// The link is expected to be detached immediately but didn't receive
+    /// an incoming Detach frame
+    #[error("Expecting the remote peer to immediately detach")]
+    ExpectImmediateDetach,
+
+    // Errors that should reject Attach
+    /// Incoming Attach frame's Source field is None
+    #[error("Source field is None")]
+    IncomingSourceIsNone,
+
+    /// Incoming Attach frame's Target field is None
+    #[error("Target field is None")]
+    IncomingTargetIsNone,
+
+    /// The remote Attach contains a [`Coordinator`] in the Target
+    #[error("Control link is not implemented without enabling the `transaction` feature")]
+    CoordinatorIsNotImplemented,
+
+    /// When set to true by the receiving link endpoint this field indicates creation of a
+    /// dynamically created node. In this case the address field will contain the address of the
+    /// created node.
+    #[error("The address field contins the address of the created node when dynamic is set by the receiving endpoint")]
+    TargetAddressIsNoneWhenDynamicIsTrue,
+
+    /// When set to true by the receiving link endpoint, this field constitutes a request for the sending
+    /// peer to dynamically create a node at the source. In this case the address field MUST NOT be set
+    #[error("Source address must not be set when dynamic is set by the receiving endpoint")]
+    SourceAddressIsSomeWhenDynamicIsTrue,
+
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    #[error("If the dynamic field is not set to true this field MUST be left unset")]
+    DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
+
+    /// Desired TransactionCapabilities is not supported
+    #[cfg(feature = "transaction")]
+    #[error("Desired transaction capability is not supported")]
+    DesireTxnCapabilitiesNotSupported,
+
+    /// Remote peer closed the link with an error
+    #[error("Remote peer closed with error {:?}", .0)]
+    RemoteClosedWithError(definitions::Error),
+}
+
 
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
@@ -194,69 +261,6 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
 
         Ok(Self::new(condition, format!("{:?}", value), None))
     }
-}
-
-/// Errors associated with attaching a link as sender
-#[derive(Debug, thiserror::Error)]
-pub enum SenderAttachError {
-    // Illegal session state
-    /// Session stopped
-    #[error("Illegal session state. Session might have stopped.")]
-    IllegalSessionState,
-
-    /// Link name duplicated
-    #[error("Link name is not unique.")]
-    DuplicatedLinkName,
-
-    /// Illegal link state
-    #[error("Illegal session state")]
-    IllegalState,
-
-    /// The local terminus is expecting an Attach from the remote peer
-    #[error("Expecting an Attach frame but received a non-Attach frame")]
-    NonAttachFrameReceived,
-
-    /// The link is expected to be detached immediately but didn't receive
-    /// an incoming Detach frame
-    #[error("Expecting the remote peer to immediately detach")]
-    ExpectImmediateDetach,
-
-    // Errors that should reject Attach
-    /// Incoming Attach frame's Source field is None
-    #[error("Source field is None")]
-    IncomingSourceIsNone,
-
-    /// Incoming Attach frame's Target field is None
-    #[error("Target field is None")]
-    IncomingTargetIsNone,
-
-    /// The remote Attach contains a [`Coordinator`] in the Target
-    #[error("Control link is not implemented without enabling the `transaction` feature")]
-    CoordinatorIsNotImplemented,
-
-    /// When set to true by the receiving link endpoint this field indicates creation of a
-    /// dynamically created node. In this case the address field will contain the address of the
-    /// created node.
-    #[error("The address field contins the address of the created node when dynamic is set by the receiving endpoint")]
-    TargetAddressIsNoneWhenDynamicIsTrue,
-
-    /// When set to true by the receiving link endpoint, this field constitutes a request for the sending
-    /// peer to dynamically create a node at the source. In this case the address field MUST NOT be set
-    #[error("Source address must not be set when dynamic is set by the receiving endpoint")]
-    SourceAddressIsSomeWhenDynamicIsTrue,
-
-    /// If the dynamic field is not set to true this field MUST be left unset.
-    #[error("If the dynamic field is not set to true this field MUST be left unset")]
-    DynamicNodePropertiesIsSomeWhenDynamicIsFalse,
-
-    /// Desired TransactionCapabilities is not supported
-    #[cfg(feature = "transaction")]
-    #[error("Desired transaction capability is not supported")]
-    DesireTxnCapabilitiesNotSupported,
-
-    /// Remote peer closed the link with an error
-    #[error("Remote peer closed with error {:?}", .0)]
-    RemoteClosedWithError(definitions::Error),
 }
 
 impl From<AllocLinkError> for SenderAttachError {
@@ -588,27 +592,24 @@ pub enum BodyError {
     IsNothing,
 }
 
-// /// Errors associated with resuming a sender link endpoint
-// #[derive(Debug, thiserror::Error)]
-// pub enum SenderResumeError {
-//     /// Errors found in link state
-//     #[error("Local error: {:?}", .0)]
-//     LinkStateError(#[from] LinkStateError),
+/// Errors associated with resuming a sender link endpoint
+#[derive(Debug, thiserror::Error)]
+pub enum SenderResumeErrorKind {
+    /// Sender attach error
+    #[error(transparent)]
+    AttachError(#[from] SenderAttachError),
 
-//     /// The remote peer detached with error
-//     #[error("Link is detached {:?}", .0)]
-//     Detached(DetachError),
+    /// Send error
+    #[error(transparent)]
+    SendError(#[from] SendError),
+}
 
-//     /// A non-terminal delivery state is received while expecting
-//     /// an outcome
-//     #[error("A non-terminal delivery state is received when an outcome is expected")]
-//     NonTerminalDeliveryState,
+/// Sender encountered error with resumption
+#[derive(Debug)]
+pub struct SenderResumeError {
+    /// The detached sender
+    pub detached_sender: DetachedSender,
 
-//     /// Transactional state found on non-transactional delivery
-//     #[error("Transactional state found on non-transactional delivery")]
-//     IllegalDeliveryState,
-
-//     /// Error serializing message
-//     #[error("Error encoding message")]
-//     MessageEncodeError,
-// }
+    /// The error with resumption
+    pub kind: SenderResumeErrorKind,
+}

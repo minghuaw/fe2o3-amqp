@@ -429,7 +429,7 @@ where
         match &mut *settlement {
             Settlement::Settled => Poll::Ready(O::from_settled()),
             Settlement::Unsettled {
-                _delivery_tag: _,
+                delivery_tag: _,
                 outcome,
             } => {
                 match outcome.poll_unpin(cx) {

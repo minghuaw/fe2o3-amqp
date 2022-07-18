@@ -20,7 +20,7 @@
 //!         endpoint)
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Handle, SequenceNo},
+    definitions::{Fields, Handle, SequenceNo, DeliveryTag},
     messaging::DeliveryState,
     performatives::Flow,
     primitives::{Boolean, UInt},
@@ -146,7 +146,7 @@ impl TryFrom<Flow> for LinkFlow {
 pub(crate) enum Settlement {
     Settled,
     Unsettled {
-        _delivery_tag: [u8; 4],
+        delivery_tag: DeliveryTag,
         outcome: oneshot::Receiver<Option<DeliveryState>>,
     },
 }

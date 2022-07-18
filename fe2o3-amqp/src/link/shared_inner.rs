@@ -32,6 +32,8 @@ where
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl>;
 
+    fn session_control_mut(&mut self) -> &mut mpsc::Sender<SessionControl>;
+
     async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
@@ -51,15 +53,15 @@ where
     async fn reallocate_output_handle(
         &mut self,
     ) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
-        if self.link().output_handle().is_none() {
-            let (tx, incoming) = mpsc::channel(self.buffer_size());
-            let link_relay = self.as_new_link_relay(tx);
-            *self.reader_mut() = incoming;
-            let link_name = self.link().name().to_string();
-            let handle =
-                session::allocate_link(self.session_control(), link_name, link_relay).await?;
-            *self.link_mut().output_handle_mut() = Some(handle);
-        }
+        // if self.link().output_handle().is_none() {
+        // }
+        let (tx, incoming) = mpsc::channel(self.buffer_size());
+        let link_relay = self.as_new_link_relay(tx);
+        *self.reader_mut() = incoming;
+        let link_name = self.link().name().to_string();
+        let handle =
+            session::allocate_link(self.session_control(), link_name, link_relay).await?;
+        *self.link_mut().output_handle_mut() = Some(handle);
         Ok(())
     }
 }
@@ -70,8 +72,6 @@ where
     Self: LinkEndpointInner + Send + Sync,
     <Self::Link as LinkAttach>::AttachError: From<AllocLinkError> + Send + Sync,
 {
-    // type ReattachError: Send + From<AllocLinkError>;
-
     fn handle_reattach_outcome(
         &mut self,
         outcome: AttachExchange,

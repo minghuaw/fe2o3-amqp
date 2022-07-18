@@ -28,7 +28,7 @@ use super::{
     role,
     shared_inner::{recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
-    SenderFlowState, SenderLink, AttachExchange,
+    SenderFlowState, SenderLink, AttachExchange, SenderResumeError,
 };
 
 /// An AMQP1.0 sender
@@ -153,7 +153,7 @@ impl Sender {
     /// the Sender will re-attach and send a closing detach
     pub async fn detach(mut self) -> Result<DetachedSender, DetachError> {
         self.inner.detach_with_error(None).await?;
-        Ok(DetachedSender { _inner: self.inner })
+        Ok(DetachedSender { inner: self.inner })
     }
 
     /// Detach the link with an error
@@ -162,7 +162,7 @@ impl Sender {
         error: definitions::Error,
     ) -> Result<DetachedSender, DetachError> {
         self.inner.detach_with_error(Some(error)).await?;
-        Ok(DetachedSender { _inner: self.inner })
+        Ok(DetachedSender { inner: self.inner })
     }
 
     /// Detach the link with a timeout
@@ -273,13 +273,46 @@ impl Sender {
 /// TODO
 #[derive(Debug)]
 pub struct DetachedSender {
-    _inner: SenderInner<SenderLink<Target>>,
+    inner: SenderInner<SenderLink<Target>>,
 }
 
 impl DetachedSender {
-    /// Resume the sender link
-    pub async fn resume<R>(self, session: &mut SessionHandle<R>) -> Sender {
-        todo!()
+    /// Resume the sender link on the original session
+    pub async fn resume<R>(mut self) -> Result<Sender, SenderResumeError> {
+        if let Err(error) = self.inner.reallocate_output_handle().await {
+            return Err(SenderResumeError {
+                detached_sender: self,
+                kind: error.into()
+            })
+        }
+
+        loop {
+            let attach_exchange = match self.inner.exchange_attach(false).await {
+                Ok(attach_exchange) => attach_exchange,
+                Err(error) => return Err(SenderResumeError {
+                    detached_sender: self,
+                    kind: error.into()
+                }),
+            };
+
+            match attach_exchange {
+                AttachExchange::Copmplete => break,
+                AttachExchange::IncompleteUnsettled(_) => todo!(),
+                AttachExchange::Resume(resuming_deliveries) => {
+                    for resuming in resuming_deliveries {
+
+                    }
+                },
+            }
+        }
+
+        Ok(Sender { inner: self.inner })
+    }
+
+    /// Resume the sender on a specific session
+    pub async fn resume_on_session<R>(mut self, session: &mut SessionHandle<R>) -> Result<Sender, SenderResumeError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume::<R>().await
     }
 }
 
@@ -355,6 +388,10 @@ where
 
     fn session_control(&self) -> &mpsc::Sender<SessionControl> {
         &self.session
+    }
+
+    fn session_control_mut(&mut self) -> &mut mpsc::Sender<SessionControl> {
+        &mut self.session
     }
 
     async fn exchange_attach(
