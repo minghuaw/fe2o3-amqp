@@ -3,7 +3,7 @@
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
     messaging::{
-        message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome,
+        message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome, MESSAGE_FORMAT,
     },
     primitives::Binary,
 };
@@ -177,7 +177,7 @@ where
     fn from(value: T) -> Self {
         Self {
             message: value.into(),
-            message_format: 0,
+            message_format: MESSAGE_FORMAT,
             settled: None,
         }
     }
@@ -187,7 +187,7 @@ impl<T> From<Message<T>> for Sendable<T> {
     fn from(message: Message<T>) -> Self {
         Self {
             message,
-            message_format: 0,
+            message_format: MESSAGE_FORMAT,
             settled: None,
         }
     }
@@ -239,7 +239,7 @@ impl Builder<Uninitialized> {
     pub fn new() -> Self {
         Self {
             message: Uninitialized {},
-            message_format: 0,
+            message_format: MESSAGE_FORMAT,
             settled: None,
             // batchable: false,
         }
@@ -381,7 +381,7 @@ impl FromOneshotRecvError for SendResult {
     }
 }
 
-type SendResult = Result<Outcome, SendError>;
+pub(crate) type SendResult = Result<Outcome, SendError>;
 
 impl FromPreSettled for SendResult {
     fn from_settled() -> Self {

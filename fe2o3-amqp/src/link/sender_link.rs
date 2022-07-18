@@ -157,10 +157,6 @@ where
             }
         };
 
-        let input_handle = self
-            .input_handle
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?;
         let handle = self
             .output_handle
             .clone()
@@ -170,7 +166,6 @@ where
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 
-        // TODO: Expose API to allow user to set this when the mode is MIXED?
         let settled = match self.snd_settle_mode {
             SenderSettleMode::Settled => true,
             SenderSettleMode::Unsettled => false,
@@ -200,13 +195,12 @@ where
             batchable,
         };
 
-        self.send_payload_with_transfer(writer, input_handle, transfer, payload, delivery_tag, settled).await
+        self.send_payload_with_transfer(writer, transfer, payload, delivery_tag, settled).await
     }
 
     async fn send_payload_with_transfer(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        input_handle: InputHandle,
         mut transfer: Transfer,
         mut payload: Payload,
 
@@ -214,6 +208,11 @@ where
         delivery_tag: DeliveryTag,
         settled: bool,
     ) -> Result<Settlement, Self::TransferError> {
+        let input_handle = self
+            .input_handle
+            .clone()
+            .ok_or(Self::TransferError::IllegalState)?;
+
         // Keep a copy for unsettled message
         // Clone should be very cheap on Bytes
         let payload_copy = payload.clone();

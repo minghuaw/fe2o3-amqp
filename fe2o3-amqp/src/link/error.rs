@@ -602,6 +602,10 @@ pub enum SenderResumeErrorKind {
     /// Send error
     #[error(transparent)]
     SendError(#[from] SendError),
+
+    /// Detach/suspend error
+    #[error(transparent)]
+    DetachError(#[from] DetachError),
 }
 
 /// Sender encountered error with resumption

@@ -126,7 +126,6 @@ pub(crate) trait SenderLink: Link + LinkExt {
     async fn send_payload_with_transfer(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        input_handle: InputHandle,
         transfer: Transfer,
         payload: Payload,
 

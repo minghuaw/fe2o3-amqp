@@ -3,32 +3,38 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
 };
 
 use fe2o3_amqp_types::{
-    definitions::{self},
-    messaging::{message::__private::Serializable, Address, DeliveryState, Outcome, Target},
-    performatives::Detach,
+    definitions::{self, DeliveryTag, SenderSettleMode},
+    messaging::{
+        message::__private::Serializable, Address, DeliveryState, Outcome, Target, MESSAGE_FORMAT,
+    },
+    performatives::{Detach, Transfer},
 };
+use tracing::instrument;
 
 use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt, Settlement},
-    session::SessionHandle, 
+    session::SessionHandle,
 };
 
 use super::{
     builder::{self, WithSource, WithoutName, WithoutTarget},
-    delivery::{DeliveryFut, Sendable},
+    delivery::{DeliveryFut, Sendable, SendResult},
     error::DetachError,
+    resumption::ResumingDelivery,
     role,
-    shared_inner::{recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
-    ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
-    SenderFlowState, SenderLink, AttachExchange, SenderResumeError,
+    shared_inner::{
+        recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
+    },
+    ArcSenderUnsettledMap, AttachExchange, LinkFrame, LinkRelay, LinkStateError, SendError,
+    SenderAttachError, SenderFlowState, SenderLink, SenderResumeError,
 };
 
 /// An AMQP1.0 sender
@@ -277,32 +283,112 @@ pub struct DetachedSender {
 }
 
 impl DetachedSender {
+    async fn send_resuming(
+        &mut self,
+        delivery_tag: DeliveryTag,
+        resuming: ResumingDelivery,
+    ) -> Result<Settlement, SendError> {
+        let handle = self
+            .inner
+            .link
+            .output_handle
+            .clone()
+            .ok_or(LinkStateError::IllegalState)?
+            .into();
+        let settled = match self.inner.link.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            SenderSettleMode::Mixed => false,
+        };
+
+        match resuming {
+            ResumingDelivery::Abort => {
+                let transfer = Transfer {
+                    handle,
+                    delivery_id: None,
+                    delivery_tag: Some(delivery_tag.clone()),
+                    message_format: Some(MESSAGE_FORMAT),
+                    settled: Some(settled),
+                    more: false,
+                    rcv_settle_mode: None,
+                    state: None,
+                    resume: true,
+                    aborted: true,
+                    batchable: false,
+                };
+                let payload = Bytes::new();
+
+                endpoint::SenderLink::send_payload_with_transfer(
+                    &mut self.inner.link,
+                    &self.inner.outgoing,
+                    transfer,
+                    payload,
+                    delivery_tag,
+                    settled,
+                ).await
+                .map_err(Into::into)
+            }
+            ResumingDelivery::Resend(_) => todo!(),
+            ResumingDelivery::Resume { state, payload } => todo!(),
+            ResumingDelivery::RestateOutcome { local_state } => todo!(),
+        }
+    }
+
     /// Resume the sender link on the original session
+    #[instrument(skip(self))]
     pub async fn resume<R>(mut self) -> Result<Sender, SenderResumeError> {
         if let Err(error) = self.inner.reallocate_output_handle().await {
             return Err(SenderResumeError {
                 detached_sender: self,
-                kind: error.into()
-            })
+                kind: error.into(),
+            });
         }
 
         loop {
             let attach_exchange = match self.inner.exchange_attach(false).await {
                 Ok(attach_exchange) => attach_exchange,
-                Err(error) => return Err(SenderResumeError {
-                    detached_sender: self,
-                    kind: error.into()
-                }),
+                Err(error) => {
+                    return Err(SenderResumeError {
+                        detached_sender: self,
+                        kind: error.into(),
+                    })
+                }
             };
 
             match attach_exchange {
                 AttachExchange::Copmplete => break,
                 AttachExchange::IncompleteUnsettled(_) => todo!(),
                 AttachExchange::Resume(resuming_deliveries) => {
-                    for resuming in resuming_deliveries {
+                    for (delivery_tag, resuming) in resuming_deliveries {
+                        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+                        let fut = match self.send_resuming(delivery_tag, resuming).await {
+                            Ok(settlement) => DeliveryFut::<SendResult>::from(settlement),
+                            Err(error) => return Err(SenderResumeError {
+                                detached_sender: self,
+                                kind: error.into(),
+                            })
+                        };
 
+                        match fut.await {
+                            Ok(outcome) => {
+                                tracing::debug!("Resuming delivery outcome {:?}", outcome)
+                            },
+                            Err(error) => return Err(SenderResumeError {
+                                detached_sender: self,
+                                kind: error.into()
+                            }),
+                        }
                     }
-                },
+
+                    // Upon completion of this reduction of state, the two parties MUST suspend and
+                    // re-attempt to resume the link.
+                    if let Err(error) = self.inner.detach_with_error(None).await {
+                        return Err(SenderResumeError {
+                            detached_sender: self,
+                            kind: error.into()
+                        })
+                    }
+                }
             }
         }
 
@@ -310,7 +396,10 @@ impl DetachedSender {
     }
 
     /// Resume the sender on a specific session
-    pub async fn resume_on_session<R>(mut self, session: &mut SessionHandle<R>) -> Result<Sender, SenderResumeError> {
+    pub async fn resume_on_session<R>(
+        mut self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Sender, SenderResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume::<R>().await
     }
@@ -427,21 +516,23 @@ where
 }
 
 #[async_trait]
-impl<L> LinkEndpointInnerReattach for SenderInner<L> 
+impl<L> LinkEndpointInnerReattach for SenderInner<L>
 where
-    L: endpoint::SenderLink<
-            AttachError = SenderAttachError,
-            DetachError = DetachError,
-        > + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+    L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>
+        + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
         + Send
         + Sync,
 {
-    fn handle_reattach_outcome(&mut self, outcome: AttachExchange) -> Result<&mut Self, L::AttachError> {
+    fn handle_reattach_outcome(
+        &mut self,
+        outcome: AttachExchange,
+    ) -> Result<&mut Self, L::AttachError> {
         match outcome {
             AttachExchange::Copmplete => Ok(self),
             //  Re-attach should have None valued unsettled, so this should be invalid
-            AttachExchange::IncompleteUnsettled(_)
-            | AttachExchange::Resume(_) => Err(SenderAttachError::IllegalState),
+            AttachExchange::IncompleteUnsettled(_) | AttachExchange::Resume(_) => {
+                Err(SenderAttachError::IllegalState)
+            }
         }
     }
 }
