@@ -8,10 +8,14 @@ use crate::{
     session::{self, AllocLinkError},
 };
 
-use super::{state::LinkState, DetachError, LinkFrame, LinkRelay, AttachExchange};
+use super::{state::LinkState, AttachExchange, DetachError, LinkFrame, LinkRelay};
 
 #[async_trait]
-pub(crate) trait LinkEndpointInner {
+pub(crate) trait LinkEndpointInner
+where
+    Self: Send + Sync,
+    <Self::Link as LinkAttach>::AttachError: From<AllocLinkError> + Send + Sync,
+{
     type Link: endpoint::LinkExt + Send + Sync;
 
     fn link(&self) -> &Self::Link;
@@ -43,6 +47,21 @@ pub(crate) trait LinkEndpointInner {
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
+
+    async fn reallocate_output_handle(
+        &mut self,
+    ) -> Result<(), <Self::Link as LinkAttach>::AttachError> {
+        if self.link().output_handle().is_none() {
+            let (tx, incoming) = mpsc::channel(self.buffer_size());
+            let link_relay = self.as_new_link_relay(tx);
+            *self.reader_mut() = incoming;
+            let link_name = self.link().name().to_string();
+            let handle =
+                session::allocate_link(self.session_control(), link_name, link_relay).await?;
+            *self.link_mut().output_handle_mut() = Some(handle);
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -58,17 +77,10 @@ where
         outcome: AttachExchange,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError>;
 
-    async fn reattach_inner(&mut self) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
-        if self.link().output_handle().is_none() {
-            let (tx, incoming) = mpsc::channel(self.buffer_size());
-            let link_relay = self.as_new_link_relay(tx);
-            *self.reader_mut() = incoming;
-            let link_name = self.link().name().to_string();
-            let handle =
-                session::allocate_link(self.session_control(), link_name, link_relay).await?;
-            *self.link_mut().output_handle_mut() = Some(handle);
-        }
-
+    async fn reattach_inner(
+        &mut self,
+    ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError> {
+        self.reallocate_output_handle().await?;
         match self.exchange_attach(true).await {
             Ok(attach_exchange) => self.handle_reattach_outcome(attach_exchange),
             Err(attach_error) => Err(self.handle_attach_error(attach_error).await),
@@ -80,7 +92,7 @@ where
 pub(crate) trait LinkEndpointInnerDetach
 where
     Self: LinkEndpointInner,
-    <Self::Link as LinkAttach>::AttachError: From<AllocLinkError>,
+    <Self::Link as LinkAttach>::AttachError: From<AllocLinkError> + Send + Sync,
 {
     /// Detach the link.
     ///
