@@ -450,7 +450,6 @@ impl<T> SenderLink<T> {
         incomplete_unsettled: bool,
     ) -> Result<AttachExchange, SenderAttachError> {
         let mut guard = self.unsettled.write().await;
-        // let is_empty = guard.as_ref().map_or_else(|| true, |m| m.is_empty());
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
             (None, None) => return Ok(AttachExchange::Copmplete),
             (None, Some(remote_map)) => remote_map
