@@ -8,7 +8,7 @@ use crate::{
     session::{self, AllocLinkError},
 };
 
-use super::{state::LinkState, AttachExchange, DetachError, LinkFrame, LinkRelay};
+use super::{state::LinkState, DetachError, LinkFrame, LinkRelay};
 
 #[async_trait]
 pub(crate) trait LinkEndpointInner
@@ -37,7 +37,7 @@ where
     async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
-    ) -> Result<AttachExchange, <Self::Link as LinkAttach>::AttachError>;
+    ) -> Result<<Self::Link as LinkAttach>::AttachExchange, <Self::Link as LinkAttach>::AttachError>;
 
     async fn handle_attach_error(
         &mut self,
@@ -74,7 +74,7 @@ where
 {
     fn handle_reattach_outcome(
         &mut self,
-        outcome: AttachExchange,
+        outcome: <Self::Link as LinkAttach>::AttachExchange,
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError>;
 
     async fn reattach_inner(

@@ -34,8 +34,8 @@ use super::{
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
-    ArcSenderUnsettledMap, AttachExchange, LinkFrame, LinkRelay, LinkStateError, SendError,
-    SenderAttachError, SenderFlowState, SenderLink, SenderResumeError,
+    ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError,
+    SenderAttachError, SenderFlowState, SenderLink, SenderResumeError, SenderAttachExchange,
 };
 
 /// An AMQP1.0 sender
@@ -307,6 +307,7 @@ impl<L> LinkEndpointInner for SenderInner<L>
 where
     L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>
         + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + LinkAttach<AttachExchange = SenderAttachExchange>
         + Send
         + Sync,
 {
@@ -354,7 +355,7 @@ where
     async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
-    ) -> Result<AttachExchange, <Self::Link as LinkAttach>::AttachError> {
+    ) -> Result<SenderAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
             .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await
@@ -388,17 +389,18 @@ impl<L> LinkEndpointInnerReattach for SenderInner<L>
 where
     L: endpoint::SenderLink<AttachError = SenderAttachError, DetachError = DetachError>
         + LinkExt<FlowState = SenderFlowState, Unsettled = ArcSenderUnsettledMap>
+        + LinkAttach<AttachExchange = SenderAttachExchange>
         + Send
         + Sync,
 {
     fn handle_reattach_outcome(
         &mut self,
-        outcome: AttachExchange,
+        outcome: SenderAttachExchange,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            AttachExchange::Copmplete => Ok(self),
+            SenderAttachExchange::Copmplete => Ok(self),
             //  Re-attach should have None valued unsettled, so this should be invalid
-            AttachExchange::IncompleteUnsettled(_) | AttachExchange::Resume(_) => {
+            SenderAttachExchange::IncompleteUnsettled(_) | SenderAttachExchange::Resume(_) => {
                 Err(SenderAttachError::IllegalState)
             }
         }
@@ -636,8 +638,8 @@ impl DetachedSender {
             let attach_exchange = tri!(self, self.inner.exchange_attach(false).await);
 
             match attach_exchange {
-                AttachExchange::Copmplete => break,
-                AttachExchange::IncompleteUnsettled(resuming_deliveries) => {
+                SenderAttachExchange::Copmplete => break,
+                SenderAttachExchange::IncompleteUnsettled(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
                         if let ResumingDelivery::Resend(payload) = resuming {
                             self.resend_buf.push_back((delivery_tag, payload));
@@ -651,7 +653,7 @@ impl DetachedSender {
                         }
                     }
                 },
-                AttachExchange::Resume(resuming_deliveries) => {
+                SenderAttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
                         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
                         let settlement = tri!(self, self.send_resuming(delivery_tag, resuming).await);

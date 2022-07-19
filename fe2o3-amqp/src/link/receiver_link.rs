@@ -541,6 +541,17 @@ mod tests {
     }
 }
 
+// impl<T> ReceiverLink<T> {
+//     async fn handle_unsettled_in_attach(
+//         &mut self,
+//         remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+//         incomplete_unsettled: bool,
+//     ) -> Result<AttachExchange, SenderAttachError> {
+//         let guard = self.unsettled.read().await;
+        
+//     }
+// }
+
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
@@ -551,9 +562,10 @@ where
         + Send
         + Sync,
 {
+    type AttachExchange = ReceiverAttachExchange;
     type AttachError = ReceiverAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<AttachExchange, Self::AttachError> {
+    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<Self::AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
         match self.local_state {
@@ -613,7 +625,7 @@ where
             .delivery_count_mut(|_| initial_delivery_count)
             .await;
 
-        Ok(AttachExchange::Copmplete)
+        Ok(Self::AttachExchange::Copmplete)
     }
 
     async fn send_attach(
@@ -691,7 +703,7 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         is_reattaching: bool,
-    ) -> Result<AttachExchange, ReceiverAttachError> {
+    ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
         self.send_attach(writer, is_reattaching).await?;
 

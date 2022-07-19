@@ -11,7 +11,6 @@ use tokio::sync::{mpsc, Notify, RwLock};
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
-    control::SessionControl,
     endpoint::{LinkExt, OutputHandle},
     link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
@@ -24,7 +23,7 @@ use super::{
     sender::SenderInner,
     state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
-    ArcUnsettledMap, LinkFrame, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
+    ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
     ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
     SenderRelayFlowState,
 };
@@ -454,14 +453,23 @@ where
             session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
-        perform_attach_exchange(
-            &mut link,
-            &session.outgoing,
-            &mut incoming_rx,
-            &session.control,
-            SenderAttachError::IllegalState,
-        )
-        .await?;
+        match link
+            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .await
+        {
+            Ok(outcome) => outcome.complete_or(SenderAttachError::IllegalState)?,
+            Err(attach_error) => {
+                let err = link
+                    .handle_attach_error(
+                        attach_error,
+                        &session.outgoing,
+                        &mut incoming_rx,
+                        &session.control,
+                    )
+                    .await;
+                return Err(err.into());
+            }
+        }
 
         // Attach completed, return Sender
         let inner = SenderInner {
@@ -546,14 +554,23 @@ where
             session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
         let mut link = self.create_link(unsettled, output_handle, flow_state);
 
-        perform_attach_exchange(
-            &mut link,
-            &session.outgoing,
-            &mut incoming_rx,
-            &session.control,
-            ReceiverAttachError::IllegalState,
-        )
-        .await?;
+        match link
+            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .await
+        {
+            Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,
+            Err(attach_error) => {
+                let err = link
+                    .handle_attach_error(
+                        attach_error,
+                        &session.outgoing,
+                        &mut incoming_rx,
+                        &session.control,
+                    )
+                    .await;
+                return Err(err.into());
+            }
+        }
 
         let mut inner = ReceiverInner {
             link,
@@ -574,26 +591,26 @@ where
     }
 }
 
-async fn perform_attach_exchange<L, E>(
-    link: &mut L,
-    writer: &mpsc::Sender<LinkFrame>,
-    reader: &mut mpsc::Receiver<LinkFrame>,
-    session: &mpsc::Sender<SessionControl>,
-    complete_or_err: E,
-) -> Result<(), E>
-where
-    L: LinkExt<AttachError = E>,
-{
-    match link.exchange_attach(writer, reader, false).await {
-        Ok(outcome) => outcome.complete_or(complete_or_err),
-        Err(attach_error) => {
-            let err = link
-                .handle_attach_error(attach_error, writer, reader, session)
-                .await;
-            Err(err)
-        }
-    }
-}
+// async fn perform_attach_exchange<L, E>(
+//     link: &mut L,
+//     writer: &mpsc::Sender<LinkFrame>,
+//     reader: &mut mpsc::Receiver<LinkFrame>,
+//     session: &mpsc::Sender<SessionControl>,
+//     complete_or_err: E,
+// ) -> Result<(), E>
+// where
+//     L: LinkExt<AttachError = E>,
+// {
+//     match link.exchange_attach(writer, reader, false).await {
+//         Ok(outcome) => outcome.complete_or(complete_or_err),
+//         Err(attach_error) => {
+//             let err = link
+//                 .handle_attach_error(attach_error, writer, reader, session)
+//                 .await;
+//             Err(err)
+//         }
+//     }
+// }
 
 #[cfg(feature = "transaction")]
 impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {

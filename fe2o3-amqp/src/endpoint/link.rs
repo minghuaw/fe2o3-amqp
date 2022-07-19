@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     control::SessionControl,
-    link::{delivery::Delivery, state::LinkState, LinkFrame, AttachExchange},
+    link::{delivery::Delivery, state::LinkState, LinkFrame},
     util::{AsByteIterator, IntoReader},
     Payload,
 };
@@ -36,9 +36,10 @@ pub(crate) trait LinkDetach {
 
 #[async_trait]
 pub(crate) trait LinkAttach {
+    type AttachExchange: Send;
     type AttachError: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<AttachExchange, Self::AttachError>;
+    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn send_attach(
         &mut self,
@@ -78,7 +79,7 @@ pub(crate) trait LinkExt: Link {
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         is_reattaching: bool,
-    ) -> Result<AttachExchange, Self::AttachError>;
+    ) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn handle_attach_error(
         &mut self,

@@ -32,7 +32,7 @@ use super::{
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
     LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
-    RecvError, DEFAULT_CREDIT, AttachExchange,
+    RecvError, DEFAULT_CREDIT, ReceiverAttachExchange,
 };
 
 #[cfg(feature = "transaction")]
@@ -468,6 +468,7 @@ impl<L> LinkEndpointInner for ReceiverInner<L>
 where
     L: endpoint::ReceiverLink<AttachError = ReceiverAttachError, DetachError = DetachError>
         + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+        + LinkAttach<AttachExchange = ReceiverAttachExchange>
         + Send
         + Sync,
 {
@@ -517,7 +518,7 @@ where
     async fn exchange_attach(
         &mut self,
         is_reattaching: bool,
-    ) -> Result<AttachExchange, <Self::Link as LinkAttach>::AttachError> {
+    ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
             .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
             .await
@@ -553,15 +554,16 @@ where
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+        + LinkAttach<AttachExchange = ReceiverAttachExchange>
         + Send
         + Sync,
 {
-    fn handle_reattach_outcome(&mut self, outcome: AttachExchange) -> Result<&mut Self, L::AttachError> {
+    fn handle_reattach_outcome(&mut self, outcome: ReceiverAttachExchange) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            AttachExchange::Copmplete => Ok(self),
+            ReceiverAttachExchange::Copmplete => Ok(self),
             //  Re-attach should have None valued unsettled, so this should be invalid
-            AttachExchange::IncompleteUnsettled(_)
-            | AttachExchange::Resume(_) => Err(ReceiverAttachError::IllegalState),
+            ReceiverAttachExchange::IncompleteUnsettled
+            | ReceiverAttachExchange::Resume => Err(ReceiverAttachError::IllegalState),
         }
     }
 }
@@ -575,6 +577,7 @@ where
             AttachError = ReceiverAttachError,
             DetachError = DetachError,
         > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+        + LinkAttach<AttachExchange = ReceiverAttachExchange>
         + Send
         + Sync,
 {

@@ -118,13 +118,28 @@ pub mod role {
 //     payload: Payload,
 // }
 
-pub(crate) enum AttachExchange {
+pub(crate) enum SenderAttachExchange {
     Copmplete,
     IncompleteUnsettled(Vec<(DeliveryTag, ResumingDelivery)>),
     Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
 
-impl AttachExchange {
+impl SenderAttachExchange {
+    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+        match self {
+            Self::Copmplete => Ok(()),
+            _ => Err(err),
+        }
+    }
+}
+
+pub(crate) enum ReceiverAttachExchange {
+    Copmplete,
+    IncompleteUnsettled,
+    Resume,
+}
+
+impl ReceiverAttachExchange {
     pub fn complete_or<E>(self, err: E) -> Result<(), E> {
         match self {
             Self::Copmplete => Ok(()),

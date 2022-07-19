@@ -427,17 +427,17 @@ impl<T> SenderLink<T> {
         &mut self,
         remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
         incomplete_unsettled: bool,
-    ) -> Result<AttachExchange, SenderAttachError> {
+    ) -> Result<SenderAttachExchange, SenderAttachError> {
         let mut guard = self.unsettled.write().await;
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
-            (None, None) => return Ok(AttachExchange::Copmplete),
+            (None, None) => return Ok(SenderAttachExchange::Copmplete),
             (None, Some(remote_map)) => remote_map
                 .into_keys()
                 .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
                 .collect(),
             (Some(map), None) => {
                 if map.is_empty() {
-                    return Ok(AttachExchange::Copmplete);
+                    return Ok(SenderAttachExchange::Copmplete);
                 } else {
                     map.into_iter()
                         .filter_map(|(tag, local)| {
@@ -462,9 +462,9 @@ impl<T> SenderLink<T> {
         };
 
         if incomplete_unsettled {
-            Ok(AttachExchange::IncompleteUnsettled(v))
+            Ok(SenderAttachExchange::IncompleteUnsettled(v))
         } else {
-            Ok(AttachExchange::Resume(v))
+            Ok(SenderAttachExchange::Resume(v))
         }
     }
 }
@@ -479,12 +479,13 @@ where
         + Send
         + Sync,
 {
+    type AttachExchange = SenderAttachExchange;
     type AttachError = SenderAttachError;
 
     async fn on_incoming_attach(
         &mut self,
         remote_attach: Attach,
-    ) -> Result<AttachExchange, Self::AttachError> {
+    ) -> Result<Self::AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
         match self.local_state {
@@ -610,7 +611,7 @@ where
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
         is_reattaching: bool,
-    ) -> Result<AttachExchange, SenderAttachError> {
+    ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
         self.send_attach(writer, is_reattaching).await?;
 
