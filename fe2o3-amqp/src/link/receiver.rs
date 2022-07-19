@@ -501,7 +501,7 @@ where
         is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming, &self.session, is_reattaching)
             .await
     }
 
@@ -789,7 +789,7 @@ impl DetachedReceiver {
     pub async fn resume<R>(
         self,
     ) -> Result<Receiver, ReceiverAttachError> {
-        
+
 
         todo!()
     }

@@ -254,6 +254,11 @@ where
         self
     }
 
+    /// Get the max frame size of the encoder
+    pub fn encoder_max_frame_size(&self) -> usize {
+        self.framed_write.encoder().max_frame_length()
+    }
+
     /// Change the max_frame_size for the transport length delimited decoder
     pub fn set_encoder_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);

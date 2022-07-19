@@ -675,9 +675,10 @@ where
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, is_reattaching).await?;
+        self.send_attach_inner(writer, session, is_reattaching).await?;
         Ok(())
     }
 }
@@ -746,10 +747,11 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer, is_reattaching).await?;
+        self.send_attach(writer, session, is_reattaching).await?;
 
         // Wait for remote attach
         let remote_attach = match reader

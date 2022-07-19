@@ -1,6 +1,6 @@
 //! Implements acceptor for a remote receiver link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{SenderSettleMode, SequenceNo},
@@ -145,9 +145,9 @@ impl LocalSenderLinkAcceptor<Symbol> {
         let outgoing = session.outgoing.clone();
 
         match link.on_incoming_attach(remote_attach).await {
-            Ok(_) => link.send_attach(&outgoing, false).await?,
+            Ok(_) => link.send_attach(&outgoing, &session.control, false).await?,
             Err(attach_error) => {
-                link.send_attach(&outgoing, false).await?;
+                link.send_attach(&outgoing, &session.control, false).await?;
                 return Err(link
                     .handle_attach_error(
                         attach_error,

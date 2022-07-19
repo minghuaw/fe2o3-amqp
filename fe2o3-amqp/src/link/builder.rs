@@ -454,7 +454,7 @@ where
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
             .await
         {
             Ok(outcome) => outcome.complete_or(SenderAttachError::IllegalState)?,
@@ -555,7 +555,7 @@ where
         let mut link = self.create_link(unsettled, output_handle, flow_state);
 
         match link
-            .exchange_attach(&session.outgoing, &mut incoming_rx, false)
+            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
             .await
         {
             Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,

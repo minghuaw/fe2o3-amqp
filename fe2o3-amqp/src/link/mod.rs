@@ -19,7 +19,7 @@ pub use error::*;
 pub use receiver::Receiver;
 pub use sender::Sender;
 use serde::Serialize;
-use serde_amqp::ser::Serializer;
+use serde_amqp::{ser::Serializer};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
@@ -206,6 +206,7 @@ where
     async fn get_unsettled_map(
         &self,
         is_reattaching: bool,
+        partial_unsettled: usize
     ) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
         // When reattaching (as opposed to resuming), the unsettled map MUST be null.
         if is_reattaching {
@@ -214,18 +215,30 @@ where
 
         let guard = self.unsettled.read().await;
         let map = guard.as_ref()?;
-        match map.len() {
-            0 => None,
-            _ => Some(
-                map.iter()
+        match (map.len(), partial_unsettled) {
+            (0, _) => None,
+            (_, 0..=1) => {
+                let v = map.iter()
                     .map(|(key, val)| (key.clone(), val.as_delivery_state().clone()))
-                    .collect(),
-            ),
+                    .collect();
+                Some(v)
+            }
+            (total, denom) => {
+                let len = total/denom;
+                let v = (0..len).zip(map.iter())
+                    .map(|(_, (key, val))| (key.clone(), val.as_delivery_state().clone()))
+                    .collect();
+                Some(v)
+            },
         }
     }
 
-    async fn as_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        let unsettled = self.get_unsettled_map(is_reattaching).await;
+    async fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
+        self.as_attach_inner(handle, is_reattaching, 1).await
+    }
+
+    async fn as_attach_inner(&self, handle: OutputHandle, is_reattaching: bool, partial_unsettled: usize) -> Attach {
+        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled).await;
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -233,6 +246,10 @@ where
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
         let properties = self.flow_state.as_ref().properties().await;
+        let incomplete_unsettled = match partial_unsettled {
+            0..=1 => false,
+            _ => true
+        };
 
         Attach {
             name: self.name.clone(),
@@ -243,7 +260,7 @@ where
             source: self.source.clone().map(Box::new),
             target: self.target.clone().map(Into::into).map(Box::new),
             unsettled,
-            incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?
+            incomplete_unsettled,
 
             /// This MUST NOT be null if role is sender,
             /// and it is ignored if the role is receiver.
@@ -257,9 +274,30 @@ where
         }
     }
 
+    async fn as_maybe_incomplete_attach(&self, max_frame_size: usize, handle: OutputHandle, is_reattaching: bool) -> Result<Attach, SendAttachErrorKind> {
+        let mut denominator = 1usize; // This is going to be the denominator
+        let mut buf = BytesMut::new();
+
+        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator).await;
+        let mut serializer = Serializer::from((&mut buf).writer());
+        attach.serialize(&mut serializer).map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
+
+        while buf.len() > max_frame_size {
+            buf.clear();
+            denominator *= 2;
+
+            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator).await;
+            let mut serializer = Serializer::from((&mut buf).writer());
+            attach.serialize(&mut serializer).map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
+        }
+
+        Ok(attach)
+    }
+
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), SendAttachErrorKind> {
         // Create Attach frame
@@ -268,7 +306,14 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let attach = self.as_attach(handle, is_reattaching).await;
+        let attach = match self.unsettled.read().await.as_ref().map(|m| m.len()) {
+            Some(0) | None => self.as_complete_attach(handle, is_reattaching).await,
+            Some(_) => {
+                let max_frame_size = get_max_frame_size(session).await?;
+                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching).await?
+            },
+        };
+        let incomplete_unsettled = attach.incomplete_unsettled;
         let frame = LinkFrame::Attach(attach);
 
         match self.local_state {
@@ -277,19 +322,33 @@ where
             | LinkState::DetachSent => {
                 writer.send(frame).await
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-                self.local_state = LinkState::AttachSent
+                if incomplete_unsettled {
+                    self.local_state = LinkState::IncompleteAttachSent
+                } else {
+                    self.local_state = LinkState::AttachSent
+                }
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-                // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
-                self.local_state = LinkState::Attached
+                if incomplete_unsettled {
+                    self.local_state = LinkState::IncompleteAttachExchanged
+                } else {
+                    self.local_state = LinkState::Attached
+                }
             }
             _ => return Err(SendAttachErrorKind::IllegalState),
         }
 
         Ok(())
     }
+}
+
+
+pub(crate) async fn get_max_frame_size(control: &mpsc::Sender<SessionControl>) -> Result<usize, SendAttachErrorKind> {
+    let (tx, rx) = oneshot::channel();
+    control.send(SessionControl::GetMaxFrameSize(tx)).await.map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
+    rx.await.map_err(|_| SendAttachErrorKind::IllegalSessionState)
 }
 
 #[async_trait]

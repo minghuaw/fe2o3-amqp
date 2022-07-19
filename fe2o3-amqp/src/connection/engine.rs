@@ -288,6 +288,12 @@ where
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
             }
+            ConnectionControl::GetMaxFrameSize(resp) => {
+                let max_frame_size = self.transport.encoder_max_frame_size();
+                if let Err(error) = resp.send(max_frame_size) {
+                    tracing::error!(?error);
+                }
+            }
         }
 
         match self.connection.local_state() {

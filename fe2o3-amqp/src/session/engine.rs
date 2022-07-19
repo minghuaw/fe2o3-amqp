@@ -233,6 +233,10 @@ where
                     .await
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
+            SessionControl::GetMaxFrameSize(resp) => {
+                self.conn.send(ConnectionControl::GetMaxFrameSize(resp)).await
+                    .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            }
 
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { resp } => {

@@ -357,7 +357,7 @@ where
         is_reattaching: bool,
     ) -> Result<SenderAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, is_reattaching)
+            .exchange_attach(&self.outgoing, &mut self.incoming, &self.session, is_reattaching)
             .await
     }
 

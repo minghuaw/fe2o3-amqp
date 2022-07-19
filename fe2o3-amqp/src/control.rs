@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
-    performatives::Disposition,
+    performatives::{Disposition},
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -30,18 +30,19 @@ pub(crate) enum ConnectionControl {
         responder: oneshot::Sender<Result<OutgoingChannel, AllocSessionError>>,
     },
     DeallocateSession(OutgoingChannel),
+    GetMaxFrameSize(oneshot::Sender<usize>),
 }
 
 impl std::fmt::Display for ConnectionControl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            // Self::Open => write!(f, "Open"),
             Self::Close(err) => write!(f, "Close({:?})", err),
             Self::AllocateSession {
                 tx: _,
                 responder: _,
             } => write!(f, "AllocateSession"),
             Self::DeallocateSession(id) => write!(f, "DeallocateSession({})", id.0),
+            Self::GetMaxFrameSize(_) => write!(f, "GetMaxFrameSize"),
         }
     }
 }
@@ -64,6 +65,7 @@ pub(crate) enum SessionControl {
     LinkFlow(LinkFlow),
     Disposition(Disposition),
     CloseConnectionWithError((ConnectionError, Option<String>)),
+    GetMaxFrameSize(oneshot::Sender<usize>),
 
     // Transaction related controls
     #[cfg(feature = "transaction")]
@@ -103,6 +105,7 @@ impl std::fmt::Display for SessionControl {
             SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
             SessionControl::CloseConnectionWithError(_) => write!(f, "CloseConnectionWithError"),
+            SessionControl::GetMaxFrameSize(_) => write!(f, "GetMaxFrameSize"),
 
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { .. } => write!(f, "AllocateTransactionId"),
