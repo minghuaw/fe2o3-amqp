@@ -305,7 +305,10 @@ where
             }
         });
 
-        if !settled {
+        if settled {
+            let mut lock = self.unsettled.write().await;
+            let _ = lock.as_mut().and_then(|map| map.remove(&delivery_tag));
+        } else {
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
@@ -569,11 +572,13 @@ impl<T> ReceiverLink<T> {
         match self.local_state {
             LinkState::IncompleteAttachReceived
             | LinkState::IncompleteAttachSent
-            | LinkState::IncompleteAttachExchanged => ReceiverAttachExchange::IncompleteUnsettled,
+            | LinkState::IncompleteAttachExchanged => {
+                ReceiverAttachExchange::IncompleteUnsettled
+            },
             _ => ReceiverAttachExchange::Resume,
         }
     }
-}
+} 
 
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>

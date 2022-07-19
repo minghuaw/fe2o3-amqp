@@ -6,7 +6,7 @@ use crate::session::AllocLinkError;
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
-use super::sender::DetachedSender;
+use super::{sender::DetachedSender, receiver::DetachedReceiver};
 
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
@@ -616,4 +616,26 @@ pub struct SenderResumeError {
 
     /// The error with resumption
     pub kind: SenderResumeErrorKind,
+}
+
+/// Error kind of receiver resumption
+#[derive(Debug, thiserror::Error)]
+pub enum ReceiverResumeErrorKind {
+    /// Sender attach error
+    #[error(transparent)]
+    AttachError(#[from] ReceiverAttachError),
+
+    /// Detach/suspend error
+    #[error(transparent)]
+    DetachError(#[from] DetachError),
+}
+
+/// Receiver resumption error
+#[derive(Debug)]
+pub struct ReceiverResumeError {
+    /// The detached receiver
+    pub detached_recver: DetachedReceiver,
+
+    /// The error with resumption
+    pub kind: ReceiverResumeErrorKind,
 }

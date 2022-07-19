@@ -11,6 +11,7 @@ use fe2o3_amqp_types::{
     },
     performatives::{Detach, Transfer},
 };
+use serde_amqp::Value;
 use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
@@ -21,7 +22,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload, 
+    Payload,
 };
 
 use super::{
@@ -32,8 +33,8 @@ use super::{
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
-    LinkStateError, ReceiverAttachError, ReceiverFlowState, ReceiverLink, ReceiverTransferError,
-    RecvError, DEFAULT_CREDIT, ReceiverAttachExchange,
+    LinkStateError, ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
+    ReceiverResumeError, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
 };
 
 #[cfg(feature = "transaction")]
@@ -137,11 +138,11 @@ impl IncompleteTransfer {
                 // The first section
                 self.section_number = Some(0);
                 self.section_offset = offset;
-            },
+            }
             (None, _) => {
                 self.section_number = Some(number - 1);
                 self.section_offset = offset;
-            },
+            }
             (Some(val), _) => {
                 *val += number;
                 self.section_offset = offset;
@@ -501,7 +502,12 @@ where
         is_reattaching: bool,
     ) -> Result<ReceiverAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, &self.session, is_reattaching)
+            .exchange_attach(
+                &self.outgoing,
+                &mut self.incoming,
+                &self.session,
+                is_reattaching,
+            )
             .await
     }
 
@@ -529,22 +535,24 @@ where
 }
 
 #[async_trait]
-impl<L> LinkEndpointInnerReattach for ReceiverInner<L> 
+impl<L> LinkEndpointInnerReattach for ReceiverInner<L>
 where
-    L: endpoint::ReceiverLink<
-            AttachError = ReceiverAttachError,
-            DetachError = DetachError,
-        > + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
+    L: endpoint::ReceiverLink<AttachError = ReceiverAttachError, DetachError = DetachError>
+        + LinkExt<FlowState = ReceiverFlowState, Unsettled = ArcReceiverUnsettledMap>
         + LinkAttach<AttachExchange = ReceiverAttachExchange>
         + Send
         + Sync,
 {
-    fn handle_reattach_outcome(&mut self, outcome: ReceiverAttachExchange) -> Result<&mut Self, L::AttachError> {
+    fn handle_reattach_outcome(
+        &mut self,
+        outcome: ReceiverAttachExchange,
+    ) -> Result<&mut Self, L::AttachError> {
         match outcome {
             ReceiverAttachExchange::Copmplete => Ok(self),
             //  Re-attach should have None valued unsettled, so this should be invalid
-            ReceiverAttachExchange::IncompleteUnsettled
-            | ReceiverAttachExchange::Resume => Err(ReceiverAttachError::IllegalState),
+            ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
+                Err(ReceiverAttachError::IllegalState)
+            }
         }
     }
 }
@@ -783,22 +791,63 @@ pub struct DetachedReceiver {
     inner: ReceiverInner<ReceiverLink<Target>>,
 }
 
+macro_rules! try_as_recver {
+    ($self:ident, $f:expr) => {
+        match $f {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                return Err(ReceiverResumeError {
+                    detached_recver: $self,
+                    kind: error.into(),
+                })
+            }
+        }
+    };
+}
+
 impl DetachedReceiver {
+    async fn recv_and_settle(&mut self) -> Result<(), RecvError> {
+        loop {
+            let delivery: Delivery<Value> = self.inner.recv().await?;
+            tracing::debug!(?delivery);
+            let state = DeliveryState::Accepted(Accepted {});
+            self.inner
+                .dispose(
+                    delivery.delivery_id,
+                    delivery.delivery_tag,
+                    Some(true),
+                    state,
+                )
+                .await?;
+        }
+    }
+
     /// Resume the receiver link
     #[instrument(skip(self))]
-    pub async fn resume<R>(
-        self,
-    ) -> Result<Receiver, ReceiverAttachError> {
+    pub async fn resume<R>(mut self) -> Result<Receiver, ReceiverResumeError> {
+        try_as_recver!(self, self.inner.reallocate_output_handle().await);
 
+        loop {
+            let exchange = try_as_recver!(self, self.inner.exchange_attach(false).await);
+            match exchange {
+                ReceiverAttachExchange::Copmplete => break,
+                // These two will always require some more transfers
+                ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
+                    let result = self.recv_and_settle().await;
+                    tracing::debug!(?result);
+                    try_as_recver!(self, self.inner.detach_with_error(None).await);
+                }
+            }
+        }
 
-        todo!()
+        Ok(Receiver { inner: self.inner })
     }
 
     /// Resume the sender on a specific session
     pub async fn resume_on_session<R>(
         mut self,
         session: &mut SessionHandle<R>,
-    ) -> Result<Receiver, ReceiverAttachError> {
+    ) -> Result<Receiver, ReceiverResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume::<R>().await
     }

@@ -368,7 +368,9 @@ where
 
         match detach.closed {
             true => match self.local_state {
-                LinkState::Attached | LinkState::AttachSent | LinkState::AttachReceived => {
+                LinkState::Attached | LinkState::AttachSent | LinkState::AttachReceived 
+                | LinkState::IncompleteAttachExchanged | LinkState::IncompleteAttachSent 
+                | LinkState::IncompleteAttachReceived => {
                     self.local_state = LinkState::CloseReceived;
                     match detach.error {
                         Some(error) => Err(DetachError::RemoteClosedWithError(error)),
