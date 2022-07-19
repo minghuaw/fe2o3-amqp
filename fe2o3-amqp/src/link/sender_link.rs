@@ -256,7 +256,7 @@ where
         }
 
         match settled {
-            true => Ok(Settlement::Settled),
+            true => Ok(Settlement::Settled(delivery_tag)),
             // If not set on the first (or only) transfer for a (multi-transfer)
             // delivery, then the settled flag MUST be interpreted as being false.
             false => {

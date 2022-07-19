@@ -18,7 +18,7 @@ use crate::{
     Payload,
 };
 
-use super::{OutputHandle, Settlement, InputHandle};
+use super::{OutputHandle, Settlement};
 
 #[async_trait]
 pub(crate) trait LinkDetach {

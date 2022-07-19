@@ -191,8 +191,3 @@ pub use link::{
 pub use session::Session;
 
 type Payload = bytes::Bytes;
-
-use std::collections::BTreeMap;
-
-use fe2o3_amqp_types::{definitions::DeliveryTag, messaging::DeliveryState};
-use link::resumption::ResumingDelivery;

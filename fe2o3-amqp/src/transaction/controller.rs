@@ -53,7 +53,7 @@ where
     T: serde::Serialize,
 {
     match sender.send(sendable).await? {
-        Settlement::Settled => Err(SendError::IllegalDeliveryState),
+        Settlement::Settled(_) => Err(SendError::IllegalDeliveryState),
         Settlement::Unsettled {
             delivery_tag: _,
             outcome,

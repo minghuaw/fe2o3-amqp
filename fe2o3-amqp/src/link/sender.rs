@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 sender
 
-use std::time::Duration;
+use std::{time::Duration, collections::VecDeque};
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
@@ -10,7 +10,7 @@ use tokio::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, Handle, SenderSettleMode},
+    definitions::{self, DeliveryTag, SenderSettleMode},
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, Target, MESSAGE_FORMAT,
     },
@@ -160,7 +160,7 @@ impl Sender {
     /// the Sender will re-attach and send a closing detach
     pub async fn detach(mut self) -> Result<DetachedSender, DetachError> {
         self.inner.detach_with_error(None).await?;
-        Ok(DetachedSender { inner: self.inner })
+        Ok(DetachedSender::new(self.inner))
     }
 
     /// Detach the link with an error
@@ -169,7 +169,7 @@ impl Sender {
         error: definitions::Error,
     ) -> Result<DetachedSender, DetachError> {
         self.inner.detach_with_error(Some(error)).await?;
-        Ok(DetachedSender { inner: self.inner })
+        Ok(DetachedSender::new(self.inner))
     }
 
     /// Detach the link with a timeout
@@ -440,7 +440,6 @@ where
             message_format,
             settled,
         } = sendable;
-        // .try_into().map_err(Into::into)?;
 
         // serialize message
         let mut payload = BytesMut::new();
@@ -587,9 +586,28 @@ impl SenderInner<SenderLink<Target>> {
 #[derive(Debug)]
 pub struct DetachedSender {
     inner: SenderInner<SenderLink<Target>>,
+    resend_buf: VecDeque<(DeliveryTag, Payload)>,
+}
+
+macro_rules! tri {
+    ($self:ident, $f:expr) => {
+        match $f {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                return Err(SenderResumeError {
+                    detached_sender: $self,
+                    kind: error.into()
+                })
+            }
+        }
+    };
 }
 
 impl DetachedSender {
+    fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
+        Self { inner, resend_buf: VecDeque::new() }
+    }
+
     async fn send_resuming(
         &mut self,
         delivery_tag: DeliveryTag,
@@ -612,61 +630,50 @@ impl DetachedSender {
     /// Resume the sender link on the original session
     #[instrument(skip(self))]
     pub async fn resume<R>(mut self) -> Result<Sender, SenderResumeError> {
-        if let Err(error) = self.inner.reallocate_output_handle().await {
-            return Err(SenderResumeError {
-                detached_sender: self,
-                kind: error.into(),
-            });
-        }
+        tri!(self, self.inner.reallocate_output_handle().await);
 
         loop {
-            let attach_exchange = match self.inner.exchange_attach(false).await {
-                Ok(attach_exchange) => attach_exchange,
-                Err(error) => {
-                    return Err(SenderResumeError {
-                        detached_sender: self,
-                        kind: error.into(),
-                    })
-                }
-            };
+            let attach_exchange = tri!(self, self.inner.exchange_attach(false).await);
 
             match attach_exchange {
                 AttachExchange::Copmplete => break,
-                AttachExchange::IncompleteUnsettled(_) => todo!(),
+                AttachExchange::IncompleteUnsettled(resuming_deliveries) => {
+                    for (delivery_tag, resuming) in resuming_deliveries {
+                        if let ResumingDelivery::Resend(payload) = resuming {
+                            self.resend_buf.push_back((delivery_tag, payload));
+                        } else {
+                            tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+                            let settlement = tri!(self, self.send_resuming(delivery_tag, resuming).await);
+                            let fut = DeliveryFut::<SendResult>::from(settlement);
+
+                            let outcome = tri!(self, fut.await);
+                            tracing::debug!("Resuming delivery outcome {:?}", outcome)
+                        }
+                    }
+                },
                 AttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
                         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-                        let fut = match self.send_resuming(delivery_tag, resuming).await {
-                            Ok(settlement) => DeliveryFut::<SendResult>::from(settlement),
-                            Err(error) => {
-                                return Err(SenderResumeError {
-                                    detached_sender: self,
-                                    kind: error.into(),
-                                })
-                            }
-                        };
+                        let settlement = tri!(self, self.send_resuming(delivery_tag, resuming).await);
+                        let fut = DeliveryFut::<SendResult>::from(settlement);
 
-                        match fut.await {
-                            Ok(outcome) => {
-                                tracing::debug!("Resuming delivery outcome {:?}", outcome)
-                            }
-                            Err(error) => {
-                                return Err(SenderResumeError {
-                                    detached_sender: self,
-                                    kind: error.into(),
-                                })
-                            }
-                        }
+                        let outcome = tri!(self, fut.await);
+                        tracing::debug!("Resuming delivery outcome {:?}", outcome)
+                    }
+
+                    // Use VecDeque to preserve order
+                    while let Some((delivery_tag, payload)) = self.resend_buf.pop_front() {
+                        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+                        let settlement = tri!(self, self.inner.resend(delivery_tag, payload, None, false).await);
+                        let fut = DeliveryFut::<SendResult>::from(settlement);
+
+                        let outcome = tri!(self, fut.await);
+                        tracing::debug!("Resuming delivery outcome {:?}", outcome)
                     }
 
                     // Upon completion of this reduction of state, the two parties MUST suspend and
                     // re-attempt to resume the link.
-                    if let Err(error) = self.inner.detach_with_error(None).await {
-                        return Err(SenderResumeError {
-                            detached_sender: self,
-                            kind: error.into(),
-                        });
-                    }
+                    tri!(self, self.inner.detach_with_error(None).await)
                 }
             }
         }

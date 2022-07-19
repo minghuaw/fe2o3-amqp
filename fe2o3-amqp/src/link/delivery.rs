@@ -352,6 +352,16 @@ pin_project! {
     }
 }
 
+impl<O> DeliveryFut<O> {
+    /// Get the delivery tag
+    pub fn delivery_tag(&self) -> &DeliveryTag {
+        match &self.settlement {
+            Settlement::Settled(delivery_tag) => delivery_tag,
+            Settlement::Unsettled { delivery_tag, outcome: _ } => delivery_tag,
+        }
+    }
+}
+
 impl<O> From<Settlement> for DeliveryFut<O> {
     fn from(settlement: Settlement) -> Self {
         Self {
@@ -427,7 +437,7 @@ where
         let mut settlement = this.settlement;
 
         match &mut *settlement {
-            Settlement::Settled => Poll::Ready(O::from_settled()),
+            Settlement::Settled(_) => Poll::Ready(O::from_settled()),
             Settlement::Unsettled {
                 delivery_tag: _,
                 outcome,
