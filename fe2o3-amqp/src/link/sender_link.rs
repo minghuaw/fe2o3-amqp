@@ -426,7 +426,6 @@ impl<T> SenderLink<T> {
     async fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
-        incomplete_unsettled: bool,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
         let mut guard = self.unsettled.write().await;
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
@@ -461,10 +460,13 @@ impl<T> SenderLink<T> {
             }
         };
 
-        if incomplete_unsettled {
-            Ok(SenderAttachExchange::IncompleteUnsettled(v))
-        } else {
-            Ok(SenderAttachExchange::Resume(v))
+        match self.local_state {
+            LinkState::IncompleteAttachReceived
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachExchanged => {
+                Ok(SenderAttachExchange::IncompleteUnsettled(v))
+            }
+            _ => Ok(SenderAttachExchange::Resume(v)),
         }
     }
 }
@@ -488,10 +490,22 @@ where
     ) -> Result<Self::AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
-        match self.local_state {
-            LinkState::AttachSent => self.local_state = LinkState::Attached,
-            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
-            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+        match (&self.local_state, remote_attach.incomplete_unsettled) {
+            (LinkState::AttachSent, false) => {
+                self.local_state = LinkState::Attached;
+            }
+            (LinkState::IncompleteAttachSent, false) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, false) | (LinkState::Detached, false) => {
+                self.local_state = LinkState::AttachReceived; // re-attaching
+            }
+            (LinkState::AttachSent, true) | (LinkState::IncompleteAttachSent, true) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, true) | (LinkState::Detached, true) => {
+                self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
+            }
             _ => return Err(SenderAttachError::IllegalState),
         };
 
@@ -532,7 +546,7 @@ where
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
-        self.handle_unsettled_in_attach(remote_attach.unsettled, remote_attach.incomplete_unsettled)
+        self.handle_unsettled_in_attach(remote_attach.unsettled)
             .await
     }
 

@@ -24,11 +24,20 @@ pub enum LinkState {
     /// An attach frame has been sent
     AttachSent,
 
+    /// An attach has been sent but with incomplete unsettled
+    IncompleteAttachSent,
+
     /// An attach frame has been received
     AttachReceived,
 
+    /// An attach frame has been received with incomplete unsettled
+    IncompleteAttachReceived,
+
     /// The link is attached
     Attached,
+
+    /// The two endpoints has exchanged Attach frames but at least one of them is incomplete
+    IncompleteAttachExchanged,
 
     /// A non-closing detach frame has been sent
     DetachSent,

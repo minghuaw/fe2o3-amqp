@@ -3,6 +3,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
+use bytes::{BytesMut, BufMut};
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
@@ -17,6 +18,8 @@ pub use error::*;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
+use serde::Serialize;
+use serde_amqp::ser::Serializer;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 

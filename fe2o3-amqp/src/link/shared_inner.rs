@@ -127,6 +127,9 @@ where
         match self.link().local_state() {
             LinkState::Unattached
             | LinkState::AttachSent
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachReceived
+            | LinkState::IncompleteAttachExchanged
             | LinkState::AttachReceived
             | LinkState::Attached => {
                 // Send a non-closing detach
@@ -182,6 +185,9 @@ where
         match self.link().local_state() {
             LinkState::Unattached
             | LinkState::AttachSent
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachReceived
+            | LinkState::IncompleteAttachExchanged
             | LinkState::AttachReceived
             | LinkState::Attached => {
                 // Send detach with closed=true and wait for remote closing detach

@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::{util::{AsByteIterator, IntoReader}};
+use crate::util::{AsByteIterator, IntoReader};
 
 use super::*;
 
@@ -149,7 +149,9 @@ where
         {
             let mut lock = self.unsettled.write().await;
             // The same key may be writter multiple times
-            let _ = lock.get_or_insert(BTreeMap::new()).insert(delivery_tag, Some(state));
+            let _ = lock
+                .get_or_insert(BTreeMap::new())
+                .insert(delivery_tag, Some(state));
         }
     }
 
@@ -244,7 +246,9 @@ where
                     {
                         let mut lock = self.unsettled.write().await;
                         // There may be records of incomplete delivery
-                        let _ = lock.get_or_insert(BTreeMap::new()).insert(delivery_tag.clone(), Some(state));
+                        let _ = lock
+                            .get_or_insert(BTreeMap::new())
+                            .insert(delivery_tag.clone(), Some(state));
                     }
 
                     // Mode Second requires user to explicitly acknowledge the delivery
@@ -305,7 +309,9 @@ where
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            let _ = lock.get_or_insert(BTreeMap::new()).insert(delivery_tag.clone(), Some(state.clone()));
+            let _ = lock
+                .get_or_insert(BTreeMap::new())
+                .insert(delivery_tag.clone(), Some(state.clone()));
         }
 
         let disposition = Disposition {
@@ -541,16 +547,33 @@ mod tests {
     }
 }
 
-// impl<T> ReceiverLink<T> {
-//     async fn handle_unsettled_in_attach(
-//         &mut self,
-//         remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
-//         incomplete_unsettled: bool,
-//     ) -> Result<AttachExchange, SenderAttachError> {
-//         let guard = self.unsettled.read().await;
-        
-//     }
-// }
+impl<T> ReceiverLink<T> {
+    async fn handle_unsettled_in_attach(
+        &mut self,
+        remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+    ) -> ReceiverAttachExchange {
+        let guard = self.unsettled.read().await;
+        let local_is_empty = match guard.as_ref() {
+            Some(map) => map.is_empty(),
+            None => true,
+        };
+        let remote_is_empty = match remote_unsettled {
+            Some(map) => map.is_empty(),
+            None => true,
+        };
+
+        if local_is_empty && remote_is_empty {
+            return ReceiverAttachExchange::Copmplete;
+        }
+
+        match self.local_state {
+            LinkState::IncompleteAttachReceived
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachExchanged => ReceiverAttachExchange::IncompleteUnsettled,
+            _ => ReceiverAttachExchange::Resume,
+        }
+    }
+}
 
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
@@ -565,13 +588,31 @@ where
     type AttachExchange = ReceiverAttachExchange;
     type AttachError = ReceiverAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<Self::AttachExchange, Self::AttachError> {
+    async fn on_incoming_attach(
+        &mut self,
+        remote_attach: Attach,
+    ) -> Result<Self::AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
-        match self.local_state {
-            LinkState::AttachSent => self.local_state = LinkState::Attached,
-            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
-            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+        match (&self.local_state, remote_attach.incomplete_unsettled) {
+            (LinkState::AttachSent, false) => {
+                self.local_state = LinkState::Attached;
+            }
+            (LinkState::IncompleteAttachSent, false) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, false) 
+            | (LinkState::Detached, false) => {
+                self.local_state = LinkState::AttachReceived; // re-attaching
+            }
+            (LinkState::AttachSent, true)
+            | (LinkState::IncompleteAttachSent, true) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, true) 
+            | (LinkState::Detached, true) => {
+                self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
+            }
             _ => return Err(ReceiverAttachError::IllegalState),
         };
 
@@ -625,7 +666,10 @@ where
             .delivery_count_mut(|_| initial_delivery_count)
             .await;
 
-        Ok(Self::AttachExchange::Copmplete)
+        // Ok(Self::AttachExchange::Copmplete)
+        Ok(self
+            .handle_unsettled_in_attach(remote_attach.unsettled)
+            .await)
     }
 
     async fn send_attach(
