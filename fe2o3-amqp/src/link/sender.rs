@@ -166,9 +166,9 @@ impl Sender {
     /// Detach the link with an error
     pub async fn detach_with_error(
         mut self,
-        error: definitions::Error,
+        error: impl Into<definitions::Error>,
     ) -> Result<DetachedSender, DetachError> {
-        self.inner.detach_with_error(Some(error)).await?;
+        self.inner.detach_with_error(Some(error.into())).await?;
         Ok(DetachedSender::new(self.inner))
     }
 
@@ -190,8 +190,8 @@ impl Sender {
     }
 
     /// Detach the link with an error
-    pub async fn close_with_error(mut self, error: definitions::Error) -> Result<(), DetachError> {
-        self.inner.close_with_error(Some(error)).await
+    pub async fn close_with_error(mut self, error: impl Into<definitions::Error>) -> Result<(), DetachError> {
+        self.inner.close_with_error(Some(error.into())).await
     }
 
     /// Send a message and wait for acknowledgement (disposition)

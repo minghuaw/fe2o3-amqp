@@ -15,6 +15,7 @@ use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
 };
+use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -302,7 +303,7 @@ impl Receiver {
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach(mut self) -> Result<DetachedReceiver, DetachError> {
         self.inner.detach_with_error(None).await?;
-        Ok(DetachedReceiver { _inner: self.inner })
+        Ok(DetachedReceiver { inner: self.inner })
     }
 
     /// Detach the link with an error.
@@ -312,10 +313,10 @@ impl Receiver {
     /// re-attach and then close by exchanging closing Detach performatives.
     pub async fn detach_with_error(
         mut self,
-        error: impl Into<Option<definitions::Error>>,
+        error: impl Into<definitions::Error>,
     ) -> Result<DetachedReceiver, DetachError> {
-        self.inner.detach_with_error(error.into()).await?;
-        Ok(DetachedReceiver { _inner: self.inner })
+        self.inner.detach_with_error(Some(error.into())).await?;
+        Ok(DetachedReceiver { inner: self.inner })
     }
 
     /// Detach the link with a timeout
@@ -340,9 +341,9 @@ impl Receiver {
     /// This will send a Detach performative with the `closed` field set to true.
     pub async fn close_with_error(
         mut self,
-        error: impl Into<Option<definitions::Error>>,
+        error: impl Into<definitions::Error>,
     ) -> Result<(), DetachError> {
-        self.inner.close_with_error(error.into()).await
+        self.inner.close_with_error(Some(error.into())).await
     }
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
@@ -409,26 +410,6 @@ impl Receiver {
                 state,
             )
             .await
-    }
-}
-
-/// A detached receiver
-///
-/// # Link re-attachment
-///
-/// TODO
-#[derive(Debug)]
-pub struct DetachedReceiver {
-    _inner: ReceiverInner<ReceiverLink<Target>>,
-}
-
-impl DetachedReceiver {
-    /// Resume the receiver link
-    pub async fn resume<R>(
-        self,
-        session: &mut SessionHandle<R>,
-    ) -> Result<Receiver, ReceiverAttachError> {
-        todo!()
     }
 }
 
@@ -789,6 +770,35 @@ where
         self.link
             .send_flow(&self.outgoing, None, Some(true), false)
             .await
+    }
+}
+
+/// A detached receiver
+///
+/// # Link re-attachment
+///
+/// TODO
+#[derive(Debug)]
+pub struct DetachedReceiver {
+    inner: ReceiverInner<ReceiverLink<Target>>,
+}
+
+impl DetachedReceiver {
+    /// Resume the receiver link
+    #[instrument(skip(self))]
+    pub async fn resume<R>(
+        self,
+    ) -> Result<Receiver, ReceiverAttachError> {
+        todo!()
+    }
+
+    /// Resume the sender on a specific session
+    pub async fn resume_on_session<R>(
+        mut self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<Receiver, ReceiverAttachError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume::<R>().await
     }
 }
 
