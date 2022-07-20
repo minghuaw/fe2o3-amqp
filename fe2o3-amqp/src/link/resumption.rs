@@ -1,8 +1,8 @@
-use fe2o3_amqp_types::{messaging::{DeliveryState, Received}, definitions::DeliveryTag};
+use fe2o3_amqp_types::{messaging::{DeliveryState, Received}};
 
 use crate::Payload;
 
-use super::{delivery::UnsettledMessage, receiver_link::is_section_header, ReceiverLink};
+use super::{delivery::UnsettledMessage, receiver_link::is_section_header};
 
 pub(crate) enum ResumingDelivery {
     Abort,

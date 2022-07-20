@@ -227,18 +227,19 @@ where
                 // sending its disposition to the sender and receiving a settled
                 // disposition from the sender.
                 ReceiverSettleMode::Second => {
-                    // Add to unsettled map
+                    // Need to decode anyway
                     let section_offset = rfind_offset_of_complete_message(&payload)
-                        .ok_or(Self::TransferError::MessageDecodeError)?;
+                    .ok_or(Self::TransferError::MessageDecodeError)?;
                     let message = T::decode_into_message(payload.into_reader())
-                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
+                    .map_err(|_| Self::TransferError::MessageDecodeError)?;
                     let section_number = message.sections();
-
+                    
                     let state = DeliveryState::Received(Received {
                         section_number, // What is section number?
                         section_offset,
                     });
-
+                    
+                    // Add to unsettled map
                     // Insert into local unsettled map with Received state
                     // Mode Second doesn't automatically send back a disposition
                     // (ie. thus doesn't call `link.dispose()`) and thus need to manually
@@ -366,13 +367,15 @@ where
 }
 
 /// Count number of sections in encoded message
-pub(crate) fn count_number_of_sections_and_offset(bytes: &[u8]) -> (u32, u64) {
+pub(crate) fn count_number_of_sections_and_offset<'a>(bytes: &'a [u8]) -> (u32, u64) {
+    let b0 = bytes.iter();
+    let b1 = bytes.iter().skip(1);
+    let b2 = bytes.iter().skip(2);
+    let iter = b0.zip(b1.zip(b2));
+
     let mut last_pos = 0;
     let mut section_numbers = 0;
 
-    let iter = bytes
-        .iter()
-        .zip(bytes.iter().skip(1).zip(bytes.iter().skip(2)));
     for (i, (&b0, (&b1, &b2))) in iter.enumerate() {
         if is_section_header(b0, b1, b2) {
             section_numbers += 1;
