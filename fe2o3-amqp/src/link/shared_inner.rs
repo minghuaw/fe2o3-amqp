@@ -59,8 +59,7 @@ where
         let link_relay = self.as_new_link_relay(tx);
         *self.reader_mut() = incoming;
         let link_name = self.link().name().to_string();
-        let handle =
-            session::allocate_link(self.session_control(), link_name, link_relay).await?;
+        let handle = session::allocate_link(self.session_control(), link_name, link_relay).await?;
         *self.link_mut().output_handle_mut() = Some(handle);
         Ok(())
     }

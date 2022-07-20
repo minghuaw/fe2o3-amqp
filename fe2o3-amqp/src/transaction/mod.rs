@@ -330,7 +330,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
-                delivery.rcv_settle_mode.clone()
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -561,7 +561,9 @@ impl<'t> Drop for Transaction<'t> {
                                 return;
                             }
                         };
-                        guard.get_or_insert(BTreeMap::new()).insert(delivery_tag, unsettled);
+                        guard
+                            .get_or_insert(BTreeMap::new())
+                            .insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {
                         Ok(Some(state)) => match state {

@@ -198,7 +198,7 @@ where
                         return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
                     }
                     Some(mode)
-                },
+                }
                 None => None,
             };
 
@@ -217,7 +217,7 @@ where
             // Upon receiving the transfer, the receiving link endpoint (receiver)
             // will create an entry in its own unsettled map and make the transferred
             // message data available to the application to process.
-            // 
+            //
             // Add to unsettled map
             // Insert into local unsettled map with Received state
             // Mode Second doesn't automatically send back a disposition
@@ -260,7 +260,6 @@ where
         batchable: bool,
         rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), Self::DispositionError> {
-        
         let settled = settled.unwrap_or({
             match rcv_settle_mode.as_ref().unwrap_or(&self.rcv_settle_mode) {
                 ReceiverSettleMode::First => {

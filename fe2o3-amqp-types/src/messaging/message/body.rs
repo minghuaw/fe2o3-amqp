@@ -1,11 +1,14 @@
 use std::{fmt::Display, marker::PhantomData};
 
-use serde::{Serialize, de::{self, VariantAccess}};
+use serde::{
+    de::{self, VariantAccess},
+    Serialize,
+};
 use serde_amqp::Value;
 
 use crate::messaging::{AmqpSequence, AmqpValue, Data};
 
-use super::__private::{Serializable, Deserializable};
+use super::__private::{Deserializable, Serializable};
 
 /// Only one section of Data and one section of AmqpSequence
 /// is supported for now

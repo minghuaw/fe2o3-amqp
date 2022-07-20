@@ -48,7 +48,7 @@ pub(crate) struct LocalReceiverLinkAcceptor<C> {
 
     /// Whether the receiver will automatically accept all incoming deliveries
     /// # Default
-    /// 
+    ///
     /// ```rust
     /// auto_accept = false;
     /// ```

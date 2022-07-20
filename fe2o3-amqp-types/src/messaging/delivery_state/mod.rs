@@ -482,7 +482,9 @@ impl From<Outcome> for DeliveryState {
 /// <type name="received" class="composite" source="list" provides="delivery-state">
 /// <descriptor name="amqp:received:list" code="0x00000000:0x00000023"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[amqp_contract(
     name = "amqp:received:list",
     code = 0x0000_0000_0000_0023,

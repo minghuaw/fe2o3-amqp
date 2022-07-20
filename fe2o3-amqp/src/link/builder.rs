@@ -106,11 +106,11 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     target_state: PhantomData<TS>,
 
     /// Whether the receiver will automatically accept all incoming deliveries
-    /// 
+    ///
     /// This field has no effect on Sender
-    /// 
+    ///
     /// # Default
-    /// 
+    ///
     /// ```rust
     /// auto_accept = false;
     /// ```

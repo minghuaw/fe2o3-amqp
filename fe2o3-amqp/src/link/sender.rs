@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 sender
 
-use std::{time::Duration, collections::VecDeque};
+use std::{collections::VecDeque, time::Duration};
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
@@ -34,8 +34,8 @@ use super::{
     shared_inner::{
         recv_remote_detach, LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach,
     },
-    ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError,
-    SenderAttachError, SenderFlowState, SenderLink, SenderResumeError, SenderAttachExchange, SenderResumeErrorKind,
+    ArcSenderUnsettledMap, LinkFrame, LinkRelay, LinkStateError, SendError, SenderAttachError,
+    SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
 };
 
 /// An AMQP1.0 sender
@@ -190,7 +190,10 @@ impl Sender {
     }
 
     /// Detach the link with an error
-    pub async fn close_with_error(mut self, error: impl Into<definitions::Error>) -> Result<(), DetachError> {
+    pub async fn close_with_error(
+        mut self,
+        error: impl Into<definitions::Error>,
+    ) -> Result<(), DetachError> {
         self.inner.close_with_error(Some(error.into())).await
     }
 
@@ -357,7 +360,12 @@ where
         is_reattaching: bool,
     ) -> Result<SenderAttachExchange, <Self::Link as LinkAttach>::AttachError> {
         self.link
-            .exchange_attach(&self.outgoing, &mut self.incoming, &self.session, is_reattaching)
+            .exchange_attach(
+                &self.outgoing,
+                &mut self.incoming,
+                &self.session,
+                is_reattaching,
+            )
             .await
     }
 
@@ -598,7 +606,7 @@ macro_rules! try_as_sender {
             Err(error) => {
                 return Err(SenderResumeError {
                     detached_sender: $self,
-                    kind: error.into()
+                    kind: error.into(),
                 })
             }
         }
@@ -607,7 +615,10 @@ macro_rules! try_as_sender {
 
 impl DetachedSender {
     fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
-        Self { inner, resend_buf: VecDeque::new() }
+        Self {
+            inner,
+            resend_buf: VecDeque::new(),
+        }
     }
 
     async fn send_resuming(
@@ -650,7 +661,7 @@ impl DetachedSender {
                             tracing::debug!("Resuming delivery outcome {:?}", outcome)
                         }
                     }
-                },
+                }
                 SenderAttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
                         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
@@ -664,7 +675,10 @@ impl DetachedSender {
                     // Use VecDeque to preserve order
                     while let Some((delivery_tag, payload)) = self.resend_buf.pop_front() {
                         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-                        let settlement = self.inner.resend(delivery_tag, payload, None, false).await?;
+                        let settlement = self
+                            .inner
+                            .resend(delivery_tag, payload, None, false)
+                            .await?;
                         let fut = DeliveryFut::<SendResult>::from(settlement);
 
                         let outcome = fut.await?;
@@ -691,7 +705,10 @@ impl DetachedSender {
 
     /// Resume the sender link with a timeout
     #[instrument(skip(self))]
-    pub async fn resume_with_timeout<R>(mut self, duration: Duration) -> Result<Sender, SenderResumeError> {
+    pub async fn resume_with_timeout<R>(
+        mut self,
+        duration: Duration,
+    ) -> Result<Sender, SenderResumeError> {
         let fut = self.resume_inner::<R>();
 
         match tokio::time::timeout(duration, fut).await {
@@ -702,7 +719,10 @@ impl DetachedSender {
             }),
             Err(_) => {
                 try_as_sender!(self, self.inner.detach_with_error(None).await);
-                Err(SenderResumeError { detached_sender: self, kind: SenderResumeErrorKind::Timeout })
+                Err(SenderResumeError {
+                    detached_sender: self,
+                    kind: SenderResumeErrorKind::Timeout,
+                })
             }
         }
     }

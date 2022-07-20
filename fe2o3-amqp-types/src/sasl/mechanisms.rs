@@ -196,7 +196,7 @@ impl<'de> serde_amqp::serde::de::Deserialize<'de> for SaslMechanisms {
                 })
             }
         }
-        const FIELDS: &[& str] = &[
+        const FIELDS: &[&str] = &[
             serde_amqp::__constants::DESCRIPTOR,
             "sasl-server-mechanisms",
         ];

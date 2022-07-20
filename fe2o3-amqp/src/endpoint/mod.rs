@@ -20,7 +20,7 @@
 //!         endpoint)
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Handle, SequenceNo, DeliveryTag},
+    definitions::{DeliveryTag, Fields, Handle, SequenceNo},
     messaging::DeliveryState,
     performatives::Flow,
     primitives::{Boolean, UInt},

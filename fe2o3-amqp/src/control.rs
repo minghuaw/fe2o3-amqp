@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, ConnectionError},
-    performatives::{Disposition},
+    performatives::Disposition,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 

@@ -167,8 +167,13 @@ impl TxnCoordinator {
                 .map(SuccessfulOutcome::Accepted),
         };
 
-        self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, delivery.rcv_settle_mode, result)
-            .await
+        self.handle_delivery_result(
+            delivery.delivery_id,
+            delivery.delivery_tag,
+            delivery.rcv_settle_mode,
+            result,
+        )
+        .await
     }
 
     #[instrument(skip(self, error))]
@@ -237,7 +242,13 @@ impl TxnCoordinator {
         let disposition_result = match result {
             Ok(outcome) => {
                 self.inner
-                    .dispose(delivery_id, delivery_tag, Some(true), outcome.into(), rcv_settle_mode)
+                    .dispose(
+                        delivery_id,
+                        delivery_tag,
+                        Some(true),
+                        outcome.into(),
+                        rcv_settle_mode,
+                    )
                     .await
             }
             Err(error) => {
@@ -246,8 +257,14 @@ impl TxnCoordinator {
                     CoordinatorError::GlobalIdNotImplemented => {
                         let error = TransactionError::UnknownId;
                         let description = "Global transaction ID is not implemented".to_string();
-                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, description)
-                            .await
+                        self.reject(
+                            delivery_id,
+                            delivery_tag,
+                            error,
+                            rcv_settle_mode,
+                            description,
+                        )
+                        .await
                     }
                     CoordinatorError::InvalidSessionState => {
                         // Session must have dropped
@@ -257,11 +274,18 @@ impl TxnCoordinator {
                         let error = TransactionError::UnknownId;
                         let description =
                             "Allocation of new transaction ID is not implemented".to_string();
-                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, description)
-                            .await
+                        self.reject(
+                            delivery_id,
+                            delivery_tag,
+                            error,
+                            rcv_settle_mode,
+                            description,
+                        )
+                        .await
                     }
                     CoordinatorError::TransactionError(error) => {
-                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, None).await
+                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, None)
+                            .await
                     }
                 }
             }
@@ -296,7 +320,13 @@ impl TxnCoordinator {
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
         self.inner
-            .dispose(delivery_id, delivery_tag, Some(true), state, rcv_settle_mode)
+            .dispose(
+                delivery_id,
+                delivery_tag,
+                Some(true),
+                state,
+                rcv_settle_mode,
+            )
             .await
     }
 

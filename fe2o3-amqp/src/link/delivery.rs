@@ -3,7 +3,8 @@
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
     messaging::{
-        message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome, MESSAGE_FORMAT,
+        message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome,
+        MESSAGE_FORMAT,
     },
     primitives::Binary,
 };
@@ -25,7 +26,7 @@ pub struct Delivery<T> {
     pub(crate) delivery_id: DeliveryNumber,
     pub(crate) delivery_tag: DeliveryTag,
 
-    pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>, 
+    pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>,
 
     pub(crate) message: Message<T>,
 }
@@ -360,7 +361,10 @@ impl<O> DeliveryFut<O> {
     pub fn delivery_tag(&self) -> &DeliveryTag {
         match &self.settlement {
             Settlement::Settled(delivery_tag) => delivery_tag,
-            Settlement::Unsettled { delivery_tag, outcome: _ } => delivery_tag,
+            Settlement::Unsettled {
+                delivery_tag,
+                outcome: _,
+            } => delivery_tag,
         }
     }
 }

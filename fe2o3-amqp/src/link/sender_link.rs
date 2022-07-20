@@ -556,7 +556,8 @@ where
         session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching).await?;
+        self.send_attach_inner(writer, session, is_reattaching)
+            .await?;
         Ok(())
     }
 }

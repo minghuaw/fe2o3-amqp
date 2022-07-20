@@ -834,7 +834,7 @@ impl DetachedReceiver {
                     delivery.delivery_tag,
                     Some(true),
                     state,
-                    delivery.rcv_settle_mode.clone()
+                    delivery.rcv_settle_mode.clone(),
                 )
                 .await?;
         }

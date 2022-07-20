@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::{messaging::{DeliveryState, Received}};
+use fe2o3_amqp_types::messaging::{DeliveryState, Received};
 
 use crate::Payload;
 
@@ -224,7 +224,7 @@ fn split_off_at_section_and_offset(
 //     //     &mut self,
 
 //     // )
-    
+
 //     pub(crate) async fn expected_resumption(
 //         &mut self,
 //         delivery_tag: DeliveryTag,
@@ -239,10 +239,10 @@ fn split_off_at_section_and_offset(
 //                 // Illegal delivery states?
 //                 Expecting::Abort
 //             }
-    
+
 //             // delivery-tag 1 example
 //             (None, None) => !incomplete_unsettled, // A resend is not expected if incomplete_unsettled is true
-    
+
 //             // delivery-tag 2 and 4 example
 //             //
 //             // delivery-tag 4 has a null in the remote value, which is equivalent to (0,0) Unlike the
@@ -255,7 +255,7 @@ fn split_off_at_section_and_offset(
 //                     section_offset,
 //                 })),
 //             ) => true,
-    
+
 //             // delivery-tag 3 example
 //             (None, Some(DeliveryState::Accepted(_)))
 //             | (None, Some(DeliveryState::Modified(_)))
@@ -265,12 +265,12 @@ fn split_off_at_section_and_offset(
 //                 lock.as_mut().and_then(|map| map.remove(&delivery_tag));
 //                 false
 //             }
-    
+
 //             // delivery-tag 5 example
 //             (Some(DeliveryState::Received(_)), None) => {
 //                 !incomplete_unsettled
 //             }
-    
+
 //             // delivery-tag 6, 7 and 9 examples
 //             (
 //                 Some(DeliveryState::Received(local_recved)),
@@ -278,7 +278,7 @@ fn split_off_at_section_and_offset(
 //             ) => {
 //                 true
 //             }
-    
+
 //             // delivery-tag 8 example
 //             //
 //             // This is just like case 3
@@ -293,7 +293,7 @@ fn split_off_at_section_and_offset(
 //                 lock.as_mut().and_then(|map| map.remove(&delivery_tag));
 //                 false
 //             }
-    
+
 //             // delivery-tag 10 example
 //             //
 //             // For delivery-tag 10 the receiver has no record of the delivery. However, in contrast to
@@ -307,7 +307,7 @@ fn split_off_at_section_and_offset(
 //             | (Some(DeliveryState::Released(_)), None) => {
 //                 false
 //             }
-    
+
 //             // delivery-tag 11 and 14 case
 //             //
 //             // For delivery-tag 11 it MUST be assumed that the sender spontaneously attained the
@@ -323,7 +323,7 @@ fn split_off_at_section_and_offset(
 //             | (Some(DeliveryState::Released(_)), Some(DeliveryState::Received(_))) => {
 //                 true
 //             }
-    
+
 //             // delivery-tag 12 case
 //             //
 //             // For delivery-tag 12 both the sender and receiver have attained the same view of the
@@ -337,7 +337,7 @@ fn split_off_at_section_and_offset(
 //                 lock.as_mut().and_then(|map| map.remove(&delivery_tag));
 //                 false
 //             }
-    
+
 //             // delivery-tag 13 example
 //             //
 //             // For delivery-tag 13 the sender and receiver have both attained terminal outcomes, but the

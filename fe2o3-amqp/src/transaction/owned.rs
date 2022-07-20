@@ -148,7 +148,7 @@ impl TransactionalRetirement for OwnedTransaction {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
-                delivery.rcv_settle_mode.clone()
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }

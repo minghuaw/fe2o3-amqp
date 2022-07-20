@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::{BytesMut, BufMut};
+use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
@@ -19,7 +19,7 @@ pub use error::*;
 pub use receiver::Receiver;
 pub use sender::Sender;
 use serde::Serialize;
-use serde_amqp::{ser::Serializer};
+use serde_amqp::ser::Serializer;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
@@ -86,7 +86,7 @@ pub mod role {
     /// Type state for link::builder::Builder
     #[derive(Debug)]
     pub struct Sender {
-        _private: ()
+        _private: (),
     }
 
     /// Type state for link::builder::Builder
@@ -210,7 +210,7 @@ where
     async fn get_unsettled_map(
         &self,
         is_reattaching: bool,
-        partial_unsettled: usize
+        partial_unsettled: usize,
     ) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
         // When reattaching (as opposed to resuming), the unsettled map MUST be null.
         if is_reattaching {
@@ -222,18 +222,20 @@ where
         match (map.len(), partial_unsettled) {
             (0, _) => None,
             (_, 0..=1) => {
-                let v = map.iter()
+                let v = map
+                    .iter()
                     .map(|(key, val)| (key.clone(), val.as_delivery_state().clone()))
                     .collect();
                 Some(v)
             }
             (total, denom) => {
-                let len = total/denom;
-                let v = (0..len).zip(map.iter())
+                let len = total / denom;
+                let v = (0..len)
+                    .zip(map.iter())
                     .map(|(_, (key, val))| (key.clone(), val.as_delivery_state().clone()))
                     .collect();
                 Some(v)
-            },
+            }
         }
     }
 
@@ -241,8 +243,15 @@ where
         self.as_attach_inner(handle, is_reattaching, 1).await
     }
 
-    async fn as_attach_inner(&self, handle: OutputHandle, is_reattaching: bool, partial_unsettled: usize) -> Attach {
-        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled).await;
+    async fn as_attach_inner(
+        &self,
+        handle: OutputHandle,
+        is_reattaching: bool,
+        partial_unsettled: usize,
+    ) -> Attach {
+        let unsettled = self
+            .get_unsettled_map(is_reattaching, partial_unsettled)
+            .await;
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -252,7 +261,7 @@ where
         let properties = self.flow_state.as_ref().properties().await;
         let incomplete_unsettled = match partial_unsettled {
             0..=1 => false,
-            _ => true
+            _ => true,
         };
 
         Attach {
@@ -278,21 +287,34 @@ where
         }
     }
 
-    async fn as_maybe_incomplete_attach(&self, max_frame_size: usize, handle: OutputHandle, is_reattaching: bool) -> Result<Attach, SendAttachErrorKind> {
+    async fn as_maybe_incomplete_attach(
+        &self,
+        max_frame_size: usize,
+        handle: OutputHandle,
+        is_reattaching: bool,
+    ) -> Result<Attach, SendAttachErrorKind> {
         let mut denominator = 1usize; // This is going to be the denominator
         let mut buf = BytesMut::new();
 
-        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator).await;
+        let mut attach = self
+            .as_attach_inner(handle.clone(), is_reattaching, denominator)
+            .await;
         let mut serializer = Serializer::from((&mut buf).writer());
-        attach.serialize(&mut serializer).map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
+        attach
+            .serialize(&mut serializer)
+            .map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
 
         while buf.len() > max_frame_size {
             buf.clear();
             denominator *= 2;
 
-            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator).await;
+            attach = self
+                .as_attach_inner(handle.clone(), is_reattaching, denominator)
+                .await;
             let mut serializer = Serializer::from((&mut buf).writer());
-            attach.serialize(&mut serializer).map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
+            attach
+                .serialize(&mut serializer)
+                .map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
         }
 
         Ok(attach)
@@ -314,8 +336,9 @@ where
             Some(0) | None => self.as_complete_attach(handle, is_reattaching).await,
             Some(_) => {
                 let max_frame_size = get_max_frame_size(session).await?;
-                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching).await?
-            },
+                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)
+                    .await?
+            }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;
         let frame = LinkFrame::Attach(attach);
@@ -348,11 +371,16 @@ where
     }
 }
 
-
-pub(crate) async fn get_max_frame_size(control: &mpsc::Sender<SessionControl>) -> Result<usize, SendAttachErrorKind> {
+pub(crate) async fn get_max_frame_size(
+    control: &mpsc::Sender<SessionControl>,
+) -> Result<usize, SendAttachErrorKind> {
     let (tx, rx) = oneshot::channel();
-    control.send(SessionControl::GetMaxFrameSize(tx)).await.map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-    rx.await.map_err(|_| SendAttachErrorKind::IllegalSessionState)
+    control
+        .send(SessionControl::GetMaxFrameSize(tx))
+        .await
+        .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
+    rx.await
+        .map_err(|_| SendAttachErrorKind::IllegalSessionState)
 }
 
 #[async_trait]
@@ -372,8 +400,11 @@ where
 
         match detach.closed {
             true => match self.local_state {
-                LinkState::Attached | LinkState::AttachSent | LinkState::AttachReceived 
-                | LinkState::IncompleteAttachExchanged | LinkState::IncompleteAttachSent 
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachExchanged
+                | LinkState::IncompleteAttachSent
                 | LinkState::IncompleteAttachReceived => {
                     self.local_state = LinkState::CloseReceived;
                     match detach.error {
@@ -632,7 +663,8 @@ impl LinkRelay<OutputHandle> {
                     // receiving end is alive or not
                     {
                         let mut guard = unsettled.write().await;
-                        guard.as_mut()
+                        guard
+                            .as_mut()
                             .and_then(|m| m.remove(&delivery_tag))
                             .map(|msg| msg.settle_with_state(state));
                     }
@@ -648,10 +680,13 @@ impl LinkRelay<OutputHandle> {
                         // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
                         if is_terminal {
-                            let _result = guard.as_mut()
+                            let _result = guard
+                                .as_mut()
                                 .and_then(|m| m.remove(&delivery_tag))
                                 .map(|msg| msg.settle_with_state(state));
-                        } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                        } else if let Some(msg) =
+                            guard.as_mut().and_then(|m| m.get_mut(&delivery_tag))
+                        {
                             *msg.state_mut() = state;
                         }
                     }
@@ -795,7 +830,7 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp_types::{messaging::Target, definitions::ReceiverSettleMode};
+    use fe2o3_amqp_types::messaging::Target;
 
     use crate::link::{
         receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,

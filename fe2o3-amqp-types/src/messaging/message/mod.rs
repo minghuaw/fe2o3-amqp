@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::{marker::PhantomData, io};
+use std::{io, marker::PhantomData};
 
 use serde::{
     de::{self},
@@ -33,22 +33,25 @@ pub mod __private {
 use __private::{Deserializable, Serializable};
 
 /// Determines how a `Message<T>` should be docoded.
-/// 
+///
 /// This is a byproduct of the workaround chosen for #49.
-/// 
+///
 /// Why not `tokio_util::Decoder`
-/// 
+///
 /// 1. avoid confusion
 /// 2. The decoder type `T` itself is also the returned type
 pub trait DecodeIntoMessage: Sized {
-    /// 
+    ///
     type DecodeError;
 
-    /// 
+    ///
     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
 }
 
-impl<T> DecodeIntoMessage for T where for<'de> T: de::Deserialize<'de> {
+impl<T> DecodeIntoMessage for T
+where
+    for<'de> T: de::Deserialize<'de>,
+{
     type DecodeError = serde_amqp::Error;
 
     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
@@ -621,7 +624,7 @@ mod tests {
 
     #[test]
     fn test_decoding_message_with_no_body_section() {
-        let buf: [u8; 8] = [ 0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45 ];
+        let buf: [u8; 8] = [0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45];
         let result: Result<Deserializable<Message<Value>>, _> = from_slice(&buf);
         assert!(result.is_ok());
         let message = result.unwrap().0;

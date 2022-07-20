@@ -234,7 +234,9 @@ where
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
             SessionControl::GetMaxFrameSize(resp) => {
-                self.conn.send(ConnectionControl::GetMaxFrameSize(resp)).await
+                self.conn
+                    .send(ConnectionControl::GetMaxFrameSize(resp))
+                    .await
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
 
