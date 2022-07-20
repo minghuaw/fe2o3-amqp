@@ -201,10 +201,10 @@ where
             let mode = if let Some(mode) = &transfer.rcv_settle_mode {
                 // If the negotiated link value is first, then it is illegal to set this
                 // field to second.
-                if let ReceiverSettleMode::First = &self.rcv_settle_mode {
-                    if let ReceiverSettleMode::Second = mode {
-                        return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
-                    }
+                if matches!(&self.rcv_settle_mode, ReceiverSettleMode::First)
+                    && matches!(mode, ReceiverSettleMode::Second)
+                {
+                    return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
                 }
                 mode
             } else {
@@ -572,13 +572,11 @@ impl<T> ReceiverLink<T> {
         match self.local_state {
             LinkState::IncompleteAttachReceived
             | LinkState::IncompleteAttachSent
-            | LinkState::IncompleteAttachExchanged => {
-                ReceiverAttachExchange::IncompleteUnsettled
-            },
+            | LinkState::IncompleteAttachExchanged => ReceiverAttachExchange::IncompleteUnsettled,
             _ => ReceiverAttachExchange::Resume,
         }
     }
-} 
+}
 
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
@@ -606,16 +604,13 @@ where
             (LinkState::IncompleteAttachSent, false) => {
                 self.local_state = LinkState::IncompleteAttachExchanged;
             }
-            (LinkState::Unattached, false) 
-            | (LinkState::Detached, false) => {
+            (LinkState::Unattached, false) | (LinkState::Detached, false) => {
                 self.local_state = LinkState::AttachReceived; // re-attaching
             }
-            (LinkState::AttachSent, true)
-            | (LinkState::IncompleteAttachSent, true) => {
+            (LinkState::AttachSent, true) | (LinkState::IncompleteAttachSent, true) => {
                 self.local_state = LinkState::IncompleteAttachExchanged;
             }
-            (LinkState::Unattached, true) 
-            | (LinkState::Detached, true) => {
+            (LinkState::Unattached, true) | (LinkState::Detached, true) => {
                 self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
             }
             _ => return Err(ReceiverAttachError::IllegalState),
@@ -683,7 +678,8 @@ where
         session: &mpsc::Sender<SessionControl>,
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer, session, is_reattaching).await?;
+        self.send_attach_inner(writer, session, is_reattaching)
+            .await?;
         Ok(())
     }
 }
