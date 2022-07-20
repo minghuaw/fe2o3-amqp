@@ -34,7 +34,7 @@ use super::{
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
     ArcReceiverUnsettledMap, DispositionError, IllegalLinkStateError, LinkFrame, LinkRelay,
     LinkStateError, ReceiverAttachError, ReceiverAttachExchange, ReceiverFlowState, ReceiverLink,
-    ReceiverResumeError, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
+    ReceiverResumeError, ReceiverResumeErrorKind, ReceiverTransferError, RecvError, DEFAULT_CREDIT,
 };
 
 #[cfg(feature = "transaction")]
@@ -822,34 +822,76 @@ impl DetachedReceiver {
         }
     }
 
-    /// Resume the receiver link
-    #[instrument(skip(self))]
-    pub async fn resume<R>(mut self) -> Result<Receiver, ReceiverResumeError> {
-        try_as_recver!(self, self.inner.reallocate_output_handle().await);
+    async fn resume_inner(&mut self) -> Result<(), ReceiverResumeErrorKind> {
+        self.inner.reallocate_output_handle().await?;
 
         loop {
-            let exchange = try_as_recver!(self, self.inner.exchange_attach(false).await);
+            let exchange = self.inner.exchange_attach(false).await?;
             match exchange {
                 ReceiverAttachExchange::Copmplete => break,
                 // These two will always require some more transfers
                 ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
                     let result = self.recv_and_settle().await;
                     tracing::debug!(?result);
-                    try_as_recver!(self, self.inner.detach_with_error(None).await);
+                    self.inner.detach_with_error(None).await?;
                 }
             }
         }
 
+        Ok(())
+    }
+
+    /// Resume the receiver link
+    #[instrument(skip(self))]
+    pub async fn resume<R>(mut self) -> Result<Receiver, ReceiverResumeError> {
+        try_as_recver!(self, self.resume_inner().await);
+
         Ok(Receiver { inner: self.inner })
     }
 
-    /// Resume the sender on a specific session
+    /// Resume the receiver link with a timeout.
+    ///
+    /// Upon failure, the detached receiver can be accessed via `error.detached_recver`
+    #[instrument(skip(self))]
+    pub async fn resume_with_timeout<R>(
+        mut self,
+        duration: Duration,
+    ) -> Result<Receiver, ReceiverResumeError> {
+        let fut = self.resume_inner();
+
+        match tokio::time::timeout(duration, fut).await {
+            Ok(Ok(_)) => Ok(Receiver { inner: self.inner }),
+            Ok(Err(kind)) => Err(ReceiverResumeError {
+                detached_recver: self,
+                kind,
+            }),
+            Err(_) => {
+                try_as_recver!(self, self.inner.detach_with_error(None).await);
+                Err(ReceiverResumeError {
+                    detached_recver: self,
+                    kind: ReceiverResumeErrorKind::Timeout,
+                })
+            }
+        }
+    }
+
+    /// Resume the receiver on a specific session
     pub async fn resume_on_session<R>(
         mut self,
-        session: &mut SessionHandle<R>,
+        session: &SessionHandle<R>,
     ) -> Result<Receiver, ReceiverResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume::<R>().await
+    }
+
+    /// Resume the receiver on a specific session with timeout
+    pub async fn resume_on_session_with_timeout<R>(
+        mut self,
+        session: &SessionHandle<R>,
+        duration: Duration,
+    ) -> Result<Receiver, ReceiverResumeError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume_with_timeout::<R>(duration).await
     }
 }
 

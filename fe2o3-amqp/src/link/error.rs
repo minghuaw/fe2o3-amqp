@@ -6,7 +6,7 @@ use crate::session::AllocLinkError;
 #[cfg(docsrs)]
 use fe2o3_amqp_types::transaction::Coordinator;
 
-use super::{sender::DetachedSender, receiver::DetachedReceiver};
+use super::{receiver::DetachedReceiver, sender::DetachedSender};
 
 /// Error associated with detaching
 #[derive(Debug, thiserror::Error)]
@@ -39,7 +39,6 @@ pub enum DetachError {
     #[error("Remote peer closed the link with an error: {}", .0)]
     RemoteClosedWithError(definitions::Error),
 }
-
 
 /// Errors associated with attaching a link as sender
 #[derive(Debug, thiserror::Error)]
@@ -103,7 +102,6 @@ pub enum SenderAttachError {
     #[error("Remote peer closed with error {:?}", .0)]
     RemoteClosedWithError(definitions::Error),
 }
-
 
 /// Error associated with sending a message
 #[derive(Debug, thiserror::Error)]
@@ -606,6 +604,10 @@ pub enum SenderResumeErrorKind {
     /// Detach/suspend error
     #[error(transparent)]
     DetachError(#[from] DetachError),
+
+    /// Resume timed out
+    #[error("Resume timed out")]
+    Timeout,
 }
 
 /// Sender encountered error with resumption
@@ -628,6 +630,10 @@ pub enum ReceiverResumeErrorKind {
     /// Detach/suspend error
     #[error(transparent)]
     DetachError(#[from] DetachError),
+
+    /// Resume timed out
+    #[error("Resume timed out")]
+    Timeout,
 }
 
 /// Receiver resumption error
