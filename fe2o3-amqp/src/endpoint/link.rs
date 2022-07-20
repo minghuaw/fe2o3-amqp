@@ -39,7 +39,10 @@ pub(crate) trait LinkAttach {
     type AttachExchange: Send;
     type AttachError: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<Self::AttachExchange, Self::AttachError>;
+    async fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn send_attach(
         &mut self,
@@ -181,13 +184,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         &'a mut self,
         transfer: Transfer,
         payload: P,
-    ) -> Result<
-        (
-            Delivery<T>,
-            Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
-        ),
-        Self::TransferError,
-    >
+    ) -> Result<Delivery<T>, Self::TransferError>
     where
         T: DecodeIntoMessage + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
@@ -200,5 +197,6 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         settled: Option<bool>, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
         batchable: bool,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), Self::DispositionError>;
 }

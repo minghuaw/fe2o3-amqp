@@ -330,6 +330,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
+                delivery.rcv_settle_mode.clone()
             )
             .await
     }

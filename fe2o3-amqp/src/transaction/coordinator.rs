@@ -48,6 +48,7 @@ impl Default for ControlLinkAcceptor {
                 fallback_rcv_settle_mode: ReceiverSettleMode::Second,
                 credit_mode: Default::default(),
                 target_capabilities: None,
+                auto_accept: false,
             },
         }
     }
@@ -166,7 +167,7 @@ impl TxnCoordinator {
                 .map(SuccessfulOutcome::Accepted),
         };
 
-        self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, result)
+        self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, delivery.rcv_settle_mode, result)
             .await
     }
 
@@ -230,12 +231,13 @@ impl TxnCoordinator {
         &mut self,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
         result: Result<SuccessfulOutcome, CoordinatorError>,
     ) -> Running {
         let disposition_result = match result {
             Ok(outcome) => {
                 self.inner
-                    .dispose(delivery_id, delivery_tag, Some(true), outcome.into())
+                    .dispose(delivery_id, delivery_tag, Some(true), outcome.into(), rcv_settle_mode)
                     .await
             }
             Err(error) => {
@@ -244,7 +246,7 @@ impl TxnCoordinator {
                     CoordinatorError::GlobalIdNotImplemented => {
                         let error = TransactionError::UnknownId;
                         let description = "Global transaction ID is not implemented".to_string();
-                        self.reject(delivery_id, delivery_tag, error, description)
+                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, description)
                             .await
                     }
                     CoordinatorError::InvalidSessionState => {
@@ -255,11 +257,11 @@ impl TxnCoordinator {
                         let error = TransactionError::UnknownId;
                         let description =
                             "Allocation of new transaction ID is not implemented".to_string();
-                        self.reject(delivery_id, delivery_tag, error, description)
+                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, description)
                             .await
                     }
                     CoordinatorError::TransactionError(error) => {
-                        self.reject(delivery_id, delivery_tag, error, None).await
+                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, None).await
                     }
                 }
             }
@@ -287,13 +289,14 @@ impl TxnCoordinator {
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         error: TransactionError,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
         description: impl Into<Option<String>>,
     ) -> Result<(), IllegalLinkStateError> {
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
         self.inner
-            .dispose(delivery_id, delivery_tag, Some(true), state)
+            .dispose(delivery_id, delivery_tag, Some(true), state, rcv_settle_mode)
             .await
     }
 

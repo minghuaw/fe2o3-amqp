@@ -1,7 +1,7 @@
 //! Helper types differentiating message delivery
 
 use fe2o3_amqp_types::{
-    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
+    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
     messaging::{
         message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome, MESSAGE_FORMAT,
     },
@@ -24,6 +24,9 @@ pub struct Delivery<T> {
     pub(crate) link_output_handle: Handle,
     pub(crate) delivery_id: DeliveryNumber,
     pub(crate) delivery_tag: DeliveryTag,
+
+    pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>, 
+
     pub(crate) message: Message<T>,
 }
 

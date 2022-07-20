@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
         SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Received, Source, Target, TargetArchetype},
+    messaging::{DeliveryState, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
@@ -85,11 +85,15 @@ pub mod role {
 
     /// Type state for link::builder::Builder
     #[derive(Debug)]
-    pub struct Sender {}
+    pub struct Sender {
+        _private: ()
+    }
 
     /// Type state for link::builder::Builder
     #[derive(Debug)]
-    pub struct Receiver {}
+    pub struct Receiver {
+        _private: (),
+    }
 
     // /// Type state for link::builder::Builder
     // #[cfg(feature = "transaction")]
@@ -791,7 +795,7 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use fe2o3_amqp_types::messaging::Target;
+    use fe2o3_amqp_types::{messaging::Target, definitions::ReceiverSettleMode};
 
     use crate::link::{
         receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,

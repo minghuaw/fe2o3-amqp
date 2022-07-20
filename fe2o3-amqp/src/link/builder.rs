@@ -104,6 +104,17 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     name_state: PhantomData<NameState>,
     source_state: PhantomData<SS>,
     target_state: PhantomData<TS>,
+
+    /// Whether the receiver will automatically accept all incoming deliveries
+    /// 
+    /// This field has no effect on Sender
+    /// 
+    /// # Default
+    /// 
+    /// ```rust
+    /// auto_accept = false;
+    /// ```
+    auto_accept: bool,
 }
 
 impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTarget> {
@@ -126,6 +137,8 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTa
             name_state: PhantomData,
             source_state: PhantomData,
             target_state: PhantomData,
+
+            auto_accept: false,
         }
     }
 }
@@ -163,6 +176,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: PhantomData,
             source_state: self.source_state,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -186,6 +201,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -209,6 +226,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -244,6 +263,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: PhantomData,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -270,6 +291,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: PhantomData,
+
+            auto_accept: false,
         }
     }
 
@@ -297,6 +320,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: PhantomData,
+
+            auto_accept: false,
         }
     }
 
@@ -541,6 +566,7 @@ where
         let outgoing = session.outgoing.clone();
         let (relay_flow_state, flow_state) = self.create_flow_state_containers();
         let unsettled = Arc::new(RwLock::new(None));
+        let auto_accept = self.auto_accept;
 
         let link_relay = LinkRelay::new_receiver(
             incoming_tx,
@@ -577,6 +603,7 @@ where
             buffer_size,
             credit_mode,
             processed: 0,
+            auto_accept,
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,

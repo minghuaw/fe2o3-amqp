@@ -497,6 +497,12 @@ pub struct Received {
     pub section_offset: ULong,
 }
 
+impl From<Received> for DeliveryState {
+    fn from(value: Received) -> Self {
+        Self::Received(value)
+    }
+}
+
 /// 3.4.2 Accepted
 /// The accepted outcome
 ///
@@ -511,6 +517,18 @@ pub struct Received {
     rename_all = "kebab-case"
 )]
 pub struct Accepted {}
+
+impl From<Accepted> for DeliveryState {
+    fn from(value: Accepted) -> Self {
+        Self::Accepted(value)
+    }
+}
+
+impl From<Accepted> for Outcome {
+    fn from(value: Accepted) -> Self {
+        Self::Accepted(value)
+    }
+}
 
 /// 3.4.3 Rejected
 /// The rejected outcome.
@@ -530,6 +548,18 @@ pub struct Rejected {
     pub error: Option<Error>,
 }
 
+impl From<Rejected> for DeliveryState {
+    fn from(value: Rejected) -> Self {
+        Self::Rejected(value)
+    }
+}
+
+impl From<Rejected> for Outcome {
+    fn from(value: Rejected) -> Self {
+        Self::Rejected(value)
+    }
+}
+
 /// 3.4.4 Released
 /// The released outcome.
 /// <type name="released" class="composite" source="list" provides="delivery-state, outcome">
@@ -543,6 +573,18 @@ pub struct Rejected {
     rename_all = "kebab-case"
 )]
 pub struct Released {}
+
+impl From<Released> for DeliveryState {
+    fn from(value: Released) -> Self {
+        Self::Released(value)
+    }
+}
+
+impl From<Released> for Outcome {
+    fn from(value: Released) -> Self {
+        Self::Released(value)
+    }
+}
 
 /// 3.4.5 Modified
 /// The modified outcome.
@@ -565,6 +607,18 @@ pub struct Modified {
 
     /// <field name="message-annotations" type="fields"/>
     pub message_annotations: Option<Fields>,
+}
+
+impl From<Modified> for DeliveryState {
+    fn from(value: Modified) -> Self {
+        Self::Modified(value)
+    }
+}
+
+impl From<Modified> for Outcome {
+    fn from(value: Modified) -> Self {
+        Self::Modified(value)
+    }
 }
 
 #[cfg(test)]

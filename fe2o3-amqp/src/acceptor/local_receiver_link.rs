@@ -45,6 +45,14 @@ pub(crate) struct LocalReceiverLinkAcceptor<C> {
 
     /// the extension capabilities the sender supports/desires
     pub target_capabilities: Option<Vec<C>>,
+
+    /// Whether the receiver will automatically accept all incoming deliveries
+    /// # Default
+    /// 
+    /// ```rust
+    /// auto_accept = false;
+    /// ```
+    pub auto_accept: bool,
 }
 
 impl<C> Default for LocalReceiverLinkAcceptor<C> {
@@ -54,6 +62,7 @@ impl<C> Default for LocalReceiverLinkAcceptor<C> {
             fallback_rcv_settle_mode: ReceiverSettleMode::default(),
             credit_mode: CreditMode::default(),
             target_capabilities: None,
+            auto_accept: false,
         }
     }
 }
@@ -194,6 +203,7 @@ where
             buffer_size: shared.buffer_size,
             credit_mode: self.credit_mode.clone(),
             processed: 0,
+            auto_accept: self.auto_accept,
             session: control.clone(),
             outgoing,
             incoming: incoming_rx,

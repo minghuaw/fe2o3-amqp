@@ -159,13 +159,7 @@ where
         &'a mut self,
         transfer: Transfer,
         payload: P,
-    ) -> Result<
-        (
-            Delivery<T>,
-            Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
-        ),
-        Self::TransferError,
-    >
+    ) -> Result<Delivery<T>, Self::TransferError>
     where
         T: DecodeIntoMessage + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a,
@@ -174,10 +168,6 @@ where
         // Will return with an error if there is not enough link credit.
         // TODO: The receiver should then detach with error
         self.flow_state.consume(1).await?;
-
-        // Upon receiving the transfer, the receiving link endpoint (receiver)
-        // will create an entry in its own unsettled map and make the transferred
-        // message data available to the application to process.
 
         // This only takes care of whether the message is considered
         // sett
@@ -189,7 +179,7 @@ where
             .delivery_tag
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
 
-        let (message, delivery_state) = if settled_by_sender {
+        let (message, mode) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
             let message = T::decode_into_message(payload.into_reader())
@@ -198,65 +188,49 @@ where
         } else {
             // If the message is being sent settled by the sender, the value of this
             // field is ignored.
-            let mode = if let Some(mode) = &transfer.rcv_settle_mode {
-                // If the negotiated link value is first, then it is illegal to set this
-                // field to second.
-                if matches!(&self.rcv_settle_mode, ReceiverSettleMode::First)
-                    && matches!(mode, ReceiverSettleMode::Second)
-                {
-                    return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
-                }
-                mode
-            } else {
-                // If not set, this value is defaulted to the value negotiated on link
-                // attach.
-                &self.rcv_settle_mode
+            let mode = match transfer.rcv_settle_mode {
+                Some(mode) => {
+                    // If the negotiated link value is first, then it is illegal to set this
+                    // field to second.
+                    if matches!(&self.rcv_settle_mode, ReceiverSettleMode::First)
+                        && matches!(mode, ReceiverSettleMode::Second)
+                    {
+                        return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
+                    }
+                    Some(mode)
+                },
+                None => None,
             };
 
-            match mode {
-                // If first, this indicates that the receiver MUST settle the delivery
-                // once it has arrived without waiting for the sender to settle first.
-                ReceiverSettleMode::First => {
-                    // Spontaneously settle the message with an Accept
-                    let message = T::decode_into_message(payload.into_reader())
-                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
+            // Need to decode anyway
+            let section_offset = rfind_offset_of_complete_message(&payload)
+                .ok_or(Self::TransferError::MessageDecodeError)?;
+            let message = T::decode_into_message(payload.into_reader())
+                .map_err(|_| Self::TransferError::MessageDecodeError)?;
+            let section_number = message.sections();
 
-                    (message, Some(DeliveryState::Accepted(Accepted {})))
-                }
-                // If second, this indicates that the receiver MUST NOT settle until
-                // sending its disposition to the sender and receiving a settled
-                // disposition from the sender.
-                ReceiverSettleMode::Second => {
-                    // Need to decode anyway
-                    let section_offset = rfind_offset_of_complete_message(&payload)
-                    .ok_or(Self::TransferError::MessageDecodeError)?;
-                    let message = T::decode_into_message(payload.into_reader())
-                    .map_err(|_| Self::TransferError::MessageDecodeError)?;
-                    let section_number = message.sections();
-                    
-                    let state = DeliveryState::Received(Received {
-                        section_number, // What is section number?
-                        section_offset,
-                    });
-                    
-                    // Add to unsettled map
-                    // Insert into local unsettled map with Received state
-                    // Mode Second doesn't automatically send back a disposition
-                    // (ie. thus doesn't call `link.dispose()`) and thus need to manually
-                    // set the delivery state
-                    {
-                        let mut lock = self.unsettled.write().await;
-                        // There may be records of incomplete delivery
-                        let _ = lock
-                            .get_or_insert(BTreeMap::new())
-                            .insert(delivery_tag.clone(), Some(state));
-                    }
+            let state = DeliveryState::Received(Received {
+                section_number, // What is section number?
+                section_offset,
+            });
 
-                    // Mode Second requires user to explicitly acknowledge the delivery
-                    // with Accept, Release, ...
-                    (message, None)
-                }
+            // Upon receiving the transfer, the receiving link endpoint (receiver)
+            // will create an entry in its own unsettled map and make the transferred
+            // message data available to the application to process.
+            // 
+            // Add to unsettled map
+            // Insert into local unsettled map with Received state
+            // Mode Second doesn't automatically send back a disposition
+            // (ie. thus doesn't call `link.dispose()`) and thus need to manually
+            // set the delivery state
+            {
+                let mut lock = self.unsettled.write().await;
+                // There may be records of incomplete delivery
+                let _ = lock
+                    .get_or_insert(BTreeMap::new())
+                    .insert(delivery_tag.clone(), Some(state));
             }
+            (message, mode)
         };
 
         let link_output_handle = self
@@ -269,13 +243,11 @@ where
             link_output_handle,
             delivery_id,
             delivery_tag: delivery_tag.clone(),
+            rcv_settle_mode: mode,
             message,
         };
 
-        Ok((
-            delivery,
-            delivery_state.map(|state| (delivery_id, delivery_tag, state)),
-        ))
+        Ok(delivery)
     }
 
     async fn dispose(
@@ -286,9 +258,11 @@ where
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), Self::DispositionError> {
+        
         let settled = settled.unwrap_or({
-            match self.rcv_settle_mode {
+            match rcv_settle_mode.as_ref().unwrap_or(&self.rcv_settle_mode) {
                 ReceiverSettleMode::First => {
                     // If first, this indicates that the receiver MUST settle
                     // the delivery once it has arrived without waiting

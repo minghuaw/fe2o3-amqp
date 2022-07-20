@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryNumber, DeliveryTag, SequenceNo},
+    definitions::{self, DeliveryNumber, DeliveryTag, ReceiverSettleMode, SequenceNo},
     messaging::{
         message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
         Target,
@@ -228,6 +228,16 @@ impl Receiver {
         builder::Builder::<role::Receiver, Target, _, _, _>::new()
     }
 
+    /// Get the `auto_accept` field of receiver
+    pub fn auto_accept(&self) -> bool {
+        self.inner.auto_accept
+    }
+
+    /// Set `auto_accept` to `value`
+    pub fn set_auto_accepto(&mut self, value: bool) {
+        self.inner.auto_accept = value;
+    }
+
     /// Attach the receiver link to a session with the default configuration
     ///
     /// # Default configuration
@@ -357,6 +367,7 @@ impl Receiver {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -377,6 +388,7 @@ impl Receiver {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -391,6 +403,7 @@ impl Receiver {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -409,6 +422,7 @@ impl Receiver {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -420,6 +434,7 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
     pub(crate) processed: SequenceNo,
+    pub(crate) auto_accept: bool,
 
     // Control sender to the session
     pub(crate) session: mpsc::Sender<SessionControl>,
@@ -647,9 +662,7 @@ where
             return Ok(None);
         }
 
-        // println!("{:#x?}", payload.as_ref());
-
-        let (delivery, disposition) = if transfer.more {
+        let delivery = if transfer.more {
             // Partial transfer of the delivery
             match &mut self.incomplete_transfer {
                 Some(incomplete) => {
@@ -705,14 +718,16 @@ where
             }
         };
 
-        // In `ReceiverSettleMode::First`, if the message is not pre-settled
-        // the receiver will spontaneously settle the message with an
-        // Accept by returning a `Some(Disposition)`
-        if let Some((delivery_id, delivery_tag, delivery_state)) = disposition {
-            // let frame = LinkFrame::Disposition(disposition);
-            // self.outgoing.send(frame).await?;
-            self.dispose(delivery_id, delivery_tag, None, delivery_state)
-                .await?;
+        // Auto accept the message and leave settled to be determined based on rcv_settle_mode
+        if self.auto_accept {
+            self.dispose(
+                delivery.delivery_id.clone(),
+                delivery.delivery_tag.clone(),
+                None,
+                Accepted {}.into(),
+                delivery.rcv_settle_mode.clone(),
+            )
+            .await?;
         }
 
         Ok(Some(delivery))
@@ -739,6 +754,7 @@ where
         delivery_tag: DeliveryTag,
         settled: Option<bool>,
         state: DeliveryState,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), DispositionError> {
         self.link
             .dispose(
@@ -748,6 +764,7 @@ where
                 settled,
                 state,
                 false,
+                rcv_settle_mode,
             )
             .await?;
 
@@ -817,6 +834,7 @@ impl DetachedReceiver {
                     delivery.delivery_tag,
                     Some(true),
                     state,
+                    delivery.rcv_settle_mode.clone()
                 )
                 .await?;
         }
