@@ -5,6 +5,7 @@
 1. Bug fix
    1. `Attach`'s unsettled map should allow `Null` for the values
 2. Fixed clippy warnings
+3. Added impl `From<Received/Accepted/Released/Modified/Rejected> for DeliveryState/Outcome`
 
 ## 0.1.3
 

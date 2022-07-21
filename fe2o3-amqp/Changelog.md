@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.0
+
+1. Added `auto_accept` option for `Receiver` and receiver `Builder` that controls whether the receiver will automatically accept incoming message
+2. Drafted link resumption on client side
+
 ## 0.1.4
 
 1. Fixed most clippy warnings
