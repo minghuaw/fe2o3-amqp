@@ -10,7 +10,7 @@ use tokio::{
 };
 
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryTag, SenderSettleMode},
+    definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode},
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, Target, MESSAGE_FORMAT,
     },
@@ -432,6 +432,33 @@ where
         self.send_with_state(sendable, None).await
     }
 
+    pub(crate) async fn send_payload<E>(
+        &mut self,
+        payload: Payload,
+        message_format: MessageFormat,
+        settled: Option<bool>,
+        state: Option<DeliveryState>,
+    ) -> Result<Settlement, E>
+    where
+        E: From<L::TransferError> + From<serde_amqp::Error>,
+    {
+        // send a transfer, checking state will be implemented in SenderLink
+        let detached_fut = self.incoming.recv();
+        let settlement = self
+            .link
+            .send_payload(
+                &self.outgoing,
+                detached_fut,
+                payload,
+                message_format,
+                settled,
+                state,
+                false,
+            )
+            .await?;
+        Ok(settlement)
+    }
+
     pub(crate) async fn send_with_state<T, E>(
         &mut self,
         sendable: Sendable<T>,
@@ -458,21 +485,23 @@ where
         // let payload = BytesMut::from(payload);
         let payload = payload.freeze();
 
-        // send a transfer, checking state will be implemented in SenderLink
-        let detached_fut = self.incoming.recv();
-        let settlement = self
-            .link
-            .send_payload(
-                &self.outgoing,
-                detached_fut,
-                payload,
-                message_format,
-                settled,
-                state,
-                false,
-            )
-            .await?;
-        Ok(settlement)
+        // // send a transfer, checking state will be implemented in SenderLink
+        // let detached_fut = self.incoming.recv();
+        // let settlement = self
+        //     .link
+        //     .send_payload(
+        //         &self.outgoing,
+        //         detached_fut,
+        //         payload,
+        //         message_format,
+        //         settled,
+        //         state,
+        //         false,
+        //     )
+        //     .await?;
+        // Ok(settlement)
+        self.send_payload(payload, message_format, settled, state)
+            .await
     }
 }
 
@@ -509,12 +538,11 @@ impl SenderInner<SenderLink<Target>> {
         .map_err(Into::into)
     }
 
-    async fn resend(
+    async fn resume(
         &mut self,
         delivery_tag: DeliveryTag,
         payload: Payload,
         state: Option<DeliveryState>,
-        resume: bool,
     ) -> Result<Settlement, SendError> {
         let handle = self
             .link
@@ -536,7 +564,7 @@ impl SenderInner<SenderLink<Target>> {
             more: false, // This will be determined in `send_payload_with_transfer`
             rcv_settle_mode: None,
             state,
-            resume,
+            resume: true,
             aborted: false,
             batchable: false,
         };
@@ -596,7 +624,7 @@ impl SenderInner<SenderLink<Target>> {
 #[derive(Debug)]
 pub struct DetachedSender {
     inner: SenderInner<SenderLink<Target>>,
-    resend_buf: VecDeque<(DeliveryTag, Payload)>,
+    resend_buf: VecDeque<Payload>,
 }
 
 macro_rules! try_as_sender {
@@ -621,23 +649,51 @@ impl DetachedSender {
         }
     }
 
-    async fn send_resuming(
+    // async fn send_resuming(
+    //     &mut self,
+    //     delivery_tag: DeliveryTag,
+    //     resuming: ResumingDelivery,
+    // ) -> Result<Settlement, SendError> {
+    //     match resuming {
+    //         ResumingDelivery::Abort => self.inner.abort(delivery_tag).await,
+    //         ResumingDelivery::Resend(payload) => {
+    //             self.resend_buf.push_back(payload);
+    //         }
+    //         ResumingDelivery::Resume { state, payload } => {
+    //             self.inner.resend(delivery_tag, payload, state, true).await
+    //         }
+    //         ResumingDelivery::RestateOutcome { local_state } => {
+    //             self.inner.restate_outcome(delivery_tag, local_state).await
+    //         }
+    //     }
+    // }
+
+    async fn handle_resuming_delivery(
         &mut self,
         delivery_tag: DeliveryTag,
         resuming: ResumingDelivery,
-    ) -> Result<Settlement, SendError> {
-        match resuming {
-            ResumingDelivery::Abort => self.inner.abort(delivery_tag).await,
+    ) -> Result<(), SendError> {
+        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        let settlement = match resuming {
+            ResumingDelivery::Abort => self.inner.abort(delivery_tag).await?,
             ResumingDelivery::Resend(payload) => {
-                self.inner.resend(delivery_tag, payload, None, false).await
+                self.resend_buf.push_back(payload);
+                return Ok(());
             }
             ResumingDelivery::Resume { state, payload } => {
-                self.inner.resend(delivery_tag, payload, state, true).await
+                self.inner.resume(delivery_tag, payload, state).await?
             }
             ResumingDelivery::RestateOutcome { local_state } => {
-                self.inner.restate_outcome(delivery_tag, local_state).await
+                self.inner
+                    .restate_outcome(delivery_tag, local_state)
+                    .await?
             }
-        }
+        };
+
+        let fut = DeliveryFut::<SendResult>::from(settlement);
+        let outcome = fut.await?;
+        tracing::debug!("Resuming delivery outcome {:?}", outcome);
+        Ok(())
     }
 
     async fn resume_inner(&mut self) -> Result<(), SenderResumeErrorKind> {
@@ -650,34 +706,21 @@ impl DetachedSender {
                 SenderAttachExchange::Copmplete => break,
                 SenderAttachExchange::IncompleteUnsettled(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
-                        if let ResumingDelivery::Resend(payload) = resuming {
-                            self.resend_buf.push_back((delivery_tag, payload));
-                        } else {
-                            tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-                            let settlement = self.send_resuming(delivery_tag, resuming).await?;
-                            let fut = DeliveryFut::<SendResult>::from(settlement);
-
-                            let outcome = fut.await?;
-                            tracing::debug!("Resuming delivery outcome {:?}", outcome)
-                        }
+                        self.handle_resuming_delivery(delivery_tag, resuming)
+                            .await?;
                     }
                 }
                 SenderAttachExchange::Resume(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
-                        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
-                        let settlement = self.send_resuming(delivery_tag, resuming).await?;
-                        let fut = DeliveryFut::<SendResult>::from(settlement);
-
-                        let outcome = fut.await?;
-                        tracing::debug!("Resuming delivery outcome {:?}", outcome)
+                        self.handle_resuming_delivery(delivery_tag, resuming)
+                            .await?;
                     }
 
                     // Use VecDeque to preserve order
-                    while let Some((delivery_tag, payload)) = self.resend_buf.pop_front() {
-                        tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+                    while let Some(payload) = self.resend_buf.pop_front() {
                         let settlement = self
                             .inner
-                            .resend(delivery_tag, payload, None, false)
+                            .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None)
                             .await?;
                         let fut = DeliveryFut::<SendResult>::from(settlement);
 
