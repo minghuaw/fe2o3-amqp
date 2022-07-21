@@ -204,6 +204,7 @@ impl Default for CreditMode {
 /// |`Properties`| `None` |
 /// |`buffer_size`| `u16::MAX` |
 /// |`role`| `role::Sender` |
+/// |`auto_accept`|`false`|
 ///
 /// # Customize configuration with [`builder::Builder`]
 ///
@@ -256,7 +257,7 @@ impl Receiver {
     /// |`Properties`| `None` |
     /// |`buffer_size`| `u16::MAX` |
     /// |`role`| `role::Sender` |
-    ///
+    /// |`auto_accept`|`false`|
     ///  
     /// # Example
     ///
