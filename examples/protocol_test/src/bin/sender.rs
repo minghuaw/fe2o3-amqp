@@ -89,7 +89,7 @@ async fn main() {
     let message = Message::builder()
             .properties(props)
             .application_properties(ApplicationProperties(application_properties))
-            .value(())
+            .value("hello AMQP")
             .build();
     let message = Sendable::from(message);
     // let message = Sendable::builder()
@@ -118,7 +118,9 @@ async fn main() {
     }
 
     let detached = sender.detach().await.unwrap();
-    let sender = detached.resume().await.unwrap();
+    let mut sender = detached.resume().await.unwrap();
+
+    // sender.send("hello again").await.unwrap();
     
     sender.close().await.unwrap();
 

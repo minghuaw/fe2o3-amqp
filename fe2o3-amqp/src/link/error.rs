@@ -623,9 +623,13 @@ pub struct SenderResumeError {
 /// Error kind of receiver resumption
 #[derive(Debug, thiserror::Error)]
 pub enum ReceiverResumeErrorKind {
-    /// Sender attach error
+    /// Error with exchanging the attach frame
     #[error(transparent)]
     AttachError(#[from] ReceiverAttachError),
+
+    /// Error with sending flow
+    #[error(transparent)]
+    FlowError(#[from] IllegalLinkStateError),
 
     /// Detach/suspend error
     #[error(transparent)]

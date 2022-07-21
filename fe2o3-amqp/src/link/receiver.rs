@@ -857,6 +857,9 @@ impl DetachedReceiver {
             }
         }
 
+        let credit = self.inner.link.flow_state.link_credit().await;
+        self.inner.set_credit(credit).await?;
+
         Ok(())
     }
 

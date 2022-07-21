@@ -234,6 +234,10 @@ impl LinkFlowState<role::Receiver> {
 }
 
 impl<R> LinkFlowState<R> {
+    pub async fn link_credit(&self) -> u32 {
+        self.lock.read().await.link_credit
+    }
+
     pub async fn drain(&self) -> bool {
         self.lock.read().await.drain
     }

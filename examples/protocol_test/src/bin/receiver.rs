@@ -64,7 +64,7 @@ async fn main() {
 
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     // receiver.accept(&delivery).await.unwrap();
-    tracing::info!("{:?}", delivery.delivery_id());
+    tracing::info!("{:?}", delivery.body());
 
     // let delivery = receiver.recv::<Value>().await.unwrap();
     // receiver.accept(&delivery).await.unwrap();
@@ -73,7 +73,10 @@ async fn main() {
 
     // Detach then resume
     let detached = receiver.detach().await.unwrap();
-    let receiver = detached.resume().await.unwrap();
+    let mut receiver = detached.resume().await.unwrap();
+    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    receiver.accept(&delivery).await.unwrap();
+    tracing::info!("{:?}", delivery.body());
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();
