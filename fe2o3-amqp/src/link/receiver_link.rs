@@ -534,11 +534,6 @@ impl<T> ReceiverLink<T> {
         &mut self,
         remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> ReceiverAttachExchange {
-        // let guard = self.unsettled.read().await;
-        // let local_is_empty = match guard.as_ref() {
-        //     Some(map) => map.is_empty(),
-        //     None => true,
-        // };
         let remote_is_empty = match remote_unsettled {
             Some(map) => map.is_empty(),
             None => true,

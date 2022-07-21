@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 sender
 
-use std::{collections::VecDeque, time::Duration};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
@@ -432,6 +432,35 @@ where
         self.send_with_state(sendable, None).await
     }
 
+    pub(crate) async fn send_with_state<T, E>(
+        &mut self,
+        sendable: Sendable<T>,
+        state: Option<DeliveryState>,
+    ) -> Result<Settlement, E>
+    where
+        T: serde::Serialize,
+        E: From<L::TransferError> + From<serde_amqp::Error>,
+    {
+        use bytes::BufMut;
+        use serde::Serialize;
+        use serde_amqp::ser::Serializer;
+
+        let Sendable {
+            message,
+            message_format,
+            settled,
+        } = sendable;
+
+        // serialize message
+        let mut payload = BytesMut::new();
+        let mut serializer = Serializer::from((&mut payload).writer());
+        Serializable(message).serialize(&mut serializer)?;
+        let payload = payload.freeze();
+
+        self.send_payload(payload, message_format, settled, state)
+            .await
+    }
+
     pub(crate) async fn send_payload<E>(
         &mut self,
         payload: Payload,
@@ -457,51 +486,6 @@ where
             )
             .await?;
         Ok(settlement)
-    }
-
-    pub(crate) async fn send_with_state<T, E>(
-        &mut self,
-        sendable: Sendable<T>,
-        state: Option<DeliveryState>,
-    ) -> Result<Settlement, E>
-    where
-        T: serde::Serialize,
-        E: From<L::TransferError> + From<serde_amqp::Error>,
-    {
-        use bytes::BufMut;
-        use serde::Serialize;
-        use serde_amqp::ser::Serializer;
-
-        let Sendable {
-            message,
-            message_format,
-            settled,
-        } = sendable;
-
-        // serialize message
-        let mut payload = BytesMut::new();
-        let mut serializer = Serializer::from((&mut payload).writer());
-        Serializable(message).serialize(&mut serializer)?;
-        // let payload = BytesMut::from(payload);
-        let payload = payload.freeze();
-
-        // // send a transfer, checking state will be implemented in SenderLink
-        // let detached_fut = self.incoming.recv();
-        // let settlement = self
-        //     .link
-        //     .send_payload(
-        //         &self.outgoing,
-        //         detached_fut,
-        //         payload,
-        //         message_format,
-        //         settled,
-        //         state,
-        //         false,
-        //     )
-        //     .await?;
-        // Ok(settlement)
-        self.send_payload(payload, message_format, settled, state)
-            .await
     }
 }
 
@@ -624,7 +608,7 @@ impl SenderInner<SenderLink<Target>> {
 #[derive(Debug)]
 pub struct DetachedSender {
     inner: SenderInner<SenderLink<Target>>,
-    resend_buf: VecDeque<Payload>,
+    resend_buf: Vec<Payload>,
 }
 
 macro_rules! try_as_sender {
@@ -645,28 +629,9 @@ impl DetachedSender {
     fn new(inner: SenderInner<SenderLink<Target>>) -> Self {
         Self {
             inner,
-            resend_buf: VecDeque::new(),
+            resend_buf: Vec::new(),
         }
     }
-
-    // async fn send_resuming(
-    //     &mut self,
-    //     delivery_tag: DeliveryTag,
-    //     resuming: ResumingDelivery,
-    // ) -> Result<Settlement, SendError> {
-    //     match resuming {
-    //         ResumingDelivery::Abort => self.inner.abort(delivery_tag).await,
-    //         ResumingDelivery::Resend(payload) => {
-    //             self.resend_buf.push_back(payload);
-    //         }
-    //         ResumingDelivery::Resume { state, payload } => {
-    //             self.inner.resend(delivery_tag, payload, state, true).await
-    //         }
-    //         ResumingDelivery::RestateOutcome { local_state } => {
-    //             self.inner.restate_outcome(delivery_tag, local_state).await
-    //         }
-    //     }
-    // }
 
     async fn handle_resuming_delivery(
         &mut self,
@@ -677,7 +642,7 @@ impl DetachedSender {
         let settlement = match resuming {
             ResumingDelivery::Abort => self.inner.abort(delivery_tag).await?,
             ResumingDelivery::Resend(payload) => {
-                self.resend_buf.push_back(payload);
+                self.resend_buf.push(payload);
                 return Ok(());
             }
             ResumingDelivery::Resume { state, payload } => {
@@ -716,8 +681,8 @@ impl DetachedSender {
                             .await?;
                     }
 
-                    // Use VecDeque to preserve order
-                    while let Some(payload) = self.resend_buf.pop_front() {
+                    // Resend buffered payloads
+                    for payload in self.resend_buf.drain(..) {
                         let settlement = self
                             .inner
                             .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None)
