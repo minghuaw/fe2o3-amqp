@@ -640,7 +640,7 @@ impl DetachedSender {
         }
     }
 
-    async fn resume_inner<R>(&mut self) -> Result<(), SenderResumeErrorKind> {
+    async fn resume_inner(&mut self) -> Result<(), SenderResumeErrorKind> {
         self.inner.reallocate_output_handle().await?;
 
         loop {
@@ -697,19 +697,19 @@ impl DetachedSender {
 
     /// Resume the sender link on the original session
     #[instrument(skip(self))]
-    pub async fn resume<R>(mut self) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(self, self.resume_inner::<R>().await);
+    pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
+        try_as_sender!(self, self.resume_inner().await);
 
         Ok(Sender { inner: self.inner })
     }
 
     /// Resume the sender link with a timeout
     #[instrument(skip(self))]
-    pub async fn resume_with_timeout<R>(
+    pub async fn resume_with_timeout(
         mut self,
         duration: Duration,
     ) -> Result<Sender, SenderResumeError> {
-        let fut = self.resume_inner::<R>();
+        let fut = self.resume_inner();
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
@@ -733,7 +733,7 @@ impl DetachedSender {
         session: &mut SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
-        self.resume::<R>().await
+        self.resume().await
     }
 
     /// Resume the sender on a specific session with timeout
@@ -743,6 +743,6 @@ impl DetachedSender {
         duration: Duration,
     ) -> Result<Sender, SenderResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
-        self.resume_with_timeout::<R>(duration).await
+        self.resume_with_timeout(duration).await
     }
 }

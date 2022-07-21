@@ -131,6 +131,16 @@ pub(crate) enum SenderAttachExchange {
     Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
 
+impl std::fmt::Debug for SenderAttachExchange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Copmplete => write!(f, "Copmplete"),
+            Self::IncompleteUnsettled(_) => f.debug_tuple("IncompleteUnsettled(_)").finish(),
+            Self::Resume(_) => f.debug_tuple("Resume(_)").finish(),
+        }
+    }
+}
+
 impl SenderAttachExchange {
     pub fn complete_or<E>(self, err: E) -> Result<(), E> {
         match self {
@@ -140,6 +150,7 @@ impl SenderAttachExchange {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum ReceiverAttachExchange {
     Copmplete,
     IncompleteUnsettled,

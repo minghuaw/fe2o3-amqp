@@ -290,9 +290,7 @@ where
     }
 
     #[inline]
-    #[instrument(skip_all)]
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
-        trace!(state = ?self.session.local_state(), frame = ?frame);
         match self.session.local_state() {
             SessionState::Mapped => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state

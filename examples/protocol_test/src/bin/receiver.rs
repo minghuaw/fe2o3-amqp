@@ -54,22 +54,26 @@ async fn main() {
     let mut receiver = Receiver::builder()
         .name("rust-receiver-link-1")
         .source("q1")
-        .auto_accept(true)
+        .auto_accept(false)
         .attach(&mut session)
         .await
         .unwrap();
 
-    println!("Receiver attached");
+    tracing::info!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    receiver.accept(&delivery).await.unwrap();
-    println!("{:?}", delivery.delivery_id());
+    // receiver.accept(&delivery).await.unwrap();
+    tracing::info!("{:?}", delivery.delivery_id());
 
-    let delivery = receiver.recv::<Value>().await.unwrap();
-    receiver.accept(&delivery).await.unwrap();
+    // let delivery = receiver.recv::<Value>().await.unwrap();
+    // receiver.accept(&delivery).await.unwrap();
     // let body = delivery.into_body();
-    println!("{:?}", delivery.delivery_id());
+    // println!("{:?}", delivery.delivery_id());
+
+    // Detach then resume
+    let detached = receiver.detach().await.unwrap();
+    let receiver = detached.resume().await.unwrap();
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();

@@ -22,7 +22,7 @@ async fn main() {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::DEBUG)
+        .with_max_level(Level::TRACE)
         // .with_max_level(Level::DEBUG)
         // completes the builder.
         .finish();
@@ -116,33 +116,12 @@ async fn main() {
     } else {
         tracing::error!("Outcome: {:?}", outcome)
     }
+
+    let detached = sender.detach().await.unwrap();
+    let sender = detached.resume().await.unwrap();
     
-    // sender.send("world").await.unwrap();
     sender.close().await.unwrap();
 
-    // // sender.close().await.unwrap();
-    // if let Err(err) = sender.detach().await {
-    //     println!("+++++++++ {:?}", err)
-    // }
-
-    // let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
-    //     .await
-    //     .unwrap();
-
-    // sender.send("HELLO AMQP").await.unwrap();
-
-    // let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
-
-    // let result = fut.await;
-    // println!("fut {:?}", result);
-
-
-
-    // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
-    //     .await
-    //     .unwrap();
-    // let result = receiver.detach().await;
-    // println!("{:?}", result);
     session.end().await.unwrap();
     // let result = session.on_end().await;
     // println!("{:?}", result);

@@ -845,6 +845,7 @@ impl DetachedReceiver {
 
         loop {
             let exchange = self.inner.exchange_attach(false).await?;
+            tracing::debug!(?exchange);
             match exchange {
                 ReceiverAttachExchange::Copmplete => break,
                 // These two will always require some more transfers
@@ -861,7 +862,7 @@ impl DetachedReceiver {
 
     /// Resume the receiver link
     #[instrument(skip(self))]
-    pub async fn resume<R>(mut self) -> Result<Receiver, ReceiverResumeError> {
+    pub async fn resume(mut self) -> Result<Receiver, ReceiverResumeError> {
         try_as_recver!(self, self.resume_inner().await);
 
         Ok(Receiver { inner: self.inner })
@@ -871,7 +872,7 @@ impl DetachedReceiver {
     ///
     /// Upon failure, the detached receiver can be accessed via `error.detached_recver`
     #[instrument(skip(self))]
-    pub async fn resume_with_timeout<R>(
+    pub async fn resume_with_timeout(
         mut self,
         duration: Duration,
     ) -> Result<Receiver, ReceiverResumeError> {
@@ -899,7 +900,7 @@ impl DetachedReceiver {
         session: &SessionHandle<R>,
     ) -> Result<Receiver, ReceiverResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
-        self.resume::<R>().await
+        self.resume().await
     }
 
     /// Resume the receiver on a specific session with timeout
@@ -909,7 +910,7 @@ impl DetachedReceiver {
         duration: Duration,
     ) -> Result<Receiver, ReceiverResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
-        self.resume_with_timeout::<R>(duration).await
+        self.resume_with_timeout(duration).await
     }
 }
 

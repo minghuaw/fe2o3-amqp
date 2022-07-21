@@ -181,6 +181,7 @@ where
     #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
         let frame = incoming?;
+        trace!(?frame);
 
         let Frame { channel, body } = frame;
         let channel = IncomingChannel(channel);
