@@ -14,7 +14,7 @@ use fe2o3_amqp_types::{
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, Target, MESSAGE_FORMAT,
     },
-    performatives::{Detach, Transfer},
+    performatives::{Attach, Detach, Transfer},
 };
 use tracing::instrument;
 
@@ -661,11 +661,24 @@ impl DetachedSender {
         Ok(())
     }
 
-    async fn resume_inner(&mut self) -> Result<(), SenderResumeErrorKind> {
+    async fn resume_inner(
+        &mut self,
+        mut initial_remote_attach: Option<Attach>,
+    ) -> Result<(), SenderResumeErrorKind> {
         self.inner.reallocate_output_handle().await?;
 
         loop {
-            let attach_exchange = self.inner.exchange_attach(false).await?;
+            // let attach_exchange = self.inner.exchange_attach(false).await?;
+            let attach_exchange = match initial_remote_attach.take() {
+                Some(remote_attach) => {
+                    self.inner
+                        .link
+                        .send_attach(&self.inner.outgoing, &self.inner.session, false)
+                        .await?;
+                    self.inner.link.on_incoming_attach(remote_attach).await?
+                }
+                None => self.inner.exchange_attach(false).await?,
+            };
 
             match attach_exchange {
                 SenderAttachExchange::Copmplete => break,
@@ -703,10 +716,12 @@ impl DetachedSender {
         Ok(())
     }
 
+    // async fn on_attach_exchange(&mut self, attach_exchange: SenderAttachExchange) -> Result<(), SenderResumeErrorKind> {}
+
     /// Resume the sender link on the original session
     #[instrument(skip(self))]
     pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
-        try_as_sender!(self, self.resume_inner().await);
+        try_as_sender!(self, self.resume_inner(None).await);
 
         Ok(Sender { inner: self.inner })
     }
@@ -717,7 +732,7 @@ impl DetachedSender {
         mut self,
         duration: Duration,
     ) -> Result<Sender, SenderResumeError> {
-        let fut = self.resume_inner();
+        let fut = self.resume_inner(None);
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
@@ -738,7 +753,7 @@ impl DetachedSender {
     /// Resume the sender on a specific session
     pub async fn resume_on_session<R>(
         mut self,
-        session: &mut SessionHandle<R>,
+        session: &SessionHandle<R>,
     ) -> Result<Sender, SenderResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume().await

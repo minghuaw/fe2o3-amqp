@@ -9,7 +9,7 @@ use fe2o3_amqp_types::{
         message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
         Target,
     },
-    performatives::{Detach, Transfer},
+    performatives::{Attach, Detach, Transfer},
 };
 use serde_amqp::Value;
 use tokio::{
@@ -840,11 +840,23 @@ impl DetachedReceiver {
         }
     }
 
-    async fn resume_inner(&mut self) -> Result<(), ReceiverResumeErrorKind> {
+    async fn resume_inner(
+        &mut self,
+        mut remote_attach: Option<Attach>,
+    ) -> Result<(), ReceiverResumeErrorKind> {
         self.inner.reallocate_output_handle().await?;
 
         loop {
-            let exchange = self.inner.exchange_attach(false).await?;
+            let exchange = match remote_attach.take() {
+                Some(remote_attach) => {
+                    self.inner
+                        .link
+                        .send_attach(&self.inner.outgoing, &self.inner.session, false)
+                        .await?;
+                    self.inner.link.on_incoming_attach(remote_attach).await?
+                }
+                None => self.inner.exchange_attach(false).await?,
+            };
             tracing::debug!(?exchange);
             match exchange {
                 ReceiverAttachExchange::Copmplete => break,
@@ -866,7 +878,7 @@ impl DetachedReceiver {
     /// Resume the receiver link
     #[instrument(skip(self))]
     pub async fn resume(mut self) -> Result<Receiver, ReceiverResumeError> {
-        try_as_recver!(self, self.resume_inner().await);
+        try_as_recver!(self, self.resume_inner(None).await);
 
         Ok(Receiver { inner: self.inner })
     }
@@ -879,7 +891,7 @@ impl DetachedReceiver {
         mut self,
         duration: Duration,
     ) -> Result<Receiver, ReceiverResumeError> {
-        let fut = self.resume_inner();
+        let fut = self.resume_inner(None);
 
         match tokio::time::timeout(duration, fut).await {
             Ok(Ok(_)) => Ok(Receiver { inner: self.inner }),
