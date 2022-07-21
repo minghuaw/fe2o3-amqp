@@ -722,7 +722,12 @@ impl DetachedSender {
     #[instrument(skip(self))]
     pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
         try_as_sender!(self, self.resume_inner(None).await);
+        Ok(Sender { inner: self.inner })
+    }
 
+    /// Resume the sender link on the original session with an Attach sent by the remote peer
+    pub async fn resume_incoming_attach(mut self, remote_attach: Attach) -> Result<Sender, SenderResumeError> {
+        try_as_sender!(self, self.resume_inner(Some(remote_attach)).await);
         Ok(Sender { inner: self.inner })
     }
 
@@ -750,6 +755,26 @@ impl DetachedSender {
         }
     }
 
+    /// Resume the sender link on the original session with an Attach sent by the remote peer
+    pub async fn resume_incoming_attach_with_timeout(mut self, remote_attach: Attach, duration: Duration,) -> Result<Sender, SenderResumeError> {
+        let fut = self.resume_inner(Some(remote_attach));
+
+        match tokio::time::timeout(duration, fut).await {
+            Ok(Ok(_)) => Ok(Sender { inner: self.inner }),
+            Ok(Err(kind)) => Err(SenderResumeError {
+                detached_sender: self,
+                kind,
+            }),
+            Err(_) => {
+                try_as_sender!(self, self.inner.detach_with_error(None).await);
+                Err(SenderResumeError {
+                    detached_sender: self,
+                    kind: SenderResumeErrorKind::Timeout,
+                })
+            }
+        }
+    }
+
     /// Resume the sender on a specific session
     pub async fn resume_on_session<R>(
         mut self,
@@ -757,6 +782,16 @@ impl DetachedSender {
     ) -> Result<Sender, SenderResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume().await
+    }
+
+    /// Resume the sender on a specific session
+    pub async fn resume_incoming_attach_on_session<R>(
+        mut self,
+        remote_attach: Attach,
+        session: &SessionHandle<R>,
+    ) -> Result<Sender, SenderResumeError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume_incoming_attach(remote_attach).await
     }
 
     /// Resume the sender on a specific session with timeout
@@ -767,5 +802,16 @@ impl DetachedSender {
     ) -> Result<Sender, SenderResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume_with_timeout(duration).await
+    }
+
+    /// Resume the sender on a specific session with timeout
+    pub async fn resume_incoming_attach_on_session_with_timeout<R>(
+        mut self,
+        remote_attach: Attach,
+        session: &SessionHandle<R>,
+        duration: Duration,
+    ) -> Result<Sender, SenderResumeError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume_incoming_attach_with_timeout(remote_attach, duration).await
     }
 }

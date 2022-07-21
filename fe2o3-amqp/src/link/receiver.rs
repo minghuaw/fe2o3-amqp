@@ -927,6 +927,53 @@ impl DetachedReceiver {
         *self.inner.session_control_mut() = session.control.clone();
         self.resume_with_timeout(duration).await
     }
+
+    /// Resume the receiver link on the original session with an Attach sent by the remote peer
+    pub async fn resume_incoming_attach(mut self, remote_attach: Attach) -> Result<Receiver, ReceiverResumeError> {
+        try_as_recver!(self, self.resume_inner(Some(remote_attach)).await);
+        Ok(Receiver { inner: self.inner })
+    }
+
+    /// Resume the receiver link on the original session with an Attach sent by the remote peer
+    pub async fn resume_incoming_attach_with_timeout(mut self, remote_attach: Attach, duration: Duration,) -> Result<Receiver, ReceiverResumeError> {
+        let fut = self.resume_inner(Some(remote_attach));
+
+        match tokio::time::timeout(duration, fut).await {
+            Ok(Ok(_)) => Ok(Receiver { inner: self.inner }),
+            Ok(Err(kind)) => Err(ReceiverResumeError {
+                detached_recver: self,
+                kind,
+            }),
+            Err(_) => {
+                try_as_recver!(self, self.inner.detach_with_error(None).await);
+                Err(ReceiverResumeError {
+                    detached_recver: self,
+                    kind: ReceiverResumeErrorKind::Timeout,
+                })
+            }
+        }
+    }
+
+    /// Resume the receiver on a specific session
+    pub async fn resume_incoming_attach_on_session<R>(
+        mut self,
+        remote_attach: Attach,
+        session: &SessionHandle<R>,
+    ) -> Result<Receiver, ReceiverResumeError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume_incoming_attach(remote_attach).await
+    }
+
+    /// Resume the receiver on a specific session with timeout
+    pub async fn resume_incoming_attach_on_session_with_timeout<R>(
+        mut self,
+        remote_attach: Attach,
+        session: &SessionHandle<R>,
+        duration: Duration,
+    ) -> Result<Receiver, ReceiverResumeError> {
+        *self.inner.session_control_mut() = session.control.clone();
+        self.resume_incoming_attach_with_timeout(remote_attach, duration).await
+    }
 }
 
 #[cfg(test)]
