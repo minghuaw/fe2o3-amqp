@@ -30,6 +30,7 @@ pub(crate) fn resume_delivery(
         }))
     });
     match (&local.state(), &remote) {
+        #[cfg(feature = "transaction")]
         (_, Some(DeliveryState::Declared(_)))
         | (_, Some(DeliveryState::TransactionalState(_)))
         | (Some(DeliveryState::Declared(_)), _)
