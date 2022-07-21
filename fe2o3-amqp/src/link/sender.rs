@@ -406,7 +406,7 @@ where
         outcome: SenderAttachExchange,
     ) -> Result<&mut Self, L::AttachError> {
         match outcome {
-            SenderAttachExchange::Copmplete => Ok(self),
+            SenderAttachExchange::Complete => Ok(self),
             //  Re-attach should have None valued unsettled, so this should be invalid
             SenderAttachExchange::IncompleteUnsettled(_) | SenderAttachExchange::Resume(_) => {
                 Err(SenderAttachError::IllegalState)
@@ -681,7 +681,7 @@ impl DetachedSender {
             };
 
             match attach_exchange {
-                SenderAttachExchange::Copmplete => break,
+                SenderAttachExchange::Complete => break,
                 SenderAttachExchange::IncompleteUnsettled(resuming_deliveries) => {
                     for (delivery_tag, resuming) in resuming_deliveries {
                         self.handle_resuming_delivery(delivery_tag, resuming)

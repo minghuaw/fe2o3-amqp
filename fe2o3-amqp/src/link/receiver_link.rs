@@ -541,7 +541,7 @@ impl<T> ReceiverLink<T> {
 
         // ActiveMQ-Artemis seems like ignores non-empty unsettled from receiver-link
         if remote_is_empty {
-            return ReceiverAttachExchange::Copmplete;
+            return ReceiverAttachExchange::Complete;
         }
 
         match self.local_state {
@@ -641,7 +641,7 @@ where
             .delivery_count_mut(|_| initial_delivery_count)
             .await;
 
-        // Ok(Self::AttachExchange::Copmplete)
+        // Ok(Self::AttachExchange::Complete)
         Ok(self
             .handle_unsettled_in_attach(remote_attach.unsettled)
             .await)

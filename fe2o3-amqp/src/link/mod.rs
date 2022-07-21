@@ -126,7 +126,7 @@ pub mod role {
 // }
 
 pub(crate) enum SenderAttachExchange {
-    Copmplete,
+    Complete,
     IncompleteUnsettled(Vec<(DeliveryTag, ResumingDelivery)>),
     Resume(Vec<(DeliveryTag, ResumingDelivery)>),
 }
@@ -134,7 +134,7 @@ pub(crate) enum SenderAttachExchange {
 impl std::fmt::Debug for SenderAttachExchange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Copmplete => write!(f, "Copmplete"),
+            Self::Complete => write!(f, "Complete"),
             Self::IncompleteUnsettled(_) => f.debug_tuple("IncompleteUnsettled(_)").finish(),
             Self::Resume(_) => f.debug_tuple("Resume(_)").finish(),
         }
@@ -144,23 +144,32 @@ impl std::fmt::Debug for SenderAttachExchange {
 impl SenderAttachExchange {
     pub fn complete_or<E>(self, err: E) -> Result<(), E> {
         match self {
-            Self::Copmplete => Ok(()),
+            Self::Complete => Ok(()),
             _ => Err(err),
         }
     }
 }
 
+/// Outcome of exchange of Attach frame on the receiver side
+/// 
+/// This is useful for exposing the outcome of resuming a local receiver
 #[derive(Debug)]
-pub(crate) enum ReceiverAttachExchange {
-    Copmplete,
+pub enum ReceiverAttachExchange {
+    /// The attach exchange is completed without any unsettled deliveries
+    Complete,
+
+    /// At least one party indicated an incomplete unsettled map during the attach exchange 
     IncompleteUnsettled,
+
+    /// The link will be resuming
     Resume,
 }
 
 impl ReceiverAttachExchange {
+    /// Returns `Ok(())` if the value is `Complete` otherwise returns `Err
     pub fn complete_or<E>(self, err: E) -> Result<(), E> {
         match self {
-            Self::Copmplete => Ok(()),
+            Self::Complete => Ok(()),
             _ => Err(err),
         }
     }

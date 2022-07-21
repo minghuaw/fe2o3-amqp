@@ -73,7 +73,8 @@ async fn main() {
 
     // Detach then resume
     let detached = receiver.detach().await.unwrap();
-    let mut receiver = detached.resume().await.unwrap();
+    let mut receiver = detached.resume().await.unwrap()
+        .complete_or_else(|r| r).unwrap();
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     tracing::info!("{:?}", delivery.body());

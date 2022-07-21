@@ -429,14 +429,14 @@ impl<T> SenderLink<T> {
     ) -> Result<SenderAttachExchange, SenderAttachError> {
         let mut guard = self.unsettled.write().await;
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
-            (None, None) => return Ok(SenderAttachExchange::Copmplete),
+            (None, None) => return Ok(SenderAttachExchange::Complete),
             (None, Some(remote_map)) => remote_map
                 .into_keys()
                 .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
                 .collect(),
             (Some(map), None) => {
                 if map.is_empty() {
-                    return Ok(SenderAttachExchange::Copmplete);
+                    return Ok(SenderAttachExchange::Complete);
                 } else {
                     map.into_iter()
                         .filter_map(|(tag, local)| {
