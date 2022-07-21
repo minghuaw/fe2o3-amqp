@@ -155,6 +155,16 @@ impl Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
     }
 }
 
+impl<T, NameState, SS, TS> Builder<role::Receiver, T, NameState, SS, TS> {
+    /// Sets the `auto_accept` field.
+    /// 
+    /// Default value: `false`
+    pub fn auto_accept(mut self, value: bool) -> Self {
+        self.auto_accept = value;
+        self
+    }
+}
+
 impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     /// The name of the link
     pub fn name(self, name: impl Into<String>) -> Builder<Role, T, WithName, SS, TS> {

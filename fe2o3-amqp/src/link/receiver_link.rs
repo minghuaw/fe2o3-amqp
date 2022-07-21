@@ -279,31 +279,34 @@ where
             }
         });
 
-        if settled {
+        let unsettled_state = if settled {
             let mut lock = self.unsettled.write().await;
-            let _ = lock.as_mut().and_then(|map| map.remove(&delivery_tag));
+            lock.as_mut().and_then(|map| map.remove(&delivery_tag))
         } else {
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            let _ = lock
+            lock
                 .get_or_insert(BTreeMap::new())
-                .insert(delivery_tag.clone(), Some(state.clone()));
-        }
-
-        let disposition = Disposition {
-            role: Role::Receiver,
-            first: delivery_id,
-            last: None,
-            settled,
-            state: Some(state),
-            batchable,
+                .insert(delivery_tag.clone(), Some(state.clone()))
         };
-        let frame = LinkFrame::Disposition(disposition);
-        writer
-            .send(frame)
-            .await
-            .map_err(|_| Self::DispositionError::IllegalSessionState)?;
+
+        // Only dispose if message is found in unsettled map
+        if unsettled_state.is_some() {
+            let disposition = Disposition {
+                role: Role::Receiver,
+                first: delivery_id,
+                last: None,
+                settled,
+                state: Some(state),
+                batchable,
+            };
+            let frame = LinkFrame::Disposition(disposition);
+            writer
+                .send(frame)
+                .await
+                .map_err(|_| Self::DispositionError::IllegalSessionState)?;
+        }
 
         // This is a unit enum, clone should be really cheap
         Ok(())

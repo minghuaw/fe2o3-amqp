@@ -48,15 +48,16 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
-        .await
-        .unwrap();
-    // let mut receiver = Receiver::builder()
-    //     .name("rust-receiver-link-1")
-    //     .source("q1")
-    //     .attach(&mut session)
+    // let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
     //     .await
     //     .unwrap();
+    let mut receiver = Receiver::builder()
+        .name("rust-receiver-link-1")
+        .source("q1")
+        .auto_accept(true)
+        .attach(&mut session)
+        .await
+        .unwrap();
 
     println!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
