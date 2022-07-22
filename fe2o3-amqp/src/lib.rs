@@ -154,6 +154,7 @@
 //!     - [ ] ~~acquisition~~ #43
 //! - [x] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test)
 //! - [ ] Link re-attachment
+//! - [ ] Dynamic link creation
 //! - [ ] Message batch disposition
 //! - [ ] Pipelined open
 //! - [ ] SASL SCRAM-SHA1

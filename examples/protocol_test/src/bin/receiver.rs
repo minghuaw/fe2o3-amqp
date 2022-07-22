@@ -3,7 +3,7 @@ use fe2o3_amqp::{
     link::Receiver,
     sasl_profile::SaslProfile,
     session::Session,
-    types::{primitives::Value},
+    types::{primitives::Value, definitions::{ReceiverSettleMode, SenderSettleMode}},
     Delivery,
 };
 use tokio::net::TcpStream;
@@ -55,6 +55,8 @@ async fn main() {
         .name("rust-receiver-link-1")
         .source("q1")
         .auto_accept(false)
+        .sender_settle_mode(SenderSettleMode::Settled)
+        .receiver_settle_mode(ReceiverSettleMode::Second)
         .attach(&mut session)
         .await
         .unwrap();
@@ -63,7 +65,7 @@ async fn main() {
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    // receiver.accept(&delivery).await.unwrap();
+    receiver.accept(&delivery).await.unwrap();
     tracing::info!("{:?}", delivery.body());
 
     // let delivery = receiver.recv::<Value>().await.unwrap();
@@ -78,6 +80,8 @@ async fn main() {
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     tracing::info!("{:?}", delivery.body());
+
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();

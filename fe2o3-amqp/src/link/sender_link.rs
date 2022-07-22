@@ -543,6 +543,10 @@ where
         // initiates the attach exchange and the sender supports the desired mode
         self.rcv_settle_mode = remote_attach.rcv_settle_mode;
 
+        if self.snd_settle_mode != remote_attach.snd_settle_mode {
+            return Err(SenderAttachError::SndSettleModeNotSupported);
+        }
+
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
@@ -673,23 +677,16 @@ where
                     .unwrap_or(SenderAttachError::IllegalSessionState)
             }
 
-            SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
+            SenderAttachError::SndSettleModeNotSupported
+            | SenderAttachError::IncomingSourceIsNone
+            | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
                 let err = self
                     .send_detach(writer, true, None)
                     .await
                     .map(|_| attach_error)
                     .unwrap_or(SenderAttachError::IllegalSessionState);
-                match reader.recv().await {
-                    Some(LinkFrame::Detach(remote_detach)) => {
-                        match self.on_incoming_detach(remote_detach).await {
-                            Ok(_) => return err,
-                            Err(detach_error) => return detach_error.try_into().unwrap_or(err),
-                        }
-                    }
-                    Some(_) => SenderAttachError::NonAttachFrameReceived,
-                    None => SenderAttachError::IllegalSessionState,
-                }
+                recv_detach(self, reader, err).await
             }
 
             SenderAttachError::CoordinatorIsNotImplemented
@@ -730,5 +727,26 @@ where
             }
         }
         Err(_) => attach_error,
+    }
+}
+
+async fn recv_detach<T>(link: &mut SenderLink<T>, reader: &mut mpsc::Receiver<LinkFrame>, err: SenderAttachError) -> SenderAttachError 
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    match reader.recv().await {
+        Some(LinkFrame::Detach(remote_detach)) => {
+            match link.on_incoming_detach(remote_detach).await {
+                Ok(_) => return err,
+                Err(detach_error) => return detach_error.try_into().unwrap_or(err),
+            }
+        }
+        Some(_) => SenderAttachError::NonAttachFrameReceived,
+        None => SenderAttachError::IllegalSessionState,
     }
 }

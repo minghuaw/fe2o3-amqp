@@ -78,6 +78,13 @@ pub enum SenderAttachError {
     #[error("Control link is not implemented without enabling the `transaction` feature")]
     CoordinatorIsNotImplemented,
 
+    /// When set at the sender this indicates the actual settlement mode in use.
+    /// 
+    /// The sender SHOULD respect the receiver’s desired settlement mode ***if
+    /// the receiver initiates*** the attach exchange and the sender supports the desired mode
+    #[error("When set at the sender this indicates the actual settlement mode in use")]
+    SndSettleModeNotSupported,
+
     /// When set to true by the receiving link endpoint this field indicates creation of a
     /// dynamically created node. In this case the address field will contain the address of the
     /// created node.
@@ -202,6 +209,13 @@ pub enum ReceiverAttachError {
     #[error("Initial delivery field must be set if the role is sender")]
     InitialDeliveryCountIsNone,
 
+    /// "When set at the receiver this indicates the actual settlement mode in use"
+    /// 
+    /// The receiver SHOULD respect the sender’s desired settlement mode ***if
+    /// the sender initiates*** the attach exchange and the receiver supports the desired mode
+    #[error("The desried ReceiverSettleMode is not supported by the remote peer")]
+    RcvSettleModeNotSupported,
+
     /// When dynamic is set to true by the sending link endpoint, this field constitutes a request
     /// for the receiving peer to dynamically create a node at the target. In this case the address
     /// field MUST NOT be set.
@@ -254,6 +268,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             }
             ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone
+            | ReceiverAttachError::RcvSettleModeNotSupported
             | ReceiverAttachError::RemoteClosedWithError(_) => return Err(value),
         };
 
@@ -329,12 +344,14 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
                 AmqpError::InvalidField.into()
             }
 
-            SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
-                return Err(value)
-            }
+            SenderAttachError::IncomingSourceIsNone 
+            | SenderAttachError::IncomingTargetIsNone 
+            | SenderAttachError::SndSettleModeNotSupported
+            | SenderAttachError::RemoteClosedWithError(_) => return Err(value),
+
             #[cfg(feature = "transaction")]
             SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
-            SenderAttachError::RemoteClosedWithError(_) => return Err(value),
+
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))

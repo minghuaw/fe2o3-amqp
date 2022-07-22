@@ -3,7 +3,7 @@ use serde_amqp::format_code::EncodingCodes;
 
 use crate::util::{AsByteIterator, IntoReader};
 
-use super::*;
+use super::{*};
 
 pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
 pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
@@ -607,6 +607,11 @@ where
         // initiates the attach exchange and the receiver supports the desired mode.
         self.snd_settle_mode = remote_attach.snd_settle_mode;
 
+        // When set at the receiver this indicates the actual settlement mode in use
+        if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
+            return Err(ReceiverAttachError::RcvSettleModeNotSupported)
+        }
+
         // The delivery-count is initialized by the sender when a link endpoint is
         // created, and is incremented whenever a message is sent
         let initial_delivery_count = remote_attach
@@ -750,6 +755,7 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> ReceiverAttachError {
         match attach_error {
+            // Errors that indicate failed attachment
             ReceiverAttachError::IllegalSessionState
             | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
@@ -768,7 +774,9 @@ where
                     .map(|_| attach_error)
                     .unwrap_or(ReceiverAttachError::IllegalSessionState)
             }
-            ReceiverAttachError::IncomingSourceIsNone
+            
+            ReceiverAttachError::RcvSettleModeNotSupported
+            | ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
                 let err = self
@@ -776,16 +784,7 @@ where
                     .await
                     .map(|_| attach_error)
                     .unwrap_or(ReceiverAttachError::IllegalSessionState);
-                match reader.recv().await {
-                    Some(LinkFrame::Detach(remote_detach)) => {
-                        match self.on_incoming_detach(remote_detach).await {
-                            Ok(_) => return err,
-                            Err(detach_error) => return detach_error.try_into().unwrap_or(err),
-                        }
-                    }
-                    Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-                    None => ReceiverAttachError::IllegalSessionState,
-                }
+                recv_detach(self, reader, err).await
             }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
@@ -796,14 +795,7 @@ where
                 match (&attach_error).try_into() {
                     Ok(error) => {
                         match self.send_detach(writer, true, Some(error)).await {
-                            Ok(_) => match reader.recv().await {
-                                Some(LinkFrame::Detach(remote_detach)) => {
-                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: how to handle this?
-                                    attach_error
-                                }
-                                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-                                None => ReceiverAttachError::IllegalSessionState,
-                            },
+                            Ok(_) => recv_detach(self, reader, attach_error).await,
                             Err(_) => ReceiverAttachError::IllegalSessionState,
                         }
                     }
@@ -811,5 +803,26 @@ where
                 }
             }
         }
+    }
+}
+
+async fn recv_detach<T>(link: &mut ReceiverLink<T>, reader: &mut mpsc::Receiver<LinkFrame>, err: ReceiverAttachError) -> ReceiverAttachError 
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    match reader.recv().await {
+        Some(LinkFrame::Detach(remote_detach)) => {
+            match link.on_incoming_detach(remote_detach).await {
+                Ok(_) => return err,
+                Err(detach_error) => return detach_error.try_into().unwrap_or(err),
+            }
+        }
+        Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+        None => ReceiverAttachError::IllegalSessionState,
     }
 }
