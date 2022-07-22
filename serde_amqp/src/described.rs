@@ -31,7 +31,7 @@ where
         let value: Value = self.value.into();
         Described {
             descriptor: self.descriptor,
-            value: value,
+            value,
         }
     }
 }
@@ -80,8 +80,8 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<'de, T> {
         };
 
         Ok(Described {
-            descriptor: descriptor,
-            value: value,
+            descriptor,
+            value,
         })
     }
 }
@@ -91,7 +91,7 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        const FIELDS: &'static [&'static str] = &[DESCRIPTOR, "value"];
+        const FIELDS: & [& str] = &[DESCRIPTOR, "value"];
         deserializer.deserialize_struct(
             DESCRIBED_BASIC,
             FIELDS,

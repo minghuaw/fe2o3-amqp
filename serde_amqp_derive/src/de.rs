@@ -119,14 +119,14 @@ fn expand_deserialize_unit_struct(
     let struct_name = match encoding {
         EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => {
-            let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+            let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
             return Err(syn::Error::new(
                 span,
                 "Basic encoding is not supported for unit struct",
             ));
         }
         EncodingType::Map => {
-            let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+            let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
             return Err(syn::Error::new(
                 span,
                 "Map encoding is not supported for unit struct",
@@ -212,7 +212,7 @@ fn expand_deserialize_tuple_struct(
             if fields.unnamed.len() == 1 {
                 quote!(serde_amqp::__constants::DESCRIBED_BASIC)
             } else {
-                let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
                 return Err(syn::Error::new(
                     span,
                     "Basic encoding is not supported for tuple struct",
@@ -220,7 +220,7 @@ fn expand_deserialize_tuple_struct(
             }
         }
         EncodingType::Map => {
-            let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+            let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
             return Err(syn::Error::new(
                 span,
                 "Map encoding is not supported for tuple struct",
@@ -290,7 +290,7 @@ fn expand_deserialize_struct(
         EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
         EncodingType::Basic => match len {
             0 => {
-                let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
                 return Err(syn::Error::new(
                     span,
                     "Basic encoding is not supported on unit struct",
@@ -300,7 +300,7 @@ fn expand_deserialize_struct(
         },
         EncodingType::Map => match len {
             0 => {
-                let span = get_span_of("encoding", ctx).unwrap_or(ident.span());
+                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
                 return Err(syn::Error::new(
                     span,
                     "Map encoding on unit struct is not implemented",
@@ -345,7 +345,7 @@ fn expand_deserialize_struct(
     let mut n_true: u32 = 0;
     let mut n_false: u32 = 0;
     field_attrs.iter().for_each(|a| {
-        if a.default == true {
+        if a.default {
             n_true += 1;
         } else {
             n_false += 1;
@@ -457,9 +457,9 @@ fn impl_deserialize_for_field(
 
 fn impl_visit_seq_for_struct(
     ident: &syn::Ident,
-    field_idents: &Vec<syn::Ident>,
-    field_types: &Vec<&syn::Type>,
-    field_attrs: &Vec<FieldAttr>,
+    field_idents: &[syn::Ident],
+    field_types: &[&syn::Type],
+    field_attrs: &[FieldAttr],
     evaluate_descriptor: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];

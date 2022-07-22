@@ -9,7 +9,7 @@ use crate::error::Error;
 #[allow(missing_docs)]
 #[repr(u8)]
 pub enum EncodingCodes {
-    DescribedType = 0x00 as u8,
+    DescribedType = 0x00_u8,
 
     Null = 0x40,
 

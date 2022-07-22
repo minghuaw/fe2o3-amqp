@@ -502,7 +502,7 @@ where
                         &session.control,
                     )
                     .await;
-                return Err(err.into());
+                return Err(err);
             }
         }
 
@@ -604,7 +604,7 @@ where
                         &session.control,
                     )
                     .await;
-                return Err(err.into());
+                return Err(err);
             }
         }
 

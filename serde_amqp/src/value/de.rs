@@ -18,7 +18,7 @@ use crate::{
 
 use super::Value;
 
-const VARIANTS: &'static [&'static str] = &[
+const VARIANTS: & [& str] = &[
     "Described",
     "Null",
     "Bool",
@@ -202,7 +202,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
                 Ok(Value::Described(val))
             }
             Field::Null => {
-                let _: () = de.newtype_variant()?;
+                de.newtype_variant()?;
                 Ok(Value::Null)
             }
             Field::Bool => {

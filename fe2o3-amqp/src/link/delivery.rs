@@ -305,7 +305,7 @@ pub(crate) struct UnsettledMessage {
 impl UnsettledMessage {
     pub fn new(payload: Payload, sender: oneshot::Sender<Option<DeliveryState>>) -> Self {
         Self {
-            payload: payload,
+            payload,
             state: None,
             sender,
         }

@@ -207,7 +207,7 @@ where
     ) -> Result<Settlement, Self::TransferError> {
         let settled = transfer
             .settled
-            .unwrap_or_else(|| match self.snd_settle_mode {
+            .unwrap_or(match self.snd_settle_mode {
                 SenderSettleMode::Settled => true,
                 SenderSettleMode::Unsettled => false,
                 SenderSettleMode::Mixed => false,
@@ -749,8 +749,8 @@ where
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => {
             match link.on_incoming_detach(remote_detach).await {
-                Ok(_) => return err,
-                Err(detach_error) => return detach_error.try_into().unwrap_or(err),
+                Ok(_) => err,
+                Err(detach_error) => detach_error.try_into().unwrap_or(err),
             }
         }
         Some(_) => SenderAttachError::NonAttachFrameReceived,

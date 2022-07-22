@@ -347,7 +347,7 @@ where
 }
 
 /// Count number of sections in encoded message
-pub(crate) fn count_number_of_sections_and_offset<'a>(bytes: &'a [u8]) -> (u32, u64) {
+pub(crate) fn count_number_of_sections_and_offset(bytes: &[u8]) -> (u32, u64) {
     let b0 = bytes.iter();
     let b1 = bytes.iter().skip(1);
     let b2 = bytes.iter().skip(2);
@@ -827,8 +827,8 @@ where
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => {
             match link.on_incoming_detach(remote_detach).await {
-                Ok(_) => return err,
-                Err(detach_error) => return detach_error.try_into().unwrap_or(err),
+                Ok(_) => err,
+                Err(detach_error) => detach_error.try_into().unwrap_or(err),
             }
         }
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,

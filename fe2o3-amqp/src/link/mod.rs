@@ -279,10 +279,7 @@ where
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
         let properties = self.flow_state.as_ref().properties().await;
-        let incomplete_unsettled = match partial_unsettled {
-            0..=1 => false,
-            _ => true,
-        };
+        let incomplete_unsettled = !matches!(partial_unsettled, 0..=1);
 
         Attach {
             name: self.name.clone(),

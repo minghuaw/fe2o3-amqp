@@ -721,7 +721,7 @@ where
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
         if self.auto_accept {
             self.dispose(
-                delivery.delivery_id.clone(),
+                delivery.delivery_id,
                 delivery.delivery_tag.clone(),
                 None,
                 Accepted {}.into(),

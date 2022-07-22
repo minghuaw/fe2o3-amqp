@@ -6,7 +6,7 @@ use syn::{parse::Parser, DeriveInput, Field};
 use crate::{DescribedAttr, DescribedStructAttr, EncodingType, FieldAttr};
 
 pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> DescribedStructAttr {
-    let attr = DescribedAttr::from_derive_input(&input).unwrap();
+    let attr = DescribedAttr::from_derive_input(input).unwrap();
 
     let name = attr.name.unwrap_or_else(|| input.ident.to_string());
     let code = attr.code;
@@ -35,7 +35,7 @@ pub(crate) fn convert_to_case(
         "snake_case" => source.to_case(Case::Snake),
         "SCREAMING_SNAKE_CASE" => source.to_case(Case::ScreamingSnake),
         "kebab-case" => source.to_case(Case::Kebab),
-        e @ _ => {
+        e => {
             let span = get_span_of("rename_all", ctx);
             match span {
                 Some(span) => {
@@ -67,7 +67,7 @@ pub(crate) fn parse_named_field_attrs<'a>(
                 FieldAttr::from_meta(&item).ok()
             })
         })
-        .map(|o| o.unwrap_or_else(|| FieldAttr { default: false }))
+        .map(|o| o.unwrap_or(FieldAttr { default: false }))
         .collect()
 }
 
@@ -76,7 +76,7 @@ pub(crate) fn get_span_of(ident_str: &str, ctx: &DeriveInput) -> Option<Span> {
         .iter()
         .find_map(|attr| match attr.path.get_ident() {
             Some(i) => {
-                if i.to_string() == ident_str {
+                if *i == ident_str {
                     Some(i.span())
                 } else {
                     None

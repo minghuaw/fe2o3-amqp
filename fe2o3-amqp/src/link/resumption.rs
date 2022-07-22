@@ -59,7 +59,7 @@ pub(crate) fn resume_delivery(
                 *section_number as usize,
                 *section_offset as usize,
             )
-            .unwrap_or(local.payload().clone());
+            .unwrap_or_else(|| local.payload().clone());
             Some(ResumingDelivery::Resume {
                 state: remote,
                 payload: remaining,
@@ -96,7 +96,7 @@ pub(crate) fn resume_delivery(
                     remote_recved.section_number as usize,
                     remote_recved.section_offset as usize,
                 )
-                .unwrap_or(local.payload().clone());
+                .unwrap_or_else(|| local.payload().clone());
                 Some(ResumingDelivery::Resume {
                     state: remote,
                     payload: remaining,
