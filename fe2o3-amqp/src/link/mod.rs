@@ -151,14 +151,14 @@ impl SenderAttachExchange {
 }
 
 /// Outcome of exchange of Attach frame on the receiver side
-/// 
+///
 /// This is useful for exposing the outcome of resuming a local receiver
 #[derive(Debug)]
 pub enum ReceiverAttachExchange {
     /// The attach exchange is completed without any unsettled deliveries
     Complete,
 
-    /// At least one party indicated an incomplete unsettled map during the attach exchange 
+    /// At least one party indicated an incomplete unsettled map during the attach exchange
     IncompleteUnsettled,
 
     /// The link will be resuming

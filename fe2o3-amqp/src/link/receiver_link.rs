@@ -3,7 +3,7 @@ use serde_amqp::format_code::EncodingCodes;
 
 use crate::util::{AsByteIterator, IntoReader};
 
-use super::{*};
+use super::*;
 
 pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
 pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
@@ -164,6 +164,11 @@ where
         T: DecodeIntoMessage + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a,
     {
+        match self.local_state {
+            LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
+            _ => return Err(ReceiverTransferError::IllegalState),
+        }
+
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
         // TODO: The receiver should then detach with error
@@ -286,8 +291,7 @@ where
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            lock
-                .get_or_insert(BTreeMap::new())
+            lock.get_or_insert(BTreeMap::new())
                 .insert(delivery_tag.clone(), Some(state.clone()))
         };
 
@@ -606,12 +610,12 @@ where
         // The receiver SHOULD respect the sender’s desired settlement mode if the sender
         // initiates the attach exchange and the receiver supports the desired mode.
         if self.snd_settle_mode != remote_attach.snd_settle_mode {
-            return Err(ReceiverAttachError::SndSettleModeNotSupported)
+            return Err(ReceiverAttachError::SndSettleModeNotSupported);
         }
 
         // When set at the receiver this indicates the actual settlement mode in use
         if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
-            return Err(ReceiverAttachError::RcvSettleModeNotSupported)
+            return Err(ReceiverAttachError::RcvSettleModeNotSupported);
         }
 
         // The delivery-count is initialized by the sender when a link endpoint is
@@ -796,12 +800,10 @@ where
             | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
             | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 match (&attach_error).try_into() {
-                    Ok(error) => {
-                        match self.send_detach(writer, true, Some(error)).await {
-                            Ok(_) => recv_detach(self, reader, attach_error).await,
-                            Err(_) => ReceiverAttachError::IllegalSessionState,
-                        }
-                    }
+                    Ok(error) => match self.send_detach(writer, true, Some(error)).await {
+                        Ok(_) => recv_detach(self, reader, attach_error).await,
+                        Err(_) => ReceiverAttachError::IllegalSessionState,
+                    },
                     Err(_) => attach_error,
                 }
             }
@@ -809,7 +811,11 @@ where
     }
 }
 
-async fn recv_detach<T>(link: &mut ReceiverLink<T>, reader: &mut mpsc::Receiver<LinkFrame>, err: ReceiverAttachError) -> ReceiverAttachError 
+async fn recv_detach<T>(
+    link: &mut ReceiverLink<T>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+    err: ReceiverAttachError,
+) -> ReceiverAttachError
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>

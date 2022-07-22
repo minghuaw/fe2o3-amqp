@@ -7,7 +7,7 @@
 use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Role, SenderSettleMode, ReceiverSettleMode},
+    definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -17,7 +17,8 @@ use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, ut
 
 use super::{
     builder::Builder, error::AcceptorAttachError, local_receiver_link::LocalReceiverLinkAcceptor,
-    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle, SupportedSenderSettleModes, SupportedReceiverSettleModes,
+    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle,
+    SupportedReceiverSettleModes, SupportedSenderSettleModes,
 };
 
 /// Listener side link endpoint

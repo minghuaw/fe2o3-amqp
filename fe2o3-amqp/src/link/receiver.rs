@@ -829,15 +829,15 @@ pub enum ResumingReceiver {
     Complete(Receiver),
 
     /// At least one side sent an Attach with an incomplete unsettled map
-    /// 
+    ///
     /// Please note that additional detach-resume may be necessary when there are
     /// unsettled deliveries
     IncompleteUnsettled(Receiver),
 
     /// The link is attached to resume partial deliveries
-    /// 
+    ///
     /// The current implementation only allows one partial delivery
-    /// 
+    ///
     /// Please note that additional detach-resume may be necessary when there are
     /// unsettled deliveries
     Resume(Receiver),
@@ -848,18 +848,18 @@ impl ResumingReceiver {
     pub fn complete_or<E>(self, err: E) -> Result<Receiver, E> {
         match self {
             ResumingReceiver::Complete(receiver) => Ok(receiver),
-            _ => Err(err)
+            _ => Err(err),
         }
     }
 
     /// Returns `Ok(Receiver)` if value is `Complete` otherwise returns `op(self)`
-    pub fn complete_or_else<F, E>(self, op: F) -> Result<Receiver, E> 
+    pub fn complete_or_else<F, E>(self, op: F) -> Result<Receiver, E>
     where
-        F: FnOnce(Self) -> E
+        F: FnOnce(Self) -> E,
     {
         match self {
             ResumingReceiver::Complete(receiver) => Ok(receiver),
-            _ => Err((op)(self))
+            _ => Err((op)(self)),
         }
     }
 
@@ -935,16 +935,18 @@ impl DetachedReceiver {
     }
 
     /// Resume the receiver link
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
-    /// times if there are unsettled deliveries. 
+    /// times if there are unsettled deliveries.
     #[instrument(skip(self))]
     pub async fn resume(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(self, self.resume_inner(None).await);
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
-            ReceiverAttachExchange::IncompleteUnsettled => ResumingReceiver::IncompleteUnsettled(receiver),
+            ReceiverAttachExchange::IncompleteUnsettled => {
+                ResumingReceiver::IncompleteUnsettled(receiver)
+            }
             ReceiverAttachExchange::Resume => ResumingReceiver::Resume(receiver),
         };
         Ok(resuming_receiver)
@@ -953,7 +955,7 @@ impl DetachedReceiver {
     /// Resume the receiver link with a timeout.
     ///
     /// Upon failure, the detached receiver can be accessed via `error.detached_recver`
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
     #[instrument(skip(self))]
@@ -968,11 +970,13 @@ impl DetachedReceiver {
                 let receiver = Receiver { inner: self.inner };
                 let resuming_receiver = match exchange {
                     ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
-                    ReceiverAttachExchange::IncompleteUnsettled => ResumingReceiver::IncompleteUnsettled(receiver),
+                    ReceiverAttachExchange::IncompleteUnsettled => {
+                        ResumingReceiver::IncompleteUnsettled(receiver)
+                    }
                     ReceiverAttachExchange::Resume => ResumingReceiver::Resume(receiver),
                 };
                 Ok(resuming_receiver)
-            },
+            }
             Ok(Err(kind)) => Err(ReceiverResumeError {
                 detached_recver: self,
                 kind,
@@ -988,7 +992,7 @@ impl DetachedReceiver {
     }
 
     /// Resume the receiver on a specific session
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
     pub async fn resume_on_session<R>(
@@ -1000,7 +1004,7 @@ impl DetachedReceiver {
     }
 
     /// Resume the receiver on a specific session with timeout
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
     pub async fn resume_on_session_with_timeout<R>(
@@ -1013,25 +1017,34 @@ impl DetachedReceiver {
     }
 
     /// Resume the receiver link on the original session with an Attach sent by the remote peer
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
-    pub async fn resume_incoming_attach(mut self, remote_attach: Attach) -> Result<ResumingReceiver, ReceiverResumeError> {
+    pub async fn resume_incoming_attach(
+        mut self,
+        remote_attach: Attach,
+    ) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(self, self.resume_inner(Some(remote_attach)).await);
         let receiver = Receiver { inner: self.inner };
         let resuming_receiver = match exchange {
             ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
-            ReceiverAttachExchange::IncompleteUnsettled => ResumingReceiver::IncompleteUnsettled(receiver),
+            ReceiverAttachExchange::IncompleteUnsettled => {
+                ResumingReceiver::IncompleteUnsettled(receiver)
+            }
             ReceiverAttachExchange::Resume => ResumingReceiver::Resume(receiver),
         };
         Ok(resuming_receiver)
     }
 
     /// Resume the receiver link on the original session with an Attach sent by the remote peer
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
-    pub async fn resume_incoming_attach_with_timeout(mut self, remote_attach: Attach, duration: Duration,) -> Result<ResumingReceiver, ReceiverResumeError> {
+    pub async fn resume_incoming_attach_with_timeout(
+        mut self,
+        remote_attach: Attach,
+        duration: Duration,
+    ) -> Result<ResumingReceiver, ReceiverResumeError> {
         let fut = self.resume_inner(Some(remote_attach));
 
         match tokio::time::timeout(duration, fut).await {
@@ -1039,11 +1052,13 @@ impl DetachedReceiver {
                 let receiver = Receiver { inner: self.inner };
                 let resuming_receiver = match exchange {
                     ReceiverAttachExchange::Complete => ResumingReceiver::Complete(receiver),
-                    ReceiverAttachExchange::IncompleteUnsettled => ResumingReceiver::IncompleteUnsettled(receiver),
+                    ReceiverAttachExchange::IncompleteUnsettled => {
+                        ResumingReceiver::IncompleteUnsettled(receiver)
+                    }
                     ReceiverAttachExchange::Resume => ResumingReceiver::Resume(receiver),
                 };
                 Ok(resuming_receiver)
-            },
+            }
             Ok(Err(kind)) => Err(ReceiverResumeError {
                 detached_recver: self,
                 kind,
@@ -1059,7 +1074,7 @@ impl DetachedReceiver {
     }
 
     /// Resume the receiver on a specific session
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
     pub async fn resume_incoming_attach_on_session<R>(
@@ -1072,7 +1087,7 @@ impl DetachedReceiver {
     }
 
     /// Resume the receiver on a specific session with timeout
-    /// 
+    ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
     pub async fn resume_incoming_attach_on_session_with_timeout<R>(
@@ -1082,7 +1097,8 @@ impl DetachedReceiver {
         duration: Duration,
     ) -> Result<ResumingReceiver, ReceiverResumeError> {
         *self.inner.session_control_mut() = session.control.clone();
-        self.resume_incoming_attach_with_timeout(remote_attach, duration).await
+        self.resume_incoming_attach_with_timeout(remote_attach, duration)
+            .await
     }
 }
 

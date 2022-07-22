@@ -542,7 +542,7 @@ where
         // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
         // initiates the attach exchange and the sender supports the desired mode
         if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
-            return Err(SenderAttachError::RcvSettleModeNotSupported)
+            return Err(SenderAttachError::RcvSettleModeNotSupported);
         }
 
         if self.snd_settle_mode != remote_attach.snd_settle_mode {
@@ -733,7 +733,11 @@ where
     }
 }
 
-async fn recv_detach<T>(link: &mut SenderLink<T>, reader: &mut mpsc::Receiver<LinkFrame>, err: SenderAttachError) -> SenderAttachError 
+async fn recv_detach<T>(
+    link: &mut SenderLink<T>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+    err: SenderAttachError,
+) -> SenderAttachError
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>

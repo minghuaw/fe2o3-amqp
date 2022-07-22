@@ -380,9 +380,7 @@ impl Builder<LinkAcceptor, Initialized> {
 
     /// The settlement policy of the receiver
     pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
-        self.inner
-            .shared
-            .supported_rcv_settle_modes = modes;
+        self.inner.shared.supported_rcv_settle_modes = modes;
         self
     }
 

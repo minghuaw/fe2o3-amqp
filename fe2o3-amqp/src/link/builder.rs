@@ -157,7 +157,7 @@ impl Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
 
 impl<T, NameState, SS, TS> Builder<role::Receiver, T, NameState, SS, TS> {
     /// Sets the `auto_accept` field.
-    /// 
+    ///
     /// Default value: `false`
     pub fn auto_accept(mut self, value: bool) -> Self {
         self.auto_accept = value;

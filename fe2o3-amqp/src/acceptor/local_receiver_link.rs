@@ -2,10 +2,7 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use fe2o3_amqp_types::{
-    messaging::TargetArchetype, performatives::Attach,
-    primitives::Symbol,
-};
+use fe2o3_amqp_types::{messaging::TargetArchetype, performatives::Attach, primitives::Symbol};
 use tokio::sync::{mpsc, RwLock};
 use tracing::instrument;
 
@@ -22,7 +19,7 @@ use crate::{
     Receiver,
 };
 
-use super::{link::SharedLinkAcceptorFields};
+use super::link::SharedLinkAcceptorFields;
 
 /// An acceptor for a remote Sender link
 ///
@@ -39,7 +36,6 @@ pub(crate) struct LocalReceiverLinkAcceptor<C> {
     // /// If this field is None, an incoming attach whose desired receiver settle
     // /// mode is not supported will then be rejected
     // pub fallback_rcv_settle_mode: ReceiverSettleMode,
-
     /// Credit mode of the link. This has no effect on a sender
     pub credit_mode: CreditMode,
 
@@ -201,12 +197,20 @@ where
                 // Complete attach anyway
                 link.send_attach(&outgoing, &control, false).await?;
                 match attach_error {
-                    ReceiverAttachError::SndSettleModeNotSupported | ReceiverAttachError::RcvSettleModeNotSupported => {
+                    ReceiverAttachError::SndSettleModeNotSupported
+                    | ReceiverAttachError::RcvSettleModeNotSupported => {
                         // FIXME: Ths initiating end should be responsible for checking whether the mode is supported
-                    },
-                    _ => return Err(link
-                        .handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control)
-                        .await)
+                    }
+                    _ => {
+                        return Err(link
+                            .handle_attach_error(
+                                attach_error,
+                                &outgoing,
+                                &mut incoming_rx,
+                                &control,
+                            )
+                            .await)
+                    }
                 }
             }
             (_, Ok(_)) => link.send_attach(&outgoing, &control, false).await?,

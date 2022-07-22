@@ -3,10 +3,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{SequenceNo},
-    messaging::Target,
-    performatives::Attach,
-    primitives::Symbol,
+    definitions::SequenceNo, messaging::Target, performatives::Attach, primitives::Symbol,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 
@@ -22,7 +19,7 @@ use crate::{
     Sender,
 };
 
-use super::{link::SharedLinkAcceptorFields};
+use super::link::SharedLinkAcceptorFields;
 
 /// An acceptor for a remote receiver link
 ///
@@ -39,7 +36,6 @@ pub(crate) struct LocalSenderLinkAcceptor<C> {
     // /// If this field is None, an incoming attach whose desired sender settle
     // /// mode is not supported will then be rejected
     // pub fallback_snd_settle_mode: SenderSettleMode,
-
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
@@ -79,7 +75,10 @@ impl LocalSenderLinkAcceptor<Symbol> {
         } else {
             shared.fallback_snd_settle_mode.clone()
         };
-        let rcv_settle_mode = if shared.supported_rcv_settle_modes.supports(&remote_attach.rcv_settle_mode) {
+        let rcv_settle_mode = if shared
+            .supported_rcv_settle_modes
+            .supports(&remote_attach.rcv_settle_mode)
+        {
             remote_attach.rcv_settle_mode.clone()
         } else {
             shared.fallback_rcv_settle_mode.clone()
@@ -155,9 +154,10 @@ impl LocalSenderLinkAcceptor<Symbol> {
                 // Complete attach then detach should any error happen
                 link.send_attach(&outgoing, &session.control, false).await?;
                 match attach_error {
-                    SenderAttachError::SndSettleModeNotSupported | SenderAttachError::RcvSettleModeNotSupported => {
+                    SenderAttachError::SndSettleModeNotSupported
+                    | SenderAttachError::RcvSettleModeNotSupported => {
                         // FIXME: The initiating side is responsible for checking whether the desired modes are supported?
-                    },
+                    }
                     _ => {
                         return Err(link
                             .handle_attach_error(

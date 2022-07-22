@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc::Sender, oneshot},
     task::JoinHandle,
 };
-use tracing::{instrument};
+use tracing::instrument;
 use url::Url;
 
 use crate::{
