@@ -2,9 +2,11 @@
 
 ## 0.2.0
 
-1. Added `auto_accept` option for `Receiver` and receiver `Builder` that controls whether the receiver will automatically accept incoming message
+1. ***Breaking*** change
+   - Added `auto_accept` option for `Receiver` and receiver `Builder` that controls whether the receiver will automatically accept incoming message
 2. Drafted link resumption on client side
 3. Sender and receiver on the client side checks if declared `snd_settle_mode` and `rcv_settle_mode` are supported by the remote peer
+4. Fixsed most clippy warnings
 
 ## 0.1.4
 
