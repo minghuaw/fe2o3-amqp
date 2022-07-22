@@ -862,6 +862,51 @@ impl ResumingReceiver {
             _ => Err((op)(self))
         }
     }
+
+    /// Consumes the enum and get the receiver
+    pub fn into_receiver(self) -> Receiver {
+        match self {
+            ResumingReceiver::Complete(receiver) => receiver,
+            ResumingReceiver::IncompleteUnsettled(receiver) => receiver,
+            ResumingReceiver::Resume(receiver) => receiver,
+        }
+    }
+
+    /// Get a reference to the receiver
+    pub fn as_receiver(&self) -> &Receiver {
+        self.as_ref()
+    }
+
+    /// Get a mutable reference to the receiver
+    pub fn as_receiver_mut(&mut self) -> &mut Receiver {
+        self.as_mut()
+    }
+}
+
+impl AsRef<Receiver> for ResumingReceiver {
+    fn as_ref(&self) -> &Receiver {
+        match self {
+            ResumingReceiver::Complete(receiver) => receiver,
+            ResumingReceiver::IncompleteUnsettled(receiver) => receiver,
+            ResumingReceiver::Resume(receiver) => receiver,
+        }
+    }
+}
+
+impl AsMut<Receiver> for ResumingReceiver {
+    fn as_mut(&mut self) -> &mut Receiver {
+        match self {
+            ResumingReceiver::Complete(receiver) => receiver,
+            ResumingReceiver::IncompleteUnsettled(receiver) => receiver,
+            ResumingReceiver::Resume(receiver) => receiver,
+        }
+    }
+}
+
+impl From<ResumingReceiver> for Receiver {
+    fn from(value: ResumingReceiver) -> Self {
+        value.into_receiver()
+    }
 }
 
 impl DetachedReceiver {
