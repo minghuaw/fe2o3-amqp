@@ -48,38 +48,41 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    // let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
-    //     .await
-    //     .unwrap();
-    let mut receiver = Receiver::builder()
-        .name("rust-receiver-link-1")
-        .source("q1")
-        .auto_accept(false)
-        .sender_settle_mode(SenderSettleMode::Settled)
-        .receiver_settle_mode(ReceiverSettleMode::Second)
-        .attach(&mut session)
+    let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
         .await
         .unwrap();
+    // let mut receiver = Receiver::builder()
+    //     .name("rust-receiver-link-1")
+    //     .source("q1")
+    //     .auto_accept(false)
+    //     .sender_settle_mode(SenderSettleMode::Settled)
+    //     .receiver_settle_mode(ReceiverSettleMode::Second)
+    //     .attach(&mut session)
+    //     .await
+    //     .unwrap();
 
     tracing::info!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    receiver.accept(&delivery).await.unwrap();
-    tracing::info!("{:?}", delivery.body());
-
-    // let delivery = receiver.recv::<Value>().await.unwrap();
+    // let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     // receiver.accept(&delivery).await.unwrap();
-    // let body = delivery.into_body();
-    // println!("{:?}", delivery.delivery_id());
+    // tracing::info!("{:?}", delivery.body());
+
+    let delivery = receiver.recv::<Value>().await.unwrap();
+    receiver.accept(&delivery).await.unwrap();
+    println!("{:?}", delivery.delivery_id());
+
+    let delivery = receiver.recv::<Value>().await.unwrap();
+    receiver.accept(&delivery).await.unwrap();
+    println!("{:?}", delivery.delivery_id());
 
     // Detach then resume
-    let detached = receiver.detach().await.unwrap();
-    let mut receiver = detached.resume().await.unwrap()
-        .complete_or_else(|r| r).unwrap();
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
-    receiver.accept(&delivery).await.unwrap();
-    tracing::info!("{:?}", delivery.body());
+    // let detached = receiver.detach().await.unwrap();
+    // let mut receiver = detached.resume().await.unwrap()
+    //     .complete_or_else(|r| r).unwrap();
+    // let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    // receiver.accept(&delivery).await.unwrap();
+    // tracing::info!("{:?}", delivery.body());
 
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
