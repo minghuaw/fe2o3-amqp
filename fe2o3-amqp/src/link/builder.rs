@@ -99,12 +99,6 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     /// Credit mode of the link. This has no effect if a sender is built
     pub credit_mode: CreditMode,
 
-    // Type state markers
-    role: PhantomData<Role>,
-    name_state: PhantomData<NameState>,
-    source_state: PhantomData<SS>,
-    target_state: PhantomData<TS>,
-
     /// Whether the receiver will automatically accept all incoming deliveries
     ///
     /// This field has no effect on Sender
@@ -114,7 +108,13 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     /// ```rust
     /// auto_accept = false;
     /// ```
-    auto_accept: bool,
+    pub auto_accept: bool,
+
+    // Type state markers
+    role: PhantomData<Role>,
+    name_state: PhantomData<NameState>,
+    source_state: PhantomData<SS>,
+    target_state: PhantomData<TS>,
 }
 
 impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTarget> {
