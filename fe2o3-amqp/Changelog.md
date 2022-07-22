@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.1
+
+1. Make `auto_accept` field in receiver builder public
+
 ## 0.2.0
 
 1. ***Breaking*** change
