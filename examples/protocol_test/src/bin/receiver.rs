@@ -3,7 +3,7 @@ use fe2o3_amqp::{
     link::Receiver,
     sasl_profile::SaslProfile,
     session::Session,
-    types::{primitives::Value},
+    types::{primitives::Value, definitions::{ReceiverSettleMode, SenderSettleMode}},
     Delivery,
 };
 use tokio::net::TcpStream;
@@ -13,7 +13,7 @@ use tracing_subscriber::FmtSubscriber;
 #[tokio::main]
 async fn main() {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::TRACE)
+        .with_max_level(Level::DEBUG)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
@@ -54,21 +54,37 @@ async fn main() {
     // let mut receiver = Receiver::builder()
     //     .name("rust-receiver-link-1")
     //     .source("q1")
+    //     .auto_accept(false)
+    //     .sender_settle_mode(SenderSettleMode::Settled)
+    //     .receiver_settle_mode(ReceiverSettleMode::Second)
     //     .attach(&mut session)
     //     .await
     //     .unwrap();
 
-    println!("Receiver attached");
+    tracing::info!("Receiver attached");
     // tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    // let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    // receiver.accept(&delivery).await.unwrap();
+    // tracing::info!("{:?}", delivery.body());
+
+    let delivery = receiver.recv::<Value>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery.delivery_id());
 
     let delivery = receiver.recv::<Value>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
-    // let body = delivery.into_body();
     println!("{:?}", delivery.delivery_id());
+
+    // Detach then resume
+    // let detached = receiver.detach().await.unwrap();
+    // let mut receiver = detached.resume().await.unwrap()
+    //     .complete_or_else(|r| r).unwrap();
+    // let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    // receiver.accept(&delivery).await.unwrap();
+    // tracing::info!("{:?}", delivery.body());
+
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();

@@ -120,7 +120,7 @@ impl<W: Write> Serializer<W> {
     fn struct_encoding(&self) -> &StructEncoding {
         self.struct_encoding
             .last()
-            .unwrap_or_else(|| &StructEncoding::None)
+            .unwrap_or(&StructEncoding::None)
     }
 }
 
@@ -200,7 +200,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     let buf = [EncodingCodes::SmallInt as u8, val as u8];
                     self.writer.write_all(&buf)?;
                 }
-                val @ _ => {
+                val => {
                     let code = [EncodingCodes::Int as u8];
                     self.writer.write_all(&code)?;
                     let buf: [u8; 4] = val.to_be_bytes();
@@ -230,7 +230,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         let buf = [EncodingCodes::SmallLong as u8, val as u8];
                         self.writer.write_all(&buf)?;
                     }
-                    val @ _ => {
+                    val => {
                         let code = [EncodingCodes::Long as u8];
                         self.writer.write_all(&code)?;
                         let buf: [u8; 8] = val.to_be_bytes();
@@ -303,7 +303,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&buf)?;
                     }
                     // uint
-                    val @ _ => {
+                    val => {
                         let code = [EncodingCodes::UInt as u8];
                         self.writer.write_all(&code)?;
                         let buf: [u8; 4] = val.to_be_bytes();
@@ -341,7 +341,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         self.writer.write_all(&buf)?;
                     }
                     // ulong
-                    val @ _ => {
+                    val => {
                         let code = [EncodingCodes::ULong as u8];
                         self.writer.write_all(&code)?;
                         let buf: [u8; 8] = val.to_be_bytes();
@@ -864,7 +864,7 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
             _ => unreachable!(),
         };
 
-        self.num = self.num + 1;
+        self.num += 1;
         value.serialize(&mut se)
     }
 
@@ -1372,11 +1372,11 @@ impl<'a, W: 'a> VariantSerializer<'a, W> {
         num: usize, // number of field in the tuple
     ) -> Self {
         Self {
-            se: se,
+            se,
             _name: name,
-            variant_index: variant_index,
+            variant_index,
             _variant: variant,
-            num: num,
+            num,
             buf: Vec::new(),
         }
     }

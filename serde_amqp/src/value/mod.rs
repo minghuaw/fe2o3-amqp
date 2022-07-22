@@ -20,7 +20,7 @@ pub mod ser;
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     /// Described type
-    /// 
+    ///
     /// Box is used to reduce the memory size of the Value type.
     Described(Box<Described<Value>>),
 

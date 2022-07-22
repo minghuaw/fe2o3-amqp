@@ -42,7 +42,7 @@ impl ser::Serialize for Value {
             Value::Timestamp(v) => v.serialize(serializer),
             Value::Uuid(v) => v.serialize(serializer),
             Value::Binary(v) => serializer.serialize_bytes(v.as_slice()),
-            Value::String(v) => serializer.serialize_str(&v),
+            Value::String(v) => serializer.serialize_str(v),
             Value::Symbol(v) => v.serialize(serializer),
             Value::List(v) => v.serialize(serializer),
             Value::Map(v) => v.serialize(serializer),
@@ -72,6 +72,12 @@ impl Serializer {
         Self {
             new_type: Default::default(),
         }
+    }
+}
+
+impl Default for Serializer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -526,9 +532,9 @@ impl<'a> VariantSerializer<'a> {
         num: usize, // number of field in the tuple
     ) -> Self {
         Self {
-            se: se,
+            se,
             _name: name,
-            variant_index: variant_index,
+            variant_index,
             _variant: variant,
             _num: num,
             buf: Vec::new(),

@@ -1,10 +1,10 @@
 //! Helper types differentiating message delivery
 
 use fe2o3_amqp_types::{
-    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat},
+    definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
     messaging::{
         message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome,
-        Received,
+        MESSAGE_FORMAT,
     },
     primitives::Binary,
 };
@@ -13,8 +13,8 @@ use pin_project_lite::pin_project;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
-use crate::Payload;
 use crate::{endpoint::Settlement, util::Uninitialized};
+use crate::{util::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
 
@@ -25,6 +25,9 @@ pub struct Delivery<T> {
     pub(crate) link_output_handle: Handle,
     pub(crate) delivery_id: DeliveryNumber,
     pub(crate) delivery_tag: DeliveryTag,
+
+    pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>,
+
     pub(crate) message: Message<T>,
 }
 
@@ -178,7 +181,7 @@ where
     fn from(value: T) -> Self {
         Self {
             message: value.into(),
-            message_format: 0,
+            message_format: MESSAGE_FORMAT,
             settled: None,
         }
     }
@@ -188,7 +191,7 @@ impl<T> From<Message<T>> for Sendable<T> {
     fn from(message: Message<T>) -> Self {
         Self {
             message,
-            message_format: 0,
+            message_format: MESSAGE_FORMAT,
             settled: None,
         }
     }
@@ -240,7 +243,7 @@ impl Builder<Uninitialized> {
     pub fn new() -> Self {
         Self {
             message: Uninitialized {},
-            message_format: 0,
+            message_format: MESSAGE_FORMAT,
             settled: None,
             // batchable: false,
         }
@@ -294,59 +297,50 @@ impl<T> From<Builder<Message<T>>> for Sendable<T> {
 /// An unsettled message stored in the Sender's unsettled map
 #[derive(Debug)]
 pub(crate) struct UnsettledMessage {
-    _payload: Payload,
-    state: DeliveryState,
-    sender: oneshot::Sender<DeliveryState>,
+    payload: Payload,
+    state: Option<DeliveryState>,
+    sender: oneshot::Sender<Option<DeliveryState>>,
 }
 
 impl UnsettledMessage {
-    pub fn new(payload: Payload, sender: oneshot::Sender<DeliveryState>) -> Self {
-        // Assume needing to resend from the beginning unless there is further
-        // update from the remote peer
-        let received = Received {
-            section_number: 0,
-            section_offset: 0,
-        };
-
+    pub fn new(payload: Payload, sender: oneshot::Sender<Option<DeliveryState>>) -> Self {
         Self {
-            _payload: payload,
-            state: DeliveryState::Received(received),
+            payload,
+            state: None,
             sender,
         }
     }
 
-    // pub fn state(&self) -> &DeliveryState {
-    //     &self.state
-    // }
+    pub fn state(&self) -> &Option<DeliveryState> {
+        &self.state
+    }
 
-    pub fn state_mut(&mut self) -> &mut DeliveryState {
+    pub fn state_mut(&mut self) -> &mut Option<DeliveryState> {
         &mut self.state
     }
 
-    // pub fn payload(&self) -> &Payload {
-    //     &self._payload
-    // }
+    pub fn payload(&self) -> &Payload {
+        &self.payload
+    }
 
-    pub fn settle(self) -> Result<(), DeliveryState> {
+    pub fn settle(self) -> Result<(), Option<DeliveryState>> {
         self.sender.send(self.state)
     }
 
-    pub fn settle_with_state(self, state: Option<DeliveryState>) -> Result<(), DeliveryState> {
-        match state {
-            Some(state) => self.sender.send(state),
-            None => self.settle(),
-        }
+    pub fn settle_with_state(
+        self,
+        state: Option<DeliveryState>,
+    ) -> Result<(), Option<DeliveryState>> {
+        self.sender.send(state)
     }
 }
 
-impl AsRef<DeliveryState> for UnsettledMessage {
-    fn as_ref(&self) -> &DeliveryState {
+impl AsDeliveryState for UnsettledMessage {
+    fn as_delivery_state(&self) -> &Option<DeliveryState> {
         &self.state
     }
-}
 
-impl AsMut<DeliveryState> for UnsettledMessage {
-    fn as_mut(&mut self) -> &mut DeliveryState {
+    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
         &mut self.state
     }
 }
@@ -359,6 +353,19 @@ pin_project! {
         // Reserved for future use on actively sending disposition from Sender
         settlement: Settlement,
         outcome_marker: PhantomData<O>
+    }
+}
+
+impl<O> DeliveryFut<O> {
+    /// Get the delivery tag
+    pub fn delivery_tag(&self) -> &DeliveryTag {
+        match &self.settlement {
+            Settlement::Settled(delivery_tag) => delivery_tag,
+            Settlement::Unsettled {
+                delivery_tag,
+                outcome: _,
+            } => delivery_tag,
+        }
     }
 }
 
@@ -376,6 +383,8 @@ pub(crate) trait FromPreSettled {
 }
 
 pub(crate) trait FromDeliveryState {
+    fn from_none() -> Self;
+
     fn from_delivery_state(state: DeliveryState) -> Self;
 }
 
@@ -389,7 +398,7 @@ impl FromOneshotRecvError for SendResult {
     }
 }
 
-type SendResult = Result<Outcome, SendError>;
+pub(crate) type SendResult = Result<Outcome, SendError>;
 
 impl FromPreSettled for SendResult {
     fn from_settled() -> Self {
@@ -398,6 +407,10 @@ impl FromPreSettled for SendResult {
 }
 
 impl FromDeliveryState for SendResult {
+    fn from_none() -> Self {
+        Err(SendError::IllegalDeliveryState)
+    }
+
     fn from_delivery_state(state: DeliveryState) -> Self {
         match state {
             // DeliveryState::Accepted(accepted) | DeliveryState::Received(_) => Ok(accepted),
@@ -431,16 +444,17 @@ where
         let mut settlement = this.settlement;
 
         match &mut *settlement {
-            Settlement::Settled => Poll::Ready(O::from_settled()),
+            Settlement::Settled(_) => Poll::Ready(O::from_settled()),
             Settlement::Unsettled {
-                _delivery_tag: _,
+                delivery_tag: _,
                 outcome,
             } => {
                 match outcome.poll_unpin(cx) {
                     Poll::Pending => Poll::Pending,
                     Poll::Ready(result) => {
                         match result {
-                            Ok(state) => Poll::Ready(O::from_delivery_state(state)),
+                            Ok(Some(state)) => Poll::Ready(O::from_delivery_state(state)),
+                            Ok(None) => Poll::Ready(O::from_none()),
                             Err(err) => {
                                 // If the sender is dropped, there is likely issues with the connection
                                 // or the session, and thus the error should propagate to the user

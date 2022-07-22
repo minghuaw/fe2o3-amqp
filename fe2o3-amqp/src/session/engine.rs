@@ -233,6 +233,12 @@ where
                     .await
                     .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             }
+            SessionControl::GetMaxFrameSize(resp) => {
+                self.conn
+                    .send(ConnectionControl::GetMaxFrameSize(resp))
+                    .await
+                    .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            }
 
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { resp } => {
@@ -284,9 +290,7 @@ where
     }
 
     #[inline]
-    #[instrument(skip_all)]
     async fn on_outgoing_link_frames(&mut self, frame: LinkFrame) -> Result<Running, Error> {
-        trace!(state = ?self.session.local_state(), frame = ?frame);
         match self.session.local_state() {
             SessionState::Mapped => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state

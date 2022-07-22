@@ -24,11 +24,20 @@ pub enum LinkState {
     /// An attach frame has been sent
     AttachSent,
 
+    /// An attach has been sent but with incomplete unsettled
+    IncompleteAttachSent,
+
     /// An attach frame has been received
     AttachReceived,
 
+    /// An attach frame has been received with incomplete unsettled
+    IncompleteAttachReceived,
+
     /// The link is attached
     Attached,
+
+    /// The two endpoints has exchanged Attach frames but at least one of them is incomplete
+    IncompleteAttachExchanged,
 
     /// A non-closing detach frame has been sent
     DetachSent,
@@ -225,6 +234,10 @@ impl LinkFlowState<role::Receiver> {
 }
 
 impl<R> LinkFlowState<R> {
+    pub async fn link_credit(&self) -> u32 {
+        self.lock.read().await.link_credit
+    }
+
     pub async fn drain(&self) -> bool {
         self.lock.read().await.drain
     }
@@ -245,9 +258,9 @@ impl<R> LinkFlowState<R> {
         guard.initial_delivery_count = new;
     }
 
-    pub async fn delivery_count(&self) -> SequenceNo {
-        self.lock.read().await.delivery_count
-    }
+    // pub async fn delivery_count(&self) -> SequenceNo {
+    //     self.lock.read().await.delivery_count
+    // }
 
     pub async fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
         let mut guard = self.lock.write().await;

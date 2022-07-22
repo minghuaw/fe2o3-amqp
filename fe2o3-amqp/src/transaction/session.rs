@@ -280,11 +280,7 @@ where
                     .txns
                     .get_mut(txn_id)
                     .map(|txn| (txn, txn_id.clone()))
-                    .ok_or_else(|| definitions::Error::new(
-                        TransactionError::UnknownId,
-                        None,
-                        None,
-                    ))
+                    .ok_or_else(|| definitions::Error::new(TransactionError::UnknownId, None, None))
                     .map_err(Self::Error::Local)?
             }
             Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,

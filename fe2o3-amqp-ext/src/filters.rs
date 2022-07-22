@@ -95,7 +95,6 @@ impl From<LegacyAmqpTopicBinding> for Option<Described<Value>> {
     }
 }
 
-
 /// 1.3 Legacy Amqp Headers Binding
 /// <type name="legacy-amqp-headers-binding" class="restricted" source="map" provides="filter">
 ///     <descriptor name="apache.org:legacy-amqp-headers-binding:map" code="0x0000468C:0x00000002"/>
@@ -124,7 +123,9 @@ impl From<LegacyAmqpHeadersBinding> for Described<BTreeMap<String, SimpleValue>>
 
 impl From<LegacyAmqpHeadersBinding> for Described<Value> {
     fn from(value: LegacyAmqpHeadersBinding) -> Self {
-        let value = value.0.into_iter()
+        let value = value
+            .0
+            .into_iter()
             .map(|(k, v)| (Value::String(k), Value::from(v)))
             .collect();
 
@@ -195,7 +196,6 @@ impl SelectorFilter {
         Self(value.into())
     }
 }
-
 
 impl From<SelectorFilter> for Described<String> {
     fn from(value: SelectorFilter) -> Self {

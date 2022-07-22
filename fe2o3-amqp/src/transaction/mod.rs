@@ -24,6 +24,8 @@
 //! ```
 //!
 
+use std::collections::BTreeMap;
+
 use crate::{
     endpoint::ReceiverLink,
     link::{
@@ -159,9 +161,7 @@ pub trait TransactionalRetirement {
     where
         T: Send + Sync,
     {
-        let outcome = Outcome::Rejected(Rejected {
-            error,
-        });
+        let outcome = Outcome::Rejected(Rejected { error });
         self.retire(recver, delivery, outcome).await
     }
 
@@ -330,6 +330,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
                 delivery.delivery_tag.clone(),
                 None,
                 state,
+                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -560,15 +561,20 @@ impl<'t> Drop for Transaction<'t> {
                                 return;
                             }
                         };
-                        guard.insert(delivery_tag, unsettled);
+                        guard
+                            .get_or_insert(BTreeMap::new())
+                            .insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {
-                        Ok(state) => match state {
+                        Ok(Some(state)) => match state {
                             DeliveryState::Accepted(_) => {}
                             _ => {
                                 tracing::error!(error = ?state);
                             }
                         },
+                        Ok(None) => {
+                            tracing::error!(error = ?ControllerSendError::IllegalDeliveryState)
+                        }
                         Err(error) => {
                             tracing::error!(?error);
                         }

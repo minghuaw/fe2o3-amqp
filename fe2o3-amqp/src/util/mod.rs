@@ -1,6 +1,7 @@
 //! Common utilities
 
-use bytes::{Buf, buf};
+use bytes::{buf, Buf};
+use fe2o3_amqp_types::messaging::DeliveryState;
 use futures_util::Future;
 use std::io;
 use std::ops::Deref;
@@ -105,7 +106,23 @@ impl IntoReader for Payload {
 
 impl<'a> AsByteIterator<'a> for Payload {
     type IterImpl = std::slice::Iter<'a, u8>;
-    
+
+    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+        self.iter()
+    }
+}
+
+impl<'a> AsByteIterator<'a> for &[u8] {
+    type IterImpl = std::slice::Iter<'a, u8>;
+
+    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+        self.iter()
+    }
+}
+
+impl<'a> AsByteIterator<'a> for Vec<u8> {
+    type IterImpl = std::slice::Iter<'a, u8>;
+
     fn as_byte_iterator(&'a self) -> Self::IterImpl {
         self.iter()
     }
@@ -115,9 +132,7 @@ impl IntoReader for Vec<Payload> {
     type Reader = ByteReader<Payload>;
 
     fn into_reader(self) -> Self::Reader {
-        ByteReader {
-            inner: self
-        }
+        ByteReader { inner: self }
     }
 }
 
@@ -126,7 +141,7 @@ impl<'a> AsByteIterator<'a> for Vec<Payload> {
 
     fn as_byte_iterator(&'a self) -> Self::IterImpl {
         ByteReaderIter {
-            inner: self.iter().map(|p| p.iter()).collect()
+            inner: self.iter().map(|p| p.iter()).collect(),
         }
     }
 }
@@ -141,17 +156,17 @@ impl io::Read for ByteReader<Payload> {
 
         for payload in self.inner.iter_mut() {
             if payload.remaining() >= dst.len() - nbytes_read {
-                let mut partial = payload.split_to(dst.len()-nbytes_read);
+                let mut partial = payload.split_to(dst.len() - nbytes_read);
                 Buf::copy_to_slice(&mut partial, &mut dst[nbytes_read..]);
                 nbytes_read = dst.len();
-                break
+                break;
             } else if payload.remaining() < dst.len() {
                 let remaining = payload.remaining();
-                Buf::copy_to_slice(payload, &mut dst[nbytes_read..nbytes_read+remaining]);
+                Buf::copy_to_slice(payload, &mut dst[nbytes_read..nbytes_read + remaining]);
                 nbytes_read += remaining;
-            } 
+            }
         }
-        
+
         Ok(nbytes_read)
     }
 }
@@ -169,14 +184,33 @@ impl<'a> Iterator for ByteReaderIter<'a> {
 }
 
 impl<'a> ExactSizeIterator for ByteReaderIter<'a> {
-    fn len(&self) -> usize {    
+    fn len(&self) -> usize {
         self.inner.iter().map(|iter| iter.len()).sum()
     }
 }
 
 impl<'a> DoubleEndedIterator for ByteReaderIter<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.iter_mut().flat_map(|iter| iter.next_back()).next_back()
+        self.inner
+            .iter_mut()
+            .flat_map(|iter| iter.next_back())
+            .next_back()
+    }
+}
+
+pub(crate) trait AsDeliveryState {
+    fn as_delivery_state(&self) -> &Option<DeliveryState>;
+
+    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState>;
+}
+
+impl AsDeliveryState for Option<DeliveryState> {
+    fn as_delivery_state(&self) -> &Option<DeliveryState> {
+        self
+    }
+
+    fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
+        self
     }
 }
 
@@ -184,9 +218,9 @@ impl<'a> DoubleEndedIterator for ByteReaderIter<'a> {
 mod tests {
     use std::io::Read;
 
-    use bytes::{Bytes, Buf};
+    use bytes::{Buf, Bytes};
 
-    use super::{IntoReader, AsByteIterator};
+    use super::{AsByteIterator, IntoReader};
 
     #[test]
     fn test_multile_payload_reader() {
@@ -237,7 +271,7 @@ mod tests {
         let v = vec![b0, b1, b2];
         let iter = v.as_byte_iterator();
         assert_eq!(iter.len(), 9);
-        
+
         let forward: Vec<u8> = iter.map(|e| *e).collect();
         assert_eq!(forward, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 

@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.2.0
+
+1. Bug fix and ***Breaking*** change
+   1. `Attach`'s unsettled map should allow `Null` for the values (ie. `pub unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>`)
+2. Fixed clippy warnings
+3. Added impl `From<Received/Accepted/Released/Modified/Rejected> for DeliveryState/Outcome`
+
 ## 0.1.3
 
 1. Added convenience fn `add_to_filter` to source builder

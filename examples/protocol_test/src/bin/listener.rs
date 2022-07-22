@@ -2,9 +2,9 @@ use fe2o3_amqp::{
     acceptor::{
         link::{LinkAcceptor, LinkEndpoint},
         session::{ListenerSessionHandle, SessionAcceptor},
-        ConnectionAcceptor, ListenerConnectionHandle, SaslPlainMechanism,
+        ConnectionAcceptor, ListenerConnectionHandle, SaslPlainMechanism, SupportedReceiverSettleModes, SupportedSenderSettleModes,
     },
-    types::primitives::Value,
+    types::{primitives::Value, definitions::{ReceiverSettleMode, SenderSettleMode}},
 };
 use tokio::net::TcpListener;
 use tracing::{error, info, instrument, Level};
@@ -14,7 +14,14 @@ const BASE_ADDR: &str = "localhost:5672";
 
 #[instrument(skip_all)]
 async fn session_main(mut session: ListenerSessionHandle) {
-    let link_acceptor = LinkAcceptor::new();
+    let link_acceptor = LinkAcceptor::builder()
+        .supported_receiver_settle_modes(SupportedReceiverSettleModes::First)
+        .fallback_receiver_settle_mode(ReceiverSettleMode::First)
+        .supported_sender_settle_modes(SupportedSenderSettleModes::All)
+        .fallback_sender_settle_mode(SenderSettleMode::Mixed)
+        .build();
+        
+        
     let mut handles = Vec::new();
 
     while let Ok(link) = link_acceptor.accept(&mut session).await {

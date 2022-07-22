@@ -1,6 +1,12 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{types::primitives::Value, Connection, Delivery, Receiver, Sender, Session};
+use fe2o3_amqp::{
+    types::{
+        definitions::{ReceiverSettleMode, SenderSettleMode},
+        primitives::Value,
+    },
+    Connection, Delivery, Receiver, Sender, Session,
+};
 use tracing::{instrument, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -16,9 +22,18 @@ async fn client_main() {
     let mut session = Session::begin(&mut connection).await.unwrap();
     // let mut session2 = Session::begin(&mut connection).await.unwrap();
 
-    let mut sender = Sender::attach(&mut session, "sender-1", "q1")
+    // let mut sender = Sender::attach(&mut session, "sender-1", "q1")
+    //     .await
+    //     .unwrap();
+    let mut sender = Sender::builder()
+        .name("sender-1")
+        .target("q1")
+        .sender_settle_mode(SenderSettleMode::Mixed)
+        .receiver_settle_mode(ReceiverSettleMode::First)
+        .attach(&mut session)
         .await
         .unwrap();
+
     sender.send("hello").await.unwrap();
 
     let mut receiver = Receiver::attach(&mut session, "receiver-1", "q1")

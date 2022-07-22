@@ -14,7 +14,8 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
-    Payload, util::{AsByteIterator, IntoReader},
+    util::{AsByteIterator, IntoReader},
+    Payload,
 };
 
 use super::{OutputHandle, Settlement};
@@ -35,13 +36,19 @@ pub(crate) trait LinkDetach {
 
 #[async_trait]
 pub(crate) trait LinkAttach {
+    type AttachExchange: Send;
     type AttachError: Send;
 
-    async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::AttachError>;
+    async fn on_incoming_attach(
+        &mut self,
+        attach: Attach,
+    ) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
     ) -> Result<(), Self::AttachError>;
 }
 
@@ -71,11 +78,13 @@ pub(crate) trait LinkExt: Link {
 
     fn target(&self) -> &Option<Self::Target>;
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-    ) -> Result<(), Self::AttachError>;
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
+    ) -> Result<Self::AttachExchange, Self::AttachError>;
 
     async fn handle_attach_error(
         &mut self,
@@ -118,6 +127,14 @@ pub(crate) trait SenderLink: Link + LinkExt {
     ) -> Result<Settlement, Self::TransferError>
     where
         Fut: Future<Output = Option<LinkFrame>> + Send;
+
+    /// Send message with delivery tag that is obtained by consuming a link credit
+    async fn send_payload_with_transfer(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Result<Settlement, Self::TransferError>;
 
     async fn dispose(
         &mut self,
@@ -167,13 +184,9 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         &'a mut self,
         transfer: Transfer,
         payload: P,
-    ) -> Result<
-        (
-            Delivery<T>,
-            Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
-        ),
-        Self::TransferError,
-    >
+        section_number: u32,
+        section_offset: u64,
+    ) -> Result<Delivery<T>, Self::TransferError>
     where
         T: DecodeIntoMessage + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
@@ -186,5 +199,6 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         settled: Option<bool>, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
         batchable: bool,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), Self::DispositionError>;
 }

@@ -6,7 +6,8 @@ use serde::{de, ser};
 
 use crate::{
     __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    descriptor::Descriptor, Value,
+    descriptor::Descriptor,
+    Value,
 };
 
 /// Contains a descriptor and a wrapped value T.
@@ -21,14 +22,17 @@ pub struct Described<T> {
     pub value: T,
 }
 
-impl<T> Described<T> 
+impl<T> Described<T>
 where
     T: Into<Value>,
 {
     /// Convert `Described<T>` to `Described<Value>`
     pub fn into_described_value(self) -> Described<Value> {
         let value: Value = self.value.into();
-        Described { descriptor: self.descriptor, value: value }
+        Described {
+            descriptor: self.descriptor,
+            value,
+        }
     }
 }
 
@@ -76,8 +80,8 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<'de, T> {
         };
 
         Ok(Described {
-            descriptor: descriptor,
-            value: value,
+            descriptor,
+            value,
         })
     }
 }
@@ -87,7 +91,7 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        const FIELDS: &'static [&'static str] = &[DESCRIPTOR, "value"];
+        const FIELDS: & [& str] = &[DESCRIPTOR, "value"];
         deserializer.deserialize_struct(
             DESCRIBED_BASIC,
             FIELDS,

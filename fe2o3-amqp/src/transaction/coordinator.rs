@@ -21,9 +21,8 @@ use crate::{
     control::SessionControl,
     link::{
         receiver::ReceiverInner,
-        role,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, Link, LinkFrame, ReceiverAttachError, ReceiverFlowState, RecvError,
+        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
     util::Running,
     Delivery,
@@ -31,8 +30,7 @@ use crate::{
 
 use super::{control_link_frame::ControlMessageBody, CoordinatorError};
 
-pub(crate) type CoordinatorLink =
-    Link<role::Receiver, Coordinator, ReceiverFlowState, DeliveryState>;
+pub(crate) type CoordinatorLink = ReceiverLink<Coordinator>;
 
 /// An acceptor that handles incoming control links
 #[derive(Debug, Clone)]
@@ -43,13 +41,17 @@ pub struct ControlLinkAcceptor {
 
 impl Default for ControlLinkAcceptor {
     fn default() -> Self {
+        let shared = SharedLinkAcceptorFields {
+            supported_rcv_settle_modes: SupportedReceiverSettleModes::Second,
+            fallback_rcv_settle_mode: ReceiverSettleMode::Second,
+            ..Default::default()
+        };
         Self {
-            shared: Default::default(),
+            shared,
             inner: LocalReceiverLinkAcceptor {
-                supported_rcv_settle_modes: SupportedReceiverSettleModes::Second,
-                fallback_rcv_settle_mode: ReceiverSettleMode::Second,
                 credit_mode: Default::default(),
                 target_capabilities: None,
+                auto_accept: false,
             },
         }
     }
@@ -168,8 +170,13 @@ impl TxnCoordinator {
                 .map(SuccessfulOutcome::Accepted),
         };
 
-        self.handle_delivery_result(delivery.delivery_id, delivery.delivery_tag, result)
-            .await
+        self.handle_delivery_result(
+            delivery.delivery_id,
+            delivery.delivery_tag,
+            delivery.rcv_settle_mode,
+            result,
+        )
+        .await
     }
 
     #[instrument(skip(self, error))]
@@ -232,12 +239,19 @@ impl TxnCoordinator {
         &mut self,
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
         result: Result<SuccessfulOutcome, CoordinatorError>,
     ) -> Running {
         let disposition_result = match result {
             Ok(outcome) => {
                 self.inner
-                    .dispose(delivery_id, delivery_tag, Some(true), outcome.into())
+                    .dispose(
+                        delivery_id,
+                        delivery_tag,
+                        Some(true),
+                        outcome.into(),
+                        rcv_settle_mode,
+                    )
                     .await
             }
             Err(error) => {
@@ -246,8 +260,14 @@ impl TxnCoordinator {
                     CoordinatorError::GlobalIdNotImplemented => {
                         let error = TransactionError::UnknownId;
                         let description = "Global transaction ID is not implemented".to_string();
-                        self.reject(delivery_id, delivery_tag, error, description)
-                            .await
+                        self.reject(
+                            delivery_id,
+                            delivery_tag,
+                            error,
+                            rcv_settle_mode,
+                            description,
+                        )
+                        .await
                     }
                     CoordinatorError::InvalidSessionState => {
                         // Session must have dropped
@@ -257,11 +277,18 @@ impl TxnCoordinator {
                         let error = TransactionError::UnknownId;
                         let description =
                             "Allocation of new transaction ID is not implemented".to_string();
-                        self.reject(delivery_id, delivery_tag, error, description)
-                            .await
+                        self.reject(
+                            delivery_id,
+                            delivery_tag,
+                            error,
+                            rcv_settle_mode,
+                            description,
+                        )
+                        .await
                     }
                     CoordinatorError::TransactionError(error) => {
-                        self.reject(delivery_id, delivery_tag, error, None).await
+                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, None)
+                            .await
                     }
                 }
             }
@@ -289,13 +316,20 @@ impl TxnCoordinator {
         delivery_id: DeliveryNumber,
         delivery_tag: DeliveryTag,
         error: TransactionError,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
         description: impl Into<Option<String>>,
     ) -> Result<(), IllegalLinkStateError> {
         let error = definitions::Error::new(error, description, None);
         let state = DeliveryState::Rejected(Rejected { error: Some(error) });
 
         self.inner
-            .dispose(delivery_id, delivery_tag, Some(true), state)
+            .dispose(
+                delivery_id,
+                delivery_tag,
+                Some(true),
+                state,
+                rcv_settle_mode,
+            )
             .await
     }
 

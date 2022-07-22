@@ -1077,7 +1077,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ArrayAccess<'a, R> {
                 Ok(None)
             }
             _ => {
-                self.count = self.count - 1;
+                self.count -= 1;
                 seed.deserialize(self.as_mut()).map(Some)
             }
         }
@@ -1118,7 +1118,7 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
         match self.count {
             0 => Ok(None),
             _ => {
-                self.count = self.count - 1;
+                self.count -= 1;
                 seed.deserialize(self.as_mut()).map(Some)
             }
         }
@@ -1310,7 +1310,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
                 let count = u32::from_be_bytes(bytes);
                 Ok(count)
             }
-            _ => return Err(de::Error::custom("Invalid format code. Expecting a list")),
+            _ => Err(de::Error::custom("Invalid format code. Expecting a list")),
         }
     }
 
@@ -1329,7 +1329,7 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
                 let count = u32::from_be_bytes(bytes);
                 Ok(count)
             }
-            _ => return Err(de::Error::custom("Invalid format code. Expecting a list")),
+            _ => Err(de::Error::custom("Invalid format code. Expecting a list")),
         }
     }
 }

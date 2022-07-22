@@ -1,38 +1,25 @@
 //! Implements AMQP1.0 Link
 
-mod frame;
-mod source;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
+use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
         self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
         SenderSettleMode, SequenceNo, SessionError,
     },
-    messaging::{Accepted, DeliveryState, Received, Source, Target, TargetArchetype},
+    messaging::{DeliveryState, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
     primitives::Symbol,
 };
-pub(crate) use frame::*;
-pub mod builder;
-pub mod delivery;
-mod error;
-pub mod receiver;
-mod receiver_link;
-pub mod sender;
-mod sender_link;
-
-pub(crate) mod state;
-
-pub(crate) mod target_archetype;
-
-pub(crate) mod shared_inner;
 
 pub use error::*;
 
 pub use receiver::Receiver;
 pub use sender::Sender;
+use serde::Serialize;
+use serde_amqp::ser::Serializer;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, instrument, trace};
 
@@ -40,18 +27,34 @@ use crate::{
     control::SessionControl,
     endpoint::{self, InputHandle, LinkAttach, LinkDetach, LinkFlow, OutputHandle, Settlement},
     link::delivery::UnsettledMessage,
-    util::{Consumer, Produce, Producer},
+    util::{AsDeliveryState, Consumer, Produce, Producer},
     Payload,
 };
 
 use self::{
     delivery::Delivery,
+    resumption::ResumingDelivery,
     state::{LinkFlowState, LinkState, UnsettledMap},
     target_archetype::VerifyTargetArchetype,
 };
 
 #[cfg(feature = "transaction")]
 use crate::transaction::TXN_ID_KEY;
+
+mod frame;
+pub(crate) use frame::*;
+pub mod builder;
+pub mod delivery;
+mod error;
+pub mod receiver;
+mod receiver_link;
+pub(crate) mod resumption;
+pub mod sender;
+mod sender_link;
+pub(crate) mod shared_inner;
+mod source;
+pub(crate) mod state;
+pub(crate) mod target_archetype;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
@@ -60,15 +63,17 @@ pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
 
 pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::Sender>>>;
+pub(crate) type ReceiverRelayFlowState = ReceiverFlowState;
 
 /// Type alias for sender link that ONLY represents the inner state of a Sender
 pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
 
 /// Type alias for receiver link that ONLY represents the inner state of receiver
-pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, DeliveryState>;
+pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, Option<DeliveryState>>;
 
-pub(crate) type ArcSenderUnsettledMap = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
-pub(crate) type ArcReceiverUnsettledMap = Arc<RwLock<UnsettledMap<DeliveryState>>>;
+pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<Option<UnsettledMap<S>>>>;
+pub(crate) type ArcSenderUnsettledMap = ArcUnsettledMap<UnsettledMessage>;
+pub(crate) type ArcReceiverUnsettledMap = ArcUnsettledMap<Option<DeliveryState>>;
 
 // const CLOSED: u8 = 0b0000_0100;
 // const DETACHED: u8 = 0b0000_0010;
@@ -80,11 +85,15 @@ pub mod role {
 
     /// Type state for link::builder::Builder
     #[derive(Debug)]
-    pub struct Sender {}
+    pub struct Sender {
+        _private: (),
+    }
 
     /// Type state for link::builder::Builder
     #[derive(Debug)]
-    pub struct Receiver {}
+    pub struct Receiver {
+        _private: (),
+    }
 
     // /// Type state for link::builder::Builder
     // #[cfg(feature = "transaction")]
@@ -108,13 +117,62 @@ pub mod role {
             Role::Receiver
         }
     }
+}
 
-    // #[cfg(feature = "transaction")]
-    // impl IntoRole for Controller {
-    //     fn into_role() -> Role {
-    //         Role::Sender
-    //     }
-    // }
+// pub(crate) struct Transferable {
+//     input_handle: InputHandle,
+//     transfer: Transfer,
+//     payload: Payload,
+// }
+
+pub(crate) enum SenderAttachExchange {
+    Complete,
+    IncompleteUnsettled(Vec<(DeliveryTag, ResumingDelivery)>),
+    Resume(Vec<(DeliveryTag, ResumingDelivery)>),
+}
+
+impl std::fmt::Debug for SenderAttachExchange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Complete => write!(f, "Complete"),
+            Self::IncompleteUnsettled(_) => f.debug_tuple("IncompleteUnsettled(_)").finish(),
+            Self::Resume(_) => f.debug_tuple("Resume(_)").finish(),
+        }
+    }
+}
+
+impl SenderAttachExchange {
+    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+        match self {
+            Self::Complete => Ok(()),
+            _ => Err(err),
+        }
+    }
+}
+
+/// Outcome of exchange of Attach frame on the receiver side
+///
+/// This is useful for exposing the outcome of resuming a local receiver
+#[derive(Debug)]
+pub enum ReceiverAttachExchange {
+    /// The attach exchange is completed without any unsettled deliveries
+    Complete,
+
+    /// At least one party indicated an incomplete unsettled map during the attach exchange
+    IncompleteUnsettled,
+
+    /// The link will be resuming
+    Resume,
+}
+
+impl ReceiverAttachExchange {
+    /// Returns `Ok(())` if the value is `Complete` otherwise returns `Err
+    pub fn complete_or<E>(self, err: E) -> Result<(), E> {
+        match self {
+            Self::Complete => Ok(()),
+            _ => Err(err),
+        }
+    }
 }
 
 /// Manages the link state
@@ -129,7 +187,7 @@ pub mod role {
 ///
 /// M: unsettledMessage type
 #[derive(Debug)]
-pub struct Link<R, T, F, M> {
+pub(crate) struct Link<R, T, F, M> {
     pub(crate) role: PhantomData<R>,
 
     pub(crate) local_state: LinkState,
@@ -159,7 +217,7 @@ pub struct Link<R, T, F, M> {
     // pub(crate) properties: Option<Fields>,
     // pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
     pub(crate) flow_state: F,
-    pub(crate) unsettled: Arc<RwLock<UnsettledMap<M>>>,
+    pub(crate) unsettled: ArcUnsettledMap<M>,
 }
 
 impl<R, T, F, M> Link<R, T, F, M>
@@ -167,29 +225,53 @@ where
     R: role::IntoRole + Send + Sync,
     T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
-    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+    M: AsDeliveryState + Send + Sync,
 {
-    pub(crate) async fn send_attach_inner(
-        &mut self,
-        writer: &mpsc::Sender<LinkFrame>,
-    ) -> Result<(), SendAttachErrorKind> {
-        // Create Attach frame
-        let handle = match &self.output_handle {
-            Some(h) => h.clone(),
-            None => return Err(SendAttachErrorKind::IllegalState),
-        };
-        let unsettled: Option<BTreeMap<DeliveryTag, DeliveryState>> = {
-            let guard = self.unsettled.read().await;
-            match guard.len() {
-                0 => None,
-                _ => Some(
-                    guard
-                        .iter()
-                        .map(|(key, val)| (key.clone(), val.as_ref().clone()))
-                        .collect(),
-                ),
+    async fn get_unsettled_map(
+        &self,
+        is_reattaching: bool,
+        partial_unsettled: usize,
+    ) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
+        // When reattaching (as opposed to resuming), the unsettled map MUST be null.
+        if is_reattaching {
+            return None;
+        }
+
+        let guard = self.unsettled.read().await;
+        let map = guard.as_ref()?;
+        match (map.len(), partial_unsettled) {
+            (0, _) => None,
+            (_, 0..=1) => {
+                let v = map
+                    .iter()
+                    .map(|(key, val)| (key.clone(), val.as_delivery_state().clone()))
+                    .collect();
+                Some(v)
             }
-        };
+            (total, denom) => {
+                let len = total / denom;
+                let v = (0..len)
+                    .zip(map.iter())
+                    .map(|(_, (key, val))| (key.clone(), val.as_delivery_state().clone()))
+                    .collect();
+                Some(v)
+            }
+        }
+    }
+
+    async fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
+        self.as_attach_inner(handle, is_reattaching, 1).await
+    }
+
+    async fn as_attach_inner(
+        &self,
+        handle: OutputHandle,
+        is_reattaching: bool,
+        partial_unsettled: usize,
+    ) -> Attach {
+        let unsettled = self
+            .get_unsettled_map(is_reattaching, partial_unsettled)
+            .await;
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -197,8 +279,9 @@ where
         };
         let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
         let properties = self.flow_state.as_ref().properties().await;
+        let incomplete_unsettled = !matches!(partial_unsettled, 0..=1);
 
-        let attach = Attach {
+        Attach {
             name: self.name.clone(),
             handle: handle.into(),
             role: R::into_role(),
@@ -207,7 +290,7 @@ where
             source: self.source.clone().map(Box::new),
             target: self.target.clone().map(Into::into).map(Box::new),
             unsettled,
-            incomplete_unsettled: false, // TODO: try send once and then retry if frame size too large?
+            incomplete_unsettled,
 
             /// This MUST NOT be null if role is sender,
             /// and it is ignored if the role is receiver.
@@ -218,22 +301,85 @@ where
             offered_capabilities: self.offered_capabilities.clone().map(Into::into),
             desired_capabilities: self.desired_capabilities.clone().map(Into::into),
             properties,
+        }
+    }
+
+    async fn as_maybe_incomplete_attach(
+        &self,
+        max_frame_size: usize,
+        handle: OutputHandle,
+        is_reattaching: bool,
+    ) -> Result<Attach, SendAttachErrorKind> {
+        let mut denominator = 1usize; // This is going to be the denominator
+        let mut buf = BytesMut::new();
+
+        let mut attach = self
+            .as_attach_inner(handle.clone(), is_reattaching, denominator)
+            .await;
+        let mut serializer = Serializer::from((&mut buf).writer());
+        attach
+            .serialize(&mut serializer)
+            .map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
+
+        while buf.len() > max_frame_size {
+            buf.clear();
+            denominator *= 2;
+
+            attach = self
+                .as_attach_inner(handle.clone(), is_reattaching, denominator)
+                .await;
+            let mut serializer = Serializer::from((&mut buf).writer());
+            attach
+                .serialize(&mut serializer)
+                .map_err(|_| SendAttachErrorKind::IllegalState)?; // This should not happen
+        }
+
+        Ok(attach)
+    }
+
+    pub(crate) async fn send_attach_inner(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
+    ) -> Result<(), SendAttachErrorKind> {
+        // Create Attach frame
+        let handle = match &self.output_handle {
+            Some(h) => h.clone(),
+            None => return Err(SendAttachErrorKind::IllegalState),
         };
+
+        let attach = match self.unsettled.read().await.as_ref().map(|m| m.len()) {
+            Some(0) | None => self.as_complete_attach(handle, is_reattaching).await,
+            Some(_) => {
+                let max_frame_size = get_max_frame_size(session).await?;
+                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)
+                    .await?
+            }
+        };
+        let incomplete_unsettled = attach.incomplete_unsettled;
         let frame = LinkFrame::Attach(attach);
 
         match self.local_state {
             LinkState::Unattached
-            | LinkState::Detached // May attempt to re-attach
+            | LinkState::Detached // May attempt to resume
             | LinkState::DetachSent => {
                 writer.send(frame).await
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-                self.local_state = LinkState::AttachSent
+                if incomplete_unsettled {
+                    self.local_state = LinkState::IncompleteAttachSent
+                } else {
+                    self.local_state = LinkState::AttachSent
+                }
             }
             LinkState::AttachReceived => {
                 writer.send(frame).await
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-                // self.state_code.fetch_and(0b0000_0000, Ordering::Release);
-                self.local_state = LinkState::Attached
+                if incomplete_unsettled {
+                    self.local_state = LinkState::IncompleteAttachExchanged
+                } else {
+                    self.local_state = LinkState::Attached
+                }
             }
             _ => return Err(SendAttachErrorKind::IllegalState),
         }
@@ -242,13 +388,25 @@ where
     }
 }
 
+pub(crate) async fn get_max_frame_size(
+    control: &mpsc::Sender<SessionControl>,
+) -> Result<usize, SendAttachErrorKind> {
+    let (tx, rx) = oneshot::channel();
+    control
+        .send(SessionControl::GetMaxFrameSize(tx))
+        .await
+        .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
+    rx.await
+        .map_err(|_| SendAttachErrorKind::IllegalSessionState)
+}
+
 #[async_trait]
 impl<R, T, F, M> endpoint::LinkDetach for Link<R, T, F, M>
 where
     R: role::IntoRole + Send + Sync,
     T: Send,
     F: AsRef<LinkFlowState<R>> + Send + Sync,
-    M: AsRef<DeliveryState> + AsMut<DeliveryState> + Send + Sync,
+    M: AsDeliveryState + Send + Sync,
 {
     type DetachError = DetachError;
 
@@ -259,7 +417,12 @@ where
 
         match detach.closed {
             true => match self.local_state {
-                LinkState::Attached | LinkState::AttachSent | LinkState::AttachReceived => {
+                LinkState::Attached
+                | LinkState::AttachSent
+                | LinkState::AttachReceived
+                | LinkState::IncompleteAttachExchanged
+                | LinkState::IncompleteAttachSent
+                | LinkState::IncompleteAttachReceived => {
                     self.local_state = LinkState::CloseReceived;
                     match detach.error {
                         Some(error) => Err(DetachError::RemoteClosedWithError(error)),
@@ -350,22 +513,50 @@ pub(crate) enum LinkRelay<O> {
         // This should be wrapped inside a Producer because the SenderLink
         // needs to consume link credit from LinkFlowState
         flow_state: SenderRelayFlowState,
-        unsettled: Arc<RwLock<UnsettledMap<UnsettledMessage>>>,
+        unsettled: ArcSenderUnsettledMap,
         receiver_settle_mode: ReceiverSettleMode,
-        // state_code: Arc<AtomicU8>,
     },
     Receiver {
         tx: mpsc::Sender<LinkIncomingItem>,
         output_handle: O,
-        flow_state: ReceiverFlowState,
-        unsettled: Arc<RwLock<UnsettledMap<DeliveryState>>>,
+        flow_state: ReceiverRelayFlowState,
+        unsettled: ArcReceiverUnsettledMap,
         receiver_settle_mode: ReceiverSettleMode,
-        // state_code: Arc<AtomicU8>,
         more: bool,
     },
 }
 
 impl LinkRelay<()> {
+    pub fn new_sender(
+        tx: mpsc::Sender<LinkIncomingItem>,
+        flow_state: SenderRelayFlowState,
+        unsettled: ArcSenderUnsettledMap,
+    ) -> Self {
+        Self::Sender {
+            tx,
+            output_handle: (),
+            flow_state,
+            unsettled,
+            receiver_settle_mode: Default::default(),
+        }
+    }
+
+    pub fn new_receiver(
+        tx: mpsc::Sender<LinkIncomingItem>,
+        flow_state: ReceiverRelayFlowState,
+        unsettled: ArcReceiverUnsettledMap,
+        receiver_settle_mode: ReceiverSettleMode,
+    ) -> Self {
+        Self::Receiver {
+            tx,
+            output_handle: (),
+            flow_state,
+            unsettled,
+            receiver_settle_mode,
+            more: false,
+        }
+    }
+
     pub fn with_output_handle(self, output_handle: OutputHandle) -> LinkRelay<OutputHandle> {
         match self {
             LinkRelay::Sender {
@@ -434,7 +625,7 @@ impl LinkRelay<OutputHandle> {
                 {
                     use serde_amqp::Value;
                     let key = Symbol::from(TXN_ID_KEY);
-                    match flow.properties.as_ref().and_then(|m| m.get(&key)){
+                    match flow.properties.as_ref().and_then(|m| m.get(&key)) {
                         Some(Value::Binary(txn_id)) => {
                             let frame = LinkFrame::Acquisition(txn_id.clone());
                             tx.send(frame).await.map_err(|_| {
@@ -490,7 +681,8 @@ impl LinkRelay<OutputHandle> {
                     {
                         let mut guard = unsettled.write().await;
                         guard
-                            .remove(&delivery_tag)
+                            .as_mut()
+                            .and_then(|m| m.remove(&delivery_tag))
                             .map(|msg| msg.settle_with_state(state));
                     }
                     false
@@ -506,12 +698,13 @@ impl LinkRelay<OutputHandle> {
                         // reflects the outcome of the application processing
                         if is_terminal {
                             let _result = guard
-                                .remove(&delivery_tag)
+                                .as_mut()
+                                .and_then(|m| m.remove(&delivery_tag))
                                 .map(|msg| msg.settle_with_state(state));
-                        } else if let Some(msg) = guard.get_mut(&delivery_tag) {
-                            if let Some(state) = state {
-                                *msg.state_mut() = state;
-                            }
+                        } else if let Some(msg) =
+                            guard.as_mut().and_then(|m| m.get_mut(&delivery_tag))
+                        {
+                            *msg.state_mut() = state;
                         }
                     }
 
@@ -539,13 +732,11 @@ impl LinkRelay<OutputHandle> {
                 if settled {
                     let mut guard = unsettled.write().await;
                     // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
-                    let _state = guard.remove(&delivery_tag);
+                    let _state = guard.as_mut().and_then(|m| m.remove(&delivery_tag));
                 } else {
                     let mut guard = unsettled.write().await;
-                    if let Some(msg_state) = guard.get_mut(&delivery_tag) {
-                        if let Some(state) = state {
-                            *msg_state = state;
-                        }
+                    if let Some(msg_state) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                        *msg_state = state;
                     }
                 }
 
@@ -658,7 +849,9 @@ pub(crate) fn get_max_message_size(local: u64, remote: Option<u64>) -> u64 {
 mod tests {
     use fe2o3_amqp_types::messaging::Target;
 
-    use crate::link::{state::LinkFlowStateInner, ReceiverLink, sender::SenderInner, receiver::ReceiverInner};
+    use crate::link::{
+        receiver::ReceiverInner, sender::SenderInner, state::LinkFlowStateInner, ReceiverLink,
+    };
 
     use super::SenderLink;
 

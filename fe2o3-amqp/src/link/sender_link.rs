@@ -1,12 +1,17 @@
 use fe2o3_amqp_types::definitions::SequenceNo;
 use futures_util::Future;
 
-use super::*;
+use super::{resumption::resume_delivery, *};
 
 #[async_trait]
 impl<T> endpoint::SenderLink for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowError = FlowError;
     type TransferError = LinkStateError;
@@ -106,7 +111,7 @@ where
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         detached: Fut,
-        mut payload: Payload,
+        payload: Payload,
         message_format: MessageFormat,
         settled: Option<bool>,
         state: Option<DeliveryState>,
@@ -152,10 +157,6 @@ where
             }
         };
 
-        let input_handle = self
-            .input_handle
-            .clone()
-            .ok_or(Self::TransferError::IllegalState)?;
         let handle = self
             .output_handle
             .clone()
@@ -165,7 +166,6 @@ where
         // Delivery count is incremented when consuming credit
         let delivery_tag = DeliveryTag::from(tag);
 
-        // TODO: Expose API to allow user to set this when the mode is MIXED?
         let settled = match self.snd_settle_mode {
             SenderSettleMode::Settled => true,
             SenderSettleMode::Unsettled => false,
@@ -178,6 +178,49 @@ where
         // unsettled delivery from a dissociated link endpoint
         let resume = false;
 
+        let transfer = Transfer {
+            handle,
+            delivery_id: None, // This will be set by the session
+            delivery_tag: Some(delivery_tag.clone()),
+            message_format: Some(message_format),
+            settled: Some(settled),
+            more: false, // This will be changed later
+
+            // If not set, this value is defaulted to the value negotiated
+            // on link attach.
+            rcv_settle_mode: None,
+            state,
+            resume,
+            aborted: false,
+            batchable,
+        };
+
+        self.send_payload_with_transfer(writer, transfer, payload)
+            .await
+    }
+
+    async fn send_payload_with_transfer(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        mut transfer: Transfer,
+        mut payload: Payload,
+    ) -> Result<Settlement, Self::TransferError> {
+        let settled = transfer
+            .settled
+            .unwrap_or(match self.snd_settle_mode {
+                SenderSettleMode::Settled => true,
+                SenderSettleMode::Unsettled => false,
+                SenderSettleMode::Mixed => false,
+            });
+        let delivery_tag = transfer
+            .delivery_tag
+            .clone()
+            .ok_or(Self::TransferError::IllegalState)?;
+        let input_handle = self
+            .input_handle
+            .clone()
+            .ok_or(Self::TransferError::IllegalState)?;
+
         // Keep a copy for unsettled message
         // Clone should be very cheap on Bytes
         let payload_copy = payload.clone();
@@ -185,98 +228,35 @@ where
         // Check message size
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
-
-        tracing::debug!(max_message_size=?self.max_message_size);
-        tracing::debug!(payload_len=?payload.len());
-        tracing::debug!(?more);
-
         if !more {
-            let transfer = Transfer {
-                handle,
-                delivery_id: None, // This will be set by the session
-                delivery_tag: Some(delivery_tag.clone()),
-                message_format: Some(message_format),
-                settled: Some(settled),
-                more: false,
-                // If not set, this value is defaulted to the value negotiated
-                // on link attach.
-                rcv_settle_mode: None,
-                state,
-                resume,
-                aborted: false,
-                batchable,
-            };
-
             // TODO: Clone should be very cheap on Bytes
+            transfer.more = false;
             send_transfer(writer, input_handle, transfer, payload.clone()).await?;
         } else {
-            // Need multiple transfers
-            // Number of transfers needed
-            // let mut n = payload.len() / self.max_message_size as usize;
-            // if payload.len() % self.max_message_size as usize > 0 {
-            //     n += 1
-            // }
-
             // Send the first frame
             let partial = payload.split_to(self.max_message_size as usize);
-            let transfer = Transfer {
-                handle: handle.clone(),
-                delivery_id: None, // This will be set by the session
-                delivery_tag: Some(delivery_tag.clone()),
-                message_format: Some(message_format),
-                settled: Some(settled), // Having this always set in first frame helps debugging
-                more: true,             // There are more content
-                // If not set, this value is defaulted to the value negotiated
-                // on link attach.
-                rcv_settle_mode: None,
-                state: state.clone(), // This is None for all transfers for now
-                resume,
-                aborted: false,
-                batchable,
-            };
-            send_transfer(writer, input_handle.clone(), transfer, partial).await?;
+            transfer.more = true;
+            send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
 
             // Send the transfers in the middle
             while payload.len() > self.max_message_size as usize {
                 let partial = payload.split_to(self.max_message_size as usize);
-                let transfer = Transfer {
-                    handle: handle.clone(),
-                    delivery_id: None,
-                    delivery_tag: None,
-                    message_format: None,
-                    settled: None,
-                    more: true,
-                    rcv_settle_mode: None,
-                    state: state.clone(), // This is None for all transfers for now
-                    resume: false,
-                    aborted: false,
-                    batchable,
-                };
-                send_transfer(writer, input_handle.clone(), transfer, partial).await?;
+                transfer.delivery_tag = None;
+                transfer.message_format = None;
+                transfer.settled = None;
+                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
             }
 
             // Send the last transfer
             // For messages that are too large to fit within the maximum frame size, additional
             // data MAY be trans- ferred in additional transfer frames by setting the more flag on
             // all but the last transfer frame
-            let transfer = Transfer {
-                handle,
-                delivery_id: None,
-                delivery_tag: None,
-                message_format: None,
-                settled: None,
-                more: false, // The
-                rcv_settle_mode: None,
-                state, // This is None for all transfers for now
-                resume: false,
-                aborted: false,
-                batchable,
-            };
+            transfer.more = false;
             send_transfer(writer, input_handle, transfer, payload).await?;
         }
 
         match settled {
-            true => Ok(Settlement::Settled),
+            true => Ok(Settlement::Settled(delivery_tag)),
             // If not set on the first (or only) transfer for a (multi-transfer)
             // delivery, then the settled flag MUST be interpreted as being false.
             false => {
@@ -284,11 +264,13 @@ where
                 let unsettled = UnsettledMessage::new(payload_copy, tx);
                 {
                     let mut guard = self.unsettled.write().await;
-                    guard.insert(delivery_tag, unsettled);
+                    guard
+                        .get_or_insert(BTreeMap::new())
+                        .insert(delivery_tag.clone(), unsettled);
                 }
 
                 Ok(Settlement::Unsettled {
-                    _delivery_tag: tag,
+                    delivery_tag,
                     outcome: rx,
                 })
             }
@@ -311,11 +293,11 @@ where
         {
             let mut lock = self.unsettled.write().await;
             if settled {
-                if let Some(msg) = lock.remove(&delivery_tag) {
+                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                     let _ = msg.settle();
                 }
-            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
-                *msg.state_mut() = state.clone();
+            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                *msg.state_mut() = Some(state.clone());
             }
         }
 
@@ -345,11 +327,11 @@ where
         // Find continuous ranges
         for (delivery_id, delivery_tag) in ids_and_tags {
             if settled {
-                if let Some(msg) = lock.remove(&delivery_tag) {
+                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                     let _ = msg.settle();
                 }
-            } else if let Some(msg) = lock.get_mut(&delivery_tag) {
-                *msg.state_mut() = state.clone();
+            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                *msg.state_mut() = Some(state.clone());
             }
 
             match (first, last) {
@@ -440,20 +422,90 @@ async fn send_disposition(
         .map_err(|_| IllegalLinkStateError::IllegalSessionState)
 }
 
+impl<T> SenderLink<T> {
+    async fn handle_unsettled_in_attach(
+        &mut self,
+        remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+    ) -> Result<SenderAttachExchange, SenderAttachError> {
+        let mut guard = self.unsettled.write().await;
+        let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
+            (None, None) => return Ok(SenderAttachExchange::Complete),
+            (None, Some(remote_map)) => remote_map
+                .into_keys()
+                .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
+                .collect(),
+            (Some(map), None) => {
+                if map.is_empty() {
+                    return Ok(SenderAttachExchange::Complete);
+                } else {
+                    map.into_iter()
+                        .filter_map(|(tag, local)| {
+                            resume_delivery(local, None).map(|resume| (tag, resume))
+                        })
+                        .collect()
+                }
+            }
+            (Some(local_map), Some(mut remote_map)) => {
+                let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
+                    .into_iter()
+                    .filter_map(|(tag, local)| {
+                        let remote = remote_map.remove(&tag);
+                        resume_delivery(local, remote).map(|resume| (tag, resume))
+                    })
+                    .collect();
+                let remote = remote_map
+                    .into_keys()
+                    .map(|tag| (tag, ResumingDelivery::Abort));
+                local.into_iter().chain(remote).collect()
+            }
+        };
+
+        match self.local_state {
+            LinkState::IncompleteAttachReceived
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachExchanged => {
+                Ok(SenderAttachExchange::IncompleteUnsettled(v))
+            }
+            _ => Ok(SenderAttachExchange::Resume(v)),
+        }
+    }
+}
+
 #[async_trait]
 impl<T> endpoint::LinkAttach for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
+    type AttachExchange = SenderAttachExchange;
     type AttachError = SenderAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+    async fn on_incoming_attach(
+        &mut self,
+        remote_attach: Attach,
+    ) -> Result<Self::AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
-        match self.local_state {
-            LinkState::AttachSent => self.local_state = LinkState::Attached,
-            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
-            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+        match (&self.local_state, remote_attach.incomplete_unsettled) {
+            (LinkState::AttachSent, false) => {
+                self.local_state = LinkState::Attached;
+            }
+            (LinkState::IncompleteAttachSent, false) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, false) | (LinkState::Detached, false) => {
+                self.local_state = LinkState::AttachReceived; // re-attaching
+            }
+            (LinkState::AttachSent, true) | (LinkState::IncompleteAttachSent, true) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, true) | (LinkState::Detached, true) => {
+                self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
+            }
             _ => return Err(SenderAttachError::IllegalState),
         };
 
@@ -489,26 +541,41 @@ where
 
         // The sender SHOULD respect the receiver’s desired settlement mode if the receiver
         // initiates the attach exchange and the sender supports the desired mode
-        self.rcv_settle_mode = remote_attach.rcv_settle_mode;
+        if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
+            return Err(SenderAttachError::RcvSettleModeNotSupported);
+        }
+
+        if self.snd_settle_mode != remote_attach.snd_settle_mode {
+            return Err(SenderAttachError::SndSettleModeNotSupported);
+        }
 
         self.max_message_size =
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
-        Ok(())
+        self.handle_unsettled_in_attach(remote_attach.unsettled)
+            .await
     }
 
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer).await?;
+        self.send_attach_inner(writer, session, is_reattaching)
+            .await?;
         Ok(())
     }
 }
 
 impl<T> endpoint::Link for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     fn role() -> Role {
         Role::Sender
@@ -518,10 +585,15 @@ where
 #[async_trait]
 impl<T> endpoint::LinkExt for SenderLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowState = SenderFlowState;
-    type Unsettled = Arc<RwLock<UnsettledMap<UnsettledMessage>>>;
+    type Unsettled = ArcSenderUnsettledMap;
     type Target = T;
 
     fn local_state(&self) -> &LinkState {
@@ -556,13 +628,15 @@ where
         &self.target
     }
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-    ) -> Result<(), SenderAttachError> {
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
+    ) -> Result<Self::AttachExchange, SenderAttachError> {
         // Send out local attach
-        self.send_attach(writer).await?;
+        self.send_attach(writer, session, is_reattaching).await?;
 
         // Wait for remote attach
         let remote_attach = match reader
@@ -605,23 +679,17 @@ where
                     .unwrap_or(SenderAttachError::IllegalSessionState)
             }
 
-            SenderAttachError::IncomingSourceIsNone | SenderAttachError::IncomingTargetIsNone => {
+            SenderAttachError::SndSettleModeNotSupported
+            | SenderAttachError::RcvSettleModeNotSupported
+            | SenderAttachError::IncomingSourceIsNone
+            | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
                 let err = self
                     .send_detach(writer, true, None)
                     .await
                     .map(|_| attach_error)
                     .unwrap_or(SenderAttachError::IllegalSessionState);
-                match reader.recv().await {
-                    Some(LinkFrame::Detach(remote_detach)) => {
-                        match self.on_incoming_detach(remote_detach).await {
-                            Ok(_) => return err,
-                            Err(detach_error) => return detach_error.try_into().unwrap_or(err),
-                        }
-                    }
-                    Some(_) => SenderAttachError::NonAttachFrameReceived,
-                    None => SenderAttachError::IllegalSessionState,
-                }
+                recv_detach(self, reader, err).await
             }
 
             SenderAttachError::CoordinatorIsNotImplemented
@@ -662,5 +730,30 @@ where
             }
         }
         Err(_) => attach_error,
+    }
+}
+
+async fn recv_detach<T>(
+    link: &mut SenderLink<T>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+    err: SenderAttachError,
+) -> SenderAttachError
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    match reader.recv().await {
+        Some(LinkFrame::Detach(remote_detach)) => {
+            match link.on_incoming_detach(remote_detach).await {
+                Ok(_) => err,
+                Err(detach_error) => detach_error.try_into().unwrap_or(err),
+            }
+        }
+        Some(_) => SenderAttachError::NonAttachFrameReceived,
+        None => SenderAttachError::IllegalSessionState,
     }
 }

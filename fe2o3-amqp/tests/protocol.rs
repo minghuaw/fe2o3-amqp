@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use fe2o3_amqp::Connection;
+use fe2o3_amqp::connection::Connection;
 use testcontainers::{clients, images};
 
 #[tokio::test]

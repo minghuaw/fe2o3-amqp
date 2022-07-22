@@ -1,6 +1,6 @@
 //! Implements the builder for a link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -21,10 +21,11 @@ use super::{
     receiver::{CreditMode, ReceiverInner},
     role,
     sender::SenderInner,
-    state::{LinkFlowState, LinkFlowStateInner, LinkState, UnsettledMap},
+    state::{LinkFlowState, LinkFlowStateInner, LinkState},
     target_archetype::VerifyTargetArchetype,
-    Receiver, ReceiverAttachError, ReceiverLink, Sender, SenderAttachError, SenderFlowState,
-    SenderLink, SenderRelayFlowState,
+    ArcUnsettledMap, Receiver, ReceiverAttachError, ReceiverFlowState, ReceiverLink,
+    ReceiverRelayFlowState, Sender, SenderAttachError, SenderFlowState, SenderLink,
+    SenderRelayFlowState,
 };
 
 #[cfg(feature = "transaction")]
@@ -103,6 +104,17 @@ pub struct Builder<Role, T, NameState, SS, TS> {
     name_state: PhantomData<NameState>,
     source_state: PhantomData<SS>,
     target_state: PhantomData<TS>,
+
+    /// Whether the receiver will automatically accept all incoming deliveries
+    ///
+    /// This field has no effect on Sender
+    ///
+    /// # Default
+    ///
+    /// ```rust
+    /// auto_accept = false;
+    /// ```
+    auto_accept: bool,
 }
 
 impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTarget> {
@@ -125,6 +137,8 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTa
             name_state: PhantomData,
             source_state: PhantomData,
             target_state: PhantomData,
+
+            auto_accept: false,
         }
     }
 }
@@ -138,6 +152,16 @@ impl<T> Builder<role::Sender, T, WithoutName, WithSource, WithoutTarget> {
 impl Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
     pub(crate) fn new() -> Self {
         Builder::<role::Receiver, Target, _, _, _>::default().target(Target::builder().build())
+    }
+}
+
+impl<T, NameState, SS, TS> Builder<role::Receiver, T, NameState, SS, TS> {
+    /// Sets the `auto_accept` field.
+    ///
+    /// Default value: `false`
+    pub fn auto_accept(mut self, value: bool) -> Self {
+        self.auto_accept = value;
+        self
     }
 }
 
@@ -162,6 +186,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: PhantomData,
             source_state: self.source_state,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -185,6 +211,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -208,6 +236,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -243,6 +273,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: PhantomData,
             target_state: self.target_state,
+
+            auto_accept: false,
         }
     }
 
@@ -269,6 +301,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: PhantomData,
+
+            auto_accept: false,
         }
     }
 
@@ -296,6 +330,8 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             name_state: self.name_state,
             source_state: self.source_state,
             target_state: PhantomData,
+
+            auto_accept: false,
         }
     }
 
@@ -343,7 +379,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
 
     pub(crate) fn create_link<C, M>(
         self,
-        unsettled: Arc<RwLock<UnsettledMap<M>>>,
+        unsettled: ArcUnsettledMap<M>,
         output_handle: OutputHandle,
         flow_state_consumer: C,
         // state_code: Arc<AtomicU8>,
@@ -445,42 +481,29 @@ where
         let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
         let outgoing = session.outgoing.clone();
         let (producer, consumer) = self.create_flow_state_containers();
+        let unsettled = Arc::new(RwLock::new(None));
 
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-
-        let link_relay = LinkRelay::Sender {
-            tx: incoming_tx,
-            output_handle: (),
-            flow_state: producer,
-            unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach in session
-                                                      // state_code: state_code.clone(),
-        };
-
-        // Create Link in Session
+        let link_relay = LinkRelay::new_sender(incoming_tx, producer, unsettled.clone());
         let output_handle =
             session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
-
         let mut link = self.create_link(unsettled, output_handle, consumer);
 
-        // Get writer to session
-        // Send an Attach frame
-        // super::do_attach(&mut link, &session.outgoing, &mut incoming_rx).await?;
-        if let Err(attach_error) = link
-            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+        match link
+            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
             .await
         {
-            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            // return Err(DetachError::new(false, Some(err)));
-            let err = link
-                .handle_attach_error(
-                    attach_error,
-                    &session.outgoing,
-                    &mut incoming_rx,
-                    &session.control,
-                )
-                .await;
-            return Err(err);
+            Ok(outcome) => outcome.complete_or(SenderAttachError::IllegalState)?,
+            Err(attach_error) => {
+                let err = link
+                    .handle_attach_error(
+                        attach_error,
+                        &session.outgoing,
+                        &mut incoming_rx,
+                        &session.control,
+                    )
+                    .await;
+                return Err(err);
+            }
         }
 
         // Attach completed, return Sender
@@ -528,16 +551,7 @@ where
         + Send
         + Sync,
 {
-    async fn attach_inner<R>(
-        mut self,
-        session: &mut SessionHandle<R>,
-    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
-        // TODO: how to avoid clone?
-        let buffer_size = self.buffer_size;
-        let credit_mode = self.credit_mode.clone();
-        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
-        let outgoing = session.outgoing.clone();
-
+    fn create_flow_state_containers(&mut self) -> (ReceiverRelayFlowState, ReceiverFlowState) {
         // Create shared link flow state
         let flow_state_inner = LinkFlowStateInner {
             initial_delivery_count: self.initial_delivery_count,
@@ -548,44 +562,50 @@ where
             properties: self.properties.take(),
         };
         let flow_state = Arc::new(LinkFlowState::receiver(flow_state_inner));
+        (flow_state.clone(), flow_state)
+    }
 
-        let unsettled = Arc::new(RwLock::new(BTreeMap::new()));
-        let flow_state_producer = flow_state.clone();
-        let flow_state_consumer = flow_state;
-        // let state_code = Arc::new(AtomicU8::new(0));
-        let link_handle = LinkRelay::Receiver {
-            tx: incoming_tx,
-            output_handle: (),
-            flow_state: flow_state_producer,
-            unsettled: unsettled.clone(),
-            receiver_settle_mode: Default::default(), // Update this on incoming attach
-            // state_code: state_code.clone(),
-            more: false,
-        };
+    async fn attach_inner<R>(
+        mut self,
+        session: &mut SessionHandle<R>,
+    ) -> Result<ReceiverInner<ReceiverLink<T>>, ReceiverAttachError> {
+        // TODO: how to avoid clone?
+        let buffer_size = self.buffer_size;
+        let credit_mode = self.credit_mode.clone();
+        let (incoming_tx, mut incoming_rx) = mpsc::channel::<LinkIncomingItem>(self.buffer_size);
+        let outgoing = session.outgoing.clone();
+        let (relay_flow_state, flow_state) = self.create_flow_state_containers();
+        let unsettled = Arc::new(RwLock::new(None));
+        let auto_accept = self.auto_accept;
 
+        let link_relay = LinkRelay::new_receiver(
+            incoming_tx,
+            relay_flow_state,
+            unsettled.clone(),
+            self.rcv_settle_mode.clone(),
+        );
         // Create Link in Session
         // Any error here will be on the Session level and thus it should immediately return with an error
         let output_handle =
-            session::allocate_link(&session.control, self.name.clone(), link_handle).await?;
+            session::allocate_link(&session.control, self.name.clone(), link_relay).await?;
+        let mut link = self.create_link(unsettled, output_handle, flow_state);
 
-        let mut link = self.create_link(unsettled, output_handle, flow_state_consumer);
-
-        // Get writer to session
-        if let Err(attach_error) = link
-            .negotiate_attach(&session.outgoing, &mut incoming_rx)
+        match link
+            .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
             .await
         {
-            // let err = definitions::Error::new(AmqpError::IllegalState, None, None);
-            // return Err(DetachError::new(false, Some(err)));
-            let err = link
-                .handle_attach_error(
-                    attach_error,
-                    &session.outgoing,
-                    &mut incoming_rx,
-                    &session.control,
-                )
-                .await;
-            return Err(err);
+            Ok(outcome) => outcome.complete_or(ReceiverAttachError::IllegalState)?,
+            Err(attach_error) => {
+                let err = link
+                    .handle_attach_error(
+                        attach_error,
+                        &session.outgoing,
+                        &mut incoming_rx,
+                        &session.control,
+                    )
+                    .await;
+                return Err(err);
+            }
         }
 
         let mut inner = ReceiverInner {
@@ -593,6 +613,7 @@ where
             buffer_size,
             credit_mode,
             processed: 0,
+            auto_accept,
             session: session.control.clone(),
             outgoing,
             incoming: incoming_rx,
@@ -606,6 +627,27 @@ where
         Ok(inner)
     }
 }
+
+// async fn perform_attach_exchange<L, E>(
+//     link: &mut L,
+//     writer: &mpsc::Sender<LinkFrame>,
+//     reader: &mut mpsc::Receiver<LinkFrame>,
+//     session: &mpsc::Sender<SessionControl>,
+//     complete_or_err: E,
+// ) -> Result<(), E>
+// where
+//     L: LinkExt<AttachError = E>,
+// {
+//     match link.exchange_attach(writer, reader, false).await {
+//         Ok(outcome) => outcome.complete_or(complete_or_err),
+//         Err(attach_error) => {
+//             let err = link
+//                 .handle_attach_error(attach_error, writer, reader, session)
+//                 .await;
+//             Err(err)
+//         }
+//     }
+// }
 
 #[cfg(feature = "transaction")]
 impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {

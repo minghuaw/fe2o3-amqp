@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.2
+
+1. Fixed clippy warnings except for too_many_arguments
+
 ## 0.1.1
 
 1. Moved `Box` outside the `Described`

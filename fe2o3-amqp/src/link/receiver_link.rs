@@ -5,23 +5,28 @@ use crate::util::{AsByteIterator, IntoReader};
 
 use super::*;
 
-const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
-const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
-const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
-const HEADER_CODE: u8 = 0x70;
-const DELIV_ANNOT_CODE: u8 = 0x71;
-const MSG_ANNOT_CODE: u8 = 0x72;
-const PROP_CODE: u8 = 0x73;
-const APP_PROP_CODE: u8 = 0x74;
-const DATA_CODE: u8 = 0x75;
-const AMQP_SEQ_CODE: u8 = 0x76;
-const AMQP_VAL_CODE: u8 = 0x77;
-const FOOTER_CODE: u8 = 0x78;
+pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
+pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
+pub(crate) const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
+pub(crate) const HEADER_CODE: u8 = 0x70;
+pub(crate) const DELIV_ANNOT_CODE: u8 = 0x71;
+pub(crate) const MSG_ANNOT_CODE: u8 = 0x72;
+pub(crate) const PROP_CODE: u8 = 0x73;
+pub(crate) const APP_PROP_CODE: u8 = 0x74;
+pub(crate) const DATA_CODE: u8 = 0x75;
+pub(crate) const AMQP_SEQ_CODE: u8 = 0x76;
+pub(crate) const AMQP_VAL_CODE: u8 = 0x77;
+pub(crate) const FOOTER_CODE: u8 = 0x78;
 
 #[async_trait]
 impl<Tar> endpoint::ReceiverLink for ReceiverLink<Tar>
 where
-    Tar: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    Tar: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowError = FlowError;
     type TransferError = ReceiverTransferError;
@@ -144,7 +149,9 @@ where
         {
             let mut lock = self.unsettled.write().await;
             // The same key may be writter multiple times
-            let _ = lock.insert(delivery_tag, state);
+            let _ = lock
+                .get_or_insert(BTreeMap::new())
+                .insert(delivery_tag, Some(state));
         }
     }
 
@@ -152,25 +159,22 @@ where
         &'a mut self,
         transfer: Transfer,
         payload: P,
-    ) -> Result<
-        (
-            Delivery<T>,
-            Option<(DeliveryNumber, DeliveryTag, DeliveryState)>,
-        ),
-        Self::TransferError,
-    >
+        section_number: u32,
+        section_offset: u64,
+    ) -> Result<Delivery<T>, Self::TransferError>
     where
         T: DecodeIntoMessage + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a,
     {
+        match self.local_state {
+            LinkState::Attached | LinkState::IncompleteAttachExchanged => {}
+            _ => return Err(ReceiverTransferError::IllegalState),
+        }
+
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
         // TODO: The receiver should then detach with error
         self.flow_state.consume(1).await?;
-
-        // Upon receiving the transfer, the receiving link endpoint (receiver)
-        // will create an entry in its own unsettled map and make the transferred
-        // message data available to the application to process.
 
         // This only takes care of whether the message is considered
         // sett
@@ -182,7 +186,7 @@ where
             .delivery_tag
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
 
-        let (message, delivery_state) = if settled_by_sender {
+        let (message, mode) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
             // add to the unsettled map and no need to reply to the Sender
             let message = T::decode_into_message(payload.into_reader())
@@ -191,62 +195,45 @@ where
         } else {
             // If the message is being sent settled by the sender, the value of this
             // field is ignored.
-            let mode = if let Some(mode) = &transfer.rcv_settle_mode {
-                // If the negotiated link value is first, then it is illegal to set this
-                // field to second.
-                if let ReceiverSettleMode::First = &self.rcv_settle_mode {
-                    if let ReceiverSettleMode::Second = mode {
+            let mode = match transfer.rcv_settle_mode {
+                Some(mode) => {
+                    // If the negotiated link value is first, then it is illegal to set this
+                    // field to second.
+                    if matches!(&self.rcv_settle_mode, ReceiverSettleMode::First)
+                        && matches!(mode, ReceiverSettleMode::Second)
+                    {
                         return Err(Self::TransferError::IllegalRcvSettleModeInTransfer);
                     }
+                    Some(mode)
                 }
-                mode
-            } else {
-                // If not set, this value is defaulted to the value negotiated on link
-                // attach.
-                &self.rcv_settle_mode
+                None => None,
             };
+            
+            let message = T::decode_into_message(payload.into_reader())
+                .map_err(|_| Self::TransferError::MessageDecodeError)?;
 
-            match mode {
-                // If first, this indicates that the receiver MUST settle the delivery
-                // once it has arrived without waiting for the sender to settle first.
-                ReceiverSettleMode::First => {
-                    // Spontaneously settle the message with an Accept
-                    let message = T::decode_into_message(payload.into_reader())
-                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
+            let state = DeliveryState::Received(Received {
+                section_number, // What is section number?
+                section_offset,
+            });
 
-                    (message, Some(DeliveryState::Accepted(Accepted {})))
-                }
-                // If second, this indicates that the receiver MUST NOT settle until
-                // sending its disposition to the sender and receiving a settled
-                // disposition from the sender.
-                ReceiverSettleMode::Second => {
-                    // Add to unsettled map
-                    let section_offset = rfind_offset_of_complete_message(&payload)
-                        .ok_or(Self::TransferError::MessageDecodeError)?;
-                    let message = T::decode_into_message(payload.into_reader())
-                        .map_err(|_| Self::TransferError::MessageDecodeError)?;
-                    let section_number = message.sections();
-
-                    let state = DeliveryState::Received(Received {
-                        section_number, // What is section number?
-                        section_offset,
-                    });
-
-                    // Insert into local unsettled map with Received state
-                    // Mode Second doesn't automatically send back a disposition
-                    // (ie. thus doesn't call `link.dispose()`) and thus need to manually
-                    // set the delivery state
-                    {
-                        let mut lock = self.unsettled.write().await;
-                        // There may be records of incomplete delivery
-                        let _ = lock.insert(delivery_tag.clone(), state);
-                    }
-
-                    // Mode Second requires user to explicitly acknowledge the delivery
-                    // with Accept, Release, ...
-                    (message, None)
-                }
+            // Upon receiving the transfer, the receiving link endpoint (receiver)
+            // will create an entry in its own unsettled map and make the transferred
+            // message data available to the application to process.
+            //
+            // Add to unsettled map
+            // Insert into local unsettled map with Received state
+            // Mode Second doesn't automatically send back a disposition
+            // (ie. thus doesn't call `link.dispose()`) and thus need to manually
+            // set the delivery state
+            {
+                let mut lock = self.unsettled.write().await;
+                // There may be records of incomplete delivery
+                let _ = lock
+                    .get_or_insert(BTreeMap::new())
+                    .insert(delivery_tag.clone(), Some(state));
             }
+            (message, mode)
         };
 
         let link_output_handle = self
@@ -259,13 +246,11 @@ where
             link_output_handle,
             delivery_id,
             delivery_tag: delivery_tag.clone(),
+            rcv_settle_mode: mode,
             message,
         };
 
-        Ok((
-            delivery,
-            delivery_state.map(|state| (delivery_id, delivery_tag, state)),
-        ))
+        Ok(delivery)
     }
 
     async fn dispose(
@@ -276,9 +261,10 @@ where
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
+        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), Self::DispositionError> {
         let settled = settled.unwrap_or({
-            match self.rcv_settle_mode {
+            match rcv_settle_mode.as_ref().unwrap_or(&self.rcv_settle_mode) {
                 ReceiverSettleMode::First => {
                     // If first, this indicates that the receiver MUST settle
                     // the delivery once it has arrived without waiting
@@ -296,99 +282,87 @@ where
             }
         });
 
-        if !settled {
+        let unsettled_state = if settled {
+            let mut lock = self.unsettled.write().await;
+            lock.as_mut().and_then(|map| map.remove(&delivery_tag))
+        } else {
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            let _ = lock.insert(delivery_tag.clone(), state.clone());
-        }
-
-        let disposition = Disposition {
-            role: Role::Receiver,
-            first: delivery_id,
-            last: None,
-            settled,
-            state: Some(state),
-            batchable,
+            lock.get_or_insert(BTreeMap::new())
+                .insert(delivery_tag.clone(), Some(state.clone()))
         };
-        let frame = LinkFrame::Disposition(disposition);
-        writer
-            .send(frame)
-            .await
-            .map_err(|_| Self::DispositionError::IllegalSessionState)?;
+
+        // Only dispose if message is found in unsettled map
+        if unsettled_state.is_some() {
+            let disposition = Disposition {
+                role: Role::Receiver,
+                first: delivery_id,
+                last: None,
+                settled,
+                state: Some(state),
+                batchable,
+            };
+            let frame = LinkFrame::Disposition(disposition);
+            writer
+                .send(frame)
+                .await
+                .map_err(|_| Self::DispositionError::IllegalSessionState)?;
+        }
 
         // This is a unit enum, clone should be really cheap
         Ok(())
     }
 }
 
-/// Finds offset of a complete message
-fn rfind_offset_of_complete_message<'a, B>(bytes: &'a B) -> Option<u64> 
-where
+/// Count number of sections in encoded message
+pub(crate) fn count_number_of_sections_and_offset<'a, B>(bytes: &'a B) -> (u32, u64) 
+where 
     B: AsByteIterator<'a>,
 {
-    // For a complete message, the only need is to check Footer or Body
     let b0 = bytes.as_byte_iterator();
+    let len = b0.len();
     let b1 = bytes.as_byte_iterator().skip(1);
     let b2 = bytes.as_byte_iterator().skip(2);
-    let len = b0.len();
-    let mut iter = b0.zip(b1.zip(b2));
+    let iter = b0.zip(b1.zip(b2));
 
-    iter.rposition(|(&b0, (&b1, &b2))| {
-        matches!(
-            (b0, b1, b2),
-            (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
-            // Some implementation may use ULong for all u64 numbers
-            | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE)
-        )
-    })
-    .map(|val| (len - val) as u64)
-}
-
-/// Count number of sections in encoded message
-pub(crate) fn section_number_and_offset(bytes: &[u8]) -> (u32, u64) {
     let mut last_pos = 0;
     let mut section_numbers = 0;
 
-    let iter = bytes
-        .iter()
-        .zip(bytes.iter().skip(1).zip(bytes.iter().skip(2)));
     for (i, (&b0, (&b1, &b2))) in iter.enumerate() {
-        match (b0, b1, b2) {
-            (DESCRIBED_TYPE, SMALL_ULONG_TYPE, HEADER_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DELIV_ANNOT_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, MSG_ANNOT_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, PROP_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, APP_PROP_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
-            // Some implementation may use ULong for all u64 numbers
-            | (DESCRIBED_TYPE, ULONG_TYPE, HEADER_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, DELIV_ANNOT_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, MSG_ANNOT_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, PROP_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, APP_PROP_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE) => {
-                section_numbers += 1;
-                last_pos = i;
-            },
-            _ => {}
+        if is_section_header(b0, b1, b2) {
+            section_numbers += 1;
+            last_pos = i;
         }
     }
 
-    let offset = bytes.len() - last_pos;
+    let offset = len - last_pos;
     (section_numbers, offset as u64)
+}
+
+pub(crate) fn is_section_header(b0: u8, b1: u8, b2: u8) -> bool {
+    matches!(
+        (b0, b1, b2),
+        (DESCRIBED_TYPE, SMALL_ULONG_TYPE, HEADER_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DELIV_ANNOT_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, MSG_ANNOT_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, PROP_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, APP_PROP_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
+        | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
+        // Some implementation may use ULong for all u64 numbers
+        | (DESCRIBED_TYPE, ULONG_TYPE, HEADER_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, DELIV_ANNOT_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, MSG_ANNOT_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, PROP_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, APP_PROP_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
+        | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE)
+    )
 }
 
 impl ReceiverLink<Target> {
@@ -504,7 +478,7 @@ mod tests {
     };
     use serde_amqp::to_vec;
 
-    use crate::link::receiver_link::section_number_and_offset;
+    use crate::link::receiver_link::count_number_of_sections_and_offset;
 
     #[test]
     fn test_section_numbers() {
@@ -527,25 +501,70 @@ mod tests {
         // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         // message.serialize(&mut serializer).unwrap();
         let buf = to_vec(&Serializable(message)).unwrap();
-        let (nums, offset) = section_number_and_offset(&buf);
+        let (nums, offset) = count_number_of_sections_and_offset(&buf);
         println!("{:?}, {:?}", nums, offset);
+    }
+}
+
+impl<T> ReceiverLink<T> {
+    async fn handle_unsettled_in_attach(
+        &mut self,
+        remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+    ) -> ReceiverAttachExchange {
+        let remote_is_empty = match remote_unsettled {
+            Some(map) => map.is_empty(),
+            None => true,
+        };
+
+        // ActiveMQ-Artemis seems like ignores non-empty unsettled from receiver-link
+        if remote_is_empty {
+            return ReceiverAttachExchange::Complete;
+        }
+
+        match self.local_state {
+            LinkState::IncompleteAttachReceived
+            | LinkState::IncompleteAttachSent
+            | LinkState::IncompleteAttachExchanged => ReceiverAttachExchange::IncompleteUnsettled,
+            _ => ReceiverAttachExchange::Resume,
+        }
     }
 }
 
 #[async_trait]
 impl<T> endpoint::LinkAttach for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
+    type AttachExchange = ReceiverAttachExchange;
     type AttachError = ReceiverAttachError;
 
-    async fn on_incoming_attach(&mut self, remote_attach: Attach) -> Result<(), Self::AttachError> {
+    async fn on_incoming_attach(
+        &mut self,
+        remote_attach: Attach,
+    ) -> Result<Self::AttachExchange, Self::AttachError> {
         use self::source::VerifySource;
 
-        match self.local_state {
-            LinkState::AttachSent => self.local_state = LinkState::Attached,
-            LinkState::Unattached => self.local_state = LinkState::AttachReceived,
-            LinkState::Detached => self.local_state = LinkState::AttachReceived, // re-attaching
+        match (&self.local_state, remote_attach.incomplete_unsettled) {
+            (LinkState::AttachSent, false) => {
+                self.local_state = LinkState::Attached;
+            }
+            (LinkState::IncompleteAttachSent, false) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, false) | (LinkState::Detached, false) => {
+                self.local_state = LinkState::AttachReceived; // re-attaching
+            }
+            (LinkState::AttachSent, true) | (LinkState::IncompleteAttachSent, true) => {
+                self.local_state = LinkState::IncompleteAttachExchanged;
+            }
+            (LinkState::Unattached, true) | (LinkState::Detached, true) => {
+                self.local_state = LinkState::IncompleteAttachReceived; // re-attaching
+            }
             _ => return Err(ReceiverAttachError::IllegalState),
         };
 
@@ -563,7 +582,14 @@ where
 
         // The receiver SHOULD respect the sender’s desired settlement mode if the sender
         // initiates the attach exchange and the receiver supports the desired mode.
-        self.snd_settle_mode = remote_attach.snd_settle_mode;
+        if self.snd_settle_mode != remote_attach.snd_settle_mode {
+            return Err(ReceiverAttachError::SndSettleModeNotSupported);
+        }
+
+        // When set at the receiver this indicates the actual settlement mode in use
+        if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
+            return Err(ReceiverAttachError::RcvSettleModeNotSupported);
+        }
 
         // The delivery-count is initialized by the sender when a link endpoint is
         // created, and is incremented whenever a message is sent
@@ -599,21 +625,32 @@ where
             .delivery_count_mut(|_| initial_delivery_count)
             .await;
 
-        Ok(())
+        // Ok(Self::AttachExchange::Complete)
+        Ok(self
+            .handle_unsettled_in_attach(remote_attach.unsettled)
+            .await)
     }
 
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
-        self.send_attach_inner(writer).await?;
+        self.send_attach_inner(writer, session, is_reattaching)
+            .await?;
         Ok(())
     }
 }
 
 impl<T> endpoint::Link for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     fn role() -> Role {
         Role::Receiver
@@ -623,10 +660,15 @@ where
 #[async_trait]
 impl<T> endpoint::LinkExt for ReceiverLink<T>
 where
-    T: Into<TargetArchetype> + TryFrom<TargetArchetype> + VerifyTargetArchetype + Clone + Send,
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
 {
     type FlowState = ReceiverFlowState;
-    type Unsettled = Arc<RwLock<UnsettledMap<DeliveryState>>>;
+    type Unsettled = ArcReceiverUnsettledMap;
     type Target = T;
 
     fn local_state(&self) -> &LinkState {
@@ -661,13 +703,15 @@ where
         &self.target
     }
 
-    async fn negotiate_attach(
+    async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         reader: &mut mpsc::Receiver<LinkFrame>,
-    ) -> Result<(), ReceiverAttachError> {
+        session: &mpsc::Sender<SessionControl>,
+        is_reattaching: bool,
+    ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer).await?;
+        self.send_attach(writer, session, is_reattaching).await?;
 
         // Wait for remote attach
         let remote_attach = match reader
@@ -690,6 +734,7 @@ where
         session: &mpsc::Sender<SessionControl>,
     ) -> ReceiverAttachError {
         match attach_error {
+            // Errors that indicate failed attachment
             ReceiverAttachError::IllegalSessionState
             | ReceiverAttachError::IllegalState
             | ReceiverAttachError::NonAttachFrameReceived
@@ -708,7 +753,10 @@ where
                     .map(|_| attach_error)
                     .unwrap_or(ReceiverAttachError::IllegalSessionState)
             }
-            ReceiverAttachError::IncomingSourceIsNone
+
+            ReceiverAttachError::SndSettleModeNotSupported
+            | ReceiverAttachError::RcvSettleModeNotSupported
+            | ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
                 let err = self
@@ -716,16 +764,7 @@ where
                     .await
                     .map(|_| attach_error)
                     .unwrap_or(ReceiverAttachError::IllegalSessionState);
-                match reader.recv().await {
-                    Some(LinkFrame::Detach(remote_detach)) => {
-                        match self.on_incoming_detach(remote_detach).await {
-                            Ok(_) => return err,
-                            Err(detach_error) => return detach_error.try_into().unwrap_or(err),
-                        }
-                    }
-                    Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-                    None => ReceiverAttachError::IllegalSessionState,
-                }
+                recv_detach(self, reader, err).await
             }
 
             ReceiverAttachError::CoordinatorIsNotImplemented
@@ -734,22 +773,38 @@ where
             | ReceiverAttachError::TargetAddressIsSomeWhenDynamicIsTrue
             | ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 match (&attach_error).try_into() {
-                    Ok(error) => {
-                        match self.send_detach(writer, true, Some(error)).await {
-                            Ok(_) => match reader.recv().await {
-                                Some(LinkFrame::Detach(remote_detach)) => {
-                                    let _ = self.on_incoming_detach(remote_detach).await; // FIXME: how to handle this?
-                                    attach_error
-                                }
-                                Some(_) => ReceiverAttachError::NonAttachFrameReceived,
-                                None => ReceiverAttachError::IllegalSessionState,
-                            },
-                            Err(_) => ReceiverAttachError::IllegalSessionState,
-                        }
-                    }
+                    Ok(error) => match self.send_detach(writer, true, Some(error)).await {
+                        Ok(_) => recv_detach(self, reader, attach_error).await,
+                        Err(_) => ReceiverAttachError::IllegalSessionState,
+                    },
                     Err(_) => attach_error,
                 }
             }
         }
+    }
+}
+
+async fn recv_detach<T>(
+    link: &mut ReceiverLink<T>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+    err: ReceiverAttachError,
+) -> ReceiverAttachError
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    match reader.recv().await {
+        Some(LinkFrame::Detach(remote_detach)) => {
+            match link.on_incoming_detach(remote_detach).await {
+                Ok(_) => err,
+                Err(detach_error) => detach_error.try_into().unwrap_or(err),
+            }
+        }
+        Some(_) => ReceiverAttachError::NonAttachFrameReceived,
+        None => ReceiverAttachError::IllegalSessionState,
     }
 }

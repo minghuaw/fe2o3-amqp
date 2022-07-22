@@ -15,7 +15,7 @@ use tokio::{
     sync::{mpsc::Sender, oneshot},
     task::JoinHandle,
 };
-use tracing::{instrument, trace};
+use tracing::instrument;
 use url::Url;
 
 use crate::{
@@ -533,13 +533,11 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Open frame
-    #[instrument(skip_all)]
     async fn on_incoming_open(
         &mut self,
-        channel: IncomingChannel,
+        _channel: IncomingChannel,
         open: Open,
     ) -> Result<(), Self::Error> {
-        trace!("channel = {}, frame = {:?}", channel.0, open);
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
@@ -555,13 +553,11 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Begin frame
-    #[instrument(skip_all)]
     async fn on_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
     ) -> Result<(), Self::Error> {
-        trace!("channel = {}, frame = {:?}", channel.0, begin);
         match self.on_incoming_begin_inner(channel, &begin)? {
             Some(relay) => {
                 // forward begin to session
@@ -585,13 +581,11 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote End frame
-    #[instrument(skip_all)]
     async fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
     ) -> Result<(), Self::Error> {
-        trace!("channel = {}, frame = {:?}", channel.0, end);
         match &self.local_state {
             ConnectionState::Opened => {}
             _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
@@ -610,14 +604,11 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Close frame
-    #[instrument(skip_all)]
     async fn on_incoming_close(
         &mut self,
-        channel: IncomingChannel,
+        _channel: IncomingChannel,
         close: Close,
     ) -> Result<(), Self::Error> {
-        trace!("channel = {}, frame = {:?}", channel.0, close);
-
         match &self.local_state {
             ConnectionState::Opened => {
                 self.local_state = ConnectionState::CloseReceived;
@@ -633,7 +624,6 @@ impl endpoint::Connection for Connection {
         }
     }
 
-    #[instrument(name = "SEND", skip_all)]
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
@@ -641,7 +631,6 @@ impl endpoint::Connection for Connection {
     {
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
-        trace!(channel = 0, frame = ?frame.body);
         writer.send(frame).await.map_err(Into::into)?;
 
         // change local state after successfully sending the frame
@@ -676,7 +665,6 @@ impl endpoint::Connection for Connection {
     }
 
     // TODO: set a timeout for recving incoming Close
-    #[instrument(name = "SEND", skip_all)]
     async fn send_close<W>(
         &mut self,
         writer: &mut W,
@@ -687,7 +675,6 @@ impl endpoint::Connection for Connection {
         W::Error: Into<Error>,
     {
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
-        trace!(channel=0, frame = ?frame.body);
         writer.send(frame).await.map_err(Into::into)?;
 
         match &self.local_state {

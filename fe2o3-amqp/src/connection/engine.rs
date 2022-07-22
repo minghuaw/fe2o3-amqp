@@ -181,6 +181,7 @@ where
     #[instrument(name = "RECV", skip_all)]
     async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
         let frame = incoming?;
+        trace!(?frame);
 
         let Frame { channel, body } = frame;
         let channel = IncomingChannel(channel);
@@ -287,6 +288,12 @@ where
             }
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
+            }
+            ConnectionControl::GetMaxFrameSize(resp) => {
+                let max_frame_size = self.transport.encoder_max_frame_size();
+                if let Err(error) = resp.send(max_frame_size) {
+                    tracing::error!(?error);
+                }
             }
         }
 

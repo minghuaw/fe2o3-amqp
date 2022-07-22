@@ -21,6 +21,12 @@ where
     marker: PhantomData<T>,
 }
 
+impl<K: Ord, V, T> Default for MapBuilder<K, V, T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V, T> MapBuilder<K, V, T>
 where
     K: Ord,

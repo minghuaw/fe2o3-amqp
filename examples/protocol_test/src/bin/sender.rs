@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use fe2o3_amqp::sasl_profile::SaslProfile;
+use fe2o3_amqp::types::definitions::ReceiverSettleMode;
+use fe2o3_amqp::types::definitions::SenderSettleMode;
 use fe2o3_amqp::types::messaging::ApplicationProperties;
 use fe2o3_amqp::types::messaging::MessageId;
 use fe2o3_amqp::types::messaging::Properties;
@@ -22,7 +24,7 @@ async fn main() {
     let subscriber = FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
-        .with_max_level(Level::DEBUG)
+        .with_max_level(Level::TRACE)
         // .with_max_level(Level::DEBUG)
         // completes the builder.
         .finish();
@@ -67,17 +69,18 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
-        .await
-        .unwrap();
-
-    // let mut sender = Sender::builder()
-    //     .name("rust-sender-link-1")
-    //     .target("q1")
-    //     .sender_settle_mode(SenderSettleMode::Mixed)
-    //     .attach(&mut session)
+    // let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
     //     .await
     //     .unwrap();
+
+    let mut sender = Sender::builder()
+        .name("rust-sender-link-1")
+        .target("q1")
+        .sender_settle_mode(SenderSettleMode::Settled)
+        .receiver_settle_mode(ReceiverSettleMode::Second)
+        .attach(&mut session)
+        .await
+        .unwrap();
 
     // let body = Body::from(());
     // let message = Message::from("hello");
@@ -89,7 +92,7 @@ async fn main() {
     let message = Message::builder()
             .properties(props)
             .application_properties(ApplicationProperties(application_properties))
-            .value(())
+            .value("hello AMQP")
             .build();
     let message = Sendable::from(message);
     // let message = Sendable::builder()
@@ -116,33 +119,14 @@ async fn main() {
     } else {
         tracing::error!("Outcome: {:?}", outcome)
     }
+
+    let detached = sender.detach().await.unwrap();
+    let mut sender = detached.resume().await.unwrap();
+
+    // sender.send("hello again").await.unwrap();
     
-    // sender.send("world").await.unwrap();
     sender.close().await.unwrap();
 
-    // // sender.close().await.unwrap();
-    // if let Err(err) = sender.detach().await {
-    //     println!("+++++++++ {:?}", err)
-    // }
-
-    // let mut sender = Sender::attach(&mut session, "sender-link-2", "q1")
-    //     .await
-    //     .unwrap();
-
-    // sender.send("HELLO AMQP").await.unwrap();
-
-    // let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
-
-    // let result = fut.await;
-    // println!("fut {:?}", result);
-
-
-
-    // let receiver = Receiver::attach(&mut session, "rust-receiver-link-1", "q1")
-    //     .await
-    //     .unwrap();
-    // let result = receiver.detach().await;
-    // println!("{:?}", result);
     session.end().await.unwrap();
     // let result = session.on_end().await;
     // println!("{:?}", result);
