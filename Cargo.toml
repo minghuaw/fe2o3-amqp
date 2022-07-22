@@ -16,6 +16,7 @@ exclude = [
     "examples/owned_txn_retirement",
     "examples/protocol_test",
     "examples/receiver",
+    "examples/receiver_auto_accept",
     "examples/rustls_connection",
     "examples/sasl_connection",
     "examples/sasl_listener",
