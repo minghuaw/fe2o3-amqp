@@ -41,11 +41,12 @@ pub struct ControlLinkAcceptor {
 
 impl Default for ControlLinkAcceptor {
     fn default() -> Self {
+        let mut shared = SharedLinkAcceptorFields::default();
+        shared.supported_rcv_settle_modes = SupportedReceiverSettleModes::Second;
+        shared.fallback_rcv_settle_mode = ReceiverSettleMode::Second;
         Self {
-            shared: Default::default(),
+            shared,
             inner: LocalReceiverLinkAcceptor {
-                supported_rcv_settle_modes: SupportedReceiverSettleModes::Second,
-                fallback_rcv_settle_mode: ReceiverSettleMode::Second,
                 credit_mode: Default::default(),
                 target_capabilities: None,
                 auto_accept: false,

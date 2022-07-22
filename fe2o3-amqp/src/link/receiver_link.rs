@@ -605,7 +605,9 @@ where
 
         // The receiver SHOULD respect the sender’s desired settlement mode if the sender
         // initiates the attach exchange and the receiver supports the desired mode.
-        self.snd_settle_mode = remote_attach.snd_settle_mode;
+        if self.snd_settle_mode != remote_attach.snd_settle_mode {
+            return Err(ReceiverAttachError::SndSettleModeNotSupported)
+        }
 
         // When set at the receiver this indicates the actual settlement mode in use
         if self.rcv_settle_mode != remote_attach.rcv_settle_mode {
@@ -774,8 +776,9 @@ where
                     .map(|_| attach_error)
                     .unwrap_or(ReceiverAttachError::IllegalSessionState)
             }
-            
-            ReceiverAttachError::RcvSettleModeNotSupported
+
+            ReceiverAttachError::SndSettleModeNotSupported
+            | ReceiverAttachError::RcvSettleModeNotSupported
             | ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately

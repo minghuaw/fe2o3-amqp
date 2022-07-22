@@ -7,7 +7,7 @@
 use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
-    definitions::{Fields, Role},
+    definitions::{Fields, Role, SenderSettleMode, ReceiverSettleMode},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -17,7 +17,7 @@ use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, ut
 
 use super::{
     builder::Builder, error::AcceptorAttachError, local_receiver_link::LocalReceiverLinkAcceptor,
-    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle,
+    local_sender_link::LocalSenderLinkAcceptor, session::ListenerSessionHandle, SupportedSenderSettleModes, SupportedReceiverSettleModes,
 };
 
 /// Listener side link endpoint
@@ -46,6 +46,26 @@ pub(crate) struct SharedLinkAcceptorFields {
 
     /// The extension capabilities the sender can use if the receiver supports them
     pub desired_capabilities: Option<Vec<Symbol>>,
+
+    /// Supported sender settle mode
+    pub supported_snd_settle_modes: SupportedSenderSettleModes,
+
+    /// The sender settle mode to fallback to when the mode desired
+    /// by the remote peer is not supported.
+    ///
+    /// If this field is None, an incoming attach whose desired sender settle
+    /// mode is not supported will then be rejected
+    pub fallback_snd_settle_mode: SenderSettleMode,
+
+    /// Supported receiver settle mode
+    pub supported_rcv_settle_modes: SupportedReceiverSettleModes,
+
+    /// The receiver settle mode to fallback to when the mode desired
+    /// by the remote peer is not supported
+    ///
+    /// If this field is None, an incoming attach whose desired receiver settle
+    /// mode is not supported will then be rejected
+    pub fallback_rcv_settle_mode: ReceiverSettleMode,
 }
 
 impl Default for SharedLinkAcceptorFields {
@@ -56,6 +76,10 @@ impl Default for SharedLinkAcceptorFields {
             properties: None,
             offered_capabilities: None,
             desired_capabilities: None,
+            supported_snd_settle_modes: SupportedSenderSettleModes::default(),
+            fallback_snd_settle_mode: SenderSettleMode::default(),
+            supported_rcv_settle_modes: SupportedReceiverSettleModes::default(),
+            fallback_rcv_settle_mode: ReceiverSettleMode::default(),
         }
     }
 }

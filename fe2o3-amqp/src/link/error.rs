@@ -85,6 +85,13 @@ pub enum SenderAttachError {
     #[error("When set at the sender this indicates the actual settlement mode in use")]
     SndSettleModeNotSupported,
 
+    /// "When set at the receiver this indicates the actual settlement mode in use"
+    /// 
+    /// The receiver SHOULD respect the sender’s desired settlement mode ***if
+    /// the sender initiates*** the attach exchange and the receiver supports the desired mode
+    #[error("The desried ReceiverSettleMode is not supported by the remote peer")]
+    RcvSettleModeNotSupported,
+
     /// When set to true by the receiving link endpoint this field indicates creation of a
     /// dynamically created node. In this case the address field will contain the address of the
     /// created node.
@@ -209,6 +216,13 @@ pub enum ReceiverAttachError {
     #[error("Initial delivery field must be set if the role is sender")]
     InitialDeliveryCountIsNone,
 
+    /// When set at the sender this indicates the actual settlement mode in use.
+    /// 
+    /// The sender SHOULD respect the receiver’s desired settlement mode ***if
+    /// the receiver initiates*** the attach exchange and the sender supports the desired mode
+    #[error("When set at the sender this indicates the actual settlement mode in use")]
+    SndSettleModeNotSupported,
+
     /// "When set at the receiver this indicates the actual settlement mode in use"
     /// 
     /// The receiver SHOULD respect the sender’s desired settlement mode ***if
@@ -268,6 +282,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             }
             ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone
+            | ReceiverAttachError::SndSettleModeNotSupported
             | ReceiverAttachError::RcvSettleModeNotSupported
             | ReceiverAttachError::RemoteClosedWithError(_) => return Err(value),
         };
@@ -347,6 +362,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
             SenderAttachError::IncomingSourceIsNone 
             | SenderAttachError::IncomingTargetIsNone 
             | SenderAttachError::SndSettleModeNotSupported
+            | SenderAttachError::RcvSettleModeNotSupported
             | SenderAttachError::RemoteClosedWithError(_) => return Err(value),
 
             #[cfg(feature = "transaction")]

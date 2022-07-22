@@ -367,21 +367,21 @@ impl Builder<LinkAcceptor, Initialized> {
 
     /// Settlement policy for the sender
     pub fn supported_sender_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
-        self.inner.local_sender_acceptor.supported_snd_settle_modes = modes;
+        self.inner.shared.supported_snd_settle_modes = modes;
         self
     }
 
     /// The sender settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
     pub fn fallback_sender_settle_mode(mut self, mode: SenderSettleMode) -> Self {
-        self.inner.local_sender_acceptor.fallback_snd_settle_mode = mode;
+        self.inner.shared.fallback_snd_settle_mode = mode;
         self
     }
 
     /// The settlement policy of the receiver
     pub fn supported_receiver_settle_modes(mut self, modes: SupportedReceiverSettleModes) -> Self {
         self.inner
-            .local_receiver_acceptor
+            .shared
             .supported_rcv_settle_modes = modes;
         self
     }
@@ -389,7 +389,7 @@ impl Builder<LinkAcceptor, Initialized> {
     /// The receiver settle mode to fallback to when the mode desired
     /// by the remote peer is not supported
     pub fn fallback_receiver_settle_mode(mut self, mode: ReceiverSettleMode) -> Self {
-        self.inner.local_receiver_acceptor.fallback_rcv_settle_mode = mode;
+        self.inner.shared.fallback_rcv_settle_mode = mode;
         self
     }
 

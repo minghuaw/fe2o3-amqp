@@ -3,7 +3,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::ReceiverSettleMode, messaging::TargetArchetype, performatives::Attach,
+    messaging::TargetArchetype, performatives::Attach,
     primitives::Symbol,
 };
 use tokio::sync::{mpsc, RwLock};
@@ -22,7 +22,7 @@ use crate::{
     Receiver,
 };
 
-use super::{link::SharedLinkAcceptorFields, SupportedReceiverSettleModes};
+use super::{link::SharedLinkAcceptorFields};
 
 /// An acceptor for a remote Sender link
 ///
@@ -30,15 +30,15 @@ use super::{link::SharedLinkAcceptorFields, SupportedReceiverSettleModes};
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
 pub(crate) struct LocalReceiverLinkAcceptor<C> {
-    /// Supported receiver settle mode
-    pub supported_rcv_settle_modes: SupportedReceiverSettleModes,
+    // /// Supported receiver settle mode
+    // pub supported_rcv_settle_modes: SupportedReceiverSettleModes,
 
-    /// The receiver settle mode to fallback to when the mode desired
-    /// by the remote peer is not supported
-    ///
-    /// If this field is None, an incoming attach whose desired receiver settle
-    /// mode is not supported will then be rejected
-    pub fallback_rcv_settle_mode: ReceiverSettleMode,
+    // /// The receiver settle mode to fallback to when the mode desired
+    // /// by the remote peer is not supported
+    // ///
+    // /// If this field is None, an incoming attach whose desired receiver settle
+    // /// mode is not supported will then be rejected
+    // pub fallback_rcv_settle_mode: ReceiverSettleMode,
 
     /// Credit mode of the link. This has no effect on a sender
     pub credit_mode: CreditMode,
@@ -58,8 +58,8 @@ pub(crate) struct LocalReceiverLinkAcceptor<C> {
 impl<C> Default for LocalReceiverLinkAcceptor<C> {
     fn default() -> Self {
         Self {
-            supported_rcv_settle_modes: SupportedReceiverSettleModes::default(),
-            fallback_rcv_settle_mode: ReceiverSettleMode::default(),
+            // supported_rcv_settle_modes: SupportedReceiverSettleModes::default(),
+            // fallback_rcv_settle_mode: ReceiverSettleMode::default(),
             credit_mode: CreditMode::default(),
             target_capabilities: None,
             auto_accept: false,
@@ -105,15 +105,23 @@ where
             + Send
             + Sync,
     {
+        let snd_settle_mode = if shared
+            .supported_snd_settle_modes
+            .supports(&remote_attach.snd_settle_mode)
+        {
+            remote_attach.snd_settle_mode.clone()
+        } else {
+            shared.fallback_snd_settle_mode.clone()
+        };
         // The receiver SHOULD respect the sender’s desired settlement mode if
         // the sender initiates the attach exchange and the receiver supports the desired mode
-        let rcv_settle_mode = if self
+        let rcv_settle_mode = if shared
             .supported_rcv_settle_modes
             .supports(&remote_attach.rcv_settle_mode)
         {
             remote_attach.rcv_settle_mode.clone()
         } else {
-            self.fallback_rcv_settle_mode.clone()
+            shared.fallback_rcv_settle_mode.clone()
         };
 
         // Create channels for Session-Link communication
@@ -177,7 +185,7 @@ where
             name: remote_attach.name.clone(),
             output_handle: Some(output_handle),
             input_handle: None, // will be set in `on_incoming_attach`
-            snd_settle_mode: Default::default(), // Will take value from incoming attach
+            snd_settle_mode,
             rcv_settle_mode,
             source: None,         // Will take value from incoming attach
             target: local_target, // Will take value from incoming attach
@@ -190,10 +198,16 @@ where
 
         match (err, link.on_incoming_attach(remote_attach).await) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
+                // Complete attach anyway
                 link.send_attach(&outgoing, &control, false).await?;
-                return Err(link
-                    .handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control)
-                    .await);
+                match attach_error {
+                    ReceiverAttachError::SndSettleModeNotSupported | ReceiverAttachError::RcvSettleModeNotSupported => {
+                        // FIXME: Ths initiating end should be responsible for checking whether the mode is supported
+                    },
+                    _ => return Err(link
+                        .handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control)
+                        .await)
+                }
             }
             (_, Ok(_)) => link.send_attach(&outgoing, &control, false).await?,
         }

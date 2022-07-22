@@ -3,7 +3,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::{SenderSettleMode, SequenceNo},
+    definitions::{SequenceNo},
     messaging::Target,
     performatives::Attach,
     primitives::Symbol,
@@ -22,7 +22,7 @@ use crate::{
     Sender,
 };
 
-use super::{link::SharedLinkAcceptorFields, SupportedSenderSettleModes};
+use super::{link::SharedLinkAcceptorFields};
 
 /// An acceptor for a remote receiver link
 ///
@@ -30,15 +30,15 @@ use super::{link::SharedLinkAcceptorFields, SupportedSenderSettleModes};
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
 pub(crate) struct LocalSenderLinkAcceptor<C> {
-    /// Supported sender settle mode
-    pub supported_snd_settle_modes: SupportedSenderSettleModes,
+    // /// Supported sender settle mode
+    // pub supported_snd_settle_modes: SupportedSenderSettleModes,
 
-    /// The sender settle mode to fallback to when the mode desired
-    /// by the remote peer is not supported.
-    ///
-    /// If this field is None, an incoming attach whose desired sender settle
-    /// mode is not supported will then be rejected
-    pub fallback_snd_settle_mode: SenderSettleMode,
+    // /// The sender settle mode to fallback to when the mode desired
+    // /// by the remote peer is not supported.
+    // ///
+    // /// If this field is None, an incoming attach whose desired sender settle
+    // /// mode is not supported will then be rejected
+    // pub fallback_snd_settle_mode: SenderSettleMode,
 
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
@@ -55,8 +55,8 @@ where
 {
     fn default() -> Self {
         Self {
-            supported_snd_settle_modes: SupportedSenderSettleModes::default(),
-            fallback_snd_settle_mode: SenderSettleMode::default(),
+            // supported_snd_settle_modes: SupportedSenderSettleModes::default(),
+            // fallback_snd_settle_mode: SenderSettleMode::default(),
             initial_delivery_count: 0,
             source_capabilities: None,
         }
@@ -71,13 +71,18 @@ impl LocalSenderLinkAcceptor<Symbol> {
         remote_attach: Attach,
         session: &mut SessionHandle<R>,
     ) -> Result<Sender, SenderAttachError> {
-        let snd_settle_mode = if self
+        let snd_settle_mode = if shared
             .supported_snd_settle_modes
             .supports(&remote_attach.snd_settle_mode)
         {
             remote_attach.snd_settle_mode.clone()
         } else {
-            self.fallback_snd_settle_mode.clone()
+            shared.fallback_snd_settle_mode.clone()
+        };
+        let rcv_settle_mode = if shared.supported_rcv_settle_modes.supports(&remote_attach.rcv_settle_mode) {
+            remote_attach.rcv_settle_mode.clone()
+        } else {
+            shared.fallback_rcv_settle_mode.clone()
         };
 
         let (incoming_tx, mut incoming_rx) = mpsc::channel(shared.buffer_size);
@@ -132,7 +137,7 @@ impl LocalSenderLinkAcceptor<Symbol> {
             output_handle: Some(output_handle),
             input_handle: None, // this will be set in `on_incoming_attach`
             snd_settle_mode,
-            rcv_settle_mode: Default::default(), // Will take value from incoming attach
+            rcv_settle_mode,
             source: local_source,
             target: None, // Will take value from incoming attach
             max_message_size: shared.max_message_size.unwrap_or(0),
@@ -147,15 +152,23 @@ impl LocalSenderLinkAcceptor<Symbol> {
         match link.on_incoming_attach(remote_attach).await {
             Ok(_) => link.send_attach(&outgoing, &session.control, false).await?,
             Err(attach_error) => {
+                // Complete attach then detach should any error happen
                 link.send_attach(&outgoing, &session.control, false).await?;
-                return Err(link
-                    .handle_attach_error(
-                        attach_error,
-                        &outgoing,
-                        &mut incoming_rx,
-                        &session.control,
-                    )
-                    .await);
+                match attach_error {
+                    SenderAttachError::SndSettleModeNotSupported | SenderAttachError::RcvSettleModeNotSupported => {
+                        // FIXME: The initiating side is responsible for checking whether the desired modes are supported?
+                    },
+                    _ => {
+                        return Err(link
+                            .handle_attach_error(
+                                attach_error,
+                                &outgoing,
+                                &mut incoming_rx,
+                                &session.control,
+                            )
+                            .await);
+                    }
+                }
             }
         }
 
