@@ -17,13 +17,13 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-# dev defaults
-default = [
-    "acceptor",
-    "rustls",
-    "native-tls",
-    "transaction",
-]
+# # dev defaults
+# default = [
+#     "acceptor",
+#     "rustls",
+#     "native-tls",
+#     "transaction",
+# ]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
@@ -47,7 +47,7 @@ fe2o3-amqp-types = { path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio = { version = "^1.16.1", features = ["io-util", "net", "rt", "macros"] }
-tokio-util = { version = "0.7.3", features = ["codec"] }
+tokio-util = { version = "<=0.7.3", features = ["codec"] } # tokio-rs/tokio#4816
 thiserror = "1"
 serde = "1"
 # erased-serde = "^0.3.16"
