@@ -910,23 +910,6 @@ impl From<ResumingReceiver> for Receiver {
 }
 
 impl DetachedReceiver {
-    // async fn recv_and_settle(&mut self) -> Result<(), RecvError> {
-    //     loop {
-    //         let delivery: Delivery<Value> = self.inner.recv().await?;
-    //         tracing::debug!(?delivery);
-    //         let state = DeliveryState::Accepted(Accepted {});
-    //         self.inner
-    //             .dispose(
-    //                 delivery.delivery_id,
-    //                 delivery.delivery_tag,
-    //                 Some(true),
-    //                 state,
-    //                 delivery.rcv_settle_mode.clone(),
-    //             )
-    //             .await?;
-    //     }
-    // }
-
     async fn resume_inner(
         &mut self,
         mut remote_attach: Option<Attach>,
@@ -944,17 +927,6 @@ impl DetachedReceiver {
             None => self.inner.exchange_attach(false).await?,
         };
         tracing::debug!(?exchange);
-        // loop {
-        //     match exchange {
-        //         ReceiverAttachExchange::Complete => break,
-        //         // These two will always require some more transfers
-        //         ReceiverAttachExchange::IncompleteUnsettled | ReceiverAttachExchange::Resume => {
-        //             let result = self.recv_and_settle().await;
-        //             tracing::debug!(?result);
-        //             self.inner.detach_with_error(None).await?;
-        //         }
-        //     }
-        // }
 
         let credit = self.inner.link.flow_state.link_credit().await;
         self.inner.set_credit(credit).await?;
