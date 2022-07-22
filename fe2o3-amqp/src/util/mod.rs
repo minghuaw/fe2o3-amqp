@@ -112,6 +112,22 @@ impl<'a> AsByteIterator<'a> for Payload {
     }
 }
 
+impl<'a> AsByteIterator<'a> for &[u8] {
+    type IterImpl = std::slice::Iter<'a, u8>;
+
+    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+        self.iter()
+    }
+}
+
+impl<'a> AsByteIterator<'a> for Vec<u8> {
+    type IterImpl = std::slice::Iter<'a, u8>;
+
+    fn as_byte_iterator(&'a self) -> Self::IterImpl {
+        self.iter()
+    }
+}
+
 impl IntoReader for Vec<Payload> {
     type Reader = ByteReader<Payload>;
 

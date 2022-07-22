@@ -159,6 +159,8 @@ where
         &'a mut self,
         transfer: Transfer,
         payload: P,
+        section_number: u32,
+        section_offset: u64,
     ) -> Result<Delivery<T>, Self::TransferError>
     where
         T: DecodeIntoMessage + Send,
@@ -206,13 +208,9 @@ where
                 }
                 None => None,
             };
-
-            // Need to decode anyway
-            let section_offset = rfind_offset_of_complete_message(&payload)
-                .ok_or(Self::TransferError::MessageDecodeError)?;
+            
             let message = T::decode_into_message(payload.into_reader())
                 .map_err(|_| Self::TransferError::MessageDecodeError)?;
-            let section_number = message.sections();
 
             let state = DeliveryState::Received(Received {
                 section_number, // What is section number?
@@ -317,40 +315,15 @@ where
     }
 }
 
-/// Finds offset of a complete message
-fn rfind_offset_of_complete_message<'a, B>(bytes: &'a B) -> Option<u64>
-where
+/// Count number of sections in encoded message
+pub(crate) fn count_number_of_sections_and_offset<'a, B>(bytes: &'a B) -> (u32, u64) 
+where 
     B: AsByteIterator<'a>,
 {
-    // For a complete message, the only need is to check Footer or Body
     let b0 = bytes.as_byte_iterator();
+    let len = b0.len();
     let b1 = bytes.as_byte_iterator().skip(1);
     let b2 = bytes.as_byte_iterator().skip(2);
-    let len = b0.len();
-    let mut iter = b0.zip(b1.zip(b2));
-
-    iter.rposition(|(&b0, (&b1, &b2))| {
-        matches!(
-            (b0, b1, b2),
-            (DESCRIBED_TYPE, SMALL_ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, SMALL_ULONG_TYPE, FOOTER_CODE)
-            // Some implementation may use ULong for all u64 numbers
-            | (DESCRIBED_TYPE, ULONG_TYPE, DATA_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_SEQ_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, AMQP_VAL_CODE)
-            | (DESCRIBED_TYPE, ULONG_TYPE, FOOTER_CODE)
-        )
-    })
-    .map(|val| (len - val) as u64)
-}
-
-/// Count number of sections in encoded message
-pub(crate) fn count_number_of_sections_and_offset(bytes: &[u8]) -> (u32, u64) {
-    let b0 = bytes.iter();
-    let b1 = bytes.iter().skip(1);
-    let b2 = bytes.iter().skip(2);
     let iter = b0.zip(b1.zip(b2));
 
     let mut last_pos = 0;
@@ -363,7 +336,7 @@ pub(crate) fn count_number_of_sections_and_offset(bytes: &[u8]) -> (u32, u64) {
         }
     }
 
-    let offset = bytes.len() - last_pos;
+    let offset = len - last_pos;
     (section_numbers, offset as u64)
 }
 

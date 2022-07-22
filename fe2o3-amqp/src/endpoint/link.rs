@@ -184,6 +184,8 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         &'a mut self,
         transfer: Transfer,
         payload: P,
+        section_number: u32,
+        section_offset: u64,
     ) -> Result<Delivery<T>, Self::TransferError>
     where
         T: DecodeIntoMessage + Send,

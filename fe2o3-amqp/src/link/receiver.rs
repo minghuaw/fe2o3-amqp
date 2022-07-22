@@ -70,7 +70,7 @@ pub(crate) struct IncompleteTransfer {
 
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
-        let (number, offset) = count_number_of_sections_and_offset(partial_payload.as_ref());
+        let (number, offset) = count_number_of_sections_and_offset(&partial_payload);
         // let mut buffer = BytesMut::new();
         // // TODO: anyway to make this not copying the bytes?
         // buffer.extend(partial_payload);
@@ -130,7 +130,7 @@ impl IncompleteTransfer {
     pub fn append(&mut self, other: Payload) {
         // TODO: append section number and re-count section-offset
         // Count section numbers
-        let (number, offset) = count_number_of_sections_and_offset(other.as_ref());
+        let (number, offset) = count_number_of_sections_and_offset(&other);
         match (&mut self.section_number, number) {
             (_, 0) => self.section_offset += offset,
             (None, 1) => {
@@ -703,17 +703,23 @@ where
             match self.incomplete_transfer.take() {
                 Some(mut incomplete) => {
                     incomplete.or_assign(transfer)?;
-                    incomplete.buffer.push(payload);
+                    incomplete.append(payload); // This also computes the section number and offset incrementally
 
                     self.link
-                        .on_complete_transfer(incomplete.performative, incomplete.buffer)
+                        .on_complete_transfer(
+                            incomplete.performative,
+                            incomplete.buffer,
+                            incomplete.section_number.unwrap_or(0),
+                            incomplete.section_offset,
+                        )
                         .await?
                 }
                 None => {
                     // let message: Message = from_reader(payload.reader())?;
                     // TODO: Is there any way to optimize this?
                     // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
-                    self.link.on_complete_transfer(transfer, payload).await?
+                    let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
+                    self.link.on_complete_transfer(transfer, payload, section_number, section_offset).await?
                 }
             }
         };
