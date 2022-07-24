@@ -205,13 +205,11 @@ where
         mut transfer: Transfer,
         mut payload: Payload,
     ) -> Result<Settlement, Self::TransferError> {
-        let settled = transfer
-            .settled
-            .unwrap_or(match self.snd_settle_mode {
-                SenderSettleMode::Settled => true,
-                SenderSettleMode::Unsettled => false,
-                SenderSettleMode::Mixed => false,
-            });
+        let settled = transfer.settled.unwrap_or(match self.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            SenderSettleMode::Mixed => false,
+        });
         let delivery_tag = transfer
             .delivery_tag
             .clone()

@@ -156,13 +156,38 @@ impl VariantOfTargetArchetype for TargetArchetype {
     }
 }
 
+pub trait DynamicTarget {
+    fn is_dynamic(&self) -> Option<bool>;
+}
+
+impl DynamicTarget for Target {
+    fn is_dynamic(&self) -> Option<bool> {
+        Some(self.dynamic)
+    }
+}
+
+impl DynamicTarget for Coordinator {
+    fn is_dynamic(&self) -> Option<bool> {
+        None
+    }
+}
+
+impl DynamicTarget for TargetArchetype {
+    fn is_dynamic(&self) -> Option<bool> {
+        match self {
+            TargetArchetype::Target(t) => t.is_dynamic(),
+            TargetArchetype::Coordinator(t) => t.is_dynamic(),
+        }
+    }
+}
+
 /// Extension trait for TargetArchetypes
 pub trait TargetArchetypeExt:
-    VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype
+    VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype + DynamicTarget
 {
 }
 
 impl<T> TargetArchetypeExt for T where
-    T: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype
+    T: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype + DynamicTarget
 {
 }

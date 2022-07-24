@@ -36,7 +36,11 @@ pub(crate) type CoordinatorLink = ReceiverLink<Coordinator>;
 #[derive(Debug, Clone)]
 pub struct ControlLinkAcceptor {
     shared: SharedLinkAcceptorFields,
-    inner: LocalReceiverLinkAcceptor<TxnCapability>,
+    inner: LocalReceiverLinkAcceptor<TxnCapability, Coordinator, fn(Coordinator)->Option<Coordinator>>,
+}
+
+fn unreachable_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {
+    unreachable!()
 }
 
 impl Default for ControlLinkAcceptor {
@@ -52,6 +56,8 @@ impl Default for ControlLinkAcceptor {
                 credit_mode: Default::default(),
                 target_capabilities: None,
                 auto_accept: false,
+                on_dynamic_target: unreachable_dynamic_coordinator,
+                target_marker: std::marker::PhantomData,
             },
         }
     }
@@ -95,9 +101,6 @@ impl From<SuccessfulOutcome> for DeliveryState {
 pub(crate) struct TxnCoordinator {
     inner: ReceiverInner<CoordinatorLink>,
     txn_ids: HashSet<TransactionId>,
-    // txns: HashMap<TransactionId, ResourceTransaction>,
-    // work_frame_rx: mpsc::Receiver<TxnWorkFrame>,
-    // work_frame_tx: mpsc::Sender<TxnWorkFrame>,
 }
 
 impl TxnCoordinator {
