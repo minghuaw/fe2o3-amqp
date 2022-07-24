@@ -2,7 +2,11 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use fe2o3_amqp_types::{messaging::{TargetArchetype, Target}, performatives::Attach, primitives::Symbol};
+use fe2o3_amqp_types::{
+    messaging::{Target, TargetArchetype},
+    performatives::Attach,
+    primitives::Symbol,
+};
 use tokio::sync::{mpsc, RwLock};
 use tracing::instrument;
 
@@ -26,7 +30,7 @@ use super::link::SharedLinkAcceptorFields;
 /// the sender is considered to hold the authoritative version of the
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
-pub(crate) struct LocalReceiverLinkAcceptor<C, T, F> 
+pub(crate) struct LocalReceiverLinkAcceptor<C, T, F>
 where
     F: Fn(T) -> Option<T>,
 {
@@ -52,7 +56,7 @@ fn reject_dynamic_target<T>(_: T) -> Option<T> {
     None
 }
 
-impl<C, T> Default for LocalReceiverLinkAcceptor<C, T, fn(T)->Option<T>> {
+impl<C, T> Default for LocalReceiverLinkAcceptor<C, T, fn(T) -> Option<T>> {
     fn default() -> Self {
         Self {
             credit_mode: CreditMode::default(),
@@ -64,7 +68,7 @@ impl<C, T> Default for LocalReceiverLinkAcceptor<C, T, fn(T)->Option<T>> {
     }
 }
 
-impl<F> LocalReceiverLinkAcceptor<Symbol, Target, F> 
+impl<F> LocalReceiverLinkAcceptor<Symbol, Target, F>
 where
     F: Fn(Target) -> Option<Target>,
 {
@@ -172,10 +176,10 @@ where
             .map(|target| {
                 target.and_then(|mut t| {
                     if matches!(t.is_dynamic(), Some(true)) {
-                        (self.on_dynamic_target)(t)
-                            .map(|mut t| {
-                                *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
-                                t
+                        (self.on_dynamic_target)(t).map(|mut t| {
+                            *t.capabilities_mut() =
+                                self.target_capabilities.clone().map(Into::into);
+                            t
                         })
                     } else {
                         *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into);

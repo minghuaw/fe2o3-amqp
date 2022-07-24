@@ -79,10 +79,7 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<'de, T> {
             }
         };
 
-        Ok(Described {
-            descriptor,
-            value,
-        })
+        Ok(Described { descriptor, value })
     }
 }
 
@@ -91,7 +88,7 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        const FIELDS: & [& str] = &[DESCRIPTOR, "value"];
+        const FIELDS: &[&str] = &[DESCRIPTOR, "value"];
         deserializer.deserialize_struct(
             DESCRIBED_BASIC,
             FIELDS,

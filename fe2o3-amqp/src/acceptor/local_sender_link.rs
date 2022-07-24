@@ -3,7 +3,10 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::SequenceNo, messaging::{Target, Source}, performatives::Attach, primitives::Symbol,
+    definitions::SequenceNo,
+    messaging::{Source, Target},
+    performatives::Attach,
+    primitives::Symbol,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 
@@ -26,7 +29,7 @@ use super::link::SharedLinkAcceptorFields;
 /// the sender is considered to hold the authoritative version of the
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
-pub(crate) struct LocalSenderLinkAcceptor<C, F> 
+pub(crate) struct LocalSenderLinkAcceptor<C, F>
 where
     F: Fn(Source) -> Option<Source>,
 {
@@ -45,7 +48,7 @@ fn reject_dynamic_source(_: Source) -> Option<Source> {
     None
 }
 
-impl<C> Default for LocalSenderLinkAcceptor<C, fn(Source)->Option<Source>>
+impl<C> Default for LocalSenderLinkAcceptor<C, fn(Source) -> Option<Source>>
 where
     C: From<Symbol>,
 {
@@ -53,12 +56,12 @@ where
         Self {
             initial_delivery_count: 0,
             source_capabilities: None,
-            on_dynamic_source: reject_dynamic_source
+            on_dynamic_source: reject_dynamic_source,
         }
     }
 }
 
-impl<F> LocalSenderLinkAcceptor<Symbol, F> 
+impl<F> LocalSenderLinkAcceptor<Symbol, F>
 where
     F: Fn(Source) -> Option<Source>,
 {
@@ -102,7 +105,6 @@ where
         let flow_state_consumer = Consumer::new(notifier, flow_state);
 
         let unsettled = Arc::new(RwLock::new(None));
-        // let state_code = Arc::new(AtomicU8::new(0));
         let link_handle = LinkRelay::Sender {
             tx: incoming_tx,
             output_handle: (),

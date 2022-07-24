@@ -36,7 +36,11 @@ pub(crate) type CoordinatorLink = ReceiverLink<Coordinator>;
 #[derive(Debug, Clone)]
 pub struct ControlLinkAcceptor {
     shared: SharedLinkAcceptorFields,
-    inner: LocalReceiverLinkAcceptor<TxnCapability, Coordinator, fn(Coordinator)->Option<Coordinator>>,
+    inner: LocalReceiverLinkAcceptor<
+        TxnCapability,
+        Coordinator,
+        fn(Coordinator) -> Option<Coordinator>,
+    >,
 }
 
 fn unreachable_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {

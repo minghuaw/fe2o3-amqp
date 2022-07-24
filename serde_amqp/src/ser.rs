@@ -118,9 +118,7 @@ impl<W: Write> Serializer<W> {
     }
 
     fn struct_encoding(&self) -> &StructEncoding {
-        self.struct_encoding
-            .last()
-            .unwrap_or(&StructEncoding::None)
+        self.struct_encoding.last().unwrap_or(&StructEncoding::None)
     }
 }
 

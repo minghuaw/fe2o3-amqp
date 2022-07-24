@@ -208,7 +208,7 @@ where
                 }
                 None => None,
             };
-            
+
             let message = T::decode_into_message(payload.into_reader())
                 .map_err(|_| Self::TransferError::MessageDecodeError)?;
 
@@ -316,8 +316,8 @@ where
 }
 
 /// Count number of sections in encoded message
-pub(crate) fn count_number_of_sections_and_offset<'a, B>(bytes: &'a B) -> (u32, u64) 
-where 
+pub(crate) fn count_number_of_sections_and_offset<'a, B>(bytes: &'a B) -> (u32, u64)
+where
     B: AsByteIterator<'a>,
 {
     let b0 = bytes.as_byte_iterator();

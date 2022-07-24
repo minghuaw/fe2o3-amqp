@@ -125,7 +125,7 @@ impl<'de> de::Deserialize<'de> for Descriptor {
     where
         D: serde::Deserializer<'de>,
     {
-        const VARIANTS: & [& str] = &["Name", "Code"];
+        const VARIANTS: &[&str] = &["Name", "Code"];
         deserializer.deserialize_enum(DESCRIPTOR, VARIANTS, DescriptorVisitor {})
     }
 }

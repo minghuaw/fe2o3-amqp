@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode},
-    messaging::{Target, Source},
+    messaging::{Source, Target},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -148,7 +148,7 @@ where
     }
 }
 
-impl Default for LinkAcceptor<fn(Source)->Option<Source>, fn(Target)->Option<Target>> {
+impl Default for LinkAcceptor<fn(Source) -> Option<Source>, fn(Target) -> Option<Target>> {
     fn default() -> Self {
         Self {
             shared: Default::default(),
@@ -158,7 +158,7 @@ impl Default for LinkAcceptor<fn(Source)->Option<Source>, fn(Target)->Option<Tar
     }
 }
 
-impl LinkAcceptor<fn(Source)->Option<Source>, fn(Target)->Option<Target>> {
+impl LinkAcceptor<fn(Source) -> Option<Source>, fn(Target) -> Option<Target>> {
     /// Creates a default LinkAcceptor
     pub fn new() -> Self {
         Self::default()

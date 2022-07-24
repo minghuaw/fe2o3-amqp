@@ -188,6 +188,9 @@ pub trait TargetArchetypeExt:
 }
 
 impl<T> TargetArchetypeExt for T where
-    T: VerifyTargetArchetype + TargetArchetypeCapabilities + VariantOfTargetArchetype + DynamicTarget
+    T: VerifyTargetArchetype
+        + TargetArchetypeCapabilities
+        + VariantOfTargetArchetype
+        + DynamicTarget
 {
 }
