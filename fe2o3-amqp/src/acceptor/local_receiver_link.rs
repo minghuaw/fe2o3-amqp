@@ -182,11 +182,6 @@ where
                         Some(t)
                     }
                 })
-
-                // if let Some(target) = t.as_mut() {
-                //     *target.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
-                // }
-                // t
             })
             .unwrap_or_else(|_| {
                 err = Some(ReceiverAttachError::CoordinatorIsNotImplemented);

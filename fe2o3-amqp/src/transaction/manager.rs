@@ -22,37 +22,6 @@ pub(crate) trait HandleControlLink {
     async fn on_incoming_control_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 }
 
-// /// How an incoming transaction should be handled in a session
-// #[async_trait]
-// pub(crate) trait HandleTransactionalWork {
-//     type Error: Send;
-
-// async fn on_incoming_txn_transfer(
-//     &mut self,
-//     transfer: Transfer,
-//     payload: Payload,
-// ) -> Result<(), Self::Error>;
-
-// async fn on_incoming_txn_flow(
-//     &mut self,
-//     flow: Flow,
-// ) -> Result<(), Self::Error>;
-
-// async fn on_incoming_txn_disposition(
-//     &mut self,
-//     disposition: Disposition,
-// ) -> Result<(), Self::Error>;
-
-// fn on_outgoing_txn_transfer(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
-
-// fn on_outgoing_txn_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error>;
-
-// fn on_outgoing_txn_disposition(
-//     &mut self,
-//     disposition: Disposition,
-// ) -> Result<SessionFrame, Self::Error>;
-// }
-
 /// Transaction manager
 #[derive(Debug)]
 pub(crate) struct TransactionManager {
