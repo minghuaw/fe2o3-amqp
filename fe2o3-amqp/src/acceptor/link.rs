@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode},
-    messaging::Target,
+    messaging::{Target, Source},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -128,25 +128,27 @@ impl Default for SharedLinkAcceptorFields {
 /// ```
 ///
 #[derive(Debug, Clone)]
-pub struct LinkAcceptor<FT>
+pub struct LinkAcceptor<FS, FT>
 where
-    FT: FnOnce(Target) -> Option<Target>,
+    FS: Fn(Source) -> Option<Source>,
+    FT: Fn(Target) -> Option<Target>,
 {
     pub(crate) shared: SharedLinkAcceptorFields,
-    pub(crate) local_sender_acceptor: LocalSenderLinkAcceptor<Symbol>,
+    pub(crate) local_sender_acceptor: LocalSenderLinkAcceptor<Symbol, FS>,
     pub(crate) local_receiver_acceptor: LocalReceiverLinkAcceptor<Symbol, Target, FT>,
 }
 
-impl<FT> std::fmt::Display for LinkAcceptor<FT>
+impl<FS, FT> std::fmt::Display for LinkAcceptor<FS, FT>
 where
-    FT: FnOnce(Target) -> Option<Target>,
+    FS: Fn(Source) -> Option<Source>,
+    FT: Fn(Target) -> Option<Target>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("LinkAcceptor"))
     }
 }
 
-impl Default for LinkAcceptor<fn(Target) -> Option<Target>> {
+impl Default for LinkAcceptor<fn(Source)->Option<Source>, fn(Target)->Option<Target>> {
     fn default() -> Self {
         Self {
             shared: Default::default(),
@@ -156,7 +158,7 @@ impl Default for LinkAcceptor<fn(Target) -> Option<Target>> {
     }
 }
 
-impl LinkAcceptor<fn(Target) -> Option<Target>> {
+impl LinkAcceptor<fn(Source)->Option<Source>, fn(Target)->Option<Target>> {
     /// Creates a default LinkAcceptor
     pub fn new() -> Self {
         Self::default()
@@ -168,8 +170,9 @@ impl LinkAcceptor<fn(Target) -> Option<Target>> {
     }
 }
 
-impl<FT> LinkAcceptor<FT>
+impl<FS, FT> LinkAcceptor<FS, FT>
 where
+    FS: Fn(Source) -> Option<Source>,
     FT: Fn(Target) -> Option<Target>,
 {
     /// Convert the acceptor into a link acceptor builder. This allows users to configure

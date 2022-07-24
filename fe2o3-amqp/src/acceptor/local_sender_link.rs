@@ -3,7 +3,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use fe2o3_amqp_types::{
-    definitions::SequenceNo, messaging::Target, performatives::Attach, primitives::Symbol,
+    definitions::SequenceNo, messaging::{Target, Source}, performatives::Attach, primitives::Symbol,
 };
 use tokio::sync::{mpsc, Notify, RwLock};
 
@@ -26,16 +26,10 @@ use super::link::SharedLinkAcceptorFields;
 /// the sender is considered to hold the authoritative version of the
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
-pub(crate) struct LocalSenderLinkAcceptor<C> {
-    // /// Supported sender settle mode
-    // pub supported_snd_settle_modes: SupportedSenderSettleModes,
-
-    // /// The sender settle mode to fallback to when the mode desired
-    // /// by the remote peer is not supported.
-    // ///
-    // /// If this field is None, an incoming attach whose desired sender settle
-    // /// mode is not supported will then be rejected
-    // pub fallback_snd_settle_mode: SenderSettleMode,
+pub(crate) struct LocalSenderLinkAcceptor<C, F> 
+where
+    F: Fn(Source) -> Option<Source>,
+{
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
@@ -43,23 +37,31 @@ pub(crate) struct LocalSenderLinkAcceptor<C> {
 
     /// the extension capabilities the sender supports/desires
     pub source_capabilities: Option<Vec<C>>,
+
+    pub on_dynamic_source: F,
 }
 
-impl<C> Default for LocalSenderLinkAcceptor<C>
+fn reject_dynamic_source(_: Source) -> Option<Source> {
+    None
+}
+
+impl<C> Default for LocalSenderLinkAcceptor<C, fn(Source)->Option<Source>>
 where
     C: From<Symbol>,
 {
     fn default() -> Self {
         Self {
-            // supported_snd_settle_modes: SupportedSenderSettleModes::default(),
-            // fallback_snd_settle_mode: SenderSettleMode::default(),
             initial_delivery_count: 0,
             source_capabilities: None,
+            on_dynamic_source: reject_dynamic_source
         }
     }
 }
 
-impl LocalSenderLinkAcceptor<Symbol> {
+impl<F> LocalSenderLinkAcceptor<Symbol, F> 
+where
+    F: Fn(Source) -> Option<Source>,
+{
     /// Accepts an incoming attach as a local sender
     pub async fn accept_incoming_attach<R>(
         &self,
@@ -107,7 +109,6 @@ impl LocalSenderLinkAcceptor<Symbol> {
             flow_state: flow_state_producer,
             unsettled: unsettled.clone(),
             receiver_settle_mode: remote_attach.rcv_settle_mode.clone(),
-            // state_code: state_code.clone(),
         };
 
         // Allocate link in session
@@ -122,10 +123,17 @@ impl LocalSenderLinkAcceptor<Symbol> {
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
-        let local_source = remote_attach.source.clone().map(|s| {
-            let mut source = *s;
-            source.capabilities = self.source_capabilities.clone().map(Into::into);
-            source
+        let local_source = remote_attach.source.clone().and_then(|s| {
+            if s.dynamic {
+                (self.on_dynamic_source)(*s).map(|mut s| {
+                    s.capabilities = self.source_capabilities.clone().map(Into::into);
+                    s
+                })
+            } else {
+                let mut source = *s;
+                source.capabilities = self.source_capabilities.clone().map(Into::into);
+                Some(source)
+            }
         });
 
         let mut link = SenderLink::<Target> {

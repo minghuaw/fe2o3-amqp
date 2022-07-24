@@ -28,7 +28,7 @@ use super::link::SharedLinkAcceptorFields;
 #[derive(Debug, Clone)]
 pub(crate) struct LocalReceiverLinkAcceptor<C, T, F> 
 where
-    F: FnOnce(T) -> Option<T>,
+    F: Fn(T) -> Option<T>,
 {
     /// Credit mode of the link. This has no effect on a sender
     pub credit_mode: CreditMode,
