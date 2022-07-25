@@ -1,7 +1,6 @@
 //! Types defined in AMQP 1.0 specification Part 3: Messaging
 
 use serde_amqp::described::Described;
-use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::{primitives::Symbol, value::Value};
 use std::collections::BTreeMap;
 
@@ -31,6 +30,9 @@ pub use term_expiry_policy::TerminusExpiryPolicy;
 
 mod dist_mode;
 pub use dist_mode::DistributionMode;
+
+mod lifetime_policy;
+pub use lifetime_policy::*;
 
 /// 3.5.8 Filter Set
 /// <type name="filter-set" class="restricted" source="map"/>
@@ -76,55 +78,3 @@ pub type NodeProperties = Fields;
 
 // // TODO: impl into Fields
 // struct SupportedDistMode(Vec<Symbol>);
-
-/// 3.5.10 Delete On Close
-/// Lifetime of dynamic node scoped to lifetime of link which caused creation.
-/// <type name="delete-on-close" class="composite" source="list" provides="lifetime-policy">
-///     <descriptor name="amqp:delete-on-close:list" code="0x00000000:0x0000002b"/>
-/// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:delete-on-close:list",
-    code = 0x0000_0000_0000_002b,
-    encoding = "list"
-)]
-pub struct DeleteOnClose {}
-
-/// 3.5.11 Delete On No Links
-/// Lifetime of dynamic node scoped to existence of links to the node
-// <type name="delete-on-no-links" class="composite" source="list" provides="lifetime-policy">
-//     <descriptor name="amqp:delete-on-no-links:list" code="0x00000000:0x0000002c"/>
-// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:delete-on-no-links:list",
-    code = 0x0000_0000_0000_002c,
-    encoding = "list"
-)]
-pub struct DeleteOnNoLinks {}
-
-/// 3.5.12 Delete On No Messages
-/// Lifetime of dynamic node scoped to existence of messages on the node.
-/// <type name="delete-on-no-messages" class="composite" source="list" provides="lifetime-policy">
-///     <descriptor name="amqp:delete-on-no-messages:list" code="0x00000000:0x0000002d"/>
-/// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:delete-on-no-messages:list",
-    code = 0x0000_0000_0000_002d,
-    encoding = "list"
-)]
-pub struct DeleteOnNoMessages {}
-
-/// 3.5.13 Delete On No Links Or Messages
-/// Lifetime of node scoped to existence of messages on or links to the node.
-/// <type name="delete-on-no-links-or-messages" class="composite" source="list" provides="lifetime-policy">
-///     <descriptor name="amqp:delete-on-no-links-or-messages:list" code="0x00000000:0x0000002e"/>
-/// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
-#[amqp_contract(
-    name = "amqp:delete-on-no-links-or-messages:list",
-    code = 0x0000_0000_0000_002e,
-    encoding = "list"
-)]
-pub struct DeleteOnNoLinksOrMessages {}
