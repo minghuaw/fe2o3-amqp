@@ -51,6 +51,7 @@ async fn sender_main(mut sender: Sender) {
 
 async fn receiver_main(mut receiver: Receiver) {
     while let Ok(delivery) = receiver.recv::<Value>().await {
+        receiver.accept(&delivery).await.unwrap();
         println!("{:?}", delivery.body())
     }
     receiver.close().await.unwrap();
