@@ -118,9 +118,7 @@ impl<W: Write> Serializer<W> {
     }
 
     fn struct_encoding(&self) -> &StructEncoding {
-        self.struct_encoding
-            .last()
-            .unwrap_or(&StructEncoding::None)
+        self.struct_encoding.last().unwrap_or(&StructEncoding::None)
     }
 }
 
@@ -742,28 +740,27 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         // The name should override the parent struct encoding
-        let result = if name == DESCRIBED_LIST {
+        if name == DESCRIBED_LIST {
             self.struct_encoding.push(StructEncoding::DescribedList);
-            Ok(StructSerializer::list_value(self))
+            Ok(StructSerializer::new(self))
         } else if name == DESCRIBED_MAP {
             self.struct_encoding.push(StructEncoding::DescribedMap);
-            Ok(StructSerializer::map_value(self))
+            Ok(StructSerializer::new(self))
         } else if name == DESCRIBED_BASIC {
             self.struct_encoding.push(StructEncoding::DescribedBasic);
-            Ok(StructSerializer::basic_value(self))
+            Ok(StructSerializer::new(self))
         } else {
             match self.struct_encoding() {
                 // A None state indicates a freshly instantiated serializer
                 StructEncoding::None => {
                     // Only non-described struct will go to this branch
-                    Ok(StructSerializer::list_value(self))
+                    Ok(StructSerializer::new(self))
                 }
-                StructEncoding::DescribedBasic => Ok(StructSerializer::basic_value(self)),
-                StructEncoding::DescribedList => Ok(StructSerializer::list_value(self)),
-                StructEncoding::DescribedMap => Ok(StructSerializer::map_value(self)),
+                StructEncoding::DescribedBasic => Ok(StructSerializer::new(self)),
+                StructEncoding::DescribedList => Ok(StructSerializer::new(self)),
+                StructEncoding::DescribedMap => Ok(StructSerializer::new(self)),
             }
-        };
-        result
+        }
     }
 
     // Treat this as if it is a tuple because this kind of enum is unique in rust
@@ -1243,25 +1240,7 @@ pub struct StructSerializer<'a, W: 'a> {
 }
 
 impl<'a, W: 'a> StructSerializer<'a, W> {
-    fn basic_value(se: &'a mut Serializer<W>) -> Self {
-        Self {
-            se,
-            count: 0,
-            buf: vec![],
-        }
-    }
-
-    fn list_value(se: &'a mut Serializer<W>) -> Self {
-        // let buf = init_vec(&role);
-        Self {
-            se,
-            count: 0,
-            buf: vec![],
-        }
-    }
-
-    fn map_value(se: &'a mut Serializer<W>) -> Self {
-        // let buf = init_vec(&role);
+    fn new(se: &'a mut Serializer<W>) -> Self {
         Self {
             se,
             count: 0,

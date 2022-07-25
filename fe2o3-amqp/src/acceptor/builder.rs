@@ -7,6 +7,7 @@ use fe2o3_amqp_types::{
         Fields, Handle, IetfLanguageTag, Milliseconds, ReceiverSettleMode, SenderSettleMode,
         SequenceNo, TransferNumber, MIN_MAX_FRAME_SIZE,
     },
+    messaging::{Source, Target},
     performatives::{ChannelMax, MaxFrameSize, Open},
     primitives::{Array, Symbol, ULong},
 };
@@ -17,8 +18,9 @@ use crate::{
 };
 
 use super::{
-    link::LinkAcceptor, session::SessionAcceptor, ConnectionAcceptor, SaslAcceptor,
-    SupportedReceiverSettleModes, SupportedSenderSettleModes,
+    link::LinkAcceptor, local_receiver_link::LocalReceiverLinkAcceptor,
+    local_sender_link::LocalSenderLinkAcceptor, session::SessionAcceptor, ConnectionAcceptor,
+    SaslAcceptor, SupportedReceiverSettleModes, SupportedSenderSettleModes,
 };
 
 #[cfg(feature = "transaction")]
@@ -346,13 +348,20 @@ impl Builder<SessionAcceptor, Initialized> {
 // LinkAcceptor builder
 // =============================================================================
 
-impl Default for Builder<LinkAcceptor, Initialized> {
+impl Default
+    for Builder<
+        LinkAcceptor<fn(Source) -> Option<Source>, fn(Target) -> Option<Target>>,
+        Initialized,
+    >
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Builder<LinkAcceptor, Initialized> {
+impl
+    Builder<LinkAcceptor<fn(Source) -> Option<Source>, fn(Target) -> Option<Target>>, Initialized>
+{
     /// Creates a new builder for [`LinkAcceptor`]
     pub fn new() -> Self {
         let inner = LinkAcceptor {
@@ -364,7 +373,13 @@ impl Builder<LinkAcceptor, Initialized> {
             marker: PhantomData,
         }
     }
+}
 
+impl<FS, FT> Builder<LinkAcceptor<FS, FT>, Initialized>
+where
+    FS: Fn(Source) -> Option<Source>,
+    FT: Fn(Target) -> Option<Target>,
+{
     /// Settlement policy for the sender
     pub fn supported_sender_settle_modes(mut self, modes: SupportedSenderSettleModes) -> Self {
         self.inner.shared.supported_snd_settle_modes = modes;
@@ -457,5 +472,51 @@ impl Builder<LinkAcceptor, Initialized> {
     ) -> Self {
         self.inner.local_sender_acceptor.source_capabilities = source_capabilities.into();
         self
+    }
+
+    /// Sets how to handle dynamic target
+    pub fn on_dynamic_target<F>(self, op: F) -> Builder<LinkAcceptor<FS, F>, Initialized>
+    where
+        F: Fn(Target) -> Option<Target>,
+    {
+        let local_receiver_acceptor = LocalReceiverLinkAcceptor {
+            credit_mode: self.inner.local_receiver_acceptor.credit_mode,
+            target_capabilities: self.inner.local_receiver_acceptor.target_capabilities,
+            auto_accept: self.inner.local_receiver_acceptor.auto_accept,
+            on_dynamic_target: op,
+            target_marker: PhantomData,
+        };
+        let inner = LinkAcceptor {
+            shared: self.inner.shared,
+            local_sender_acceptor: self.inner.local_sender_acceptor,
+            local_receiver_acceptor,
+        };
+
+        Builder {
+            inner,
+            marker: PhantomData,
+        }
+    }
+
+    /// Sets how to handle dynamic source
+    pub fn on_dynamic_source<F>(self, op: F) -> Builder<LinkAcceptor<F, FT>, Initialized>
+    where
+        F: Fn(Source) -> Option<Source>,
+    {
+        let local_sender_acceptor = LocalSenderLinkAcceptor {
+            initial_delivery_count: self.inner.local_sender_acceptor.initial_delivery_count,
+            source_capabilities: self.inner.local_sender_acceptor.source_capabilities,
+            on_dynamic_source: op,
+        };
+        let inner = LinkAcceptor {
+            shared: self.inner.shared,
+            local_sender_acceptor,
+            local_receiver_acceptor: self.inner.local_receiver_acceptor,
+        };
+
+        Builder {
+            inner,
+            marker: PhantomData,
+        }
     }
 }

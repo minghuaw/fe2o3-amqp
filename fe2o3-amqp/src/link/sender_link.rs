@@ -205,13 +205,11 @@ where
         mut transfer: Transfer,
         mut payload: Payload,
     ) -> Result<Settlement, Self::TransferError> {
-        let settled = transfer
-            .settled
-            .unwrap_or(match self.snd_settle_mode {
-                SenderSettleMode::Settled => true,
-                SenderSettleMode::Unsettled => false,
-                SenderSettleMode::Mixed => false,
-            });
+        let settled = transfer.settled.unwrap_or(match self.snd_settle_mode {
+            SenderSettleMode::Settled => true,
+            SenderSettleMode::Unsettled => false,
+            SenderSettleMode::Mixed => false,
+        });
         let delivery_tag = transfer
             .delivery_tag
             .clone()
@@ -530,6 +528,8 @@ where
 
         // Note that it is the responsibility of the transaction controller to
         // verify that the capabilities of the controller meet its requirements.
+        //
+        // the receiver is considered to hold the authoritative version of the target properties
         match (&self.target, &target) {
             (Some(local_target), Some(remote_target)) => {
                 local_target.verify_as_sender(remote_target)?

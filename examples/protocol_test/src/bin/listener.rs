@@ -2,7 +2,7 @@ use fe2o3_amqp::{
     acceptor::{
         link::{LinkAcceptor, LinkEndpoint},
         session::{ListenerSessionHandle, SessionAcceptor},
-        ConnectionAcceptor, ListenerConnectionHandle, SaslPlainMechanism, SupportedReceiverSettleModes, SupportedSenderSettleModes,
+        ConnectionAcceptor, ListenerConnectionHandle, SupportedReceiverSettleModes, SupportedSenderSettleModes,
     },
     types::{primitives::Value, definitions::{ReceiverSettleMode, SenderSettleMode}},
 };
@@ -19,6 +19,14 @@ async fn session_main(mut session: ListenerSessionHandle) {
         .fallback_receiver_settle_mode(ReceiverSettleMode::First)
         .supported_sender_settle_modes(SupportedSenderSettleModes::All)
         .fallback_sender_settle_mode(SenderSettleMode::Mixed)
+        .on_dynamic_target(|mut target| {
+            target.address = Some(String::from("dynamic-address"));
+            Some(target)
+        })
+        .on_dynamic_source(|mut source| {
+            source.address = Some(String::from("dynamic-address"));
+            Some(source)
+        })
         .build();
         
         

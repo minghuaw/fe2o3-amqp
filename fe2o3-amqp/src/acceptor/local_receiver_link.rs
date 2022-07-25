@@ -2,7 +2,11 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use fe2o3_amqp_types::{messaging::TargetArchetype, performatives::Attach, primitives::Symbol};
+use fe2o3_amqp_types::{
+    messaging::{Target, TargetArchetype},
+    performatives::Attach,
+    primitives::Symbol,
+};
 use tokio::sync::{mpsc, RwLock};
 use tracing::instrument;
 
@@ -26,16 +30,10 @@ use super::link::SharedLinkAcceptorFields;
 /// the sender is considered to hold the authoritative version of the
 /// source properties, the receiver is considered to hold the authoritative version of the target properties.
 #[derive(Debug, Clone)]
-pub(crate) struct LocalReceiverLinkAcceptor<C> {
-    // /// Supported receiver settle mode
-    // pub supported_rcv_settle_modes: SupportedReceiverSettleModes,
-
-    // /// The receiver settle mode to fallback to when the mode desired
-    // /// by the remote peer is not supported
-    // ///
-    // /// If this field is None, an incoming attach whose desired receiver settle
-    // /// mode is not supported will then be rejected
-    // pub fallback_rcv_settle_mode: ReceiverSettleMode,
+pub(crate) struct LocalReceiverLinkAcceptor<C, T, F>
+where
+    F: Fn(T) -> Option<T>,
+{
     /// Credit mode of the link. This has no effect on a sender
     pub credit_mode: CreditMode,
 
@@ -49,21 +47,31 @@ pub(crate) struct LocalReceiverLinkAcceptor<C> {
     /// auto_accept = false;
     /// ```
     pub auto_accept: bool,
+
+    pub on_dynamic_target: F,
+    pub target_marker: PhantomData<T>,
 }
 
-impl<C> Default for LocalReceiverLinkAcceptor<C> {
+fn reject_dynamic_target<T>(_: T) -> Option<T> {
+    None
+}
+
+impl<C, T> Default for LocalReceiverLinkAcceptor<C, T, fn(T) -> Option<T>> {
     fn default() -> Self {
         Self {
-            // supported_rcv_settle_modes: SupportedReceiverSettleModes::default(),
-            // fallback_rcv_settle_mode: ReceiverSettleMode::default(),
             credit_mode: CreditMode::default(),
             target_capabilities: None,
             auto_accept: false,
+            on_dynamic_target: reject_dynamic_target,
+            target_marker: PhantomData,
         }
     }
 }
 
-impl LocalReceiverLinkAcceptor<Symbol> {
+impl<F> LocalReceiverLinkAcceptor<Symbol, Target, F>
+where
+    F: Fn(Target) -> Option<Target>,
+{
     pub async fn accept_incoming_attach<R>(
         &self,
         shared: &SharedLinkAcceptorFields,
@@ -81,12 +89,13 @@ impl LocalReceiverLinkAcceptor<Symbol> {
     }
 }
 
-impl<C> LocalReceiverLinkAcceptor<C>
+impl<C, T, F> LocalReceiverLinkAcceptor<C, T, F>
 where
     C: Clone,
+    F: Fn(T) -> Option<T>,
 {
     #[instrument(skip_all)]
-    pub async fn accept_incoming_attach_inner<T>(
+    pub async fn accept_incoming_attach_inner(
         &self,
         shared: &SharedLinkAcceptorFields,
         remote_attach: Attach,
@@ -164,11 +173,19 @@ where
             .clone()
             .map(|t| T::try_from(*t))
             .transpose()
-            .map(|mut t| {
-                if let Some(target) = t.as_mut() {
-                    *target.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
-                }
-                t
+            .map(|target| {
+                target.and_then(|mut t| {
+                    if matches!(t.is_dynamic(), Some(true)) {
+                        (self.on_dynamic_target)(t).map(|mut t| {
+                            *t.capabilities_mut() =
+                                self.target_capabilities.clone().map(Into::into);
+                            t
+                        })
+                    } else {
+                        *t.capabilities_mut() = self.target_capabilities.clone().map(Into::into);
+                        Some(t)
+                    }
+                })
             })
             .unwrap_or_else(|_| {
                 err = Some(ReceiverAttachError::CoordinatorIsNotImplemented);

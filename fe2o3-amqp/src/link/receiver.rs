@@ -718,8 +718,11 @@ where
                     // let message: Message = from_reader(payload.reader())?;
                     // TODO: Is there any way to optimize this?
                     // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
-                    let (section_number, section_offset) = count_number_of_sections_and_offset(&payload);
-                    self.link.on_complete_transfer(transfer, payload, section_number, section_offset).await?
+                    let (section_number, section_offset) =
+                        count_number_of_sections_and_offset(&payload);
+                    self.link
+                        .on_complete_transfer(transfer, payload, section_number, section_offset)
+                        .await?
                 }
             }
         };

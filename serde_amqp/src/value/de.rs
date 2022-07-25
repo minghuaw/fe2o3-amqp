@@ -18,7 +18,7 @@ use crate::{
 
 use super::Value;
 
-const VARIANTS: & [& str] = &[
+const VARIANTS: &[&str] = &[
     "Described",
     "Null",
     "Bool",

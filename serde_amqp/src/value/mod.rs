@@ -13,8 +13,8 @@ use crate::{
     Error,
 };
 
-pub mod de;
-pub mod ser;
+pub(crate) mod de;
+pub(crate) mod ser;
 
 /// Primitive type definitions
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]

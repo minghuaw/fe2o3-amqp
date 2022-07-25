@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, Role, SenderSettleMode},
+    messaging::{Source, Target},
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
@@ -126,30 +127,54 @@ impl Default for SharedLinkAcceptorFields {
 ///     .build();
 /// ```
 ///
-#[derive(Debug, Clone, Default)]
-pub struct LinkAcceptor {
+#[derive(Debug, Clone)]
+pub struct LinkAcceptor<FS, FT>
+where
+    FS: Fn(Source) -> Option<Source>,
+    FT: Fn(Target) -> Option<Target>,
+{
     pub(crate) shared: SharedLinkAcceptorFields,
-    pub(crate) local_sender_acceptor: LocalSenderLinkAcceptor<Symbol>,
-    pub(crate) local_receiver_acceptor: LocalReceiverLinkAcceptor<Symbol>,
+    pub(crate) local_sender_acceptor: LocalSenderLinkAcceptor<Symbol, FS>,
+    pub(crate) local_receiver_acceptor: LocalReceiverLinkAcceptor<Symbol, Target, FT>,
 }
 
-impl std::fmt::Display for LinkAcceptor {
+impl<FS, FT> std::fmt::Display for LinkAcceptor<FS, FT>
+where
+    FS: Fn(Source) -> Option<Source>,
+    FT: Fn(Target) -> Option<Target>,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("LinkAcceptor"))
     }
 }
 
-impl LinkAcceptor {
+impl Default for LinkAcceptor<fn(Source) -> Option<Source>, fn(Target) -> Option<Target>> {
+    fn default() -> Self {
+        Self {
+            shared: Default::default(),
+            local_sender_acceptor: Default::default(),
+            local_receiver_acceptor: Default::default(),
+        }
+    }
+}
+
+impl LinkAcceptor<fn(Source) -> Option<Source>, fn(Target) -> Option<Target>> {
     /// Creates a default LinkAcceptor
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     /// Creates a builder for [`LinkAcceptor`]
     pub fn builder() -> Builder<Self, Initialized> {
         Builder::<Self, Initialized>::new()
     }
+}
 
+impl<FS, FT> LinkAcceptor<FS, FT>
+where
+    FS: Fn(Source) -> Option<Source>,
+    FT: Fn(Target) -> Option<Target>,
+{
     /// Convert the acceptor into a link acceptor builder. This allows users to configure
     /// particular field using the builder pattern
     pub fn into_builder(self) -> Builder<Self, Initialized> {
