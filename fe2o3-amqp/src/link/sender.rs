@@ -12,7 +12,7 @@ use tokio::{
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode},
     messaging::{
-        message::__private::Serializable, Address, DeliveryState, Outcome, Target, MESSAGE_FORMAT,
+        message::__private::Serializable, Address, DeliveryState, Outcome, Target, MESSAGE_FORMAT, Source,
     },
     performatives::{Attach, Detach, Transfer},
 };
@@ -106,6 +106,16 @@ impl Sender {
     pub fn builder(
     ) -> builder::Builder<role::Sender, Target, WithoutName, WithSource, WithoutTarget> {
         builder::Builder::<role::Sender, Target, _, _, _>::new()
+    }
+
+    /// Get a reference to the link's source field
+    pub fn source(&self) -> &Option<Source> {
+        &self.inner.link.source
+    }
+
+    /// Get a reference to the link's target field
+    pub fn target(&self) -> &Option<Target> {
+        &self.inner.link.target
     }
 
     /// Attach the sender link to a session with default configuration

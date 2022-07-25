@@ -13,11 +13,6 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("{:?}", sender.target());
-
-    let outcome = sender.send("hello AMQP").await.unwrap();
-    outcome.accepted_or_else(|outcome| outcome).unwrap();
-
     sender.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();

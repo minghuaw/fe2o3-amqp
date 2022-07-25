@@ -18,12 +18,6 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("{:?}", receiver.source());
-
-    let delivery = receiver.recv::<Value>().await.unwrap();
-    receiver.accept(&delivery).await.unwrap();
-    println!("{:?}", delivery.delivery_id());
-
     receiver.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();

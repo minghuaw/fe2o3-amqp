@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
     definitions::{self, DeliveryNumber, DeliveryTag, ReceiverSettleMode, SequenceNo},
     messaging::{
         message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
-        Target,
+        Target, Source,
     },
     performatives::{Attach, Detach, Transfer},
 };
@@ -236,6 +236,16 @@ impl Receiver {
     /// Set `auto_accept` to `value`
     pub fn set_auto_accepto(&mut self, value: bool) {
         self.inner.auto_accept = value;
+    }
+
+    /// Get a reference to the link's source field
+    pub fn source(&self) -> &Option<Source> {
+        &self.inner.link.source
+    }
+
+    /// Get a reference to the link's target field
+    pub fn target(&self) -> &Option<Target> {
+        &self.inner.link.target
     }
 
     /// Attach the receiver link to a session with the default configuration
