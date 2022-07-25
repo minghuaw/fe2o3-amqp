@@ -1,6 +1,8 @@
 //! Types defined in AMQP 1.0 specification Part 3: Messaging
 
+use serde::{Deserialize, Serialize};
 use serde_amqp::described::Described;
+use serde_amqp::primitives::Array;
 use serde_amqp::{primitives::Symbol, value::Value};
 use std::collections::BTreeMap;
 
@@ -77,4 +79,69 @@ pub type NodeProperties = Fields;
 // }
 
 // // TODO: impl into Fields
-// struct SupportedDistMode(Vec<Symbol>);
+
+/// The distribution modes that the node supports.
+///
+/// The value of this entry MUST be one or more symbols which are valid distribution-modes. That is,
+/// the value MUST be of the same type as would be valid in a field defined with the following
+/// attributes:
+///
+/// type=“symbol” multiple=“true” requires=“distribution-mode”
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SupportedDistModes(Array<DistributionMode>);
+
+impl SupportedDistModes {
+    /// Creates a "supported-dist-modes"
+    ///
+    /// The value of this entry MUST be one or more symbols which are valid distribution-modes.
+    pub fn new(mode: DistributionMode) -> Self {
+        Self(Array(vec![mode]))
+    }
+
+    /// Add a mode to the "supported-dist-modes"
+    pub fn add_mode(&mut self, mode: DistributionMode) {
+        self.0.0.push(mode)
+    }
+
+    /// Creates a "supported-dist-modes" from an iterator of `DistributionMode`. Returns an error if the iterator is empty
+    pub fn try_from_modes(
+        modes: impl IntoIterator<Item = DistributionMode>,
+    ) -> Result<Self, Array<DistributionMode>> {
+        let modes: Array<DistributionMode> = modes.into_iter().collect();
+        if modes.0.is_empty() {
+            return Err(modes);
+        } else {
+            Ok(Self(modes))
+        }
+    }
+}
+
+impl From<DistributionMode> for SupportedDistModes {
+    fn from(mode: DistributionMode) -> Self {
+        Self(Array(vec![mode]))
+    }
+}
+
+impl From<SupportedDistModes> for Fields {
+    fn from(modes: SupportedDistModes) -> Self {
+        let mut map = Fields::new();
+        let values = modes
+            .0.0
+            .into_iter()
+            .map(|el| Symbol::from(el))
+            .map(Value::Symbol)
+            .collect();
+        map.insert(Symbol::from("supported-dist-modes"), Value::Array(values));
+        map
+    }
+}
+
+impl From<SupportedDistModes> for Value {
+    fn from(modes: SupportedDistModes) -> Self {
+        let values: Array<Value> = modes.0.0.into_iter().map(|el| Symbol::from(el))
+            .map(Value::Symbol)
+            .collect();
+        Value::Array(values)
+    }
+}

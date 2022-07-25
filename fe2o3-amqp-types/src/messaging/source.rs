@@ -9,7 +9,7 @@ use crate::definitions::{Fields, Seconds};
 
 use super::{
     Address, DistributionMode, FilterSet, NodeProperties, Outcome, TerminusDurability,
-    TerminusExpiryPolicy,
+    TerminusExpiryPolicy, LifetimePolicy, SupportedDistModes,
 };
 
 /// 3.5.3 Source
@@ -123,6 +123,31 @@ impl Builder {
     /// Set the "dynamic-node-properties" field
     pub fn dynamic_node_properties(mut self, properties: impl Into<Fields>) -> Self {
         self.source.dynamic_node_properties = Some(properties.into());
+        self
+    }
+
+    /// Add a "lifetime-policy" to the "dynamic-node-properties" field
+    pub fn add_lifetime_policy(mut self, policy: impl Into<LifetimePolicy>) -> Self {
+        match &mut self.source.dynamic_node_properties {
+            Some(map) => {
+                map.insert(Symbol::from("lifetime-policy"), Value::from(policy.into()));
+            }
+            None => {
+                let policy: LifetimePolicy = policy.into();
+                self.source.dynamic_node_properties = Some(policy.into());
+            },
+        };
+        self
+    }
+
+    /// Add "supported-dist-modes" entry to the "dynamic-node-properties" field
+    pub fn add_supported_dist_modes(mut self, modes: impl Into<SupportedDistModes>) -> Self {
+        let modes: SupportedDistModes = modes.into();
+
+        match &mut self.source.dynamic_node_properties {
+            Some(map) => map.insert(Symbol::from("supported-dist-modes"), ),
+            None => todo!(),
+        };
         self
     }
 

@@ -1,5 +1,11 @@
-use serde::{de::{self, VariantAccess}, ser};
-use serde_amqp::{DeserializeComposite, SerializeComposite, primitives::Symbol, Value, described::Described};
+use serde::{
+    de::{self, VariantAccess},
+    ser,
+};
+use serde_amqp::{
+    described::Described, descriptor::Descriptor, primitives::Symbol, DeserializeComposite,
+    SerializeComposite, Value,
+};
 
 use crate::definitions::Fields;
 
@@ -29,6 +35,17 @@ impl From<DeleteOnClose> for LifetimePolicy {
     }
 }
 
+impl From<DeleteOnClose> for Value {
+    fn from(_: DeleteOnClose) -> Self {
+        let described = Described {
+            descriptor: Descriptor::Code(0x0000_0000_0000_002b),
+            value: Value::List(vec![]),
+        };
+
+        Value::Described(Box::new(described))
+    }
+}
+
 /// 3.5.11 Delete On No Links
 /// Lifetime of dynamic node scoped to existence of links to the node
 // <type name="delete-on-no-links" class="composite" source="list" provides="lifetime-policy">
@@ -52,6 +69,17 @@ impl DeleteOnNoLinks {
 impl From<DeleteOnNoLinks> for LifetimePolicy {
     fn from(value: DeleteOnNoLinks) -> Self {
         Self::DeleteOnNoLinks(value)
+    }
+}
+
+impl From<DeleteOnNoLinks> for Value {
+    fn from(_: DeleteOnNoLinks) -> Self {
+        let described = Described {
+            descriptor: Descriptor::Code(0x0000_0000_0000_002c),
+            value: Value::List(vec![]),
+        };
+
+        Value::Described(Box::new(described))
     }
 }
 
@@ -81,6 +109,17 @@ impl From<DeleteOnNoMessages> for LifetimePolicy {
     }
 }
 
+impl From<DeleteOnNoMessages> for Value {
+    fn from(_: DeleteOnNoMessages) -> Self {
+        let described = Described {
+            descriptor: Descriptor::Code(0x0000_0000_0000_002d),
+            value: Value::List(vec![]),
+        };
+
+        Value::Described(Box::new(described))
+    }
+}
+
 /// 3.5.13 Delete On No Links Or Messages
 /// Lifetime of node scoped to existence of messages on or links to the node.
 /// <type name="delete-on-no-links-or-messages" class="composite" source="list" provides="lifetime-policy">
@@ -104,6 +143,17 @@ impl DeleteOnNoLinksOrMessages {
 impl From<DeleteOnNoLinksOrMessages> for LifetimePolicy {
     fn from(value: DeleteOnNoLinksOrMessages) -> Self {
         Self::DeleteOnNoLinksOrMessages(value)
+    }
+}
+
+impl From<DeleteOnNoLinksOrMessages> for Value {
+    fn from(_: DeleteOnNoLinksOrMessages) -> Self {
+        let described = Described {
+            descriptor: Descriptor::Code(0x0000_0000_0000_002e),
+            value: Value::List(vec![]),
+        };
+
+        Value::Described(Box::new(described))
     }
 }
 
@@ -217,7 +267,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
@@ -232,27 +283,28 @@ impl<'de> de::Visitor<'de> for Visitor {
     }
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-        where
-            A: de::EnumAccess<'de>, {
+    where
+        A: de::EnumAccess<'de>,
+    {
         let (field, variant) = data.variant()?;
 
         match field {
             Field::DeleteOnClose => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnClose(value))
-            },
+            }
             Field::DeleteOnNoLinks => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnNoLinks(value))
-            },
+            }
             Field::DeleteOnNoMessages => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnNoMessages(value))
-            },
+            }
             Field::DeleteOnNoLinksOrMessages => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnNoLinksOrMessages(value))
-            },
+            }
         }
     }
 }
@@ -260,7 +312,8 @@ impl<'de> de::Visitor<'de> for Visitor {
 impl<'de> de::Deserialize<'de> for LifetimePolicy {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         const VARIANTS: &[&str] = &[
             "amqp:delete-on-close:list",
             "amqp:delete-on-no-links:list",
@@ -272,17 +325,41 @@ impl<'de> de::Deserialize<'de> for LifetimePolicy {
     }
 }
 
-// impl From<LifetimePolicy> for Fields {
-//     fn from(value: LifetimePolicy) -> Self {
-//         let mut map = Self::new();
-//         map.insert(Symbol::from("lifetime-policy"), Value::from(value));
-//         map
-//     }
-// }
+impl From<LifetimePolicy> for Value {
+    fn from(policy: LifetimePolicy) -> Self {
+        match policy {
+            LifetimePolicy::DeleteOnClose(value) => value.into(),
+            LifetimePolicy::DeleteOnNoLinks(value) => value.into(),
+            LifetimePolicy::DeleteOnNoMessages(value) => value.into(),
+            LifetimePolicy::DeleteOnNoLinksOrMessages(value) => value.into(),
+        }
+    }
+}
+
+impl From<LifetimePolicy> for Fields {
+    fn from(value: LifetimePolicy) -> Self {
+        let mut map = Self::new();
+        match value {
+            LifetimePolicy::DeleteOnClose(value) => {
+                map.insert(Symbol::from("lifetime-policy"), Value::from(value));
+            }
+            LifetimePolicy::DeleteOnNoLinks(value) => {
+                map.insert(Symbol::from("lifetime-policy"), Value::from(value));
+            }
+            LifetimePolicy::DeleteOnNoMessages(value) => {
+                map.insert(Symbol::from("lifetime-policy"), Value::from(value));
+            }
+            LifetimePolicy::DeleteOnNoLinksOrMessages(value) => {
+                map.insert(Symbol::from("lifetime-policy"), Value::from(value));
+            }
+        }
+        map
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{to_vec, from_slice, to_value};
+    use serde_amqp::{from_slice, to_value, to_vec};
 
     use super::{DeleteOnClose, LifetimePolicy};
 

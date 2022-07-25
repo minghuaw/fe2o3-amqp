@@ -19,6 +19,17 @@ pub enum DistributionMode {
     Copy,
 }
 
+impl From<DistributionMode> for Symbol {
+    fn from(v: DistributionMode) -> Self {
+        let s = match v {
+            DistributionMode::Move => "move",
+            DistributionMode::Copy => "copy",
+        };
+
+        Symbol::from(s)
+    }
+}
+
 impl From<&DistributionMode> for Symbol {
     fn from(v: &DistributionMode) -> Self {
         let s = match v {
