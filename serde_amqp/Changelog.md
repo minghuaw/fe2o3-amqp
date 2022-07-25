@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.4
+
+1. Added `Deref` and `DerefMut` impl for `Array` and `Symbol`
+
 ## 0.1.3
 
 1. Fixed [#69](https://github.com/minghuaw/fe2o3-amqp/issues/69)
