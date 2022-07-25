@@ -2,7 +2,7 @@
 
 ## 0.2.4
 
-1. Removed `BufReader` and `BufWriter` as `Framed` is already internally buffered
+1. Removed `BufReader` and `BufWriter` as `Framed` is already internally buffered. (ie. this is essentially the same as v0.2.2)
 
 ## 0.2.3
 
