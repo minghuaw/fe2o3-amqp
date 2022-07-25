@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.1
+
+1. Added convenience fns for setting dynamic node prop in `Source` and `Target` when requesting for dynamic node at the remote peer.
+2. Updated `serde_amqp` version requirement to "^0.1.4"
+
 ## 0.2.0
 
 1. Bug fix and ***Breaking*** change

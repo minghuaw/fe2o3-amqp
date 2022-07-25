@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.2.2
+
+1. Added `on_dynamic_source` and `on_dynamic_target` for link acceptor to handle incoming dynamic source and dynamic target.
+2. Updated `serde_amqp` version requirement to "^0.1.4"
+3. Updated `fe2o3-amqp-types` version requirement to "^0.2.1"
+
 ## 0.2.1
 
 1. Make `auto_accept` field in receiver builder public
