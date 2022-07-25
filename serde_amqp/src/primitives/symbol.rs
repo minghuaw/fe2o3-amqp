@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use serde::{
     de::{self, Visitor},
     Serialize,
@@ -52,6 +54,20 @@ impl From<String> for Symbol {
 impl From<&str> for Symbol {
     fn from(val: &str) -> Self {
         Self(val.into())
+    }
+}
+
+impl Deref for Symbol {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Symbol {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
