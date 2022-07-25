@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.3
+
+1. Wrap `Io` inside `BufReader` and `BufWriter`
+
 ## 0.2.2
 
 1. Added `on_dynamic_source` and `on_dynamic_target` for link acceptor to handle incoming dynamic source and dynamic target.
