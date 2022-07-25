@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.1.3
+
+1. Fixed [#69](https://github.com/minghuaw/fe2o3-amqp/issues/69)
+
 ## 0.1.2
 
 1. Fixed clippy warnings except for too_many_arguments
