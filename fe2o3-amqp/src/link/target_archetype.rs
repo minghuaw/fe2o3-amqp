@@ -166,6 +166,7 @@ impl DynamicTarget for Target {
     }
 }
 
+#[cfg(feature = "transaction")]
 impl DynamicTarget for Coordinator {
     fn is_dynamic(&self) -> Option<bool> {
         None
@@ -176,6 +177,7 @@ impl DynamicTarget for TargetArchetype {
     fn is_dynamic(&self) -> Option<bool> {
         match self {
             TargetArchetype::Target(t) => t.is_dynamic(),
+            #[cfg(feature = "transaction")]
             TargetArchetype::Coordinator(t) => t.is_dynamic(),
         }
     }
