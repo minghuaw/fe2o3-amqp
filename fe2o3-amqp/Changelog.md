@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.4
+
+1. Removed `BufReader` and `BufWriter` as `Framed` is already internally buffered
+
 ## 0.2.3
 
 1. Wrap `Io` inside `BufReader` and `BufWriter`

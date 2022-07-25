@@ -23,7 +23,7 @@ use std::{convert::TryFrom, io, marker::PhantomData, task::Poll, time::Duration}
 use bytes::BytesMut;
 use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf, BufReader, BufWriter};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::{
@@ -46,10 +46,10 @@ pin_project! {
     #[derive(Debug)]
     pub struct Transport<Io, Ftype> {
         #[pin]
-        framed_write: FramedWrite<BufWriter<WriteHalf<Io>>, LengthDelimitedCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
 
         #[pin]
-        framed_read: FramedRead<BufReader<ReadHalf<Io>>, LengthDelimitedCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
 
         #[pin]
         idle_timeout: Option<IdleTimeout>,
@@ -66,8 +66,8 @@ where
     pub fn into_framed_codec(
         self,
     ) -> (
-        FramedWrite<BufWriter<WriteHalf<Io>>, LengthDelimitedCodec>,
-        FramedRead<BufReader<ReadHalf<Io>>, LengthDelimitedCodec>,
+        FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
+        FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
     ) {
         (self.framed_write, self.framed_read)
     }
@@ -75,9 +75,6 @@ where
     /// Bind to an IO
     pub fn bind(io: Io, max_frame_size: usize, idle_timeout: Option<Duration>) -> Self {
         let (reader, writer) = tokio::io::split(io);
-        let reader = BufReader::new(reader);
-        let writer = BufWriter::new(writer);
-
         let encoder = length_delimited_encoder(max_frame_size);
         let framed_write = FramedWrite::new(writer, encoder);
 
@@ -90,8 +87,8 @@ where
     /// Bind transport a framed codec
     pub fn bind_to_framed_codec(
         // framed: Framed<Io, LengthDelimitedCodec>,
-        framed_write: FramedWrite<BufWriter<WriteHalf<Io>>, LengthDelimitedCodec>,
-        framed_read: FramedRead<BufReader<ReadHalf<Io>>, LengthDelimitedCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, LengthDelimitedCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, LengthDelimitedCodec>,
         idle_timeout: Option<Duration>,
     ) -> Self {
         let idle_timeout = match idle_timeout {
@@ -171,8 +168,8 @@ where
     /// doesn't modify the connection state
     pub async fn negotiate_sasl_header(
         // mut framed: Framed<Io, ProtocolHeaderCodec>,
-        mut framed_write: FramedWrite<BufWriter<WriteHalf<Io>>, ProtocolHeaderCodec>,
-        mut framed_read: FramedRead<BufReader<ReadHalf<Io>>, ProtocolHeaderCodec>,
+        mut framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        mut framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<Self, NegotiationError> {
         let span = span!(Level::TRACE, "SEND");
         let proto_header = ProtocolHeader::sasl();
@@ -215,8 +212,8 @@ where
     /// Performs AMQP negotiation
     #[instrument(skip_all)]
     pub async fn negotiate_amqp_header(
-        mut framed_write: FramedWrite<BufWriter<WriteHalf<Io>>, ProtocolHeaderCodec>,
-        mut framed_read: FramedRead<BufReader<ReadHalf<Io>>, ProtocolHeaderCodec>,
+        mut framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        mut framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
         local_state: &mut ConnectionState,
         idle_timeout: Option<Duration>,
     ) -> Result<Self, NegotiationError> {
@@ -595,7 +592,6 @@ mod tests {
     use bytes::{Bytes, BytesMut};
     use fe2o3_amqp_types::{performatives::Open, states::ConnectionState};
     use futures_util::{SinkExt, StreamExt};
-    use tokio::io::{BufReader, BufWriter};
     use tokio_test::io::Builder;
     use tokio_util::codec::{Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
@@ -670,8 +666,6 @@ mod tests {
             .build();
 
         let (reader, writer) = tokio::io::split(mock);
-        let reader = BufReader::new(reader);
-        let writer = BufWriter::new(writer);
         let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
         let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
 

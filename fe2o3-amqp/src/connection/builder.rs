@@ -10,7 +10,7 @@ use fe2o3_amqp_types::{
 use futures_util::{SinkExt, StreamExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf, BufReader, BufWriter},
+    io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf},
     net::TcpStream,
     sync::mpsc::{self},
 };
@@ -574,8 +574,6 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         match self.sasl_profile.take() {
             Some(profile) => {
                 let (reader, writer) = tokio::io::split(stream);
-                let reader = BufReader::new(reader);
-                let writer = BufWriter::new(writer);
                 let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
                 let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
                 let mut transport =
@@ -598,8 +596,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
     async fn connect_amqp_with_framed<Io>(
         self,
-        framed_write: FramedWrite<BufWriter<WriteHalf<Io>>, ProtocolHeaderCodec>,
-        framed_read: FramedRead<BufReader<ReadHalf<Io>>, ProtocolHeaderCodec>,
+        framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
+        framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
@@ -646,8 +644,6 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         let (reader, writer) = tokio::io::split(stream);
-        let reader = BufReader::new(reader);
-        let writer = BufWriter::new(writer);
         let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
         let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
         self.connect_amqp_with_framed(framed_write, framed_read)
