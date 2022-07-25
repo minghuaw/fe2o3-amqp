@@ -593,10 +593,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use serde::{Deserialize, Serialize};
+    use serde_amqp_derive::{SerializeComposite, DeserializeComposite};
 
     use crate::{
         primitives::{Array, Timestamp},
-        value::Value,
+        value::Value, described::Described, to_vec, from_slice,
     };
 
     use super::to_value;
@@ -737,6 +738,16 @@ mod tests {
         inner: T,
     }
 
+    use crate as serde_amqp;
+
+    #[derive(Debug, SerializeComposite, DeserializeComposite)]
+    #[amqp_contract(
+        name = "composite",
+        code = 0x0000_0000_0000_0001,
+        encoding = "list"
+    )]
+    pub struct EmptyComposite { }
+
     #[test]
     fn test_serialize_vec_of_tuple() {
         // let data = vec![(&AnotherNewType{ inner: NewType(1i32) }, &NewType(false), &NewType("amqp"))];
@@ -747,5 +758,26 @@ mod tests {
 
         let buf = to_value(&data).unwrap();
         println!("{:?}", buf);
+    }
+
+    #[test]
+    fn test_serialize_empty_composite() {
+        let comp = EmptyComposite {};
+        let value = to_value(&comp).unwrap();
+        assert_eq!(value, Value::Described(Box::new(Described {
+            descriptor: serde_amqp::descriptor::Descriptor::Code(1),
+            value: Value::List(vec![])
+        })))
+    }
+
+    #[test]
+    fn test_deserialize_empty_composite() {
+        let comp = EmptyComposite {};
+        let buf = to_vec(&comp).unwrap();
+        let value: Value = from_slice(&buf).unwrap();
+        assert_eq!(value, Value::Described(Box::new(Described {
+            descriptor: serde_amqp::descriptor::Descriptor::Code(1),
+            value: Value::List(vec![])
+        })))
     }
 }

@@ -1,5 +1,7 @@
 use serde::{de::{self, VariantAccess}, ser};
-use serde_amqp::{DeserializeComposite, SerializeComposite};
+use serde_amqp::{DeserializeComposite, SerializeComposite, primitives::Symbol, Value, described::Described};
+
+use crate::definitions::Fields;
 
 /// 3.5.10 Delete On Close
 /// Lifetime of dynamic node scoped to lifetime of link which caused creation.
@@ -270,9 +272,17 @@ impl<'de> de::Deserialize<'de> for LifetimePolicy {
     }
 }
 
+// impl From<LifetimePolicy> for Fields {
+//     fn from(value: LifetimePolicy) -> Self {
+//         let mut map = Self::new();
+//         map.insert(Symbol::from("lifetime-policy"), Value::from(value));
+//         map
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{to_vec, from_slice};
+    use serde_amqp::{to_vec, from_slice, to_value};
 
     use super::{DeleteOnClose, LifetimePolicy};
 
@@ -284,6 +294,8 @@ mod tests {
         let s_buf = to_vec(&s).unwrap();
         let e_buf = to_vec(&e).unwrap();
 
+        println!("{:#x?}", e_buf);
+
         assert_eq!(s_buf, e_buf);
     }
 
@@ -294,5 +306,12 @@ mod tests {
         let enum_value: LifetimePolicy = from_slice(&buf).unwrap();
 
         assert!(matches!(enum_value, LifetimePolicy::DeleteOnClose(_)));
+    }
+
+    #[test]
+    fn test_lifetime_to_value() {
+        let delete_on_close = DeleteOnClose::new();
+        let value = to_value(&delete_on_close).unwrap();
+        println!("{:?}", value);
     }
 }
