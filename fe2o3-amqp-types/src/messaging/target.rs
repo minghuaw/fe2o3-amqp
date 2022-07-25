@@ -1,9 +1,10 @@
+use serde_amqp::Value;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Array, Boolean, Symbol};
 
 use crate::definitions::{Fields, Seconds};
 
-use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy};
+use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy, LifetimePolicy, SupportedDistModes};
 
 #[cfg(feature = "transaction")]
 use crate::transaction::Coordinator;
@@ -179,6 +180,16 @@ pub struct Target {
     pub dynamic: Boolean,
 
     /// <field name="dynamic-node-properties" type="node-properties"/>
+    /// 
+    /// Properties of the dynamically created node
+    /// 
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    /// 
+    /// When set by the sending link endpoint, this field contains the desired properties of the
+    /// node the sender wishes to be created. When set by the receiving link endpoint this field
+    /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
+    /// Properties for standard node properties. A registry of other commonly used node-properties
+    /// and their meanings is maintained [AMQPNODEPROP].
     pub dynamic_node_properties: Option<NodeProperties>,
 
     /// <field name="capabilities" type="symbol" multiple="true"/>
@@ -206,11 +217,11 @@ impl TryFrom<TargetArchetype> for Target {
 
 impl<T: Into<Address>> From<T> for Target {
     fn from(val: T) -> Self {
-        // Self {
-        //     address: Some(val.into()),
-        //     ..Default::default()
-        // }
-        Self::builder().address(val.into()).build()
+        Self {
+            address: Some(val.into()),
+            ..Default::default()
+        }
+        // Self::builder().address(val.into()).build()
     }
 }
 
@@ -267,8 +278,93 @@ impl Builder {
     }
 
     /// Set the "dynamic-node-properties" field
+    /// 
+    /// Properties of the dynamically created node
+    /// 
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    /// 
+    /// When set by the sending link endpoint, this field contains the desired properties of the
+    /// node the sender wishes to be created. When set by the receiving link endpoint this field
+    /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
+    /// Properties for standard node properties. A registry of other commonly used node-properties
+    /// and their meanings is maintained [AMQPNODEPROP].
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp_types::messaging::{Target, LifetimePolicy, DeleteOnClose};
+    /// 
+    /// let source = Target::builder()
+    ///     .dynamic(true)
+    ///     .dynamic_node_properties(LifetimePolicy::DeleteOnClose(DeleteOnClose{}))
+    ///     .build();
+    /// ```
     pub fn dynamic_node_properties(mut self, properties: impl Into<Fields>) -> Self {
         self.target.dynamic_node_properties = Some(properties.into());
+        self
+    }
+
+    /// Add a "lifetime-policy" to the "dynamic-node-properties" field
+    /// 
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    /// 
+    /// When set by the sending link endpoint, this field contains the desired properties of the
+    /// node the sender wishes to be created. When set by the receiving link endpoint this field
+    /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
+    /// Properties for standard node properties. A registry of other commonly used node-properties
+    /// and their meanings is maintained [AMQPNODEPROP].
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp_types::messaging::{Target, DeleteOnClose};
+    /// 
+    /// let source = Target::builder()
+    ///     .dynamic(true)
+    ///     .add_lifetime_policy(DeleteOnClose{})
+    ///     .build();
+    /// ```
+    pub fn add_lifetime_policy(mut self, policy: impl Into<LifetimePolicy>) -> Self {
+        let policy: LifetimePolicy = policy.into();
+        match &mut self.target.dynamic_node_properties {
+            Some(map) => {
+                map.insert(Symbol::from("lifetime-policy"), Value::from(policy));
+            }
+            None => {
+                self.target.dynamic_node_properties = Some(policy.into());
+            }
+        };
+        self
+    }
+
+    /// Add "supported-dist-modes" entry to the "dynamic-node-properties" field
+    /// 
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    /// 
+    /// When set by the sending link endpoint, this field contains the desired properties of the
+    /// node the sender wishes to be created. When set by the receiving link endpoint this field
+    /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
+    /// Properties for standard node properties. A registry of other commonly used node-properties
+    /// and their meanings is maintained [AMQPNODEPROP].
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp_types::messaging::{Target, DistributionMode};
+    /// 
+    /// let source = Target::builder()
+    ///     .dynamic(true)
+    ///     .add_supported_dist_modes(DistributionMode::Move)
+    ///     .build();
+    /// ```
+    pub fn add_supported_dist_modes(mut self, modes: impl Into<SupportedDistModes>) -> Self {
+        let modes: SupportedDistModes = modes.into();
+        match &mut self.target.dynamic_node_properties {
+            Some(map) => {
+                map.insert(Symbol::from("supported-dist-modes"), Value::from(modes));
+            }
+            None => self.target.dynamic_node_properties = Some(modes.into()),
+        };
         self
     }
 

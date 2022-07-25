@@ -101,7 +101,7 @@ impl SupportedDistModes {
 
     /// Add a mode to the "supported-dist-modes"
     pub fn add_mode(&mut self, mode: DistributionMode) {
-        self.0.0.push(mode)
+        self.0.push(mode)
     }
 
     /// Creates a "supported-dist-modes" from an iterator of `DistributionMode`. Returns an error if the iterator is empty
