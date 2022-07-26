@@ -154,7 +154,7 @@ The items below are listed in the order of priority.
 - [x] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test)
 - [x] Link resumption
 - [x] Dynamic link
-- [ ] Message batch disposition
+- [x] Dispose multiple deliveries
 - [ ] Pipelined open
 - [ ] SASL SCRAM-SHA1
   - [ ] acceptor
