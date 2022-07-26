@@ -726,9 +726,14 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
-        self.hostname = url.host_str().map(Into::into);
+        // only override if value exists
         self.scheme = url.scheme();
-        self.domain = url.domain().map(Into::into);
+        if let Some(hostname) = url.host_str() {
+            self.hostname = Some(hostname);
+        }
+        if let Some(domain) = url.domain() {
+            self.domain = Some(domain);
+        }
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);
         }
@@ -927,9 +932,14 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
-        self.hostname = url.host_str().map(Into::into);
+        // only override if value exists
         self.scheme = url.scheme();
-        self.domain = url.domain().map(Into::into);
+        if let Some(hostname) = url.host_str() {
+            self.hostname = Some(hostname);
+        }
+        if let Some(domain) = url.domain() {
+            self.domain = Some(domain);
+        }
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);
         }
@@ -1038,9 +1048,14 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
         let url: Url = url.try_into()?;
 
         // Url info will override the builder fields
-        self.hostname = url.host_str().map(Into::into);
+        // only override if value exists
         self.scheme = url.scheme();
-        self.domain = url.domain().map(Into::into);
+        if let Some(hostname) = url.host_str() {
+            self.hostname = Some(hostname);
+        }
+        if let Some(domain) = url.domain() {
+            self.domain = Some(domain);
+        }
         if let Ok(profile) = SaslProfile::try_from(&url) {
             self.sasl_profile = Some(profile);
         }
