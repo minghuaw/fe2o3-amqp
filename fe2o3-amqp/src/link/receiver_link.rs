@@ -325,16 +325,27 @@ where
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
         delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
+        {
+            let reader = self.unsettled.read().await;
+            delivery_infos.retain(|info| {
+                reader
+                    .as_ref()
+                    .map(|m| m.contains_key(&info.delivery_tag))
+                    .unwrap_or(false)
+            });
+        }
         let chunk_inds = consecutive_chunk_indices(&delivery_infos);
 
         let mut prev_ind = 0;
         for ind in chunk_inds {
             let slice = &delivery_infos[prev_ind..ind];
-            self.dispose_consecutive(writer, slice, settled, state.clone(), batchable).await?;
+            self.dispose_consecutive(writer, slice, settled, state.clone(), batchable)
+                .await?;
             prev_ind = ind;
         }
         let final_slice = &delivery_infos[prev_ind..];
-        self.dispose_consecutive(writer, final_slice, settled, state, batchable).await
+        self.dispose_consecutive(writer, final_slice, settled, state, batchable)
+            .await
     }
 }
 
@@ -354,9 +365,10 @@ fn consecutive_chunk_indices(delivery_infos: &[DeliveryInfo]) -> Vec<usize> {
                 None
             } else {
                 // window size is 2, so the iter is 1 less than the total len
-                Some(i+1)
+                Some(i + 1)
             }
-        }).collect()
+        })
+        .collect()
 }
 
 /// Count number of sections in encoded message
@@ -509,7 +521,6 @@ impl ReceiverLink<Target> {
     }
 }
 
-
 impl<T> ReceiverLink<T> {
     async fn handle_unsettled_in_attach(
         &mut self,
@@ -534,20 +545,24 @@ impl<T> ReceiverLink<T> {
     }
 
     async fn dispose_consecutive(
-        &mut self, 
+        &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         consecutive_infos: &[DeliveryInfo],
         settled: Option<bool>,
         state: DeliveryState,
-        batchable: bool
+        batchable: bool,
     ) -> Result<(), DispositionError> {
         // This shouldn't happen but just being cautious
         if consecutive_infos.is_empty() {
-            return Ok(())
+            return Ok(());
         }
 
         let settled = settled.unwrap_or({
-            match consecutive_infos[0].rcv_settle_mode.as_ref().unwrap_or(&self.rcv_settle_mode) {
+            match consecutive_infos[0]
+                .rcv_settle_mode
+                .as_ref()
+                .unwrap_or(&self.rcv_settle_mode)
+            {
                 ReceiverSettleMode::First => true,
                 ReceiverSettleMode::Second => false,
             }
@@ -576,7 +591,10 @@ impl<T> ReceiverLink<T> {
             batchable,
         };
         let frame = LinkFrame::Disposition(disposition);
-        writer.send(frame).await.map_err(|_| DispositionError::IllegalSessionState)
+        writer
+            .send(frame)
+            .await
+            .map_err(|_| DispositionError::IllegalSessionState)
     }
 }
 
@@ -903,25 +921,21 @@ mod tests {
 
     #[test]
     fn test_consecutive_chunks() {
-        let expected = vec![
-            vec![0u32, 1, 2, 3],
-            vec![5, 6],
-            vec![8, 9],
-            vec![11]
-        ];
+        let expected = vec![vec![0u32, 1, 2, 3], vec![5, 6], vec![8, 9], vec![11]];
         let vals: Vec<u32> = expected.iter().flatten().map(|el| *el).collect();
         assert_eq!(vals.len() - 1, vals.windows(2).len());
 
-        let inds: Vec<usize> = vals.windows(2)
+        let inds: Vec<usize> = vals
+            .windows(2)
             .enumerate()
             .filter_map(|(i, vals)| {
                 if is_consecutive(&vals[0], &vals[1]) {
                     None
                 } else {
-                    Some(i+1)
+                    Some(i + 1)
                 }
-            }).collect();
-        
+            })
+            .collect();
 
         let mut prev_ind = 0;
         for i in 0..inds.len() {
