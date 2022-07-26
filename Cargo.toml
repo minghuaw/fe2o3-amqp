@@ -5,6 +5,7 @@ members = [
     "fe2o3-amqp",
     "fe2o3-amqp-ext",
     "fe2o3-amqp-types", 
+    "fe2o3-amqp-ws",
 ]
 
 exclude = [
