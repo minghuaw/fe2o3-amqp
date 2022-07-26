@@ -150,6 +150,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
 }
 
 impl<T> Delivery<T> {
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     pub(crate) fn into_info(self) -> DeliveryInfo {
         DeliveryInfo {
             delivery_id: self.delivery_id,
