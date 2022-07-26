@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
     definitions::{self, SequenceNo},
     messaging::{
         message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
-        Target, Source,
+        Source, Target,
     },
     performatives::{Attach, Detach, Transfer},
 };
@@ -21,7 +21,8 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload, util::DeliveryInfo,
+    util::DeliveryInfo,
+    Payload,
 };
 
 use super::{
@@ -372,13 +373,18 @@ impl Receiver {
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
         let delivery_info = delivery.clone_info();
-        self.inner
-            .dispose(
-                delivery_info,
-                None,
-                state,
-            )
-            .await
+        self.inner.dispose(delivery_info, None, state).await
+    }
+
+    /// Accept the message by sending a disposition with the `delivery_state` field set
+    /// to `Accept`
+    pub async fn accept_all<'a, T: 'a>(
+        &mut self,
+        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+    ) -> Result<(), DispositionError> {
+        let state = DeliveryState::Accepted(Accepted {});
+        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
@@ -392,13 +398,21 @@ impl Receiver {
             error: error.into(),
         });
         let delivery_info = delivery.clone_info();
-        self.inner
-            .dispose(
-                delivery_info,
-                None,
-                state,
-            )
-            .await
+        self.inner.dispose(delivery_info, None, state).await
+    }
+
+    /// Reject the message by sending a disposition with the `delivery_state` field set
+    /// to `Reject`
+    pub async fn reject_all<'a, T: 'a>(
+        &mut self,
+        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        error: impl Into<Option<definitions::Error>>,
+    ) -> Result<(), DispositionError> {
+        let state = DeliveryState::Rejected(Rejected {
+            error: error.into(),
+        });
+        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
@@ -406,13 +420,15 @@ impl Receiver {
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         let delivery_info = delivery.clone_info();
-        self.inner
-            .dispose(
-                delivery_info,
-                None,
-                state,
-            )
-            .await
+        self.inner.dispose(delivery_info, None, state).await
+    }
+
+    /// Release the message by sending a disposition with the `delivery_state` field set
+    /// to `Release`
+    pub async fn release_all<'a, T: 'a>(&mut self, deliveries: impl IntoIterator<Item = &'a Delivery<T>>) -> Result<(), DispositionError> {
+        let state = DeliveryState::Released(Released {});
+        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
@@ -424,13 +440,19 @@ impl Receiver {
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
         let delivery_info = delivery.clone_info();
-        self.inner
-            .dispose(
-                delivery_info,
-                None,
-                state,
-            )
-            .await
+        self.inner.dispose(delivery_info, None, state).await
+    }
+
+    /// Modify the message by sending a disposition with the `delivery_state` field set
+    /// to `Modify`
+    pub async fn modify_all<'a, T: 'a>(
+        &mut self,
+        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        modified: Modified,
+    ) -> Result<(), DispositionError> {
+        let state = DeliveryState::Modified(modified);
+        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        self.inner.dispose_all(delivery_infos, None, state).await
     }
 }
 
@@ -736,12 +758,8 @@ where
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
         if self.auto_accept {
             let delivery_info = delivery.clone_info();
-            self.dispose(
-                delivery_info,
-                None,
-                Accepted {}.into(),
-            )
-            .await?;
+            self.dispose(delivery_info, None, Accepted {}.into())
+                .await?;
         }
 
         Ok(Some(delivery))
@@ -768,18 +786,34 @@ where
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
-
         self.link
-            .dispose(
-                &self.outgoing,
-                delivery_info,
-                settled,
-                state,
-                false,
-            )
+            .dispose(&self.outgoing, delivery_info, settled, state, false)
             .await?;
 
         self.processed += 1;
+        self.update_credit_if_auto().await?;
+        Ok(())
+    }
+
+    #[inline]
+    pub(crate) async fn dispose_all(
+        &mut self,
+        delivery_infos: Vec<DeliveryInfo>,
+        settled: Option<bool>,
+        state: DeliveryState,
+    ) -> Result<(), DispositionError> {
+        let total = delivery_infos.len();
+        self.link
+            .dispose_all(&&self.outgoing, delivery_infos, settled, state, false)
+            .await?;
+
+        self.processed += total as u32;
+        self.update_credit_if_auto().await?;
+        Ok(())
+    }
+
+    #[inline]
+    async fn update_credit_if_auto(&mut self) -> Result<(), DispositionError> {
         if let CreditMode::Auto(max_credit) = self.credit_mode {
             if self.processed >= max_credit / 2 {
                 // self.processed will be set to zero when setting link credit

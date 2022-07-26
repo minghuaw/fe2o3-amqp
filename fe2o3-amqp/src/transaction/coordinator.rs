@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, DeliveryNumber, DeliveryTag, LinkError, ReceiverSettleMode},
+    definitions::{self, AmqpError, LinkError, ReceiverSettleMode},
     messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{
