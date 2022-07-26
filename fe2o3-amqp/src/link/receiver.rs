@@ -370,6 +370,15 @@ impl Receiver {
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
     /// to `Accept`
+    ///
+    /// # Example
+    ///
+    /// The code of the example below can be found in the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/blob/main/examples/receiver/src/main.rs)
+    ///
+    /// ```rust,ignore
+    /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
         let delivery_info = delivery.clone_info();
@@ -378,6 +387,16 @@ impl Receiver {
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
     /// to `Accept`
+    ///
+    /// # Example
+    ///
+    /// The code of the example below can be found in the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/blob/main/examples/dispose_multiple/src/main.rs)
+    ///
+    /// ```rust,ignore
+    /// let delivery1: Delivery<Value> = receiver.recv().await.unwrap();
+    /// let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
+    /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
+    /// ```
     pub async fn accept_all<'a, T: 'a>(
         &mut self,
         deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
