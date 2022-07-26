@@ -739,8 +739,8 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         self.open_with_stream(stream).await
     }
 
-    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`. 
-    /// 
+    /// Open with an IO that implements `AsyncRead` and `AsyncWrite`.
+    ///
     /// The stream will be wrapped in `BufReader` and `BufWriter` so it is not necessary
     /// to wrap the stream in buffer.
     ///

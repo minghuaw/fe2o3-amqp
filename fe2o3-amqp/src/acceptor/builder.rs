@@ -475,10 +475,10 @@ where
     }
 
     /// Sets how to handle dynamic target
-    /// 
+    ///
     /// If a valid target is created, a `Some(target)` should be returned. If dynamic
     /// node creation is not supported, then a `None` should be returned.
-    /// 
+    ///
     /// The default handler simply rejects the request by returning a `None`
     pub fn on_dynamic_target<F>(self, op: F) -> Builder<LinkAcceptor<FS, F>, Initialized>
     where
@@ -504,10 +504,10 @@ where
     }
 
     /// Sets how to handle dynamic source
-    /// 
+    ///
     /// If a valid source is created, a `Some(source)` should be returned. If dynamic
     /// node creation is not supported, then a `None` should be returned.
-    /// 
+    ///
     /// The default handler simply rejects the request by returning a `None`
     pub fn on_dynamic_source<F>(self, op: F) -> Builder<LinkAcceptor<F, FT>, Initialized>
     where

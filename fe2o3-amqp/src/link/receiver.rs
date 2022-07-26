@@ -425,7 +425,10 @@ impl Receiver {
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    pub async fn release_all<'a, T: 'a>(&mut self, deliveries: impl IntoIterator<Item = &'a Delivery<T>>) -> Result<(), DispositionError> {
+    pub async fn release_all<'a, T: 'a>(
+        &mut self,
+        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await

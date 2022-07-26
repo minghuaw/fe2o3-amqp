@@ -3,18 +3,19 @@
 use std::{collections::BTreeMap, convert::TryFrom};
 
 use ordered_float::OrderedFloat;
-use serde::{ser::{self}};
+use serde::ser::{self};
 use serde_bytes::ByteBuf;
 
 use crate::{
     __constants::{
-        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_LIST, DESCRIPTOR, SYMBOL, TIMESTAMP,
-        UUID, DESCRIBED_MAP, DESCRIBED_BASIC,
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
     },
+    described::Described,
     descriptor::Descriptor,
     error::Error,
     primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
-    util::{NewType, FieldRole}, described::Described,
+    util::{FieldRole, NewType},
 };
 
 use super::Value;
@@ -260,7 +261,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     where
         T: serde::Serialize,
     {
-        use crate::__constants::{VALUE};
+        use crate::__constants::VALUE;
 
         if name == DESCRIPTOR || name == VALUE
         // || name == AMQP_ERROR || name == CONNECTION_ERROR || name == SESSION_ERROR || name == LINK_ERROR
@@ -308,7 +309,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         match name {
             DESCRIBED_LIST => Ok(TupleStructSerializer::list(self, len)),
             DESCRIBED_BASIC => Ok(TupleStructSerializer::basic(self)),
-            _ => Ok(TupleStructSerializer::list_fields(self, len))
+            _ => Ok(TupleStructSerializer::list_fields(self, len)),
         }
     }
 
@@ -347,7 +348,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
             DESCRIBED_LIST => Ok(StructSerializer::list(self, len)),
             DESCRIBED_MAP => Ok(StructSerializer::map(self)),
             DESCRIBED_BASIC => Ok(StructSerializer::basic(self)),
-            _ => Ok(StructSerializer::list(self, len))
+            _ => Ok(StructSerializer::list(self, len)),
         }
     }
 
@@ -456,7 +457,7 @@ impl<'a> ser::SerializeTuple for SeqSerializer<'a> {
 #[derive(Debug)]
 pub enum TupleStructSerializerKind<'a> {
     /// A transparent serializer
-    Basic{ 
+    Basic {
         /// A mutable reference to the value serializer
         se: &'a mut Serializer,
 
@@ -473,33 +474,42 @@ pub enum TupleStructSerializerKind<'a> {
 pub struct TupleStructSerializer<'a> {
     field_role: FieldRole,
     descriptor: Option<Descriptor>,
-    kind: TupleStructSerializerKind<'a>
+    kind: TupleStructSerializerKind<'a>,
 }
 
 impl<'a> TupleStructSerializer<'a> {
     fn basic(se: &'a mut Serializer) -> Self {
-        let kind = TupleStructSerializerKind::Basic {
-            se,
-            val: None,
-        };
-        Self { field_role: FieldRole::Descriptor, kind, descriptor: None }
+        let kind = TupleStructSerializerKind::Basic { se, val: None };
+        Self {
+            field_role: FieldRole::Descriptor,
+            kind,
+            descriptor: None,
+        }
     }
 
     fn list(se: &'a mut Serializer, len: usize) -> Self {
         let kind = TupleStructSerializerKind::List(SeqSerializer::new(se, len));
-        Self { field_role: FieldRole::Descriptor, kind, descriptor: None }
+        Self {
+            field_role: FieldRole::Descriptor,
+            kind,
+            descriptor: None,
+        }
     }
 
     fn list_fields(se: &'a mut Serializer, len: usize) -> Self {
         let kind = TupleStructSerializerKind::List(SeqSerializer::new(se, len));
-        Self { field_role: FieldRole::Fields, kind, descriptor: None }
+        Self {
+            field_role: FieldRole::Fields,
+            kind,
+            descriptor: None,
+        }
     }
 }
 
 impl<'a> AsMut<Serializer> for TupleStructSerializer<'a> {
     fn as_mut(&mut self) -> &mut Serializer {
         match &mut self.kind {
-            TupleStructSerializerKind::Basic{se, ..} => se,
+            TupleStructSerializerKind::Basic { se, .. } => se,
             TupleStructSerializerKind::List(seq) => seq.as_mut(),
         }
     }
@@ -512,7 +522,7 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
 
     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize 
+        T: serde::Serialize,
     {
         use ser::SerializeSeq;
 
@@ -526,39 +536,30 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                     _ => return Err(Error::InvalidValue),
                 }
                 Ok(())
-            },
-            FieldRole::Fields => {
-                match &mut self.kind {
-                    TupleStructSerializerKind::Basic{val, ..} => {
-                        let mut se = Serializer::new();
-                        *val = Some(value.serialize(&mut se)?);
-                        Ok(())
-                    },
-                    TupleStructSerializerKind::List(seq) => {
-                        seq.serialize_element(value)
-                    }
+            }
+            FieldRole::Fields => match &mut self.kind {
+                TupleStructSerializerKind::Basic { val, .. } => {
+                    let mut se = Serializer::new();
+                    *val = Some(value.serialize(&mut se)?);
+                    Ok(())
                 }
+                TupleStructSerializerKind::List(seq) => seq.serialize_element(value),
             },
         }
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        use serde::ser::{SerializeSeq};
+        use serde::ser::SerializeSeq;
         let value = match self.kind {
-            TupleStructSerializerKind::Basic { se: _, val } => {
-                val.ok_or(Error::InvalidValue)?
-            },
+            TupleStructSerializerKind::Basic { se: _, val } => val.ok_or(Error::InvalidValue)?,
             TupleStructSerializerKind::List(seq) => seq.end()?,
         };
 
         match self.descriptor {
             Some(descriptor) => {
-                let described = Described {
-                    descriptor,
-                    value,
-                };
+                let described = Described { descriptor, value };
                 Ok(Value::Described(Box::new(described)))
-            },
+            }
             None => Ok(value),
         }
     }
@@ -568,7 +569,7 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
 #[derive(Debug)]
 pub enum StructSerializerKind<'a> {
     /// A transparent serializer
-    Basic{ 
+    Basic {
         /// A mutable reference to the value serializer
         se: &'a mut Serializer,
 
@@ -587,36 +588,42 @@ pub enum StructSerializerKind<'a> {
 #[derive(Debug)]
 pub struct StructSerializer<'a> {
     descriptor: Option<Descriptor>,
-    kind: StructSerializerKind<'a>
+    kind: StructSerializerKind<'a>,
 }
 
 impl<'a> StructSerializer<'a> {
     /// Create a struct serializer with transparent encoding
     pub fn basic(se: &'a mut Serializer) -> Self {
-        let kind = StructSerializerKind::Basic {
-            se,
-            val: None,
-        };
-        Self { descriptor: None, kind }
+        let kind = StructSerializerKind::Basic { se, val: None };
+        Self {
+            descriptor: None,
+            kind,
+        }
     }
 
     /// Create a struct serializer for list encoding
     pub fn list(se: &'a mut Serializer, len: usize) -> Self {
         let kind = StructSerializerKind::List(SeqSerializer::new(se, len));
-        Self { descriptor: None, kind }
+        Self {
+            descriptor: None,
+            kind,
+        }
     }
 
     /// Create a struct serializer for map encoding
     pub fn map(se: &'a mut Serializer) -> Self {
         let kind = StructSerializerKind::Map(MapSerializer::new(se));
-        Self { descriptor: None, kind }
+        Self {
+            descriptor: None,
+            kind,
+        }
     }
 }
 
 impl<'a> AsMut<Serializer> for StructSerializer<'a> {
     fn as_mut(&mut self) -> &mut Serializer {
         match &mut self.kind {
-            StructSerializerKind::Basic{se, ..} => se,
+            StructSerializerKind::Basic { se, .. } => se,
             StructSerializerKind::List(seq) => seq.as_mut(),
             StructSerializerKind::Map(map) => map.as_mut(),
         }
@@ -648,17 +655,13 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
             Ok(())
         } else {
             match &mut self.kind {
-                StructSerializerKind::Basic{val, ..} => {
+                StructSerializerKind::Basic { val, .. } => {
                     let mut se = Serializer::new();
                     *val = Some(value.serialize(&mut se)?);
                     Ok(())
-                },
-                StructSerializerKind::List(seq) => {
-                    seq.serialize_element(value)
                 }
-                StructSerializerKind::Map(map) => {
-                    map.serialize_entry(key, value)
-                }
+                StructSerializerKind::List(seq) => seq.serialize_element(value),
+                StructSerializerKind::Map(map) => map.serialize_entry(key, value),
             }
         }
     }
@@ -666,21 +669,16 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         use serde::ser::{SerializeMap, SerializeSeq};
         let value = match self.kind {
-            StructSerializerKind::Basic { se: _, val } => {
-                val.ok_or(Error::InvalidValue)?
-            },
+            StructSerializerKind::Basic { se: _, val } => val.ok_or(Error::InvalidValue)?,
             StructSerializerKind::List(seq) => seq.end()?,
             StructSerializerKind::Map(map) => map.end()?,
         };
 
         match self.descriptor {
             Some(descriptor) => {
-                let described = Described {
-                    descriptor,
-                    value,
-                };
+                let described = Described { descriptor, value };
                 Ok(Value::Described(Box::new(described)))
-            },
+            }
             None => Ok(value),
         }
     }
@@ -696,7 +694,10 @@ pub struct MapSerializer<'a> {
 impl<'a> MapSerializer<'a> {
     /// Create a new map serializer
     pub fn new(se: &'a mut Serializer) -> Self {
-        Self { se, map: Default::default() }
+        Self {
+            se,
+            map: Default::default(),
+        }
     }
 }
 

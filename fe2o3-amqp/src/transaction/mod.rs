@@ -32,7 +32,7 @@ use crate::{
         delivery::{DeliveryFut, UnsettledMessage},
         DispositionError, FlowError, LinkFrame,
     },
-    util::{TryConsume},
+    util::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;
@@ -324,14 +324,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
         };
         let state = DeliveryState::TransactionalState(txn_state);
         let delivery_info = delivery.clone_info();
-        recver
-            .inner
-            .dispose(
-                delivery_info,
-                None,
-                state,
-            )
-            .await
+        recver.inner.dispose(delivery_info, None, state).await
     }
 }
 

@@ -127,7 +127,8 @@ impl From<SupportedDistModes> for Fields {
     fn from(modes: SupportedDistModes) -> Self {
         let mut map = Fields::new();
         let values = modes
-            .0.0
+            .0
+             .0
             .into_iter()
             .map(|el| Symbol::from(el))
             .map(Value::Symbol)
@@ -139,7 +140,11 @@ impl From<SupportedDistModes> for Fields {
 
 impl From<SupportedDistModes> for Value {
     fn from(modes: SupportedDistModes) -> Self {
-        let values: Array<Value> = modes.0.0.into_iter().map(|el| Symbol::from(el))
+        let values: Array<Value> = modes
+            .0
+             .0
+            .into_iter()
+            .map(|el| Symbol::from(el))
             .map(Value::Symbol)
             .collect();
         Value::Array(values)

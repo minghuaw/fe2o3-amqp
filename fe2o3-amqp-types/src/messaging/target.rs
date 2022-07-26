@@ -1,10 +1,13 @@
-use serde_amqp::Value;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
 use serde_amqp::primitives::{Array, Boolean, Symbol};
+use serde_amqp::Value;
 
 use crate::definitions::{Fields, Seconds};
 
-use super::{Address, NodeProperties, TerminusDurability, TerminusExpiryPolicy, LifetimePolicy, SupportedDistModes};
+use super::{
+    Address, LifetimePolicy, NodeProperties, SupportedDistModes, TerminusDurability,
+    TerminusExpiryPolicy,
+};
 
 #[cfg(feature = "transaction")]
 use crate::transaction::Coordinator;
@@ -180,11 +183,11 @@ pub struct Target {
     pub dynamic: Boolean,
 
     /// <field name="dynamic-node-properties" type="node-properties"/>
-    /// 
+    ///
     /// Properties of the dynamically created node
-    /// 
+    ///
     /// If the dynamic field is not set to true this field MUST be left unset.
-    /// 
+    ///
     /// When set by the sending link endpoint, this field contains the desired properties of the
     /// node the sender wishes to be created. When set by the receiving link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
@@ -278,22 +281,22 @@ impl Builder {
     }
 
     /// Set the "dynamic-node-properties" field
-    /// 
+    ///
     /// Properties of the dynamically created node
-    /// 
+    ///
     /// If the dynamic field is not set to true this field MUST be left unset.
-    /// 
+    ///
     /// When set by the sending link endpoint, this field contains the desired properties of the
     /// node the sender wishes to be created. When set by the receiving link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
     /// Properties for standard node properties. A registry of other commonly used node-properties
     /// and their meanings is maintained [AMQPNODEPROP].
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp_types::messaging::{Target, LifetimePolicy, DeleteOnClose};
-    /// 
+    ///
     /// let source = Target::builder()
     ///     .dynamic(true)
     ///     .dynamic_node_properties(LifetimePolicy::DeleteOnClose(DeleteOnClose{}))
@@ -305,20 +308,20 @@ impl Builder {
     }
 
     /// Add a "lifetime-policy" to the "dynamic-node-properties" field
-    /// 
+    ///
     /// If the dynamic field is not set to true this field MUST be left unset.
-    /// 
+    ///
     /// When set by the sending link endpoint, this field contains the desired properties of the
     /// node the sender wishes to be created. When set by the receiving link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
     /// Properties for standard node properties. A registry of other commonly used node-properties
     /// and their meanings is maintained [AMQPNODEPROP].
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp_types::messaging::{Target, DeleteOnClose};
-    /// 
+    ///
     /// let source = Target::builder()
     ///     .dynamic(true)
     ///     .add_lifetime_policy(DeleteOnClose{})
@@ -338,20 +341,20 @@ impl Builder {
     }
 
     /// Add "supported-dist-modes" entry to the "dynamic-node-properties" field
-    /// 
+    ///
     /// If the dynamic field is not set to true this field MUST be left unset.
-    /// 
+    ///
     /// When set by the sending link endpoint, this field contains the desired properties of the
     /// node the sender wishes to be created. When set by the receiving link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
     /// Properties for standard node properties. A registry of other commonly used node-properties
     /// and their meanings is maintained [AMQPNODEPROP].
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp_types::messaging::{Target, DistributionMode};
-    /// 
+    ///
     /// let source = Target::builder()
     ///     .dynamic(true)
     ///     .add_supported_dist_modes(DistributionMode::Move)

@@ -45,11 +45,11 @@ pub struct Source {
     pub dynamic: Boolean,
 
     /// <field name="dynamic-node-properties" type="node-properties"/>
-    /// 
+    ///
     /// Properties of the dynamically created node
-    /// 
-    /// If the dynamic field is not set to true this field MUST be left unset. 
-    /// 
+    ///
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    ///
     /// When set by the receiving link endpoint, this field contains the desired properties of the
     /// node the receiver wishes to be created. When set by the sending link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
@@ -131,20 +131,20 @@ impl Builder {
     }
 
     /// Set the "dynamic-node-properties" field
-    /// 
-    /// If the dynamic field is not set to true this field MUST be left unset. 
-    /// 
+    ///
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    ///
     /// When set by the receiving link endpoint, this field contains the desired properties of the
     /// node the receiver wishes to be created. When set by the sending link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
     /// Properties for standard node properties. A registry of other commonly used node-properties
     /// and their meanings is maintained [AMQPNODEPROP].
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp_types::messaging::{Source, LifetimePolicy, DeleteOnClose};
-    /// 
+    ///
     /// let source = Source::builder()
     ///     .dynamic(true)
     ///     .dynamic_node_properties(LifetimePolicy::DeleteOnClose(DeleteOnClose{}))
@@ -156,20 +156,20 @@ impl Builder {
     }
 
     /// Add a "lifetime-policy" to the "dynamic-node-properties" field
-    /// 
-    /// If the dynamic field is not set to true this field MUST be left unset. 
-    /// 
+    ///
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    ///
     /// When set by the receiving link endpoint, this field contains the desired properties of the
     /// node the receiver wishes to be created. When set by the sending link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
     /// Properties for standard node properties. A registry of other commonly used node-properties
     /// and their meanings is maintained [AMQPNODEPROP].
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp_types::messaging::{Source, DeleteOnClose};
-    /// 
+    ///
     /// let source = Source::builder()
     ///     .dynamic(true)
     ///     .add_lifetime_policy(DeleteOnClose{})
@@ -189,20 +189,20 @@ impl Builder {
     }
 
     /// Add "supported-dist-modes" entry to the "dynamic-node-properties" field
-    /// 
-    /// If the dynamic field is not set to true this field MUST be left unset. 
-    /// 
+    ///
+    /// If the dynamic field is not set to true this field MUST be left unset.
+    ///
     /// When set by the receiving link endpoint, this field contains the desired properties of the
     /// node the receiver wishes to be created. When set by the sending link endpoint this field
     /// contains the actual properties of the dynamically created node. See subsection 3.5.9 Node
     /// Properties for standard node properties. A registry of other commonly used node-properties
     /// and their meanings is maintained [AMQPNODEPROP].
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp_types::messaging::{Source, DistributionMode};
-    /// 
+    ///
     /// let source = Source::builder()
     ///     .dynamic(true)
     ///     .add_supported_dist_modes(DistributionMode::Move)
