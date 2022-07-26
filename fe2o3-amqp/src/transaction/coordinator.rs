@@ -24,7 +24,7 @@ use crate::{
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
         IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
-    util::Running,
+    util::{Running, DeliveryInfo},
     Delivery,
 };
 
@@ -176,11 +176,9 @@ impl TxnCoordinator {
                 .await
                 .map(SuccessfulOutcome::Accepted),
         };
-
+        let delivery_info = delivery.into_info();
         self.handle_delivery_result(
-            delivery.delivery_id,
-            delivery.delivery_tag,
-            delivery.rcv_settle_mode,
+            delivery_info,
             result,
         )
         .await
@@ -244,20 +242,16 @@ impl TxnCoordinator {
 
     async fn handle_delivery_result(
         &mut self,
-        delivery_id: DeliveryNumber,
-        delivery_tag: DeliveryTag,
-        rcv_settle_mode: Option<ReceiverSettleMode>,
+        delivery_info: DeliveryInfo,
         result: Result<SuccessfulOutcome, CoordinatorError>,
     ) -> Running {
         let disposition_result = match result {
             Ok(outcome) => {
                 self.inner
                     .dispose(
-                        delivery_id,
-                        delivery_tag,
+                        delivery_info,
                         Some(true),
                         outcome.into(),
-                        rcv_settle_mode,
                     )
                     .await
             }
@@ -268,10 +262,8 @@ impl TxnCoordinator {
                         let error = TransactionError::UnknownId;
                         let description = "Global transaction ID is not implemented".to_string();
                         self.reject(
-                            delivery_id,
-                            delivery_tag,
+                            delivery_info,
                             error,
-                            rcv_settle_mode,
                             description,
                         )
                         .await
@@ -285,16 +277,14 @@ impl TxnCoordinator {
                         let description =
                             "Allocation of new transaction ID is not implemented".to_string();
                         self.reject(
-                            delivery_id,
-                            delivery_tag,
+                            delivery_info,
                             error,
-                            rcv_settle_mode,
                             description,
                         )
                         .await
                     }
                     CoordinatorError::TransactionError(error) => {
-                        self.reject(delivery_id, delivery_tag, error, rcv_settle_mode, None)
+                        self.reject(delivery_info, error, None)
                             .await
                     }
                 }
@@ -320,10 +310,8 @@ impl TxnCoordinator {
 
     async fn reject(
         &mut self,
-        delivery_id: DeliveryNumber,
-        delivery_tag: DeliveryTag,
+        delivery_info: DeliveryInfo,
         error: TransactionError,
-        rcv_settle_mode: Option<ReceiverSettleMode>,
         description: impl Into<Option<String>>,
     ) -> Result<(), IllegalLinkStateError> {
         let error = definitions::Error::new(error, description, None);
@@ -331,11 +319,9 @@ impl TxnCoordinator {
 
         self.inner
             .dispose(
-                delivery_id,
-                delivery_tag,
+                delivery_info,
                 Some(true),
                 state,
-                rcv_settle_mode,
             )
             .await
     }

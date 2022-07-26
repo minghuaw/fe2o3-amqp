@@ -13,7 +13,10 @@ use pin_project_lite::pin_project;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
-use crate::{endpoint::Settlement, util::Uninitialized};
+use crate::{
+    endpoint::Settlement,
+    util::{DeliveryInfo, Uninitialized},
+};
 use crate::{util::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
@@ -142,6 +145,24 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
             Body::Nothing => write!(f, "Nothing"),
+        }
+    }
+}
+
+impl<T> Delivery<T> {
+    pub(crate) fn into_info(self) -> DeliveryInfo {
+        DeliveryInfo {
+            delivery_id: self.delivery_id,
+            delivery_tag: self.delivery_tag,
+            rcv_settle_mode: self.rcv_settle_mode,
+        }
+    }
+
+    pub(crate) fn clone_info(&self) -> DeliveryInfo {
+        DeliveryInfo {
+            delivery_id: self.delivery_id.clone(),
+            delivery_tag: self.delivery_tag.clone(),
+            rcv_settle_mode: self.rcv_settle_mode.clone(),
         }
     }
 }

@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 use crate::{
     control::SessionControl,
     link::{delivery::Delivery, state::LinkState, LinkFrame},
-    util::{AsByteIterator, IntoReader},
+    util::{AsByteIterator, IntoReader, DeliveryInfo},
     Payload,
 };
 
@@ -194,11 +194,18 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     async fn dispose(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        delivery_id: DeliveryNumber,
-        delivery_tag: DeliveryTag,
+        delivery_info: DeliveryInfo,
         settled: Option<bool>, // TODO: This should depend on ReceiverSettleMode?
         state: DeliveryState,
         batchable: bool,
-        rcv_settle_mode: Option<ReceiverSettleMode>,
+    ) -> Result<(), Self::DispositionError>;
+
+    async fn dispose_all(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        delivery_infos: Vec<DeliveryInfo>,
+        settled: Option<bool>,
+        state: DeliveryState,
+        batchable: bool,
     ) -> Result<(), Self::DispositionError>;
 }

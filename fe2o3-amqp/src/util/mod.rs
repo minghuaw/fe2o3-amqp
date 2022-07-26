@@ -1,6 +1,7 @@
 //! Common utilities
 
 use bytes::{buf, Buf};
+use fe2o3_amqp_types::definitions::{DeliveryNumber, DeliveryTag, ReceiverSettleMode};
 use fe2o3_amqp_types::messaging::DeliveryState;
 use futures_util::Future;
 use std::io;
@@ -212,6 +213,12 @@ impl AsDeliveryState for Option<DeliveryState> {
     fn as_delivery_state_mut(&mut self) -> &mut Option<DeliveryState> {
         self
     }
+}
+
+pub(crate) struct DeliveryInfo {
+    pub delivery_id: DeliveryNumber,
+    pub delivery_tag: DeliveryTag,
+    pub rcv_settle_mode: Option<ReceiverSettleMode>,
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, DeliveryNumber, DeliveryTag, ReceiverSettleMode, SequenceNo},
+    definitions::{self, SequenceNo},
     messaging::{
         message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
         Target, Source,
@@ -21,7 +21,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    Payload,
+    Payload, util::DeliveryInfo,
 };
 
 use super::{
@@ -371,13 +371,12 @@ impl Receiver {
     /// to `Accept`
     pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
+        let delivery_info = delivery.clone_info();
         self.inner
             .dispose(
-                delivery.delivery_id,
-                delivery.delivery_tag.clone(),
+                delivery_info,
                 None,
                 state,
-                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -392,13 +391,12 @@ impl Receiver {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
+        let delivery_info = delivery.clone_info();
         self.inner
             .dispose(
-                delivery.delivery_id,
-                delivery.delivery_tag.clone(),
+                delivery_info,
                 None,
                 state,
-                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -407,13 +405,12 @@ impl Receiver {
     /// to `Release`
     pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
+        let delivery_info = delivery.clone_info();
         self.inner
             .dispose(
-                delivery.delivery_id,
-                delivery.delivery_tag.clone(),
+                delivery_info,
                 None,
                 state,
-                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -426,13 +423,12 @@ impl Receiver {
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
+        let delivery_info = delivery.clone_info();
         self.inner
             .dispose(
-                delivery.delivery_id,
-                delivery.delivery_tag.clone(),
+                delivery_info,
                 None,
                 state,
-                delivery.rcv_settle_mode.clone(),
             )
             .await
     }
@@ -739,12 +735,11 @@ where
 
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
         if self.auto_accept {
+            let delivery_info = delivery.clone_info();
             self.dispose(
-                delivery.delivery_id,
-                delivery.delivery_tag.clone(),
+                delivery_info,
                 None,
                 Accepted {}.into(),
-                delivery.rcv_settle_mode.clone(),
             )
             .await?;
         }
@@ -769,21 +764,18 @@ where
     #[inline]
     pub(crate) async fn dispose(
         &mut self,
-        delivery_id: DeliveryNumber,
-        delivery_tag: DeliveryTag,
+        delivery_info: DeliveryInfo,
         settled: Option<bool>,
         state: DeliveryState,
-        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), DispositionError> {
+
         self.link
             .dispose(
                 &self.outgoing,
-                delivery_id,
-                delivery_tag,
+                delivery_info,
                 settled,
                 state,
                 false,
-                rcv_settle_mode,
             )
             .await?;
 

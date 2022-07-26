@@ -141,14 +141,13 @@ impl TransactionalRetirement for OwnedTransaction {
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
+        let delivery_info = delivery.clone_info();
         recver
             .inner
             .dispose(
-                delivery.delivery_id,
-                delivery.delivery_tag.clone(),
+                delivery_info,
                 None,
                 state,
-                delivery.rcv_settle_mode.clone(),
             )
             .await
     }

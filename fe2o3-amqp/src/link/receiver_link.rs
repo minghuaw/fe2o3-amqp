@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{AsByteIterator, IntoReader};
+use crate::util::{AsByteIterator, DeliveryInfo, IntoReader};
 
 use super::*;
 
@@ -256,15 +256,17 @@ where
     async fn dispose(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
-        delivery_id: DeliveryNumber,
-        delivery_tag: DeliveryTag,
+        delivery_info: DeliveryInfo,
         settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
-        rcv_settle_mode: Option<ReceiverSettleMode>,
     ) -> Result<(), Self::DispositionError> {
         let settled = settled.unwrap_or({
-            match rcv_settle_mode.as_ref().unwrap_or(&self.rcv_settle_mode) {
+            match delivery_info
+                .rcv_settle_mode
+                .as_ref()
+                .unwrap_or(&self.rcv_settle_mode)
+            {
                 ReceiverSettleMode::First => {
                     // If first, this indicates that the receiver MUST settle
                     // the delivery once it has arrived without waiting
@@ -284,20 +286,21 @@ where
 
         let unsettled_state = if settled {
             let mut lock = self.unsettled.write().await;
-            lock.as_mut().and_then(|map| map.remove(&delivery_tag))
+            lock.as_mut()
+                .and_then(|map| map.remove(&delivery_info.delivery_tag))
         } else {
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
             lock.get_or_insert(BTreeMap::new())
-                .insert(delivery_tag.clone(), Some(state.clone()))
+                .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
         };
 
         // Only dispose if message is found in unsettled map
         if unsettled_state.is_some() {
             let disposition = Disposition {
                 role: Role::Receiver,
-                first: delivery_id,
+                first: delivery_info.delivery_id,
                 last: None,
                 settled,
                 state: Some(state),
@@ -310,9 +313,50 @@ where
                 .map_err(|_| Self::DispositionError::IllegalSessionState)?;
         }
 
-        // This is a unit enum, clone should be really cheap
         Ok(())
     }
+
+    async fn dispose_all(
+        &mut self,
+        writer: &mpsc::Sender<LinkFrame>,
+        mut delivery_infos: Vec<DeliveryInfo>,
+        settled: Option<bool>,
+        state: DeliveryState,
+        batchable: bool,
+    ) -> Result<(), Self::DispositionError> {
+        delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
+        let chunk_inds = consecutive_chunk_indices(&delivery_infos);
+
+        let mut prev_ind = 0;
+        for ind in chunk_inds {
+            let slice = &delivery_infos[prev_ind..ind];
+            self.dispose_consecutive(writer, slice, settled, state.clone(), batchable).await?;
+            prev_ind = ind;
+        }
+        let final_slice = &delivery_infos[prev_ind..];
+        self.dispose_consecutive(writer, final_slice, settled, state, batchable).await
+    }
+}
+
+fn is_consecutive(left: &DeliveryNumber, right: &DeliveryNumber) -> bool {
+    // Assume ascending order
+    right - left == 1
+}
+
+fn consecutive_chunk_indices(delivery_infos: &[DeliveryInfo]) -> Vec<usize> {
+    delivery_infos
+        .windows(2)
+        .enumerate()
+        .filter_map(|(i, infos)| {
+            if is_consecutive(&infos[0].delivery_id, &infos[1].delivery_id)
+                && infos[0].rcv_settle_mode == infos[1].rcv_settle_mode
+            {
+                None
+            } else {
+                // window size is 2, so the iter is 1 less than the total len
+                Some(i+1)
+            }
+        }).collect()
 }
 
 /// Count number of sections in encoded message
@@ -465,46 +509,6 @@ impl ReceiverLink<Target> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-
-    use fe2o3_amqp_types::{
-        messaging::{
-            message::{Body, __private::Serializable},
-            AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
-        },
-        primitives::Value,
-    };
-    use serde_amqp::to_vec;
-
-    use crate::link::receiver_link::count_number_of_sections_and_offset;
-
-    #[test]
-    fn test_section_numbers() {
-        let message = Message {
-            header: Some(Header {
-                durable: true,
-                ..Default::default()
-            }),
-            // header: None,
-            delivery_annotations: Some(DeliveryAnnotations(BTreeMap::new())),
-            // delivery_annotations: None,
-            message_annotations: Some(MessageAnnotations(BTreeMap::new())),
-            // message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: Body::Value(AmqpValue(Value::Bool(true))),
-            footer: None,
-        };
-        // let mut buf = Vec::new();
-        // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
-        // message.serialize(&mut serializer).unwrap();
-        let buf = to_vec(&Serializable(message)).unwrap();
-        let (nums, offset) = count_number_of_sections_and_offset(&buf);
-        println!("{:?}, {:?}", nums, offset);
-    }
-}
 
 impl<T> ReceiverLink<T> {
     async fn handle_unsettled_in_attach(
@@ -527,6 +531,52 @@ impl<T> ReceiverLink<T> {
             | LinkState::IncompleteAttachExchanged => ReceiverAttachExchange::IncompleteUnsettled,
             _ => ReceiverAttachExchange::Resume,
         }
+    }
+
+    async fn dispose_consecutive(
+        &mut self, 
+        writer: &mpsc::Sender<LinkFrame>,
+        consecutive_infos: &[DeliveryInfo],
+        settled: Option<bool>,
+        state: DeliveryState,
+        batchable: bool
+    ) -> Result<(), DispositionError> {
+        // This shouldn't happen but just being cautious
+        if consecutive_infos.is_empty() {
+            return Ok(())
+        }
+
+        let settled = settled.unwrap_or({
+            match consecutive_infos[0].rcv_settle_mode.as_ref().unwrap_or(&self.rcv_settle_mode) {
+                ReceiverSettleMode::First => true,
+                ReceiverSettleMode::Second => false,
+            }
+        });
+
+        // TODO: Individually checking whether a delivery is already dropped is probably too heavy?
+        if settled {
+            let mut lock = self.unsettled.write().await;
+            for info in consecutive_infos {
+                lock.as_mut().and_then(|map| map.remove(&info.delivery_tag));
+            }
+        } else {
+            let mut lock = self.unsettled.write().await;
+            for info in consecutive_infos {
+                lock.get_or_insert(BTreeMap::new())
+                    .insert(info.delivery_tag.clone(), Some(state.clone()));
+            }
+        }
+
+        let disposition = Disposition {
+            role: Role::Receiver,
+            first: consecutive_infos[0].delivery_id,
+            last: consecutive_infos.last().map(|el| el.delivery_id),
+            settled,
+            state: Some(state),
+            batchable,
+        };
+        let frame = LinkFrame::Disposition(disposition);
+        writer.send(frame).await.map_err(|_| DispositionError::IllegalSessionState)
     }
 }
 
@@ -806,5 +856,81 @@ where
         }
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,
         None => ReceiverAttachError::IllegalSessionState,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use fe2o3_amqp_types::{
+        messaging::{
+            message::{Body, __private::Serializable},
+            AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
+        },
+        primitives::Value,
+    };
+    use serde_amqp::to_vec;
+
+    use crate::link::receiver_link::count_number_of_sections_and_offset;
+
+    use super::is_consecutive;
+
+    #[test]
+    fn test_section_numbers() {
+        let message = Message {
+            header: Some(Header {
+                durable: true,
+                ..Default::default()
+            }),
+            // header: None,
+            delivery_annotations: Some(DeliveryAnnotations(BTreeMap::new())),
+            // delivery_annotations: None,
+            message_annotations: Some(MessageAnnotations(BTreeMap::new())),
+            // message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: Body::Value(AmqpValue(Value::Bool(true))),
+            footer: None,
+        };
+        // let mut buf = Vec::new();
+        // let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
+        // message.serialize(&mut serializer).unwrap();
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let (nums, offset) = count_number_of_sections_and_offset(&buf);
+        println!("{:?}, {:?}", nums, offset);
+    }
+
+    #[test]
+    fn test_consecutive_chunks() {
+        let expected = vec![
+            vec![0u32, 1, 2, 3],
+            vec![5, 6],
+            vec![8, 9],
+            vec![11]
+        ];
+        let vals: Vec<u32> = expected.iter().flatten().map(|el| *el).collect();
+        assert_eq!(vals.len() - 1, vals.windows(2).len());
+
+        let inds: Vec<usize> = vals.windows(2)
+            .enumerate()
+            .filter_map(|(i, vals)| {
+                if is_consecutive(&vals[0], &vals[1]) {
+                    None
+                } else {
+                    Some(i+1)
+                }
+            }).collect();
+        
+
+        let mut prev_ind = 0;
+        for i in 0..inds.len() {
+            let ind = inds[i];
+            let slice = &vals[prev_ind..ind];
+            assert_eq!(slice, expected[i]);
+            prev_ind = ind;
+        }
+        let final_slice = &vals[prev_ind..];
+        assert_eq!(final_slice, expected.last().unwrap())
     }
 }
