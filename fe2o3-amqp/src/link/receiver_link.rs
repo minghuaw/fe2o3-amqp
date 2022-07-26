@@ -324,6 +324,8 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
+        // TODO: which is faster? filtering before sorting or sorting before filtering?
+        // sorting before filtering may be more cache/branch-prediction friendly?
         delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
         {
             let reader = self.unsettled.read().await;
