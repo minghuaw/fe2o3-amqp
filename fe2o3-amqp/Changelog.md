@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.6
+
+1. Only override connection builder's hostname and domain if valid values are found in url.
+
 ## 0.2.5
 
 1. Added `accept_all`, `reject_all`, `modify_all`, and `release_all` to handle disposition of multiple deliveries in a single Disposition if all deliveries are consecutive.
