@@ -10,6 +10,7 @@ members = [
 exclude = [
     "examples/alternative_tls_connection",
     "examples/batchable_send",
+    "examples/dispose_multiple",
     "examples/dynamic_sender",
     "examples/dynamic_receiver",
     "examples/listener",

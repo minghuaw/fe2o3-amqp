@@ -11,7 +11,8 @@ The examples below are individual examples which you need to `cd` into the corre
 |[receiver](./receiver/) | A simple receiver with default configuration |
 |[receiver_auto_accept](./receiver_auto_accept/) | A simple receiver that accepts incoming deliveries automatically |
 |[dynamic_receiver](./dynamic_receiver) | Request the sending peer to dynamically create a node at source |
-|[batchable_send](./batchable_send/)| A simple sender that sends a message but doesn't require immediate disposition |
+|[batchable_send](./batchable_send/)| A simple sender that sends multiple messages but doesn't require immediate disposition |
+|[dispose_multiple](./dispose_multiple) | A simple receiver that disposes multiple deliveries in one Disposition frame (if all deliveries are consecutive) |
 |[listener](./listener)| A simple listener that handles incoming connections, sessions, and links |
 
 ## TLS and SASL

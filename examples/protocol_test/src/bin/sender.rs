@@ -69,18 +69,18 @@ async fn main() {
         .await
         .unwrap();
 
-    // let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
-    //     .await
-    //     .unwrap();
-
-    let mut sender = Sender::builder()
-        .name("rust-sender-link-1")
-        .target("q1")
-        .sender_settle_mode(SenderSettleMode::Settled)
-        .receiver_settle_mode(ReceiverSettleMode::Second)
-        .attach(&mut session)
+    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await
         .unwrap();
+
+    // let mut sender = Sender::builder()
+    //     .name("rust-sender-link-1")
+    //     .target("q1")
+    //     .sender_settle_mode(SenderSettleMode::Settled)
+    //     .receiver_settle_mode(ReceiverSettleMode::Second)
+    //     .attach(&mut session)
+    //     .await
+    //     .unwrap();
 
     // let body = Body::from(());
     // let message = Message::from("hello");

@@ -10,9 +10,14 @@ async fn main() {
         .await
         .unwrap();
 
-    let fut = sender.send_batchable("hello AMQP").await.unwrap();
-    let outcome = fut.await.unwrap();
-    outcome.accepted_or_else(|outcome| outcome).unwrap();
+    let fut1 = sender.send_batchable("hello AMQP").await.unwrap();
+    let fut2 = sender.send_batchable("hello world").await.unwrap();
+
+    let outcome1 = fut1.await.unwrap();
+    outcome1.accepted_or_else(|outcome| outcome).unwrap();
+
+    let outcome2 = fut2.await.unwrap();
+    outcome2.accepted_or_else(|outcome| outcome).unwrap();
 
     sender.close().await.unwrap();
     session.end().await.unwrap();
