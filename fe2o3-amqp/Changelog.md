@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.5
+
+1. Added `accept_all`, `reject_all`, `modify_all`, and `release_all` to handle disposition of multiple deliveries in a single Disposition if all deliveries are consecutive.
+if the deliveries are not all consecutive, then the number of Disposition frames will be equal to the number of consecutive chunks.
+
 ## 0.2.4
 
 1. Removed `BufReader` and `BufWriter` as `Framed` is already internally buffered. (ie. this is essentially the same as v0.2.2)
