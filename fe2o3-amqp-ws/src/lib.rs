@@ -5,8 +5,18 @@ use std::{
 
 use futures_util::{ready, Sink, Stream};
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tungstenite::Message;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
+use tokio_tungstenite::{
+    client_async, client_async_with_config, connect_async, connect_async_with_config,
+    MaybeTlsStream,
+};
+use tungstenite::{
+    client::IntoClientRequest, handshake::client::Response, http::HeaderValue,
+    protocol::WebSocketConfig, Message,
+};
 
 pin_project! {
     pub struct WebSocketStream<S> {
@@ -22,6 +32,89 @@ impl<S> From<tokio_tungstenite::WebSocketStream<S>> for WebSocketStream<S> {
             inner,
             current_binary: None,
         }
+    }
+}
+
+impl WebSocketStream<MaybeTlsStream<TcpStream>> {
+    pub async fn connect(
+        req: impl IntoClientRequest,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let mut request = req.into_client_request()?;
+
+        // Sec-WebSocket-Protocol HTTP header
+        //
+        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
+        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
+        // or greater, with version negotiation as defined by AMQP 1.0.
+        request
+            .headers_mut()
+            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
+
+        let (ws_stream, response) = connect_async(request).await?;
+        Ok((Self::from(ws_stream), response))
+    }
+
+    pub async fn connect_with_config(
+        req: impl IntoClientRequest,
+        config: Option<WebSocketConfig>,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let mut request = req.into_client_request()?;
+
+        // Sec-WebSocket-Protocol HTTP header
+        //
+        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
+        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
+        // or greater, with version negotiation as defined by AMQP 1.0.
+        request
+            .headers_mut()
+            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
+
+        let (ws_stream, response) = connect_async_with_config(request, config).await?;
+        Ok((Self::from(ws_stream), response))
+    }
+}
+
+impl<S> WebSocketStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    pub async fn connect_with_stream(
+        req: impl IntoClientRequest,
+        stream: S,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let mut request = req.into_client_request()?;
+
+        // Sec-WebSocket-Protocol HTTP header
+        //
+        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
+        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
+        // or greater, with version negotiation as defined by AMQP 1.0.
+        request
+            .headers_mut()
+            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
+
+        let (ws_stream, response) = client_async(request, stream).await?;
+        Ok((Self::from(ws_stream), response))
+    }
+
+    pub async fn connect_with_stream_and_config(
+        req: impl IntoClientRequest,
+        stream: S,
+        config: Option<WebSocketConfig>,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let mut request = req.into_client_request()?;
+
+        // Sec-WebSocket-Protocol HTTP header
+        //
+        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
+        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
+        // or greater, with version negotiation as defined by AMQP 1.0.
+        request
+            .headers_mut()
+            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
+
+        let (ws_stream, response) = client_async_with_config(request, stream, config).await?;
+        Ok((Self::from(ws_stream), response))
     }
 }
 
@@ -65,14 +158,14 @@ where
                 Message::Binary(vec) => *this.current_binary = Some(Cursor::new(vec)),
 
                 // This is already handled by tungstenite
-                Message::Ping(_) => {},
-                Message::Pong(_) => {},
+                Message::Ping(_) => {}
+                Message::Pong(_) => {}
 
                 // Let tungstenite perform close handshake
-                Message::Close(_) => {},
+                Message::Close(_) => {}
 
                 // Raw frame. Note, that you’re not going to get this value while reading the message.
-                Message::Frame(_) => unreachable!(), 
+                Message::Frame(_) => unreachable!(),
             }
         };
 
@@ -97,8 +190,7 @@ where
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         let mut this = self.project();
-        ready!(this.inner.as_mut().poll_ready(cx))
-            .map_err(map_tungstenite_error)?;
+        ready!(this.inner.as_mut().poll_ready(cx)).map_err(map_tungstenite_error)?;
         let n = buf.len();
         let item = Message::binary(buf);
         match this.inner.start_send(item) {
