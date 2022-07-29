@@ -1,3 +1,8 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![deny(missing_docs, missing_debug_implementations)]
+
+//! WebSocket adapter for AMQP 1.0 websocket binding
+
 use std::{
     io::{self, Cursor, Read},
     task::Poll,
@@ -22,6 +27,12 @@ use tungstenite::{
 };
 
 pin_project! {
+    /// A wrapper over [`tokio_tungstenite::WebSoccketStream`] that implements
+    /// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite`.
+    /// 
+    /// The public APIs all internally call their equivalent in `tokio_tungstenite`. The only
+    /// difference is that the APIs will set "Sec-WebSocket-Protocol" HTTP header to "amqp"
+    #[derive(Debug)]
     pub struct WebSocketStream<S> {
         #[pin]
         inner: tokio_tungstenite::WebSocketStream<S>,
@@ -39,6 +50,8 @@ impl<S> From<tokio_tungstenite::WebSocketStream<S>> for WebSocketStream<S> {
 }
 
 impl WebSocketStream<MaybeTlsStream<TcpStream>> {
+    /// Calls `tokio_tungstenite::connect_async` internanly with `"Sec-WebSocket-Protocol"` HTTP
+    /// header of the `req` set to `"amqp"`
     pub async fn connect(
         req: impl IntoClientRequest,
     ) -> Result<(Self, Response), tungstenite::Error> {
@@ -47,6 +60,8 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
         Ok((Self::from(ws_stream), response))
     }
 
+    /// Calls `tokio_tungstenite::connect_async_with_config` internanly with
+    /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_with_config(
         req: impl IntoClientRequest,
         config: Option<WebSocketConfig>,
@@ -61,6 +76,8 @@ impl<S> WebSocketStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Calls `tokio_tungstenite::client_async` internanly with `"Sec-WebSocket-Protocol"` HTTP
+    /// header of the `req` set to `"amqp"`
     pub async fn connect_with_stream(
         req: impl IntoClientRequest,
         stream: S,
@@ -70,6 +87,8 @@ where
         Ok((Self::from(ws_stream), response))
     }
 
+    /// Calls `tokio_tungstenite::client_async_with_config` internanly with
+    /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_with_stream_and_config(
         req: impl IntoClientRequest,
         stream: S,
@@ -91,6 +110,8 @@ impl<S> WebSocketStream<MaybeTlsStream<S>>
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
+    /// Calls `tokio_tungstenite::client_async_tls` internanly with `"Sec-WebSocket-Protocol"` HTTP
+    /// header of the `req` set to `"amqp"`
     pub async fn connect_tls_with_stream(
         req: impl IntoClientRequest,
         stream: S,
@@ -100,6 +121,8 @@ where
         Ok((Self::from(ws_stream), response))
     }
 
+    /// Calls `tokio_tungstenite::client_async_tls_with_config` internanly with
+    /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_tls_with_stream_and_config(
         req: impl IntoClientRequest,
         stream: S,
@@ -121,6 +144,8 @@ where
     feature = "rustls-tls-webpki-roots"
 ))]
 impl WebSocketStream<MaybeTlsStream<TcpStream>> {
+    /// Calls `tokio_tungstenite::connect_async_tls_with_config` internanly with
+    /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_tls_with_config(
         req: impl IntoClientRequest,
         config: Option<WebSocketConfig>,
@@ -136,6 +161,8 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
 // Reference implementations:
 //
 // - `tokio-rw-stream-sink`
+// - `rw-stream-sink`
+// - `ws_stream_tungstenite`
 impl<S> AsyncRead for WebSocketStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
