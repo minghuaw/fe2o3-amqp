@@ -10,12 +10,15 @@ use tokio::{
     net::TcpStream,
 };
 use tokio_tungstenite::{
-    client_async, client_async_with_config, connect_async, connect_async_with_config,
+    client_async, client_async_with_config, connect_async, connect_async_with_config, Connector,
     MaybeTlsStream,
 };
 use tungstenite::{
-    client::IntoClientRequest, handshake::client::Response, http::HeaderValue,
-    protocol::WebSocketConfig, Message,
+    client::IntoClientRequest,
+    handshake::client::{Request, Response},
+    http::HeaderValue,
+    protocol::WebSocketConfig,
+    Message,
 };
 
 pin_project! {
@@ -39,17 +42,7 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
     pub async fn connect(
         req: impl IntoClientRequest,
     ) -> Result<(Self, Response), tungstenite::Error> {
-        let mut request = req.into_client_request()?;
-
-        // Sec-WebSocket-Protocol HTTP header
-        //
-        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
-        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
-        // or greater, with version negotiation as defined by AMQP 1.0.
-        request
-            .headers_mut()
-            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
-
+        let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = connect_async(request).await?;
         Ok((Self::from(ws_stream), response))
     }
@@ -58,17 +51,7 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
         req: impl IntoClientRequest,
         config: Option<WebSocketConfig>,
     ) -> Result<(Self, Response), tungstenite::Error> {
-        let mut request = req.into_client_request()?;
-
-        // Sec-WebSocket-Protocol HTTP header
-        //
-        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
-        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
-        // or greater, with version negotiation as defined by AMQP 1.0.
-        request
-            .headers_mut()
-            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
-
+        let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = connect_async_with_config(request, config).await?;
         Ok((Self::from(ws_stream), response))
     }
@@ -82,17 +65,7 @@ where
         req: impl IntoClientRequest,
         stream: S,
     ) -> Result<(Self, Response), tungstenite::Error> {
-        let mut request = req.into_client_request()?;
-
-        // Sec-WebSocket-Protocol HTTP header
-        //
-        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
-        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
-        // or greater, with version negotiation as defined by AMQP 1.0.
-        request
-            .headers_mut()
-            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
-
+        let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = client_async(request, stream).await?;
         Ok((Self::from(ws_stream), response))
     }
@@ -102,18 +75,60 @@ where
         stream: S,
         config: Option<WebSocketConfig>,
     ) -> Result<(Self, Response), tungstenite::Error> {
-        let mut request = req.into_client_request()?;
-
-        // Sec-WebSocket-Protocol HTTP header
-        //
-        // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
-        // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
-        // or greater, with version negotiation as defined by AMQP 1.0.
-        request
-            .headers_mut()
-            .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
-
+        let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = client_async_with_config(request, stream, config).await?;
+        Ok((Self::from(ws_stream), response))
+    }
+}
+
+#[cfg(any(
+    feature = "native-tls",
+    feature = "native-tls-vendored",
+    feature = "rustls-tls-native-roots",
+    feature = "rustls-tls-webpki-roots"
+))]
+impl<S> WebSocketStream<MaybeTlsStream<S>>
+where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+{
+    pub async fn connect_tls_with_stream(
+        req: impl IntoClientRequest,
+        stream: S,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let request = map_amqp_websocket_request(req)?;
+        let (ws_stream, response) = tokio_tungstenite::client_async_tls(request, stream).await?;
+        Ok((Self::from(ws_stream), response))
+    }
+
+    pub async fn connect_tls_with_stream_and_config(
+        req: impl IntoClientRequest,
+        stream: S,
+        config: Option<WebSocketConfig>,
+        connector: Option<Connector>,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let request = map_amqp_websocket_request(req)?;
+        let (ws_stream, response) =
+            tokio_tungstenite::client_async_tls_with_config(request, stream, config, connector)
+                .await?;
+        Ok((Self::from(ws_stream), response))
+    }
+}
+
+#[cfg(any(
+    feature = "native-tls",
+    feature = "native-tls-vendored",
+    feature = "rustls-tls-native-roots",
+    feature = "rustls-tls-webpki-roots"
+))]
+impl WebSocketStream<MaybeTlsStream<TcpStream>> {
+    pub async fn connect_tls_with_config(
+        req: impl IntoClientRequest,
+        config: Option<WebSocketConfig>,
+        connector: Option<Connector>,
+    ) -> Result<(Self, Response), tungstenite::Error> {
+        let request = map_amqp_websocket_request(req)?;
+        let (ws_stream, response) =
+            tokio_tungstenite::connect_async_tls_with_config(request, config, connector).await?;
         Ok((Self::from(ws_stream), response))
     }
 }
@@ -227,11 +242,17 @@ fn map_tungstenite_error(error: tungstenite::Error) -> io::Error {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
+fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, tungstenite::Error> {
+    let mut request = req.into_client_request()?;
+
+    // Sec-WebSocket-Protocol HTTP header
+    //
+    // Identifies the WebSocket subprotocol. For this AMQP WebSocket binding, the value MUST be
+    // set to the US- ASCII text string “amqp” which refers to the 1.0 version of the AMQP 1.0
+    // or greater, with version negotiation as defined by AMQP 1.0.
+    request
+        .headers_mut()
+        .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
+
+    Ok(request)
 }
