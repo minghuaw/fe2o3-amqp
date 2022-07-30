@@ -29,4 +29,5 @@ exclude = [
     "examples/txn_enabled_listener",
     "examples/txn_posting",
     "examples/txn_retirement",
+    "examples/websocket",
 ]
