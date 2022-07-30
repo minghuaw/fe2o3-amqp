@@ -5,8 +5,20 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = [
+    "tokio-net",
+    "tokio-rustls",
+    "tokio-native-tls",
+]
+
+tokio-net = ["tokio/net"]
+
 [dependencies]
 bytes = "1"
 futures-util = "0.3"
 tokio = { version = "1", features = ["time"] }
 async-trait = "0.1"
+
+tokio-rustls = { version = "0.23", optional = true }
+tokio-native-tls = { version = "0.3", optional = true }

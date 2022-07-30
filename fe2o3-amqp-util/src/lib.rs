@@ -4,6 +4,9 @@ use bytes::{buf, Buf};
 use futures_util::Future;
 use tokio::time::{Sleep, Instant};
 
+mod close;
+pub use close::*;
+
 type Payload = bytes::Bytes;
 
 #[derive(Debug)]
@@ -112,7 +115,7 @@ impl<'a> AsByteIterator<'a> for Vec<u8> {
 }
 
 impl IntoReader for Vec<Payload> {
-    type Reader = ByteReader<Payload>;
+    type Reader = ByteReader<Vec<Payload>>;
 
     fn into_reader(self) -> Self::Reader {
         ByteReader { inner: self }
@@ -130,10 +133,10 @@ impl<'a> AsByteIterator<'a> for Vec<Payload> {
 }
 
 pub struct ByteReader<T> {
-    inner: Vec<T>,
+    inner: T,
 }
 
-impl io::Read for ByteReader<Payload> {
+impl io::Read for ByteReader<Vec<Payload>> {
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
         let mut nbytes_read = 0;
 

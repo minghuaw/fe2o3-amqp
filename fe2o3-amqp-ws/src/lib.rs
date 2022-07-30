@@ -10,6 +10,8 @@ use std::{
     task::Poll,
 };
 
+use async_trait::async_trait;
+use fe2o3_amqp_util::Close;
 use futures_util::{ready, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::{
@@ -24,7 +26,7 @@ use tungstenite::{
     client::IntoClientRequest,
     handshake::client::{Request, Response},
     http::HeaderValue,
-    protocol::WebSocketConfig,
+    protocol::{WebSocketConfig, CloseFrame},
     Message,
 };
 
@@ -348,5 +350,18 @@ fn verify_response(response: Response) -> Result<Response, Error> {
     {
         "amqp" => Ok(response),
         _ => Err(Error::SecWebSocketProtocolIsNotAmqp),
+    }
+}
+
+#[async_trait]
+impl<S> Close for WebSocketStream<S> 
+where
+    S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
+{
+    type Message = CloseFrame<'static>;
+    type Error = tungstenite::Error;
+
+    async fn close_with_message(&mut self, message: Option<Self::Message>) -> Result<(), Self::Error> {
+        self.inner.close(message).await
     }
 }
