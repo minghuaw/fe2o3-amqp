@@ -1,3 +1,30 @@
+# fe2o3-amqp-ws
+
+WebSocket adapter for AMQP 1.0 websocket binding
+
+This provides a thin wrapper over `tokio_tungstenite::WebSocketStream`, and the wrapper
+performs the WebSocket handshake with the "Sec-WebSocket-Protocol" HTTP header set to "amqp".
+
+The wrapper type [`WebSocketStream`] could also be used for non-AMQP applications; however,
+the user should establish websocket stream with raw `tokio_tungstenite` API and then
+wrap the stream with the wrapper by `fe2o3_amqp_ws::WebSocketStream::from(ws_stream)`.
+
+## Feature flags
+
+```toml
+default = []
+```
+
+| Feature | Description |
+|---------|-------------|
+| `native-tls` | Enables "tokio-tungstenite/native-tls" |
+| `native-tls-vendored` | Enables "tokio-tungstenite/native-tls-vendored" |
+| `rustls-tls-native-roots` | Enables "tokio-tungstenite/rustls-tls-native-roots" |
+| `rustls-tls-webpki-roots` | Enables "tokio-tungstenite/rustls-tls-webpki-roots" |
+
+## Example
+
+```rust
 use fe2o3_amqp::{
     types::{messaging::Outcome, primitives::Value},
     Connection, Delivery, Receiver, Sender, Session,
@@ -36,3 +63,6 @@ async fn main() {
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }
+```
+
+License: MIT/Apache-2.0

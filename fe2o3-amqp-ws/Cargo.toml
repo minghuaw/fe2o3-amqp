@@ -2,13 +2,22 @@
 name = "fe2o3-amqp-ws"
 version = "0.1.0"
 edition = "2021"
+description = "WebSocket binding stream for AMQP1.0"
+license = "MIT/Apache-2.0"
+documentation = "https://docs.rs/fe2o3-amqp-ws/"
+homepage = "https://github.com/minghuaw/fe2o3-amqp"
+repository = "https://github.com/minghuaw/fe2o3-amqp"
+keywords = ["websocket", "tokio"]
+readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
-default = [
-    "native-tls"
-]
+default = []
 
 native-tls = ["tokio-tungstenite/native-tls"]
 native-tls-vendored = ["tokio-tungstenite/native-tls-vendored"]
