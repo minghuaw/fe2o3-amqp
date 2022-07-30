@@ -59,9 +59,14 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
     /// header of the `req` set to `"amqp"`
     pub async fn connect(req: impl IntoClientRequest) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) = connect_async(request).await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        let (mut ws_stream, response) = connect_async(request).await?;
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 
     /// Calls `tokio_tungstenite::connect_async_with_config` internanly with
@@ -71,9 +76,14 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
         config: Option<WebSocketConfig>,
     ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) = connect_async_with_config(request, config).await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        let (mut ws_stream, response) = connect_async_with_config(request, config).await?;
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 }
 
@@ -88,9 +98,14 @@ where
         stream: S,
     ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) = client_async(request, stream).await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        let (mut ws_stream, response) = client_async(request, stream).await?;
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 
     /// Calls `tokio_tungstenite::client_async_with_config` internanly with
@@ -101,9 +116,14 @@ where
         config: Option<WebSocketConfig>,
     ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) = client_async_with_config(request, stream, config).await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        let (mut ws_stream, response) = client_async_with_config(request, stream, config).await?;
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 }
 
@@ -124,9 +144,15 @@ where
         stream: S,
     ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) = tokio_tungstenite::client_async_tls(request, stream).await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        let (mut ws_stream, response) =
+            tokio_tungstenite::client_async_tls(request, stream).await?;
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 
     /// Calls `tokio_tungstenite::client_async_tls_with_config` internanly with
@@ -138,11 +164,16 @@ where
         connector: Option<Connector>,
     ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) =
+        let (mut ws_stream, response) =
             tokio_tungstenite::client_async_tls_with_config(request, stream, config, connector)
                 .await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 }
 
@@ -161,10 +192,15 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
         connector: Option<Connector>,
     ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
-        let (ws_stream, response) =
+        let (mut ws_stream, response) =
             tokio_tungstenite::connect_async_tls_with_config(request, config, connector).await?;
-        let response = verify_response(response)?;
-        Ok((Self::from(ws_stream), response))
+        match verify_response(response) {
+            Ok(response) => Ok((Self::from(ws_stream), response)),
+            Err(error) => {
+                ws_stream.close(None).await?;
+                Err(error)
+            }
+        }
     }
 }
 
