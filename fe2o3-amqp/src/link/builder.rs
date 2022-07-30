@@ -8,6 +8,7 @@ use fe2o3_amqp_types::{
     primitives::{Symbol, ULong},
 };
 use tokio::sync::{mpsc, Notify, RwLock};
+use tracing::instrument;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
@@ -437,6 +438,7 @@ impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
+    #[instrument(skip(self, session))]
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,
@@ -492,8 +494,12 @@ where
             .exchange_attach(&session.outgoing, &mut incoming_rx, &session.control, false)
             .await
         {
-            Ok(outcome) => outcome.complete_or(SenderAttachError::IllegalState)?,
+            Ok(exchange) => {
+                tracing::debug!(?exchange);
+                exchange.complete_or(SenderAttachError::IllegalState)?
+            },
             Err(attach_error) => {
+                tracing::error!(?attach_error);
                 let err = link
                     .handle_attach_error(
                         attach_error,
@@ -532,6 +538,7 @@ impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
+    #[instrument(skip(self, session))]
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,

@@ -428,22 +428,33 @@ impl<T> SenderLink<T> {
         let mut guard = self.unsettled.write().await;
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
             (None, None) => return Ok(SenderAttachExchange::Complete),
-            (None, Some(remote_map)) => remote_map
-                .into_keys()
-                .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
-                .collect(),
-            (Some(map), None) => {
-                if map.is_empty() {
+            (None, Some(remote_map)) => {
+                if remote_map.is_empty() {
                     return Ok(SenderAttachExchange::Complete);
-                } else {
-                    map.into_iter()
-                        .filter_map(|(tag, local)| {
-                            resume_delivery(local, None).map(|resume| (tag, resume))
-                        })
-                        .collect()
                 }
+
+                remote_map
+                    .into_keys()
+                    .map(|delivery_tag| (delivery_tag, ResumingDelivery::Abort))
+                    .collect()
+            }
+            (Some(local_map), None) => {
+                if local_map.is_empty() {
+                    return Ok(SenderAttachExchange::Complete);
+                }
+
+                local_map
+                    .into_iter()
+                    .filter_map(|(tag, local)| {
+                        resume_delivery(local, None).map(|resume| (tag, resume))
+                    })
+                    .collect()
             }
             (Some(local_map), Some(mut remote_map)) => {
+                if local_map.is_empty() && remote_map.is_empty() {
+                    return Ok(SenderAttachExchange::Complete);
+                }
+
                 let local: Vec<(DeliveryTag, ResumingDelivery)> = local_map
                     .into_iter()
                     .filter_map(|(tag, local)| {

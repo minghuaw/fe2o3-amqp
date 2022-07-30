@@ -138,11 +138,11 @@ where
         // Set heartbeat here because in pipelined-open, the Open frame
         // may be recved after mux loop is started
         match &remote_idle_timeout {
+            Some(0) | None => engine.heartbeat = HeartBeat::never(),
             Some(millis) => {
                 let period = Duration::from_millis(*millis as u64);
                 engine.heartbeat = HeartBeat::new(period);
             }
-            None => engine.heartbeat = HeartBeat::never(),
         };
 
         Ok(engine)
