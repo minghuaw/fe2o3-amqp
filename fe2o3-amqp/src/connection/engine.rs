@@ -138,11 +138,11 @@ where
         // Set heartbeat here because in pipelined-open, the Open frame
         // may be recved after mux loop is started
         match &remote_idle_timeout {
+            Some(0) | None => engine.heartbeat = HeartBeat::never(),
             Some(millis) => {
                 let period = Duration::from_millis(*millis as u64);
                 engine.heartbeat = HeartBeat::new(period);
             }
-            None => engine.heartbeat = HeartBeat::never(),
         };
 
         Ok(engine)
@@ -488,9 +488,11 @@ where
         // at which point the receiver can be dropped.
         self.control.close();
         self.outgoing_session_frames.close();
+        let close = self.transport.close().await
+            .map_err(Into::into);
 
         debug!("Stopped");
 
-        outcome
+        outcome.and(close)
     }
 }

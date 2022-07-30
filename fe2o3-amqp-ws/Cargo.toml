@@ -2,7 +2,33 @@
 name = "fe2o3-amqp-ws"
 version = "0.1.0"
 edition = "2021"
+description = "WebSocket binding stream for AMQP1.0"
+license = "MIT/Apache-2.0"
+documentation = "https://docs.rs/fe2o3-amqp-ws/"
+homepage = "https://github.com/minghuaw/fe2o3-amqp"
+repository = "https://github.com/minghuaw/fe2o3-amqp"
+keywords = ["websocket", "tokio"]
+readme = "Readme.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = []
+
+native-tls = ["tokio-tungstenite/native-tls"]
+native-tls-vendored = ["tokio-tungstenite/native-tls-vendored"]
+rustls-tls-native-roots = ["tokio-tungstenite/rustls-tls-native-roots"]
+rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
+
 [dependencies]
+futures-util = "0.3.21"
+pin-project-lite = "0.2.9"
+tokio = "1.20.1"
+tokio-tungstenite = "0.17.2"
+tungstenite = "0.17.3"
+http = "0.2"
+thiserror = "1"
