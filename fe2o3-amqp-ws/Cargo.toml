@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-ws"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "WebSocket binding stream for AMQP1.0"
 license = "MIT/Apache-2.0"
@@ -25,10 +25,10 @@ rustls-tls-native-roots = ["tokio-tungstenite/rustls-tls-native-roots"]
 rustls-tls-webpki-roots = ["tokio-tungstenite/rustls-tls-webpki-roots"]
 
 [dependencies]
-futures-util = "0.3.21"
-pin-project-lite = "0.2.9"
-tokio = "1.20.1"
-tokio-tungstenite = "0.17.2"
-tungstenite = "0.17.3"
+futures-util = "0.3"
+pin-project-lite = "0.2"
+tokio = "1"
+tokio-tungstenite = "0.17"
+tungstenite = "0.17"
 http = "0.2"
 thiserror = "1"

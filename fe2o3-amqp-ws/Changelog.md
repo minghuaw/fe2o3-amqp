@@ -1,5 +1,9 @@
 # fe2o3-amqp-ws
 
+## 0.1.2
+
+1. Relaxed dependency versions
+
 ## 0.1.1
 
 1. Fixed typo in docs
