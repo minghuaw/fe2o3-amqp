@@ -3,7 +3,7 @@ use futures_util::{AsyncRead, AsyncWrite};
 use tokio::{net::TcpStream, io::BufStream};
 
 #[async_trait]
-pub trait Close: Send + Sync + Unpin {
+pub trait AsyncClose: Send + Sync + Unpin {
     type Message: Send;
     type Error;
 
@@ -14,7 +14,7 @@ pub trait Close: Send + Sync + Unpin {
 }
 
 #[async_trait]
-impl<S> Close for BufStream<S> 
+impl<S> AsyncClose for BufStream<S> 
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
 {
@@ -28,7 +28,7 @@ where
 
 #[cfg(feature = "tokio-net")]
 #[async_trait]
-impl Close for TcpStream {
+impl AsyncClose for TcpStream {
     type Message = ();
     type Error = ();
 
@@ -39,7 +39,7 @@ impl Close for TcpStream {
 
 #[cfg(feature = "tokio-rustls")]
 #[async_trait]
-impl<S> Close for tokio_rustls::TlsStream<S> 
+impl<S> AsyncClose for tokio_rustls::TlsStream<S> 
 where
     S: Send + Sync + Unpin,
 {
@@ -53,7 +53,7 @@ where
 
 #[cfg(feature = "tokio-native-tls")]
 #[async_trait]
-impl<S> Close for tokio_native_tls::TlsStream<S> 
+impl<S> AsyncClose for tokio_native_tls::TlsStream<S> 
 where
     S: Send + Sync + Unpin,
 {

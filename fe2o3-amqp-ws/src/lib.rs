@@ -11,7 +11,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use fe2o3_amqp_util::Close;
+use fe2o3_amqp_util::AsyncClose;
 use futures_util::{ready, Sink, Stream};
 use pin_project_lite::pin_project;
 use tokio::{
@@ -354,7 +354,7 @@ fn verify_response(response: Response) -> Result<Response, Error> {
 }
 
 #[async_trait]
-impl<S> Close for WebSocketStream<S> 
+impl<S> AsyncClose for WebSocketStream<S> 
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
 {
