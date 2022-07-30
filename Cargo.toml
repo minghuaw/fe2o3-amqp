@@ -6,6 +6,7 @@ members = [
     "fe2o3-amqp-ext",
     "fe2o3-amqp-types", 
     "fe2o3-amqp-ws",
+    "fe2o3-amqp-util",
 ]
 
 exclude = [
@@ -29,4 +30,5 @@ exclude = [
     "examples/txn_enabled_listener",
     "examples/txn_posting",
     "examples/txn_retirement",
+    "examples/websocket",
 ]
