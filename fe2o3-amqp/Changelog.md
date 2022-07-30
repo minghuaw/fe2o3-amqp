@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.7
+
+1. Fixed a bug where sender would attempt to resume delivery when remote attach carries a non-null but empty unsettled map and thus resulting in `IllegalState` error
+2. The connection engine will call `SinkExt::close` on the transport when stopping
+
 ## 0.2.6
 
 1. Only override connection builder's hostname and domain if valid values are found in url.

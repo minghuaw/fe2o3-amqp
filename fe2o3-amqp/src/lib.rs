@@ -156,6 +156,7 @@
 //! - [x] Link resumption
 //! - [x] Dynamic link
 //! - [x] Dispose multiple deliveries
+//! - [x] WebSocket binding [`fe2o3-amqp-ws`]()
 //! - [ ] Pipelined open
 //! - [ ] SASL SCRAM-SHA1
 //!   - [ ] acceptor
