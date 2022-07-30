@@ -24,7 +24,8 @@ use crate::{
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
         IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
-    util::{DeliveryInfo, Running},
+    Running,
+    types_ext::DeliveryInfo,
     Delivery,
 };
 

@@ -18,7 +18,7 @@ use crate::{
         LinkRelay, SenderAttachError, SenderLink,
     },
     session::SessionHandle,
-    util::{Consumer, Producer},
+    sync::{Consumer, Producer},
     Sender,
 };
 

@@ -14,7 +14,7 @@ use crate::{
     control::{ConnectionControl, SessionControl},
     endpoint::{self, IncomingChannel, Session},
     link::LinkFrame,
-    util::Running,
+    Running,
 };
 
 use super::{

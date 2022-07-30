@@ -27,7 +27,8 @@ use crate::{
     control::SessionControl,
     endpoint::{self, InputHandle, LinkAttach, LinkDetach, LinkFlow, OutputHandle, Settlement},
     link::delivery::UnsettledMessage,
-    util::{AsDeliveryState, Consumer, Produce, Producer},
+    sync::{Consumer, Produce, Producer},
+    types_ext::AsDeliveryState,
     Payload,
 };
 
@@ -862,7 +863,7 @@ mod tests {
 
         use super::*;
         use crate::endpoint::OutputHandle;
-        use crate::util::{Produce, Producer};
+        use crate::sync::{Produce, Producer};
 
         let notifier = Arc::new(Notify::new());
         let state = LinkFlowState::sender(LinkFlowStateInner {

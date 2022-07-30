@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},
-    util::{Consume, ProducerState, TryConsume},
+    sync::{Consume, ProducerState, TryConsume},
 };
 
 use super::{role, ReceiverTransferError, SenderFlowState, SenderTryConsumeError};

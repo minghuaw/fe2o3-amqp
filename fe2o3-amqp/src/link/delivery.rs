@@ -15,9 +15,9 @@ use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{
     endpoint::Settlement,
-    util::{DeliveryInfo, Uninitialized},
+    util::{Uninitialized}, types_ext::DeliveryInfo,
 };
-use crate::{util::AsDeliveryState, Payload};
+use crate::{types_ext::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
 

@@ -21,7 +21,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    util::DeliveryInfo,
+    types_ext::DeliveryInfo,
     Payload,
 };
 

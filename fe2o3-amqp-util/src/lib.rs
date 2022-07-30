@@ -4,18 +4,7 @@ use bytes::{buf, Buf};
 use futures_util::Future;
 use tokio::time::{Sleep, Instant};
 
-mod consumer;
-mod producer;
-pub use consumer::*;
-pub use producer::*;
-
 type Payload = bytes::Bytes;
-
-#[derive(Debug)]
-pub enum Running {
-    Continue,
-    Stop,
-}
 
 #[derive(Debug)]
 pub struct IdleTimeout {
@@ -78,13 +67,13 @@ pub struct Uninitialized {}
 #[derive(Debug)]
 pub struct Initialized {}
 
-pub(crate) trait AsByteIterator<'a> {
+pub trait AsByteIterator<'a> {
     type IterImpl: Iterator<Item = &'a u8> + ExactSizeIterator + DoubleEndedIterator;
 
     fn as_byte_iterator(&'a self) -> Self::IterImpl;
 }
 
-pub(crate) trait IntoReader {
+pub trait IntoReader {
     type Reader: io::Read;
 
     fn into_reader(self) -> Self::Reader;
@@ -140,7 +129,7 @@ impl<'a> AsByteIterator<'a> for Vec<Payload> {
     }
 }
 
-pub(crate) struct ByteReader<T> {
+pub struct ByteReader<T> {
     inner: Vec<T>,
 }
 
@@ -165,7 +154,7 @@ impl io::Read for ByteReader<Payload> {
     }
 }
 
-pub(crate) struct ByteReaderIter<'a> {
+pub struct ByteReaderIter<'a> {
     pub inner: Vec<Iter<'a, u8>>,
 }
 

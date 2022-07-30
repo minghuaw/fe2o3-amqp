@@ -121,7 +121,7 @@ where
         Fut: Future<Output = Option<LinkFrame>> + Send,
     {
         use crate::endpoint::LinkDetach;
-        use crate::util::Consume;
+        use crate::sync::Consume;
 
         let tag = tokio::select! {
             tag = self.flow_state.consume(1) => {

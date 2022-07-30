@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{AsByteIterator, DeliveryInfo, IntoReader};
+use crate::{util::{AsByteIterator, IntoReader}, types_ext::DeliveryInfo};
 
 use super::*;
 

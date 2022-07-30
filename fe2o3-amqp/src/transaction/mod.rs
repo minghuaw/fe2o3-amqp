@@ -32,7 +32,7 @@ use crate::{
         delivery::{DeliveryFut, UnsettledMessage},
         DispositionError, FlowError, LinkFrame,
     },
-    util::TryConsume,
+    sync::TryConsume,
     Delivery, Receiver, Sendable, Sender,
 };
 use async_trait::async_trait;

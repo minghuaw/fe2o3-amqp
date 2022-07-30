@@ -16,7 +16,7 @@ use crate::endpoint::{IncomingChannel, OutgoingChannel};
 use crate::frames::amqp::{self, Frame, FrameBody};
 use crate::session::frame::{SessionFrame, SessionFrameBody};
 use crate::transport::Transport;
-use crate::util::Running;
+use crate::Running;
 use crate::{endpoint, transport};
 
 use super::{heartbeat::HeartBeat, ConnectionState, Error};

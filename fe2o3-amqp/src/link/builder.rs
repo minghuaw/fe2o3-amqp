@@ -14,7 +14,7 @@ use crate::{
     endpoint::{LinkExt, OutputHandle},
     link::{Link, LinkIncomingItem, LinkRelay},
     session::{self, SessionHandle},
-    util::{Consumer, Producer},
+    sync::{Consumer, Producer},
 };
 
 use super::{

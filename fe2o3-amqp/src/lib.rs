@@ -160,9 +160,6 @@
 //! - [ ] SASL SCRAM-SHA1
 //!   - [ ] acceptor
 
-pub(crate) mod control;
-pub(crate) mod util;
-
 pub mod connection;
 pub mod endpoint;
 pub mod frames;
@@ -179,10 +176,7 @@ pub mod acceptor;
 #[cfg(feature = "transaction")]
 pub mod transaction;
 
-pub mod types {
-    //! Re-exporting `fe2o3-amqp-types`
-    pub use fe2o3_amqp_types::*;
-}
+pub use fe2o3_amqp_types as types;
 
 pub use connection::Connection;
 pub use link::{
@@ -191,4 +185,16 @@ pub use link::{
 };
 pub use session::Session;
 
+use fe2o3_amqp_util as util;
+
+pub(crate) mod control;
+pub(crate) mod types_ext;
+pub(crate) mod sync;
+
 type Payload = bytes::Bytes;
+
+#[derive(Debug)]
+pub(crate) enum Running {
+    Continue,
+    Stop,
+}
