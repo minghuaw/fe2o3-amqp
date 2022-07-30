@@ -110,6 +110,32 @@ pin_project! {
     /// If the Client does not receive a response with HTTP status code 101 and an HTTP
     /// Sec-WebSocket-Protocol equal to the US-ASCII text string "amqp" then the Client MUST close
     /// the socket connection
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::{
+    ///     types::{messaging::Outcome, primitives::Value},
+    ///     Connection, Delivery, Receiver, Sender, Session,
+    /// };
+    /// use fe2o3_amqp_ws::WebSocketStream;
+    /// 
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
+    ///         .await
+    ///         .unwrap();
+    ///     let mut connection = Connection::builder()
+    ///         .container_id("connection-1")
+    ///         .open_with_stream(ws_stream)
+    ///         .await
+    ///         .unwrap();
+    /// 
+    ///     // ...
+    /// 
+    ///     connection.close().await.unwrap();
+    /// }
+    /// ```
     #[derive(Debug)]
     pub struct WebSocketStream<S> {
         #[pin]
@@ -128,7 +154,7 @@ impl<S> From<tokio_tungstenite::WebSocketStream<S>> for WebSocketStream<S> {
 }
 
 impl WebSocketStream<MaybeTlsStream<TcpStream>> {
-    /// Calls `tokio_tungstenite::connect_async` internanly with `"Sec-WebSocket-Protocol"` HTTP
+    /// Calls [`tokio_tungstenite::connect_async`] internally with `"Sec-WebSocket-Protocol"` HTTP
     /// header of the `req` set to `"amqp"`
     pub async fn connect(req: impl IntoClientRequest) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
@@ -142,7 +168,7 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
         }
     }
 
-    /// Calls `tokio_tungstenite::connect_async_with_config` internanly with
+    /// Calls [`tokio_tungstenite::connect_async_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_with_config(
         req: impl IntoClientRequest,
@@ -164,7 +190,7 @@ impl<S> WebSocketStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Calls `tokio_tungstenite::client_async` internanly with `"Sec-WebSocket-Protocol"` HTTP
+    /// Calls [`tokio_tungstenite::client_async`] internally with `"Sec-WebSocket-Protocol"` HTTP
     /// header of the `req` set to `"amqp"`
     pub async fn connect_with_stream(
         req: impl IntoClientRequest,
@@ -181,7 +207,7 @@ where
         }
     }
 
-    /// Calls `tokio_tungstenite::client_async_with_config` internanly with
+    /// Calls [`tokio_tungstenite::client_async_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_with_stream_and_config(
         req: impl IntoClientRequest,
@@ -216,7 +242,7 @@ impl<S> WebSocketStream<MaybeTlsStream<S>>
 where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
 {
-    /// Calls `tokio_tungstenite::client_async_tls` internanly with `"Sec-WebSocket-Protocol"` HTTP
+    /// Calls [`tokio_tungstenite::client_async_tls`] internally with `"Sec-WebSocket-Protocol"` HTTP
     /// header of the `req` set to `"amqp"`
     pub async fn connect_tls_with_stream(
         req: impl IntoClientRequest,
@@ -234,7 +260,7 @@ where
         }
     }
 
-    /// Calls `tokio_tungstenite::client_async_tls_with_config` internanly with
+    /// Calls [`tokio_tungstenite::client_async_tls_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_tls_with_stream_and_config(
         req: impl IntoClientRequest,
@@ -269,7 +295,7 @@ where
     feature = "rustls-tls-webpki-roots"
 ))]
 impl WebSocketStream<MaybeTlsStream<TcpStream>> {
-    /// Calls `tokio_tungstenite::connect_async_tls_with_config` internanly with
+    /// Calls [`tokio_tungstenite::connect_async_tls_with_config`] internally with
     /// `"Sec-WebSocket-Protocol"` HTTP header of the `req` set to `"amqp"`
     pub async fn connect_tls_with_config(
         req: impl IntoClientRequest,
