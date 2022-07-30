@@ -3,6 +3,8 @@
 
 //! WebSocket adapter for AMQP 1.0 websocket binding
 
+const SEC_WEBSOCKET_PROTOCOL: &str = "Sec-WebSocket-Protocol";
+
 use std::{
     io::{self, Cursor, Read},
     task::Poll,
@@ -26,10 +28,13 @@ use tungstenite::{
     Message,
 };
 
+mod error;
+pub use error::Error;
+
 pin_project! {
     /// A wrapper over [`tokio_tungstenite::WebSoccketStream`] that implements
     /// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite`.
-    /// 
+    ///
     /// The public APIs all internally call their equivalent in `tokio_tungstenite`. The only
     /// difference is that the APIs will set "Sec-WebSocket-Protocol" HTTP header to "amqp"
     #[derive(Debug)]
@@ -52,11 +57,10 @@ impl<S> From<tokio_tungstenite::WebSocketStream<S>> for WebSocketStream<S> {
 impl WebSocketStream<MaybeTlsStream<TcpStream>> {
     /// Calls `tokio_tungstenite::connect_async` internanly with `"Sec-WebSocket-Protocol"` HTTP
     /// header of the `req` set to `"amqp"`
-    pub async fn connect(
-        req: impl IntoClientRequest,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    pub async fn connect(req: impl IntoClientRequest) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = connect_async(request).await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 
@@ -65,9 +69,10 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
     pub async fn connect_with_config(
         req: impl IntoClientRequest,
         config: Option<WebSocketConfig>,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = connect_async_with_config(request, config).await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 }
@@ -81,9 +86,10 @@ where
     pub async fn connect_with_stream(
         req: impl IntoClientRequest,
         stream: S,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = client_async(request, stream).await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 
@@ -93,9 +99,10 @@ where
         req: impl IntoClientRequest,
         stream: S,
         config: Option<WebSocketConfig>,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = client_async_with_config(request, stream, config).await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 }
@@ -115,9 +122,10 @@ where
     pub async fn connect_tls_with_stream(
         req: impl IntoClientRequest,
         stream: S,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) = tokio_tungstenite::client_async_tls(request, stream).await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 
@@ -128,11 +136,12 @@ where
         stream: S,
         config: Option<WebSocketConfig>,
         connector: Option<Connector>,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) =
             tokio_tungstenite::client_async_tls_with_config(request, stream, config, connector)
                 .await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 }
@@ -150,10 +159,11 @@ impl WebSocketStream<MaybeTlsStream<TcpStream>> {
         req: impl IntoClientRequest,
         config: Option<WebSocketConfig>,
         connector: Option<Connector>,
-    ) -> Result<(Self, Response), tungstenite::Error> {
+    ) -> Result<(Self, Response), Error> {
         let request = map_amqp_websocket_request(req)?;
         let (ws_stream, response) =
             tokio_tungstenite::connect_async_tls_with_config(request, config, connector).await?;
+        let response = verify_response(response)?;
         Ok((Self::from(ws_stream), response))
     }
 }
@@ -279,7 +289,28 @@ fn map_amqp_websocket_request(req: impl IntoClientRequest) -> Result<Request, tu
     // or greater, with version negotiation as defined by AMQP 1.0.
     request
         .headers_mut()
-        .insert("Sec-WebSocket-Protocol", HeaderValue::from_static("amqp"));
+        .insert(SEC_WEBSOCKET_PROTOCOL, HeaderValue::from_static("amqp"));
 
     Ok(request)
+}
+
+fn verify_response(response: Response) -> Result<Response, Error> {
+    use http::StatusCode;
+
+    // If the Client does not receive a response with HTTP status code 101 and an HTTP
+    // Sec-WebSocket-Protocol equal to the US-ASCII text string “amqp” then the Client MUST close
+    // the socket connection
+    if response.status() != StatusCode::SWITCHING_PROTOCOLS {
+        return Err(Error::StatucCodeIsNotSwitchingProtocols);
+    }
+
+    match response
+        .headers()
+        .get(SEC_WEBSOCKET_PROTOCOL)
+        .map(|val| val.to_str())
+        .ok_or(Error::MissingSecWebSocketProtocol)??
+    {
+        "amqp" => Ok(response),
+        _ => Err(Error::SecWebSocketProtocolIsNotAmqp),
+    }
 }
