@@ -21,6 +21,7 @@ default = []
 
 1. [Client](#client)
 2. [Listener](#listener)
+3. [WebSocket binding](#websocket)
 
 ### Client
 
@@ -115,6 +116,34 @@ async fn main() {
 }
 ```
 
+### WebSocket
+
+[`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws) is needed for WebSocket binding
+
+```rust
+use fe2o3_amqp::{
+    types::{messaging::Outcome, primitives::Value},
+    Connection, Delivery, Receiver, Sender, Session,
+};
+use fe2o3_amqp_ws::WebSocketStream;
+
+#[tokio::main]
+async fn main() {
+    let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
+        .await
+        .unwrap();
+    let mut connection = Connection::builder()
+        .container_id("connection-1")
+        .open_with_stream(ws_stream)
+        .await
+        .unwrap();
+
+    // ...
+
+    connection.close().await.unwrap();
+}
+```
+
 ## More examples
 
 More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/).
@@ -129,6 +158,7 @@ Please note that most examples requires a local broker running. One broker that 
 |`fe2o3-amqp-types`| AMQP1.0 data types |
 |`fe2o3-amqp`| Implementation of AMQP1.0 `Connection`, `Session`, and `Link` |
 |`fe2o3-amqp-ext`| Extension types and implementations |
+|`fe2o3-amqp-ws` | WebSocket binding for `fe2o3-amqp` transport |
 
 ### Road map
 
@@ -155,6 +185,7 @@ The items below are listed in the order of priority.
 - [x] Link resumption
 - [x] Dynamic link
 - [x] Dispose multiple deliveries
+- [x] WebSocket binding [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws)
 - [ ] Pipelined open
 - [ ] SASL SCRAM-SHA1
   - [ ] acceptor

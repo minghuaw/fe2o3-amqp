@@ -36,6 +36,12 @@ The examples below are individual examples which you need to `cd` into the corre
 |[owned_txn_retirement](./owned_txn_retirement)|Transactional retirement with an implicit control link|
 |[txn_enabled_listener](./txn_enabled_listener/)|Allow handling remotely initated transaction on the listener|
 
+## WebSocket binding
+
+| Name | Description |
+|------|-------------|
+|[websocket](./websocket/)AMQP 1.0 over websocket |
+
 ## More examples coming
 
 - TLS layer with rustls on listner
