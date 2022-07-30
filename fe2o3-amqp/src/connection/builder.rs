@@ -7,6 +7,7 @@ use fe2o3_amqp_types::{
     performatives::{ChannelMax, MaxFrameSize, Open},
     sasl::SaslCode,
 };
+use fe2o3_amqp_util::AsyncClose;
 use futures_util::{SinkExt, StreamExt};
 use serde_amqp::primitives::Symbol;
 use tokio::{
@@ -569,7 +570,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         stream: Io,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     {
         match self.sasl_profile.take() {
             Some(profile) => {
@@ -600,7 +601,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     {
         // Exchange AMQP headers
         let mut local_state = ConnectionState::Start;
@@ -641,7 +642,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         stream: Io,
     ) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     {
         let (reader, writer) = tokio::io::split(stream);
         let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
@@ -784,7 +785,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     #[allow(unreachable_code)]
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
@@ -959,7 +960,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     /// `tokio_rustls::TlsConnector`.
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
@@ -1075,7 +1076,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     /// `tokio_rustls::TlsConnector`.
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+        Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,

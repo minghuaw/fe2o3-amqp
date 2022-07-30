@@ -1,5 +1,7 @@
+use std::convert::Infallible;
+
 use async_trait::async_trait;
-use futures_util::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::{net::TcpStream, io::BufStream};
 
 #[async_trait]
@@ -19,7 +21,7 @@ where
     S: AsyncRead + AsyncWrite + Send + Sync + Unpin,
 {
     type Message = ();
-    type Error = ();
+    type Error = Infallible;
 
     async fn close_with_message(&mut self, _: Option<Self::Message>) -> Result<(), Self::Error> {
         Ok(())
@@ -30,7 +32,7 @@ where
 #[async_trait]
 impl AsyncClose for TcpStream {
     type Message = ();
-    type Error = ();
+    type Error = Infallible;
 
     async fn close_with_message(&mut self, _: Option<Self::Message>) -> Result<(), Self::Error> {
         Ok(())
@@ -44,7 +46,35 @@ where
     S: Send + Sync + Unpin,
 {
     type Message = ();
-    type Error = ();
+    type Error = Infallible;
+
+    async fn close_with_message(&mut self, _: Option<Self::Message>) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "tokio-rustls")]
+#[async_trait]
+impl<S> AsyncClose for tokio_rustls::client::TlsStream<S> 
+where
+    S: Send + Sync + Unpin,
+{
+    type Message = ();
+    type Error = Infallible;
+
+    async fn close_with_message(&mut self, _: Option<Self::Message>) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "tokio-rustls")]
+#[async_trait]
+impl<S> AsyncClose for tokio_rustls::server::TlsStream<S> 
+where
+    S: Send + Sync + Unpin,
+{
+    type Message = ();
+    type Error = Infallible;
 
     async fn close_with_message(&mut self, _: Option<Self::Message>) -> Result<(), Self::Error> {
         Ok(())
@@ -58,7 +88,7 @@ where
     S: Send + Sync + Unpin,
 {
     type Message = ();
-    type Error = ();
+    type Error = Infallible;
 
     async fn close_with_message(&mut self, _: Option<Self::Message>) -> Result<(), Self::Error> {
         Ok(())

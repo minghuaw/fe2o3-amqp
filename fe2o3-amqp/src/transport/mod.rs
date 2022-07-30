@@ -14,6 +14,7 @@ use fe2o3_amqp_types::{
     definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
+use fe2o3_amqp_util::AsyncClose;
 use tracing::{event, instrument, span, trace, Level};
 
 /* -------------------------------- Transport ------------------------------- */
@@ -584,6 +585,24 @@ where
             },
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+impl<Io, Ftype> Transport<Io, Ftype> 
+where
+    Io: AsyncClose,
+    Error: From<<Io as AsyncClose>::Error>,
+{
+    /// Closes the transport
+    /// 
+    /// This should only be called after connection is closed. The internal
+    /// buffer will be dropped, and any unprocessed data will be dropped as well
+    pub async fn close(self) -> Result<(), Error> {
+        let read_half = self.framed_read.into_inner();
+        let write_half = self.framed_write.into_inner();
+        let mut stream = read_half.unsplit(write_half);
+        stream.close().await?;
+        Ok(())
     }
 }
 

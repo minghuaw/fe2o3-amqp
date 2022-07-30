@@ -5,6 +5,7 @@ use std::io;
 use std::time::Duration;
 
 use fe2o3_amqp_types::definitions::{self, AmqpError};
+use fe2o3_amqp_util::AsyncClose;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
@@ -33,7 +34,7 @@ pub(crate) struct ConnectionEngine<Io, C> {
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin + 'static,
     C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
@@ -155,7 +156,7 @@ where
 
 impl<Io, C> ConnectionEngine<Io, C>
 where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin,
+    Io: AsyncRead + AsyncWrite + AsyncClose + std::fmt::Debug + Send + Unpin,
     C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
     C::Error: Into<Error> + From<transport::Error>,
     C::AllocError: Into<AllocSessionError>,
@@ -488,9 +489,10 @@ where
         // at which point the receiver can be dropped.
         self.control.close();
         self.outgoing_session_frames.close();
-
+        let close_result = self.transport.close().await
+            .map_err(Into::into);
         debug!("Stopped");
 
-        outcome
+        outcome.and(close_result)
     }
 }

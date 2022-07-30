@@ -33,7 +33,6 @@ impl Future for IdleTimeout {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         self.delay.as_mut().poll(cx)
-        // .map(|_| IdleTimeoutElapsed {  } )
     }
 }
 
