@@ -1,5 +1,6 @@
 use dotenv::dotenv;
 use fe2o3_amqp::Receiver;
+use fe2o3_amqp::types::primitives::Value;
 use std::env;
 use std::sync::Arc;
 
@@ -18,7 +19,7 @@ async fn main() {
     dotenv().ok();
 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::DEBUG)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
@@ -56,18 +57,18 @@ async fn main() {
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    // let mut sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
-    //     .await
-    //     .unwrap();
+    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
+        .await
+        .unwrap();
 
-    // let outcome = sender.send("hello AMQP").await.unwrap();
-    // outcome.accepted_or_else(|outcome| outcome).unwrap();
-    // sender.close().await.unwrap();
+    let outcome = sender.send("hello AMQP").await.unwrap();
+    outcome.accepted_or_else(|outcome| outcome).unwrap();
+    sender.close().await.unwrap();
 
     let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
-    let delivery = receiver.recv::<String>().await.unwrap();
+    let delivery = receiver.recv::<Value>().await.unwrap();
     println!("Received: {:?}", delivery);
     receiver.accept(&delivery).await.unwrap();
     receiver.close().await.unwrap();
