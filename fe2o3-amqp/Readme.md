@@ -23,10 +23,11 @@ default = []
 2. [Listener](#listener)
 3. [WebSocket binding](#websocket)
 
+More examples including one showing how to use it with Azure Serivce Bus can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples).
+
 ### Client
 
-Below is an example with a local broker (
-[`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
+Below is an example with a local broker ([`TestAmqpBroker`](https://github.com/Azure/amqpnetlite/releases/download/test_broker.1609/TestAmqpBroker.zip))
 listening on the localhost. The broker is executed with the following command
 
 ```powershell
@@ -65,25 +66,19 @@ async fn main() {
     let outcome: Outcome = sender.send("hello AMQP").await.unwrap();
     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 
-    // Send a message
+    // Send a message with batchable field set to true
     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
-    // Wait for outcome (Disposition)
-    let outcome: Outcome = fut.await.unwrap();
+    let outcome: Outcome = fut.await.unwrap(); // Wait for outcome (Disposition)
     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
 
     // Receive the message from the broker
     let delivery = receiver.recv::<String>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
 
-    // Detach links with closing Detach performatives
-    sender.close().await.unwrap();
-    receiver.close().await.unwrap();
-
-    // End the session
-    session.end().await.unwrap();
-
-    // Close the connection
-    connection.close().await.unwrap();
+    sender.close().await.unwrap(); // Detach sender with closing Detach performatives
+    receiver.close().await.unwrap(); // Detach receiver with closing Detach performatives
+    session.end().await.unwrap(); // End the session
+    connection.close().await.unwrap(); // Close the connection
 }
 ```
 
@@ -137,8 +132,6 @@ async fn main() {
         .open_with_stream(ws_stream)
         .await
         .unwrap();
-
-    // ...
 
     connection.close().await.unwrap();
 }

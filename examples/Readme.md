@@ -36,11 +36,12 @@ The examples below are individual examples which you need to `cd` into the corre
 |[owned_txn_retirement](./owned_txn_retirement)|Transactional retirement with an implicit control link|
 |[txn_enabled_listener](./txn_enabled_listener/)|Allow handling remotely initated transaction on the listener|
 
-## WebSocket binding
+## Other Examples
 
 | Name | Description |
 |------|-------------|
-|[websocket](./websocket/)AMQP 1.0 over websocket |
+|[websocket](./websocket/) | AMQP 1.0 over websocket |
+|[service_bus](./service_bus/) | Sending to / receiving from Azure Service Bus |
 
 ## More examples coming
 

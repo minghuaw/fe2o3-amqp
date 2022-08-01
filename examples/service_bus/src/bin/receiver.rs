@@ -52,7 +52,7 @@ async fn main() {
         .await
         .unwrap();
     let delivery = receiver.recv::<Value>().await.unwrap();
-    println!("Received: {:?}", delivery);
+    println!("Received: {:?}", delivery.body());
     receiver.accept(&delivery).await.unwrap();
     receiver.close().await.unwrap();
 

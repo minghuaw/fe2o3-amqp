@@ -22,6 +22,7 @@ pub enum DetachError {
     // /// Expecting a detach but found other frame
     // #[error("Expecting a Detach")]
     // NonDetachFrameReceived,
+
     /// Remote peer detached with error
     #[error("Remote detached with an error: {}", .0)]
     RemoteDetachedWithError(definitions::Error),
@@ -221,6 +222,7 @@ pub enum ReceiverAttachError {
     // /// the receiver initiates*** the attach exchange and the sender supports the desired mode
     // #[error("When set at the sender this indicates the actual settlement mode in use")]
     // SndSettleModeNotSupported,
+    
     /// "When set at the receiver this indicates the actual settlement mode in use"
     ///
     /// The receiver SHOULD respect the sender’s desired settlement mode ***if

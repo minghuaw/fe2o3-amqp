@@ -5,6 +5,12 @@
 1. Updated `serde_amqp` to 0.2.1 which introduced breaking bug fixes
    1. `Array<T>` deserializes a single standalone instance of `T` (one that is not encoded inside an `Array`) into an `Array` of one element (#75)
    2. Fixed `IoReader::forward_read_bytes` and `IoReader::forward_read_str` not clearing buffer after forwarding
+2. Breaking changes
+   1. Receiver no longers checks whether local and remote SenderSettleMode are the same. It now simply takes the value given by the sending link.
+      1. Removed `ReceiverAttachError::SndSettleModeNotSupported`
+   2. Set the link credit to zero before `Receiver` sends out a closing detach.
+   3. Removed `DetachError::NonDetachFrameReceived` error. Non-detach frame received while detaching will simply be logged with `tracing::debug` and then dropped
+3. Added Service Bus example
 
 ## 0.2.7
 

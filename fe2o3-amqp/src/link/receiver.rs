@@ -374,7 +374,6 @@ impl Receiver {
     ) -> Result<(), DetachError> {
         // Stop link transfer before closing
         self.set_credit(0).await?;
-        self.drain().await?;
         self.inner.close_with_error(Some(error.into())).await
     }
 
