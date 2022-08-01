@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-ext"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 description = "Extension types to fe2o3-amqp"
 license = "MIT/Apache-2.0"
@@ -12,7 +12,7 @@ readme = "Readme.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde_amqp = { version = "^0.1.4", features = ["derive"] }
+serde_amqp = { version = "0.2.1", features = ["derive"] }
 # serde_amqp = { path = "../serde_amqp", features = ["derive"] }
-fe2o3-amqp-types = "^0.2.1"
+fe2o3-amqp-types = "0.3.0"
 # fe2o3-amqp-types = { path = "../fe2o3-amqp-types" }
