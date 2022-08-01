@@ -521,13 +521,13 @@ impl<T> Builder<Body<T>> {
 mod tests {
     use std::vec;
 
-    use serde_amqp::{from_slice, to_vec, value::Value, de::Deserializer, from_reader};
-    use serde_bytes::{ByteBuf, deserialize};
+    use serde_amqp::{from_slice, to_vec, value::Value, from_reader};
+    use serde_bytes::{ByteBuf};
 
     use crate::messaging::{
         message::{
             Body,
-            __private::{Deserializable, Serializable}, DecodeIntoMessage,
+            __private::{Deserializable, Serializable},
         },
         AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Header,
         MessageAnnotations, Properties,
@@ -633,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_service_bus_message() {
+    fn test_decode_message_using_reader() {
         let buf = &[
             0x0, 0x53, 0x70, 0xc0, 0xb, 0x5, 0x40, 0x40, 0x70, 0x48, 0x19, 0x8, 0x0, 0x40, 0x52,
             0x3, 0x0, 0x53, 0x71, 0xc1, 0x24, 0x2, 0xa3, 0x10, 0x78, 0x2d, 0x6f, 0x70, 0x74, 0x2d,
@@ -653,11 +653,7 @@ mod tests {
             0x40, 0x0, 0x53, 0x75, 0xa0, 0xa, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x20, 0x23,
             0x31,
         ];
-        // let result: Result<Deserializable<Message<String>>, _> = from_slice(&buf[..]);
         let result: Result<Deserializable<Message<String>>, _> = from_reader(&buf[..]);
-        // let result: Result<Message<String>, _> = String::decode_into_message(std::io::Cursor::new(buf));
-        // let mut deserializer = Deserializer::new(buf.reader());
-        // let result = Deserializable::<Message<String>>::deserialize(&mut deserializer);
         assert!(result.is_ok());
         let message = result.unwrap();
         println!("{:?}", message);

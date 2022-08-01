@@ -722,8 +722,6 @@ where
             return Ok(None);
         }
 
-        tracing::debug!("Payload: {:#x?}", &payload[..]);
-
         let delivery = if transfer.more {
             // Partial transfer of the delivery
             match &mut self.incomplete_transfer {
