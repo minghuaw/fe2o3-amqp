@@ -229,13 +229,20 @@ impl Receiver {
         builder::Builder::<role::Receiver, Target, _, _, _>::new()
     }
 
+    /// Set the credit mode
+    /// 
+    /// This will not send a flow to the remote peer even if credits in `CreditMode::Auto` is changed.
+    pub fn set_credit_mode(&mut self, credit_mode: CreditMode) {
+        self.inner.credit_mode = credit_mode;
+    }
+
     /// Get the `auto_accept` field of receiver
     pub fn auto_accept(&self) -> bool {
         self.inner.auto_accept
     }
 
     /// Set `auto_accept` to `value`
-    pub fn set_auto_accepto(&mut self, value: bool) {
+    pub fn set_auto_accept(&mut self, value: bool) {
         self.inner.auto_accept = value;
     }
 
@@ -365,6 +372,9 @@ impl Receiver {
         mut self,
         error: impl Into<definitions::Error>,
     ) -> Result<(), DetachError> {
+        // Stop link transfer before closing
+        self.set_credit(0).await?;
+        self.drain().await?;
         self.inner.close_with_error(Some(error.into())).await
     }
 

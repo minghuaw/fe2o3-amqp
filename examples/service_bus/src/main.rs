@@ -1,4 +1,5 @@
 use dotenv::dotenv;
+use fe2o3_amqp::Receiver;
 use std::env;
 use std::sync::Arc;
 
@@ -9,15 +10,24 @@ use fe2o3_amqp::Session;
 use rustls::OwnedTrustAnchor;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::INFO)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let hostname = env::var("HOST").unwrap();
     let port = 5671;
     let username = env::var("USER").unwrap();
     let password = env::var("PASSWORD").unwrap();
+    let queue_name = "q1";
 
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
@@ -44,16 +54,24 @@ async fn main() {
         .open_with_stream(tls_stream)
         .await
         .unwrap();
-
     let mut session = Session::begin(&mut connection).await.unwrap();
-    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
+
+    // let mut sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
+    //     .await
+    //     .unwrap();
+
+    // let outcome = sender.send("hello AMQP").await.unwrap();
+    // outcome.accepted_or_else(|outcome| outcome).unwrap();
+    // sender.close().await.unwrap();
+
+    let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
+    let delivery = receiver.recv::<String>().await.unwrap();
+    println!("Received: {:?}", delivery);
+    receiver.accept(&delivery).await.unwrap();
+    receiver.close().await.unwrap();
 
-    let outcome = sender.send("hello AMQP").await.unwrap();
-    outcome.accepted_or_else(|outcome| outcome).unwrap();
-
-    sender.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

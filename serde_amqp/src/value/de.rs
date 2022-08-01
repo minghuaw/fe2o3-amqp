@@ -964,6 +964,22 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 Value::ULong(_) => self.deserialize_u64(visitor),
                 _ => Err(Error::InvalidValue),
             }
+        } else if name == ARRAY {
+            self.enum_type = EnumType::Array;
+            match self.value {
+                Value::Array(array) => {
+                    let v = array.into_inner();
+                    let iter = v.into_iter();
+                    visitor.visit_seq(SeqAccess {
+                        iter,
+                        seq_type: SeqType::Array,
+                    })
+                },
+                _ => {
+                    let format_code = self.value.format_code();
+                    visitor.visit_u8(format_code)
+                }
+            }
         } else {
             match self.value {
                 // An UInt should represent a unit_variant
@@ -991,6 +1007,10 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                 visitor.visit_u8(code)
             }
             EnumType::Descriptor => {
+                let code = self.value.format_code();
+                visitor.visit_u8(code)
+            }
+            EnumType::Array => {
                 let code = self.value.format_code();
                 visitor.visit_u8(code)
             }
