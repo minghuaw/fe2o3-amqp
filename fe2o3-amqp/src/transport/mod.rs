@@ -230,18 +230,6 @@ where
         Ok(transport)
     }
 
-    // /// Change the max_frame_size for the transport
-    // pub fn set_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
-    //     let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);
-    //     self.framed_write
-    //         .encoder_mut()
-    //         .set_max_frame_length(max_frame_size - 4);
-    //     self.framed_read
-    //         .decoder_mut()
-    //         .set_max_frame_length(max_frame_size);
-    //     self
-    // }
-
     /// Change the max_frame_size for the transport length delimited encoder
     pub fn set_decoder_max_frame_size(&mut self, max_frame_size: usize) -> &mut Self {
         let max_frame_size = std::cmp::max(MIN_MAX_FRAME_SIZE, max_frame_size);
@@ -489,6 +477,7 @@ where
                             Ok(b) => b,
                             Err(err) => return Poll::Ready(Some(Err(err.into()))),
                         };
+                        // tracing::debug!("raw bytes {:#x?}", &src[..]);
                         let mut decoder = amqp::FrameDecoder {};
                         Poll::Ready(decoder.decode(&mut src).map_err(Into::into).transpose())
                     }

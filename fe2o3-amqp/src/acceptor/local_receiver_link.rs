@@ -214,8 +214,8 @@ where
                 // Complete attach anyway
                 link.send_attach(&outgoing, &control, false).await?;
                 match attach_error {
-                    ReceiverAttachError::SndSettleModeNotSupported
-                    | ReceiverAttachError::RcvSettleModeNotSupported => {
+                    // ReceiverAttachError::SndSettleModeNotSupported
+                    ReceiverAttachError::RcvSettleModeNotSupported => {
                         // FIXME: Ths initiating end should be responsible for checking whether the mode is supported
                     }
                     _ => {

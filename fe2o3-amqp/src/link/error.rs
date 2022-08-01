@@ -19,9 +19,9 @@ pub enum DetachError {
     #[error("Session has dropped")]
     IllegalSessionState,
 
-    /// Expecting a detach but found other frame
-    #[error("Expecting a Detach")]
-    NonDetachFrameReceived,
+    // /// Expecting a detach but found other frame
+    // #[error("Expecting a Detach")]
+    // NonDetachFrameReceived,
 
     /// Remote peer detached with error
     #[error("Remote detached with an error: {}", .0)]
@@ -216,12 +216,12 @@ pub enum ReceiverAttachError {
     #[error("Initial delivery field must be set if the role is sender")]
     InitialDeliveryCountIsNone,
 
-    /// When set at the sender this indicates the actual settlement mode in use.
-    ///
-    /// The sender SHOULD respect the receiver’s desired settlement mode ***if
-    /// the receiver initiates*** the attach exchange and the sender supports the desired mode
-    #[error("When set at the sender this indicates the actual settlement mode in use")]
-    SndSettleModeNotSupported,
+    // /// When set at the sender this indicates the actual settlement mode in use.
+    // ///
+    // /// The sender SHOULD respect the receiver’s desired settlement mode ***if
+    // /// the receiver initiates*** the attach exchange and the sender supports the desired mode
+    // #[error("When set at the sender this indicates the actual settlement mode in use")]
+    // SndSettleModeNotSupported,
 
     /// "When set at the receiver this indicates the actual settlement mode in use"
     ///
@@ -282,7 +282,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             }
             ReceiverAttachError::IncomingSourceIsNone
             | ReceiverAttachError::IncomingTargetIsNone
-            | ReceiverAttachError::SndSettleModeNotSupported
+            // | ReceiverAttachError::SndSettleModeNotSupported
             | ReceiverAttachError::RcvSettleModeNotSupported
             | ReceiverAttachError::RemoteClosedWithError(_) => return Err(value),
         };
@@ -312,8 +312,8 @@ impl TryFrom<DetachError> for SenderAttachError {
                 // A closing detach is used for errors during attach anyway
                 Ok(Self::RemoteClosedWithError(error))
             }
-            DetachError::NonDetachFrameReceived
-            | DetachError::ClosedByRemote
+            // DetachError::NonDetachFrameReceived
+            DetachError::ClosedByRemote
             | DetachError::DetachedByRemote => Err(value),
         }
     }
@@ -331,8 +331,8 @@ impl TryFrom<DetachError> for ReceiverAttachError {
                 // A closing detach is used for errors during attach anyway
                 Ok(Self::RemoteClosedWithError(error))
             }
-            DetachError::NonDetachFrameReceived
-            | DetachError::ClosedByRemote
+            // DetachError::NonDetachFrameReceived
+            DetachError::ClosedByRemote
             | DetachError::DetachedByRemote => Err(value),
         }
     }
@@ -442,7 +442,7 @@ impl From<DetachError> for LinkStateError {
             DetachError::ClosedByRemote => Self::RemoteClosed,
             DetachError::DetachedByRemote => Self::RemoteDetached,
             DetachError::RemoteClosedWithError(error) => Self::RemoteClosedWithError(error),
-            DetachError::NonDetachFrameReceived => Self::ExpectImmediateDetach,
+            // DetachError::NonDetachFrameReceived => Self::ExpectImmediateDetach,
         }
     }
 }
@@ -589,6 +589,15 @@ impl From<IllegalLinkStateError> for SendError {
             IllegalLinkStateError::IllegalSessionState => {
                 LinkStateError::IllegalSessionState.into()
             }
+        }
+    }
+}
+
+impl From<IllegalLinkStateError> for DetachError {
+    fn from(value: IllegalLinkStateError) -> Self {
+        match value {
+            IllegalLinkStateError::IllegalState => Self::IllegalState,
+            IllegalLinkStateError::IllegalSessionState => Self::IllegalSessionState,
         }
     }
 }

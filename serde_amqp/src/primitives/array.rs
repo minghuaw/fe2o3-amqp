@@ -3,9 +3,9 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use serde::{de, ser};
+use serde::{de::{self, VariantAccess}, ser};
 
-use crate::__constants::ARRAY;
+use crate::{__constants::ARRAY, format_code::EncodingCodes};
 
 /// A sequence of values of a single type.
 ///
@@ -67,6 +67,39 @@ impl<T: ser::Serialize> ser::Serialize for Array<T> {
     }
 }
 
+enum Field {
+    Single,
+    Multiple,
+}
+
+struct FieldVisitor {}
+
+impl<'de> de::Visitor<'de> for FieldVisitor {
+    type Value = Field;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("Single or Multiple identifier for Array")
+    }
+
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+        where
+            E: de::Error, {
+        match v.try_into().map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
+        {
+            EncodingCodes::Array8 | EncodingCodes::Array32 => Ok(Field::Multiple),
+            _ => Ok(Field::Single),
+        }
+    }
+}
+
+impl<'de> de::Deserialize<'de> for Field {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de> {
+        deserializer.deserialize_identifier(FieldVisitor {})
+    }
+}
+
 struct Visitor<T> {
     marker: PhantomData<T>,
 }
@@ -76,6 +109,22 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("struct Array")
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::EnumAccess<'de>, {
+        let (val, de) = data.variant()?;
+        match val {
+            Field::Single => {
+                let val: T = de.newtype_variant()?;
+                Ok(Array(vec![val]))
+            },
+            Field::Multiple => {
+                let vec: Vec<T> = de.newtype_variant()?;
+                Ok(Array(vec))
+            },
+        }
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -103,12 +152,14 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Array<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_newtype_struct(
-            ARRAY,
-            Visitor {
-                marker: PhantomData,
-            },
-        )
+        // deserializer.deserialize_newtype_struct(
+        //     ARRAY,
+        //     Visitor {
+        //         marker: PhantomData,
+        //     },
+        // )
+        const VARIANTS: &[&str] = &["Single", "Multiple"];
+        deserializer.deserialize_enum(ARRAY, VARIANTS, Visitor { marker: PhantomData })
     }
 }
 
@@ -116,5 +167,53 @@ impl<T> FromIterator<T> for Array<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let v = Vec::from_iter(iter);
         Self(v)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{to_vec, from_slice};
+
+    use super::Array;
+
+    #[test]
+    fn test_serialize_and_deserialize_multiple_elem_array() {
+        let expected = Array(vec![1i32, 2, 3]);
+        let buf = to_vec(&expected).unwrap();
+        let array: Array<i32> = from_slice(&buf).unwrap();
+        assert_eq!(array, expected);
+
+        let expected = Array(vec![String::from("abc"), String::from("def"), String::from("ghi")]);
+        let buf = to_vec(&expected).unwrap();
+        let array: Array<String> = from_slice(&buf).unwrap();
+        assert_eq!(array, expected);
+    }
+
+    #[test]
+    fn test_serialize_and_deserialize_array_encoded_single_elem_array() {
+        let expected = Array(vec![1i32]);
+        let buf = to_vec(&expected).unwrap();
+        let array: Array<i32> = from_slice(&buf).unwrap();
+        assert_eq!(array, expected);
+
+        let expected = Array(vec![String::from("abc")]);
+        let buf = to_vec(&expected).unwrap();
+        let array: Array<String> = from_slice(&buf).unwrap();
+        assert_eq!(array, expected);
+    }
+
+    #[test]
+    fn test_serialize_and_deserialize_single_value_encoded_single_elem_array() {
+        let value = 1i32;
+        let expected = Array(vec![value]);
+        let buf = to_vec(&value).unwrap();
+        let array: Array<i32> = from_slice(&buf).unwrap();
+        assert_eq!(array, expected);
+
+        let value = String::from("abc");
+        let expected = Array(vec![value.clone()]);
+        let buf = to_vec(&value).unwrap();
+        let array: Array<String> = from_slice(&buf).unwrap();
+        assert_eq!(array, expected);
     }
 }

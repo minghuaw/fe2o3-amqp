@@ -26,6 +26,7 @@ pub enum IsArrayElement {
 #[derive(Debug, Clone)]
 pub enum EnumType {
     None,
+    Array,
     Descriptor,
     Value,
 }

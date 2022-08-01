@@ -120,8 +120,8 @@ async fn main() {
         tracing::error!("Outcome: {:?}", outcome)
     }
 
-    let detached = sender.detach().await.unwrap();
-    let mut sender = detached.resume().await.unwrap();
+    // let detached = sender.detach().await.unwrap();
+    // let mut sender = detached.resume().await.unwrap();
 
     // sender.send("hello again").await.unwrap();
     

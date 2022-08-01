@@ -271,13 +271,20 @@ where
     T::Link: LinkDetach<DetachError = DetachError>,
     <T::Link as LinkAttach>::AttachError: From<AllocLinkError> + Sync,
 {
-    match link_inner
-        .reader_mut()
-        .recv()
-        .await
-        .ok_or(DetachError::IllegalSessionState)?
-    {
-        LinkFrame::Detach(detach) => Ok(detach),
-        _ => Err(DetachError::NonDetachFrameReceived),
+    loop {
+        match link_inner
+            .reader_mut()
+            .recv()
+            .await
+            .ok_or(DetachError::IllegalSessionState)?
+        {
+            LinkFrame::Detach(detach) => return Ok(detach),
+            frame @ _ => {
+                // The only other frames should be Attach or Detach, (or Transfer if receiver).
+                // Ignore all other frames
+                tracing::debug!("Non-detach frame received: {:?}", frame);
+                continue;
+            },
+        }
     }
 }
