@@ -14,7 +14,7 @@ use crate::definitions::Fields;
 /// <type name="delete-on-close" class="composite" source="list" provides="lifetime-policy">
 ///     <descriptor name="amqp:delete-on-close:list" code="0x00000000:0x0000002b"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-close:list",
     code = 0x0000_0000_0000_002b,
@@ -51,7 +51,7 @@ impl From<DeleteOnClose> for Value {
 // <type name="delete-on-no-links" class="composite" source="list" provides="lifetime-policy">
 //     <descriptor name="amqp:delete-on-no-links:list" code="0x00000000:0x0000002c"/>
 // </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-no-links:list",
     code = 0x0000_0000_0000_002c,
@@ -88,7 +88,7 @@ impl From<DeleteOnNoLinks> for Value {
 /// <type name="delete-on-no-messages" class="composite" source="list" provides="lifetime-policy">
 ///     <descriptor name="amqp:delete-on-no-messages:list" code="0x00000000:0x0000002d"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-no-messages:list",
     code = 0x0000_0000_0000_002d,
@@ -125,7 +125,7 @@ impl From<DeleteOnNoMessages> for Value {
 /// <type name="delete-on-no-links-or-messages" class="composite" source="list" provides="lifetime-policy">
 ///     <descriptor name="amqp:delete-on-no-links-or-messages:list" code="0x00000000:0x0000002e"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-no-links-or-messages:list",
     code = 0x0000_0000_0000_002e,

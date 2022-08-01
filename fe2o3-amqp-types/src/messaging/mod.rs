@@ -110,7 +110,7 @@ impl SupportedDistModes {
     ) -> Result<Self, Array<DistributionMode>> {
         let modes: Array<DistributionMode> = modes.into_iter().collect();
         if modes.0.is_empty() {
-            return Err(modes);
+            Err(modes)
         } else {
             Ok(Self(modes))
         }
@@ -130,7 +130,7 @@ impl From<SupportedDistModes> for Fields {
             .0
              .0
             .into_iter()
-            .map(|el| Symbol::from(el))
+            .map(Symbol::from)
             .map(Value::Symbol)
             .collect();
         map.insert(Symbol::from("supported-dist-modes"), Value::Array(values));
@@ -144,7 +144,7 @@ impl From<SupportedDistModes> for Value {
             .0
              .0
             .into_iter()
-            .map(|el| Symbol::from(el))
+            .map(Symbol::from)
             .map(Value::Symbol)
             .collect();
         Value::Array(values)

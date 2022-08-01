@@ -521,8 +521,8 @@ impl<T> Builder<Body<T>> {
 mod tests {
     use std::vec;
 
-    use serde_amqp::{from_slice, to_vec, value::Value, from_reader};
-    use serde_bytes::{ByteBuf};
+    use serde_amqp::{from_reader, from_slice, to_vec, value::Value};
+    use serde_bytes::ByteBuf;
 
     use crate::messaging::{
         message::{
@@ -655,7 +655,7 @@ mod tests {
         ];
         let result: Result<Deserializable<Message<String>>, _> = from_reader(&buf[..]);
         assert!(result.is_ok());
-        let message = result.unwrap();
-        println!("{:?}", message);
+        let message = result.unwrap().0;
+        assert!(matches!(message.body, Body::Data(_)));
     }
 }
