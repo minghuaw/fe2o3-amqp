@@ -1,6 +1,6 @@
-# Service Bus Example
+# Service Bus over WebSocket Example
 
-This is a simple example showcasing how to send message to and receiver message from Azure Service Bus.
+This is a simple example showcasing how to send message to and receiver message from Azure Service Bus over WebSocket.
 
 To run the example, the following environment variables must be set:
 
