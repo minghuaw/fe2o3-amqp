@@ -292,6 +292,7 @@ where
                 // FIXME: all errors here are just treated as end of stream
                 Err(_) => break,
             };
+            // let opt =  seq.next_element()?;
             let field: Field = match opt {
                 Some(val) => val,
                 None => break,
@@ -652,8 +653,8 @@ mod tests {
             0x40, 0x0, 0x53, 0x75, 0xa0, 0xa, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x20, 0x23,
             0x31,
         ];
-        let result: Result<Deserializable<Message<String>>, _> = from_slice(&buf[..]);
-        // let result: Result<Deserializable<Message<String>>, _> = from_reader(&buf[..]);
+        // let result: Result<Deserializable<Message<String>>, _> = from_slice(&buf[..]);
+        let result: Result<Deserializable<Message<String>>, _> = from_reader(&buf[..]);
         // let result: Result<Message<String>, _> = String::decode_into_message(std::io::Cursor::new(buf));
         // let mut deserializer = Deserializer::new(buf.reader());
         // let result = Deserializable::<Message<String>>::deserialize(&mut deserializer);
