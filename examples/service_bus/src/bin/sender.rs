@@ -1,4 +1,3 @@
-
 use dotenv::dotenv;
 use std::env;
 use std::sync::Arc;
@@ -17,8 +16,8 @@ async fn main() {
 
     let hostname = env::var("HOST").unwrap();
     let port = 5671;
-    let username = env::var("USER").unwrap();
-    let password = env::var("PASSWORD").unwrap();
+    let sas_key_name = env::var("SAS_KEY_NAME").unwrap();
+    let sas_key_value = env::var("SAS_KEY_VALUE").unwrap();
     let queue_name = "q1";
 
     let mut root_store = rustls::RootCertStore::empty();
@@ -42,7 +41,10 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
         .hostname(&hostname[..])
-        .sasl_profile(SaslProfile::Plain { username, password })
+        .sasl_profile(SaslProfile::Plain {
+            username: sas_key_name,
+            password: sas_key_value,
+        })
         .open_with_stream(tls_stream)
         .await
         .unwrap();
