@@ -3,4 +3,5 @@
 .vscode/
 .DS_Store
 
-**flamegraph.svg
+*flamegraph.svg
+*.env

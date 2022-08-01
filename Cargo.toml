@@ -30,4 +30,5 @@ exclude = [
     "examples/txn_posting",
     "examples/txn_retirement",
     "examples/websocket",
+    "examples/service_bus",
 ]
