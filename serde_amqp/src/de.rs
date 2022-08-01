@@ -931,6 +931,9 @@ where
             visitor.visit_enum(VariantAccess::new(self))
         } else if name == UNTAGGED_ENUM {
             visitor.visit_enum(VariantAccess::new(self))
+        } else if name == ARRAY {
+            self.enum_type = EnumType::Array;
+            visitor.visit_enum(VariantAccess::new(self))
         } else {
             // Considering the following enum serialization format
             // `unit_variant` - a single u32
@@ -968,7 +971,7 @@ where
                 }
                 // for newtype variant of described type
                 EncodingCodes::DescribedType => visitor.visit_enum(VariantAccess::new(self)),
-                _ => Err(Error::InvalidFormatCode),
+                _ => visitor.visit_enum(VariantAccess::new(self)),
             }
         };
 
@@ -996,6 +999,10 @@ where
                 };
                 // Reset the enum type
                 self.enum_type = EnumType::None;
+                let code = self.get_elem_code_or_peek_byte()?;
+                visitor.visit_u8(code)
+            }
+            EnumType::Array => {
                 let code = self.get_elem_code_or_peek_byte()?;
                 visitor.visit_u8(code)
             }

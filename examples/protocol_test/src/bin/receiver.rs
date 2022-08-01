@@ -70,11 +70,11 @@ async fn main() {
 
     let delivery = receiver.recv::<Value>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
-    println!("{:?}", delivery.delivery_id());
+    println!("{:?}", delivery);
 
     let delivery = receiver.recv::<Value>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
-    println!("{:?}", delivery.delivery_id());
+    println!("{:?}", delivery);
 
     // Detach then resume
     // let detached = receiver.detach().await.unwrap();

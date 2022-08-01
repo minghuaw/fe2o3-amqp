@@ -99,7 +99,9 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         V: serde::de::Visitor<'de>,
     {
         self.fill_buffer(len)?;
-        visitor.visit_bytes(&self.buf[..len])
+        let result = visitor.visit_bytes(&self.buf[..len]);
+        self.buf.clear();
+        result
     }
 
     fn forward_read_str<V>(&mut self, len: usize, visitor: V) -> Result<V::Value, Error>
@@ -108,7 +110,9 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
     {
         self.fill_buffer(len)?;
         let s = std::str::from_utf8(&self.buf[..len])?;
-        visitor.visit_str(s)
+        let result = visitor.visit_str(s);
+        self.buf.clear();
+        result
     }
 }
 

@@ -33,8 +33,8 @@ transaction = ["primitive", "messaging"]
 security = ["primitive"]
 
 [dependencies]
-# serde_amqp = { path = "../serde_amqp", features = ["derive"] }
-serde_amqp = { version = "^0.1.4", features = ["derive"] }
+serde_amqp = { path = "../serde_amqp", features = ["derive"] }
+# serde_amqp = { version = "^0.1.4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 ordered-float = { version = "3", features = ["serde"] }
