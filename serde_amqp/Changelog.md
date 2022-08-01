@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.1
+
+1. Instead of clearing `IoReader` buffer, only drain the `len` needed.
+
 ## 0.2.0
 
 1. Breaking bug fixes

@@ -100,7 +100,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
     {
         self.fill_buffer(len)?;
         let result = visitor.visit_bytes(&self.buf[..len]);
-        self.buf.clear();
+        self.buf.drain(..len);
         result
     }
 
@@ -111,7 +111,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         self.fill_buffer(len)?;
         let s = std::str::from_utf8(&self.buf[..len])?;
         let result = visitor.visit_str(s);
-        self.buf.clear();
+        self.buf.drain(..len);
         result
     }
 }
