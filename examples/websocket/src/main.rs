@@ -26,6 +26,7 @@ async fn main() {
     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
 
     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
+    println!("{:?}", delivery.body());
     receiver.accept(&delivery).await.unwrap();
 
     let outcome: Outcome = fut.await.unwrap();
