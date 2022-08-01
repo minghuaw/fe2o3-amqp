@@ -279,12 +279,12 @@ where
             .ok_or(DetachError::IllegalSessionState)?
         {
             LinkFrame::Detach(detach) => return Ok(detach),
-            frame @ _ => {
+            frame => {
                 // The only other frames should be Attach or Detach, (or Transfer if receiver).
                 // Ignore all other frames
                 tracing::debug!("Non-detach frame received: {:?}", frame);
                 continue;
-            },
+            }
         }
     }
 }

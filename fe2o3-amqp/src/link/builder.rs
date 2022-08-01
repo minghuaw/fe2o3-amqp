@@ -497,7 +497,7 @@ where
             Ok(exchange) => {
                 tracing::debug!(?exchange);
                 exchange.complete_or(SenderAttachError::IllegalState)?
-            },
+            }
             Err(attach_error) => {
                 tracing::error!(?attach_error);
                 let err = link

@@ -230,7 +230,7 @@ impl Receiver {
     }
 
     /// Set the credit mode
-    /// 
+    ///
     /// This will not send a flow to the remote peer even if credits in `CreditMode::Auto` is changed.
     pub fn set_credit_mode(&mut self, credit_mode: CreditMode) {
         self.inner.credit_mode = credit_mode;
@@ -836,7 +836,7 @@ where
     ) -> Result<(), DispositionError> {
         let total = delivery_infos.len();
         self.link
-            .dispose_all(&&self.outgoing, delivery_infos, settled, state, false)
+            .dispose_all(&self.outgoing, delivery_infos, settled, state, false)
             .await?;
 
         self.processed += total as u32;

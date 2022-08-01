@@ -488,8 +488,7 @@ where
         // at which point the receiver can be dropped.
         self.control.close();
         self.outgoing_session_frames.close();
-        let close = self.transport.close().await
-            .map_err(Into::into);
+        let close = self.transport.close().await.map_err(Into::into);
 
         debug!("Stopped");
 

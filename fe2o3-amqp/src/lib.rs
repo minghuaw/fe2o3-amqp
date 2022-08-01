@@ -118,16 +118,16 @@
 //! ```
 //!
 //! ## WebSocket
-//! 
+//!
 //! [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws) is needed for WebSocket binding
-//! 
+//!
 //! ```rust
 //! use fe2o3_amqp::{
 //!     types::{messaging::Outcome, primitives::Value},
 //!     Connection, Delivery, Receiver, Sender, Session,
 //! };
 //! use fe2o3_amqp_ws::WebSocketStream;
-//! 
+//!
 //! #[tokio::main]
 //! async fn main() {
 //!     let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
@@ -138,13 +138,13 @@
 //!         .open_with_stream(ws_stream)
 //!         .await
 //!         .unwrap();
-//! 
+//!
 //!     // ...  
-//! 
+//!
 //!     connection.close().await.unwrap();
 //! }
 //! ```
-//! 
+//!
 //! # More examples
 //!
 //! More examples of sending and receiving can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples/).

@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.3.0
+
+1. Updated `serde_amqp` to 0.2.1 which introduced breaking bug fixes
+   1. `Array<T>` deserializes a single standalone instance of `T` (one that is not encoded inside an `Array`) into an `Array` of one element (#75)
+   2. Fixed `IoReader::forward_read_bytes` and `IoReader::forward_read_str` not clearing buffer after forwarding
+
 ## 0.2.7
 
 1. Fixed a bug where sender would attempt to resume delivery when remote attach carries a non-null but empty unsettled map and thus resulting in `IllegalState` error

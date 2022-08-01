@@ -161,7 +161,7 @@ impl<T> Delivery<T> {
 
     pub(crate) fn clone_info(&self) -> DeliveryInfo {
         DeliveryInfo {
-            delivery_id: self.delivery_id.clone(),
+            delivery_id: self.delivery_id,
             delivery_tag: self.delivery_tag.clone(),
             rcv_settle_mode: self.rcv_settle_mode.clone(),
         }
