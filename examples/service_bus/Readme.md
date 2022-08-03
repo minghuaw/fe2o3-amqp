@@ -2,7 +2,7 @@
 
 This is a simple example showcasing how to send message to and receiver message from Azure Service Bus.
 
-To run the example, the following environment variables must be set:
+To run the example, the following environment variables must be set in an `.env` file:
 
 - `HOST=<namespace>.servicebus.windows.net`
 - `SAS_KEY_NAME=<SharedAccessKeyName>`
