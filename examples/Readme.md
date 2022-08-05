@@ -8,9 +8,11 @@ The examples below are individual examples which you need to `cd` into the corre
 |------|-------------|
 |[sender](./sender/) | A simple sender with default configuration |
 |[dynamic_sender](./dynamic_sender) | Request the receiving peer to dynamically create a node at target |
+|[send_with_custom_properties](./send_with_custom_properties) | Send a message with customized message sections |
 |[receiver](./receiver/) | A simple receiver with default configuration |
 |[receiver_auto_accept](./receiver_auto_accept/) | A simple receiver that accepts incoming deliveries automatically |
 |[dynamic_receiver](./dynamic_receiver) | Request the sending peer to dynamically create a node at source |
+|[recv_with_filter](./recv_with_filter) | Receive message with filter |
 |[batchable_send](./batchable_send/)| A simple sender that sends multiple messages but doesn't require immediate disposition |
 |[dispose_multiple](./dispose_multiple) | A simple receiver that disposes multiple deliveries in one Disposition frame (if all deliveries are consecutive) |
 |[listener](./listener)| A simple listener that handles incoming connections, sessions, and links |

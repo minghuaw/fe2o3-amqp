@@ -3,7 +3,10 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use serde::{de::{self, VariantAccess}, ser};
+use serde::{
+    de::{self, VariantAccess},
+    ser,
+};
 
 use crate::{__constants::ARRAY, format_code::EncodingCodes};
 
@@ -82,9 +85,12 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     }
 
     fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
-        where
-            E: de::Error, {
-        match v.try_into().map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
+    where
+        E: de::Error,
+    {
+        match v
+            .try_into()
+            .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
         {
             EncodingCodes::Array8 | EncodingCodes::Array32 => Ok(Field::Multiple),
             _ => Ok(Field::Single),
@@ -95,7 +101,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
 impl<'de> de::Deserialize<'de> for Field {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_identifier(FieldVisitor {})
     }
 }
@@ -112,18 +119,19 @@ impl<'de, T: de::Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
     }
 
     fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-        where
-            A: de::EnumAccess<'de>, {
+    where
+        A: de::EnumAccess<'de>,
+    {
         let (val, de) = data.variant()?;
         match val {
             Field::Single => {
                 let val: T = de.newtype_variant()?;
                 Ok(Array(vec![val]))
-            },
+            }
             Field::Multiple => {
                 let vec: Vec<T> = de.newtype_variant()?;
                 Ok(Array(vec))
-            },
+            }
         }
     }
 
@@ -159,7 +167,13 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Array<T> {
         //     },
         // )
         const VARIANTS: &[&str] = &["Single", "Multiple"];
-        deserializer.deserialize_enum(ARRAY, VARIANTS, Visitor { marker: PhantomData })
+        deserializer.deserialize_enum(
+            ARRAY,
+            VARIANTS,
+            Visitor {
+                marker: PhantomData,
+            },
+        )
     }
 }
 
@@ -172,7 +186,7 @@ impl<T> FromIterator<T> for Array<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{to_vec, from_slice};
+    use crate::{from_slice, to_vec};
 
     use super::Array;
 
@@ -183,7 +197,11 @@ mod tests {
         let array: Array<i32> = from_slice(&buf).unwrap();
         assert_eq!(array, expected);
 
-        let expected = Array(vec![String::from("abc"), String::from("def"), String::from("ghi")]);
+        let expected = Array(vec![
+            String::from("abc"),
+            String::from("def"),
+            String::from("ghi"),
+        ]);
         let buf = to_vec(&expected).unwrap();
         let array: Array<String> = from_slice(&buf).unwrap();
         assert_eq!(array, expected);

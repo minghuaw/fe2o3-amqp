@@ -1,4 +1,7 @@
-use fe2o3_amqp::{Connection, Sender, Session, types::messaging::{Message, Properties, ApplicationProperties}};
+use fe2o3_amqp::{
+    types::messaging::{ApplicationProperties, Message, Properties},
+    Connection, Sender, Session,
+};
 
 #[tokio::main]
 async fn main() {

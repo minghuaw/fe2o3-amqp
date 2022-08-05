@@ -974,7 +974,7 @@ impl<'de> de::Deserializer<'de> for Deserializer {
                         iter,
                         seq_type: SeqType::Array,
                     })
-                },
+                }
                 _ => {
                     let format_code = self.value.format_code();
                     visitor.visit_u8(format_code)

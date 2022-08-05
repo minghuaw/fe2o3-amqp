@@ -23,7 +23,7 @@
 //! 1. [Client](#client)
 //! 2. [Listener](#listener)
 //! 3. [WebSocket binding](#websocket)
-//! 
+//!
 //! More examples including one showing how to use it with Azure Serivce Bus can be found on the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples).
 //!
 //! ## Client

@@ -1,9 +1,14 @@
-use fe2o3_amqp::{Connection, Session, types::{messaging::Source, primitives::Value}, Receiver};
+use fe2o3_amqp::{
+    types::{messaging::Source, primitives::Value},
+    Connection, Receiver, Session,
+};
 use fe2o3_amqp_ext::filters::SelectorFilter;
 
 #[tokio::main]
 async fn main() {
-    let mut connection = Connection::open("connection-1", "amqp://localhost:5672").await.unwrap();
+    let mut connection = Connection::open("connection-1", "amqp://localhost:5672")
+        .await
+        .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
     let source = Source::builder()
@@ -23,5 +28,5 @@ async fn main() {
 
     receiver.close().await.unwrap();
     session.end().await.unwrap();
-    connection.close().await.unwrap();   
+    connection.close().await.unwrap();
 }

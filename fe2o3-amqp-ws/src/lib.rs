@@ -2,36 +2,36 @@
 #![deny(missing_docs, missing_debug_implementations)]
 
 //! WebSocket adapter for AMQP 1.0 websocket binding
-//! 
+//!
 //! This provides a thin wrapper over `tokio_tungstenite::WebSocketStream`, and the wrapper
 //! performs the WebSocket handshake with the "Sec-WebSocket-Protocol" HTTP header set to "amqp".
-//! 
+//!
 //! The wrapper type [`WebSocketStream`] could also be used for non-AMQP applications; however,
 //! the user should establish websocket stream with raw `tokio_tungstenite` API and then
 //! wrap the stream with the wrapper by `fe2o3_amqp_ws::WebSocketStream::from(ws_stream)`.
-//! 
+//!
 //! # Feature flags
-//! 
+//!
 //! ```toml
 //! default = []
 //! ```
-//! 
+//!
 //! | Feature | Description |
 //! |---------|-------------|
 //! | `native-tls` | Enables "tokio-tungstenite/native-tls" |
 //! | `native-tls-vendored` | Enables "tokio-tungstenite/native-tls-vendored" |
 //! | `rustls-tls-native-roots` | Enables "tokio-tungstenite/rustls-tls-native-roots" |
 //! | `rustls-tls-webpki-roots` | Enables "tokio-tungstenite/rustls-tls-webpki-roots" |
-//! 
+//!
 //! # Example
-//! 
+//!
 //! ```rust
 //! use fe2o3_amqp::{
 //!     types::{messaging::Outcome, primitives::Value},
 //!     Connection, Delivery, Receiver, Sender, Session,
 //! };
 //! use fe2o3_amqp_ws::WebSocketStream;
-//! 
+//!
 //! #[tokio::main]
 //! async fn main() {
 //!     let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
@@ -43,22 +43,22 @@
 //!         .await
 //!         .unwrap();
 //!     let mut session = Session::begin(&mut connection).await.unwrap();
-//! 
+//!
 //!     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
 //!         .await
 //!         .unwrap();
 //!     let mut receiver = Receiver::attach(&mut session, "rust-recver-1", "q1")
 //!         .await
 //!         .unwrap();
-//! 
+//!
 //!     let fut = sender.send_batchable("hello batchable AMQP").await.unwrap();
-//! 
+//!
 //!     let delivery: Delivery<Value> = receiver.recv().await.unwrap();
 //!     receiver.accept(&delivery).await.unwrap();
-//! 
+//!
 //!     let outcome: Outcome = fut.await.unwrap();
 //!     outcome.accepted_or_else(|state| state).unwrap(); // Handle delivery outcome
-//! 
+//!
 //!     sender.close().await.unwrap();
 //!     receiver.close().await.unwrap();
 //!     session.end().await.unwrap();
@@ -98,28 +98,28 @@ pin_project! {
     /// A wrapper over [`tokio_tungstenite::WebSoccketStream`] that implements
     /// `tokio::io::AsyncRead` and `tokio::io::AsyncWrite`.
     ///
-    /// The public APIs all internally call their equivalent in `tokio_tungstenite` and checks the 
-    /// response. The only difference is that the APIs will set "Sec-WebSocket-Protocol" HTTP header 
+    /// The public APIs all internally call their equivalent in `tokio_tungstenite` and checks the
+    /// response. The only difference is that the APIs will set "Sec-WebSocket-Protocol" HTTP header
     /// to "amqp".
     ///
-    /// The "Sec-WebSocket-Protocol" HTTP header identifies the WebSocket subprotocol. For this 
-    /// AMQP WebSocket binding, the value MUST be set to the US-ASCII text string “amqp” which 
-    /// refers to the 1.0 version of the AMQP 1.0 or greater, with version negotiation as 
+    /// The "Sec-WebSocket-Protocol" HTTP header identifies the WebSocket subprotocol. For this
+    /// AMQP WebSocket binding, the value MUST be set to the US-ASCII text string “amqp” which
+    /// refers to the 1.0 version of the AMQP 1.0 or greater, with version negotiation as
     /// defined by AMQP 1.0.
-    /// 
+    ///
     /// If the Client does not receive a response with HTTP status code 101 and an HTTP
     /// Sec-WebSocket-Protocol equal to the US-ASCII text string "amqp" then the Client MUST close
     /// the socket connection
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// use fe2o3_amqp::{
     ///     types::{messaging::Outcome, primitives::Value},
     ///     Connection, Delivery, Receiver, Sender, Session,
     /// };
     /// use fe2o3_amqp_ws::WebSocketStream;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let (ws_stream, _response) = WebSocketStream::connect("ws://localhost:5673")
@@ -130,9 +130,9 @@ pin_project! {
     ///         .open_with_stream(ws_stream)
     ///         .await
     ///         .unwrap();
-    /// 
+    ///
     ///     // ...
-    /// 
+    ///
     ///     connection.close().await.unwrap();
     /// }
     /// ```
@@ -226,12 +226,15 @@ where
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(any(
-    feature = "native-tls",
-    feature = "native-tls-vendored",
-    feature = "rustls-tls-native-roots",
-    feature = "rustls-tls-webpki-roots"
-))))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(
+        feature = "native-tls",
+        feature = "native-tls-vendored",
+        feature = "rustls-tls-native-roots",
+        feature = "rustls-tls-webpki-roots"
+    )))
+)]
 #[cfg(any(
     feature = "native-tls",
     feature = "native-tls-vendored",
@@ -282,12 +285,15 @@ where
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(any(
-    feature = "native-tls",
-    feature = "native-tls-vendored",
-    feature = "rustls-tls-native-roots",
-    feature = "rustls-tls-webpki-roots"
-))))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(
+        feature = "native-tls",
+        feature = "native-tls-vendored",
+        feature = "rustls-tls-native-roots",
+        feature = "rustls-tls-webpki-roots"
+    )))
+)]
 #[cfg(any(
     feature = "native-tls",
     feature = "native-tls-vendored",
