@@ -1,11 +1,7 @@
-use dotenv::dotenv;
-use std::env;
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
-use fe2o3_amqp::sasl_profile::SaslProfile;
-use fe2o3_amqp::Connection;
-use fe2o3_amqp::Sender;
-use fe2o3_amqp::Session;
+use dotenv::dotenv;
+use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Receiver, types::primitives::Value};
 use rustls::OwnedTrustAnchor;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
@@ -18,7 +14,8 @@ async fn main() {
     let port = 5671;
     let sas_key_name = env::var("SAS_KEY_NAME").unwrap();
     let sas_key_value = env::var("SAS_KEY_VALUE").unwrap();
-    let queue_name = "q1";
+    let topic_name = env::var("TOPIC_NAME").unwrap();
+    let topic_subscription = env::var("TOPIC_SUBSCRIPTION").unwrap();
 
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
@@ -39,25 +36,24 @@ async fn main() {
     let tls_stream = connector.connect(domain, stream).await.unwrap();
 
     let mut connection = Connection::builder()
-        .container_id("rust-connection-1")
+        .container_id("rust-receiver-connection-1")
         .hostname(&hostname[..])
-        .sasl_profile(SaslProfile::Plain {
-            username: sas_key_name,
-            password: sas_key_value,
-        })
+        .sasl_profile(SaslProfile::Plain { username: sas_key_name, password: sas_key_value })
         .open_with_stream(tls_stream)
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let mut sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
-        .await
-        .unwrap();
+    let address = format!("{}/Subscriptions/{}", topic_name, topic_subscription);
+    let mut receiver = Receiver::attach(&mut session, "rust-topic-receiver", address).await.unwrap();
 
-    let outcome = sender.send("hello AMQP from rust").await.unwrap();
-    outcome.accepted_or_else(|outcome| outcome).unwrap();
-    sender.close().await.unwrap();
+    for _ in 0..3 {
+        let delivery = receiver.recv::<Value>().await.unwrap();
+        println!("Received: {:?}", delivery.body());
+        receiver.accept(&delivery).await.unwrap();
+    }
 
+    receiver.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }
