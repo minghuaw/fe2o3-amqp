@@ -84,16 +84,23 @@ async fn main() {
 
     // let body = Body::from(());
     // let message = Message::from("hello");
-    let props = Properties::builder()
-            .message_id(MessageId::ULong(1))
-            .build();
-    let mut application_properties = BTreeMap::new();
-    application_properties.insert(String::from("sn"), SimpleValue::UInt(1));
+    // let props = Properties::builder()
+    //         .message_id(MessageId::ULong(1))
+    //         .build();
+    // let mut application_properties = BTreeMap::new();
+    // application_properties.insert(String::from("sn"), SimpleValue::UInt(100));
+    // let message = Message::builder()
+    //         .properties(props)
+    //         .application_properties(ApplicationProperties(application_properties))
+    //         .value("hello AMQP")
+    //         .build();
+
     let message = Message::builder()
-            .properties(props)
-            .application_properties(ApplicationProperties(application_properties))
-            .value("hello AMQP")
-            .build();
+        .properties(Properties::builder().message_id(1).build())
+        .application_properties(ApplicationProperties::builder().insert("sn", 10).build())
+        .value("hello AMQP")
+        .build();
+
     let message = Sendable::from(message);
     // let message = Sendable::builder()
     //     .message("hello world")
