@@ -533,11 +533,14 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Open frame
+    #[instrument(skip_all)]
     async fn on_incoming_open(
         &mut self,
         _channel: IncomingChannel,
         open: Open,
     ) -> Result<(), Self::Error> {
+        tracing::trace!(frame = ?open);
+
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
@@ -624,6 +627,7 @@ impl endpoint::Connection for Connection {
         }
     }
 
+    #[instrument(skip_all)]
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
     where
         W: Sink<Frame> + Send + Unpin,
@@ -631,6 +635,7 @@ impl endpoint::Connection for Connection {
     {
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
+        tracing::trace!(?frame);
         writer.send(frame).await.map_err(Into::into)?;
 
         // change local state after successfully sending the frame
