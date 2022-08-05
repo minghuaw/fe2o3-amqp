@@ -200,9 +200,9 @@ pub struct Target {
 }
 
 impl Target {
-    /// Creates a Builder for Target
-    pub fn builder() -> Builder {
-        Builder::new()
+    /// Creates a TargetBuilder for Target
+    pub fn builder() -> TargetBuilder {
+        TargetBuilder::new()
     }
 }
 
@@ -237,12 +237,12 @@ impl<T: Into<Target>> From<T> for TargetArchetype {
 
 /// [`Target`] builder
 #[derive(Debug, Default, Clone)]
-pub struct Builder {
+pub struct TargetBuilder {
     /// The [`Target`] instance being built
     pub target: Target,
 }
 
-impl Builder {
+impl TargetBuilder {
     /// Creates a new [`Target`] builder
     pub fn new() -> Self {
         Self {

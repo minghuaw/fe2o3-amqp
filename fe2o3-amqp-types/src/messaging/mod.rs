@@ -19,10 +19,10 @@ pub use delivery_state::*;
 
 /* -------------------------- 3.5 Source and Target ------------------------- */
 mod source;
-pub use source::Source;
+pub use source::{Source, SourceBuilder};
 
 mod target;
-pub use target::{Target, TargetArchetype};
+pub use target::{Target, TargetArchetype, TargetBuilder};
 
 mod terminus_durability;
 pub use terminus_durability::TerminusDurability;

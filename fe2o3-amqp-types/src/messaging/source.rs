@@ -75,24 +75,24 @@ pub struct Source {
 
 impl Source {
     /// Creates a [`Source`] builder
-    pub fn builder() -> Builder {
-        Builder::new()
+    pub fn builder() -> SourceBuilder {
+        SourceBuilder::new()
     }
 }
 
 /// [`Source`] builder
 #[derive(Debug, Clone)]
-pub struct Builder {
+pub struct SourceBuilder {
     source: Source,
 }
 
-impl Default for Builder {
+impl Default for SourceBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Builder {
+impl SourceBuilder {
     /// Creates a [`Source`] builder
     pub fn new() -> Self {
         Self {
