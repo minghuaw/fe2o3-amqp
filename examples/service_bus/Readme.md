@@ -4,7 +4,7 @@ This is a simple example showcasing how to send message to and receiver message 
 
 ## Queue
 
-To run the example, the following environment variables must be set in an `.env` file:
+To run the example, the following environment variables must be set in a `.env` file:
 
 - `HOST=<namespace>.servicebus.windows.net`
 - `SAS_KEY_NAME=<SharedAccessKeyName>`
@@ -27,7 +27,7 @@ cargo run --bin queue_receiver
 
 ## Topic
 
-To run the example, the following environment variables must be set in an `.env` file:
+To run the example, the following environment variables must be set in a `.env` file:
 
 - `HOST=<namespace>.servicebus.windows.net`
 - `SAS_KEY_NAME=<SharedAccessKeyName>`
