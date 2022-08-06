@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    Connection, Sender, Session, sasl_profile::SaslProfile,
+    Connection, Sender, Session, sasl_profile::SaslProfile, types::{messaging::{Message, Properties}, primitives::Binary},
 };
 use fe2o3_amqp_ws::WebSocketStream;
 use dotenv::dotenv;
@@ -38,7 +38,13 @@ async fn main() {
         .await
         .unwrap();
 
-    let outcome = sender.send("hello AMQP from rust over websocket").await.unwrap();
+    // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
+    let data = Vec::from("hello AMQP from rust over websocket");
+    let message = Message::builder()
+        .properties(Properties::builder().message_id(1).build())
+        .data(Binary::from(data))
+        .build();
+    let outcome = sender.send(message).await.unwrap();
     outcome.accepted_or_else(|outcome| outcome).unwrap();
     sender.close().await.unwrap();
 

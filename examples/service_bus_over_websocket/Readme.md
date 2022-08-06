@@ -14,11 +14,11 @@ Replace the field wrapped in `<>` with the corresponding value for your Service 
 Then you can run the example with
 
 ```sh
-cargo run --bin sender
+cargo run --bin queue_sender
 ```
 
 OR
 
 ```sh
-cargo run --bin receiver
+cargo run --bin queue_receiver
 ```
