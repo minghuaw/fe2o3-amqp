@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+1. Added `descriptor_code()` and `descriptor_name` methods
+
 ## 0.2.0
 
 1. Updated `serde_amqp` to 0.2.1 which introduced breaking bug fixes

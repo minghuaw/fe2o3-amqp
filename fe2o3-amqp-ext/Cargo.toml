@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-ext"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Extension types to fe2o3-amqp"
 license = "MIT/Apache-2.0"
