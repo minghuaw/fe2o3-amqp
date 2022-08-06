@@ -50,7 +50,6 @@ async fn main() {
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-
     let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
@@ -60,8 +59,8 @@ async fn main() {
     let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
     println!("Received: {:?}", msg);
     receiver.accept(&delivery).await.unwrap();
+    
     receiver.close().await.unwrap();
-
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }
