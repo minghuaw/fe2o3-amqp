@@ -33,7 +33,6 @@ async fn main() {
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
         .await
         .unwrap();
@@ -46,8 +45,8 @@ async fn main() {
         .build();
     let outcome = sender.send(message).await.unwrap();
     outcome.accepted_or_else(|outcome| outcome).unwrap();
+    
     sender.close().await.unwrap();
-
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }
