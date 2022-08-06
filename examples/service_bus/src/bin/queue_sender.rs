@@ -18,8 +18,9 @@ async fn main() {
     let port = 5671;
     let sas_key_name = env::var("SAS_KEY_NAME").unwrap();
     let sas_key_value = env::var("SAS_KEY_VALUE").unwrap();
-    let queue_name = env::var("QUEUE_NAME").unwrap();
+    let queue_name = "q1";
 
+    // Service Bus requires alternative TLS establishment
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -56,8 +57,8 @@ async fn main() {
 
     let outcome = sender.send("hello AMQP from rust").await.unwrap();
     outcome.accepted_or_else(|outcome| outcome).unwrap();
-    
     sender.close().await.unwrap();
+
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }

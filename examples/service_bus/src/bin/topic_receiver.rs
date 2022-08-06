@@ -1,7 +1,9 @@
 use std::{env, sync::Arc};
 
 use dotenv::dotenv;
-use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Receiver, types::primitives::Value};
+use fe2o3_amqp::{
+    sasl_profile::SaslProfile, types::primitives::Value, Connection, Receiver, Session,
+};
 use rustls::OwnedTrustAnchor;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
@@ -38,14 +40,19 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("rust-receiver-connection-1")
         .hostname(&hostname[..])
-        .sasl_profile(SaslProfile::Plain { username: sas_key_name, password: sas_key_value })
+        .sasl_profile(SaslProfile::Plain {
+            username: sas_key_name,
+            password: sas_key_value,
+        })
         .open_with_stream(tls_stream)
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
     let address = format!("{}/Subscriptions/{}", topic_name, topic_subscription);
-    let mut receiver = Receiver::attach(&mut session, "rust-topic-receiver", address).await.unwrap();
+    let mut receiver = Receiver::attach(&mut session, "rust-topic-receiver", address)
+        .await
+        .unwrap();
 
     for _ in 0..3 {
         let delivery = receiver.recv::<Value>().await.unwrap();

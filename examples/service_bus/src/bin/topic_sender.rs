@@ -1,11 +1,17 @@
 use std::{env, sync::Arc};
 
 use dotenv::dotenv;
-use fe2o3_amqp::{Connection, sasl_profile::SaslProfile, Session, Sender, types::{messaging::{Message, Properties}, primitives::Binary}};
+use fe2o3_amqp::{
+    sasl_profile::SaslProfile,
+    types::{
+        messaging::{Message, Properties},
+        primitives::Binary,
+    },
+    Connection, Sender, Session,
+};
 use rustls::OwnedTrustAnchor;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
-
 
 #[tokio::main]
 async fn main() {
@@ -17,6 +23,7 @@ async fn main() {
     let sas_key_value = env::var("SAS_KEY_VALUE").unwrap();
     let topic_name = env::var("TOPIC_NAME").unwrap();
 
+    // Service Bus requires alternative TLS establishment
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -38,7 +45,10 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("rust-sender-connection-1")
         .hostname(&hostname[..])
-        .sasl_profile(SaslProfile::Plain { username: sas_key_name, password: sas_key_value })
+        .sasl_profile(SaslProfile::Plain {
+            username: sas_key_name,
+            password: sas_key_value,
+        })
         .open_with_stream(tls_stream)
         .await
         .unwrap();
