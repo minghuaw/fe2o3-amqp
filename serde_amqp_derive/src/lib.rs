@@ -116,6 +116,18 @@ impl Default for DescriptorPreference {
     }
 }
 
+impl TryFrom<String> for DescriptorPreference {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_ascii_lowercase().as_str() {
+            "code" => Ok(Self::Code),
+            "name" => Ok(Self::Name),
+            _ => Err(value)
+        }
+    }
+}
+
 #[derive(Debug, Clone, FromMeta)]
 #[darling(default)]
 enum EncodingType {
@@ -132,6 +144,8 @@ struct DescribedAttr {
     pub name: Option<String>,
     #[darling(default)]
     pub code: Option<u64>,
+    #[darling(default)]
+    pub prefer: Option<String>,
     #[darling(default)]
     pub encoding: Option<EncodingType>,
     #[darling(default)]
