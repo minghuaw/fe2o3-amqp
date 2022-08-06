@@ -76,7 +76,8 @@ pub struct Message<T> {
     /// Immutable properties of the message.
     pub properties: Option<Properties>,
 
-    /// The application-properties section is a part of the bare message used for structured application data. Intermediaries can use the data within this structure for the purposes of filtering or routin
+    /// The application-properties section is a part of the bare message used for structured application data. 
+    /// Intermediaries can use the data within this structure for the purposes of filtering or routin
     pub application_properties: Option<ApplicationProperties>,
 
     /// The body consists of one of the following three choices: one or more data sections, one or more amqp-sequence
