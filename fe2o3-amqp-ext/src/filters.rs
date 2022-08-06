@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::SimpleValue;
+use fe2o3_amqp_types::primitives::{SimpleValue, Symbol};
 use serde_amqp::{
     described::Described, descriptor::Descriptor, value::Value, DeserializeComposite,
     SerializeComposite,
@@ -25,6 +25,16 @@ impl LegacyAmqpDirectBinding {
     /// Creates a new `LegacyAmqpDirectBinding`
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
+    }
+
+    /// Returns the descriptor code
+    pub fn descriptor_code() -> u64 {
+        0x0000_468c_0000_0000
+    }
+
+    /// Returns the descriptor name
+    pub fn descriptor_name() -> Symbol {
+        Symbol::from("apache.org:legacy-amqp-direct-binding:string")
     }
 }
 
@@ -69,6 +79,16 @@ impl LegacyAmqpTopicBinding {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
+
+    /// Returns the descriptor code
+    pub fn descriptor_code() -> u64 {
+        0x0000_468c_0000_0001
+    }
+
+    /// Returns the descriptor name
+    pub fn descriptor_name() -> Symbol {
+        Symbol::from("apache.org:legacy-amqp-topic-binding:string")
+    }
 }
 
 impl From<LegacyAmqpTopicBinding> for Described<String> {
@@ -112,6 +132,18 @@ impl From<LegacyAmqpTopicBinding> for Option<Described<Value>> {
 )]
 pub struct LegacyAmqpHeadersBinding(pub BTreeMap<String, SimpleValue>);
 
+impl LegacyAmqpHeadersBinding {
+    /// Returns the descriptor code
+    pub fn descriptor_code() -> u64 {
+        0x0000_468c_0000_0002
+    }
+
+    /// Returns the descriptor name
+    pub fn descriptor_name() -> Symbol {
+        Symbol::from("apache.org:legacy-amqp-headers-binding:map")
+    }
+}
+
 impl From<LegacyAmqpHeadersBinding> for Described<BTreeMap<String, SimpleValue>> {
     fn from(value: LegacyAmqpHeadersBinding) -> Self {
         Self {
@@ -154,6 +186,18 @@ impl From<LegacyAmqpHeadersBinding> for Option<Described<Value>> {
 )]
 pub struct NoLocalFilter(pub Vec<Value>);
 
+impl NoLocalFilter {
+    /// Returns the descriptor code
+    pub fn descriptor_code() -> u64 {
+        0x0000_468c_0000_0003
+    }
+
+    /// Returns the descriptor name
+    pub fn descriptor_name() -> Symbol {
+        Symbol::from("apache.org:no-local-filter:list")
+    }
+}
+
 impl From<NoLocalFilter> for Described<Vec<Value>> {
     fn from(value: NoLocalFilter) -> Self {
         Self {
@@ -194,6 +238,16 @@ impl SelectorFilter {
     /// Creates a new `SelectorFilter`
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
+    }
+
+    /// Returns the descriptor code
+    pub fn descriptor_code() -> u64 {
+        0x0000_468c_0000_0004
+    }
+
+    /// Returns the descriptor name
+    pub fn descriptor_name() -> Symbol {
+        Symbol::from("apache.org:selector-filter:string")
     }
 }
 
@@ -237,6 +291,16 @@ impl Xquery {
     /// Creates a new `Xquery`
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
+    }
+
+    /// Returns the descriptor code
+    pub fn descriptor_code() -> u64 {
+        0x0000_468c_0000_0005
+    }
+
+    /// Returns the descriptor name
+    pub fn descriptor_name() -> Symbol {
+        Symbol::from("apache.org:xquery-filter:string")
     }
 }
 
