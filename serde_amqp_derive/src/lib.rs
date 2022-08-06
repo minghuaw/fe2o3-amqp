@@ -105,6 +105,18 @@ mod ser;
 mod util;
 
 #[derive(Debug, Clone, FromMeta)]
+enum DescriptorPreference {
+    Code,
+    Name,
+}
+
+impl Default for DescriptorPreference {
+    fn default() -> Self {
+        Self::Code
+    }
+}
+
+#[derive(Debug, Clone, FromMeta)]
 #[darling(default)]
 enum EncodingType {
     Basic, // considering removing Basic
