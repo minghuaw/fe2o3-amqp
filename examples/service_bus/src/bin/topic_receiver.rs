@@ -56,7 +56,8 @@ async fn main() {
 
     for _ in 0..3 {
         let delivery = receiver.recv::<Value>().await.unwrap();
-        println!("Received: {:?}", delivery.body());
+        let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
+        println!("Received: {:?}", msg);
         receiver.accept(&delivery).await.unwrap();
     }
 

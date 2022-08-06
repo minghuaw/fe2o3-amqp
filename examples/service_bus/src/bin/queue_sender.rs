@@ -1,4 +1,7 @@
 use dotenv::dotenv;
+use fe2o3_amqp::types::messaging::Message;
+use fe2o3_amqp::types::messaging::Properties;
+use fe2o3_amqp::types::primitives::Binary;
 use std::env;
 use std::sync::Arc;
 
@@ -50,12 +53,18 @@ async fn main() {
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", queue_name)
         .await
         .unwrap();
 
-    let outcome = sender.send("hello AMQP from rust").await.unwrap();
+    // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
+    let data = "hello AMQP from rust".as_bytes().to_vec();
+    let message = Message::builder()
+        .properties(Properties::builder().message_id(1).build())
+        .data(Binary::from(data))
+        .build();
+
+    let outcome = sender.send(message).await.unwrap();
     outcome.accepted_or_else(|outcome| outcome).unwrap();
     sender.close().await.unwrap();
 

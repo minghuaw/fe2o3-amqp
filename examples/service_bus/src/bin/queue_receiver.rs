@@ -54,8 +54,11 @@ async fn main() {
     let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
+
+    // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
     let delivery = receiver.recv::<Value>().await.unwrap();
-    println!("Received: {:?}", delivery.body());
+    let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
+    println!("Received: {:?}", msg);
     receiver.accept(&delivery).await.unwrap();
     receiver.close().await.unwrap();
 

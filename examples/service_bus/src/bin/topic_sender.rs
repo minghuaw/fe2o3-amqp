@@ -60,6 +60,7 @@ async fn main() {
 
     for i in 0..3 {
         let message_id = format!("topic_test_{}", i);
+        // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
         let data = format!("Message {}", i).into_bytes();
         let message = Message::builder()
             .properties(Properties::builder().message_id(message_id).build())
