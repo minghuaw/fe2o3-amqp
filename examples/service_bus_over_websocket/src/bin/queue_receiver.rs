@@ -10,15 +10,15 @@ use tokio::net::TcpStream;
 async fn main() {
     dotenv().ok();
 
-    let hostname = env::var("HOST").unwrap();
+    let hostname = env::var("HOST_NAME").unwrap();
     let port = 443;
-    let sas_key_name = env::var("SAS_KEY_NAME").unwrap();
-    let sas_key_value = env::var("SAS_KEY_VALUE").unwrap();
+    let sa_key_name = env::var("SHARED_ACCESS_KEY_NAME").unwrap();
+    let sa_key_value = env::var("SHARED_ACCESS_KEY_VALUE").unwrap();
     let queue_name = env::var("QUEUE_NAME").unwrap();
 
     // wss://[sas-policy]:[sas-key]@[ns].servicebus.windows.net/$servicebus/websocket
     let ws_address =
-        format!("wss://{sas_key_name}:{sas_key_value}@{hostname}/$servicebus/websocket");
+        format!("wss://{sa_key_name}:{sa_key_value}@{hostname}/$servicebus/websocket");
 
     let stream = TcpStream::connect((&hostname[..], port)).await.unwrap();
     let (ws_stream, _) = WebSocketStream::connect_tls_with_stream(ws_address, stream)
@@ -29,8 +29,8 @@ async fn main() {
         .container_id("rust-connection-1")
         .hostname(&hostname[..])
         .sasl_profile(SaslProfile::Plain {
-            username: sas_key_name,
-            password: sas_key_value,
+            username: sa_key_name,
+            password: sa_key_value,
         })
         .open_with_stream(ws_stream)
         .await

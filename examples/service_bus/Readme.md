@@ -6,9 +6,9 @@ This is a simple example showcasing how to send message to and receiver message 
 
 To run the example, the following environment variables must be set in a `.env` file:
 
-- `HOST=<namespace>.servicebus.windows.net`
-- `SAS_KEY_NAME=<SharedAccessKeyName>`
-- `SAS_KEY_VALUE=<SharedAccessKey>`
+- `HOST_NAME=<namespace>.servicebus.windows.net`
+- `SHARED_ACCESS_KEY_NAME=<SharedAccessKeyName>`
+- `SHARED_ACCESS_KEY_VALUE=<SharedAccessKey>`
 - `QUEUE_NAME=<queue>`
 
 Replace the field wrapped in `<>` with the corresponding value for your Service Bus instance.
@@ -29,9 +29,9 @@ cargo run --bin queue_receiver
 
 To run the example, the following environment variables must be set in a `.env` file:
 
-- `HOST=<namespace>.servicebus.windows.net`
-- `SAS_KEY_NAME=<SharedAccessKeyName>`
-- `SAS_KEY_VALUE=<SharedAccessKey>`
+- `HOST_NAME=<namespace>.servicebus.windows.net`
+- `SHARED_ACCESS_KEY_NAME=<SharedAccessKeyName>`
+- `SHARED_ACCESS_KEY_VALUE=<SharedAccessKey>`
 - `TOPIC_NAME=<topic>`
 - `TOPIC_SUBSCRIPTION=<subscription>`
 

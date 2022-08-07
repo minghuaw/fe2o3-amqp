@@ -1,0 +1,14 @@
+[package]
+name = "event_hub"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dotenv = "0.15.0"
+tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
+tokio-rustls = "0.23"
+rustls = "0.20"
+webpki-roots = "0.22.4"
+fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
