@@ -9,7 +9,7 @@ To run the example, the following environment variables must be set in a `.env` 
 - `SHARED_ACCESS_KEY_VALUE=<SharedAccessKey>`
 - `QUEUE_NAME=<queue>`
 
-Replace the field wrapped in `<>` with the corresponding value for your Service Bus instance.
+Replace the fields wrapped in `<>` with the corresponding values for your Service Bus instance.
 
 Then you can run the example with
 

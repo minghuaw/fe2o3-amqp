@@ -11,7 +11,7 @@ To run the example(s), the following environment variables must be set in a `.en
 - `SHARED_ACCESS_KEY_VALUE=<SharedAccessKey>`
 - `EVENT_HUB_NAME=<event_hub_name>`
 
-Replace the field wrapped in `<>` with the corresponding value for your Event Hub instance.
+Replace the fields wrapped in `<>` with the corresponding values for your Event Hub instance.
 
 Then you can run the example with
 
