@@ -16,5 +16,5 @@ Replace the field wrapped in `<>` with the corresponding value for your Event Hu
 Then you can run the example with
 
 ```sh
-cargo run --bin send_to_event_hub
+cargo run --bin simple_sender
 ```
