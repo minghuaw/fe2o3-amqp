@@ -1,4 +1,4 @@
-# Event Hub Example
+# Event Hubs Example
 
 This is a simple example demonstrating how to work with Azure Event Hub with fe2p3-amqp.
 
