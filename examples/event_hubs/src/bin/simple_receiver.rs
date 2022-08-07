@@ -79,7 +79,6 @@ async fn main() {
     println!("{:?}", msg);
     receiver.accept(&delivery).await.unwrap();
 
-
     receiver.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();
