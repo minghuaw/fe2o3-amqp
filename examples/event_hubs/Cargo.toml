@@ -1,5 +1,5 @@
 [package]
-name = "event_hub"
+name = "event_hubs"
 version = "0.1.0"
 edition = "2021"
 

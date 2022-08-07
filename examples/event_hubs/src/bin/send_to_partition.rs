@@ -1,7 +1,7 @@
 use std::{env, sync::Arc};
 
 use dotenv::dotenv;
-use event_hub::get_event_hub_partitions;
+use event_hubs::get_event_hub_partitions;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
     types::{
