@@ -58,18 +58,21 @@ async fn main() {
         .await
         .unwrap();
 
-    // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let data = Vec::from("hello Event Hub from rust");
-    let message = Message::builder()
-        .properties(
-            Properties::builder()
-                .group_id(String::from("send_to_event_hub_without_partition"))
-                .build(),
-        )
-        .data(Binary::from(data))
-        .build();
-    let outcome = sender.send(message).await.unwrap();
-    outcome.accepted_or_else(|outcome| outcome).unwrap();
+    // Message will be randomly distributed to different partitions
+    for i in 0..3 {
+        // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
+        let data = format!("Message {}", i).into_bytes();
+        let message = Message::builder()
+            .properties(
+                Properties::builder()
+                    .group_id(String::from("send_to_event_hub"))
+                    .build(),
+            )
+            .data(Binary::from(data))
+            .build();
+        let outcome = sender.send(message).await.unwrap();
+        outcome.accepted_or_else(|outcome| outcome).unwrap();
+    }
 
     sender.close().await.unwrap();
     session.end().await.unwrap();

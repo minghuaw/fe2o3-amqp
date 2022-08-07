@@ -6,10 +6,11 @@ use fe2o3_amqp::{
     sasl_profile::SaslProfile,
     types::{
         definitions::SECURE_PORT,
-        primitives::{Value},
+        primitives::{Value}, messaging::Source,
     },
     Connection, Receiver, Session,
 };
+use fe2o3_amqp_ext::filters::SelectorFilter;
 use rustls::OwnedTrustAnchor;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
@@ -62,17 +63,25 @@ async fn main() {
 
     // <event_hub_name>/ConsumerGroups/$default/Partitions/<partition>;
     let partition = &partitions[0]; // This should be equal to "0"
+    let name = format!("receiver-{}", partition);
     let partition_address = format!(
         "{}/ConsumerGroups/$default/Partitions/{}",
         event_hub_name, partition
     );
-    let mut receiver = Receiver::attach(
-        &mut session,
-        format!("receiver-{}", partition),
-        partition_address,
-    )
-    .await
-    .unwrap();
+    let mut receiver = Receiver::builder()
+        .name(name)
+        .source(
+            Source::builder()
+                .address(partition_address)
+                .add_to_filter(
+                    SelectorFilter::descriptor_name(), 
+                    SelectorFilter::new("amqp.annotation.x-opt-offset > @latest")
+                )
+                .build()
+        )
+        .attach(&mut session)
+        .await
+        .unwrap();
 
     for _ in 0..3 {
         let delivery = receiver.recv::<Value>().await.unwrap();
