@@ -74,7 +74,7 @@ async fn main() {
             Source::builder()
                 .address(partition_address)
                 .add_to_filter(
-                    SelectorFilter::descriptor_name(), 
+                    "filter_latest",
                     SelectorFilter::new("amqp.annotation.x-opt-offset > @latest")
                 )
                 .build()
