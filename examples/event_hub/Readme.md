@@ -18,3 +18,9 @@ Then you can run the example with
 ```sh
 cargo run --bin simple_sender
 ```
+
+OR
+
+```sh
+cargo run --bin simple_receiver
+```
