@@ -60,7 +60,7 @@ async fn main() {
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    // string partitionAddress = this.Entity + "/ConsumerGroups/$default/Partitions/" + partition; ;
+    // <event_hub_name>/ConsumerGroups/$default/Partitions/<partition>;
     let partition = &partitions[0]; // This should be equal to "0"
     let partition_address = format!(
         "{}/ConsumerGroups/$default/Partitions/{}",
