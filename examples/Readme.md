@@ -45,7 +45,7 @@ The examples below are individual examples which you need to `cd` into the corre
 |[websocket](./websocket/) | AMQP 1.0 over websocket |
 |[service_bus](./service_bus/) | Sending to / receiving from Azure Service Bus |
 |[service_bus_over_websocket](./service_bus_over_websocket) | Sending to / receiving from Azure Service Bus over WebSocket |
-|[event_hub](./event_hub) | Send to and receive from Azure Event Hub |
+|[event_hubs](./event_hubs) | Send to and receive from Azure Event Hubs |
 
 ## More examples coming
 
