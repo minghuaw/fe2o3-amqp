@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::{ops::{Deref, DerefMut}, borrow::Borrow};
 
 use serde::{
     de::{self, Visitor},
@@ -47,6 +47,13 @@ impl<'a> Deref for SymbolRef<'a> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+/// The `Ord` and `Hash` is exactly the same as wrapped `&str`
+impl<'a> Borrow<str> for SymbolRef<'a> {
+    fn borrow(&self) -> &str {
+        self.0
     }
 }
 
@@ -162,6 +169,13 @@ impl DerefMut for Symbol {
     }
 }
 
+/// The `Ord` and `Hash` is exactly the same as wrapped `String`, which is the same as `&str`
+impl Borrow<str> for Symbol {
+    fn borrow(&self) -> &str {
+        &self.0[..]
+    }
+}
+
 impl Serialize for Symbol {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -238,5 +252,20 @@ mod tests {
 
         let deserialized: SymbolRef = from_slice(&buf).unwrap();
         println!("{:?}", deserialized);
+    }
+
+    #[test]
+    fn test_borrow_str() {
+        use std::collections::BTreeMap;
+        use crate::value::Value;
+
+        let mut map = BTreeMap::new();
+        map.insert(Symbol::from("hello"), Value::from("world"));
+
+        let val = map.get("hello");
+        assert_eq!(val, Some(&Value::String(String::from("world"))));
+
+        let val = map.get(&Symbol::from("hello"));
+        assert_eq!(val, Some(&Value::String(String::from("world"))));
     }
 }
