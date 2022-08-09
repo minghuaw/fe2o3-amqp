@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, LinkError, ReceiverSettleMode},
+    definitions::{self, AmqpError, LinkError},
     messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{
@@ -16,7 +16,6 @@ use tracing::instrument;
 use crate::{
     acceptor::{
         link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor,
-        SupportedReceiverSettleModes,
     },
     control::SessionControl,
     link::{
@@ -24,7 +23,7 @@ use crate::{
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
         IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
-    util::{DeliveryInfo, Running},
+    util::{DeliveryInfo, Running, Initialized},
     Delivery,
 };
 
@@ -35,8 +34,8 @@ pub(crate) type CoordinatorLink = ReceiverLink<Coordinator>;
 /// An acceptor that handles incoming control links
 #[derive(Debug, Clone)]
 pub struct ControlLinkAcceptor {
-    shared: SharedLinkAcceptorFields,
-    inner: LocalReceiverLinkAcceptor<
+    pub(crate) shared: SharedLinkAcceptorFields,
+    pub(crate) inner: LocalReceiverLinkAcceptor<
         TxnCapability,
         Coordinator,
         fn(Coordinator) -> Option<Coordinator>,
@@ -49,11 +48,7 @@ fn unreachable_dynamic_coordinator(_: Coordinator) -> Option<Coordinator> {
 
 impl Default for ControlLinkAcceptor {
     fn default() -> Self {
-        let shared = SharedLinkAcceptorFields {
-            supported_rcv_settle_modes: SupportedReceiverSettleModes::Second,
-            fallback_rcv_settle_mode: ReceiverSettleMode::Second,
-            ..Default::default()
-        };
+        let shared = SharedLinkAcceptorFields::default();
         Self {
             shared,
             inner: LocalReceiverLinkAcceptor {
@@ -82,6 +77,11 @@ impl ControlLinkAcceptor {
                 inner,
                 txn_ids: HashSet::new(),
             })
+    }
+
+    /// Creates a builder for `ControlLinkAcceptor`
+    pub fn builder() -> crate::acceptor::builder::Builder<Self, Initialized> {
+        crate::acceptor::builder::Builder::<Self, Initialized>::new()
     }
 }
 

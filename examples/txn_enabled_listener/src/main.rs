@@ -65,5 +65,6 @@ async fn receiver_main(mut receiver: Receiver) {
     loop {
         let delivery = receiver.recv::<Value>().await.unwrap();
         receiver.accept(&delivery).await.unwrap();
+        println!("{:?}", delivery.body());
     }
 }

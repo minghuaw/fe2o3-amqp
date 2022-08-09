@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use fe2o3_amqp::{
     acceptor::{
-        ConnectionAcceptor, LinkAcceptor, LinkEndpoint, SessionAcceptor, ListenerConnectionHandle, ListenerSessionHandle,
+        ConnectionAcceptor, LinkAcceptor, LinkEndpoint, SessionAcceptor, ListenerConnectionHandle, ListenerSessionHandle, SupportedReceiverSettleModes,
     },
     types::primitives::Value, transaction::coordinator::ControlLinkAcceptor, Receiver, Sender, Sendable,
 };
@@ -37,7 +37,11 @@ async fn main() {
 
 async fn connection_main(mut connection: ListenerConnectionHandle) {
     let session_acceptor = SessionAcceptor::builder()
-        .control_link_acceptor(ControlLinkAcceptor::default())
+        .control_link_acceptor(
+            ControlLinkAcceptor::builder()
+                .supported_receiver_settle_modes(SupportedReceiverSettleModes::First)
+                .build()
+        )
         .build();
 
     while let Ok(session) = session_acceptor.accept(&mut connection).await {
