@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.2
+
+1. Added `SymbolRef` which takes a `&str` instead of `String`
+2. Added impl of `TryFrom` for `Value` variant types
+
 ## 0.2.1
 
 1. Instead of clearing `IoReader` buffer, only drain the `len` needed.
