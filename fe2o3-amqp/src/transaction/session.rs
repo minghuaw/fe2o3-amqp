@@ -258,7 +258,7 @@ where
         // match flow
         //     .properties
         //     .as_ref()
-        //     .map(|fields| fields.contains_key(&Symbol::from(TXN_ID_KEY)))
+        //     .map(|fields| fields.contains_key(TXN_ID_KEY))
         // {
         //     Some(true) => {
         //         // self.on_incoming_txn_flow(flow).await

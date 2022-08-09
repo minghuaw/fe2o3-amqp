@@ -624,8 +624,7 @@ impl LinkRelay<OutputHandle> {
                 #[cfg(feature = "transaction")]
                 {
                     use serde_amqp::Value;
-                    let key = Symbol::from(TXN_ID_KEY);
-                    match flow.properties.as_ref().and_then(|m| m.get(&key)) {
+                    match flow.properties.as_ref().and_then(|m| m.get(TXN_ID_KEY)) {
                         Some(Value::Binary(txn_id)) => {
                             let frame = LinkFrame::Acquisition(txn_id.clone());
                             tx.send(frame).await.map_err(|_| {

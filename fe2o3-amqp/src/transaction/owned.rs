@@ -244,19 +244,18 @@ impl OwnedTransaction {
     ) -> Result<TxnAcquisition<'_, OwnedTransaction>, FlowError> {
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
-            let key = Symbol::from(TXN_ID_KEY);
             let value = Value::Binary(self.declared.txn_id.clone());
             match &mut writer.properties {
                 Some(fields) => {
-                    if fields.contains_key(&key) {
+                    if fields.contains_key(TXN_ID_KEY) {
                         return Err(FlowError::IllegalState);
                     }
 
-                    fields.insert(key, value);
+                    fields.insert(Symbol::from(TXN_ID_KEY), value);
                 }
                 None => {
                     let mut fields = Fields::new();
-                    fields.insert(key, value);
+                    fields.insert(Symbol::from(TXN_ID_KEY), value);
                 }
             }
         }
@@ -271,8 +270,7 @@ impl OwnedTransaction {
             Err(error) => {
                 let mut writer = recver.inner.link.flow_state.lock.write().await;
                 if let Some(fields) = &mut writer.properties {
-                    let key = Symbol::from(TXN_ID_KEY);
-                    fields.remove(&key);
+                    fields.remove(TXN_ID_KEY);
                 }
                 Err(error)
             }

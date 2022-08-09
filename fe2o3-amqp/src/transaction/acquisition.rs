@@ -3,7 +3,6 @@
 use fe2o3_amqp_types::{
     definitions::{self, SequenceNo},
     messaging::Modified,
-    primitives::Symbol,
     transaction::TransactionId,
 };
 
@@ -61,8 +60,7 @@ where
         // clear txn-id
         {
             let mut writer = self.recver.inner.link.flow_state.lock.write().await;
-            let key = Symbol::from(TXN_ID_KEY);
-            writer.properties.as_mut().map(|map| map.remove(&key));
+            writer.properties.as_mut().map(|map| map.remove(TXN_ID_KEY));
         }
 
         // set drain to true
@@ -154,8 +152,7 @@ where
             // clear txn-id from the link's properties
             {
                 let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();
-                let key = Symbol::from(TXN_ID_KEY);
-                writer.properties.as_mut().map(|fields| fields.remove(&key));
+                writer.properties.as_mut().map(|fields| fields.remove(TXN_ID_KEY));
             }
 
             // Set drain to true

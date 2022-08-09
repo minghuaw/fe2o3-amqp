@@ -18,12 +18,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # dev defaults
-# default = [
-#     "acceptor",
-#     "rustls",
-#     "native-tls",
-#     "transaction",
-# ]
+default = [
+    "acceptor",
+    "rustls",
+    "native-tls",
+    "transaction",
+]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
 
@@ -40,7 +40,7 @@ tokio-test = { version = "0.4" }
 testcontainers = "0.14"
 
 [dependencies]
-serde_amqp = "0.2.1"
+serde_amqp = "0.2.3"
 # serde_amqp = { path = "../serde_amqp" }
 fe2o3-amqp-types = "0.3.0"
 # fe2o3-amqp-types = { path = "../fe2o3-amqp-types" }

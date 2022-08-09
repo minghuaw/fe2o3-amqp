@@ -414,21 +414,20 @@ impl<'t> Transaction<'t> {
         recver: &'r mut Receiver,
         credit: SequenceNo,
     ) -> Result<TxnAcquisition<'r, Transaction<'t>>, FlowError> {
-        let key = Symbol::from(TXN_ID_KEY);
         let value = Value::Binary(self.declared.txn_id.clone());
         {
             let mut writer = recver.inner.link.flow_state.lock.write().await;
             match &mut writer.properties {
                 Some(fields) => {
-                    if fields.contains_key(&key) {
+                    if fields.contains_key(TXN_ID_KEY) {
                         return Err(FlowError::IllegalState);
                     }
 
-                    fields.insert(key, value);
+                    fields.insert(Symbol::from(TXN_ID_KEY), value);
                 }
                 None => {
                     let mut fields = Fields::new();
-                    fields.insert(key, value);
+                    fields.insert(Symbol::from(TXN_ID_KEY), value);
                 }
             }
         }
@@ -443,8 +442,7 @@ impl<'t> Transaction<'t> {
             Err(error) => {
                 let mut writer = recver.inner.link.flow_state.lock.write().await;
                 if let Some(fields) = &mut writer.properties {
-                    let key = Symbol::from(TXN_ID_KEY);
-                    fields.remove(&key);
+                    fields.remove(TXN_ID_KEY);
                 }
                 Err(error)
             }
