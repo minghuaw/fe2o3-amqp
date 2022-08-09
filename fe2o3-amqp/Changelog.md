@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.2
+
+1. Made traits `FromPreSettled`, `FromDeliveryState`, `FromOneshotRecvError` public for compatibility with rust versions <=1.58.0
+
 ## 0.3.1
 
 1. Fixed bug where `ControlLinkAcceptor` defaulted to `SupportedReceiverSettleMode::Second`. It now defaults to `SupportedReceiverSettleMode::Both`

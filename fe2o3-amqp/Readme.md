@@ -153,7 +153,11 @@ Please note that most examples requires a local broker running. One broker that 
 |`fe2o3-amqp-ext`| Extension types and implementations |
 |`fe2o3-amqp-ws` | WebSocket binding for `fe2o3-amqp` transport |
 
-### Road map
+## Minimum rust version supported
+
+1.56.0 (ie. 2021 edition)
+
+## Road map
 
 The items below are listed in the order of priority.
 
