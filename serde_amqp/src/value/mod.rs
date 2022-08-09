@@ -380,6 +380,73 @@ impl<T: Serialize> TryFromSerializable<T> for Value {
     }
 }
 
+macro_rules! impl_try_from_for_value_variant {
+    ($variant:ident, $variant_ty:ty) => {
+        impl TryFrom<Value> for $variant_ty {
+            type Error = Value;
+
+            fn try_from(val: Value) -> Result<Self, Self::Error> {
+                match val {
+                    Value::$variant(inner) => Ok(inner),
+                    _ => Err(val)
+                }
+            }
+        }
+    };
+
+    ($($variant:ident, $variant_ty:ty),*) => {
+        $(impl_try_from_for_value_variant!($variant, $variant_ty);)*
+    }
+}
+
+impl_try_from_for_value_variant! {
+    Bool, bool,
+    UByte, u8,
+    UShort, u16,
+    UInt, u32,
+    ULong, u64,
+    Byte, i8,
+    Short, i16,
+    Int, i32,
+    Long, i64,
+    Float, OrderedFloat<f32>,
+    Double, OrderedFloat<f64>,
+    Decimal32, Dec32,
+    Decimal64, Dec64,
+    Decimal128, Dec128,
+    Char, char,
+    Timestamp, Timestamp,
+    Uuid, Uuid,
+    Binary, ByteBuf,
+    String, String,
+    Symbol, Symbol,
+    List, Vec<Value>,
+    Map, BTreeMap<Value, Value>,
+    Array, Array<Value>
+}
+
+impl TryFrom<Value> for f32 {
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Float(val) => Ok(val.0),
+            _ => Err(value)
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Double(val) => Ok(val.0),
+            _ => Err(value)
+        }
+    }
+}
+
 #[cfg(feature = "json")]
 impl From<serde_json::Value> for Value {
     fn from(value: serde_json::Value) -> Self {
