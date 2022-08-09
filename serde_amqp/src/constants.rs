@@ -19,5 +19,6 @@ pub(crate) const DECIMAL32: &str = "AMQP1.0_DECIMAL32";
 pub(crate) const DECIMAL64: &str = "AMQP1.0_DECIMAL64";
 pub(crate) const DECIMAL128: &str = "AMQP1.0_DECIMAL128";
 pub(crate) const SYMBOL: &str = "AMQP1.0_SYMBOL";
+pub(crate) const SYMBOL_REF: &str = "AMQP1.0_SYMBOL_REF";
 pub(crate) const TIMESTAMP: &str = "AMQP1.0_TIMESTAMP";
 pub(crate) const UUID: &str = "AMQP1.0_UUID";

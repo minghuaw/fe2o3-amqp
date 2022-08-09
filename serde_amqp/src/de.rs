@@ -6,7 +6,7 @@ use std::convert::TryInto;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, VALUE,
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, VALUE, SYMBOL_REF,
     },
     error::Error,
     fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
@@ -567,8 +567,10 @@ where
         V: de::Visitor<'de>,
     {
         let len = match self.get_elem_code_or_read_format_code()? {
-            EncodingCodes::Str8 => self.reader.next()? as usize,
-            EncodingCodes::Str32 => {
+            EncodingCodes::Str8
+            | EncodingCodes::Sym8 => self.reader.next()? as usize,
+            EncodingCodes::Str32 
+            | EncodingCodes::Sym32 => {
                 let len_bytes = self.reader.read_const_bytes()?;
                 u32::from_be_bytes(len_bytes) as usize
             }
@@ -658,6 +660,9 @@ where
             // Leave symbol as visit_string because serde(untagged)
             // on descriptor will visit String instead of str
             self.deserialize_string(visitor)
+        } else if name == SYMBOL_REF {
+            self.new_type = NewType::SymbolRef;
+            self.deserialize_str(visitor)
         } else if name == DECIMAL32 {
             self.new_type = NewType::Dec32;
             self.deserialize_bytes(visitor)

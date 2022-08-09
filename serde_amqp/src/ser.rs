@@ -11,7 +11,7 @@ use serde::{
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, SYMBOL_REF,
     },
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
@@ -400,7 +400,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         match self.is_array_elem {
             IsArrayElement::False => {
                 match self.new_type {
-                    NewType::Symbol => {
+                    NewType::Symbol 
+                    | NewType::SymbolRef => {
                         // Symbols are encoded as ASCII characters [ASCII].
                         //
                         // Returns the length of this String, in bytes,
@@ -450,7 +451,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 }
             }
             IsArrayElement::FirstElement => match self.new_type {
-                NewType::Symbol => {
+                NewType::Symbol 
+                | NewType::SymbolRef => {
                     // Symbols are encoded as ASCII characters [ASCII].
                     //
                     // Returns the length of this String, in bytes,
@@ -476,7 +478,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 _ => unreachable!(),
             },
             IsArrayElement::OtherElement => match self.new_type {
-                NewType::Symbol => {
+                NewType::Symbol 
+                | NewType::SymbolRef => {
                     // Symbols are encoded as ASCII characters [ASCII].
                     //
                     // Returns the length of this String, in bytes,
@@ -571,6 +574,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             NewType::Timestamp => unreachable!(),
             NewType::Array => unreachable!(),
             NewType::Symbol => unreachable!(),
+            NewType::SymbolRef => unreachable!(),
         }
 
         self.writer.write_all(v).map_err(Into::into)
@@ -632,6 +636,8 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
     {
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
+        } else if name == SYMBOL_REF { 
+            self.new_type = NewType::SymbolRef;
         } else if name == ARRAY {
             self.new_type = NewType::Array;
         } else if name == DECIMAL32 {
