@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.3
+
+1. Added `Borrow<str>` impl for `Symbol` and `SymbolRef`
+
 ## 0.2.2
 
 1. Added `SymbolRef` which takes a `&str` instead of `String`
