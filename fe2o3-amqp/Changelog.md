@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.3.1
+
+1. Fixed bug where `ControlLinkAcceptor` defaulted to `SupportedReceiverSettleMode::Second`. It now defaults to `SupportedReceiverSettleMode::Both`
+2. Added `ControlLinkAcceptor::builder()` to allow customize acceptor configs
+3. Updated `serde_amqp` dep to "0.2.3" which allows using `&str` as look up keys for maps with `Symbol` as the key type
+
 ## 0.3.0
 
 1. Updated `serde_amqp` to 0.2.1 which introduced breaking bug fixes
