@@ -6,6 +6,7 @@ pub(crate) enum NewType {
     Dec64,
     Dec128,
     Symbol,
+    SymbolRef,
     Timestamp,
     Uuid,
 }

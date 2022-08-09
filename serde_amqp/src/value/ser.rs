@@ -9,7 +9,7 @@ use serde_bytes::ByteBuf;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID,
+        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, SYMBOL_REF,
     },
     described::Described,
     descriptor::Descriptor,
@@ -169,7 +169,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         match self.new_type {
             NewType::None => Ok(Value::String(String::from(v))),
-            NewType::Symbol => {
+            NewType::Symbol 
+            | NewType::SymbolRef => {
                 self.new_type = NewType::None;
                 Ok(Value::Symbol(Symbol::from(v)))
             }
@@ -200,6 +201,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
             NewType::Timestamp => Err(Error::InvalidValue),
             NewType::Array => Err(Error::InvalidValue),
             NewType::Symbol => Err(Error::InvalidValue),
+            NewType::SymbolRef => Err(Error::InvalidValue),
         }
     }
 
@@ -234,6 +236,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     {
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
+        } else if name == SYMBOL_REF {
+            self.new_type = NewType::SymbolRef;
         } else if name == ARRAY {
             self.new_type = NewType::Array;
         } else if name == DECIMAL32 {
