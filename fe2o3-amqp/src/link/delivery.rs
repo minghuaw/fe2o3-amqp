@@ -400,17 +400,30 @@ impl<O> From<Settlement> for DeliveryFut<O> {
     }
 }
 
-pub(crate) trait FromPreSettled {
+/// This trait defines how to interprete a pre-settled delivery
+/// 
+/// This is public for compatibility with rust versions <= 1.58.0
+pub trait FromPreSettled {
+    /// how to interprete a pre-settled delivery
     fn from_settled() -> Self;
 }
 
-pub(crate) trait FromDeliveryState {
+/// This trait defines how to interprete a DeliveryState
+/// 
+/// This is public for compatibility with rust versions <= 1.58.0
+pub trait FromDeliveryState {
+    /// how to interprete a DeliveryState when `None` is found
     fn from_none() -> Self;
 
+    /// how to interprete a DeliveryState
     fn from_delivery_state(state: DeliveryState) -> Self;
 }
 
-pub(crate) trait FromOneshotRecvError {
+/// This trait defines how to interprete `tokio::sync::oneshot::error::RecvError`
+/// 
+/// This is public for compatibility with rust versions <= 1.58.0
+pub trait FromOneshotRecvError {
+    /// how to interprete `tokio::sync::oneshot::error::RecvError`
     fn from_oneshot_recv_error(err: RecvError) -> Self;
 }
 
