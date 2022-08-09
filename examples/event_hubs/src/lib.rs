@@ -56,11 +56,9 @@ pub async fn get_event_hub_partitions(
     let partitions: Vec<String> = partitions
         .into_inner()
         .into_iter()
-        .filter_map(|el| match el {
-            Value::String(s) => Some(s),
-            _ => None
-        })
-        .collect();
+        .map(|el| el.try_into())
+        .collect::<std::result::Result<Vec<String>, Value>>()
+            .map_err(|val| anyhow!("Expect string found {:?}", val))?;
 
     sender.close().await?;
     receiver.close().await?;
