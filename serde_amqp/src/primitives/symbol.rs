@@ -7,7 +7,8 @@ use serde::{
 
 use crate::__constants::{SYMBOL, SYMBOL_REF};
 
-/// Symbolic values from a constrained domain with a slice
+/// Symbolic values from a constrained domain. This is similar to `Symbol` but
+/// takes a slice instead of `String`.
 ///
 /// encoding name = "sym8", encoding code = 0xa3,
 /// category = variable, width = 1
