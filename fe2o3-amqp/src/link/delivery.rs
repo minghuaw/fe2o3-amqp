@@ -401,7 +401,7 @@ impl<O> From<Settlement> for DeliveryFut<O> {
 }
 
 /// This trait defines how to interprete a pre-settled delivery
-/// 
+///
 /// This is public for compatibility with rust versions <= 1.58.0
 pub trait FromPreSettled {
     /// how to interprete a pre-settled delivery
@@ -409,7 +409,7 @@ pub trait FromPreSettled {
 }
 
 /// This trait defines how to interprete a DeliveryState
-/// 
+///
 /// This is public for compatibility with rust versions <= 1.58.0
 pub trait FromDeliveryState {
     /// how to interprete a DeliveryState when `None` is found
@@ -420,7 +420,7 @@ pub trait FromDeliveryState {
 }
 
 /// This trait defines how to interprete `tokio::sync::oneshot::error::RecvError`
-/// 
+///
 /// This is public for compatibility with rust versions <= 1.58.0
 pub trait FromOneshotRecvError {
     /// how to interprete `tokio::sync::oneshot::error::RecvError`

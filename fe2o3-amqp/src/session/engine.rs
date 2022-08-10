@@ -1,6 +1,7 @@
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
-    performatives::End, transaction::TransactionError,
+    performatives::End,
+    transaction::TransactionError,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -301,11 +302,11 @@ where
             SessionInnerError::HandleInUse => {
                 let error = Error::new(SessionError::HandleInUse, None, None);
                 self.end_session(Some(error)).await
-            },
+            }
             SessionInnerError::IllegalState => {
                 let error = Error::new(AmqpError::IllegalState, None, None);
                 self.end_session(Some(error)).await
-            },
+            }
             SessionInnerError::IllegalConnectionState => Ok(Running::Stop),
             SessionInnerError::TransferFrameToSender => {
                 let error = Error::new(
@@ -314,17 +315,13 @@ where
                     None,
                 );
                 self.end_session(Some(error)).await
-            },
+            }
             SessionInnerError::RemoteEnded => self.end_session(None).await,
             SessionInnerError::RemoteEndedWithError(_) => self.end_session(None).await,
 
             #[cfg(feature = "transaction")]
             SessionInnerError::UnknownTxnId => {
-                let error = Error::new(
-                    TransactionError::UnknownId,
-                    None,
-                    None
-                );
+                let error = Error::new(TransactionError::UnknownId, None, None);
                 self.end_session(Some(error)).await
             }
         }

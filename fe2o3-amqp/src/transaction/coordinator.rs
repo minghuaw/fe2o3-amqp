@@ -14,16 +14,14 @@ use tokio::sync::mpsc;
 use tracing::instrument;
 
 use crate::{
-    acceptor::{
-        link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor,
-    },
+    acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
     link::{
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
         IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
-    util::{DeliveryInfo, Running, Initialized},
+    util::{DeliveryInfo, Initialized, Running},
     Delivery,
 };
 

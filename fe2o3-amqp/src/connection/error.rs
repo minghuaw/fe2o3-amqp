@@ -89,7 +89,6 @@ impl From<transport::Error> for Error {
 pub(crate) enum AllocSessionError {
     // #[error(transparent)]
     // Io(#[from] io::Error),
-
     #[error("Illegal local state")]
     IllegalState,
 

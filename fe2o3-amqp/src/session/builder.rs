@@ -7,9 +7,8 @@ use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};
 
-
 use crate::{
-    connection::{ConnectionHandle, AllocSessionError},
+    connection::{AllocSessionError, ConnectionHandle},
     control::SessionControl,
     endpoint::OutgoingChannel,
     link::LinkFrame,
@@ -23,7 +22,11 @@ use crate::transaction::{
     coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
 };
 
-use super::{frame::SessionFrame, SessionHandle, DEFAULT_WINDOW, error::{SessionBeginError, SessionErrorKind}};
+use super::{
+    error::{SessionBeginError, SessionErrorKind},
+    frame::SessionFrame,
+    SessionHandle, DEFAULT_WINDOW,
+};
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -332,11 +335,13 @@ impl Builder {
         let outgoing_channel = match connection.allocate_session(incoming_tx).await {
             Ok(channel) => channel,
             Err(alloc_error) => match alloc_error {
-                AllocSessionError::IllegalState => return Err(SessionBeginError::IllegalConnectionState),
+                AllocSessionError::IllegalState => {
+                    return Err(SessionBeginError::IllegalConnectionState)
+                }
                 AllocSessionError::ChannelMaxReached => {
                     // Locally initiating session exceeded channel max
-                    return Err(SessionBeginError::LocalChannelMaxReached)
-                },
+                    return Err(SessionBeginError::LocalChannelMaxReached);
+                }
             },
         };
 

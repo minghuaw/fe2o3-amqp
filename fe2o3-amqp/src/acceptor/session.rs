@@ -242,10 +242,13 @@ impl SessionAcceptor {
                         "Exceeding channel-max".to_string(),
                         None,
                     );
-                    connection.control.send(ConnectionControl::Close(Some(error))).await
+                    connection
+                        .control
+                        .send(ConnectionControl::Close(Some(error)))
+                        .await
                         .map_err(|_| SessionBeginError::IllegalConnectionState)?;
-                    
-                    return Err(SessionBeginError::LocalChannelMaxReached)
+
+                    return Err(SessionBeginError::LocalChannelMaxReached);
                 }
             },
         };

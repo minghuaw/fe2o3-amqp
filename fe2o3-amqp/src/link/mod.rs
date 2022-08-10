@@ -747,7 +747,7 @@ impl LinkRelay<OutputHandle> {
     }
 
     /// LinkRelay operates in session's event loop
-    /// 
+    ///
     /// The session needs a map of delivery_id and delivery_tag
     pub(crate) async fn on_incoming_transfer(
         &mut self,
@@ -764,7 +764,7 @@ impl LinkRelay<OutputHandle> {
                     //     Some("Sender should never receive a transfer".to_string()),
                     //     None,
                     // ),
-                    LinkRelayError::TransferFrameToSender
+                    LinkRelayError::TransferFrameToSender,
                 )
             }
             LinkRelay::Receiver {

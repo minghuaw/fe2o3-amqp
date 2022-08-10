@@ -327,7 +327,10 @@ where
     }
 
     // Handling SessionFrames
-    async fn send_begin(&mut self, writer: &mpsc::Sender<SessionFrame>) -> Result<(), Self::BeginError> {
+    async fn send_begin(
+        &mut self,
+        writer: &mpsc::Sender<SessionFrame>,
+    ) -> Result<(), Self::BeginError> {
         self.session.send_begin(writer).await
     }
 

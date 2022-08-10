@@ -72,7 +72,10 @@ pub(crate) trait Session {
     ) -> Result<(), Self::EndError>;
 
     // Handling SessionFrames
-    async fn send_begin(&mut self, writer: &mpsc::Sender<SessionFrame>) -> Result<(), Self::BeginError>;
+    async fn send_begin(
+        &mut self,
+        writer: &mpsc::Sender<SessionFrame>,
+    ) -> Result<(), Self::BeginError>;
 
     async fn send_end(
         &mut self,
