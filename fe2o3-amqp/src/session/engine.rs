@@ -105,7 +105,15 @@ where
                 self.session.on_incoming_attach(attach).await?;
             }
             SessionFrameBody::Flow(flow) => {
-                self.session.on_incoming_flow(flow).await?;
+                if let Some(link_flow) = self.session.on_incoming_flow(flow).await? {
+                    let flow = self.session.on_outgoing_flow(link_flow)?;
+                    self.outgoing
+                        .send(flow)
+                        .await
+                        // The receiving half must have dropped, and thus the `Connection`
+                        // event loop has stopped. It should be treated as an io error
+                        .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                }
             }
             SessionFrameBody::Transfer {
                 performative,
@@ -116,13 +124,26 @@ where
                     .await?;
             }
             SessionFrameBody::Disposition(disposition) => {
-                self.session.on_incoming_disposition(disposition).await?;
+                if let Some(dispositions) = self.session.on_incoming_disposition(disposition).await? {
+                    for disposition in dispositions {
+                        let disposition = self.session.on_outgoing_disposition(disposition)?;
+                        self.outgoing
+                            .send(disposition)
+                            .await
+                            // The receiving half must have dropped, and thus the `Connection`
+                            // event loop has stopped. It should be treated as an io error
+                            .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    }
+                }
             }
             SessionFrameBody::Detach(detach) => {
                 self.session.on_incoming_detach(detach).await?;
             }
             SessionFrameBody::End(end) => {
                 self.session.on_incoming_end(channel, end).await?;
+                if matches!(self.session.local_state(), SessionState::EndReceived) {
+                    self.session.send_end(&self.outgoing, None).await?;
+                }
             }
         }
 

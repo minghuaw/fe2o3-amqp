@@ -26,7 +26,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
-    util::Constant,
+    util::{is_consecutive, Constant},
     Payload,
 };
 
@@ -206,7 +206,7 @@ pub(crate) async fn allocate_link(
 ///
 #[derive(Debug)]
 pub struct Session {
-    pub(crate) control: mpsc::Sender<SessionControl>,
+    // pub(crate) control: mpsc::Sender<SessionControl>,
     // session_id: usize,
     pub(crate) outgoing_channel: OutgoingChannel,
 
@@ -271,9 +271,9 @@ impl Session {
 }
 
 impl endpoint::SessionExt for Session {
-    fn control(&self) -> &mpsc::Sender<SessionControl> {
-        &self.control
-    }
+    // fn control(&self) -> &mpsc::Sender<SessionControl> {
+    //     &self.control
+    // }
 }
 
 #[async_trait]
@@ -400,7 +400,7 @@ impl endpoint::Session for Session {
         }
     }
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
         // Handle session flow control
         //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
@@ -430,30 +430,34 @@ impl endpoint::Session for Session {
             let input_handle = InputHandle::from(link_flow.handle.clone());
             match self.link_by_input_handle.get_mut(&input_handle) {
                 Some(link_relay) => {
-                    if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await? {
-                        self.control
-                            .send(SessionControl::LinkFlow(echo_flow))
-                            .await
-                            // Sending control to self. This will only give an error if the receiving
-                            // half is dropped. An error would thus indicate that the event loop
-                            // has stopped, so it could be considered illegal state.
-                            //
-                            // If the event loop has stopped, this should not be executed at all
-                            .map_err(|_| SessionInnerError::IllegalConnectionState)?;
-                    }
+                    // if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await? {
+                    //     self.control
+                    //         .send(SessionControl::LinkFlow(echo_flow))
+                    //         .await
+                    //         // Sending control to self. This will only give an error if the receiving
+                    //         // half is dropped. An error would thus indicate that the event loop
+                    //         // has stopped, so it could be considered illegal state.
+                    //         //
+                    //         // If the event loop has stopped, this should not be executed at all
+                    //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    // }
+                    return link_relay
+                        .on_incoming_flow(link_flow)
+                        .await
+                        .map_err(Into::into);
                 }
                 None => return Err(SessionInnerError::UnattachedHandle), // End session with unattached handle?
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Disposition>, Self::Error> {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
@@ -475,14 +479,14 @@ impl endpoint::Session for Session {
             None => return Err(SessionInnerError::UnattachedHandle),
         };
 
-        Ok(())
+        Ok(None)
     }
 
     #[instrument(skip_all)]
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Vec<Disposition>>, Self::Error> {
         // TODO: what to do when session lost delivery_tag_by_id
         // and disposition only has delivery id?
 
@@ -491,10 +495,6 @@ impl endpoint::Session for Session {
 
         // A disposition frame may refer to deliveries on multiple links, each may be running
         // in different mode. This counts the largest sections that can be echoed back together
-        let mut first_echo = first;
-        let mut last_echo = first;
-        let mut prev = false;
-
         if disposition.settled {
             // If it is alrea
             for delivery_id in first..=last {
@@ -512,7 +512,10 @@ impl endpoint::Session for Session {
                     }
                 }
             }
+
+            Ok(None)
         } else {
+            let mut delivery_ids = Vec::new();
             for delivery_id in first..=last {
                 let key = (disposition.role.clone(), delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&key) {
@@ -529,43 +532,31 @@ impl endpoint::Session for Session {
                             .await;
 
                         if echo {
-                            if !prev {
-                                first_echo = delivery_id;
-                            }
-                            last_echo = delivery_id
-                        } else if !echo && prev {
-                            let role = match disposition.role {
-                                Role::Sender => Role::Receiver,
-                                Role::Receiver => Role::Sender,
-                            };
-                            let last = if last_echo != first_echo {
-                                Some(last_echo)
-                            } else {
-                                None
-                            };
-
-                            let disposition = Disposition {
-                                role,
-                                first: first_echo,
-                                last,
-                                settled: true,
-                                state: None,
-                                batchable: false, // No reply is really expected as this is a reply
-                            };
-                            self.control
-                                .send(SessionControl::Disposition(disposition))
-                                .await
-                                .map_err(|_| SessionInnerError::IllegalState)?
-                            // event loop has stopped
+                            delivery_ids.push(delivery_id);
                         }
-
-                        prev = echo;
                     }
                 }
             }
-        }
 
-        Ok(())
+            let chunk_inds = consecutive_chunk_indices(&delivery_ids[..]);
+
+            let mut dispositions = Vec::with_capacity(chunk_inds.len());
+            let mut prev_ind = 0;
+            for ind in chunk_inds {
+                let slice = &delivery_ids[prev_ind..ind];
+                let disposition = Disposition {
+                    role: Role::Sender,
+                    first: slice[0],
+                    last: slice.last().map(|id| *id),
+                    settled: true,
+                    state: disposition.state.clone(),
+                    batchable: false,
+                };
+                dispositions.push(disposition);
+                prev_ind = ind;
+            }
+            Ok(Some(dispositions))
+        }
     }
 
     #[instrument(skip_all)]
@@ -594,15 +585,15 @@ impl endpoint::Session for Session {
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
-                self.control
-                    .send(SessionControl::End(None))
-                    .await
-                    // The `SendError` occurs when the receiving half is dropped,
-                    // indicating that the `SessionEngine::event_loop` has stopped.
-                    // and thus should yield an illegal state error
-                    //
-                    // event loop has stopped
-                    .map_err(|_| SessionStateError::IllegalState)?;
+                // self.control
+                //     .send(SessionControl::End(None))
+                //     .await
+                //     // The `SendError` occurs when the receiving half is dropped,
+                //     // indicating that the `SessionEngine::event_loop` has stopped.
+                //     // and thus should yield an illegal state error
+                //     //
+                //     // event loop has stopped
+                //     .map_err(|_| SessionStateError::IllegalState)?;
 
                 match end.error {
                     Some(err) => Err(SessionStateError::RemoteEndedWithError(err)),
@@ -825,4 +816,18 @@ impl HandleDischarge for Session {
         // FIXME: This should be impossible
         Ok(Err(TransactionError::UnknownId))
     }
+}
+
+fn consecutive_chunk_indices(delivery_ids: &[DeliveryNumber]) -> Vec<usize> {
+    delivery_ids
+        .windows(2)
+        .enumerate()
+        .filter_map(|(i, id)| {
+            if is_consecutive(&id[0], &id[1]) {
+                None
+            } else {
+                Some(i + 1)
+            }
+        })
+        .collect()
 }

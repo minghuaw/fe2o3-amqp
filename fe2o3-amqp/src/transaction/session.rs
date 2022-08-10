@@ -77,6 +77,7 @@ pub(crate) struct TxnSession<S>
 where
     S: endpoint::Session,
 {
+    pub(crate) control: mpsc::Sender<SessionControl>,
     pub(crate) session: S,
     pub(crate) txn_manager: TransactionManager,
 }
@@ -98,7 +99,7 @@ where
         remote_attach: Attach,
     ) -> Result<(), Self::Error> {
         let acceptor = self.txn_manager.control_link_acceptor.clone();
-        let control = self.session.control().clone();
+        let control = self.control.clone();
         let outgoing = self.txn_manager.control_link_outgoing.clone();
 
         tokio::spawn(async move {
@@ -160,7 +161,12 @@ where
                     if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
                         transfer.state = txn_state.outcome.map(Into::into);
                     };
-                    self.session.on_incoming_transfer(transfer, payload).await?
+                    
+                    // Committing shuold never need to send an immediate disposition
+                    if let Some(disposition) = self.session.on_incoming_transfer(transfer, payload).await? {
+                        self.control.send(SessionControl::Disposition(disposition)).await
+                                .map_err(|_| Self::Error::IllegalState)?
+                    }
                 }
                 TxnWorkFrame::Retire(mut disposition) => {
                     // On a successful discharge, the resource will apply the given outcome and can immediately settle the transfers.
@@ -168,7 +174,14 @@ where
                         disposition.state = txn_state.outcome.map(Into::into)
                     }
                     disposition.settled = true;
-                    self.session.on_incoming_disposition(disposition).await?
+
+                    // TODO: Where should the echoing disposition be sent?
+                    if let Some(dispositions) = self.session.on_incoming_disposition(disposition).await? {
+                        for disposition in dispositions {
+                            self.control.send(SessionControl::Disposition(disposition)).await
+                                .map_err(|_| Self::Error::IllegalState)?
+                        }
+                    }
                 }
             }
         }
@@ -250,7 +263,7 @@ where
     }
 
     #[instrument(skip_all, flow = ?flow)]
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
         // TODO: implement transactional acquisition
         // match flow
         //     .properties
@@ -269,7 +282,7 @@ where
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Disposition>, Self::Error> {
         let (txn, txn_id) = match &transfer.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
@@ -282,27 +295,28 @@ where
             Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,
         };
 
-        if let Some(disposition) = txn.on_incoming_post(txn_id, transfer, payload) {
-            self.session
-                .control()
-                .send(SessionControl::Disposition(disposition))
-                .await
-                .map_err(|_| S::Error::IllegalConnectionState)?;
-        }
-        Ok(())
+        // if let Some(disposition) = txn.on_incoming_post(txn_id, transfer, payload) {
+        //     self.session
+        //         .control()
+        //         .send(SessionControl::Disposition(disposition))
+        //         .await
+        //         .map_err(|_| S::Error::IllegalConnectionState)?;
+        // }
+        // Ok(())
+        Ok(txn.on_incoming_post(txn_id, transfer, payload))
     }
 
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Vec<Disposition>>, Self::Error> {
         match &disposition.state {
             Some(DeliveryState::TransactionalState(state)) => {
                 let txn_id = &state.txn_id;
                 match self.txn_manager.txns.get_mut(txn_id) {
                     Some(txn) => {
                         txn.frames.push(TxnWorkFrame::Retire(disposition));
-                        Ok(())
+                        Ok(None) // TODO: need to consider the receiver settle mode?
                     }
                     None => {
                         // FIXME: Should this stop the session or just the coordinator associated with the txn?

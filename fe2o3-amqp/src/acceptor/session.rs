@@ -153,6 +153,7 @@ impl SessionAcceptor {
         listener_session: ListenerSession,
         _control_link_outgoing: &mpsc::Sender<LinkFrame>,
         connection: &crate::connection::ConnectionHandle<R>,
+        _session_control_tx: &mpsc::Sender<SessionControl>,
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
@@ -175,6 +176,7 @@ impl SessionAcceptor {
         listener_session: ListenerSession,
         control_link_outgoing: &mpsc::Sender<LinkFrame>,
         connection: &crate::connection::ConnectionHandle<R>,
+        session_control_tx: &mpsc::Sender<SessionControl>,
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
@@ -184,6 +186,7 @@ impl SessionAcceptor {
                 let txn_manager =
                     TransactionManager::new(control_link_outgoing.clone(), control_link_acceptor);
                 let listener_session = TxnSession {
+                    control: session_control_tx.clone(),
                     session: listener_session,
                     txn_manager,
                 };
@@ -253,7 +256,7 @@ impl SessionAcceptor {
         let mut session =
             self.0
                 .clone()
-                .into_session(session_control_tx.clone(), outgoing_channel, local_state);
+                .into_session(outgoing_channel, local_state);
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,
@@ -269,6 +272,7 @@ impl SessionAcceptor {
                 listener_session,
                 &outgoing_tx,
                 connection,
+                &session_control_tx,
                 session_control_rx,
                 incoming_rx,
                 outgoing_rx,
@@ -336,9 +340,9 @@ pub struct ListenerSession {
 }
 
 impl endpoint::SessionExt for ListenerSession {
-    fn control(&self) -> &mpsc::Sender<SessionControl> {
-        &self.session.control
-    }
+    // fn control(&self) -> &mpsc::Sender<SessionControl> {
+    //     &self.session.control
+    // }
 }
 
 #[async_trait]
@@ -440,7 +444,7 @@ impl endpoint::Session for ListenerSession {
         }
     }
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
         self.session.on_incoming_flow(flow).await
     }
 
@@ -448,14 +452,14 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Disposition>, Self::Error> {
         self.session.on_incoming_transfer(transfer, payload).await
     }
 
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Vec<Disposition>>, Self::Error> {
         self.session.on_incoming_disposition(disposition).await
     }
 

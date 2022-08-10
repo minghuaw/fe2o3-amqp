@@ -8,7 +8,7 @@ use fe2o3_amqp_types::{
 
 use tokio::sync::mpsc;
 
-use crate::{control::SessionControl, link::LinkRelay, session::frame::SessionFrame, Payload};
+use crate::{link::LinkRelay, session::frame::SessionFrame, Payload};
 
 use super::{IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle};
 
@@ -50,18 +50,20 @@ pub(crate) trait Session {
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error>;
+    /// An `Ok(Some(link_flow))` means an immediate echo of the link flow is requested
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error>;
 
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<Option<Disposition>, Self::Error>;
 
+    /// An `Ok(Some(Disposition))` means an immediate disposition should be sent back
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
 
@@ -104,5 +106,5 @@ pub(crate) trait Session {
 }
 
 pub(crate) trait SessionExt: Session {
-    fn control(&self) -> &mpsc::Sender<SessionControl>;
+    // fn control(&self) -> &mpsc::Sender<SessionControl>;
 }

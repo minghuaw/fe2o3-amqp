@@ -90,12 +90,12 @@ impl Builder {
 
     pub(crate) fn into_session(
         self,
-        control: mpsc::Sender<SessionControl>,
+        // control: mpsc::Sender<SessionControl>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
     ) -> Session {
         Session {
-            control,
+            // control,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -129,7 +129,7 @@ impl Builder {
     ) -> TxnSession<Session> {
         let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
         let session = Session {
-            control,
+            // control,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -152,6 +152,7 @@ impl Builder {
         };
 
         TxnSession {
+            control,
             session,
             txn_manager,
         }
@@ -160,7 +161,7 @@ impl Builder {
     #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
     async fn launch_client_session_engine<R>(
         self,
-        session_control_tx: mpsc::Sender<SessionControl>,
+        _session_control_tx: &mpsc::Sender<SessionControl>,
         _outgoing: &mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
@@ -169,7 +170,7 @@ impl Builder {
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
     ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
-        let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+        let session = self.into_session(outgoing_channel, local_state);
         let engine = SessionEngine::begin_client_session(
             connection.control.clone(),
             session,
@@ -185,7 +186,7 @@ impl Builder {
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     async fn launch_client_session_engine<R>(
         mut self,
-        session_control_tx: mpsc::Sender<SessionControl>,
+        session_control_tx: &mpsc::Sender<SessionControl>,
         control_link_outgoing: &mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
@@ -197,7 +198,7 @@ impl Builder {
         match self.control_link_acceptor.take() {
             Some(control_link_acceptor) => {
                 let session = self.into_txn_session(
-                    session_control_tx,
+                    session_control_tx.clone(),
                     control_link_outgoing.clone(),
                     outgoing_channel,
                     control_link_acceptor,
@@ -216,7 +217,7 @@ impl Builder {
             }
             None => {
                 let session =
-                    self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+                    self.into_session(outgoing_channel, local_state);
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
                     session,
@@ -345,7 +346,7 @@ impl Builder {
 
         let engine_handle = self
             .launch_client_session_engine(
-                session_control_tx.clone(),
+                &session_control_tx,
                 &outgoing_tx,
                 outgoing_channel,
                 local_state,

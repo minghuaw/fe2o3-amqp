@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{AsByteIterator, DeliveryInfo, IntoReader};
+use crate::util::{AsByteIterator, DeliveryInfo, IntoReader, is_consecutive};
 
 use super::*;
 
@@ -349,11 +349,6 @@ where
         self.dispose_consecutive(writer, final_slice, settled, state, batchable)
             .await
     }
-}
-
-fn is_consecutive(left: &DeliveryNumber, right: &DeliveryNumber) -> bool {
-    // Assume ascending order
-    right - left == 1
 }
 
 fn consecutive_chunk_indices(delivery_infos: &[DeliveryInfo]) -> Vec<usize> {
