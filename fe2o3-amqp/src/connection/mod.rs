@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::BTreeMap, convert::TryInto, io, sync::Arc};
+use std::{cmp::min, collections::BTreeMap, convert::TryInto, sync::Arc};
 
 use async_trait::async_trait;
 

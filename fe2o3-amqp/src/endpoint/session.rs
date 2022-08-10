@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     definitions::Error,
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
 };
-use futures_util::Sink;
+
 use tokio::sync::mpsc;
 
 use crate::{control::SessionControl, link::LinkRelay, session::frame::SessionFrame, Payload};

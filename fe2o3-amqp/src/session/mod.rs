@@ -1,25 +1,23 @@
 //! Implements AMQP1.0 Session
 
-use std::{collections::BTreeMap, io};
+use std::{collections::BTreeMap};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo,
-        SessionError, TransferNumber,
+        self, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::{Symbol, UInt},
     states::SessionState,
 };
-use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{
     sync::{
         mpsc::{self},
         oneshot,
     },
-    task::{JoinHandle, JoinError},
+    task::{JoinHandle},
 };
 use tracing::{instrument, trace};
 

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
+        self, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
         SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{DeliveryState, Received, Source, Target, TargetArchetype},

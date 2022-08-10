@@ -1,12 +1,7 @@
-use std::io;
-
-use fe2o3_amqp_types::definitions::{self, AmqpError, ErrorCondition, Handle, SessionError};
+use fe2o3_amqp_types::definitions::{self};
 use tokio::task::JoinError;
 
-use crate::{connection::AllocSessionError, link::LinkRelayError};
-
-#[cfg(feature = "transaction")]
-use crate::link::ReceiverAttachError;
+use crate::link::LinkRelayError;
 
 /// Error with ending a session
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +20,7 @@ pub(crate) enum SessionStateError {
 
     /// Remote session ended with error
     #[error("Remote ended with error")]
-    RemoteEndedWithError(definitions::Error)
+    RemoteEndedWithError(definitions::Error),
 }
 
 /// Error with beginning a session
@@ -89,34 +84,34 @@ pub(crate) enum SessionInnerError {
     #[error("Found Transfer frame being sent to a Sender")]
     TransferFrameToSender,
 
-    // /// Remote session ended
-    // #[error("Remote session ended")]
-    // RemoteEnded,
+    /// Remote session ended
+    #[error("Remote session ended")]
+    RemoteEnded,
 
-    // /// Remote session ended with error
-    // #[error("Remote ended with error")]
-    // RemoteEndedWithError(definitions::Error),
+    /// Remote session ended with error
+    #[error("Remote ended with error")]
+    RemoteEndedWithError(definitions::Error),
+}
+
+impl From<SessionStateError> for SessionInnerError {
+    fn from(error: SessionStateError) -> Self {
+        match error {
+            SessionStateError::IllegalState => Self::IllegalState,
+            SessionStateError::IllegalConnectionState => Self::IllegalConnectionState,
+            SessionStateError::RemoteEnded => Self::RemoteEnded,
+            SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+        }
+    }
 }
 
 impl From<LinkRelayError> for SessionInnerError {
     fn from(error: LinkRelayError) -> Self {
         match error {
             LinkRelayError::UnattachedHandle => Self::UnattachedHandle,
-            LinkRelayError::TransferFrameToSender => todo!(),
+            LinkRelayError::TransferFrameToSender => Self::TransferFrameToSender,
         }
     }
 }
-
-// impl From<SessionEndError> for SessionInnerError {
-//     fn from(error: SessionEndError) -> Self {
-//         match error {
-//             SessionEndError::IllegalState => Self::IllegalState,
-//             SessionEndError::IllegalConnectionState => Self::IllegalConnectionState,
-//             SessionEndError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
-//             SessionEndError::RemoteEnded => Self::RemoteEnded,
-//         }
-//     }
-// }
 
 /// Error with session operations
 #[derive(Debug, thiserror::Error)]
@@ -161,13 +156,15 @@ impl From<SessionInnerError> for SessionErrorKind {
     fn from(error: SessionInnerError) -> Self {
         match error {
             SessionInnerError::UnattachedHandle => Self::UnattachedHandle,
-            SessionInnerError::RemoteAttachingLinkNameNotFound => Self::RemoteAttachingLinkNameNotFound,
+            SessionInnerError::RemoteAttachingLinkNameNotFound => {
+                Self::RemoteAttachingLinkNameNotFound
+            }
             SessionInnerError::HandleInUse => Self::HandleInUse,
             SessionInnerError::IllegalState => Self::IllegalState,
             SessionInnerError::IllegalConnectionState => Self::IllegalConnectionState,
             SessionInnerError::TransferFrameToSender => Self::TransferFrameToSender,
-            // SessionInnerError::RemoteEnded => Self::RemoteEnded,
-            // SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+            SessionInnerError::RemoteEnded => Self::RemoteEnded,
+            SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
         }
     }
 }
@@ -181,17 +178,6 @@ impl From<LinkRelayError> for SessionErrorKind {
     }
 }
 
-// impl From<SessionBeginError> for SessionErrorKind {
-//     fn from(error: SessionBeginError) -> Self {
-//         match error {
-//             SessionBeginError::IllegalState => Self::IllegalState,
-//             SessionBeginError::IllegalConnectionState => Self::IllegalConnectionState,
-//             SessionBeginError::RemoteEnded => Self::RemoteEnded,
-//             SessionBeginError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
-//         }
-//     }
-// }
-
 impl From<SessionStateError> for SessionErrorKind {
     fn from(error: SessionStateError) -> Self {
         match error {
@@ -203,54 +189,34 @@ impl From<SessionStateError> for SessionErrorKind {
     }
 }
 
-// /// Session errors
-// #[derive(Debug, thiserror::Error)]
-// pub enum Error {
-//     /// Io Error. If includes failing to send to the underlying connection event loop
-//     #[error(transparent)]
-//     Io(#[from] io::Error),
+// impl<'a> TryFrom<&'a SessionErrorKind> for definitions::Error {
+//     type Error = &'a SessionErrorKind;
 
-//     /// An attempt is trying to exceed the maximum number of allowed channel
-//     #[error("All channels have been allocated")]
-//     ChannelMaxReached,
+//     fn try_from(kind: &'a SessionErrorKind) -> Result<Self, Self::Error> {
+//         use fe2o3_amqp_types::definitions::{AmqpError, Error, SessionError};
 
-//     /// Error joining the event loop task. This could occur only when the user attempts
-//     /// to end the session
-//     #[error(transparent)]
-//     JoinError(#[from] JoinError),
-
-//     // /// TODO: Fine grain control over particular errors
-//     // ///
-//     // /// A local error
-//     // #[error("Local error {:?}", .0)]
-//     // Local(definitions::Error),
-//     /// A peer that receives a handle outside the supported range MUST close the connection with the
-//     /// framing-error error-code
-//     #[error("A handle outside the supported range is received")]
-//     HandleMaxExceeded,
-
-//     /// The remote peer ended the session with the provided error
-//     #[error("Remote error {:?}", .0)]
-//     Remote(definitions::Error),
-
-//     /// TODO: hide this from public API
-//     /// Link handle error should be handled differently. Link handle is only local
-//     #[error("Local LinkRelay {:?} error {:?}", .handle, .error)]
-//     LinkHandleError {
-//         /// Handle of the link
-//         handle: Handle,
-//         /// Whether the link should close upon having an error
-//         closed: bool,
-//         /// Error
-//         error: definitions::Error,
-//     },
-
-//     /// A remotely initiated control link failed to attach
-//     ///
-//     /// TODO: Hide from public API?
-//     #[cfg(feature = "transaction")]
-//     #[error("Control link attach error {:?}", .0)]
-//     CoordinatorAttachError(ReceiverAttachError),
+//         match kind {
+//             SessionErrorKind::UnattachedHandle => {
+//                 Ok(Error::new(SessionError::UnattachedHandle, None, None))
+//             }
+//             SessionErrorKind::RemoteAttachingLinkNameNotFound => Ok(Error::new(
+//                 AmqpError::InternalError,
+//                 Some(String::from("Link name is not found")),
+//                 None,
+//             )),
+//             SessionErrorKind::HandleInUse => Ok(Error::new(SessionError::HandleInUse, None, None)),
+//             SessionErrorKind::IllegalState => Ok(Error::new(AmqpError::IllegalState, None, None)),
+//             SessionErrorKind::IllegalConnectionState => Err(kind),
+//             SessionErrorKind::TransferFrameToSender => Ok(Error::new(
+//                 AmqpError::NotAllowed,
+//                 Some(String::from("Found Transfer frame sent Sender link")),
+//                 None,
+//             )),
+//             SessionErrorKind::RemoteEnded => Err(kind),
+//             SessionErrorKind::RemoteEndedWithError(_) => Err(kind),
+//             SessionErrorKind::JoinError(_) => Err(kind),
+//         }
+//     }
 // }
 
 #[derive(Debug, thiserror::Error)]
@@ -261,32 +227,3 @@ pub(crate) enum AllocLinkError {
     #[error("Link name must be unique")]
     DuplicatedLinkName,
 }
-
-// impl From<AllocSessionError> for Error {
-//     fn from(err: AllocSessionError) -> Self {
-//         match err {
-//             AllocSessionError::Io(e) => Self::Io(e),
-//             AllocSessionError::ChannelMaxReached => Self::ChannelMaxReached,
-//             AllocSessionError::IllegalState => {
-//                 Self::Local(definitions::Error::new(AmqpError::IllegalState, None, None))
-//             }
-//         }
-//     }
-// }
-
-// impl From<AllocLinkError> for definitions::Error {
-//     fn from(err: AllocLinkError) -> Self {
-//         match err {
-//             AllocLinkError::IllegalSessionState => Self {
-//                 condition: AmqpError::IllegalState.into(),
-//                 description: Some("Illegal session state".to_string()),
-//                 info: None,
-//             },
-//             AllocLinkError::DuplicatedLinkName => Self {
-//                 condition: AmqpError::NotAllowed.into(),
-//                 description: Some("Link name is duplicated".to_string()),
-//                 info: None,
-//             },
-//         }
-//     }
-// }

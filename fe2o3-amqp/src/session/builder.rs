@@ -2,11 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber, self, ConnectionError};
+use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tokio_util::sync::PollSender;
+
 
 use crate::{
     connection::{ConnectionHandle, AllocSessionError},
