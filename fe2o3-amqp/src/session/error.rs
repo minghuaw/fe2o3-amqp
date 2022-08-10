@@ -202,36 +202,6 @@ impl From<SessionStateError> for SessionErrorKind {
     }
 }
 
-// impl<'a> TryFrom<&'a SessionErrorKind> for definitions::Error {
-//     type Error = &'a SessionErrorKind;
-
-//     fn try_from(kind: &'a SessionErrorKind) -> Result<Self, Self::Error> {
-//         use fe2o3_amqp_types::definitions::{AmqpError, Error, SessionError};
-
-//         match kind {
-//             SessionErrorKind::UnattachedHandle => {
-//                 Ok(Error::new(SessionError::UnattachedHandle, None, None))
-//             }
-//             SessionErrorKind::RemoteAttachingLinkNameNotFound => Ok(Error::new(
-//                 AmqpError::InternalError,
-//                 Some(String::from("Link name is not found")),
-//                 None,
-//             )),
-//             SessionErrorKind::HandleInUse => Ok(Error::new(SessionError::HandleInUse, None, None)),
-//             SessionErrorKind::IllegalState => Ok(Error::new(AmqpError::IllegalState, None, None)),
-//             SessionErrorKind::IllegalConnectionState => Err(kind),
-//             SessionErrorKind::TransferFrameToSender => Ok(Error::new(
-//                 AmqpError::NotAllowed,
-//                 Some(String::from("Found Transfer frame sent Sender link")),
-//                 None,
-//             )),
-//             SessionErrorKind::RemoteEnded => Err(kind),
-//             SessionErrorKind::RemoteEndedWithError(_) => Err(kind),
-//             SessionErrorKind::JoinError(_) => Err(kind),
-//         }
-//     }
-// }
-
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AllocLinkError {
     #[error("Illegal session state")]

@@ -467,16 +467,6 @@ impl endpoint::Session for Session {
         match self.link_by_input_handle.get_mut(&input_handle) {
             Some(link_relay) => {
                 let id_and_tag = link_relay.on_incoming_transfer(transfer, payload).await?;
-                // {
-                // Ok(opt) => opt,
-                // Err((closed, error)) => {
-                //     return Err(Error::LinkHandleError {
-                //         handle: link_relay.output_handle().clone().into(),
-                //         closed,
-                //         error,
-                //     })
-                // }
-                // };
 
                 // FIXME: If the unsettled map needs this
                 if let Some((delivery_id, delivery_tag)) = id_and_tag {

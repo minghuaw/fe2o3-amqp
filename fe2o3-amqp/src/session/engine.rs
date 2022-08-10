@@ -382,29 +382,6 @@ where
         }
     }
 
-    // #[inline]
-    // async fn on_link_handle_error(
-    //     &mut self,
-    //     handle: &Handle,
-    //     closed: &bool,
-    //     error: LinkRelayError,
-    // ) -> Result<Running, SessionErrorKind> {
-    //     // TODO: detach?
-    //     let detach = Detach {
-    //         handle: handle.clone(),
-    //         closed: *closed,
-    //         error: Some(definitions::Error::from(error)),
-    //     };
-    //     let frame = self.session.on_outgoing_detach(detach);
-    //     if let Err(error) = self.outgoing.send(frame).await {
-    //         // The connection must have dropped
-    //         Err(SessionErrorKind::IllegalConnectionState)
-    //     } else {
-    //         // Overall, link errors should not stop the session
-    //         Ok(Running::Continue)
-    //     }
-    // }
-
     #[inline]
     fn continue_or_stop_by_state(&self) -> Running {
         match self.session.local_state() {
