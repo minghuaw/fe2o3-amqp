@@ -182,11 +182,29 @@ where
         match engine.open_inner().await {
             Ok(_) => Ok(engine),
             Err(error) => {
-                if let Err(error) = engine.close_connection(None).await {
-                    tracing::error!(?error)
+                match engine.close_connection(None).await {
+                    Ok(_) => Err(error),
+                    Err(error) => match error {
+                        ConnectionInnerError::TransportError(e) => {
+                            Err(OpenError::TransportError(e))
+                        }
+                        ConnectionInnerError::IllegalState => Err(OpenError::IllegalState),
+                        ConnectionInnerError::NotImplemented(e) => {
+                            Err(OpenError::NotImplemented(e))
+                        }
+                        ConnectionInnerError::RemoteClosed => Err(OpenError::RemoteClosed),
+                        ConnectionInnerError::RemoteClosedWithError(e) => {
+                            Err(OpenError::RemoteClosedWithError(e))
+                        }
+                        ConnectionInnerError::NotFound(_) => {
+                            // This will only occur when the remote is trying to send to a session
+                            // which is not supported currently
+                            Err(OpenError::NotImplemented(Some(String::from(
+                                "Pipelined open is not implemented",
+                            ))))
+                        }
+                    },
                 }
-
-                Err(error)
             }
         }
     }
@@ -410,12 +428,6 @@ where
             }
             ConnectionInnerError::NotFound(description) => {
                 let error = definitions::Error::new(AmqpError::NotFound, description.clone(), None);
-                self.close_connection(Some(error)).await?;
-                Ok(Running::Stop)
-            }
-            ConnectionInnerError::NotAllowed(description) => {
-                let error =
-                    definitions::Error::new(AmqpError::NotAllowed, description.clone(), None);
                 self.close_connection(Some(error)).await?;
                 Ok(Running::Stop)
             }

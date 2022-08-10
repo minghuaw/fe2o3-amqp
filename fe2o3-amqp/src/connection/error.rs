@@ -221,10 +221,6 @@ pub(crate) enum ConnectionInnerError {
     #[error("Not found {:?}", .0)]
     NotFound(Option<String>),
 
-    /// Not allowed
-    #[error("Not allowd {:?}", .0)]
-    NotAllowed(Option<String>),
-
     /// Remote peer closed connection
     #[error("Remote peer closed")]
     RemoteClosed,
@@ -269,7 +265,7 @@ pub enum ConnectionErrorKind {
     #[error("Not implemented {:?}", .0)]
     NotImplemented(Option<String>),
 
-    /// Not found
+    /// Session is not found
     #[error("Not found {:?}", .0)]
     NotFound(Option<String>),
 
@@ -297,7 +293,6 @@ impl From<ConnectionInnerError> for ConnectionErrorKind {
             ConnectionInnerError::IllegalState => Self::IllegalState,
             ConnectionInnerError::NotImplemented(val) => Self::NotImplemented(val),
             ConnectionInnerError::NotFound(val) => Self::NotFound(val),
-            ConnectionInnerError::NotAllowed(val) => Self::NotAllowed(val),
             ConnectionInnerError::RemoteClosed => Self::RemoteClosed,
             ConnectionInnerError::RemoteClosedWithError(val) => Self::RemoteClosedWithError(val),
         }

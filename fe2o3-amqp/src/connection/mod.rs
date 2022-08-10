@@ -762,9 +762,6 @@ impl Connection {
                     .get(outgoing_channel as usize)
                     .ok_or_else(|| ConnectionInnerError::NotFound(None))?; // Close with error NotFound
 
-                if self.session_by_incoming_channel.contains_key(&channel) {
-                    return Err(ConnectionInnerError::NotAllowed(None)); // TODO: this is probably not how not allowed should be used?
-                }
                 self.session_by_incoming_channel
                     .insert(channel, relay.clone());
                 Ok(Some(relay))
