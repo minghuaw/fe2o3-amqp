@@ -41,6 +41,7 @@ async fn create_dlq_message(connection: &mut ConnectionHandle<()>, queue_name: &
     sender.close().await.unwrap();
 
     // Reject the message
+    // "... it can reject the message, which moves it into the dead-letter queue ..."
     let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
