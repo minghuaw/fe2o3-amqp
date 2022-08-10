@@ -25,6 +25,10 @@ OR
 cargo run --bin queue_receiver
 ```
 
+```sh
+cargo run --bin queue_dlq --features "dlq"
+```
+
 ## Topic
 
 To run the example, the following environment variables must be set in a `.env` file:

@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+dlq = ["fe2o3-amqp/transaction"]
+
 [dependencies]
 dotenv = "0.15.0"
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
@@ -12,3 +15,8 @@ tokio-rustls = "0.23"
 rustls = "0.20"
 webpki-roots = "0.22.4"
 fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
+
+[[bin]]
+name = "queue_dlq"
+path = "src/bin/queue_dlq.rs"
+required-features = ["dlq"]
