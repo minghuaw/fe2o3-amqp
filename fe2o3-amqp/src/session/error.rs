@@ -25,7 +25,7 @@ pub(crate) enum SessionStateError {
 
 /// Error with beginning a session
 #[derive(Debug, thiserror::Error)]
-pub enum SessionBeginError {
+pub enum BeginError {
     /// Illegal session state
     #[error("Illegal session state")]
     IllegalState,
@@ -47,7 +47,7 @@ pub enum SessionBeginError {
     LocalChannelMaxReached,
 }
 
-impl From<SessionStateError> for SessionBeginError {
+impl From<SessionStateError> for BeginError {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,

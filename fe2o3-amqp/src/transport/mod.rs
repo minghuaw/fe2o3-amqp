@@ -488,7 +488,9 @@ where
                 // check if idle timeout has exceeded
                 if let Some(delay) = this.idle_timeout.as_pin_mut() {
                     match delay.poll(cx) {
-                        Poll::Ready(()) => return Poll::Ready(Some(Err(Error::IdleTimeout))),
+                        Poll::Ready(()) => {
+                            return Poll::Ready(Some(Err(Error::IdleTimeoutElapsed)))
+                        }
                         Poll::Pending => return Poll::Pending,
                     }
                 }

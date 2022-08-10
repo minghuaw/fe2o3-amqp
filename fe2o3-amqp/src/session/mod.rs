@@ -44,7 +44,7 @@ pub(crate) mod frame;
 
 mod error;
 pub(crate) use error::{
-    AllocLinkError, SessionBeginError, SessionErrorKind, SessionInnerError, SessionStateError,
+    AllocLinkError, BeginError, SessionErrorKind, SessionInnerError, SessionStateError,
 };
 
 mod builder;
@@ -265,9 +265,7 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(
-        conn: &mut ConnectionHandle<()>,
-    ) -> Result<SessionHandle<()>, SessionBeginError> {
+    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
         Session::builder().begin(conn).await
     }
 }

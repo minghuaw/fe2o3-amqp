@@ -21,7 +21,7 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem},
-        AllocLinkError, SessionBeginError, SessionErrorKind, SessionHandle, SessionInnerError,
+        AllocLinkError, BeginError, SessionErrorKind, SessionHandle, SessionInnerError,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
@@ -178,7 +178,7 @@ impl SessionAcceptor {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, SessionBeginError> {
+    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
         match self.0.control_link_acceptor.clone() {
             Some(control_link_acceptor) => {
                 let txn_manager =
@@ -219,7 +219,7 @@ impl SessionAcceptor {
         &self,
         incoming_session: IncomingSession,
         connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, SessionBeginError> {
+    ) -> Result<ListenerSessionHandle, BeginError> {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
@@ -231,9 +231,7 @@ impl SessionAcceptor {
         let outgoing_channel = match connection.allocate_session(incoming_tx).await {
             Ok(channel) => channel,
             Err(error) => match error {
-                AllocSessionError::IllegalState => {
-                    return Err(SessionBeginError::IllegalConnectionState)
-                }
+                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
                 AllocSessionError::ChannelMaxReached => {
                     // A peer that receives a channel number outside the supported range MUST close the connection
                     // with the framing-error error-code
@@ -246,9 +244,9 @@ impl SessionAcceptor {
                         .control
                         .send(ConnectionControl::Close(Some(error)))
                         .await
-                        .map_err(|_| SessionBeginError::IllegalConnectionState)?;
+                        .map_err(|_| BeginError::IllegalConnectionState)?;
 
-                    return Err(SessionBeginError::LocalChannelMaxReached);
+                    return Err(BeginError::LocalChannelMaxReached);
                 }
             },
         };
@@ -291,11 +289,11 @@ impl SessionAcceptor {
     pub async fn accept(
         &self,
         connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, SessionBeginError> {
+    ) -> Result<ListenerSessionHandle, BeginError> {
         let incoming_session = connection
             .next_incoming_session()
             .await
-            .ok_or(SessionBeginError::IllegalConnectionState)?;
+            .ok_or(BeginError::IllegalConnectionState)?;
         self.accept_incoming_session(incoming_session, connection)
             .await
     }
@@ -304,7 +302,7 @@ impl SessionAcceptor {
 impl<S> SessionEngine<S>
 where
     S: ListenerSessionEndpoint + endpoint::SessionEndpoint,
-    SessionBeginError: From<S::BeginError>,
+    BeginError: From<S::BeginError>,
 {
     pub async fn begin_listener_session(
         conn_control: mpsc::Sender<ConnectionControl>,
@@ -313,7 +311,7 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<Self, SessionBeginError> {
+    ) -> Result<Self, BeginError> {
         tracing::trace!("Instantiating session engine");
         let mut engine = Self {
             conn_control,

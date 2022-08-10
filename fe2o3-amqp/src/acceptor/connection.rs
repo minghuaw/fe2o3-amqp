@@ -4,7 +4,7 @@ use std::{io, marker::PhantomData, time::Duration};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError},
+    definitions::{self},
     performatives::{Begin, Close, End, Open},
     sasl::{SaslCode, SaslOutcome},
     states::ConnectionState,
@@ -20,8 +20,7 @@ use tracing::instrument;
 use crate::{
     acceptor::sasl_acceptor::SaslServerFrame,
     connection::{
-        self, engine::ConnectionEngine, ConnectionHandle, Error, OpenError,
-        DEFAULT_CONTROL_CHAN_BUF,
+        self, engine::ConnectionEngine, ConnectionHandle, OpenError, DEFAULT_CONTROL_CHAN_BUF,
     },
     endpoint::{self, IncomingChannel, OutgoingChannel},
     frames::{
@@ -511,11 +510,10 @@ pub struct ListenerConnection {
 #[async_trait]
 impl endpoint::Connection for ListenerConnection {
     type AllocError = <connection::Connection as endpoint::Connection>::AllocError;
-
+    type OpenError = <connection::Connection as endpoint::Connection>::OpenError;
+    type CloseError = <connection::Connection as endpoint::Connection>::CloseError;
     type Error = <connection::Connection as endpoint::Connection>::Error;
-
     type State = <connection::Connection as endpoint::Connection>::State;
-
     type Session = <connection::Connection as endpoint::Connection>::Session;
 
     #[inline]
@@ -550,7 +548,7 @@ impl endpoint::Connection for ListenerConnection {
         &mut self,
         channel: IncomingChannel,
         open: Open,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::OpenError> {
         self.connection.on_incoming_open(channel, open).await
     }
 
@@ -587,12 +585,7 @@ impl endpoint::Connection for ListenerConnection {
                 self.session_listener
                     .send(incoming_session)
                     .await
-                    .map_err(|_| {
-                        Error::amqp_error(
-                            AmqpError::NotImplemented,
-                            Some("Remotely initiazted session is not supported".to_string()),
-                        )
-                    })?;
+                    .map_err(|_| Self::Error::NotImplemented(None))?;
             }
         }
 
@@ -613,15 +606,15 @@ impl endpoint::Connection for ListenerConnection {
         &mut self,
         channel: IncomingChannel,
         close: Close,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::CloseError> {
         self.connection.on_incoming_close(channel, close).await
     }
 
     #[inline]
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
+        Self::OpenError: From<W::Error>,
     {
         self.connection.send_open(writer).await
     }
@@ -631,10 +624,10 @@ impl endpoint::Connection for ListenerConnection {
         &mut self,
         writer: &mut W,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), Self::CloseError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Self::Error>,
+        Self::CloseError: From<W::Error>,
     {
         self.connection.send_close(writer, error).await
     }
@@ -651,10 +644,7 @@ impl endpoint::Connection for ListenerConnection {
                 .session_by_outgoing_channel
                 .get(outgoing_channel.0 as usize)
                 .ok_or_else(|| {
-                    Error::amqp_error(
-                        AmqpError::InternalError,
-                        "Outgoing channel is not found".to_string(),
-                    )
+                    Self::Error::NotFound(Some(String::from("Outgoing channel is not found")))
                 })?;
 
             self.connection

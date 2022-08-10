@@ -5,7 +5,7 @@ use std::{cmp::min, collections::BTreeMap, convert::TryInto, sync::Arc};
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError},
+    definitions::{self},
     performatives::{Begin, Close, End, Open},
     states::ConnectionState,
 };
@@ -54,7 +54,7 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 #[allow(dead_code)]
 pub struct ConnectionHandle<R> {
     pub(crate) control: Sender<ConnectionControl>,
-    pub(crate) handle: JoinHandle<Result<(), Error>>,
+    pub(crate) handle: JoinHandle<Result<(), ConnectionErrorKind>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -86,7 +86,7 @@ impl<R> ConnectionHandle<R> {
     /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn close(&mut self) -> Result<(), Error> {
+    pub async fn close(&mut self) -> Result<(), ConnectionErrorKind> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(ConnectionControl::Close(None)).await;
@@ -103,7 +103,7 @@ impl<R> ConnectionHandle<R> {
     pub async fn close_with_error(
         &mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ConnectionErrorKind> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self
@@ -120,10 +120,10 @@ impl<R> ConnectionHandle<R> {
     /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn on_close(&mut self) -> Result<(), Error> {
+    pub async fn on_close(&mut self) -> Result<(), ConnectionErrorKind> {
         match (&mut self.handle).await {
             Ok(res) => res,
-            Err(e) => Err(Error::JoinError(e)),
+            Err(e) => Err(ConnectionErrorKind::JoinError(e)),
         }
     }
 
@@ -475,7 +475,9 @@ impl Connection {
 #[async_trait]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;
-    type Error = Error;
+    type OpenError = ConnectionStateError;
+    type CloseError = ConnectionStateError;
+    type Error = ConnectionInnerError;
     type State = ConnectionState;
     type Session = Session;
 
@@ -531,14 +533,14 @@ impl endpoint::Connection for Connection {
         &mut self,
         _channel: IncomingChannel,
         open: Open,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::OpenError> {
         tracing::trace!(frame = ?open);
 
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
             ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(Self::OpenError::IllegalState),
         }
 
         // set channel_max to mutually acceptable
@@ -566,10 +568,9 @@ impl endpoint::Connection for Connection {
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
                 // TODO: allow remotely initiated session
-                return Err(Error::amqp_error(
-                    AmqpError::NotImplemented,
-                    Some("Remotely initiazted session is not supported yet".to_string()),
-                )); // Close with error NotImplemented
+                return Err(ConnectionInnerError::NotImplemented(Some(
+                    "Remotely initiazted session is not supported yet".to_string(),
+                ))); // Close with error NotImplemented
             }
         }
 
@@ -584,7 +585,7 @@ impl endpoint::Connection for Connection {
     ) -> Result<(), Self::Error> {
         match &self.local_state {
             ConnectionState::Opened => {}
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(ConnectionInnerError::IllegalState),
         }
 
         // Forward to session
@@ -593,7 +594,7 @@ impl endpoint::Connection for Connection {
         let relay = self
             .session_by_incoming_channel
             .remove(&channel)
-            .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
+            .ok_or_else(|| ConnectionInnerError::NotFound(None))?;
         relay.send(sframe).await?;
 
         Ok(())
@@ -604,27 +605,41 @@ impl endpoint::Connection for Connection {
         &mut self,
         _channel: IncomingChannel,
         close: Close,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::CloseError> {
         match &self.local_state {
-            ConnectionState::Opened => {
+            ConnectionState::Opened
+            | ConnectionState::OpenPipe
+            | ConnectionState::OpenClosePipe
+            | ConnectionState::OpenReceived
+            | ConnectionState::OpenSent => {
                 self.local_state = ConnectionState::CloseReceived;
-                self.control.send(ConnectionControl::Close(None)).await?;
-            }
-            ConnectionState::CloseSent => self.local_state = ConnectionState::End,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
-        };
+                self.control
+                    .send(ConnectionControl::Close(None))
+                    .await
+                    .map_err(|_| CloseError::IllegalState)?;
 
-        match close.error {
-            Some(error) => Err(Error::Remote(error)),
-            None => Ok(()),
+                match close.error {
+                    Some(error) => Err(CloseError::RemoteClosedWithError(error)),
+                    None => Err(CloseError::RemoteClosed),
+                }
+            }
+            ConnectionState::CloseSent | ConnectionState::Discarding => {
+                self.local_state = ConnectionState::End;
+
+                match close.error {
+                    Some(error) => Err(CloseError::RemoteClosedWithError(error)),
+                    None => Ok(()),
+                }
+            }
+            _ => return Err(CloseError::IllegalState),
         }
     }
 
     #[instrument(skip_all)]
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Error>,
+        Self::OpenError: From<W::Error>,
     {
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
@@ -636,7 +651,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(Self::OpenError::IllegalState),
         }
 
         Ok(())
@@ -667,20 +682,30 @@ impl endpoint::Connection for Connection {
         &mut self,
         writer: &mut W,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), Self::CloseError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Error>,
+        Self::CloseError: From<W::Error>,
     {
+        let error_is_some = error.is_some();
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
         writer.send(frame).await.map_err(Into::into)?;
 
         match &self.local_state {
-            ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,
+            ConnectionState::Opened => match error_is_some {
+                true => self.local_state = ConnectionState::Discarding,
+                false => self.local_state = ConnectionState::CloseSent,
+            },
             ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
-            ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
-            ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            ConnectionState::OpenSent => match error_is_some {
+                true => self.local_state = ConnectionState::Discarding,
+                false => self.local_state = ConnectionState::ClosePipe,
+            },
+            ConnectionState::OpenPipe => match error_is_some {
+                true => self.local_state = ConnectionState::Discarding,
+                false => self.local_state = ConnectionState::OpenClosePipe,
+            },
+            _ => return Err(CloseError::IllegalState),
         }
         Ok(())
     }
@@ -722,11 +747,11 @@ impl Connection {
         &mut self,
         channel: IncomingChannel,
         begin: &Begin,
-    ) -> Result<Option<&SessionRelay>, Error> {
+    ) -> Result<Option<&SessionRelay>, ConnectionInnerError> {
         match &self.local_state {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // TODO: what to do?
+            _ => return Err(ConnectionInnerError::IllegalState), // TODO: what to do?
         }
 
         match begin.remote_channel {
@@ -735,10 +760,10 @@ impl Connection {
                 let relay = self
                     .session_by_outgoing_channel
                     .get(outgoing_channel as usize)
-                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?; // Close with error NotFound
+                    .ok_or_else(|| ConnectionInnerError::NotFound(None))?; // Close with error NotFound
 
                 if self.session_by_incoming_channel.contains_key(&channel) {
-                    return Err(Error::amqp_error(AmqpError::NotAllowed, None)); // TODO: this is probably not how not allowed should be used?
+                    return Err(ConnectionInnerError::NotAllowed(None)); // TODO: this is probably not how not allowed should be used?
                 }
                 self.session_by_incoming_channel
                     .insert(channel, relay.clone());

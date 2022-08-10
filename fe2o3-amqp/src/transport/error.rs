@@ -1,7 +1,7 @@
 use std::io;
 
 use bytes::Bytes;
-use fe2o3_amqp_types::{definitions::AmqpError, primitives::Binary, sasl::SaslCode};
+use fe2o3_amqp_types::{primitives::Binary, sasl::SaslCode};
 
 use crate::{frames, sasl_profile};
 
@@ -14,81 +14,37 @@ pub enum Error {
 
     /// Idle timeout
     #[error("Idle timeout")]
-    IdleTimeout,
+    IdleTimeoutElapsed,
 
-    /// AMQP error
-    #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    AmqpError {
-        /// Error condition
-        condition: AmqpError,
+    /// Decode error
+    #[error("Decode error")]
+    DecodeError,
 
-        /// Error description
-        description: Option<String>,
-    },
+    /// Not implemented
+    #[error("Not implemented")]
+    NotImplemented(Option<String>),
 
     /// Connection error: framing error
     #[error("Connection error: framing error")]
     FramingError,
 }
 
-// impl Error {
-//     pub(crate) fn amqp_error(
-//         condition: impl Into<AmqpError>,
-//         description: impl Into<Option<String>>,
-//     ) -> Self {
-//         Self::AmqpError {
-//             condition: condition.into(),
-//             description: description.into(),
-//         }
-//     }
-// }
-
 // TODO: What about encode error?
 impl From<serde_amqp::Error> for Error {
     fn from(err: serde_amqp::Error) -> Self {
         match err {
             serde_amqp::Error::Io(e) => Self::Io(e),
-            e => {
-                let description = e.to_string();
-                Self::AmqpError {
-                    condition: AmqpError::DecodeError,
-                    description: Some(description),
-                }
-            }
+            e => Self::DecodeError,
         }
     }
 }
-
-impl From<AmqpError> for Error {
-    fn from(err: AmqpError) -> Self {
-        Self::AmqpError {
-            condition: err,
-            description: None,
-        }
-    }
-}
-
-// impl From<ConnectionError> for Error {
-//     fn from(err: ConnectionError) -> Self {
-//         Self::ConnectionError {
-//             condition: err,
-//             description: None,
-//         }
-//     }
-// }
 
 impl From<frames::Error> for Error {
     fn from(err: frames::Error) -> Self {
         match err {
             frames::Error::Io(io) => Self::Io(io),
-            frames::Error::DecodeError => Self::AmqpError {
-                condition: AmqpError::DecodeError,
-                description: None,
-            },
-            frames::Error::NotImplemented => Self::AmqpError {
-                condition: AmqpError::NotImplemented,
-                description: None,
-            },
+            frames::Error::DecodeError => Self::DecodeError,
+            frames::Error::NotImplemented => Self::NotImplemented(None),
         }
     }
 }
@@ -110,11 +66,6 @@ pub enum NegotiationError {
     #[error("Not implemented")]
     NotImplemented(Option<String>),
 
-    // #[error("AMQP error {:?}, {:?}", .condition, .description)]
-    // AmqpError {
-    //     condition: AmqpError,
-    //     description: Option<String>,
-    // },
     #[error("Illegal state")]
     IllegalState,
 
@@ -143,12 +94,3 @@ impl From<sasl_profile::Error> for NegotiationError {
         }
     }
 }
-
-// impl From<AmqpError> for NegotiationError {
-//     fn from(err: AmqpError) -> Self {
-//         Self::AmqpError {
-//             condition: err,
-//             description: None,
-//         }
-//     }
-// }

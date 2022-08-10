@@ -23,7 +23,7 @@ use crate::transaction::{
 };
 
 use super::{
-    error::{SessionBeginError, SessionErrorKind},
+    error::{BeginError, SessionErrorKind},
     frame::SessionFrame,
     SessionHandle, DEFAULT_WINDOW,
 };
@@ -168,7 +168,7 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, SessionBeginError> {
+    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
         let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
         let engine = SessionEngine::begin_client_session(
             connection.control.clone(),
@@ -193,7 +193,7 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, SessionBeginError> {
+    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
         match self.control_link_acceptor.take() {
             Some(control_link_acceptor) => {
                 let session = self.into_txn_session(
@@ -324,7 +324,7 @@ impl Builder {
     pub async fn begin(
         self,
         connection: &mut ConnectionHandle<()>,
-    ) -> Result<SessionHandle<()>, SessionBeginError> {
+    ) -> Result<SessionHandle<()>, BeginError> {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
@@ -335,12 +335,10 @@ impl Builder {
         let outgoing_channel = match connection.allocate_session(incoming_tx).await {
             Ok(channel) => channel,
             Err(alloc_error) => match alloc_error {
-                AllocSessionError::IllegalState => {
-                    return Err(SessionBeginError::IllegalConnectionState)
-                }
+                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
                 AllocSessionError::ChannelMaxReached => {
                     // Locally initiating session exceeded channel max
-                    return Err(SessionBeginError::LocalChannelMaxReached);
+                    return Err(BeginError::LocalChannelMaxReached);
                 }
             },
         };

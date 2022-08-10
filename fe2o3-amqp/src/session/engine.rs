@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    error::{AllocLinkError, SessionBeginError, SessionErrorKind, SessionInnerError},
+    error::{AllocLinkError, BeginError, SessionErrorKind, SessionInnerError},
     frame::SessionIncomingItem,
     SessionFrame, SessionFrameBody, SessionState,
 };
@@ -34,7 +34,7 @@ pub(crate) struct SessionEngine<S: Session> {
 impl<S> SessionEngine<S>
 where
     S: endpoint::Session,
-    SessionBeginError: From<S::BeginError>,
+    BeginError: From<S::BeginError>,
 {
     pub(crate) async fn begin_client_session(
         conn_control: mpsc::Sender<ConnectionControl>,
@@ -43,7 +43,7 @@ where
         incoming: mpsc::Receiver<SessionIncomingItem>,
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<Self, SessionBeginError> {
+    ) -> Result<Self, BeginError> {
         let mut engine = Self {
             conn_control,
             session,
@@ -60,7 +60,7 @@ where
             Some(frame) => frame,
             None => {
                 // Connection sender must have dropped
-                return Err(SessionBeginError::IllegalConnectionState);
+                return Err(BeginError::IllegalConnectionState);
             }
         };
         let SessionFrame { channel, body } = frame;
@@ -68,10 +68,10 @@ where
         let remote_begin = match body {
             SessionFrameBody::Begin(begin) => begin,
             SessionFrameBody::End(end) => match end.error {
-                Some(err) => return Err(SessionBeginError::RemoteEndedWithError(err)),
-                None => return Err(SessionBeginError::RemoteEnded),
+                Some(err) => return Err(BeginError::RemoteEndedWithError(err)),
+                None => return Err(BeginError::RemoteEnded),
             },
-            _ => return Err(SessionBeginError::IllegalState),
+            _ => return Err(BeginError::IllegalState),
         };
         engine.session.on_incoming_begin(channel, remote_begin)?;
         Ok(engine)
@@ -316,8 +316,9 @@ where
                 );
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::RemoteEnded => self.end_session(None).await,
-            SessionInnerError::RemoteEndedWithError(_) => self.end_session(None).await,
+            SessionInnerError::RemoteEnded | SessionInnerError::RemoteEndedWithError(_) => {
+                self.end_session(None).await
+            }
 
             #[cfg(feature = "transaction")]
             SessionInnerError::UnknownTxnId => {
@@ -453,7 +454,7 @@ where
                             running
                         }
                         Err(error) => {
-                            // Stop the session if errors cannot be handled
+                            // Stop the session if error cannot be handled
                             outcome = Err(error);
                             Running::Stop
                         }
