@@ -19,9 +19,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 # dev defaults
 default = [
-    # "acceptor",
-    # "rustls",
-    # "native-tls",
+    "acceptor",
+    "rustls",
+    "native-tls",
     "transaction",
 ]
 

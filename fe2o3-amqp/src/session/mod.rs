@@ -43,13 +43,13 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 mod error;
-pub(crate) use error::AllocLinkError;
+pub(crate) use error::{AllocLinkError, SessionBeginError, SessionInnerError, SessionStateError};
 
 mod builder;
 pub use builder::*;
 
 use self::{
-    error::{SessionBeginError, SessionInnerError, SessionErrorKind, SessionStateError},
+    error::{SessionErrorKind},
     frame::{SessionFrame, SessionFrameBody},
 };
 

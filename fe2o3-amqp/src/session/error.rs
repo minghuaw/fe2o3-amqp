@@ -91,6 +91,11 @@ pub(crate) enum SessionInnerError {
     /// Remote session ended with error
     #[error("Remote ended with error")]
     RemoteEndedWithError(definitions::Error),
+
+    /// Unknown transaction ID
+    #[cfg(feature = "transaction")]
+    #[error("Unknown transaction ID")]
+    UnknownTxnId,
 }
 
 impl From<SessionStateError> for SessionInnerError {
@@ -150,6 +155,11 @@ pub enum SessionErrorKind {
     /// Event loop exitted with error
     #[error(transparent)]
     JoinError(#[from] JoinError),
+
+    /// Unknown transaction ID
+    #[cfg(feature = "transaction")]
+    #[error("Unknown transaction ID")]
+    UnknownTxnId,
 }
 
 impl From<SessionInnerError> for SessionErrorKind {
@@ -165,6 +175,9 @@ impl From<SessionInnerError> for SessionErrorKind {
             SessionInnerError::TransferFrameToSender => Self::TransferFrameToSender,
             SessionInnerError::RemoteEnded => Self::RemoteEnded,
             SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
+
+            #[cfg(feature = "transaction")]
+            SessionInnerError::UnknownTxnId => Self::UnknownTxnId,
         }
     }
 }

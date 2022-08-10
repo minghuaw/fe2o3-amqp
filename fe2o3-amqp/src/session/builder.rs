@@ -190,7 +190,7 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, SessionBeginError> {
         match self.control_link_acceptor.take() {
             Some(control_link_acceptor) => {
                 let session = self.into_txn_session(
@@ -205,7 +205,7 @@ impl Builder {
                     session,
                     session_control_rx,
                     incoming,
-                    PollSender::new(connection.outgoing.clone()),
+                    connection.outgoing.clone(),
                     outgoing_link_frames,
                 )
                 .await?;
@@ -219,7 +219,7 @@ impl Builder {
                     session,
                     session_control_rx,
                     incoming,
-                    PollSender::new(connection.outgoing.clone()),
+                    connection.outgoing.clone(),
                     outgoing_link_frames,
                 )
                 .await?;
