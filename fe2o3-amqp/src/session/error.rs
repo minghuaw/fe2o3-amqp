@@ -93,7 +93,7 @@ pub(crate) enum SessionInnerError {
     RemoteEndedWithError(definitions::Error),
 
     /// Unknown transaction ID
-    #[cfg(feature = "transaction")]
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
     UnknownTxnId,
 }
@@ -176,7 +176,7 @@ impl From<SessionInnerError> for SessionErrorKind {
             SessionInnerError::RemoteEnded => Self::RemoteEnded,
             SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
 
-            #[cfg(feature = "transaction")]
+            #[cfg(all(feature = "transaction", feature = "acceptor"))]
             SessionInnerError::UnknownTxnId => Self::UnknownTxnId,
         }
     }

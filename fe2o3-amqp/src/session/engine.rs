@@ -1,7 +1,6 @@
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
     performatives::End,
-    transaction::TransactionError,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -307,6 +306,9 @@ where
     async fn on_error(&mut self, kind: &SessionInnerError) -> Result<Running, SessionInnerError> {
         use definitions::Error;
 
+        #[cfg(all(feature = "transaction", feature = "acceptor"))]
+        use fe2o3_amqp_types::transaction::TransactionError;
+
         match kind {
             SessionInnerError::UnattachedHandle => {
                 let error = Error::new(SessionError::UnattachedHandle, None, None);
@@ -341,7 +343,7 @@ where
                 self.end_session(None).await
             }
 
-            #[cfg(feature = "transaction")]
+            #[cfg(all(feature = "transaction", feature = "acceptor"))]
             SessionInnerError::UnknownTxnId => {
                 let error = Error::new(TransactionError::UnknownId, None, None);
                 self.end_session(Some(error)).await
