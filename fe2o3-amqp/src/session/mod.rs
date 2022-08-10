@@ -44,7 +44,7 @@ pub(crate) mod frame;
 
 mod error;
 pub(crate) use error::{
-    AllocLinkError, BeginError, SessionErrorKind, SessionInnerError, SessionStateError,
+    AllocLinkError, BeginError, Error, SessionInnerError, SessionStateError,
 };
 
 mod builder;
@@ -61,7 +61,7 @@ pub const DEFAULT_WINDOW: UInt = 2048;
 #[allow(dead_code)]
 pub struct SessionHandle<R> {
     pub(crate) control: mpsc::Sender<SessionControl>,
-    pub(crate) engine_handle: JoinHandle<Result<(), SessionErrorKind>>,
+    pub(crate) engine_handle: JoinHandle<Result<(), Error>>,
 
     // outgoing for Link
     pub(crate) outgoing: mpsc::Sender<LinkFrame>,
@@ -93,7 +93,7 @@ impl<R> SessionHandle<R> {
     /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error),
     /// [`on_end`](#on_end) has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn end(&mut self) -> Result<(), SessionErrorKind> {
+    pub async fn end(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(SessionControl::End(None)).await;
@@ -101,7 +101,7 @@ impl<R> SessionHandle<R> {
     }
 
     /// Alias for [`end`](#method.end)
-    pub async fn close(&mut self) -> Result<(), SessionErrorKind> {
+    pub async fn close(&mut self) -> Result<(), Error> {
         self.end().await
     }
 
@@ -115,7 +115,7 @@ impl<R> SessionHandle<R> {
     pub async fn end_with_error(
         &mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), SessionErrorKind> {
+    ) -> Result<(), Error> {
         // If sending is unsuccessful, the `SessionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self
@@ -132,13 +132,13 @@ impl<R> SessionHandle<R> {
     /// Panics if called after any of [`end`](#method.end), [`end_with_error`](#method.end_with_error),
     /// [`on_end`](#on_end) has beend executed.
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn on_end(&mut self) -> Result<(), SessionErrorKind> {
+    pub async fn on_end(&mut self) -> Result<(), Error> {
         match (&mut self.engine_handle).await {
             Ok(res) => {
                 res?;
                 Ok(())
             }
-            Err(join_error) => Err(SessionErrorKind::JoinError(join_error)),
+            Err(join_error) => Err(Error::JoinError(join_error)),
         }
     }
 }

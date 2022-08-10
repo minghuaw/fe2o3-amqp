@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    error::{AllocLinkError, BeginError, SessionErrorKind, SessionInnerError},
+    error::{AllocLinkError, BeginError, Error, SessionInnerError},
     frame::SessionIncomingItem,
     SessionFrame, SessionFrameBody, SessionState,
 };
@@ -84,7 +84,7 @@ where
     AllocLinkError: From<S::AllocError>,
     SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
 {
-    pub fn spawn(self) -> JoinHandle<Result<(), SessionErrorKind>> {
+    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
 
@@ -419,7 +419,7 @@ where
     }
 
     #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0))]
-    async fn event_loop(mut self) -> Result<(), SessionErrorKind> {
+    async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {

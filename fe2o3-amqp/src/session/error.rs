@@ -120,7 +120,7 @@ impl From<LinkRelayError> for SessionInnerError {
 
 /// Error with session operations
 #[derive(Debug, thiserror::Error)]
-pub enum SessionErrorKind {
+pub enum Error {
     /// A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.
     #[error("A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.")]
     UnattachedHandle,
@@ -162,7 +162,7 @@ pub enum SessionErrorKind {
     UnknownTxnId,
 }
 
-impl From<SessionInnerError> for SessionErrorKind {
+impl From<SessionInnerError> for Error {
     fn from(error: SessionInnerError) -> Self {
         match error {
             SessionInnerError::UnattachedHandle => Self::UnattachedHandle,
@@ -182,7 +182,7 @@ impl From<SessionInnerError> for SessionErrorKind {
     }
 }
 
-impl From<LinkRelayError> for SessionErrorKind {
+impl From<LinkRelayError> for Error {
     fn from(error: LinkRelayError) -> Self {
         match error {
             LinkRelayError::UnattachedHandle => Self::UnattachedHandle,
@@ -191,7 +191,7 @@ impl From<LinkRelayError> for SessionErrorKind {
     }
 }
 
-impl From<SessionStateError> for SessionErrorKind {
+impl From<SessionStateError> for Error {
     fn from(error: SessionStateError) -> Self {
         match error {
             SessionStateError::IllegalState => Self::IllegalState,

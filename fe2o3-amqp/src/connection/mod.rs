@@ -54,7 +54,7 @@ type SessionRelay = Arc<Sender<SessionIncomingItem>>;
 #[allow(dead_code)]
 pub struct ConnectionHandle<R> {
     pub(crate) control: Sender<ConnectionControl>,
-    pub(crate) handle: JoinHandle<Result<(), ConnectionErrorKind>>,
+    pub(crate) handle: JoinHandle<Result<(), Error>>,
 
     // outgoing channel for session
     pub(crate) outgoing: Sender<SessionFrame>,
@@ -86,7 +86,7 @@ impl<R> ConnectionHandle<R> {
     /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn close(&mut self) -> Result<(), ConnectionErrorKind> {
+    pub async fn close(&mut self) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self.control.send(ConnectionControl::Close(None)).await;
@@ -103,7 +103,7 @@ impl<R> ConnectionHandle<R> {
     pub async fn close_with_error(
         &mut self,
         error: impl Into<definitions::Error>,
-    ) -> Result<(), ConnectionErrorKind> {
+    ) -> Result<(), Error> {
         // If sending is unsuccessful, the `ConnectionEngine` event loop is
         // already dropped, this should be reflected by `JoinError` then.
         let _ = self
@@ -120,10 +120,10 @@ impl<R> ConnectionHandle<R> {
     /// Panics if this is called after executing any of [`close`](#method.close),
     /// [`close_with_error`](#method.close_with_error) or [`on_close`](#method.on_close).
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
-    pub async fn on_close(&mut self) -> Result<(), ConnectionErrorKind> {
+    pub async fn on_close(&mut self) -> Result<(), Error> {
         match (&mut self.handle).await {
             Ok(res) => res,
-            Err(e) => Err(ConnectionErrorKind::JoinError(e)),
+            Err(e) => Err(Error::JoinError(e)),
         }
     }
 

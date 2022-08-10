@@ -22,7 +22,7 @@ use crate::{endpoint, transport};
 
 use super::{heartbeat::HeartBeat, ConnectionState};
 use super::{
-    AllocSessionError, ConnectionErrorKind, ConnectionInnerError, ConnectionStateError, OpenError,
+    AllocSessionError, Error, ConnectionInnerError, ConnectionStateError, OpenError,
 };
 
 #[derive(Debug)]
@@ -209,7 +209,7 @@ where
         }
     }
 
-    pub fn spawn(self) -> JoinHandle<Result<(), ConnectionErrorKind>> {
+    pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
 
@@ -441,7 +441,7 @@ where
     }
 
     #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]
-    async fn event_loop(mut self) -> Result<(), ConnectionErrorKind> {
+    async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
             let result = tokio::select! {

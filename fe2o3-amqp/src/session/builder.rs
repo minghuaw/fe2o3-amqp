@@ -23,7 +23,7 @@ use crate::transaction::{
 };
 
 use super::{
-    error::{BeginError, SessionErrorKind},
+    error::{BeginError, Error},
     frame::SessionFrame,
     SessionHandle, DEFAULT_WINDOW,
 };
@@ -169,7 +169,7 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         let session = self.into_session(outgoing_channel, local_state);
         let engine = SessionEngine::begin_client_session(
             connection.control.clone(),
@@ -194,7 +194,7 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         match self.control_link_acceptor.take() {
             Some(control_link_acceptor) => {
                 let session = self.into_txn_session(

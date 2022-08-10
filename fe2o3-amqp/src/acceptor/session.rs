@@ -21,7 +21,7 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem},
-        AllocLinkError, BeginError, SessionErrorKind, SessionHandle, SessionInnerError,
+        AllocLinkError, BeginError, Error, SessionHandle, SessionInnerError,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
@@ -157,7 +157,7 @@ impl SessionAcceptor {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         let engine = SessionEngine::begin_listener_session(
             connection.control.clone(),
             listener_session,
@@ -180,7 +180,7 @@ impl SessionAcceptor {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), SessionErrorKind>>, BeginError> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         match self.0.control_link_acceptor.clone() {
             Some(control_link_acceptor) => {
                 let txn_manager =
