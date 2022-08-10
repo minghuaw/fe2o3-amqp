@@ -8,7 +8,7 @@ use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
     connection::AllocSessionError,
-    endpoint::{InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
+    endpoint::{InputHandle, OutgoingChannel, OutputHandle},
     link::LinkRelay,
     session::{frame::SessionIncomingItem, AllocLinkError},
 };
@@ -62,7 +62,6 @@ pub(crate) enum SessionControl {
         responder: oneshot::Sender<Result<OutputHandle, AllocLinkError>>,
     },
     DeallocateLink(OutputHandle),
-    LinkFlow(LinkFlow),
     Disposition(Disposition),
     CloseConnectionWithError((ConnectionError, Option<String>)),
     GetMaxFrameSize(oneshot::Sender<usize>),
@@ -102,7 +101,6 @@ impl std::fmt::Display for SessionControl {
                 responder: _,
             } => write!(f, "AllocateIncomingLink"),
             SessionControl::DeallocateLink(name) => write!(f, "DeallocateLink({:?})", name),
-            SessionControl::LinkFlow(_) => write!(f, "LinkFlow"),
             SessionControl::Disposition(_) => write!(f, "Disposition"),
             SessionControl::CloseConnectionWithError(_) => write!(f, "CloseConnectionWithError"),
             SessionControl::GetMaxFrameSize(_) => write!(f, "GetMaxFrameSize"),

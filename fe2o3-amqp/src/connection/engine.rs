@@ -5,6 +5,7 @@ use std::io;
 use std::time::Duration;
 
 use fe2o3_amqp_types::definitions::{self, AmqpError};
+use fe2o3_amqp_types::performatives::Close;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
@@ -19,8 +20,10 @@ use crate::transport::Transport;
 use crate::util::Running;
 use crate::{endpoint, transport};
 
-use super::{heartbeat::HeartBeat, ConnectionState, Error};
-use super::{AllocSessionError, OpenError};
+use super::{heartbeat::HeartBeat, ConnectionState};
+use super::{
+    AllocSessionError, Error, ConnectionInnerError, ConnectionStateError, OpenError,
+};
 
 #[derive(Debug)]
 pub(crate) struct ConnectionEngine<Io, C> {
@@ -34,24 +37,131 @@ pub(crate) struct ConnectionEngine<Io, C> {
 impl<Io, C> ConnectionEngine<Io, C>
 where
     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
-    C::Error: Into<Error> + From<transport::Error>,
+    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + Sync + 'static,
     C::AllocError: Into<AllocSessionError>,
+    C::CloseError: From<transport::Error>,
+    C::OpenError: From<transport::Error>,
+    ConnectionInnerError: From<C::Error> + From<C::OpenError> + From<C::CloseError>,
+    ConnectionStateError: From<C::OpenError> + From<C::CloseError>,
+    OpenError: From<C::OpenError>,
 {
-    async fn on_open_error(
-        transport: &mut Transport<Io, amqp::Frame>,
-        connection: &mut C,
-        error: Error,
-    ) -> OpenError {
-        match error {
-            Error::Io(err) => OpenError::Io(err),
-            Error::JoinError(_) => unreachable!(),
-            Error::Local(err) => {
-                let _ = connection.send_close(transport, Some(err.clone())).await;
-                OpenError::LocalError(err)
+    async fn close_connection(
+        &mut self,
+        error: Option<definitions::Error>,
+    ) -> Result<Running, ConnectionInnerError> {
+        match self.connection.local_state() {
+            ConnectionState::Start
+            | ConnectionState::HeaderReceived
+            | ConnectionState::HeaderSent
+            | ConnectionState::HeaderExchange => Err(ConnectionInnerError::IllegalState),
+            ConnectionState::OpenPipe
+            | ConnectionState::OpenClosePipe
+            | ConnectionState::OpenReceived
+            | ConnectionState::OpenSent
+            | ConnectionState::Opened => {
+                self.connection
+                    .send_close(&mut self.transport, error)
+                    .await?;
+                let (channel, close) = self.wait_for_remote_close(false).await?;
+                self.connection.on_incoming_close(channel, close).await?;
+                Ok(Running::Stop)
             }
-            Error::Remote(err) => OpenError::RemoteError(err),
+            ConnectionState::CloseReceived => {
+                self.connection
+                    .send_close(&mut self.transport, error)
+                    .await?;
+                Ok(Running::Stop)
+            }
+            ConnectionState::ClosePipe | ConnectionState::CloseSent => {
+                let (channel, close) = self.wait_for_remote_close(false).await?;
+                self.connection.on_incoming_close(channel, close).await?;
+                Ok(Running::Stop)
+            }
+            ConnectionState::Discarding => {
+                let (channel, close) = self.wait_for_remote_close(true).await?;
+                self.connection.on_incoming_close(channel, close).await?;
+                Ok(Running::Stop)
+            }
+            ConnectionState::End => Ok(Running::Stop),
         }
+    }
+
+    async fn wait_for_remote_close(
+        &mut self,
+        discard_other: bool,
+    ) -> Result<(IncomingChannel, Close), ConnectionInnerError> {
+        loop {
+            let frame =
+                self.transport
+                    .next()
+                    .await
+                    .ok_or(transport::Error::Io(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "Expecting remote close",
+                    )))??;
+
+            match frame.body {
+                FrameBody::Close(close) => return Ok((IncomingChannel(frame.channel), close)),
+                _ => {
+                    if !discard_other {
+                        self.on_incoming(frame).await?;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn open_inner(&mut self) -> Result<(), OpenError> {
+        self.connection.send_open(&mut self.transport).await?;
+
+        // Wait for an Open
+        let frame = match self.transport.next().await {
+            Some(frame) => match frame {
+                Ok(fr) => fr,
+                Err(error) => return Err(error.into()),
+            },
+            None => {
+                return Err(OpenError::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Expecting an Open frame",
+                )))
+            }
+        };
+        let Frame { channel, body } = frame;
+        let channel = endpoint::IncomingChannel(channel);
+        let remote_open = match body {
+            FrameBody::Open(open) => open,
+            FrameBody::Close(close) => match close.error {
+                Some(error) => return Err(OpenError::RemoteClosedWithError(error)),
+                None => return Err(OpenError::RemoteClosed),
+            },
+            _ => return Err(OpenError::IllegalState),
+        };
+
+        // Handle incoming remote_open
+        let remote_max_frame_size = remote_open.max_frame_size.0 as usize;
+        let remote_idle_timeout = remote_open.idle_time_out;
+        self.connection
+            .on_incoming_open(channel, remote_open)
+            .await?;
+
+        // update transport setting
+        let local_max_frame_size = self.connection.local_open().max_frame_size.0 as usize;
+        self.transport
+            .set_encoder_max_frame_size(remote_max_frame_size)
+            .set_decoder_max_frame_size(local_max_frame_size);
+
+        // Set heartbeat here because in pipelined-open, the Open frame
+        // may be recved after mux loop is started
+        match &remote_idle_timeout {
+            Some(0) | None => self.heartbeat = HeartBeat::never(),
+            Some(millis) => {
+                let period = Duration::from_millis(*millis as u64);
+                self.heartbeat = HeartBeat::new(period);
+            }
+        };
+
+        Ok(())
     }
 
     /// Open Connection without starting the Engine::event_loop()
@@ -69,118 +179,61 @@ where
             heartbeat: HeartBeat::never(),
         };
 
-        // Send an Open
-        if let Err(error) = engine.connection.send_open(&mut engine.transport).await {
-            return Err(Self::on_open_error(
-                &mut engine.transport,
-                &mut engine.connection,
-                error.into(),
-            )
-            .await);
-        }
-
-        // Wait for an Open
-        let frame = match engine.transport.next().await {
-            Some(frame) => match frame {
-                Ok(fr) => fr,
-                Err(error) => {
-                    return Err(Self::on_open_error(
-                        &mut engine.transport,
-                        &mut engine.connection,
-                        error.into(),
-                    )
-                    .await)
+        match engine.open_inner().await {
+            Ok(_) => Ok(engine),
+            Err(error) => {
+                match engine.close_connection(None).await {
+                    Ok(_) => Err(error),
+                    Err(error) => match error {
+                        ConnectionInnerError::TransportError(e) => {
+                            Err(OpenError::TransportError(e))
+                        }
+                        ConnectionInnerError::IllegalState => Err(OpenError::IllegalState),
+                        ConnectionInnerError::NotImplemented(e) => {
+                            Err(OpenError::NotImplemented(e))
+                        }
+                        ConnectionInnerError::RemoteClosed => Err(OpenError::RemoteClosed),
+                        ConnectionInnerError::RemoteClosedWithError(e) => {
+                            Err(OpenError::RemoteClosedWithError(e))
+                        }
+                        ConnectionInnerError::NotFound(_) => {
+                            // This will only occur when the remote is trying to send to a session
+                            // which is not supported currently
+                            Err(OpenError::NotImplemented(Some(String::from(
+                                "Pipelined open is not implemented",
+                            ))))
+                        }
+                    },
                 }
-            },
-            None => {
-                return Err(OpenError::Io(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "Expecting an Open frame",
-                )))
             }
-        };
-        let Frame { channel, body } = frame;
-        let channel = endpoint::IncomingChannel(channel);
-        let remote_open = match body {
-            FrameBody::Open(open) => open,
-            _ => {
-                return Err(OpenError::LocalError(definitions::Error::new(
-                    AmqpError::IllegalState,
-                    None,
-                    None,
-                )))
-            }
-        };
-
-        // Handle incoming remote_open
-        let remote_max_frame_size = remote_open.max_frame_size.0 as usize;
-        let remote_idle_timeout = remote_open.idle_time_out;
-        if let Err(error) = engine
-            .connection
-            .on_incoming_open(channel, remote_open)
-            .await
-        {
-            return Err(Self::on_open_error(
-                &mut engine.transport,
-                &mut engine.connection,
-                error.into(),
-            )
-            .await);
         }
-
-        // update transport setting
-        let local_max_frame_size = engine.connection.local_open().max_frame_size.0 as usize;
-        engine
-            .transport
-            .set_encoder_max_frame_size(remote_max_frame_size)
-            .set_decoder_max_frame_size(local_max_frame_size);
-
-        // Set heartbeat here because in pipelined-open, the Open frame
-        // may be recved after mux loop is started
-        match &remote_idle_timeout {
-            Some(0) | None => engine.heartbeat = HeartBeat::never(),
-            Some(millis) => {
-                let period = Duration::from_millis(*millis as u64);
-                engine.heartbeat = HeartBeat::new(period);
-            }
-        };
-
-        Ok(engine)
     }
 
     pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
     }
-}
 
-impl<Io, C> ConnectionEngine<Io, C>
-where
-    Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin,
-    C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
-    C::Error: Into<Error> + From<transport::Error>,
-    C::AllocError: Into<AllocSessionError>,
-{
     #[instrument(skip_all)]
     async fn forward_to_session(
         &mut self,
         channel: IncomingChannel,
         frame: SessionFrame,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ConnectionInnerError> {
         match &self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(ConnectionInnerError::IllegalState),
         };
 
         match self.connection.session_tx_by_incoming_channel(channel) {
             Some(tx) => tx.send(frame).await?,
-            None => return Err(Error::amqp_error(AmqpError::NotFound, None)),
+            None => return Err(ConnectionInnerError::NotFound(None)),
         };
         Ok(())
     }
 
     #[instrument(name = "RECV", skip_all)]
-    async fn on_incoming(&mut self, incoming: Result<Frame, Error>) -> Result<Running, Error> {
-        let frame = incoming?;
+    async fn on_incoming(&mut self, frame: Frame) -> Result<Running, ConnectionInnerError> {
+        // let frame = incoming;
         trace!(?frame);
 
         let Frame { channel, body } = frame;
@@ -188,10 +241,7 @@ where
         match body {
             FrameBody::Open(open) => {
                 let remote_idle_timeout = open.idle_time_out;
-                self.connection
-                    .on_incoming_open(channel, open)
-                    .await
-                    .map_err(Into::into)?;
+                self.connection.on_incoming_open(channel, open).await?;
 
                 // Set heartbeat here because in pipelined-open, the Open frame
                 // may be recved after mux loop is started
@@ -204,10 +254,7 @@ where
                 };
             }
             FrameBody::Begin(begin) => {
-                self.connection
-                    .on_incoming_begin(channel, begin)
-                    .await
-                    .map_err(Into::into)?;
+                self.connection.on_incoming_begin(channel, begin).await?;
             }
             FrameBody::Attach(attach) => {
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Attach(attach));
@@ -239,16 +286,24 @@ where
                 self.forward_to_session(channel, sframe).await?;
             }
             FrameBody::End(end) => {
-                self.connection
-                    .on_incoming_end(channel, end)
-                    .await
-                    .map_err(Into::into)?;
+                self.connection.on_incoming_end(channel, end).await?;
             }
             FrameBody::Close(close) => {
-                self.connection
-                    .on_incoming_close(channel, close)
-                    .await
-                    .map_err(Into::into)?;
+                let result = self.connection.on_incoming_close(channel, close).await;
+                if matches!(
+                    self.connection.local_state(),
+                    ConnectionState::CloseReceived
+                ) {
+                    self.outgoing_session_frames.close();
+                    while let Some(frame) = self.outgoing_session_frames.recv().await {
+                        self.on_outgoing_session_frames(frame).await?;
+                    }
+
+                    self.connection
+                        .send_close(&mut self.transport, None)
+                        .await?;
+                }
+                result?;
             }
             FrameBody::Empty => {
                 // do nothing, IdleTimeout is tracked by Transport
@@ -263,7 +318,10 @@ where
 
     #[inline]
     #[instrument(skip_all)]
-    async fn on_control(&mut self, control: ConnectionControl) -> Result<Running, Error> {
+    async fn on_control(
+        &mut self,
+        control: ConnectionControl,
+    ) -> Result<Running, ConnectionInnerError> {
         debug!("{}", control);
         match control {
             ConnectionControl::Close(error) => {
@@ -274,17 +332,13 @@ where
 
                 self.connection
                     .send_close(&mut self.transport, error)
-                    .await
-                    .map_err(Into::into)?;
+                    .await?;
             }
             ConnectionControl::AllocateSession { tx, responder } => {
                 let result = self.connection.allocate_session(tx).map_err(Into::into);
-                responder.send(result).map_err(|_| {
-                    Error::Io(io::Error::new(
-                        io::ErrorKind::Other,
-                        "ConnectionHandle is dropped",
-                    ))
-                })?;
+                responder
+                    .send(result)
+                    .map_err(|_| ConnectionInnerError::IllegalState)?;
             }
             ConnectionControl::DeallocateSession(session_id) => {
                 self.connection.deallocate_session(session_id)
@@ -305,21 +359,21 @@ where
 
     #[inline]
     #[instrument(name = "SEND", skip_all)]
-    async fn on_outgoing_session_frames(&mut self, frame: SessionFrame) -> Result<Running, Error> {
+    async fn on_outgoing_session_frames(
+        &mut self,
+        frame: SessionFrame,
+    ) -> Result<Running, ConnectionInnerError> {
         use crate::frames::amqp::FrameBody;
 
         match self.connection.local_state() {
             ConnectionState::Opened => {}
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(ConnectionInnerError::IllegalState),
         }
 
         let SessionFrame { channel, body } = frame;
         let channel = OutgoingChannel(channel);
         let frame = match body {
-            SessionFrameBody::Begin(begin) => self
-                .connection
-                .on_outgoing_begin(channel, begin)
-                .map_err(Into::into)?,
+            SessionFrameBody::Begin(begin) => self.connection.on_outgoing_begin(channel, begin)?,
             SessionFrameBody::Attach(attach) => Frame::new(channel, FrameBody::Attach(attach)),
             SessionFrameBody::Flow(flow) => Frame::new(channel, FrameBody::Flow(flow)),
             SessionFrameBody::Transfer {
@@ -336,10 +390,7 @@ where
                 Frame::new(channel, FrameBody::Disposition(disposition))
             }
             SessionFrameBody::Detach(detach) => Frame::new(channel, FrameBody::Detach(detach)),
-            SessionFrameBody::End(end) => self
-                .connection
-                .on_outgoing_end(channel, end)
-                .map_err(Into::into)?,
+            SessionFrameBody::End(end) => self.connection.on_outgoing_end(channel, end)?,
         };
 
         trace!(channel = frame.channel, frame = ?frame.body);
@@ -348,7 +399,7 @@ where
     }
 
     #[inline]
-    async fn on_heartbeat(&mut self) -> Result<Running, Error> {
+    async fn on_heartbeat(&mut self) -> Result<Running, ConnectionInnerError> {
         match &self.connection.local_state() {
             ConnectionState::Start | ConnectionState::CloseSent => return Ok(Running::Continue),
             ConnectionState::End => return Ok(Running::Stop),
@@ -361,41 +412,30 @@ where
     }
 
     #[inline]
-    async fn on_error(&mut self, error: &Error) -> Running {
+    async fn on_error(
+        &mut self,
+        error: &ConnectionInnerError,
+    ) -> Result<Running, ConnectionInnerError> {
         match error {
-            Error::Io(_) => Running::Stop,
-            Error::JoinError(_) => unreachable!(), // JoinError is only for the event_loop task
-            Error::Local(error) => {
-                let _ = self
-                    .connection
-                    .send_close(&mut self.transport, Some(error.clone()))
-                    .await;
-                self.continue_or_stop_by_state()
+            ConnectionInnerError::TransportError(_) => Ok(Running::Stop),
+            ConnectionInnerError::IllegalState => {
+                let error = definitions::Error::new(AmqpError::IllegalState, None, None);
+                self.close_connection(Some(error)).await?;
+                Ok(Running::Stop)
             }
-            Error::Remote(_) => {
-                // TODO: Simplify remote error handling?
-                self.continue_or_stop_by_state()
+            ConnectionInnerError::NotImplemented(description) => {
+                let error =
+                    definitions::Error::new(AmqpError::NotImplemented, description.clone(), None);
+                self.close_connection(Some(error)).await?;
+                Ok(Running::Stop)
             }
-        }
-    }
-
-    /// Get whether event loop should conditnue or stop by ConnectionState
-    #[inline]
-    fn continue_or_stop_by_state(&self) -> Running {
-        match self.connection.local_state() {
-            ConnectionState::Start
-            | ConnectionState::HeaderReceived
-            | ConnectionState::HeaderSent
-            | ConnectionState::HeaderExchange
-            | ConnectionState::OpenPipe
-            | ConnectionState::OpenClosePipe
-            | ConnectionState::OpenReceived
-            | ConnectionState::OpenSent
-            | ConnectionState::Opened
-            | ConnectionState::CloseReceived
-            | ConnectionState::CloseSent => Running::Continue,
-            ConnectionState::ClosePipe | ConnectionState::Discarding | ConnectionState::End => {
-                Running::Stop
+            ConnectionInnerError::NotFound(description) => {
+                let error = definitions::Error::new(AmqpError::NotFound, description.clone(), None);
+                self.close_connection(Some(error)).await?;
+                Ok(Running::Stop)
+            }
+            ConnectionInnerError::RemoteClosed | ConnectionInnerError::RemoteClosedWithError(_) => {
+                self.close_connection(None).await
             }
         }
     }
@@ -408,7 +448,12 @@ where
                 _ = self.heartbeat.next() => self.on_heartbeat().await,
                 incoming = self.transport.next() => {
                     let result = match incoming {
-                        Some(incoming) => self.on_incoming(incoming.map_err(Into::into)).await,
+                        Some(incoming) => {
+                            match incoming {
+                                Ok(frame) => self.on_incoming(frame).await,
+                                Err(err) => Err(err.into()),
+                            }
+                        },
                         None => {
                             // Incoming stream is closed
 
@@ -423,10 +468,7 @@ where
                                 | ConnectionState::OpenSent
                                 | ConnectionState::Opened
                                 | ConnectionState::CloseReceived
-                                | ConnectionState::CloseSent => Err(Error::Io(io::Error::new(
-                                    io::ErrorKind::UnexpectedEof,
-                                    "Transport is closed before connection is closed"
-                                ))),
+                                | ConnectionState::CloseSent => Err(ConnectionInnerError::IllegalState),
                                 ConnectionState::ClosePipe
                                 | ConnectionState::Discarding
                                 | ConnectionState::End => Ok(Running::Stop),
@@ -467,9 +509,18 @@ where
                 Err(error) => {
                     // TODO: error handling
                     error!("{:?}", error);
-                    let running = self.on_error(&error).await;
-                    outcome = Err(error);
-                    running
+                    // let running = self.on_error(&error).await;
+                    match self.on_error(&error).await {
+                        Ok(running) => {
+                            outcome = Err(error);
+                            running
+                        }
+                        Err(error) => {
+                            // Stop the session if error cannot be handled
+                            outcome = Err(error);
+                            Running::Stop
+                        }
+                    }
                 }
             };
 
@@ -492,6 +543,6 @@ where
 
         debug!("Stopped");
 
-        outcome.and(close)
+        outcome.and(close).map_err(Into::into)
     }
 }

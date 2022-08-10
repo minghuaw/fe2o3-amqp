@@ -152,7 +152,10 @@ where
             // clear txn-id from the link's properties
             {
                 let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();
-                writer.properties.as_mut().map(|fields| fields.remove(TXN_ID_KEY));
+                writer
+                    .properties
+                    .as_mut()
+                    .map(|fields| fields.remove(TXN_ID_KEY));
             }
 
             // Set drain to true

@@ -153,9 +153,9 @@
 //! |`fe2o3-amqp`| Implementation of AMQP1.0 `Connection`, `Session`, and `Link` |
 //! |`fe2o3-amqp-ext`| Extension types and implementations |
 //! |`fe2o3-amqp-ws` | WebSocket binding for `fe2o3-amqp` transport |
-//! 
+//!
 //! # Minimum rust version supported
-//! 
+//!
 //! 1.56.0 (ie. 2021 edition)
 //!
 //! # Road map

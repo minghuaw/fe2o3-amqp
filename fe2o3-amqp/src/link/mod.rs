@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
+        self, DeliveryNumber, DeliveryTag, MessageFormat, ReceiverSettleMode, Role,
         SenderSettleMode, SequenceNo, SessionError,
     },
     messaging::{DeliveryState, Received, Source, Target, TargetArchetype},
@@ -592,12 +592,12 @@ impl LinkRelay<()> {
 }
 
 impl LinkRelay<OutputHandle> {
-    pub(crate) fn output_handle(&self) -> &OutputHandle {
-        match self {
-            Self::Sender { output_handle, .. } => output_handle,
-            Self::Receiver { output_handle, .. } => output_handle,
-        }
-    }
+    // pub(crate) fn output_handle(&self) -> &OutputHandle {
+    //     match self {
+    //         Self::Sender { output_handle, .. } => output_handle,
+    //         Self::Receiver { output_handle, .. } => output_handle,
+    //     }
+    // }
 
     pub(crate) async fn send(
         &mut self,
@@ -613,7 +613,7 @@ impl LinkRelay<OutputHandle> {
     pub(crate) async fn on_incoming_flow(
         &mut self,
         flow: LinkFlow,
-    ) -> Result<Option<LinkFlow>, definitions::Error> {
+    ) -> Result<Option<LinkFlow>, LinkRelayError> {
         match self {
             LinkRelay::Sender {
                 flow_state,
@@ -627,9 +627,9 @@ impl LinkRelay<OutputHandle> {
                     match flow.properties.as_ref().and_then(|m| m.get(TXN_ID_KEY)) {
                         Some(Value::Binary(txn_id)) => {
                             let frame = LinkFrame::Acquisition(txn_id.clone());
-                            tx.send(frame).await.map_err(|_| {
-                                definitions::Error::new(SessionError::UnattachedHandle, None, None)
-                            })?;
+                            tx.send(frame)
+                                .await
+                                .map_err(|_| LinkRelayError::UnattachedHandle)?;
                         }
                         Some(_) | None => {}
                     }
@@ -747,22 +747,25 @@ impl LinkRelay<OutputHandle> {
     }
 
     /// LinkRelay operates in session's event loop
+    ///
+    /// The session needs a map of delivery_id and delivery_tag
     pub(crate) async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, (bool, definitions::Error)> {
+    ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, LinkRelayError> {
         match self {
             LinkRelay::Sender { .. } => {
                 // TODO: This should not happen, but should the link detach if this happens?
-                Err((
-                    true, // Closing the link
-                    definitions::Error::new(
-                        AmqpError::NotAllowed,
-                        Some("Sender should never receive a transfer".to_string()),
-                        None,
-                    ),
-                ))
+                Err(
+                    // true, // Closing the link
+                    // definitions::Error::new(
+                    //     AmqpError::NotAllowed,
+                    //     Some("Sender should never receive a transfer".to_string()),
+                    //     None,
+                    // ),
+                    LinkRelayError::TransferFrameToSender,
+                )
             }
             LinkRelay::Receiver {
                 tx,
@@ -782,10 +785,11 @@ impl LinkRelay<OutputHandle> {
                 })
                 .await
                 .map_err(|_| {
-                    (
-                        true,
-                        definitions::Error::new(SessionError::UnattachedHandle, None, None),
-                    )
+                    // (
+                    //     true,
+                    //     definitions::Error::new(SessionError::UnattachedHandle, None, None),
+                    // )
+                    LinkRelayError::UnattachedHandle
                 })?;
 
                 if !settled {

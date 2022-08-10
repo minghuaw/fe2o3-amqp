@@ -1,18 +1,16 @@
 //! Implements AMQP1.0 Session
 
-use std::{collections::BTreeMap, io};
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        self, AmqpError, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo,
-        SessionError, TransferNumber,
+        self, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     primitives::{Symbol, UInt},
     states::SessionState,
 };
-use futures_util::{Sink, SinkExt};
 use slab::Slab;
 use tokio::{
     sync::{
@@ -28,7 +26,7 @@ use crate::{
     control::SessionControl,
     endpoint::{self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle},
     link::{LinkFrame, LinkRelay},
-    util::Constant,
+    util::{is_consecutive, Constant},
     Payload,
 };
 
@@ -45,8 +43,9 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 mod error;
-pub(crate) use error::AllocLinkError;
-pub use error::Error;
+pub(crate) use error::{
+    AllocLinkError, BeginError, Error, SessionInnerError, SessionStateError,
+};
 
 mod builder;
 pub use builder::*;
@@ -135,8 +134,11 @@ impl<R> SessionHandle<R> {
     /// This will cause the JoinHandle to be polled after completion, which causes a panic.
     pub async fn on_end(&mut self) -> Result<(), Error> {
         match (&mut self.engine_handle).await {
-            Ok(res) => res,
-            Err(e) => Err(Error::JoinError(e)),
+            Ok(res) => {
+                res?;
+                Ok(())
+            }
+            Err(join_error) => Err(Error::JoinError(join_error)),
         }
     }
 }
@@ -204,8 +206,6 @@ pub(crate) async fn allocate_link(
 ///
 #[derive(Debug)]
 pub struct Session {
-    pub(crate) control: mpsc::Sender<SessionControl>,
-    // session_id: usize,
     pub(crate) outgoing_channel: OutgoingChannel,
 
     // local amqp states
@@ -263,21 +263,19 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, Error> {
+    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, BeginError> {
         Session::builder().begin(conn).await
     }
 }
 
-impl endpoint::SessionExt for Session {
-    fn control(&self) -> &mpsc::Sender<SessionControl> {
-        &self.control
-    }
-}
+impl endpoint::SessionExt for Session {}
 
 #[async_trait]
 impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
-    type Error = Error;
+    type BeginError = SessionStateError;
+    type EndError = SessionStateError;
+    type Error = SessionInnerError;
     type State = SessionState;
 
     fn local_state(&self) -> &Self::State {
@@ -348,11 +346,11 @@ impl endpoint::Session for Session {
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::BeginError> {
         match self.local_state {
             SessionState::Unmapped => self.local_state = SessionState::BeginReceived,
             SessionState::BeginSent => self.local_state = SessionState::Mapped,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with unattached handle?
+            _ => return Err(SessionStateError::IllegalState), // End session with unattached handle?
         }
 
         self.incoming_channel = Some(channel);
@@ -382,18 +380,21 @@ impl endpoint::Session for Session {
                     relay
                         .send(LinkFrame::Attach(attach))
                         .await
-                        .map_err(|_| Error::session_error(SessionError::UnattachedHandle, None))?;
+                        .map_err(|_| SessionInnerError::UnattachedHandle)?;
                     self.link_by_input_handle.insert(input_handle, relay);
 
                     Ok(())
                 }
-                None => Err(Error::session_error(SessionError::HandleInUse, None)),
+                None => {
+                    // Link name is found but is already in use
+                    Err(SessionInnerError::HandleInUse)
+                }
             },
-            None => Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?,
+            None => Err(SessionInnerError::RemoteAttachingLinkNameNotFound), // End session with unattached handle?,
         }
     }
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
         // Handle session flow control
         //
         // When the endpoint receives a flow frame from its peer, it MUST update the next-incoming-id
@@ -423,34 +424,34 @@ impl endpoint::Session for Session {
             let input_handle = InputHandle::from(link_flow.handle.clone());
             match self.link_by_input_handle.get_mut(&input_handle) {
                 Some(link_relay) => {
-                    if let Some(echo_flow) = link_relay
+                    // if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await? {
+                    //     self.control
+                    //         .send(SessionControl::LinkFlow(echo_flow))
+                    //         .await
+                    //         // Sending control to self. This will only give an error if the receiving
+                    //         // half is dropped. An error would thus indicate that the event loop
+                    //         // has stopped, so it could be considered illegal state.
+                    //         //
+                    //         // If the event loop has stopped, this should not be executed at all
+                    //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    // }
+                    return link_relay
                         .on_incoming_flow(link_flow)
                         .await
-                        .map_err(Self::Error::Local)?
-                    {
-                        self.control
-                            .send(SessionControl::LinkFlow(echo_flow))
-                            .await
-                            // Sending control to self. This will only give an error if the receiving
-                            // half is dropped. An error would thus indicate that the event loop
-                            // has stopped, so it could be considered illegal state.
-                            //
-                            // If the event loop has stopped, this should not be executed at all
-                            .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?;
-                    }
+                        .map_err(Into::into);
                 }
-                None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
+                None => return Err(SessionInnerError::UnattachedHandle), // End session with unattached handle?
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     async fn on_incoming_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Disposition>, Self::Error> {
         // Upon receiving a transfer, the receiving endpoint will increment the next-incoming-id to
         // match the implicit transfer-id of the incoming transfer plus one, as well as decrementing the
         // remote-outgoing-window, and MAY (depending on policy) decrement its incoming-window.
@@ -461,16 +462,7 @@ impl endpoint::Session for Session {
         let input_handle = InputHandle::from(transfer.handle.clone());
         match self.link_by_input_handle.get_mut(&input_handle) {
             Some(link_relay) => {
-                let id_and_tag = match link_relay.on_incoming_transfer(transfer, payload).await {
-                    Ok(opt) => opt,
-                    Err((closed, error)) => {
-                        return Err(Error::LinkHandleError {
-                            handle: link_relay.output_handle().clone().into(),
-                            closed,
-                            error,
-                        })
-                    }
-                };
+                let id_and_tag = link_relay.on_incoming_transfer(transfer, payload).await?;
 
                 // FIXME: If the unsettled map needs this
                 if let Some((delivery_id, delivery_tag)) = id_and_tag {
@@ -478,17 +470,17 @@ impl endpoint::Session for Session {
                         .insert((Role::Sender, delivery_id), (input_handle, delivery_tag));
                 }
             }
-            None => return Err(Error::session_error(SessionError::UnattachedHandle, None)), // End session with unattached handle?
+            None => return Err(SessionInnerError::UnattachedHandle),
         };
 
-        Ok(())
+        Ok(None)
     }
 
     #[instrument(skip_all)]
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Vec<Disposition>>, Self::Error> {
         // TODO: what to do when session lost delivery_tag_by_id
         // and disposition only has delivery id?
 
@@ -497,10 +489,6 @@ impl endpoint::Session for Session {
 
         // A disposition frame may refer to deliveries on multiple links, each may be running
         // in different mode. This counts the largest sections that can be echoed back together
-        let mut first_echo = first;
-        let mut last_echo = first;
-        let mut prev = false;
-
         if disposition.settled {
             // If it is alrea
             for delivery_id in first..=last {
@@ -518,7 +506,10 @@ impl endpoint::Session for Session {
                     }
                 }
             }
+
+            Ok(None)
         } else {
+            let mut delivery_ids = Vec::new();
             for delivery_id in first..=last {
                 let key = (disposition.role.clone(), delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.get(&key) {
@@ -535,43 +526,31 @@ impl endpoint::Session for Session {
                             .await;
 
                         if echo {
-                            if !prev {
-                                first_echo = delivery_id;
-                            }
-                            last_echo = delivery_id
-                        } else if !echo && prev {
-                            let role = match disposition.role {
-                                Role::Sender => Role::Receiver,
-                                Role::Receiver => Role::Sender,
-                            };
-                            let last = if last_echo != first_echo {
-                                Some(last_echo)
-                            } else {
-                                None
-                            };
-
-                            let disposition = Disposition {
-                                role,
-                                first: first_echo,
-                                last,
-                                settled: true,
-                                state: None,
-                                batchable: false, // No reply is really expected as this is a reply
-                            };
-                            self.control
-                                .send(SessionControl::Disposition(disposition))
-                                .await
-                                .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?
-                            // event loop has stopped
+                            delivery_ids.push(delivery_id);
                         }
-
-                        prev = echo;
                     }
                 }
             }
-        }
 
-        Ok(())
+            let chunk_inds = consecutive_chunk_indices(&delivery_ids[..]);
+
+            let mut dispositions = Vec::with_capacity(chunk_inds.len());
+            let mut prev_ind = 0;
+            for ind in chunk_inds {
+                let slice = &delivery_ids[prev_ind..ind];
+                let disposition = Disposition {
+                    role: Role::Sender,
+                    first: slice[0],
+                    last: slice.last().map(|id| *id),
+                    settled: true,
+                    state: disposition.state.clone(),
+                    batchable: false,
+                };
+                dispositions.push(disposition);
+                prev_ind = ind;
+            }
+            Ok(Some(dispositions))
+        }
     }
 
     #[instrument(skip_all)]
@@ -582,17 +561,11 @@ impl endpoint::Session for Session {
             .link_by_input_handle
             .remove(&InputHandle::from(detach.handle.clone()))
         {
-            Some(mut link) => match link.on_incoming_detach(detach).await {
-                Ok(_) => Ok(()),
-                Err(_) => Err(Error::session_error(
-                    SessionError::UnattachedHandle,
-                    "Local link is already dropped".to_string(),
-                )), // End session with unattached handle
-            },
-            None => Err(Error::session_error(
-                SessionError::UnattachedHandle,
-                "Handle is not found".to_string(),
-            )), // End session with unattached handle
+            Some(mut link) => link
+                .on_incoming_detach(detach)
+                .await
+                .map_err(|_| SessionInnerError::UnattachedHandle),
+            None => Err(SessionInnerError::UnattachedHandle),
         }
     }
 
@@ -601,39 +574,44 @@ impl endpoint::Session for Session {
         &mut self,
         _channel: IncomingChannel,
         end: End,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::EndError> {
         trace!(end = ?end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
-                self.control
-                    .send(SessionControl::End(None))
-                    .await
-                    // The `SendError` occurs when the receiving half is dropped,
-                    // indicating that the `SessionEngine::event_loop` has stopped.
-                    // and thus should yield an illegal state error
-                    .map_err(|_| Error::amqp_error(AmqpError::IllegalState, None))?;
-                // event loop has stopped
+                // self.control
+                //     .send(SessionControl::End(None))
+                //     .await
+                //     // The `SendError` occurs when the receiving half is dropped,
+                //     // indicating that the `SessionEngine::event_loop` has stopped.
+                //     // and thus should yield an illegal state error
+                //     //
+                //     // event loop has stopped
+                //     .map_err(|_| SessionStateError::IllegalState)?;
+
+                match end.error {
+                    Some(err) => Err(SessionStateError::RemoteEndedWithError(err)),
+                    None => Err(SessionStateError::RemoteEnded),
+                }
             }
             SessionState::EndSent | SessionState::Discarding => {
-                self.local_state = SessionState::Unmapped
+                self.local_state = SessionState::Unmapped;
+
+                if let Some(error) = end.error {
+                    // TODO: handle remote error
+                    tracing::error!(remote_error = ?error);
+                    return Err(SessionStateError::RemoteEndedWithError(error));
+                }
+                Ok(())
             }
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state?
+            _ => Err(SessionStateError::IllegalState), // End session with illegal state?
         }
-
-        if let Some(error) = end.error {
-            // TODO: handle remote error
-            tracing::error!(remote_error = ?error);
-            return Err(Error::Remote(error));
-        }
-
-        Ok(())
     }
 
-    async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin,
-    {
+    async fn send_begin(
+        &mut self,
+        writer: &mpsc::Sender<SessionFrame>,
+    ) -> Result<(), Self::BeginError> {
         let begin = Begin {
             remote_channel: self.incoming_channel.map(Into::into),
             next_outgoing_id: self.next_outgoing_id,
@@ -654,44 +632,34 @@ impl endpoint::Session for Session {
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| {
-                        Self::Error::Io(io::Error::new(
-                            io::ErrorKind::Other,
-                            "Connection event loop receiver has dropped",
-                        ))
-                    })?;
+                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await.map_err(|_| {
-                    Self::Error::Io(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Connection event loop receiver has dropped",
-                    ))
-                })?;
+                writer
+                    .send(frame)
+                    .await
+                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
                 self.local_state = SessionState::Mapped;
             }
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
+            _ => return Err(SessionStateError::IllegalState),
         }
 
         Ok(())
     }
 
-    async fn send_end<W>(
+    async fn send_end(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<SessionFrame>,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin,
-    {
+    ) -> Result<(), Self::EndError> {
         match self.local_state {
             SessionState::Mapped => match error.is_some() {
                 true => self.local_state = SessionState::Discarding,
                 false => self.local_state = SessionState::EndSent,
             },
             SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // End session with illegal state
+            _ => return Err(SessionStateError::IllegalState),
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
@@ -700,12 +668,7 @@ impl endpoint::Session for Session {
             .await
             // The receiving half must have dropped, and thus the `Connection`
             // event loop has stopped. It should be treated as an io error
-            .map_err(|_| {
-                Self::Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Connection event loop has dropped",
-                ))
-            })?;
+            .map_err(|_| SessionStateError::IllegalConnectionState)?;
         Ok(())
     }
 
@@ -809,12 +772,12 @@ impl endpoint::Session for Session {
         Ok(frame)
     }
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
+    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
         // TODO: what else do we need to do here?
         self.deallocate_link(detach.handle.clone().into());
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
-        Ok(frame)
+        frame
     }
 }
 
@@ -847,4 +810,18 @@ impl HandleDischarge for Session {
         // FIXME: This should be impossible
         Ok(Err(TransactionError::UnknownId))
     }
+}
+
+fn consecutive_chunk_indices(delivery_ids: &[DeliveryNumber]) -> Vec<usize> {
+    delivery_ids
+        .windows(2)
+        .enumerate()
+        .filter_map(|(i, id)| {
+            if is_consecutive(&id[0], &id[1]) {
+                None
+            } else {
+                Some(i + 1)
+            }
+        })
+        .collect()
 }

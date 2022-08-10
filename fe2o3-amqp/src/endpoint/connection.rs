@@ -16,6 +16,8 @@ use super::{IncomingChannel, OutgoingChannel, Session};
 #[async_trait]
 pub(crate) trait Connection {
     type AllocError: Send;
+    type OpenError: Send;
+    type CloseError: Send;
     type Error: Send;
     type State: Send;
     type Session: Session + Send;
@@ -39,7 +41,7 @@ pub(crate) trait Connection {
         &mut self,
         channel: IncomingChannel,
         open: Open,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::OpenError>;
 
     /// Reacting to remote Begin frame
     ///
@@ -62,26 +64,26 @@ pub(crate) trait Connection {
         &mut self,
         channel: IncomingChannel,
         close: Close,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::CloseError>;
 
     /// Sending out an Open frame
     ///
     /// The write is passed in is because sending an Open frame also changes the local
     /// connection state. If the sending fails outside, coming back
     /// and revert the state changes would be too complicated
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Self::Error>; // DO NOT remove this. This is where `Transport` will be used
+        Self::OpenError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     async fn send_close<W>(
         &mut self,
         writer: &mut W,
         error: Option<Error>,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), Self::CloseError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Self::Error>; // DO NOT remove this. This is where `Transport` will be used
+        Self::CloseError: From<W::Error>; // DO NOT remove this. This is where `Transport` will be used
 
     /// Intercepting session frames
     fn on_outgoing_begin(

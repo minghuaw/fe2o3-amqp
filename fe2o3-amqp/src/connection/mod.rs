@@ -1,11 +1,11 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::BTreeMap, convert::TryInto, io, sync::Arc};
+use std::{cmp::min, collections::BTreeMap, convert::TryInto, sync::Arc};
 
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError},
+    definitions::{self},
     performatives::{Begin, Close, End, Open},
     states::ConnectionState,
 };
@@ -135,16 +135,9 @@ impl<R> ConnectionHandle<R> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
             .send(ConnectionControl::AllocateSession { tx, responder })
-            .await?; // std::io::Error
-        let result = resp_rx.await.map_err(|_| {
-            AllocSessionError::Io(
-                // The sending half is already dropped
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    "ConnectionEngine event_loop is dropped",
-                ),
-            )
-        })?;
+            .await
+            .map_err(|_| AllocSessionError::IllegalState)?; // Connection must have stopped
+        let result = resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?;
         result
     }
 }
@@ -351,8 +344,6 @@ pub(crate) async fn deallocate_session(
 ///
 #[derive(Debug)]
 pub struct Connection {
-    pub(crate) control: Sender<ConnectionControl>,
-
     // local
     pub(crate) local_state: ConnectionState,
     pub(crate) local_open: Open,
@@ -461,13 +452,13 @@ impl Connection {
 /* ------------------------------- Private API ------------------------------ */
 impl Connection {
     pub(crate) fn new(
-        control: Sender<ConnectionControl>,
+        // control: Sender<ConnectionControl>,
         local_state: ConnectionState,
         local_open: Open,
     ) -> Self {
         let agreed_channel_max = local_open.channel_max.0;
         Self {
-            control,
+            // control,
             local_state,
             local_open,
             session_by_incoming_channel: BTreeMap::new(),
@@ -482,7 +473,9 @@ impl Connection {
 #[async_trait]
 impl endpoint::Connection for Connection {
     type AllocError = AllocSessionError;
-    type Error = Error;
+    type OpenError = ConnectionStateError;
+    type CloseError = ConnectionStateError;
+    type Error = ConnectionInnerError;
     type State = ConnectionState;
     type Session = Session;
 
@@ -538,14 +531,14 @@ impl endpoint::Connection for Connection {
         &mut self,
         _channel: IncomingChannel,
         open: Open,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::OpenError> {
         tracing::trace!(frame = ?open);
 
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
             ConnectionState::OpenSent => self.local_state = ConnectionState::Opened,
             ConnectionState::ClosePipe => self.local_state = ConnectionState::CloseSent,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(Self::OpenError::IllegalState),
         }
 
         // set channel_max to mutually acceptable
@@ -573,10 +566,9 @@ impl endpoint::Connection for Connection {
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
                 // TODO: allow remotely initiated session
-                return Err(Error::amqp_error(
-                    AmqpError::NotImplemented,
-                    Some("Remotely initiazted session is not supported yet".to_string()),
-                )); // Close with error NotImplemented
+                return Err(ConnectionInnerError::NotImplemented(Some(
+                    "Remotely initiazted session is not supported yet".to_string(),
+                ))); // Close with error NotImplemented
             }
         }
 
@@ -591,7 +583,7 @@ impl endpoint::Connection for Connection {
     ) -> Result<(), Self::Error> {
         match &self.local_state {
             ConnectionState::Opened => {}
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(ConnectionInnerError::IllegalState),
         }
 
         // Forward to session
@@ -600,7 +592,7 @@ impl endpoint::Connection for Connection {
         let relay = self
             .session_by_incoming_channel
             .remove(&channel)
-            .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
+            .ok_or_else(|| ConnectionInnerError::NotFound(None))?;
         relay.send(sframe).await?;
 
         Ok(())
@@ -611,27 +603,37 @@ impl endpoint::Connection for Connection {
         &mut self,
         _channel: IncomingChannel,
         close: Close,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::CloseError> {
         match &self.local_state {
-            ConnectionState::Opened => {
+            ConnectionState::Opened
+            | ConnectionState::OpenPipe
+            | ConnectionState::OpenClosePipe
+            | ConnectionState::OpenReceived
+            | ConnectionState::OpenSent => {
                 self.local_state = ConnectionState::CloseReceived;
-                self.control.send(ConnectionControl::Close(None)).await?;
-            }
-            ConnectionState::CloseSent => self.local_state = ConnectionState::End,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
-        };
 
-        match close.error {
-            Some(error) => Err(Error::Remote(error)),
-            None => Ok(()),
+                match close.error {
+                    Some(error) => Err(CloseError::RemoteClosedWithError(error)),
+                    None => Err(CloseError::RemoteClosed),
+                }
+            }
+            ConnectionState::CloseSent | ConnectionState::Discarding => {
+                self.local_state = ConnectionState::End;
+
+                match close.error {
+                    Some(error) => Err(CloseError::RemoteClosedWithError(error)),
+                    None => Ok(()),
+                }
+            }
+            _ => return Err(CloseError::IllegalState),
         }
     }
 
     #[instrument(skip_all)]
-    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
+    async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Error>,
+        Self::OpenError: From<W::Error>,
     {
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
@@ -643,7 +645,7 @@ impl endpoint::Connection for Connection {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenSent,
             ConnectionState::OpenReceived => self.local_state = ConnectionState::Opened,
             ConnectionState::HeaderSent => self.local_state = ConnectionState::OpenPipe,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            _ => return Err(Self::OpenError::IllegalState),
         }
 
         Ok(())
@@ -674,20 +676,30 @@ impl endpoint::Connection for Connection {
         &mut self,
         writer: &mut W,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
+    ) -> Result<(), Self::CloseError>
     where
         W: Sink<Frame> + Send + Unpin,
-        W::Error: Into<Error>,
+        Self::CloseError: From<W::Error>,
     {
+        let error_is_some = error.is_some();
         let frame = Frame::new(0u16, FrameBody::Close(Close { error }));
         writer.send(frame).await.map_err(Into::into)?;
 
         match &self.local_state {
-            ConnectionState::Opened => self.local_state = ConnectionState::CloseSent,
+            ConnectionState::Opened => match error_is_some {
+                true => self.local_state = ConnectionState::Discarding,
+                false => self.local_state = ConnectionState::CloseSent,
+            },
             ConnectionState::CloseReceived => self.local_state = ConnectionState::End,
-            ConnectionState::OpenSent => self.local_state = ConnectionState::ClosePipe,
-            ConnectionState::OpenPipe => self.local_state = ConnectionState::OpenClosePipe,
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)),
+            ConnectionState::OpenSent => match error_is_some {
+                true => self.local_state = ConnectionState::Discarding,
+                false => self.local_state = ConnectionState::ClosePipe,
+            },
+            ConnectionState::OpenPipe => match error_is_some {
+                true => self.local_state = ConnectionState::Discarding,
+                false => self.local_state = ConnectionState::OpenClosePipe,
+            },
+            _ => return Err(CloseError::IllegalState),
         }
         Ok(())
     }
@@ -729,11 +741,11 @@ impl Connection {
         &mut self,
         channel: IncomingChannel,
         begin: &Begin,
-    ) -> Result<Option<&SessionRelay>, Error> {
+    ) -> Result<Option<&SessionRelay>, ConnectionInnerError> {
         match &self.local_state {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
-            _ => return Err(Error::amqp_error(AmqpError::IllegalState, None)), // TODO: what to do?
+            _ => return Err(ConnectionInnerError::IllegalState), // TODO: what to do?
         }
 
         match begin.remote_channel {
@@ -742,11 +754,8 @@ impl Connection {
                 let relay = self
                     .session_by_outgoing_channel
                     .get(outgoing_channel as usize)
-                    .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?; // Close with error NotFound
+                    .ok_or_else(|| ConnectionInnerError::NotFound(None))?; // Close with error NotFound
 
-                if self.session_by_incoming_channel.contains_key(&channel) {
-                    return Err(Error::amqp_error(AmqpError::NotAllowed, None)); // TODO: this is probably not how not allowed should be used?
-                }
                 self.session_by_incoming_channel
                     .insert(channel, relay.clone());
                 Ok(Some(relay))

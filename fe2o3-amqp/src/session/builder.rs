@@ -6,10 +6,9 @@ use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tokio_util::sync::PollSender;
 
 use crate::{
-    connection::ConnectionHandle,
+    connection::{AllocSessionError, ConnectionHandle},
     control::SessionControl,
     endpoint::OutgoingChannel,
     link::LinkFrame,
@@ -23,7 +22,11 @@ use crate::transaction::{
     coordinator::ControlLinkAcceptor, manager::TransactionManager, session::TxnSession,
 };
 
-use super::{frame::SessionFrame, Error, SessionHandle, DEFAULT_WINDOW};
+use super::{
+    error::{BeginError, Error},
+    frame::SessionFrame,
+    SessionHandle, DEFAULT_WINDOW,
+};
 
 pub(crate) const DEFAULT_SESSION_CONTROL_BUFFER_SIZE: usize = 128;
 pub(crate) const DEFAULT_SESSION_MUX_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -87,12 +90,12 @@ impl Builder {
 
     pub(crate) fn into_session(
         self,
-        control: mpsc::Sender<SessionControl>,
+        // control: mpsc::Sender<SessionControl>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
     ) -> Session {
         Session {
-            control,
+            // control,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -126,7 +129,7 @@ impl Builder {
     ) -> TxnSession<Session> {
         let txn_manager = TransactionManager::new(outgoing, control_link_acceptor);
         let session = Session {
-            control,
+            // control,
             outgoing_channel,
             local_state,
             initial_outgoing_id: Constant::new(self.next_outgoing_id),
@@ -149,6 +152,7 @@ impl Builder {
         };
 
         TxnSession {
+            control,
             session,
             txn_manager,
         }
@@ -157,7 +161,7 @@ impl Builder {
     #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
     async fn launch_client_session_engine<R>(
         self,
-        session_control_tx: mpsc::Sender<SessionControl>,
+        _session_control_tx: &mpsc::Sender<SessionControl>,
         _outgoing: &mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
@@ -165,14 +169,14 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
-        let session = self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
+        let session = self.into_session(outgoing_channel, local_state);
         let engine = SessionEngine::begin_client_session(
             connection.control.clone(),
             session,
             session_control_rx,
             incoming,
-            PollSender::new(connection.outgoing.clone()),
+            connection.outgoing.clone(),
             outgoing_link_frames,
         )
         .await?;
@@ -182,7 +186,7 @@ impl Builder {
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     async fn launch_client_session_engine<R>(
         mut self,
-        session_control_tx: mpsc::Sender<SessionControl>,
+        session_control_tx: &mpsc::Sender<SessionControl>,
         control_link_outgoing: &mpsc::Sender<LinkFrame>,
         outgoing_channel: OutgoingChannel,
         local_state: SessionState,
@@ -190,11 +194,11 @@ impl Builder {
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         match self.control_link_acceptor.take() {
             Some(control_link_acceptor) => {
                 let session = self.into_txn_session(
-                    session_control_tx,
+                    session_control_tx.clone(),
                     control_link_outgoing.clone(),
                     outgoing_channel,
                     control_link_acceptor,
@@ -205,21 +209,20 @@ impl Builder {
                     session,
                     session_control_rx,
                     incoming,
-                    PollSender::new(connection.outgoing.clone()),
+                    connection.outgoing.clone(),
                     outgoing_link_frames,
                 )
                 .await?;
                 Ok(engine.spawn())
             }
             None => {
-                let session =
-                    self.into_session(session_control_tx.clone(), outgoing_channel, local_state);
+                let session = self.into_session(outgoing_channel, local_state);
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
                     session,
                     session_control_rx,
                     incoming,
-                    PollSender::new(connection.outgoing.clone()),
+                    connection.outgoing.clone(),
                     outgoing_link_frames,
                 )
                 .await?;
@@ -321,7 +324,7 @@ impl Builder {
     pub async fn begin(
         self,
         connection: &mut ConnectionHandle<()>,
-    ) -> Result<SessionHandle<()>, Error> {
+    ) -> Result<SessionHandle<()>, BeginError> {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
@@ -329,11 +332,20 @@ impl Builder {
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
 
         // create session in connection::Engine
-        let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
+        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+            Ok(channel) => channel,
+            Err(alloc_error) => match alloc_error {
+                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                AllocSessionError::ChannelMaxReached => {
+                    // Locally initiating session exceeded channel max
+                    return Err(BeginError::LocalChannelMaxReached);
+                }
+            },
+        };
 
         let engine_handle = self
             .launch_client_session_engine(
-                session_control_tx.clone(),
+                &session_control_tx,
                 &outgoing_tx,
                 outgoing_channel,
                 local_state,

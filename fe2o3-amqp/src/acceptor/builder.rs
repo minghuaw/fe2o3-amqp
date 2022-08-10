@@ -545,12 +545,12 @@ impl Builder<ControlLinkAcceptor, Initialized> {
     pub fn new() -> Self {
         let shared = Default::default();
         let inner = Default::default();
-        let inner = ControlLinkAcceptor {
-            shared,
-            inner
-        };
+        let inner = ControlLinkAcceptor { shared, inner };
 
-        Self { inner, marker: PhantomData }
+        Self {
+            inner,
+            marker: PhantomData,
+        }
     }
 
     /// Settlement policy for the sender

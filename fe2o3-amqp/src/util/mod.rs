@@ -287,3 +287,8 @@ mod tests {
         assert_eq!(reverse, vec![9, 8, 7, 6, 5, 4, 3, 2, 1]);
     }
 }
+
+pub(crate) fn is_consecutive(left: &DeliveryNumber, right: &DeliveryNumber) -> bool {
+    // Assume ascending order
+    right - left == 1
+}

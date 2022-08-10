@@ -1,24 +1,17 @@
 //! Session Listener
 
-// /// Listener for incoming session
-// #[derive(Debug)]
-// pub struct SessionListener {}
-
-use std::io;
-
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, AmqpError, SessionError},
+    definitions::{self, ConnectionError},
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
     states::SessionState,
 };
-use futures_util::Sink;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
-use tokio_util::sync::PollSender;
 use tracing::instrument;
 
 use crate::{
+    connection::AllocSessionError,
     control::{ConnectionControl, SessionControl},
     endpoint::{
         self, IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandle, Session,
@@ -28,7 +21,8 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem},
-        AllocLinkError, Error, SessionHandle, DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
+        AllocLinkError, BeginError, Error, SessionHandle, SessionInnerError,
+        DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
     Payload,
@@ -159,16 +153,17 @@ impl SessionAcceptor {
         listener_session: ListenerSession,
         _control_link_outgoing: &mpsc::Sender<LinkFrame>,
         connection: &crate::connection::ConnectionHandle<R>,
+        _session_control_tx: &mpsc::Sender<SessionControl>,
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         let engine = SessionEngine::begin_listener_session(
             connection.control.clone(),
             listener_session,
             session_control_rx,
             incoming,
-            PollSender::new(connection.outgoing.clone()),
+            connection.outgoing.clone(),
             outgoing_link_frames,
         )
         .await?;
@@ -181,15 +176,17 @@ impl SessionAcceptor {
         listener_session: ListenerSession,
         control_link_outgoing: &mpsc::Sender<LinkFrame>,
         connection: &crate::connection::ConnectionHandle<R>,
+        session_control_tx: &mpsc::Sender<SessionControl>,
         session_control_rx: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<JoinHandle<Result<(), Error>>, Error> {
+    ) -> Result<JoinHandle<Result<(), Error>>, BeginError> {
         match self.0.control_link_acceptor.clone() {
             Some(control_link_acceptor) => {
                 let txn_manager =
                     TransactionManager::new(control_link_outgoing.clone(), control_link_acceptor);
                 let listener_session = TxnSession {
+                    control: session_control_tx.clone(),
                     session: listener_session,
                     txn_manager,
                 };
@@ -199,7 +196,7 @@ impl SessionAcceptor {
                     listener_session,
                     session_control_rx,
                     incoming,
-                    PollSender::new(connection.outgoing.clone()),
+                    connection.outgoing.clone(),
                     outgoing_link_frames,
                 )
                 .await?;
@@ -211,7 +208,7 @@ impl SessionAcceptor {
                     listener_session,
                     session_control_rx,
                     incoming,
-                    PollSender::new(connection.outgoing.clone()),
+                    connection.outgoing.clone(),
                     outgoing_link_frames,
                 )
                 .await?;
@@ -225,7 +222,7 @@ impl SessionAcceptor {
         &self,
         incoming_session: IncomingSession,
         connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, Error> {
+    ) -> Result<ListenerSessionHandle, BeginError> {
         let local_state = SessionState::Unmapped;
         let (session_control_tx, session_control_rx) =
             mpsc::channel::<SessionControl>(DEFAULT_SESSION_CONTROL_BUFFER_SIZE);
@@ -234,11 +231,29 @@ impl SessionAcceptor {
         let (link_listener_tx, link_listener_rx) = mpsc::channel(self.0.buffer_size);
 
         // create session in connection::Engine
-        let outgoing_channel = connection.allocate_session(incoming_tx).await?; // AllocSessionError
-        let mut session =
-            self.0
-                .clone()
-                .into_session(session_control_tx.clone(), outgoing_channel, local_state);
+        let outgoing_channel = match connection.allocate_session(incoming_tx).await {
+            Ok(channel) => channel,
+            Err(error) => match error {
+                AllocSessionError::IllegalState => return Err(BeginError::IllegalConnectionState),
+                AllocSessionError::ChannelMaxReached => {
+                    // A peer that receives a channel number outside the supported range MUST close the connection
+                    // with the framing-error error-code
+                    let error = definitions::Error::new(
+                        ConnectionError::FramingError,
+                        "Exceeding channel-max".to_string(),
+                        None,
+                    );
+                    connection
+                        .control
+                        .send(ConnectionControl::Close(Some(error)))
+                        .await
+                        .map_err(|_| BeginError::IllegalConnectionState)?;
+
+                    return Err(BeginError::LocalChannelMaxReached);
+                }
+            },
+        };
+        let mut session = self.0.clone().into_session(outgoing_channel, local_state);
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,
@@ -254,6 +269,7 @@ impl SessionAcceptor {
                 listener_session,
                 &outgoing_tx,
                 connection,
+                &session_control_tx,
                 session_control_rx,
                 incoming_rx,
                 outgoing_rx,
@@ -274,10 +290,11 @@ impl SessionAcceptor {
     pub async fn accept(
         &self,
         connection: &mut ListenerConnectionHandle,
-    ) -> Result<ListenerSessionHandle, Error> {
-        let incoming_session = connection.next_incoming_session().await.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::Other, "Connection must have been dropped")
-        })?;
+    ) -> Result<ListenerSessionHandle, BeginError> {
+        let incoming_session = connection
+            .next_incoming_session()
+            .await
+            .ok_or(BeginError::IllegalConnectionState)?;
         self.accept_incoming_session(incoming_session, connection)
             .await
     }
@@ -285,19 +302,20 @@ impl SessionAcceptor {
 
 impl<S> SessionEngine<S>
 where
-    S: ListenerSessionEndpoint + endpoint::SessionEndpoint<Error = Error>,
+    S: ListenerSessionEndpoint + endpoint::SessionEndpoint,
+    BeginError: From<S::BeginError>,
 {
     pub async fn begin_listener_session(
-        conn: mpsc::Sender<ConnectionControl>,
+        conn_control: mpsc::Sender<ConnectionControl>,
         session: S,
         control: mpsc::Receiver<SessionControl>,
         incoming: mpsc::Receiver<SessionIncomingItem>,
-        outgoing: PollSender<SessionFrame>,
+        outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, BeginError> {
         tracing::trace!("Instantiating session engine");
         let mut engine = Self {
-            conn,
+            conn_control,
             session,
             control,
             incoming,
@@ -319,15 +337,16 @@ pub struct ListenerSession {
 }
 
 impl endpoint::SessionExt for ListenerSession {
-    fn control(&self) -> &mpsc::Sender<SessionControl> {
-        &self.session.control
-    }
+    // fn control(&self) -> &mpsc::Sender<SessionControl> {
+    //     &self.session.control
+    // }
 }
 
 #[async_trait]
 impl endpoint::Session for ListenerSession {
     type AllocError = <session::Session as endpoint::Session>::AllocError;
-
+    type BeginError = <session::Session as endpoint::Session>::BeginError;
+    type EndError = <session::Session as endpoint::Session>::EndError;
     type Error = <session::Session as endpoint::Session>::Error;
 
     type State = <session::Session as endpoint::Session>::State;
@@ -370,7 +389,7 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::BeginError> {
         self.session.on_incoming_begin(channel, begin)
     }
 
@@ -393,7 +412,7 @@ impl endpoint::Session for ListenerSession {
                     relay
                         .send(LinkFrame::Attach(attach))
                         .await
-                        .map_err(|_| Error::session_error(SessionError::UnattachedHandle, None))?;
+                        .map_err(|_| SessionInnerError::UnattachedHandle)?;
                     self.session
                         .link_by_input_handle
                         .insert(input_handle, relay);
@@ -401,10 +420,10 @@ impl endpoint::Session for ListenerSession {
                 }
                 None => {
                     // TODO: Resuming link
-                    Err(Error::amqp_error(
-                        AmqpError::NotImplemented,
-                        "Link resumption is not supported yet".to_string(),
-                    ))
+                    self.link_listener.send(attach).await.map_err(|_| {
+                        // SessionHandle must have been dropped, then treat it as if the acceptor doesn't exist
+                        SessionInnerError::HandleInUse
+                    })
                 }
             },
             None => {
@@ -415,18 +434,14 @@ impl endpoint::Session for ListenerSession {
                 // the state of the newly created endpoint.
 
                 self.link_listener.send(attach).await.map_err(|_| {
-                    // SessionHandle must have been dropped
-                    Error::amqp_error(
-                        AmqpError::IllegalState,
-                        Some("Listener session handle must have been dropped".to_string()),
-                    )
-                })?;
-                return Ok(());
+                    // SessionHandle must have been dropped, then treat it as if the acceptor doesn't exist
+                    SessionInnerError::UnattachedHandle
+                })
             }
         }
     }
 
-    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<(), Self::Error> {
+    async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
         self.session.on_incoming_flow(flow).await
     }
 
@@ -434,14 +449,14 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         transfer: Transfer,
         payload: Payload,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Disposition>, Self::Error> {
         self.session.on_incoming_transfer(transfer, payload).await
     }
 
     async fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Option<Vec<Disposition>>, Self::Error> {
         self.session.on_incoming_disposition(disposition).await
     }
 
@@ -453,26 +468,23 @@ impl endpoint::Session for ListenerSession {
         &mut self,
         channel: IncomingChannel,
         end: End,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), Self::EndError> {
         self.session.on_incoming_end(channel, end).await
     }
 
     // Handling SessionFrames
-    async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin,
-    {
+    async fn send_begin(
+        &mut self,
+        writer: &mpsc::Sender<SessionFrame>,
+    ) -> Result<(), Self::BeginError> {
         self.session.send_begin(writer).await
     }
 
-    async fn send_end<W>(
+    async fn send_end(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<SessionFrame>,
         error: Option<definitions::Error>,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin,
-    {
+    ) -> Result<(), Self::EndError> {
         self.session.send_end(writer, error).await
     }
 
@@ -502,7 +514,7 @@ impl endpoint::Session for ListenerSession {
         self.session.on_outgoing_disposition(disposition)
     }
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error> {
+    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
         self.session.on_outgoing_detach(detach)
     }
 }
@@ -513,10 +525,6 @@ impl endpoint::HandleDeclare for ListenerSession {
     fn allocate_transaction_id(
         &mut self,
     ) -> Result<fe2o3_amqp_types::transaction::TransactionId, AllocTxnIdError> {
-        // Err(Error::amqp_error(
-        //     AmqpError::NotImplemented,
-        //     "Resource side transaction is not enabled".to_string(),
-        // ))
         Err(AllocTxnIdError::NotImplemented)
     }
 }
