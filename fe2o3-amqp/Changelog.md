@@ -2,7 +2,8 @@
 
 ## 0.4.0
 
-1. Restructured `connection::error::{OpenError, Error}` and `session::error:{BeginError, Error}`
+1. Breaking changes:
+   1. Restructured `connection::error::{OpenError, Error}` and `session::error:{BeginError, Error}`
 2. `Connection` and non-txn `Session` no longer hold a copy of the controller sender to its own engine
 
 ## 0.3.2
