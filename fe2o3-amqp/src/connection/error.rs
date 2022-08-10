@@ -87,23 +87,14 @@ impl From<transport::Error> for Error {
 /// Error associated with allocation of new session
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum AllocSessionError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
+    // #[error(transparent)]
+    // Io(#[from] io::Error),
 
     #[error("Illegal local state")]
     IllegalState,
 
     #[error("Reached connection channel max")]
     ChannelMaxReached,
-}
-
-impl<T> From<mpsc::error::SendError<T>> for AllocSessionError
-where
-    T: std::fmt::Debug,
-{
-    fn from(err: mpsc::error::SendError<T>) -> Self {
-        Self::Io(io::Error::new(io::ErrorKind::Other, err.to_string()))
-    }
 }
 
 /// Error associated with openning a connection

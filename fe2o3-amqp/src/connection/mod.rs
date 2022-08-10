@@ -135,16 +135,9 @@ impl<R> ConnectionHandle<R> {
         let (responder, resp_rx) = oneshot::channel();
         self.control
             .send(ConnectionControl::AllocateSession { tx, responder })
-            .await?; // std::io::Error
-        let result = resp_rx.await.map_err(|_| {
-            AllocSessionError::Io(
-                // The sending half is already dropped
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    "ConnectionEngine event_loop is dropped",
-                ),
-            )
-        })?;
+            .await
+            .map_err(|_| AllocSessionError::IllegalState)?; // Connection must have stopped
+        let result = resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?;
         result
     }
 }

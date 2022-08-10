@@ -686,3 +686,32 @@ pub struct ReceiverResumeError {
     /// The error with resumption
     pub kind: ReceiverResumeErrorKind,
 }
+
+/// Error with link relay
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum LinkRelayError {
+    /// Link is not attached
+    #[error("Link is not attached")]
+    UnattachedHandle,
+
+    /// Found a transfer frame to sender
+    #[error("Found transfer frame sent to a sender")]
+    TransferFrameToSender,
+}
+
+impl From<LinkRelayError> for definitions::Error {
+    fn from(error: LinkRelayError) -> Self {
+        match error {
+            LinkRelayError::UnattachedHandle => definitions::Error {
+                condition: SessionError::UnattachedHandle.into(),
+                description: None,
+                info: None,
+            },
+            LinkRelayError::TransferFrameToSender => definitions::Error {
+                condition: AmqpError::NotAllowed.into(),
+                description: Some(String::from("Transfer frame must not be sent to Sender")),
+                info: None,
+            },
+        }
+    }
+}

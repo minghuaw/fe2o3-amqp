@@ -15,6 +15,8 @@ use super::{IncomingChannel, InputHandle, LinkFlow, OutgoingChannel, OutputHandl
 #[async_trait]
 pub(crate) trait Session {
     type AllocError: Send;
+    type BeginError: Send;
+    type EndError: Send;
     type Error: Send;
     type State;
 
@@ -44,7 +46,7 @@ pub(crate) trait Session {
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::BeginError>;
 
     async fn on_incoming_attach(&mut self, attach: Attach) -> Result<(), Self::Error>;
 
@@ -67,20 +69,16 @@ pub(crate) trait Session {
         &mut self,
         channel: IncomingChannel,
         end: End,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::EndError>;
 
     // Handling SessionFrames
-    async fn send_begin<W>(&mut self, writer: &mut W) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin;
+    async fn send_begin(&mut self, writer: &mpsc::Sender<SessionFrame>) -> Result<(), Self::BeginError>;
 
-    async fn send_end<W>(
+    async fn send_end(
         &mut self,
-        writer: &mut W,
+        writer: &mpsc::Sender<SessionFrame>,
         error: Option<Error>,
-    ) -> Result<(), Self::Error>
-    where
-        W: Sink<SessionFrame> + Send + Unpin;
+    ) -> Result<(), Self::EndError>;
 
     // Intercepting LinkFrames
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error>;
@@ -99,7 +97,7 @@ pub(crate) trait Session {
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error>;
 
-    fn on_outgoing_detach(&mut self, detach: Detach) -> Result<SessionFrame, Self::Error>;
+    fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame;
 }
 
 pub(crate) trait SessionExt: Session {
