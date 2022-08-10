@@ -213,17 +213,6 @@ where
         tokio::spawn(self.event_loop())
     }
 
-    // }
-
-    // impl<Io, C> ConnectionEngine<Io, C>
-    // where
-    //     Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin,
-    //     C: endpoint::Connection<State = ConnectionState> + std::fmt::Debug + Send + 'static,
-    //     C::AllocError: Into<AllocSessionError>,
-    //     C::OpenError: From<transport::Error>,
-    //     C::CloseError: From<transport::Error>,
-    //     ConnectionInnerError: From<C::Error> + From<C::OpenError> + From<C::CloseError>,
-    // {
     #[instrument(skip_all)]
     async fn forward_to_session(
         &mut self,
