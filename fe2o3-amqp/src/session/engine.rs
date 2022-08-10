@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, SessionError},
-    performatives::End,
+    performatives::End, transaction::TransactionError,
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -317,6 +317,16 @@ where
             },
             SessionInnerError::RemoteEnded => self.end_session(None).await,
             SessionInnerError::RemoteEndedWithError(_) => self.end_session(None).await,
+
+            #[cfg(feature = "transaction")]
+            SessionInnerError::UnknownTxnId => {
+                let error = Error::new(
+                    TransactionError::UnknownId,
+                    None,
+                    None
+                );
+                self.end_session(Some(error)).await
+            }
         }
     }
 

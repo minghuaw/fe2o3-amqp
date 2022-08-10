@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Session
 
-use std::{collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -17,7 +17,7 @@ use tokio::{
         mpsc::{self},
         oneshot,
     },
-    task::{JoinHandle},
+    task::JoinHandle,
 };
 use tracing::{instrument, trace};
 
@@ -43,15 +43,14 @@ pub(crate) mod engine;
 pub(crate) mod frame;
 
 mod error;
-pub(crate) use error::{AllocLinkError, SessionBeginError, SessionInnerError, SessionStateError};
+pub(crate) use error::{
+    AllocLinkError, SessionBeginError, SessionErrorKind, SessionInnerError, SessionStateError,
+};
 
 mod builder;
 pub use builder::*;
 
-use self::{
-    error::{SessionErrorKind},
-    frame::{SessionFrame, SessionFrameBody},
-};
+use self::frame::{SessionFrame, SessionFrameBody};
 
 /// Default incoming_window and outgoing_window
 pub const DEFAULT_WINDOW: UInt = 2048;
@@ -138,7 +137,7 @@ impl<R> SessionHandle<R> {
             Ok(res) => {
                 res?;
                 Ok(())
-            },
+            }
             Err(join_error) => Err(SessionErrorKind::JoinError(join_error)),
         }
     }
@@ -266,7 +265,9 @@ impl Session {
     ///
     /// let session = Session::begin(&mut connection).await.unwrap();
     /// ```
-    pub async fn begin(conn: &mut ConnectionHandle<()>) -> Result<SessionHandle<()>, SessionBeginError> {
+    pub async fn begin(
+        conn: &mut ConnectionHandle<()>,
+    ) -> Result<SessionHandle<()>, SessionBeginError> {
         Session::builder().begin(conn).await
     }
 }
@@ -591,7 +592,7 @@ impl endpoint::Session for Session {
                 .on_incoming_detach(detach)
                 .await
                 .map_err(|_| SessionInnerError::UnattachedHandle),
-            None => Err(SessionInnerError::UnattachedHandle), 
+            None => Err(SessionInnerError::UnattachedHandle),
         }
     }
 
@@ -634,7 +635,10 @@ impl endpoint::Session for Session {
         }
     }
 
-    async fn send_begin(&mut self, writer: &mpsc::Sender<SessionFrame>) -> Result<(), Self::BeginError> {
+    async fn send_begin(
+        &mut self,
+        writer: &mpsc::Sender<SessionFrame>,
+    ) -> Result<(), Self::BeginError> {
         let begin = Begin {
             remote_channel: self.incoming_channel.map(Into::into),
             next_outgoing_id: self.next_outgoing_id,
@@ -659,10 +663,13 @@ impl endpoint::Session for Session {
                 self.local_state = SessionState::BeginSent;
             }
             SessionState::BeginReceived => {
-                writer.send(frame).await.map_err(|_| SessionStateError::IllegalConnectionState)?;
+                writer
+                    .send(frame)
+                    .await
+                    .map_err(|_| SessionStateError::IllegalConnectionState)?;
                 self.local_state = SessionState::Mapped;
             }
-            _ => return Err(SessionStateError::IllegalState), 
+            _ => return Err(SessionStateError::IllegalState),
         }
 
         Ok(())
@@ -679,7 +686,7 @@ impl endpoint::Session for Session {
                 false => self.local_state = SessionState::EndSent,
             },
             SessionState::EndReceived => self.local_state = SessionState::Unmapped,
-            _ => return Err(SessionStateError::IllegalState), 
+            _ => return Err(SessionStateError::IllegalState),
         }
 
         let frame = SessionFrame::new(self.outgoing_channel, SessionFrameBody::End(End { error }));
