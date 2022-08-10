@@ -206,8 +206,6 @@ pub(crate) async fn allocate_link(
 ///
 #[derive(Debug)]
 pub struct Session {
-    // pub(crate) control: mpsc::Sender<SessionControl>,
-    // session_id: usize,
     pub(crate) outgoing_channel: OutgoingChannel,
 
     // local amqp states
@@ -270,11 +268,7 @@ impl Session {
     }
 }
 
-impl endpoint::SessionExt for Session {
-    // fn control(&self) -> &mpsc::Sender<SessionControl> {
-    //     &self.control
-    // }
-}
+impl endpoint::SessionExt for Session {}
 
 #[async_trait]
 impl endpoint::Session for Session {

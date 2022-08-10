@@ -621,7 +621,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         // Create channels
         let (control_tx, control_rx) = mpsc::channel(DEFAULT_CONTROL_CHAN_BUF);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(buffer_size);
-        let connection = Connection::new(control_tx.clone(), local_state, local_open);
+        let connection = Connection::new(local_state, local_open);
 
         let engine = ConnectionEngine::open(transport, connection, control_rx, outgoing_rx).await?;
         let handle = engine.spawn();

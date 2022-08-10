@@ -289,7 +289,21 @@ where
                 self.connection.on_incoming_end(channel, end).await?;
             }
             FrameBody::Close(close) => {
-                self.connection.on_incoming_close(channel, close).await?;
+                let result = self.connection.on_incoming_close(channel, close).await;
+                if matches!(
+                    self.connection.local_state(),
+                    ConnectionState::CloseReceived
+                ) {
+                    self.outgoing_session_frames.close();
+                    while let Some(frame) = self.outgoing_session_frames.recv().await {
+                        self.on_outgoing_session_frames(frame).await?;
+                    }
+
+                    self.connection
+                        .send_close(&mut self.transport, None)
+                        .await?;
+                }
+                result?;
             }
             FrameBody::Empty => {
                 // do nothing, IdleTimeout is tracked by Transport

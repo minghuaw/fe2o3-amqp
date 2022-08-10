@@ -161,11 +161,15 @@ where
                     if let Some(DeliveryState::TransactionalState(txn_state)) = transfer.state {
                         transfer.state = txn_state.outcome.map(Into::into);
                     };
-                    
+
                     // Committing shuold never need to send an immediate disposition
-                    if let Some(disposition) = self.session.on_incoming_transfer(transfer, payload).await? {
-                        self.control.send(SessionControl::Disposition(disposition)).await
-                                .map_err(|_| Self::Error::IllegalState)?
+                    if let Some(disposition) =
+                        self.session.on_incoming_transfer(transfer, payload).await?
+                    {
+                        self.control
+                            .send(SessionControl::Disposition(disposition))
+                            .await
+                            .map_err(|_| Self::Error::IllegalState)?
                     }
                 }
                 TxnWorkFrame::Retire(mut disposition) => {
@@ -176,9 +180,13 @@ where
                     disposition.settled = true;
 
                     // TODO: Where should the echoing disposition be sent?
-                    if let Some(dispositions) = self.session.on_incoming_disposition(disposition).await? {
+                    if let Some(dispositions) =
+                        self.session.on_incoming_disposition(disposition).await?
+                    {
                         for disposition in dispositions {
-                            self.control.send(SessionControl::Disposition(disposition)).await
+                            self.control
+                                .send(SessionControl::Disposition(disposition))
+                                .await
                                 .map_err(|_| Self::Error::IllegalState)?
                         }
                     }

@@ -216,8 +216,7 @@ impl Builder {
                 Ok(engine.spawn())
             }
             None => {
-                let session =
-                    self.into_session(outgoing_channel, local_state);
+                let session = self.into_session(outgoing_channel, local_state);
                 let engine = SessionEngine::begin_client_session(
                     connection.control.clone(),
                     session,

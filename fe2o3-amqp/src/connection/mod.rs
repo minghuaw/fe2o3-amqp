@@ -344,8 +344,6 @@ pub(crate) async fn deallocate_session(
 ///
 #[derive(Debug)]
 pub struct Connection {
-    pub(crate) control: Sender<ConnectionControl>,
-
     // local
     pub(crate) local_state: ConnectionState,
     pub(crate) local_open: Open,
@@ -454,13 +452,13 @@ impl Connection {
 /* ------------------------------- Private API ------------------------------ */
 impl Connection {
     pub(crate) fn new(
-        control: Sender<ConnectionControl>,
+        // control: Sender<ConnectionControl>,
         local_state: ConnectionState,
         local_open: Open,
     ) -> Self {
         let agreed_channel_max = local_open.channel_max.0;
         Self {
-            control,
+            // control,
             local_state,
             local_open,
             session_by_incoming_channel: BTreeMap::new(),
@@ -613,10 +611,6 @@ impl endpoint::Connection for Connection {
             | ConnectionState::OpenReceived
             | ConnectionState::OpenSent => {
                 self.local_state = ConnectionState::CloseReceived;
-                self.control
-                    .send(ConnectionControl::Close(None))
-                    .await
-                    .map_err(|_| CloseError::IllegalState)?;
 
                 match close.error {
                     Some(error) => Err(CloseError::RemoteClosedWithError(error)),

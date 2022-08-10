@@ -198,8 +198,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl> {
         let (outgoing_tx, outgoing_rx) = mpsc::channel(self.buffer_size);
         let (begin_tx, begin_rx) = mpsc::channel(self.buffer_size);
 
-        let connection =
-            connection::Connection::new(control_tx.clone(), local_state, self.local_open.clone());
+        let connection = connection::Connection::new(local_state, self.local_open.clone());
         let listener_connection = ListenerConnection {
             connection,
             session_listener: begin_tx,

@@ -253,10 +253,7 @@ impl SessionAcceptor {
                 }
             },
         };
-        let mut session =
-            self.0
-                .clone()
-                .into_session(outgoing_channel, local_state);
+        let mut session = self.0.clone().into_session(outgoing_channel, local_state);
         session.on_incoming_begin(
             IncomingChannel(incoming_session.channel),
             incoming_session.begin,

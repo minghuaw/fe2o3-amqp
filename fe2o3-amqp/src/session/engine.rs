@@ -123,7 +123,9 @@ where
                     .await?;
             }
             SessionFrameBody::Disposition(disposition) => {
-                if let Some(dispositions) = self.session.on_incoming_disposition(disposition).await? {
+                if let Some(dispositions) =
+                    self.session.on_incoming_disposition(disposition).await?
+                {
                     for disposition in dispositions {
                         let disposition = self.session.on_outgoing_disposition(disposition)?;
                         self.outgoing
@@ -139,10 +141,17 @@ where
                 self.session.on_incoming_detach(detach).await?;
             }
             SessionFrameBody::End(end) => {
-                self.session.on_incoming_end(channel, end).await?;
+                let result = self.session.on_incoming_end(channel, end).await;
                 if matches!(self.session.local_state(), SessionState::EndReceived) {
+                    // if control is closing, finish sending all buffered messages before closing
+                    self.outgoing_link_frames.close();
+                    while let Some(frame) = self.outgoing_link_frames.recv().await {
+                        self.on_outgoing_link_frames(frame).await?;
+                    }
+
                     self.session.send_end(&self.outgoing, None).await?;
                 }
+                result?;
             }
         }
 
@@ -194,15 +203,6 @@ where
             SessionControl::DeallocateLink(link_name) => {
                 self.session.deallocate_link(link_name);
             }
-            // SessionControl::LinkFlow(flow) => {
-            //     let flow = self.session.on_outgoing_flow(flow)?;
-            //     self.outgoing
-            //         .send(flow)
-            //         .await
-            //         // The receiving half must have dropped, and thus the `Connection`
-            //         // event loop has stopped. It should be treated as an io error
-            //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
-            // }
             SessionControl::Disposition(disposition) => {
                 let disposition = self.session.on_outgoing_disposition(disposition)?;
                 self.outgoing
