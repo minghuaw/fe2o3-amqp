@@ -194,15 +194,15 @@ where
             SessionControl::DeallocateLink(link_name) => {
                 self.session.deallocate_link(link_name);
             }
-            SessionControl::LinkFlow(flow) => {
-                let flow = self.session.on_outgoing_flow(flow)?;
-                self.outgoing
-                    .send(flow)
-                    .await
-                    // The receiving half must have dropped, and thus the `Connection`
-                    // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
-            }
+            // SessionControl::LinkFlow(flow) => {
+            //     let flow = self.session.on_outgoing_flow(flow)?;
+            //     self.outgoing
+            //         .send(flow)
+            //         .await
+            //         // The receiving half must have dropped, and thus the `Connection`
+            //         // event loop has stopped. It should be treated as an io error
+            //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+            // }
             SessionControl::Disposition(disposition) => {
                 let disposition = self.session.on_outgoing_disposition(disposition)?;
                 self.outgoing
