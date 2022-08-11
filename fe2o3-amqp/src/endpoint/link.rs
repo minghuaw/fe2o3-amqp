@@ -167,7 +167,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
-        drain: Option<bool>, // TODO: Is Option necessary?
+        drain: Option<bool>,
         echo: bool,
     ) -> Result<(), Self::FlowError>;
 
@@ -195,7 +195,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
-        settled: Option<bool>, // TODO: This should depend on ReceiverSettleMode?
+        settled: Option<bool>,
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError>;

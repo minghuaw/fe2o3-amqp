@@ -54,7 +54,7 @@ pub enum OpenError {
 
     /// Decode error
     #[error("Decode error")]
-    DecodeError,
+    DecodeError(String),
 
     /// Transport error
     #[error(transparent)]
@@ -82,7 +82,7 @@ impl From<NegotiationError> for OpenError {
                 code,
                 additional_data,
             },
-            NegotiationError::DecodeError => Self::DecodeError,
+            NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
             NegotiationError::IllegalState => Self::IllegalState,
         }

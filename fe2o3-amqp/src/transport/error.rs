@@ -18,7 +18,7 @@ pub enum Error {
 
     /// Decode error
     #[error("Decode error")]
-    DecodeError,
+    DecodeError(String),
 
     /// Not implemented
     #[error("Not implemented")]
@@ -29,12 +29,11 @@ pub enum Error {
     FramingError,
 }
 
-// TODO: What about encode error?
 impl From<serde_amqp::Error> for Error {
     fn from(err: serde_amqp::Error) -> Self {
         match err {
             serde_amqp::Error::Io(e) => Self::Io(e),
-            _e => Self::DecodeError,
+            other => Self::DecodeError(other.to_string()),
         }
     }
 }
@@ -43,7 +42,7 @@ impl From<frames::Error> for Error {
     fn from(err: frames::Error) -> Self {
         match err {
             frames::Error::Io(io) => Self::Io(io),
-            frames::Error::DecodeError => Self::DecodeError,
+            frames::Error::DecodeError(val) => Self::DecodeError(val),
             frames::Error::NotImplemented => Self::NotImplemented(None),
         }
     }
@@ -61,7 +60,7 @@ pub enum NegotiationError {
     InvalidDomain,
 
     #[error("Decode error")]
-    DecodeError,
+    DecodeError(String),
 
     #[error("Not implemented")]
     NotImplemented(Option<String>),
@@ -81,7 +80,7 @@ impl From<frames::Error> for NegotiationError {
     fn from(err: frames::Error) -> Self {
         match err {
             frames::Error::Io(err) => Self::Io(err),
-            frames::Error::DecodeError => Self::DecodeError,
+            frames::Error::DecodeError(val) => Self::DecodeError(val),
             frames::Error::NotImplemented => Self::NotImplemented(None),
         }
     }

@@ -137,7 +137,6 @@ impl<T> Delivery<T> {
     }
 }
 
-// TODO: Vec doesnt implement display trait
 impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.message.body {
@@ -184,7 +183,7 @@ impl<T> Delivery<T> {
 #[derive(Debug)]
 pub struct Sendable<T> {
     pub(crate) message: Message<T>,
-    pub(crate) message_format: MessageFormat, // TODO: The message format defined in spec is 0
+    pub(crate) message_format: MessageFormat,
     pub(crate) settled: Option<bool>,
     // pub(crate) batchable: bool,
 }

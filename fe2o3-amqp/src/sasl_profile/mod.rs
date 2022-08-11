@@ -119,7 +119,7 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(_challenge) => {
-                // TODO
+                // TODO: SCRAM-SHA1, SCRAM-SHA256
                 Err(Error::NotImplemented(Some(
                     "SASL Challenge is not implemented.".to_string(),
                 )))

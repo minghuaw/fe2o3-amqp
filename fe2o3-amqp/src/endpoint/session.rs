@@ -30,7 +30,7 @@ pub(crate) trait Session {
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_relay: Option<LinkRelay<()>>, // TODO: how to expose error at compile time?
+        link_relay: Option<LinkRelay<()>>,
     ) -> Result<OutputHandle, Self::AllocError>;
 
     fn allocate_incoming_link(

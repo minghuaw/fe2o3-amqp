@@ -72,12 +72,9 @@ pub(crate) struct IncompleteTransfer {
 impl IncompleteTransfer {
     pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
         let (number, offset) = count_number_of_sections_and_offset(&partial_payload);
-        // let mut buffer = BytesMut::new();
-        // // TODO: anyway to make this not copying the bytes?
-        // buffer.extend(partial_payload);
         Self {
             performative: transfer,
-            buffer: vec![partial_payload],
+            buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
             section_number: Some(number),
             section_offset: offset,
         }
@@ -129,7 +126,6 @@ impl IncompleteTransfer {
 
     /// Append to the buffered payload
     pub fn append(&mut self, other: Payload) {
-        // TODO: append section number and re-count section-offset
         // Count section numbers
         let (number, offset) = count_number_of_sections_and_offset(&other);
         match (&mut self.section_number, number) {
@@ -774,9 +770,6 @@ where
                         .await?
                 }
                 None => {
-                    // let message: Message = from_reader(payload.reader())?;
-                    // TODO: Is there any way to optimize this?
-                    // let (section_number, section_offset) = section_number_and_offset(payload.as_ref());
                     let (section_number, section_offset) =
                         count_number_of_sections_and_offset(&payload);
                     self.link
@@ -809,7 +802,6 @@ where
             .await
     }
 
-    // TODO: batch disposition
     #[inline]
     pub(crate) async fn dispose(
         &mut self,
@@ -878,7 +870,8 @@ where
 ///
 /// # Link re-attachment
 ///
-/// TODO
+/// TODO: documentation
+/// TODO: handle continued partial delivery
 #[derive(Debug)]
 pub struct DetachedReceiver {
     inner: ReceiverInner<ReceiverLink<Target>>,

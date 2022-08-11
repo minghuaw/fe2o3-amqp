@@ -123,7 +123,6 @@ where
     fn allocate_transaction_id(&mut self) -> Result<TransactionId, AllocTxnIdError> {
         let mut txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         while self.txn_manager.txns.contains_key(&txn_id) {
-            // TODO: timeout?
             txn_id = TransactionId::from(Uuid::new_v4().into_bytes());
         }
 
@@ -236,7 +235,7 @@ where
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_relay: Option<LinkRelay<()>>, // TODO: how to expose error at compile time?
+        link_relay: Option<LinkRelay<()>>, 
     ) -> Result<OutputHandle, Self::AllocError> {
         self.session.allocate_link(link_name, link_relay)
     }
@@ -303,14 +302,6 @@ where
             Some(_) | None => return self.session.on_incoming_transfer(transfer, payload).await,
         };
 
-        // if let Some(disposition) = txn.on_incoming_post(txn_id, transfer, payload) {
-        //     self.session
-        //         .control()
-        //         .send(SessionControl::Disposition(disposition))
-        //         .await
-        //         .map_err(|_| S::Error::IllegalConnectionState)?;
-        // }
-        // Ok(())
         Ok(txn.on_incoming_post(txn_id, transfer, payload))
     }
 
@@ -370,7 +361,6 @@ where
     }
 
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
-        // TODO:
         self.session.on_outgoing_flow(flow)
     }
 
@@ -380,8 +370,6 @@ where
         transfer: Transfer,
         payload: Payload,
     ) -> Result<SessionFrame, Self::Error> {
-        // TODO:
-
         self.session
             .on_outgoing_transfer(input_handle, transfer, payload)
     }
@@ -390,8 +378,6 @@ where
         &mut self,
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error> {
-        // TODO:
-
         self.session.on_outgoing_disposition(disposition)
     }
 

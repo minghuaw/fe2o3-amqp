@@ -399,7 +399,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
             input_handle: None,
             snd_settle_mode: self.snd_settle_mode,
             rcv_settle_mode: self.rcv_settle_mode,
-            source: self.source, // TODO: how should this field be set?
+            source: self.source,
             target: self.target,
             max_message_size,
             offered_capabilities: self.offered_capabilities,

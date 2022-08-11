@@ -439,7 +439,7 @@ impl Connection {
     /// ```
     ///
     pub async fn open(
-        container_id: impl Into<String>, // TODO: default container id? random uuid-ish
+        container_id: impl Into<String>,
         url: impl TryInto<Url, Error = url::ParseError>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
         Connection::builder()
@@ -560,19 +560,17 @@ impl endpoint::Connection for Connection {
                 let sframe = SessionFrame::new(channel.0, SessionFrameBody::Begin(begin));
                 // self.send_to_session(session_id, sframe).await?;
                 relay.send(sframe).await?;
+                Ok(())
             }
             None => {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
-                // TODO: allow remotely initiated session
-                return Err(ConnectionInnerError::NotImplemented(Some(
+                Err(ConnectionInnerError::NotImplemented(Some(
                     "Remotely initiazted session is not supported yet".to_string(),
-                ))); // Close with error NotImplemented
+                )))
             }
         }
-
-        Ok(())
     }
 
     /// Reacting to remote End frame
@@ -724,19 +722,11 @@ impl endpoint::Connection for Connection {
 }
 
 impl Connection {
-    // pub(crate) async fn send_to_session(
-    //     &mut self,
-    //     session_id: usize,
-    //     frame: SessionFrame,
-    // ) -> Result<(), Error> {
-    //     let tx = self
-    //         .local_sessions
-    //         .get_mut(session_id)
-    //         .ok_or_else(|| Error::amqp_error(AmqpError::NotFound, None))?;
-    //     tx.send(frame).await?;
-    //     Ok(())
-    // }
-
+    /// Allocate a new session relay for a locally initiated session upon receiving the response 
+    /// from the remote peer.
+    /// 
+    /// Returns `Ok(Some(session_relay))` if a valid response is found and `Ok(None)` if the session
+    /// is initated by the remote peer
     pub(crate) fn on_incoming_begin_inner(
         &mut self,
         channel: IncomingChannel,
@@ -745,7 +735,7 @@ impl Connection {
         match &self.local_state {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
-            _ => return Err(ConnectionInnerError::IllegalState), // TODO: what to do?
+            _ => return Err(ConnectionInnerError::IllegalState), 
         }
 
         match begin.remote_channel {
@@ -765,11 +755,6 @@ impl Connection {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
-                // TODO: allow remotely initiated session
-                // return Err(Error::amqp_error(
-                //     AmqpError::NotImplemented,
-                //     Some("Remotely initiazted session is not supported yet".to_string()),
-                // )); // Close with error NotImplemented
                 Ok(None)
             }
         }

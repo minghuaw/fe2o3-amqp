@@ -201,21 +201,18 @@ pub(crate) struct Link<R, T, F, M> {
     pub(crate) snd_settle_mode: SenderSettleMode,
     pub(crate) rcv_settle_mode: ReceiverSettleMode,
 
-    pub(crate) source: Option<Source>, // TODO: Option?
-    pub(crate) target: Option<T>,      // TODO: Option?
+    pub(crate) source: Option<Source>,
+    pub(crate) target: Option<T>,
 
     /// If zero, the max size is not set.
     /// If zero, the attach frame should treated is None
     pub(crate) max_message_size: u64,
 
     // capabilities
-    pub(crate) offered_capabilities: Option<Vec<Symbol>>,
-    pub(crate) desired_capabilities: Option<Vec<Symbol>>,
+    pub(crate) offered_capabilities: Option<Vec<Symbol>>, // TODO: Add accessor fns
+    pub(crate) desired_capabilities: Option<Vec<Symbol>>, // TODO: Add accessor fns
 
-    // See Section 2.6.7 Flow Control
-    // pub(crate) delivery_count: SequenceNo, // TODO: the first value is the initial_delivery_count?
-    // pub(crate) properties: Option<Fields>,
-    // pub(crate) flow_state: Consumer<Arc<LinkFlowState>>,
+    /// See Section 2.6.7 Flow Control
     pub(crate) flow_state: F,
     pub(crate) unsettled: ArcUnsettledMap<M>,
 }
@@ -668,9 +665,7 @@ impl LinkRelay<OutputHandle> {
                 receiver_settle_mode,
                 ..
             } => {
-                // TODO: verfify role?
                 let echo = if settled {
-                    // TODO: Reply with disposition?
                     // Upon receiving the updated delivery state from the receiver, the sender will, if it has not already spontaneously
                     // attained a terminal state (e.g., through the expiry of the TTL at the sender), update its view of the state and
                     // communicate this back to the sending application.
@@ -755,18 +750,7 @@ impl LinkRelay<OutputHandle> {
         payload: Payload,
     ) -> Result<Option<(DeliveryNumber, DeliveryTag)>, LinkRelayError> {
         match self {
-            LinkRelay::Sender { .. } => {
-                // TODO: This should not happen, but should the link detach if this happens?
-                Err(
-                    // true, // Closing the link
-                    // definitions::Error::new(
-                    //     AmqpError::NotAllowed,
-                    //     Some("Sender should never receive a transfer".to_string()),
-                    //     None,
-                    // ),
-                    LinkRelayError::TransferFrameToSender,
-                )
-            }
+            LinkRelay::Sender { .. } => Err(LinkRelayError::TransferFrameToSender),
             LinkRelay::Receiver {
                 tx,
                 receiver_settle_mode,
@@ -784,13 +768,7 @@ impl LinkRelay<OutputHandle> {
                     payload,
                 })
                 .await
-                .map_err(|_| {
-                    // (
-                    //     true,
-                    //     definitions::Error::new(SessionError::UnattachedHandle, None, None),
-                    // )
-                    LinkRelayError::UnattachedHandle
-                })?;
+                .map_err(|_| LinkRelayError::UnattachedHandle)?;
 
                 if !settled {
                     if let ReceiverSettleMode::Second = receiver_settle_mode {

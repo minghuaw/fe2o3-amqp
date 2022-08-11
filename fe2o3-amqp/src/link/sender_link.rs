@@ -39,7 +39,6 @@ where
                 LinkFlow {
                     handle,
                     delivery_count: Some(delivery_count),
-                    // TODO: "last known value"???
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(writer.link_credit),
                     available: Some(available),
@@ -56,7 +55,6 @@ where
                 LinkFlow {
                     handle,
                     delivery_count: Some(delivery_count),
-                    // TODO: "last known value"???
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(writer.link_credit),
                     available: Some(writer.available),
@@ -73,7 +71,6 @@ where
                 LinkFlow {
                     handle,
                     delivery_count: Some(writer.delivery_count),
-                    // TODO: "last known value"???
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(writer.link_credit),
                     available: Some(available),
@@ -89,7 +86,6 @@ where
                 LinkFlow {
                     handle,
                     delivery_count: Some(reader.delivery_count),
-                    // TODO: "last known value"???
                     // The sender endpoint sets this to the last known value seen from the receiver.
                     link_credit: Some(reader.link_credit),
                     available: Some(reader.available),
@@ -227,7 +223,6 @@ where
         // If this field is zero or unset, there is no maximum size imposed by the link endpoint.
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
         if !more {
-            // TODO: Clone should be very cheap on Bytes
             transfer.more = false;
             send_transfer(writer, input_handle, transfer, payload.clone()).await?;
         } else {
@@ -317,9 +312,7 @@ where
         let mut first = None;
         let mut last = None;
 
-        // TODO: Is sort necessary?
         ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
-
         let mut lock = self.unsettled.write().await;
 
         // Find continuous ranges
@@ -522,7 +515,6 @@ where
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
-        // TODO: is verification necessary?
         match (&self.source, &remote_attach.source) {
             (Some(local_source), Some(remote_source)) => {
                 local_source.verify_as_sender(remote_source)?;

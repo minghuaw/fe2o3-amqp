@@ -507,7 +507,6 @@ where
             let running = match result {
                 Ok(running) => running,
                 Err(error) => {
-                    // TODO: error handling
                     error!("{:?}", error);
                     // let running = self.on_error(&error).await;
                     match self.on_error(&error).await {
@@ -517,6 +516,7 @@ where
                         }
                         Err(error) => {
                             // Stop the session if error cannot be handled
+                            error!("Unable to handle error {:?}", error);
                             outcome = Err(error);
                             Running::Stop
                         }

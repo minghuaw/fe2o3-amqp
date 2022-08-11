@@ -568,7 +568,6 @@ impl endpoint::Connection for ListenerConnection {
                 // If a session is locally initiated, the remote-channel MUST NOT be set. When an endpoint responds
                 // to a remotely initiated session, the remote-channel MUST be set to the channel on which the
                 // remote session sent the begin.
-                // TODO: allow remotely initiated session
 
                 // Upon receiving the
                 // begin the partner will check the remote-channel field and find it empty. This indicates that the begin is referring to

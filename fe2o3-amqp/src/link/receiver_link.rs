@@ -48,79 +48,75 @@ where
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
-                let mut writer = self.flow_state.lock.write().await;
-                writer.link_credit = link_credit;
-                writer.drain = drain;
+                let mut guard = self.flow_state.lock.write().await;
+                guard.link_credit = link_credit;
+                guard.drain = drain;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
+                    delivery_count: Some(guard.delivery_count),
                     link_credit: Some(link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
                     available: None,
                     drain,
                     echo,
-                    properties: writer.properties.clone(),
+                    properties: guard.properties.clone(),
                 }
             }
             (Some(link_credit), None) => {
-                let mut writer = self.flow_state.lock.write().await;
-                writer.link_credit = link_credit;
+                let mut guard = self.flow_state.lock.write().await;
+                guard.link_credit = link_credit;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
+                    delivery_count: Some(guard.delivery_count),
                     link_credit: Some(link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
                     available: None,
-                    drain: writer.drain,
+                    drain: guard.drain,
                     echo,
-                    properties: writer.properties.clone(),
+                    properties: guard.properties.clone(),
                 }
             }
             (None, Some(drain)) => {
-                let mut writer = self.flow_state.lock.write().await;
-                writer.drain = drain;
+                let mut guard = self.flow_state.lock.write().await;
+                guard.drain = drain;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(writer.link_credit),
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(guard.link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
                     available: None,
                     drain,
                     echo,
-                    properties: writer.properties.clone(),
+                    properties: guard.properties.clone(),
                 }
             }
             (None, None) => {
-                let reader = self.flow_state.lock.read().await;
+                let guard = self.flow_state.lock.read().await;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
-                    delivery_count: Some(reader.delivery_count),
-                    link_credit: Some(reader.link_credit),
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(guard.link_credit),
                     // The receiver sets this to the last known value seen from the sender
                     // available: Some(writer.available),
                     available: None,
-                    drain: reader.drain,
+                    drain: guard.drain,
                     echo,
-                    properties: reader.properties.clone(),
+                    properties: guard.properties.clone(),
                 }
             }
         };
@@ -173,7 +169,6 @@ where
 
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
-        // TODO: The receiver should then detach with error
         self.flow_state.consume(1).await?;
 
         // This only takes care of whether the message is considered
@@ -324,7 +319,6 @@ where
         state: DeliveryState,
         batchable: bool,
     ) -> Result<(), Self::DispositionError> {
-        // TODO: which is faster? filtering before sorting or sorting before filtering?
         // sorting before filtering may be more cache/branch-prediction friendly?
         delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
         {
@@ -441,7 +435,6 @@ impl ReceiverLink<Target> {
                 writer.drain = drain;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
@@ -460,7 +453,6 @@ impl ReceiverLink<Target> {
                 writer.link_credit = link_credit;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
@@ -479,7 +471,6 @@ impl ReceiverLink<Target> {
                 writer.drain = drain;
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
@@ -497,7 +488,6 @@ impl ReceiverLink<Target> {
                 let reader = self.flow_state.lock.blocking_read();
                 LinkFlow {
                     handle,
-                    // TODO: "last known value"???
                     // When the flow state is being sent from the receiver endpoint to the sender
                     // endpoint this field MUST be set to the last known value of the corresponding
                     // sending endpoint.
@@ -669,7 +659,7 @@ where
             .transpose()
             .map_err(|_| ReceiverAttachError::CoordinatorIsNotImplemented)?;
 
-        // TODO: **the receiver is considered to hold the authoritative version of the target properties**,
+        // **the receiver is considered to hold the authoritative version of the target properties**,
         // Is this verification necessary?
         match (&self.target, &target) {
             (Some(local_target), Some(remote_target)) => {

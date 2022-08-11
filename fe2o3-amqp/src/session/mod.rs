@@ -312,7 +312,6 @@ impl endpoint::Session for Session {
         entry.insert(link_name.clone());
         let value = link_relay.map(|val| val.with_output_handle(handle.clone()));
         self.link_by_name.insert(link_name, value);
-        // TODO: how to know which link to send the Flow frames to?
         Ok(handle)
     }
 
@@ -481,7 +480,6 @@ impl endpoint::Session for Session {
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
-        // TODO: what to do when session lost delivery_tag_by_id
         // and disposition only has delivery id?
 
         let first = disposition.first;
@@ -579,15 +577,6 @@ impl endpoint::Session for Session {
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
-                // self.control
-                //     .send(SessionControl::End(None))
-                //     .await
-                //     // The `SendError` occurs when the receiving half is dropped,
-                //     // indicating that the `SessionEngine::event_loop` has stopped.
-                //     // and thus should yield an illegal state error
-                //     //
-                //     // event loop has stopped
-                //     .map_err(|_| SessionStateError::IllegalState)?;
 
                 match end.error {
                     Some(err) => Err(SessionStateError::RemoteEndedWithError(err)),
@@ -598,7 +587,6 @@ impl endpoint::Session for Session {
                 self.local_state = SessionState::Unmapped;
 
                 if let Some(error) = end.error {
-                    // TODO: handle remote error
                     tracing::error!(remote_error = ?error);
                     return Err(SessionStateError::RemoteEndedWithError(error));
                 }
@@ -673,16 +661,12 @@ impl endpoint::Session for Session {
     }
 
     fn on_outgoing_attach(&mut self, attach: Attach) -> Result<SessionFrame, Self::Error> {
-        // TODO: is state checking redundant?
-
         let body = SessionFrameBody::Attach(attach);
         let frame = SessionFrame::new(self.outgoing_channel, body);
         Ok(frame)
     }
 
     fn on_outgoing_flow(&mut self, flow: LinkFlow) -> Result<SessionFrame, Self::Error> {
-        // TODO: what else do we need to do here?
-
         let flow = Flow {
             // Session flow states
             next_incoming_id: Some(self.next_incoming_id),
@@ -763,7 +747,6 @@ impl endpoint::Session for Session {
         &mut self,
         disposition: Disposition,
     ) -> Result<SessionFrame, Self::Error> {
-        // TODO: what else do we need to do here?
         // Currently the sender cannot actively dispose any message
         // because the sender doesn't have access to the delivery_id
 
@@ -773,7 +756,6 @@ impl endpoint::Session for Session {
     }
 
     fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
-        // TODO: what else do we need to do here?
         self.deallocate_link(detach.handle.clone().into());
         let body = SessionFrameBody::Detach(detach);
         let frame = SessionFrame::new(self.outgoing_channel, body);

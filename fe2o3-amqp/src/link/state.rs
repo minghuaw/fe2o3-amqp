@@ -157,8 +157,6 @@ impl LinkFlowState<role::Sender> {
         // that the sender could make use of the indicated amount of link-credit. Only the
         // sender can indepen- dently modify this field.
 
-        // drain, TODO: advance the link-credit as much as possible
-        //
         // The drain flag indicates how the sender SHOULD behave when insufficient messages
         // are available to consume the current link-credit. If set, the sender will (after
         // sending all available messages) advance the delivery-count as much as possible,
@@ -343,7 +341,6 @@ async fn consume_link_credit(
     lock: &RwLock<LinkFlowStateInner>,
     count: u32,
 ) -> Result<[u8; 4], InsufficientCredit> {
-    // TODO: Is is worth splitting into a read and then write?
     let mut state = lock.write().await;
 
     if state.link_credit < count {

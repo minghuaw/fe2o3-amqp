@@ -305,7 +305,7 @@ where
             framed_write.send(proto_header).await?;
             *local_state = ConnectionState::HeaderExchange;
         }
-        _ => return Err(NegotiationError::IllegalState), // TODO: is this necessary?
+        _ => return Err(NegotiationError::IllegalState),
     }
     Ok(())
 }
