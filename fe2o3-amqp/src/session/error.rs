@@ -60,66 +60,6 @@ impl From<SessionStateError> for BeginError {
 
 /// Error with session operations
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum SessionInnerError {
-    /// A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.
-    #[error("A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.")]
-    UnattachedHandle,
-
-    #[error("Remote sent an attach with a name that cannot be found locally")]
-    RemoteAttachingLinkNameNotFound,
-
-    /// An attach was received using a handle that is already in use for an attached link.
-    #[error("An attach was received using a handle that is already in use for an attached link.")]
-    HandleInUse,
-
-    /// Illegal sesesion state
-    #[error("Illegal session state")]
-    IllegalState,
-
-    /// The associated connection must have been closed
-    #[error("Connection must have been closed")]
-    IllegalConnectionState,
-
-    /// Found a Transfer frame sent to a Sender
-    #[error("Found Transfer frame being sent to a Sender")]
-    TransferFrameToSender,
-
-    /// Remote session ended
-    #[error("Remote session ended")]
-    RemoteEnded,
-
-    /// Remote session ended with error
-    #[error("Remote ended with error")]
-    RemoteEndedWithError(definitions::Error),
-
-    /// Unknown transaction ID
-    #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    #[error("Unknown transaction ID")]
-    UnknownTxnId,
-}
-
-impl From<SessionStateError> for SessionInnerError {
-    fn from(error: SessionStateError) -> Self {
-        match error {
-            SessionStateError::IllegalState => Self::IllegalState,
-            SessionStateError::IllegalConnectionState => Self::IllegalConnectionState,
-            SessionStateError::RemoteEnded => Self::RemoteEnded,
-            SessionStateError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
-        }
-    }
-}
-
-impl From<LinkRelayError> for SessionInnerError {
-    fn from(error: LinkRelayError) -> Self {
-        match error {
-            LinkRelayError::UnattachedHandle => Self::UnattachedHandle,
-            LinkRelayError::TransferFrameToSender => Self::TransferFrameToSender,
-        }
-    }
-}
-
-/// Error with session operations
-#[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.
     #[error("A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.")]
@@ -157,29 +97,9 @@ pub enum Error {
     JoinError(#[from] JoinError),
 
     /// Unknown transaction ID
-    #[cfg(feature = "transaction")]
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
     UnknownTxnId,
-}
-
-impl From<SessionInnerError> for Error {
-    fn from(error: SessionInnerError) -> Self {
-        match error {
-            SessionInnerError::UnattachedHandle => Self::UnattachedHandle,
-            SessionInnerError::RemoteAttachingLinkNameNotFound => {
-                Self::RemoteAttachingLinkNameNotFound
-            }
-            SessionInnerError::HandleInUse => Self::HandleInUse,
-            SessionInnerError::IllegalState => Self::IllegalState,
-            SessionInnerError::IllegalConnectionState => Self::IllegalConnectionState,
-            SessionInnerError::TransferFrameToSender => Self::TransferFrameToSender,
-            SessionInnerError::RemoteEnded => Self::RemoteEnded,
-            SessionInnerError::RemoteEndedWithError(err) => Self::RemoteEndedWithError(err),
-
-            #[cfg(all(feature = "transaction", feature = "acceptor"))]
-            SessionInnerError::UnknownTxnId => Self::UnknownTxnId,
-        }
-    }
 }
 
 impl From<LinkRelayError> for Error {

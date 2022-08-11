@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    error::{AllocLinkError, BeginError, Error, SessionInnerError},
+    error::{AllocLinkError, BeginError, Error},
     frame::SessionIncomingItem,
     SessionFrame, SessionFrameBody, SessionState,
 };
@@ -82,7 +82,7 @@ where
     // S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
     S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
     AllocLinkError: From<S::AllocError>,
-    SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
+    Error: From<S::Error> + From<S::BeginError> + From<S::EndError>,
 {
     pub fn spawn(self) -> JoinHandle<Result<(), Error>> {
         tokio::spawn(self.event_loop())
@@ -93,7 +93,7 @@ where
     async fn on_incoming(
         &mut self,
         incoming: SessionIncomingItem,
-    ) -> Result<Running, SessionInnerError> {
+    ) -> Result<Running, Error> {
         let SessionFrame { channel, body } = incoming;
         let channel = IncomingChannel(channel);
         match body {
@@ -111,7 +111,7 @@ where
                         .await
                         // The receiving half must have dropped, and thus the `Connection`
                         // event loop has stopped. It should be treated as an io error
-                        .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                        .map_err(|_| Error::IllegalConnectionState)?;
                 }
             }
             SessionFrameBody::Transfer {
@@ -133,7 +133,7 @@ where
                             .await
                             // The receiving half must have dropped, and thus the `Connection`
                             // event loop has stopped. It should be treated as an io error
-                            .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                            .map_err(|_| Error::IllegalConnectionState)?;
                     }
                 }
             }
@@ -163,7 +163,7 @@ where
 
     #[inline]
     #[instrument(skip_all)]
-    async fn on_control(&mut self, control: SessionControl) -> Result<Running, SessionInnerError> {
+    async fn on_control(&mut self, control: SessionControl) -> Result<Running, Error> {
         trace!("control: {}", control);
         match control {
             SessionControl::End(error) => {
@@ -184,7 +184,7 @@ where
                 responder
                     .send(result.map_err(Into::into))
                     // The receiving end (ie. link) must have been stopped
-                    .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                    .map_err(|_| Error::UnattachedHandle)?;
             }
             SessionControl::AllocateIncomingLink {
                 link_name,
@@ -198,7 +198,7 @@ where
                 responder
                     .send(result.map_err(Into::into))
                     // The receiving end (ie. link) must have been stopped
-                    .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                    .map_err(|_| Error::UnattachedHandle)?;
             }
             SessionControl::DeallocateLink(link_name) => {
                 self.session.deallocate_link(link_name);
@@ -210,7 +210,7 @@ where
                     .await
                     // The receiving half must have dropped, and thus the `Connection`
                     // event loop has stopped. It should be treated as an io error
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| Error::IllegalConnectionState)?;
             }
             SessionControl::CloseConnectionWithError((condition, description)) => {
                 let error = definitions::Error::new(condition, description, None);
@@ -218,32 +218,32 @@ where
                 self.conn_control
                     .send(control)
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| Error::IllegalConnectionState)?;
             }
             SessionControl::GetMaxFrameSize(resp) => {
                 self.conn_control
                     .send(ConnectionControl::GetMaxFrameSize(resp))
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| Error::IllegalConnectionState)?;
             }
 
             #[cfg(feature = "transaction")]
             SessionControl::AllocateTransactionId { resp } => {
                 let result = self.session.allocate_transaction_id();
                 resp.send(result)
-                    .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                    .map_err(|_| Error::UnattachedHandle)?;
             }
             #[cfg(feature = "transaction")]
             SessionControl::CommitTransaction { txn_id, resp } => {
                 let result = self.session.commit_transaction(txn_id).await?;
                 resp.send(result)
-                    .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                    .map_err(|_| Error::UnattachedHandle)?;
             }
             #[cfg(feature = "transaction")]
             SessionControl::RollbackTransaction { txn_id, resp } => {
                 let result = self.session.rollback_transaction(txn_id)?;
                 resp.send(result)
-                    .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                    .map_err(|_| Error::UnattachedHandle)?;
             }
             #[cfg(feature = "transaction")]
             SessionControl::AbortTransaction(txn_id) => {
@@ -261,10 +261,10 @@ where
     async fn on_outgoing_link_frames(
         &mut self,
         frame: LinkFrame,
-    ) -> Result<Running, SessionInnerError> {
+    ) -> Result<Running, Error> {
         match self.session.local_state() {
             SessionState::Mapped => {}
-            _ => return Err(SessionInnerError::IllegalState), // End session with illegal state
+            _ => return Err(Error::IllegalState), // End session with illegal state
         }
 
         let session_frame = match frame {
@@ -294,7 +294,7 @@ where
             .await
             // The receiving half must have dropped, and thus the `Connection`
             // event loop has stopped. It should be treated as an io error
-            .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+            .map_err(|_| Error::IllegalConnectionState)?;
 
         match self.session.local_state() {
             SessionState::Unmapped => Ok(Running::Stop),
@@ -303,65 +303,64 @@ where
     }
 
     #[inline]
-    async fn on_error(&mut self, kind: &SessionInnerError) -> Result<Running, SessionInnerError> {
-        use definitions::Error;
-
+    async fn on_error(&mut self, kind: &Error) -> Result<Running, Error> {
         #[cfg(all(feature = "transaction", feature = "acceptor"))]
         use fe2o3_amqp_types::transaction::TransactionError;
 
         match kind {
-            SessionInnerError::UnattachedHandle => {
-                let error = Error::new(SessionError::UnattachedHandle, None, None);
+            Error::UnattachedHandle => {
+                let error = definitions::Error::new(SessionError::UnattachedHandle, None, None);
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::RemoteAttachingLinkNameNotFound => {
-                let error = Error::new(
+            Error::RemoteAttachingLinkNameNotFound => {
+                let error = definitions::Error::new(
                     AmqpError::InternalError,
                     Some(String::from("Link name is not found")),
                     None,
                 );
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::HandleInUse => {
-                let error = Error::new(SessionError::HandleInUse, None, None);
+            Error::HandleInUse => {
+                let error = definitions::Error::new(SessionError::HandleInUse, None, None);
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::IllegalState => {
-                let error = Error::new(AmqpError::IllegalState, None, None);
+            Error::IllegalState => {
+                let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::IllegalConnectionState => Ok(Running::Stop),
-            SessionInnerError::TransferFrameToSender => {
-                let error = Error::new(
+            Error::IllegalConnectionState => Ok(Running::Stop),
+            Error::TransferFrameToSender => {
+                let error = definitions::Error::new(
                     AmqpError::NotAllowed,
                     Some(String::from("Found Transfer frame sent Sender link")),
                     None,
                 );
                 self.end_session(Some(error)).await
             }
-            SessionInnerError::RemoteEnded | SessionInnerError::RemoteEndedWithError(_) => {
+            Error::RemoteEnded | Error::RemoteEndedWithError(_) => {
                 self.end_session(None).await
             }
 
             #[cfg(all(feature = "transaction", feature = "acceptor"))]
-            SessionInnerError::UnknownTxnId => {
-                let error = Error::new(TransactionError::UnknownId, None, None);
+            Error::UnknownTxnId => {
+                let error = definitions::Error::new(TransactionError::UnknownId, None, None);
                 self.end_session(Some(error)).await
             }
+            Error::JoinError(_) => unreachable!("JoinError will never occur inside the event loop"),
         }
     }
 
     async fn end_session(
         &mut self,
         error: Option<definitions::Error>,
-    ) -> Result<Running, SessionInnerError> {
+    ) -> Result<Running, Error> {
         match self.session.local_state() {
             SessionState::Unmapped => {}
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.session
                     .send_end(&self.outgoing, error)
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| Error::IllegalConnectionState)?;
                 let (channel, end) = self.wait_for_remote_end(false).await?;
                 self.session.on_incoming_end(channel, end).await?;
             }
@@ -372,7 +371,7 @@ where
                 self.session
                     .send_end(&self.outgoing, error)
                     .await
-                    .map_err(|_| SessionInnerError::IllegalConnectionState)?;
+                    .map_err(|_| Error::IllegalConnectionState)?;
             }
             SessionState::Discarding => {
                 // The DISCARDING state is a variant of the CLOSE SENT state where the close is triggered
@@ -388,13 +387,13 @@ where
     async fn wait_for_remote_end(
         &mut self,
         discard_other_frame: bool,
-    ) -> Result<(IncomingChannel, End), SessionInnerError> {
+    ) -> Result<(IncomingChannel, End), Error> {
         loop {
             let frame = self
                 .incoming
                 .recv()
                 .await
-                .ok_or(SessionInnerError::IllegalConnectionState)?;
+                .ok_or(Error::IllegalConnectionState)?;
             match frame.body {
                 SessionFrameBody::End(end) => return Ok((IncomingChannel(frame.channel), end)),
                 _ => {
@@ -431,7 +430,7 @@ where
                             match self.continue_or_stop_by_state() {
                                 Running::Continue => {
                                     // The connection must have already stopped before session negotiated ending
-                                    Err(SessionInnerError::IllegalConnectionState)
+                                    Err(Error::IllegalConnectionState)
                                 },
                                 Running::Stop => Ok(Running::Stop),
                             }

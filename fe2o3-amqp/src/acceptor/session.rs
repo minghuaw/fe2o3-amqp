@@ -21,7 +21,7 @@ use crate::{
         self,
         engine::SessionEngine,
         frame::{SessionFrame, SessionIncomingItem},
-        AllocLinkError, BeginError, Error, SessionHandle, SessionInnerError,
+        AllocLinkError, BeginError, Error, SessionHandle,
         DEFAULT_SESSION_CONTROL_BUFFER_SIZE,
     },
     util::Initialized,
@@ -412,7 +412,7 @@ impl endpoint::Session for ListenerSession {
                     relay
                         .send(LinkFrame::Attach(attach))
                         .await
-                        .map_err(|_| SessionInnerError::UnattachedHandle)?;
+                        .map_err(|_| Error::UnattachedHandle)?;
                     self.session
                         .link_by_input_handle
                         .insert(input_handle, relay);
@@ -422,7 +422,7 @@ impl endpoint::Session for ListenerSession {
                     // TODO: Resuming link
                     self.link_listener.send(attach).await.map_err(|_| {
                         // SessionHandle must have been dropped, then treat it as if the acceptor doesn't exist
-                        SessionInnerError::HandleInUse
+                        Error::HandleInUse
                     })
                 }
             },
@@ -435,7 +435,7 @@ impl endpoint::Session for ListenerSession {
 
                 self.link_listener.send(attach).await.map_err(|_| {
                     // SessionHandle must have been dropped, then treat it as if the acceptor doesn't exist
-                    SessionInnerError::UnattachedHandle
+                    Error::UnattachedHandle
                 })
             }
         }
