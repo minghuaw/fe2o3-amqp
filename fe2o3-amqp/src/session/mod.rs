@@ -44,7 +44,7 @@ pub(crate) mod frame;
 
 mod error;
 pub(crate) use error::{
-    AllocLinkError, BeginError, Error, SessionStateError,
+    AllocLinkError, BeginError, Error, SessionInnerError, SessionStateError,
 };
 
 mod builder;
@@ -275,7 +275,7 @@ impl endpoint::Session for Session {
     type AllocError = AllocLinkError;
     type BeginError = SessionStateError;
     type EndError = SessionStateError;
-    type Error = Error;
+    type Error = SessionInnerError;
     type State = SessionState;
 
     fn local_state(&self) -> &Self::State {
@@ -380,17 +380,17 @@ impl endpoint::Session for Session {
                     relay
                         .send(LinkFrame::Attach(attach))
                         .await
-                        .map_err(|_| Error::UnattachedHandle)?;
+                        .map_err(|_| SessionInnerError::UnattachedHandle)?;
                     self.link_by_input_handle.insert(input_handle, relay);
 
                     Ok(())
                 }
                 None => {
                     // Link name is found but is already in use
-                    Err(Error::HandleInUse)
+                    Err(SessionInnerError::HandleInUse)
                 }
             },
-            None => Err(Error::RemoteAttachingLinkNameNotFound), // End session with unattached handle?,
+            None => Err(SessionInnerError::RemoteAttachingLinkNameNotFound), // End session with unattached handle?,
         }
     }
 
@@ -433,14 +433,14 @@ impl endpoint::Session for Session {
                     //         // has stopped, so it could be considered illegal state.
                     //         //
                     //         // If the event loop has stopped, this should not be executed at all
-                    //         .map_err(|_| Error::IllegalConnectionState)?;
+                    //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
                     // }
                     return link_relay
                         .on_incoming_flow(link_flow)
                         .await
                         .map_err(Into::into);
                 }
-                None => return Err(Error::UnattachedHandle), // End session with unattached handle?
+                None => return Err(SessionInnerError::UnattachedHandle), // End session with unattached handle?
             }
         }
 
@@ -470,7 +470,7 @@ impl endpoint::Session for Session {
                         .insert((Role::Sender, delivery_id), (input_handle, delivery_tag));
                 }
             }
-            None => return Err(Error::UnattachedHandle),
+            None => return Err(SessionInnerError::UnattachedHandle),
         };
 
         Ok(None)
@@ -564,8 +564,8 @@ impl endpoint::Session for Session {
             Some(mut link) => link
                 .on_incoming_detach(detach)
                 .await
-                .map_err(|_| Error::UnattachedHandle),
-            None => Err(Error::UnattachedHandle),
+                .map_err(|_| SessionInnerError::UnattachedHandle),
+            None => Err(SessionInnerError::UnattachedHandle),
         }
     }
 
