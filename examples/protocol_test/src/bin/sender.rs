@@ -4,7 +4,9 @@ use std::time::Duration;
 use fe2o3_amqp::sasl_profile::SaslProfile;
 use fe2o3_amqp::types::definitions::ReceiverSettleMode;
 use fe2o3_amqp::types::definitions::SenderSettleMode;
+use fe2o3_amqp::types::messaging::AmqpSequence;
 use fe2o3_amqp::types::messaging::ApplicationProperties;
+use fe2o3_amqp::types::messaging::Data;
 use fe2o3_amqp::types::messaging::MessageId;
 use fe2o3_amqp::types::messaging::Properties;
 use fe2o3_amqp::types::messaging::message::Body;
@@ -13,7 +15,9 @@ use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sendable;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
+use fe2o3_amqp::types::primitives::Binary;
 use fe2o3_amqp::types::primitives::SimpleValue;
+use fe2o3_amqp::types::primitives::Value;
 use tokio::net::TcpStream;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -126,6 +130,24 @@ async fn main() {
     } else {
         tracing::error!("Outcome: {:?}", outcome)
     }
+
+    let data = Binary::from("hello");
+    // let outcome = sender.send(Body::<Value>::Data(Data(data))).await.unwrap();
+    // let outcome = sender.send(Data(data)).await.unwrap();
+    // let outcome = sender.send(Body::Sequence(AmqpSequence(vec![1i32, 2, 3]))).await.unwrap();
+
+    // let message = Message::builder()
+    //     // .value("hello")
+    //     // .sequence(vec![1, 2, 3])
+    //     .data(Binary::from("hello"))
+    //     .build();
+
+    let message = Sendable::builder()
+        .message("hello")
+        .settled(true)
+        .build();
+    let outcome = sender.send(message).await.unwrap();
+    outcome.accepted_or("Not accepted").unwrap();
 
     // let detached = sender.detach().await.unwrap();
     // let mut sender = detached.resume().await.unwrap();

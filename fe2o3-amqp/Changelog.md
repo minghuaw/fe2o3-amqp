@@ -7,6 +7,9 @@
    2. `DecodeError` variant now carries a `String` message of the `serde_amqp::Error`
 2. `Connection` and non-txn `Session` no longer hold a copy of the controller sender to its own engine
 3. Resuming receiver now doesn't assume the continued payload transfer starts at the receiver's `Received` state
+4. Made `Sendable`'s fields public
+5. Updated documentations on
+   1. `Sender::send`
 
 ## 0.3.2
 

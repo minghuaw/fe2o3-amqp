@@ -169,7 +169,8 @@ impl<T> Delivery<T> {
 
 /// A type representing the delivery before sending
 ///
-/// This allows pre-setting a message as settled.
+/// This allows pre-setting a message as settled if the sender's settle mode is set 
+/// to `SenderSettleMode::Mixed`.
 ///
 /// # Example
 ///
@@ -182,10 +183,17 @@ impl<T> Delivery<T> {
 /// ```
 #[derive(Debug)]
 pub struct Sendable<T> {
-    pub(crate) message: Message<T>,
-    pub(crate) message_format: MessageFormat,
-    pub(crate) settled: Option<bool>,
-    // pub(crate) batchable: bool,
+    /// The message to send
+    pub message: Message<T>,
+
+    /// Please see page 82 of the AMQP 1.0 core specification
+    pub message_format: MessageFormat,
+
+    /// Whether the message will be sent pre-settled
+    /// 
+    /// Please note that this field will be neglected if the negotiated
+    /// sender settle mode is NOT equal to `SenderSettleMode::Mixed`
+    pub settled: Option<bool>,
 }
 
 impl Sendable<Uninitialized> {

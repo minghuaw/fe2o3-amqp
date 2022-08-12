@@ -111,7 +111,7 @@ pub struct Receiver {
 }
 
 impl Receiver {
-    /// Creates a builder for the [`ReceiverInner`]
+    /// Creates a builder for the [`Receiver`]
     pub fn builder(
     ) -> builder::Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
         builder::Builder::<role::Receiver, Target, _, _, _>::new()
@@ -145,6 +145,7 @@ impl Receiver {
     }
 
     /// Attach the receiver link to a session with the default configuration
+    /// with the `name` and `source` address set the specified value
     ///
     /// # Default configuration
     ///
@@ -238,7 +239,7 @@ impl Receiver {
 
     /// Detach the link with a timeout
     ///
-    /// This simply wraps [`detach`] with a `timeout`
+    /// This simply wraps [`detach`](#method.detach) with a `timeout`
     pub async fn detach_with_timeout(
         self,
         duration: Duration,

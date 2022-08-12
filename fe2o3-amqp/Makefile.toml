@@ -2,7 +2,7 @@
 toolchain = "nightly"
 command = "cargo"
 args = [
-    "doc", "--no-deps", "--all-features", "--open"
+    "doc", "--no-deps", "--all-features", "--open", "-Z", "unstable-options", "--config", "build.rustdocflags=[\"--cfg\", \"docsrs\"]"
 ]
 
 [tasks.feature_check]

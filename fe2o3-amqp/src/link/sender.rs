@@ -39,11 +39,14 @@ use super::{
     SenderAttachExchange, SenderFlowState, SenderLink, SenderResumeError, SenderResumeErrorKind,
 };
 
+#[cfg(docsrs)]
+use fe2o3_amqp_types::messaging::{AmqpValue, AmqpSequence, Data, Message, Body};
+
 /// An AMQP1.0 sender
 ///
 /// # Attach a new sender with default configurations
 ///
-/// ```rust, ignore
+/// ```rust
 /// let mut sender = Sender::attach(
 ///     &mut session,           // mutable reference to SessionHandle
 ///     "rust-sender-link-1",   // link name
@@ -81,7 +84,7 @@ use super::{
 ///
 /// # Customize configuration with [`builder::Builder`]
 ///
-/// ```rust, ignore
+/// ```rust
 /// let mut sender = Sender::builder()
 ///     .name("rust-sender-link-1")
 ///     .target("q1")
@@ -97,7 +100,6 @@ pub struct Sender {
 impl std::fmt::Debug for Sender {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Sender")
-            // .field("inner", &self.inner)
             .finish()
     }
 }
@@ -120,13 +122,14 @@ impl Sender {
     }
 
     /// Attach the sender link to a session with default configuration
+    /// with the `name` and `target` address set to the specified values
     ///
     /// ## Default configuration
     ///
     /// | Field | Default Value |
     /// |-------|---------------|
     /// |`name`|`String::default()`|
-    /// |`snd_settle_mode`|`SenderSettleMode::Mixed`|
+    /// |`snd_settle_mode`|`[SenderSettleMode]::Mixed`|
     /// |`rcv_settle_mode`|`ReceiverSettleMode::First`|
     /// |`source`|`Some(Source)` |
     /// |`target`| `None` |
@@ -140,7 +143,7 @@ impl Sender {
     ///
     /// # Example
     ///
-    /// ```rust, ignore
+    /// ```rust
     /// let sender = Sender::attach(
     ///     &mut session,           // mutable reference to SessionHandle
     ///     "rust-sender-link-1",   // link name
@@ -185,7 +188,7 @@ impl Sender {
 
     /// Detach the link with a timeout
     ///
-    /// This simply wraps [`detach`] with a `timeout`
+    /// This simply wraps [`detach`](#method.detach) with a `timeout`
     pub async fn detach_with_timeout(
         self,
         duration: Duration,
@@ -209,11 +212,103 @@ impl Sender {
     }
 
     /// Send a message and wait for acknowledgement (disposition)
-    ///
-    /// # Example
-    ///
-    /// ```rust, ignore
+    /// 
+    /// # Argument
+    /// 
+    /// The argument `sendable` can be any type that implement `Into<Sendable>` with the [`Sendable`]'s 
+    /// field `message_format` set to [`MESSAGE_FORMAT`] and field `settled` set to `None`.
+    /// 
+    /// ## Example
+    /// 
+    /// Send message pre-settled if the sender's settle mode is set to `SenderSettleMode::Mixed`. Please
+    /// note that the field `settled` will be ***ignored*** if the negotiated `SenderSettleMode` is set to 
+    /// either `SenderSettleMode::Settled` or `SenderSettleMode::Unsettled`
+    /// 
+    /// ```rust
+    /// let sendable = Sendable::builder()
+    ///     .message("hello AMQP")
+    ///     .settled(true)
+    ///     .build();
+    /// let outcome = sender.send(sendable).await.unwrap():
+    /// ```
+    /// 
+    /// ## Specify Message Body Section Type
+    /// 
+    /// There are several ways to define the exact type of body section to use.
+    /// 
+    /// - Any type that implements [`serde::Serialize`] will be implicitly wrapped inside an [`AmqpValue`]. 
+    /// Please note that this includes any value wrapped inside [`AmqpSequence`] or [`Data`] 
+    /// (ie. `Data(Binary::from("hello"))` becomes `AmqpValue(Data(Binary::from("hello")))`) unless it is
+    /// explicitly wrapped inside a [`Body`] (please see the next method).
+    /// 
+    /// ## Example
+    /// 
+    /// The string literal `"hello"` will be implicitly converted to `AmqpValue<&str>("hello")`
+    /// 
+    /// ```rust
     /// let outcome = sender.send("hello").await.unwrap();
+    /// ```
+    /// 
+    /// - Use [`Body`] to specify the exact type of body section to use with all other message sections
+    /// set to `None`
+    /// 
+    /// ## Example
+    /// 
+    /// Use `Body::Data` section
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::types::primitives::Binary;
+    /// use fe2o3_amqp::types::messaging::{Data, Body};
+    /// 
+    /// let data = Binary::from("hello AMQP");
+    /// let outcome = sender.send(Body::<Value>::Data(Data(data))).await.unwrap();
+    /// ```
+    /// 
+    /// Use `Body::Sequence` section
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::types::messaging::{AmqpSequence, Body};
+    /// 
+    /// let outcome = sender.send(Body::Sequence(AmqpSequence(vec![1i32, 2, 3]))).await.unwrap();
+    /// ```
+    /// 
+    /// - Use [`Message`] builder to specify the exact body section and set other section of the message
+    /// if needed
+    /// 
+    /// ## Example
+    /// 
+    /// Creates a `Message` with the body section set to `Body::Value`
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::types::messaging::Message;
+    /// 
+    /// let message = Message::builder()
+    ///     .value("hello AMQP")
+    ///     .build()
+    /// let outcome = sender.send(message).await.unwrap();
+    /// ```
+    /// 
+    /// Creates a `Message` with the body section set to `Body::Sequence`
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::types::messaging::Message;
+    /// 
+    /// let message = Message::builder()
+    ///     .sequence(vec![1, 2 ,3])
+    ///     .build();
+    /// let outcome = sender.send(message).await.unwrap();
+    /// ```
+    /// 
+    /// Creates a `Message` with the body section set to `Body::Data`
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::types::primitives::Binary;
+    /// use fe2o3_amqp::types::messaging::Message;
+    /// 
+    /// let message = Message::builder()
+    ///     .data(Binary::from("hello AMQP"))
+    ///     .build();
+    /// let outcome = sender.send(message).await.unwrap();
     /// ```
     pub async fn send<T: serde::Serialize>(
         &mut self,
@@ -240,7 +335,7 @@ impl Sender {
     ///
     /// # Example
     ///
-    /// ```rust, ignore
+    /// ```rust
     /// let fut = sender.send_batchable("HELLO AMQP").await.unwrap();
     /// let result = fut.await;
     /// println!("fut {:?}", result);
