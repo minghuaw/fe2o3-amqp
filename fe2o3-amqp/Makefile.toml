@@ -1,82 +1,114 @@
 [tasks.doctest]
-toolchain = "nightly"
-command = "cargo"
 args = [
-    "doc", "--no-deps", "--all-features", "--open", "-Z", "unstable-options", "--config", "build.rustdocflags=[\"--cfg\", \"docsrs\"]"
+  "doc",
+  "--no-deps",
+  "--all-features",
+  "--open",
+  "-Z",
+  "unstable-options",
+  "--config",
+  "build.rustdocflags=[\"--cfg\", \"docsrs\"]",
 ]
+command = "cargo"
+toolchain = "nightly"
 
 [tasks.feature_check]
-dependencies =  [
-    "check_feature_acceptor",
-    "check_feature_rustls",
-    "check_feature_nativetls",
-    "check_feature_transaction",
-    "check_feature_group1",
-    "check_feature_group2",
-    "check_feature_group3",
-    "check_feature_group4",
-    "check_all_features",
+dependencies = [
+  "check_feature_acceptor",
+  "check_feature_rustls",
+  "check_feature_nativetls",
+  "check_feature_transaction",
+  "check_feature_group1",
+  "check_feature_group2",
+  "check_feature_group3",
+  "check_feature_group4",
+  "check_all_features",
 ]
 
 [tasks.check_all_features]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--all-features"
+  "check",
+  "--all-features",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_acceptor]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "acceptor"
+  "check",
+  "--no-default-features",
+  "--features",
+  "acceptor",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_rustls]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "rustls"
+  "check",
+  "--no-default-features",
+  "--features",
+  "rustls",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_nativetls]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "native-tls"
+  "check",
+  "--no-default-features",
+  "--features",
+  "native-tls",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_transaction]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "transaction"
+  "check",
+  "--no-default-features",
+  "--features",
+  "transaction",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_group1]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "rustls, transaction"
+  "check",
+  "--no-default-features",
+  "--features",
+  "rustls, transaction",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_group2]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "native-tls, transaction"
+  "check",
+  "--no-default-features",
+  "--features",
+  "native-tls, transaction",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_group3]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "acceptor, rustls, transaction"
+  "check",
+  "--no-default-features",
+  "--features",
+  "acceptor, rustls, transaction",
 ]
+command = "cargo"
+toolchain = "stable"
 
 [tasks.check_feature_group4]
-toolchain = "stable"
-command = "cargo"
 args = [
-    "check", "--no-default-features", "--features", "acceptor, native-tls, transaction"
+  "check",
+  "--no-default-features",
+  "--features",
+  "acceptor, native-tls, transaction",
 ]
+command = "cargo"
+toolchain = "stable"
