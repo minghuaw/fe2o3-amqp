@@ -867,10 +867,14 @@ where
 
 /// A detached receiver
 ///
-/// # Link re-attachment
-///
-/// TODO: documentation
-/// TODO: handle continued partial delivery
+/// # Example
+/// 
+/// Link re-attachment
+/// 
+/// ```rust
+/// let detached = receiver.detach().await.unwrap();
+/// let resuming_receiver = detached.resume().await.unwrap();
+/// ```
 #[derive(Debug)]
 pub struct DetachedReceiver {
     inner: ReceiverInner<ReceiverLink<Target>>,

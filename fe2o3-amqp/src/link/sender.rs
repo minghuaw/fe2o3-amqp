@@ -708,9 +708,14 @@ impl SenderInner<SenderLink<Target>> {
 
 /// A detached sender
 ///
-/// # Link re-attachment
+/// # Example
+/// 
+/// Link re-attachment
 ///
-/// TODO
+/// ```rust
+/// let detached = sender.detach().await.unwrap();
+/// let sender = detached.resume().await.unwrap():
+/// ```
 #[derive(Debug)]
 pub struct DetachedSender {
     inner: SenderInner<SenderLink<Target>>,
