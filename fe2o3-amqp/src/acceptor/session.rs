@@ -336,11 +336,7 @@ pub struct ListenerSession {
     pub(crate) link_listener: mpsc::Sender<Attach>,
 }
 
-impl endpoint::SessionExt for ListenerSession {
-    // fn control(&self) -> &mpsc::Sender<SessionControl> {
-    //     &self.session.control
-    // }
-}
+impl endpoint::SessionExt for ListenerSession { }
 
 #[async_trait]
 impl endpoint::Session for ListenerSession {
@@ -419,7 +415,6 @@ impl endpoint::Session for ListenerSession {
                     Ok(())
                 }
                 None => {
-                    // TODO: Resuming link
                     self.link_listener.send(attach).await.map_err(|_| {
                         // SessionHandle must have been dropped, then treat it as if the acceptor doesn't exist
                         SessionInnerError::HandleInUse
