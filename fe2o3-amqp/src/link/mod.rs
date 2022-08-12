@@ -55,6 +55,7 @@ pub(crate) mod shared_inner;
 mod source;
 pub(crate) mod state;
 pub(crate) mod target_archetype;
+mod incomplete_transfer;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;

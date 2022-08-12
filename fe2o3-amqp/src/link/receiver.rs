@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
-    definitions::{self, SequenceNo},
+    definitions::{self, DeliveryTag, SequenceNo},
     messaging::{
         message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
         Source, Target,
@@ -29,6 +29,7 @@ use super::{
     builder::{self, WithTarget, WithoutName, WithoutSource},
     delivery::Delivery,
     error::DetachError,
+    incomplete_transfer::IncompleteTransfer,
     receiver_link::count_number_of_sections_and_offset,
     role,
     shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach, LinkEndpointInnerReattach},
@@ -39,115 +40,6 @@ use super::{
 
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::definitions::AmqpError;
-
-macro_rules! or_assign {
-    ($self:ident, $other:ident, $field:ident) => {
-        match &$self.performative.$field {
-            Some(value) => {
-                if let Some(other_value) = $other.$field {
-                    if *value != other_value {
-                        return Err(ReceiverTransferError::InconsistentFieldInMultiFrameDelivery)
-                    }
-                }
-            },
-            None => {
-                $self.performative.$field = $other.$field;
-            }
-        }
-    };
-
-    ($self:ident, $other:ident, $($field:ident), *) => {
-        $(or_assign!($self, $other, $field);)*
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct IncompleteTransfer {
-    pub performative: Transfer,
-    pub buffer: Vec<Payload>,
-    pub section_number: Option<u32>,
-    pub section_offset: u64,
-}
-
-impl IncompleteTransfer {
-    pub fn new(transfer: Transfer, partial_payload: Payload) -> Self {
-        let (number, offset) = count_number_of_sections_and_offset(&partial_payload);
-        Self {
-            performative: transfer,
-            buffer: vec![partial_payload], // TODO: handle payload split across re-attachment
-            section_number: Some(number),
-            section_offset: offset,
-        }
-    }
-
-    /// Like `|=` operator but works on the field level
-    pub fn or_assign(&mut self, other: Transfer) -> Result<(), ReceiverTransferError> {
-        or_assign! {
-            self, other,
-            delivery_id,
-            delivery_tag,
-            message_format
-        };
-
-        // If not set on the first (or only) transfer for a (multi-transfer)
-        // delivery, then the settled flag MUST be interpreted as being false. For
-        // subsequent transfers in a multi-transfer delivery if the settled flag
-        // is left unset then it MUST be interpreted as true if and only if the
-        // value of the settled flag on any of the preceding transfers was true;
-        // if no preceding transfer was sent with settled being true then the
-        // value when unset MUST be taken as false.
-        match &self.performative.settled {
-            Some(value) => {
-                if let Some(other_value) = other.settled {
-                    if !value {
-                        self.performative.settled = Some(other_value);
-                    }
-                }
-            }
-            None => self.performative.settled = other.settled,
-        }
-
-        if let Some(other_state) = other.state {
-            if let Some(state) = &self.performative.state {
-                // Note that if the transfer performative (or an earlier disposition
-                // performative referring to the delivery) indicates that the delivery has
-                // attained a terminal state, then no future transfer or disposition sent
-                // by the sender can alter that terminal state.
-                if !state.is_terminal() {
-                    self.performative.state = Some(other_state);
-                }
-            } else {
-                self.performative.state = Some(other_state);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Append to the buffered payload
-    pub fn append(&mut self, other: Payload) {
-        // Count section numbers
-        let (number, offset) = count_number_of_sections_and_offset(&other);
-        match (&mut self.section_number, number) {
-            (_, 0) => self.section_offset += offset,
-            (None, 1) => {
-                // The first section
-                self.section_number = Some(0);
-                self.section_offset = offset;
-            }
-            (None, _) => {
-                self.section_number = Some(number - 1);
-                self.section_offset = offset;
-            }
-            (Some(val), _) => {
-                *val += number;
-                self.section_offset = offset;
-            }
-        }
-
-        self.buffer.push(other);
-    }
-}
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]
@@ -700,6 +592,158 @@ where
         }
     }
 
+    async fn on_transfer_state(
+        &mut self,
+        delivery_tag: &Option<DeliveryTag>,
+        settled: Option<bool>,
+        state: DeliveryState,
+    ) -> Result<(), RecvError> {
+        match &mut self.incomplete_transfer {
+            Some(incomplete) if *delivery_tag == incomplete.performative.delivery_tag => {
+                if let DeliveryState::Received(received) = &state {
+                    incomplete.keep_buffer_till_section_number_and_offset(
+                        received.section_number,
+                        received.section_offset,
+                    );
+                }
+            }
+            Some(_) | None => {}
+        }
+
+        self.link
+            .on_transfer_state(delivery_tag, settled, state)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn on_incomplete_transfer(
+        &mut self,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Result<(), RecvError> {
+        // Partial transfer of the delivery
+        match &mut self.incomplete_transfer {
+            Some(incomplete) => {
+                incomplete.or_assign(transfer)?;
+                incomplete.append(payload);
+
+                if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
+                    // Update unsettled map in the link
+                    self.link
+                        .on_incomplete_transfer(
+                            delivery_tag,
+                            incomplete.section_number.unwrap_or(0),
+                            incomplete.section_offset,
+                        )
+                        .await;
+                }
+            }
+            None => {
+                let incomplete = IncompleteTransfer::new(transfer, payload);
+                if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
+                    // Update unsettled map in the link
+                    self.link
+                        .on_incomplete_transfer(
+                            delivery_tag,
+                            incomplete.section_number.unwrap_or(0),
+                            incomplete.section_offset,
+                        )
+                        .await;
+                }
+                self.incomplete_transfer = Some(Box::new(incomplete));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn on_resuming_transfer<T>(
+        &mut self,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Result<Option<Delivery<T>>, RecvError>
+    where
+        T: DecodeIntoMessage + Send,
+    {
+        // need to check whether the incoming transfer matches
+        match (
+            &transfer.delivery_tag,
+            self.incomplete_transfer
+                .as_ref()
+                .map(|i| &i.performative.delivery_tag),
+        ) {
+            (Some(remote), Some(Some(local))) => {
+                // The transfer does not belong to the buffer incomplete transfer
+                if remote != local {
+                    let (section_number, section_offset) =
+                        count_number_of_sections_and_offset(&payload);
+                    let delivery = self
+                        .link
+                        .on_complete_transfer(transfer, payload, section_number, section_offset)
+                        .await?;
+
+                    // Auto accept the message and leave settled to be determined based on rcv_settle_mode
+                    if self.auto_accept {
+                        let delivery_info = delivery.clone_info();
+                        self.dispose(delivery_info, None, Accepted {}.into())
+                            .await?;
+                    }
+
+                    return Ok(Some(delivery));
+                } else {
+                    // The new Transfer belongs to the buffered incomplete transfer
+                    self.on_complete_transfer(transfer, payload).await
+                }
+            }
+            _ => {
+                // The new Transfer belongs to the buffered incomplete transfer that there isn't an incomplete_transfer
+                self.on_complete_transfer(transfer, payload).await
+            }
+        }
+
+    }
+
+    async fn on_complete_transfer<T>(
+        &mut self,
+        transfer: Transfer,
+        payload: Payload,
+    ) -> Result<Option<Delivery<T>>, RecvError>
+    where
+        T: DecodeIntoMessage + Send,
+    {
+        let delivery = match self.incomplete_transfer.take() {
+            Some(mut incomplete) => {
+                incomplete.or_assign(transfer)?;
+                incomplete.append(payload); // This also computes the section number and offset incrementally
+
+                self.link
+                    .on_complete_transfer(
+                        incomplete.performative,
+                        incomplete.buffer,
+                        incomplete.section_number.unwrap_or(0),
+                        incomplete.section_offset,
+                    )
+                    .await?
+            }
+            None => {
+                let (section_number, section_offset) =
+                    count_number_of_sections_and_offset(&payload);
+                self.link
+                    .on_complete_transfer(transfer, payload, section_number, section_offset)
+                    .await?
+            }
+        };
+
+        // Auto accept the message and leave settled to be determined based on rcv_settle_mode
+        if self.auto_accept {
+            let delivery_info = delivery.clone_info();
+            self.dispose(delivery_info, None, Accepted {}.into())
+                .await?;
+        }
+
+        Ok(Some(delivery))
+    }
+
     #[inline]
     async fn on_incoming_transfer<T>(
         &mut self,
@@ -717,76 +761,30 @@ where
             return Ok(None);
         }
 
-        let delivery = if transfer.more {
-            // Partial transfer of the delivery
-            match &mut self.incomplete_transfer {
-                Some(incomplete) => {
-                    incomplete.or_assign(transfer)?;
-                    incomplete.append(payload);
-
-                    if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
-                        // Update unsettled map in the link
-                        self.link
-                            .on_incomplete_transfer(
-                                delivery_tag,
-                                incomplete.section_number.unwrap_or(0),
-                                incomplete.section_offset,
-                            )
-                            .await;
-                    }
-                }
-                None => {
-                    let incomplete = IncompleteTransfer::new(transfer, payload);
-                    if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
-                        // Update unsettled map in the link
-                        self.link
-                            .on_incomplete_transfer(
-                                delivery_tag,
-                                incomplete.section_number.unwrap_or(0),
-                                incomplete.section_offset,
-                            )
-                            .await;
-                    }
-                    self.incomplete_transfer = Some(Box::new(incomplete));
-                }
-            }
-
-            // Partial delivery doesn't yield a complete message
-            return Ok(None);
-        } else {
-            // Final transfer of the delivery
-            match self.incomplete_transfer.take() {
-                Some(mut incomplete) => {
-                    incomplete.or_assign(transfer)?;
-                    incomplete.append(payload); // This also computes the section number and offset incrementally
-
-                    self.link
-                        .on_complete_transfer(
-                            incomplete.performative,
-                            incomplete.buffer,
-                            incomplete.section_number.unwrap_or(0),
-                            incomplete.section_offset,
-                        )
-                        .await?
-                }
-                None => {
-                    let (section_number, section_offset) =
-                        count_number_of_sections_and_offset(&payload);
-                    self.link
-                        .on_complete_transfer(transfer, payload, section_number, section_offset)
-                        .await?
-                }
-            }
-        };
-
-        // Auto accept the message and leave settled to be determined based on rcv_settle_mode
-        if self.auto_accept {
-            let delivery_info = delivery.clone_info();
-            self.dispose(delivery_info, None, Accepted {}.into())
+        if let Some(state) = transfer.state.clone() {
+            // Setting the state
+            // on the transfer can be thought of as being equivalent to sending a disposition immediately before
+            // the transfer performative, i.e., it is the state of the delivery (not the transfer) that existed at the
+            // point the frame was sent.
+            self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)
                 .await?;
         }
 
-        Ok(Some(delivery))
+        if transfer.more {
+            // Partial transfer of the delivery
+            // There is only ONE incomplet transfer locally, so the partial transfer must belong to the 
+            // same delivery
+            self.on_incomplete_transfer(transfer, payload).await?;
+            // Partial delivery doesn't yield a complete message
+            Ok(None)
+        } else {
+            if transfer.resume {
+                self.on_resuming_transfer(transfer, payload).await
+            } else {
+                // Final transfer of the delivery
+                self.on_complete_transfer(transfer, payload).await
+            }
+        }
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle

@@ -126,6 +126,44 @@ where
             .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
+    async fn on_transfer_state(
+        &mut self,
+        delivery_tag: &Option<DeliveryTag>,
+        settled: Option<bool>,
+        state: DeliveryState,
+    ) -> Result<(), Self::TransferError> {
+        let delivery_tag = delivery_tag
+            .as_ref()
+            .ok_or(Self::TransferError::DeliveryTagIsNone)?;
+        let mut guard = self.unsettled.write().await;
+        let map = guard.get_or_insert(BTreeMap::new());
+
+        if matches!(settled, Some(true)) {
+            // FIXME: Simply remove from the unsettled map?
+            let _ = map.remove(delivery_tag);
+        } else {
+            // If a terminal state is already achieved, cannot send any further
+            let value = map.get_mut(delivery_tag);
+            match value {
+                Some(val) => {
+                    match val.as_ref().map(|v| v.is_terminal()) {
+                        Some(true) => {
+                            // Note that if the transfer performative (or an earlier disposition performative referring to the
+                            //     delivery) indicates that the delivery has attained a terminal state, then no future transfer or
+                            //     disposition sent by the sender can alter that terminal state.
+                            return Ok(());
+                        }
+                        _ => *val = Some(state),
+                    }
+                }
+                None => {
+                    map.insert(delivery_tag.clone(), Some(state));
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn on_incomplete_transfer(
         &mut self,
         delivery_tag: DeliveryTag,
@@ -143,9 +181,9 @@ where
         });
 
         {
-            let mut lock = self.unsettled.write().await;
+            let mut guard = self.unsettled.write().await;
             // The same key may be writter multiple times
-            let _ = lock
+            let _ = guard
                 .get_or_insert(BTreeMap::new())
                 .insert(delivery_tag, Some(state));
         }
