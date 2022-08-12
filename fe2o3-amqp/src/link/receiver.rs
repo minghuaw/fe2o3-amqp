@@ -64,7 +64,7 @@ impl Default for CreditMode {
 /// # Attach a new receiver with default configurations
 ///
 /// ```rust, ignore
-/// let mut receiver = ReceiverInner::attach(
+/// let mut receiver = Receiver::attach(
 ///     &mut session,           // mutable reference to SessionHandle
 ///     "rust-receiver-link-1", // link name
 ///     "q1"                    // Source address
@@ -97,7 +97,7 @@ impl Default for CreditMode {
 /// # Customize configuration with [`builder::Builder`]
 ///
 /// ```rust, ignore
-/// let mut receiver = ReceiverInner::builder()
+/// let mut receiver = Receiver::builder()
 ///     .name("rust-receiver-link-1")
 ///     .source("q1")
 ///     .attach(&mut session)
@@ -168,7 +168,7 @@ impl Receiver {
     /// # Example
     ///
     /// ```rust, ignore
-    /// let mut receiver = ReceiverInner::attach(
+    /// let mut receiver = Receiver::attach(
     ///     &mut session,           // mutable reference to SessionHandle
     ///     "rust-receiver-link-1", // link name
     ///     "q1"                    // Source address
