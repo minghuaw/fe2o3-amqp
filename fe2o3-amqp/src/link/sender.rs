@@ -107,8 +107,8 @@ impl std::fmt::Debug for Sender {
 impl Sender {
     /// Creates a builder for [`Sender`] link
     pub fn builder(
-    ) -> builder::Builder<role::Sender, Target, WithoutName, WithSource, WithoutTarget> {
-        builder::Builder::<role::Sender, Target, _, _, _>::new()
+    ) -> builder::Builder<role::SenderMarker, Target, WithoutName, WithSource, WithoutTarget> {
+        builder::Builder::<role::SenderMarker, Target, _, _, _>::new()
     }
 
     /// Get a reference to the link's source field

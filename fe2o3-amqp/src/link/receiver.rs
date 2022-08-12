@@ -113,8 +113,8 @@ pub struct Receiver {
 impl Receiver {
     /// Creates a builder for the [`Receiver`]
     pub fn builder(
-    ) -> builder::Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
-        builder::Builder::<role::Receiver, Target, _, _, _>::new()
+    ) -> builder::Builder<role::ReceiverMarker, Target, WithoutName, WithoutSource, WithTarget> {
+        builder::Builder::<role::ReceiverMarker, Target, _, _, _>::new()
     }
 
     /// Set the credit mode

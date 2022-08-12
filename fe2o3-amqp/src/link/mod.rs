@@ -60,17 +60,17 @@ mod incomplete_transfer;
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
 
-pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::Sender>>>;
-pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::Receiver>>;
+pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::SenderMarker>>>;
+pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::ReceiverMarker>>;
 
-pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::Sender>>>;
+pub(crate) type SenderRelayFlowState = Producer<Arc<LinkFlowState<role::SenderMarker>>>;
 pub(crate) type ReceiverRelayFlowState = ReceiverFlowState;
 
 /// Type alias for sender link that ONLY represents the inner state of a Sender
-pub(crate) type SenderLink<T> = Link<role::Sender, T, SenderFlowState, UnsettledMessage>;
+pub(crate) type SenderLink<T> = Link<role::SenderMarker, T, SenderFlowState, UnsettledMessage>;
 
 /// Type alias for receiver link that ONLY represents the inner state of receiver
-pub(crate) type ReceiverLink<T> = Link<role::Receiver, T, ReceiverFlowState, Option<DeliveryState>>;
+pub(crate) type ReceiverLink<T> = Link<role::ReceiverMarker, T, ReceiverFlowState, Option<DeliveryState>>;
 
 pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<Option<UnsettledMap<S>>>>;
 pub(crate) type ArcSenderUnsettledMap = ArcUnsettledMap<UnsettledMessage>;
@@ -86,20 +86,15 @@ pub mod role {
 
     /// Type state for link::builder::Builder
     #[derive(Debug)]
-    pub struct Sender {
+    pub struct SenderMarker {
         _private: (),
     }
 
     /// Type state for link::builder::Builder
     #[derive(Debug)]
-    pub struct Receiver {
+    pub struct ReceiverMarker {
         _private: (),
     }
-
-    // /// Type state for link::builder::Builder
-    // #[cfg(feature = "transaction")]
-    // #[derive(Debug)]
-    // pub struct Controller {}
 
     /// Marker trait for role
     pub trait IntoRole {
@@ -107,13 +102,13 @@ pub mod role {
         fn into_role() -> Role;
     }
 
-    impl IntoRole for Sender {
+    impl IntoRole for SenderMarker {
         fn into_role() -> Role {
             Role::Sender
         }
     }
 
-    impl IntoRole for Receiver {
+    impl IntoRole for ReceiverMarker {
         fn into_role() -> Role {
             Role::Receiver
         }

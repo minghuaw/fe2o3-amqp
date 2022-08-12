@@ -144,19 +144,19 @@ impl<Role, T> Default for Builder<Role, T, WithoutName, WithoutSource, WithoutTa
     }
 }
 
-impl<T> Builder<role::Sender, T, WithoutName, WithSource, WithoutTarget> {
+impl<T> Builder<role::SenderMarker, T, WithoutName, WithSource, WithoutTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::Sender, T, _, _, _>::default().source(Source::builder().build())
+        Builder::<role::SenderMarker, T, _, _, _>::default().source(Source::builder().build())
     }
 }
 
-impl Builder<role::Receiver, Target, WithoutName, WithoutSource, WithTarget> {
+impl Builder<role::ReceiverMarker, Target, WithoutName, WithoutSource, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::Receiver, Target, _, _, _>::default().target(Target::builder().build())
+        Builder::<role::ReceiverMarker, Target, _, _, _>::default().target(Target::builder().build())
     }
 }
 
-impl<T, NameState, SS, TS> Builder<role::Receiver, T, NameState, SS, TS> {
+impl<T, NameState, SS, TS> Builder<role::ReceiverMarker, T, NameState, SS, TS> {
     /// Sets the `auto_accept` field.
     ///
     /// Default value: `false`
@@ -193,7 +193,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     }
 
     /// Set the link's role to sender
-    pub fn sender(self) -> Builder<role::Sender, T, NameState, SS, TS> {
+    pub fn sender(self) -> Builder<role::SenderMarker, T, NameState, SS, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -218,7 +218,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     }
 
     /// Set the link's role to receiver
-    pub fn receiver(self) -> Builder<role::Receiver, T, NameState, SS, TS> {
+    pub fn receiver(self) -> Builder<role::ReceiverMarker, T, NameState, SS, TS> {
         Builder {
             name: self.name,
             snd_settle_mode: self.snd_settle_mode,
@@ -414,7 +414,7 @@ impl<Role, T, NameState, SS, TS> Builder<Role, T, NameState, SS, TS> {
     }
 }
 
-impl<T, NameState, SS, TS> Builder<role::Sender, T, NameState, SS, TS> {
+impl<T, NameState, SS, TS> Builder<role::SenderMarker, T, NameState, SS, TS> {
     /// This MUST NOT be null if role is sender,
     /// and it is ignored if the role is receiver.
     /// See subsection 2.6.7.
@@ -424,7 +424,7 @@ impl<T, NameState, SS, TS> Builder<role::Sender, T, NameState, SS, TS> {
     }
 }
 
-impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
+impl Builder<role::SenderMarker, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a sender
     ///
     /// # Example
@@ -449,7 +449,7 @@ impl Builder<role::Sender, Target, WithName, WithSource, WithTarget> {
     }
 }
 
-impl<T> Builder<role::Sender, T, WithName, WithSource, WithTarget>
+impl<T> Builder<role::SenderMarker, T, WithName, WithSource, WithTarget>
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
@@ -525,7 +525,7 @@ where
     }
 }
 
-impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
+impl Builder<role::ReceiverMarker, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a receiver
     ///
     /// # Example
@@ -549,7 +549,7 @@ impl Builder<role::Receiver, Target, WithName, WithSource, WithTarget> {
     }
 }
 
-impl<T> Builder<role::Receiver, T, WithName, WithSource, WithTarget>
+impl<T> Builder<role::ReceiverMarker, T, WithName, WithSource, WithTarget>
 where
     T: Into<TargetArchetype>
         + TryFrom<TargetArchetype>
@@ -657,7 +657,7 @@ where
 // }
 
 #[cfg(feature = "transaction")]
-impl Builder<role::Sender, Coordinator, WithName, WithSource, WithTarget> {
+impl Builder<role::SenderMarker, Coordinator, WithName, WithSource, WithTarget> {
     /// Attach the link as a transaction controller
     pub async fn attach<R>(
         self,

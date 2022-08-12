@@ -100,19 +100,19 @@ impl<R> LinkFlowState<R> {
     }
 }
 
-impl LinkFlowState<role::Sender> {
+impl LinkFlowState<role::SenderMarker> {
     pub(crate) fn sender(inner: LinkFlowStateInner) -> Self {
         Self::new(inner)
     }
 }
 
-impl LinkFlowState<role::Receiver> {
+impl LinkFlowState<role::ReceiverMarker> {
     pub(crate) fn receiver(inner: LinkFlowStateInner) -> Self {
         Self::new(inner)
     }
 }
 
-impl LinkFlowState<role::Sender> {
+impl LinkFlowState<role::SenderMarker> {
     /// Handles incoming Flow frame
     ///
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
@@ -179,7 +179,7 @@ impl LinkFlowState<role::Sender> {
     }
 }
 
-impl LinkFlowState<role::Receiver> {
+impl LinkFlowState<role::ReceiverMarker> {
     #[inline]
     pub(crate) async fn on_incoming_flow(
         &self,
@@ -272,7 +272,7 @@ impl<R> LinkFlowState<R> {
     }
 }
 
-impl LinkFlowState<role::Receiver> {
+impl LinkFlowState<role::ReceiverMarker> {
     /// Consume one link credit if available. Returns an error if there is
     /// not enough link credit
     pub async fn consume(&self, count: u32) -> Result<(), ReceiverTransferError> {
@@ -291,7 +291,7 @@ impl LinkFlowState<role::Receiver> {
 pub(crate) type UnsettledMap<M> = BTreeMap<DeliveryTag, M>;
 
 #[async_trait]
-impl ProducerState for Arc<LinkFlowState<role::Sender>> {
+impl ProducerState for Arc<LinkFlowState<role::SenderMarker>> {
     type Item = (LinkFlow, OutputHandle);
     // If echo is requested, a Some(LinkFlow) will be returned
     type Outcome = Option<LinkFlow>;

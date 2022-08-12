@@ -10,6 +10,8 @@
 4. Made `Sendable`'s fields public
 5. Updated documentations on
    1. `Sender::send`
+   2. `Sender::attach`
+   3. `Receiver::attach`
 
 ## 0.3.2
 
