@@ -760,3 +760,56 @@ where
         None => SenderAttachError::IllegalSessionState,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use tokio::sync::Notify;
+
+    use crate::{
+        link::state::{LinkFlowState, LinkFlowStateInner},
+        util::{Consume, Consumer, Producer, Produce}, endpoint::{LinkFlow, OutputHandle},
+    };
+
+    #[tokio::test]
+    async fn test_sender_flow_state_producer_and_consumer() {
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: 0,
+            delivery_count: 0,
+            link_credit: 0,
+            available: 0,
+            drain: false,
+            properties: None,
+        };
+        let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
+        let notifier = Arc::new(Notify::new());
+        let mut producer = Producer::new(notifier.clone(), flow_state.clone());
+        let mut consumer = Consumer::new(notifier, flow_state);
+
+        // .await on notify
+        let result = tokio::time::timeout(Duration::from_millis(500), consumer.consume(1)).await;
+        assert!(result.is_err());
+
+        // .await after notify with zero credit
+        let item = (LinkFlow::default(), OutputHandle(0));
+        producer.produce(item).await;
+        let result = tokio::time::timeout(Duration::from_millis(500), consumer.consume(1)).await;
+        assert!(result.is_err());
+
+        // .await after notify with zero credit
+        let link_flow = LinkFlow {
+            link_credit: Some(2),
+            ..Default::default()
+        };
+        let item = (link_flow, OutputHandle(0));
+        producer.produce(item).await;
+        let result = tokio::time::timeout(Duration::from_millis(500), consumer.consume(1)).await;
+        assert!(result.is_ok());
+        let result = tokio::time::timeout(Duration::from_millis(500), consumer.consume(1)).await;
+        assert!(result.is_ok());
+
+        let result = tokio::time::timeout(Duration::from_millis(500), consumer.consume(1)).await;
+        assert!(result.is_err());
+    }
+}

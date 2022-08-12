@@ -76,9 +76,6 @@ pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<Option<UnsettledMap<S>>>>;
 pub(crate) type ArcSenderUnsettledMap = ArcUnsettledMap<UnsettledMessage>;
 pub(crate) type ArcReceiverUnsettledMap = ArcUnsettledMap<Option<DeliveryState>>;
 
-// const CLOSED: u8 = 0b0000_0100;
-// const DETACHED: u8 = 0b0000_0010;
-
 pub mod role {
     //! Type state definition of link role
 
