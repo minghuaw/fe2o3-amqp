@@ -8,7 +8,8 @@
 2. `Connection` and non-txn `Session` no longer hold a copy of the controller sender to its own engine
 3. Resuming receiver now doesn't assume the continued payload transfer starts at the receiver's `Received` state
 4. Made `Sendable`'s fields public
-5. Updated documentations on
+5. Renamed `role::Sender/Receiver` to `role::SenderMarker/ReceiverMarker` to avoid confusion
+6. Updated documentations on
    1. `Sender::send`
    2. `Sender::attach`
    3. `Receiver::attach`
