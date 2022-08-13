@@ -144,7 +144,7 @@ impl IncompleteTransfer {
                     if chunk.len() < index {
                         index -= chunk.len();
                     } else {
-                        // Found the chunk
+                        // Found the chunk and split the chunk
                         let _ = chunk.split_off(index);
                     }
                 }
