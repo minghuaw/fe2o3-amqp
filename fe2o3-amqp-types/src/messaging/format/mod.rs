@@ -4,7 +4,7 @@ use serde_amqp::{
     primitives::{Binary, Boolean, Symbol, UByte, UInt, ULong, Uuid},
     value::Value,
 };
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display, ops::{Deref, DerefMut}};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
@@ -84,6 +84,20 @@ impl DeliveryAnnotations {
     }
 }
 
+impl Deref for DeliveryAnnotations {
+    type Target = Annotations;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for DeliveryAnnotations {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 /// 3.2.3 Message Annotations
 /// <type name="message-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:message-annotations:map" code="0x00000000:0x00000072"/>
@@ -100,6 +114,20 @@ impl MessageAnnotations {
     /// Creates a builder for [`MessageAnnotations`]
     pub fn builder() -> MapBuilder<Symbol, Value, Self> {
         MapBuilder::new()
+    }
+}
+
+impl Deref for MessageAnnotations {
+    type Target = Annotations;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MessageAnnotations {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -124,6 +152,20 @@ impl ApplicationProperties {
     /// Creates a builder for ApplicationProperties
     pub fn builder() -> MapBuilder<String, SimpleValue, Self> {
         MapBuilder::new()
+    }
+}
+
+impl Deref for ApplicationProperties {
+    type Target = BTreeMap<String, SimpleValue>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ApplicationProperties {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -168,6 +210,20 @@ impl Display for Data {
     encoding = "basic"
 )]
 pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
+
+impl<T> Deref for AmqpSequence<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for AmqpSequence<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl<T> Display for AmqpSequence<T>
 where
@@ -224,6 +280,20 @@ impl Footer {
     /// Creates a builder for [`Footer`]
     pub fn builder() -> MapBuilder<Symbol, Value, Self> {
         MapBuilder::new()
+    }
+}
+
+impl Deref for Footer {
+    type Target = Annotations;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Footer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.3.3
+
+1. Added `Deref` and `DerefMut` impl to `DeliveryAnnotations`, `MessageAnnotations`, `ApplicationProperties`,
+   `AmqpSequence`, and `Footer`
+
 ## 0.3.2
 
 1. Added `Default` impl to `DeliveryAnnotations`, `MessageAnnotations`, `ApplicationProperties`,
