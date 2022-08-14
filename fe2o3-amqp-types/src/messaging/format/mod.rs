@@ -69,7 +69,7 @@ impl From<Priority> for UByte {
 /// <type name="delivery-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:delivery-annotations:map" code="0x00000000:0x00000071"/>
 /// </type>
-#[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
+#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
     code = 0x0000_0000_0000_0071,
@@ -88,7 +88,7 @@ impl DeliveryAnnotations {
 /// <type name="message-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:message-annotations:map" code="0x00000000:0x00000072"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
     code = 0x0000_0000_0000_0072,
@@ -112,7 +112,7 @@ use self::map_builder::MapBuilder;
 /// <type name="application-properties" class="restricted" source="map" provides="section">
 ///     <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:application-properties:map",
     code = 0x0000_0000_0000_0074,
@@ -161,7 +161,7 @@ impl Display for Data {
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq)]
+#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq)]
 #[amqp_contract(
     name = "amqp:amqp-sequence:list",
     code = 0x0000_0000_0000_0076,
@@ -212,7 +212,7 @@ where
 /// <type name="footer" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:footer:map" code="0x00000000:0x00000078"/>
 /// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:footer:map",
     code = 0x0000_0000_0000_0078,
