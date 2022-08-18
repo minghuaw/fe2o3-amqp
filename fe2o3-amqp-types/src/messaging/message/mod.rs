@@ -41,10 +41,10 @@ use __private::{Deserializable, Serializable};
 /// 1. avoid confusion
 /// 2. The decoder type `T` itself is also the returned type
 pub trait DecodeIntoMessage: Sized {
-    ///
+    /// Error type associated with decoding
     type DecodeError;
 
-    ///
+    /// Decode reader into [`Message<T>`]
     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
 }
 
