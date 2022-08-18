@@ -406,3 +406,45 @@ impl From<&str> for SimpleValue {
         Self::String(val.to_string())
     }
 }
+
+macro_rules! impl_try_from_for_simple_value_variant {
+    ($variant:ident, $variant_ty:ty) => {
+        impl TryFrom<SimpleValue> for $variant_ty {
+            type Error = SimpleValue;
+
+            fn try_from(val: SimpleValue) -> Result<Self, Self::Error> {
+                match val {
+                    SimpleValue::$variant(inner) => Ok(inner),
+                    _ => Err(val)
+                }
+            }
+        }
+    };
+
+    ($($variant:ident, $variant_ty:ty),*) => {
+        $(impl_try_from_for_simple_value_variant!($variant, $variant_ty);)*
+    }
+}
+
+impl_try_from_for_simple_value_variant! {
+    Bool, bool,
+    UByte, u8,
+    UShort, u16,
+    UInt, u32,
+    ULong, u64,
+    Byte, i8,
+    Short, i16,
+    Int, i32,
+    Long, i64,
+    Float, OrderedFloat<f32>,
+    Double, OrderedFloat<f64>,
+    Decimal32, Dec32,
+    Decimal64, Dec64,
+    Decimal128, Dec128,
+    Char, char,
+    Timestamp, Timestamp,
+    Uuid, Uuid,
+    Binary, ByteBuf,
+    String, String,
+    Symbol, Symbol
+}

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.4
+
+1. Added `impl TryFrom<SimpleValue> $variant_ty` for variants of `SimpleValue`
+
 ## 0.3.3
 
 1. Added `Deref` and `DerefMut` impl to `DeliveryAnnotations`, `MessageAnnotations`, `ApplicationProperties`,
