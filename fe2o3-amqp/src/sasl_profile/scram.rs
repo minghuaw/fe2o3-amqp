@@ -13,9 +13,11 @@ use super::SaslProfile;
 /// # Example
 /// 
 /// ```rust
+/// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha1};
+/// 
 /// let mut connection = Connection::builder()
 ///     .container_id("connection-1")
-///     .sasl_profile(SaslScramSha512::new("username", "password"))
+///     .sasl_profile(SaslScramSha1::new("username", "password"))
 ///     .open("amqp://localhost:5672")
 ///     .await
 ///     .unwrap();
@@ -44,9 +46,11 @@ impl From<SaslScramSha1> for SaslProfile {
 /// # Example
 /// 
 /// ```rust
+/// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha256};
+/// 
 /// let mut connection = Connection::builder()
 ///     .container_id("connection-1")
-///     .sasl_profile(SaslScramSha512::new("username", "password"))
+///     .sasl_profile(SaslScramSha256::new("username", "password"))
 ///     .open("amqp://localhost:5672")
 ///     .await
 ///     .unwrap();
@@ -75,6 +79,8 @@ impl From<SaslScramSha256> for SaslProfile {
 /// # Example
 /// 
 /// ```rust
+/// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha512};
+///
 /// let mut connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .sasl_profile(SaslScramSha512::new("username", "password"))

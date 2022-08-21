@@ -15,11 +15,12 @@ pub use crate::scram::error::ScramErrorKind;
 mod error;
 pub use error::Error;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
 #[cfg(feature = "scram")]
 pub mod scram;
 
 #[cfg(feature = "scram")]
-use self::scram::{SaslScramSha1, SaslScramSha256, SaslScramSha512};
+pub use self::scram::{SaslScramSha1, SaslScramSha256, SaslScramSha512};
 
 // pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
 pub(crate) const ANONYMOUS: &str = "ANONYMOUS";

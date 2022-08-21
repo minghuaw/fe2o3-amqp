@@ -1,5 +1,5 @@
 use fe2o3_amqp::{
-    sasl_profile::scram::SaslScramSha256, types::primitives::Value, Connection, Receiver, Sender,
+    sasl_profile::SaslScramSha256, types::primitives::Value, Connection, Receiver, Sender,
     Session,
 };
 

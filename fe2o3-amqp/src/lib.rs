@@ -191,9 +191,9 @@
 
 pub(crate) mod control;
 pub(crate) mod util;
+pub(crate) mod endpoint;
 
 pub mod connection;
-pub mod endpoint;
 pub mod frames;
 pub mod link;
 pub mod sasl_profile;
@@ -208,9 +208,8 @@ pub mod acceptor;
 #[cfg(feature = "transaction")]
 pub mod transaction;
 
-#[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
 #[cfg(feature = "scram")]
-pub mod scram;
+pub(crate) mod scram;
 
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`
