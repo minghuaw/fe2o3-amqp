@@ -29,5 +29,5 @@ pub const PROOF_KEY: &str = "p=";
 /// v: This attribute specifies a base64-encoded ServerSignature.
 pub const VERIFIER_KEY: &str = "v=";
 
-/// e: This attribute specifies an error that occurred during authentication exchange.
-pub const SERVER_ERROR_KEY: &str = "e=";
+// /// e: This attribute specifies an error that occurred during authentication exchange.
+// pub const SERVER_ERROR_KEY: &str = "e=";

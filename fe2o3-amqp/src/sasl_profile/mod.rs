@@ -15,13 +15,14 @@ use crate::frames::sasl;
 
 pub use crate::scram::error::ScramErrorKind;
 
-use self::scram::{SaslScramSha1, SaslScramSha256};
+use self::scram::{SaslScramSha1, SaslScramSha256, SaslScramSha512};
 
 // pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
 pub(crate) const ANONYMOUS: &str = "ANONYMOUS";
 pub(crate) const PLAIN: &str = "PLAIN";
 pub(crate) const SCRAM_SHA_1: &str = "SCRAM-SHA-1";
 pub(crate) const SCRAM_SHA_256: &str = "SCRAM-SHA-256";
+pub(crate) const SCRAM_SHA_512: &str = "SCRAM-SHA-512";
 
 pub(crate) enum Negotiation {
     Init(SaslInit),
@@ -43,11 +44,14 @@ pub enum SaslProfile {
         password: String,
     },
 
-    /// SASL-SCRAM-SHA1
+    /// SASL-SCRAM-SHA-1
     ScramSha1(SaslScramSha1),
 
-    /// SASL-SCRAM-SHA256
+    /// SASL-SCRAM-SHA-256
     ScramSha256(SaslScramSha256),
+
+    /// SASL-SCRAM-SHA-512
+    ScramSha512(SaslScramSha512),
 }
 
 impl<T1, T2> From<(T1, T2)> for SaslProfile
@@ -87,6 +91,7 @@ impl SaslProfile {
             } => PLAIN,
             SaslProfile::ScramSha1(_) => SCRAM_SHA_1,
             SaslProfile::ScramSha256(_) => SCRAM_SHA_256,
+            SaslProfile::ScramSha512(_) => SCRAM_SHA_512,
         };
         Symbol::from(value)
     }
@@ -104,12 +109,15 @@ impl SaslProfile {
                 buf.put_slice(password);
                 Some(Binary::from(buf))
             }
-            SaslProfile::ScramSha1(scram_sha1) => {
-                Some(Binary::from(scram_sha1.client.compute_client_first()))
-            }
-            SaslProfile::ScramSha256(scram_sha256) => {
-                Some(Binary::from(scram_sha256.client.compute_client_first()))
-            }
+            SaslProfile::ScramSha1(scram_sha1) => Some(Binary::from(
+                scram_sha1.client.compute_client_first_message(),
+            )),
+            SaslProfile::ScramSha256(scram_sha256) => Some(Binary::from(
+                scram_sha256.client.compute_client_first_message(),
+            )),
+            SaslProfile::ScramSha512(scram_sha512) => Some(Binary::from(
+                scram_sha512.client.compute_client_first_message(),
+            )),
         }
     }
 
@@ -148,10 +156,11 @@ impl SaslProfile {
                         )))
                     }
                     SaslProfile::ScramSha1(SaslScramSha1 { client })
-                    | SaslProfile::ScramSha256(SaslScramSha256 { client }) => {
+                    | SaslProfile::ScramSha256(SaslScramSha256 { client }) 
+                    | SaslProfile::ScramSha512(SaslScramSha512{ client }) => {
                         let server_first = std::str::from_utf8(&challenge.challenge)
                             .map_err(|e| ScramErrorKind::Utf8Error(e))?;
-                        let client_final = client.compute_client_final(server_first)?;
+                        let client_final = client.compute_client_final_message(server_first)?;
                         let response = SaslResponse {
                             response: Binary::from(client_final),
                         };
@@ -162,16 +171,19 @@ impl SaslProfile {
             }
             Frame::Outcome(outcome) => {
                 match self {
-                    SaslProfile::Anonymous 
-                    | SaslProfile::Plain { .. } => {},
-                    SaslProfile::ScramSha1(SaslScramSha1 { client }) 
-                    | SaslProfile::ScramSha256(SaslScramSha256 { client }) => {
-                        let server_final = outcome.additional_data.as_ref().ok_or(ScramErrorKind::ServerSignatureMismatch)?;
+                    SaslProfile::Anonymous | SaslProfile::Plain { .. } => {}
+                    SaslProfile::ScramSha1(SaslScramSha1 { client })
+                    | SaslProfile::ScramSha256(SaslScramSha256 { client })
+                    | SaslProfile::ScramSha512(SaslScramSha512{ client }) => {
+                        let server_final = outcome
+                            .additional_data
+                            .as_ref()
+                            .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
                         client.validate_server_final(server_final)?;
-                    },
+                    }
                 }
                 Ok(Negotiation::Outcome(outcome))
-            },
+            }
             _ => Err(Error::NotImplemented(Some(format!(
                 "{:?} is not expected on client SASL profile",
                 frame

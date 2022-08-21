@@ -9,7 +9,7 @@ use hmac::{
 };
 use rand::Rng;
 use sha1::Sha1;
-use sha2::Sha256;
+use sha2::{Sha256, Sha512};
 
 use self::{
     attributes::{
@@ -27,7 +27,7 @@ enum ScramClientState {
     Initial,
     ClientFirstSent {
         client_nonce: String,
-        client_first: Vec<u8>,
+        client_first_message_bare: Bytes,
     },
     ClientFinalSent {
         server_signature: Vec<u8>,
@@ -57,31 +57,37 @@ impl ScramClient {
         }
     }
 
-    pub fn compute_client_first(&mut self) -> Vec<u8> {
+    pub fn compute_client_first_message(&mut self) -> Bytes {
         let nonce_bytes: [u8; 32] = rand::thread_rng().gen();
         let nonce = base64::encode(nonce_bytes);
-        let client_first = self
+        let (client_first_message, client_first_message_bare) = self
             .scram
-            .client_first(self.username.as_bytes(), nonce.as_bytes());
+            .client_first_message(self.username.as_bytes(), nonce.as_bytes());
         self.state = ScramClientState::ClientFirstSent {
             client_nonce: nonce,
-            client_first: client_first.clone(),
+            client_first_message_bare,
         };
-        client_first.into()
+        client_first_message
     }
 
-    pub fn compute_client_final(&mut self, server_first: &str) -> Result<Vec<u8>, ScramErrorKind> {
+    pub fn compute_client_final_message(
+        &mut self,
+        server_first: &str,
+    ) -> Result<Vec<u8>, ScramErrorKind> {
         match &self.state {
             ScramClientState::ClientFirstSent {
                 client_nonce,
-                client_first,
+                client_first_message_bare,
             } => {
-                let (client_final, server_signature) = self
-                    .scram
-                    .compute_client_final(&client_nonce, &self.password, server_first, &client_first)?;
+                let (client_final, server_signature) = self.scram.compute_client_final_message(
+                    &client_nonce,
+                    &self.password,
+                    server_first,
+                    &client_first_message_bare,
+                )?;
                 self.state = ScramClientState::ClientFinalSent { server_signature };
                 Ok(client_final)
-            },
+            }
             _ => Err(ScramErrorKind::IllegalClientState),
         }
     }
@@ -89,11 +95,12 @@ impl ScramClient {
     pub fn validate_server_final(&mut self, server_final: &[u8]) -> Result<(), ScramErrorKind> {
         match &self.state {
             ScramClientState::ClientFinalSent { server_signature } => {
-                self.scram.validate_server_final(server_final, server_signature)?;
+                self.scram
+                    .validate_server_final(server_final, server_signature)?;
                 self.state = ScramClientState::Complete;
                 Ok(())
-            },
-            _ => Err(ScramErrorKind::IllegalClientState)
+            }
+            _ => Err(ScramErrorKind::IllegalClientState),
         }
     }
 }
@@ -102,13 +109,15 @@ impl ScramClient {
 pub(crate) enum ScramVersion {
     Sha1,
     Sha256,
+    Sha512,
 }
 
 // This is shamelessly copied from
 // [MongoDB](https://github.com/mongodb/mongo-rust-driver/blob/main/src/client/auth/scram.rs)
 impl ScramVersion {
-    pub(crate) fn client_first(&self, username: &[u8], nonce: &[u8]) -> Vec<u8> {
-        let mut bytes = Vec::new();
+    /// Returns (client_first_message, client_first_message_bare)
+    pub(crate) fn client_first_message(&self, username: &[u8], nonce: &[u8]) -> (Bytes, Bytes) {
+        let mut bytes = BytesMut::new();
         bytes.put_slice(GS2_HEADER.as_bytes());
 
         bytes.put_slice(USERNAME_KEY.as_bytes());
@@ -119,13 +128,17 @@ impl ScramVersion {
         bytes.put_slice(NONCE_KEY.as_bytes());
         bytes.put_slice(nonce);
 
-        bytes
+        let client_first_message = bytes.freeze();
+        let gs2_header_len = GS2_HEADER.as_bytes().len();
+        let client_first_message_bare = client_first_message.slice(gs2_header_len..);
+        (client_first_message, client_first_message_bare)
     }
 
     fn h_i(&self, password: &[u8], salt: &[u8], iterations: u32) -> Vec<u8> {
         match self {
-            ScramVersion::Sha256 => h_i::<Hmac<Sha1>>(password, salt, iterations, 160 / 8),
-            ScramVersion::Sha1 => h_i::<Hmac<Sha256>>(password, salt, iterations, 256 / 8),
+            ScramVersion::Sha1 => h_i::<Hmac<Sha1>>(password, salt, iterations, 160 / 8),
+            ScramVersion::Sha256 => h_i::<Hmac<Sha256>>(password, salt, iterations, 256 / 8),
+            ScramVersion::Sha512 => h_i::<Hmac<Sha512>>(password, salt, iterations, 512 / 8),
         }
     }
 
@@ -142,8 +155,9 @@ impl ScramVersion {
     /// HMAC function used as part of SCRAM authentication.
     fn hmac(&self, key: &[u8], input: &[u8]) -> Result<Vec<u8>, ScramErrorKind> {
         let bytes = match self {
-            ScramVersion::Sha1 => mac::<Hmac<Sha1>>(key, input, "SCRAM")?.as_ref().into(),
-            ScramVersion::Sha256 => mac::<Hmac<Sha256>>(key, input, "SCRAM")?.as_ref().into(),
+            ScramVersion::Sha1 => mac::<Hmac<Sha1>>(key, input)?.as_ref().into(),
+            ScramVersion::Sha256 => mac::<Hmac<Sha256>>(key, input)?.as_ref().into(),
+            ScramVersion::Sha512 => mac::<Hmac<Sha512>>(key, input)?.as_ref().into(),
         };
 
         Ok(bytes)
@@ -154,14 +168,21 @@ impl ScramVersion {
     /// H(str): Apply the cryptographic hash function to the octet string "str", producing an octet
     /// string as a result. The size of the result depends on the hash result size for the hash
     /// function in use.
+    ///
+    /// H(str): Apply the cryptographic hash function to the octet string
+    /// "str", producing an octet string as a result. The size of the
+    /// result depends on the hash result size for the hash function in use
+    ///
+    ///  dkLen == output length of HMAC() == output length of H()
     fn h(&self, str: &[u8]) -> Vec<u8> {
         match self {
             ScramVersion::Sha1 => hash::<Sha1>(str),
             ScramVersion::Sha256 => hash::<Sha256>(str),
+            ScramVersion::Sha512 => hash::<Sha512>(str),
         }
     }
 
-    pub(crate) fn compute_client_final(
+    pub(crate) fn compute_client_final_message(
         &self,
         client_nonce: &str,
         password: &str,
@@ -227,18 +248,21 @@ impl ScramVersion {
 
         Ok((client_final, server_signature))
     }
-    
-    fn validate_server_final(&self, server_final: &[u8], server_signature: &[u8]) -> Result<(), ScramErrorKind> {
+
+    fn validate_server_final(
+        &self,
+        server_final: &[u8],
+        server_signature: &[u8],
+    ) -> Result<(), ScramErrorKind> {
         let server_final = std::str::from_utf8(server_final)?;
         let parts: Vec<&str> = server_final.split(',').collect();
-        
-        let signature = parts.get(0)
-            .and_then(|signature| 
-                signature.strip_prefix(VERIFIER_KEY)
-            )
+
+        let signature = parts
+            .get(0)
+            .and_then(|signature| signature.strip_prefix(VERIFIER_KEY))
             .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
         let signature_bytes = base64::decode(signature)?;
-        
+
         match signature_bytes == server_signature {
             true => Ok(()),
             false => Err(ScramErrorKind::ServerSignatureMismatch),
@@ -252,6 +276,7 @@ fn client_final(client_final_message_without_proof: &[u8], client_proof: &[u8]) 
     let mut buf = Vec::with_capacity(total_len);
     buf.put_slice(client_final_message_without_proof);
     buf.put_u8(b',');
+    buf.put_slice(PROOF_KEY.as_bytes());
     buf.put_slice(client_proof);
     buf
 }
@@ -311,11 +336,7 @@ fn h_i<M: KeyInit + FixedOutput + Mac + Sync + Clone>(
     buf
 }
 
-fn mac<M: Mac + KeyInit>(
-    key: &[u8],
-    input: &[u8],
-    auth_mechanism: &str,
-) -> Result<impl AsRef<[u8]>, ScramErrorKind> {
+fn mac<M: Mac + KeyInit>(key: &[u8], input: &[u8]) -> Result<impl AsRef<[u8]>, ScramErrorKind> {
     let mut mac =
         <M as Mac>::new_from_slice(key).map_err(|_| ScramErrorKind::HmacErrorInvalidLength)?;
     mac.update(input);
@@ -338,4 +359,127 @@ fn xor(lhs: &[u8], rhs: &[u8]) -> Result<Vec<u8>, ScramErrorKind> {
         .zip(rhs.iter())
         .map(|(l, r)| l.bitxor(r))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    mod scram_sha1 {
+        use crate::scram::ScramVersion;
+
+        pub(super) static TEST_USERNAME: &str = "user";
+        pub(super) static TEST_PASSWORD: &str = "pencil";
+        pub(super) static CLIENT_NONCE: &str = "fyko+d2lbbFgONRv9qkxdawL";
+        pub(super) static EXPECTED_CLIENT_INITIAL_RESPONSE: &str =
+            "n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL";
+        pub(super) static SERVER_FIRST_MESSAGE: &str =
+            "r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,i=4096";
+        pub(super) static EXPECTED_CLIENT_FINAL_MESSAGE: &str =
+            "c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=";
+        pub(super) static SERVER_FINAL_MESSAGE: &str = "v=rmF9pqV8S7suAoZWja4dJRkFsKQ=";
+        pub(super) static VERSION: ScramVersion = ScramVersion::Sha1;
+    }
+
+    mod scram_sha256 {
+        use crate::scram::ScramVersion;
+
+        pub(super) static TEST_USERNAME: &str = "user";
+        pub(super) static TEST_PASSWORD: &str = "pencil";
+        pub(super) static CLIENT_NONCE: &str = "rOprNGfwEbeRWgbNEkqO";
+        pub(super) static EXPECTED_CLIENT_INITIAL_RESPONSE: &str =
+            "n,,n=user,r=rOprNGfwEbeRWgbNEkqO";
+        pub(super) static SERVER_FIRST_MESSAGE: &str =
+            "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096";
+        pub(super) static EXPECTED_CLIENT_FINAL_MESSAGE: &str = "c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=";
+        pub(super) static SERVER_FINAL_MESSAGE: &str =
+            "v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=";
+        pub(super) static VERSION: ScramVersion = ScramVersion::Sha256;
+    }
+
+    mod scram_sha512 {
+        use crate::scram::ScramVersion;
+        pub(super) static TEST_USERNAME: &str = "user";
+        pub(super) static TEST_PASSWORD: &str = "pencil";
+        pub(super) static CLIENT_NONCE: &str = "rOprNGfwEbeRWgbNEkqO";
+        pub(super) static EXPECTED_CLIENT_INITIAL_RESPONSE: &str =
+            "n,,n=user,r=rOprNGfwEbeRWgbNEkqO";
+        pub(super) static SERVER_FIRST_MESSAGE: &str = "r=rOprNGfwEbeRWgbNEkqO02431b08-2f89-4bad-a4e6-80c0564ec865,s=Yin2FuHTt/M0kJWb0t9OI32n2VmOGi3m+JfjOvuDF88=,i=4096";
+        pub(super) static EXPECTED_CLIENT_FINAL_MESSAGE: &str = "c=biws,r=rOprNGfwEbeRWgbNEkqO02431b08-2f89-4bad-a4e6-80c0564ec865,p=Hc5yec3NmCD7t+kFRw4/3yD6/F3SQHc7AVYschRja+Bc3sbdjlA0eH1OjJc0DD4ghn1tnXN5/Wr6qm9xmaHt4A==";
+        pub(super) static SERVER_FINAL_MESSAGE: &str = "v=BQuhnKHqYDwQWS5jAw4sZed+C9KFUALsbrq81bB0mh+bcUUbbMPNNmBIupnS2AmyyDnG5CTBQtkjJ9kyY4kzmw==";
+        pub(super) static VERSION: ScramVersion = ScramVersion::Sha512;
+    }
+
+    #[test]
+    fn test_sasl_scram_sha1() {
+        use scram_sha1::*;
+
+        let (client_first_message, client_first_message_bare) =
+            VERSION.client_first_message(TEST_USERNAME.as_bytes(), CLIENT_NONCE.as_bytes());
+        assert_eq!(
+            client_first_message,
+            EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes()
+        );
+
+        let (client_final, server_signature) = VERSION
+            .compute_client_final_message(
+                CLIENT_NONCE,
+                TEST_PASSWORD,
+                SERVER_FIRST_MESSAGE,
+                &client_first_message_bare,
+            )
+            .unwrap();
+        assert_eq!(client_final, EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes());
+        assert!(VERSION
+            .validate_server_final(SERVER_FINAL_MESSAGE.as_bytes(), &server_signature)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_sasl_scram_sha256() {
+        use scram_sha256::*;
+
+        let (client_first_message, client_first_message_bare) =
+            VERSION.client_first_message(TEST_USERNAME.as_bytes(), CLIENT_NONCE.as_bytes());
+        assert_eq!(
+            client_first_message,
+            EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes()
+        );
+
+        let (client_final, server_signature) = VERSION
+            .compute_client_final_message(
+                CLIENT_NONCE,
+                TEST_PASSWORD,
+                SERVER_FIRST_MESSAGE,
+                &client_first_message_bare,
+            )
+            .unwrap();
+        assert_eq!(client_final, EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes());
+        assert!(VERSION
+            .validate_server_final(SERVER_FINAL_MESSAGE.as_bytes(), &server_signature)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_sasl_scram_sha512() {
+        use scram_sha512::*;
+
+        let (client_first_message, client_first_message_bare) =
+            VERSION.client_first_message(TEST_USERNAME.as_bytes(), CLIENT_NONCE.as_bytes());
+        assert_eq!(
+            client_first_message,
+            EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes()
+        );
+
+        let (client_final, server_signature) = VERSION
+            .compute_client_final_message(
+                CLIENT_NONCE,
+                TEST_PASSWORD,
+                SERVER_FIRST_MESSAGE,
+                &client_first_message_bare,
+            )
+            .unwrap();
+        assert_eq!(client_final, EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes());
+        assert!(VERSION
+            .validate_server_final(SERVER_FINAL_MESSAGE.as_bytes(), &server_signature)
+            .is_ok());
+    }
 }
