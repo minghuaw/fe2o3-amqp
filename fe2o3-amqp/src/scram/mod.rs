@@ -1,4 +1,4 @@
-//! Implements SCRAM for SASL-SCRAM-SHA1 and SASL-SCRAM-SHA256 auth
+//! Implements SCRAM for SASL-SCRAM-SHA-1 and SASL-SCRAM-SHA-256 auth
 
 use std::ops::BitXor;
 

@@ -3,7 +3,7 @@
 use bytes::BufMut;
 use fe2o3_amqp_types::{
     primitives::{Binary, Symbol},
-    sasl::{SaslInit, SaslOutcome, SaslResponse},
+    sasl::{SaslInit, SaslOutcome, SaslResponse, SaslCode},
 };
 use url::Url;
 
@@ -147,8 +147,6 @@ impl SaslProfile {
                 }
             }
             Frame::Challenge(challenge) => {
-                // TODO: SCRAM-SHA1, SCRAM-SHA256
-
                 match self {
                     SaslProfile::Anonymous | SaslProfile::Plain { .. } => {
                         Err(Error::NotImplemented(Some(
@@ -175,11 +173,13 @@ impl SaslProfile {
                     SaslProfile::ScramSha1(SaslScramSha1 { client })
                     | SaslProfile::ScramSha256(SaslScramSha256 { client })
                     | SaslProfile::ScramSha512(SaslScramSha512{ client }) => {
-                        let server_final = outcome
-                            .additional_data
-                            .as_ref()
-                            .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
-                        client.validate_server_final(server_final)?;
+                        if matches!(outcome.code, SaslCode::Ok) {
+                            let server_final = outcome
+                                .additional_data
+                                .as_ref()
+                                .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
+                            client.validate_server_final(server_final)?;
+                        }
                     }
                 }
                 Ok(Negotiation::Outcome(outcome))

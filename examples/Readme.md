@@ -24,7 +24,7 @@ The examples below are individual examples which you need to `cd` into the corre
 |[rustls_connection](./rustls_connection/)|Establish TLS connection with default and custom rustls connectors|
 |[native_tls_connection](./native_tls_connection)|Establish TLS connection with default and custom native-tls connectors |
 |[alternative_tls_connection](./alternative_tls_connection/)|Alternative establishment of TLS connection (core spec 5.2.1)|
-|[sasl_connection](./sasl_connection/) |Establish connection with SASL Plain|
+|[sasl_connection](./sasl_connection/) |Establish connection with SASL Plain/SCRAM-SHA-1/SCRAM-SHA-256|
 |[tls_sasl_connection](./tls_sasl_connection/) |Establish connection with default rustls connector and SASL Plain|
 |[sasl_listener](./sasl_listener/) |SASL layer on listener|
 

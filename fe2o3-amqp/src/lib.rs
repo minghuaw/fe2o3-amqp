@@ -185,7 +185,7 @@
 //! - [x] Dispose multiple deliveries
 //! - [x] WebSocket binding [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws)
 //! - [ ] Pipelined open
-//! - [ ] SASL SCRAM-SHA1
+//! - [ ] SASL SCRAM-SHA-1
 //!   - [ ] acceptor
 
 pub(crate) mod control;
