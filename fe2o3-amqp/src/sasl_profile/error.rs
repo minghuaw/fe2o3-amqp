@@ -1,3 +1,4 @@
+#[cfg(feature = "scram")]
 use crate::scram::error::ScramErrorKind;
 
 /// SASL profile error
@@ -8,6 +9,8 @@ pub enum Error {
     NotImplemented(Option<String>),
 
     /// Error with SCRAM
+    #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+    #[cfg(feature = "scram")]
     #[error(transparent)]
     ScramError(#[from] ScramErrorKind),
 }

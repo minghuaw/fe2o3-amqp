@@ -6,10 +6,10 @@ use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::{
-    sasl_profile::ScramErrorKind,
-    transport::{self, error::NegotiationError},
-};
+use crate::transport::{self, error::NegotiationError};
+
+#[cfg(feature = "scram")]
+use crate::sasl_profile::ScramErrorKind;
 
 /// Error associated with openning a connection
 #[derive(Debug, thiserror::Error)]
@@ -48,6 +48,8 @@ pub enum OpenError {
     },
 
     /// Error with SCRAM
+    #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+    #[cfg(feature = "scram")]
     #[error(transparent)]
     ScramError(#[from] ScramErrorKind),
 
@@ -92,6 +94,8 @@ impl From<NegotiationError> for OpenError {
             NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
             NegotiationError::IllegalState => Self::IllegalState,
+            
+            #[cfg(feature = "scram")]
             NegotiationError::ScramError(e) => Self::ScramError(e),
         }
     }
