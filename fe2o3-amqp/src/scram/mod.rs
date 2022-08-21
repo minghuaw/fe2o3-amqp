@@ -2,7 +2,7 @@
 
 use std::ops::BitXor;
 
-use bytes::{BufMut, BytesMut, Bytes};
+use bytes::{BufMut, Bytes, BytesMut};
 use hmac::{
     digest::{Digest, FixedOutput, KeyInit},
     Hmac, Mac,
@@ -16,7 +16,7 @@ use self::{
         CHANNEL_BINDING_KEY, GS2_HEADER, ITERATION_COUNT_KEY, NONCE_KEY, PROOF_KEY, RESERVED_MEXT,
         SALT_KEY, USERNAME_KEY,
     },
-    error::{ScramErrorKind},
+    error::ScramErrorKind,
 };
 
 mod attributes;
@@ -57,21 +57,29 @@ impl ScramClient {
     pub fn compute_client_first(&mut self) -> Vec<u8> {
         let nonce_bytes: [u8; 32] = rand::thread_rng().gen();
         let nonce = base64::encode(nonce_bytes);
-        let client_first = self.scram.client_first(self.username.as_bytes(), nonce.as_bytes());
-        self.state = ScramClientState::ClientFirstSent { client_nonce: nonce, client_first: client_first.clone() };
+        let client_first = self
+            .scram
+            .client_first(self.username.as_bytes(), nonce.as_bytes());
+        self.state = ScramClientState::ClientFirstSent {
+            client_nonce: nonce,
+            client_first: client_first.clone(),
+        };
         client_first.into()
     }
 
     pub fn compute_client_final(&mut self, server_first: &str) -> Result<Vec<u8>, ScramErrorKind> {
         match &self.state {
-            ScramClientState::ClientFirstSent { client_nonce, client_first } => {
-                self.scram.compute_client_final(&client_nonce, &self.password, server_first, &client_first)
-                    .map(|client_final| {
-                        self.state = ScramClientState::ClientFinalSent;
-                        client_final
-                    })
-            },
-            _ => Err(ScramErrorKind::IllegalClientState)
+            ScramClientState::ClientFirstSent {
+                client_nonce,
+                client_first,
+            } => self
+                .scram
+                .compute_client_final(&client_nonce, &self.password, server_first, &client_first)
+                .map(|client_final| {
+                    self.state = ScramClientState::ClientFinalSent;
+                    client_final
+                }),
+            _ => Err(ScramErrorKind::IllegalClientState),
         }
     }
 }
@@ -204,27 +212,6 @@ impl ScramVersion {
     }
 }
 
-// enum ScramClientState {
-//     Initial,
-//     ClientFirstSent,
-//     ClientProofSent,
-//     Complete,
-// }
-
-// struct Nonce(pub [u8; 32]);
-
-// impl Nonce {
-//     pub fn generate() -> Self {
-//         let bytes = rand::thread_rng().gen();
-//         Self(bytes)
-//     }
-
-//     /// Get base64-encoded string
-//     pub fn encode_base64(&self) -> String {
-//         base64::encode(&self.0)
-//     }
-// }
-
 fn client_final(client_final_message_without_proof: &[u8], client_proof: &[u8]) -> Vec<u8> {
     let total_len =
         client_final_message_without_proof.len() + 1 + PROOF_KEY.len() + client_proof.len();
@@ -318,25 +305,3 @@ fn xor(lhs: &[u8], rhs: &[u8]) -> Result<Vec<u8>, ScramErrorKind> {
         .map(|(l, r)| l.bitxor(r))
         .collect())
 }
-
-// struct ClientFirst<'a> {
-//     username: &'a str,
-//     nonce: &'a Nonce,
-// }
-
-// impl<'a> ClientFirst<'a> {
-//     pub fn to_bytes(&self) -> Vec<u8> {
-//         let mut bytes = vec![];
-//         bytes.put_slice(GS2_HEADER.as_bytes());
-
-//         bytes.put_slice(USERNAME_KEY.as_bytes());
-//         bytes.put_slice(self.username.as_bytes());
-
-//         bytes.put_u8(',' as u8);
-
-//         bytes.put_slice(NONCE_KEY.as_bytes());
-//         bytes.put_slice(self.nonce.encode_base64().as_bytes());
-
-//         bytes
-//     }
-// }

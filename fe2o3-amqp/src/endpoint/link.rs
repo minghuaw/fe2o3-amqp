@@ -176,7 +176,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
-        state: DeliveryState
+        state: DeliveryState,
     ) -> Result<(), Self::TransferError>;
 
     async fn on_incomplete_transfer(

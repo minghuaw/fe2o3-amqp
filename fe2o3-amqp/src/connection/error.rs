@@ -6,7 +6,10 @@ use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::{transport::{self, error::NegotiationError}, sasl_profile::ScramErrorKind};
+use crate::{
+    sasl_profile::ScramErrorKind,
+    transport::{self, error::NegotiationError},
+};
 
 /// Error associated with openning a connection
 #[derive(Debug, thiserror::Error)]

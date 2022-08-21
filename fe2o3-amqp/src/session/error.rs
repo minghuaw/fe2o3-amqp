@@ -157,7 +157,7 @@ pub enum Error {
     JoinError(#[from] JoinError),
 
     /// Unknown transaction ID
-    #[cfg(all(feature = "transaction", feature = "acceptor"))]    
+    #[cfg(all(feature = "transaction", feature = "acceptor"))]
     #[error("Unknown transaction ID")]
     UnknownTxnId,
 }

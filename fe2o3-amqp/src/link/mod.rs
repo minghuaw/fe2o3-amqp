@@ -46,6 +46,7 @@ pub(crate) use frame::*;
 pub mod builder;
 pub mod delivery;
 mod error;
+mod incomplete_transfer;
 pub mod receiver;
 mod receiver_link;
 pub(crate) mod resumption;
@@ -55,7 +56,6 @@ pub(crate) mod shared_inner;
 mod source;
 pub(crate) mod state;
 pub(crate) mod target_archetype;
-mod incomplete_transfer;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
@@ -70,7 +70,8 @@ pub(crate) type ReceiverRelayFlowState = ReceiverFlowState;
 pub(crate) type SenderLink<T> = Link<role::SenderMarker, T, SenderFlowState, UnsettledMessage>;
 
 /// Type alias for receiver link that ONLY represents the inner state of receiver
-pub(crate) type ReceiverLink<T> = Link<role::ReceiverMarker, T, ReceiverFlowState, Option<DeliveryState>>;
+pub(crate) type ReceiverLink<T> =
+    Link<role::ReceiverMarker, T, ReceiverFlowState, Option<DeliveryState>>;
 
 pub(crate) type ArcUnsettledMap<S> = Arc<RwLock<Option<UnsettledMap<S>>>>;
 pub(crate) type ArcSenderUnsettledMap = ArcUnsettledMap<UnsettledMessage>;

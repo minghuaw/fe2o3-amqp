@@ -63,10 +63,20 @@ where
 
 impl Controller {
     /// Creates a new builder for controller
-    pub fn builder(
-    ) -> link::builder::Builder<role::SenderMarker, Coordinator, WithoutName, WithSource, WithoutTarget>
-    {
-        link::builder::Builder::<role::SenderMarker, Coordinator, WithoutName, WithSource, WithoutTarget>::new()
+    pub fn builder() -> link::builder::Builder<
+        role::SenderMarker,
+        Coordinator,
+        WithoutName,
+        WithSource,
+        WithoutTarget,
+    > {
+        link::builder::Builder::<
+            role::SenderMarker,
+            Coordinator,
+            WithoutName,
+            WithSource,
+            WithoutTarget,
+        >::new()
     }
 
     /// Close the control link with error

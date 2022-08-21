@@ -169,7 +169,7 @@ impl<T> Delivery<T> {
 
 /// A type representing the delivery before sending
 ///
-/// This allows pre-setting a message as settled if the sender's settle mode is set 
+/// This allows pre-setting a message as settled if the sender's settle mode is set
 /// to `SenderSettleMode::Mixed`.
 ///
 /// # Example
@@ -190,7 +190,7 @@ pub struct Sendable<T> {
     pub message_format: MessageFormat,
 
     /// Whether the message will be sent pre-settled
-    /// 
+    ///
     /// Please note that this field will be neglected if the negotiated
     /// sender settle mode is NOT equal to `SenderSettleMode::Mixed`
     pub settled: Option<bool>,

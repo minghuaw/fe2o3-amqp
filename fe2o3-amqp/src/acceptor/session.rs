@@ -336,7 +336,7 @@ pub struct ListenerSession {
     pub(crate) link_listener: mpsc::Sender<Attach>,
 }
 
-impl endpoint::SessionExt for ListenerSession { }
+impl endpoint::SessionExt for ListenerSession {}
 
 #[async_trait]
 impl endpoint::Session for ListenerSession {

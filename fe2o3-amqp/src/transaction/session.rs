@@ -235,7 +235,7 @@ where
     fn allocate_link(
         &mut self,
         link_name: String,
-        link_relay: Option<LinkRelay<()>>, 
+        link_relay: Option<LinkRelay<()>>,
     ) -> Result<OutputHandle, Self::AllocError> {
         self.session.allocate_link(link_name, link_relay)
     }

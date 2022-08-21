@@ -21,9 +21,7 @@ use crate::util::Running;
 use crate::{endpoint, transport};
 
 use super::{heartbeat::HeartBeat, ConnectionState};
-use super::{
-    AllocSessionError, Error, ConnectionInnerError, ConnectionStateError, OpenError,
-};
+use super::{AllocSessionError, ConnectionInnerError, ConnectionStateError, Error, OpenError};
 
 #[derive(Debug)]
 pub(crate) struct ConnectionEngine<Io, C> {

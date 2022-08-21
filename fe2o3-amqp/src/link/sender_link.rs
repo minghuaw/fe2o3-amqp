@@ -768,8 +768,9 @@ mod tests {
     use tokio::sync::Notify;
 
     use crate::{
+        endpoint::{LinkFlow, OutputHandle},
         link::state::{LinkFlowState, LinkFlowStateInner},
-        util::{Consume, Consumer, Producer, Produce}, endpoint::{LinkFlow, OutputHandle},
+        util::{Consume, Consumer, Produce, Producer},
     };
 
     #[tokio::test]

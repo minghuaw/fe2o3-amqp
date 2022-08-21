@@ -11,7 +11,7 @@ mod error;
 pub use error::Error;
 pub mod scram;
 
-use crate::{frames::sasl};
+use crate::frames::sasl;
 
 pub use crate::scram::error::ScramErrorKind;
 
@@ -87,7 +87,6 @@ impl SaslProfile {
             } => PLAIN,
             SaslProfile::ScramSha1(_) => SCRAM_SHA_1,
             SaslProfile::ScramSha256(_) => SCRAM_SHA_256,
-            
         };
         Symbol::from(value)
     }
@@ -104,10 +103,13 @@ impl SaslProfile {
                 buf.put_u8(0);
                 buf.put_slice(password);
                 Some(Binary::from(buf))
-            },
-            SaslProfile::ScramSha1(scram_sha1) => Some(Binary::from(scram_sha1.client.compute_client_first())),
-            SaslProfile::ScramSha256(scram_sha256) => Some(Binary::from(scram_sha256.client.compute_client_first())),
-
+            }
+            SaslProfile::ScramSha1(scram_sha1) => {
+                Some(Binary::from(scram_sha1.client.compute_client_first()))
+            }
+            SaslProfile::ScramSha256(scram_sha256) => {
+                Some(Binary::from(scram_sha256.client.compute_client_first()))
+            }
         }
     }
 
@@ -138,13 +140,14 @@ impl SaslProfile {
             }
             Frame::Challenge(challenge) => {
                 // TODO: SCRAM-SHA1, SCRAM-SHA256
-                
+
                 match self {
-                    SaslProfile::Anonymous 
-                    | SaslProfile::Plain { .. } => Err(Error::NotImplemented(Some(
-                        "SASL Challenge is not implemented for ANONYMOUS or PLAIN.".to_string(),
-                    ))),
-                    SaslProfile::ScramSha1(SaslScramSha1{ client }) 
+                    SaslProfile::Anonymous | SaslProfile::Plain { .. } => {
+                        Err(Error::NotImplemented(Some(
+                            "SASL Challenge is not implemented for ANONYMOUS or PLAIN.".to_string(),
+                        )))
+                    }
+                    SaslProfile::ScramSha1(SaslScramSha1 { client })
                     | SaslProfile::ScramSha256(SaslScramSha256 { client }) => {
                         let server_first = std::str::from_utf8(&challenge.challenge)
                             .map_err(|e| ScramErrorKind::Utf8Error(e))?;

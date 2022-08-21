@@ -2,7 +2,6 @@ use std::str::Utf8Error;
 
 use base64::DecodeError;
 
-
 /// Error with SCRAM
 #[derive(Debug, thiserror::Error)]
 pub enum ScramErrorKind {

@@ -113,7 +113,8 @@ pub struct Receiver {
 impl Receiver {
     /// Creates a builder for the [`Receiver`]
     pub fn builder(
-    ) -> builder::Builder<role::ReceiverMarker, Target, WithoutName, WithoutSource, WithTarget> {
+    ) -> builder::Builder<role::ReceiverMarker, Target, WithoutName, WithoutSource, WithTarget>
+    {
         builder::Builder::<role::ReceiverMarker, Target, _, _, _>::new()
     }
 
@@ -701,7 +702,6 @@ where
                 self.on_complete_transfer(transfer, payload).await
             }
         }
-
     }
 
     async fn on_complete_transfer<T>(
@@ -773,7 +773,7 @@ where
 
         if transfer.more {
             // Partial transfer of the delivery
-            // There is only ONE incomplet transfer locally, so the partial transfer must belong to the 
+            // There is only ONE incomplet transfer locally, so the partial transfer must belong to the
             // same delivery
             self.on_incomplete_transfer(transfer, payload).await?;
             // Partial delivery doesn't yield a complete message
@@ -868,9 +868,9 @@ where
 /// A detached receiver
 ///
 /// # Example
-/// 
+///
 /// Link re-attachment
-/// 
+///
 /// ```rust
 /// let detached = receiver.detach().await.unwrap();
 /// let resuming_receiver = detached.resume().await.unwrap();
