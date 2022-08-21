@@ -14,7 +14,7 @@ use sha2::Sha256;
 use self::{
     attributes::{
         CHANNEL_BINDING_KEY, GS2_HEADER, ITERATION_COUNT_KEY, NONCE_KEY, PROOF_KEY, RESERVED_MEXT,
-        SALT_KEY, USERNAME_KEY,
+        SALT_KEY, USERNAME_KEY, VERIFIER_KEY,
     },
     error::ScramErrorKind,
 };
@@ -27,9 +27,12 @@ enum ScramClientState {
     Initial,
     ClientFirstSent {
         client_nonce: String,
-        client_first: Bytes,
+        client_first: Vec<u8>,
     },
-    ClientFinalSent,
+    ClientFinalSent {
+        server_signature: Vec<u8>,
+    },
+    Complete,
 }
 
 #[derive(Debug, Clone)]
@@ -72,14 +75,25 @@ impl ScramClient {
             ScramClientState::ClientFirstSent {
                 client_nonce,
                 client_first,
-            } => self
-                .scram
-                .compute_client_final(&client_nonce, &self.password, server_first, &client_first)
-                .map(|client_final| {
-                    self.state = ScramClientState::ClientFinalSent;
-                    client_final
-                }),
+            } => {
+                let (client_final, server_signature) = self
+                    .scram
+                    .compute_client_final(&client_nonce, &self.password, server_first, &client_first)?;
+                self.state = ScramClientState::ClientFinalSent { server_signature };
+                Ok(client_final)
+            },
             _ => Err(ScramErrorKind::IllegalClientState),
+        }
+    }
+
+    pub fn validate_server_final(&mut self, server_final: &[u8]) -> Result<(), ScramErrorKind> {
+        match &self.state {
+            ScramClientState::ClientFinalSent { server_signature } => {
+                self.scram.validate_server_final(server_final, server_signature)?;
+                self.state = ScramClientState::Complete;
+                Ok(())
+            },
+            _ => Err(ScramErrorKind::IllegalClientState)
         }
     }
 }
@@ -93,8 +107,8 @@ pub(crate) enum ScramVersion {
 // This is shamelessly copied from
 // [MongoDB](https://github.com/mongodb/mongo-rust-driver/blob/main/src/client/auth/scram.rs)
 impl ScramVersion {
-    pub(crate) fn client_first(&self, username: &[u8], nonce: &[u8]) -> bytes::Bytes {
-        let mut bytes = BytesMut::new();
+    pub(crate) fn client_first(&self, username: &[u8], nonce: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
         bytes.put_slice(GS2_HEADER.as_bytes());
 
         bytes.put_slice(USERNAME_KEY.as_bytes());
@@ -105,7 +119,7 @@ impl ScramVersion {
         bytes.put_slice(NONCE_KEY.as_bytes());
         bytes.put_slice(nonce);
 
-        bytes.freeze()
+        bytes
     }
 
     fn h_i(&self, password: &[u8], salt: &[u8], iterations: u32) -> Vec<u8> {
@@ -153,7 +167,7 @@ impl ScramVersion {
         password: &str,
         server_first: &str,
         client_first: &[u8],
-    ) -> Result<Vec<u8>, ScramErrorKind> {
+    ) -> Result<(Vec<u8>, Vec<u8>), ScramErrorKind> {
         let parts: Vec<&str> = server_first.split(',').collect();
 
         if parts.len() < 3 {
@@ -208,7 +222,27 @@ impl ScramVersion {
         let client_final =
             client_final(&client_final_message_without_proof, client_proof.as_bytes());
 
-        Ok(client_final)
+        let server_key = self.hmac(&salted_password, b"Server Key")?;
+        let server_signature = self.hmac(&server_key, &auth_message)?;
+
+        Ok((client_final, server_signature))
+    }
+    
+    fn validate_server_final(&self, server_final: &[u8], server_signature: &[u8]) -> Result<(), ScramErrorKind> {
+        let server_final = std::str::from_utf8(server_final)?;
+        let parts: Vec<&str> = server_final.split(',').collect();
+        
+        let signature = parts.get(0)
+            .and_then(|signature| 
+                signature.strip_prefix(VERIFIER_KEY)
+            )
+            .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
+        let signature_bytes = base64::decode(signature)?;
+        
+        match signature_bytes == server_signature {
+            true => Ok(()),
+            false => Err(ScramErrorKind::ServerSignatureMismatch),
+        }
     }
 }
 

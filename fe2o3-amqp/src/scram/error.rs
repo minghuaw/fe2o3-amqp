@@ -56,4 +56,8 @@ pub enum ScramErrorKind {
     /// Illegal SCRAM client state
     #[error("Illegal SCRAM client state")]
     IllegalClientState,
+
+    /// Server signature mismatch
+    #[error("Server signature mismatch")]
+    ServerSignatureMismatch,
 }

@@ -160,9 +160,20 @@ impl SaslProfile {
                     }
                 }
             }
-            Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
+            Frame::Outcome(outcome) => {
+                match self {
+                    SaslProfile::Anonymous 
+                    | SaslProfile::Plain { .. } => {},
+                    SaslProfile::ScramSha1(SaslScramSha1 { client }) 
+                    | SaslProfile::ScramSha256(SaslScramSha256 { client }) => {
+                        let server_final = outcome.additional_data.as_ref().ok_or(ScramErrorKind::ServerSignatureMismatch)?;
+                        client.validate_server_final(server_final)?;
+                    },
+                }
+                Ok(Negotiation::Outcome(outcome))
+            },
             _ => Err(Error::NotImplemented(Some(format!(
-                "{:?} is not expected",
+                "{:?} is not expected on client SASL profile",
                 frame
             )))),
         }
