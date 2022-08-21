@@ -5,21 +5,27 @@ use fe2o3_amqp_types::{
     primitives::{Binary, Symbol},
     sasl::{SaslInit, SaslOutcome, SaslResponse},
 };
-use serde_bytes::ByteBuf;
 use url::Url;
 
 mod error;
 pub use error::Error;
+pub mod scram;
 
-use crate::frames::sasl;
+use crate::{frames::sasl};
+
+pub use crate::scram::error::ScramErrorKind;
+
+use self::scram::{SaslScramSha1, SaslScramSha256};
 
 // pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
 pub(crate) const ANONYMOUS: &str = "ANONYMOUS";
 pub(crate) const PLAIN: &str = "PLAIN";
+pub(crate) const SCRAM_SHA_1: &str = "SCRAM-SHA-1";
+pub(crate) const SCRAM_SHA_256: &str = "SCRAM-SHA-256";
 
 pub(crate) enum Negotiation {
     Init(SaslInit),
-    _Response(SaslResponse),
+    Response(SaslResponse),
     Outcome(SaslOutcome),
 }
 
@@ -36,6 +42,12 @@ pub enum SaslProfile {
         /// Password
         password: String,
     },
+
+    /// SASL-SCRAM-SHA1
+    ScramSha1(SaslScramSha1),
+
+    /// SASL-SCRAM-SHA256
+    ScramSha256(SaslScramSha256),
 }
 
 impl<T1, T2> From<(T1, T2)> for SaslProfile
@@ -73,11 +85,14 @@ impl SaslProfile {
                 username: _,
                 password: _,
             } => PLAIN,
+            SaslProfile::ScramSha1(_) => SCRAM_SHA_1,
+            SaslProfile::ScramSha256(_) => SCRAM_SHA_256,
+            
         };
         Symbol::from(value)
     }
 
-    pub(crate) fn initial_response(&self) -> Option<Binary> {
+    pub(crate) fn initial_response(&mut self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
             SaslProfile::Plain { username, password } => {
@@ -88,8 +103,11 @@ impl SaslProfile {
                 buf.put_slice(username);
                 buf.put_u8(0);
                 buf.put_slice(password);
-                Some(ByteBuf::from(buf))
-            }
+                Some(Binary::from(buf))
+            },
+            SaslProfile::ScramSha1(scram_sha1) => Some(Binary::from(scram_sha1.client.compute_client_first())),
+            SaslProfile::ScramSha256(scram_sha256) => Some(Binary::from(scram_sha256.client.compute_client_first())),
+
         }
     }
 
@@ -118,11 +136,26 @@ impl SaslProfile {
                     ))))
                 }
             }
-            Frame::Challenge(_challenge) => {
+            Frame::Challenge(challenge) => {
                 // TODO: SCRAM-SHA1, SCRAM-SHA256
-                Err(Error::NotImplemented(Some(
-                    "SASL Challenge is not implemented.".to_string(),
-                )))
+                
+                match self {
+                    SaslProfile::Anonymous 
+                    | SaslProfile::Plain { .. } => Err(Error::NotImplemented(Some(
+                        "SASL Challenge is not implemented for ANONYMOUS or PLAIN.".to_string(),
+                    ))),
+                    SaslProfile::ScramSha1(SaslScramSha1{ client }) 
+                    | SaslProfile::ScramSha256(SaslScramSha256 { client }) => {
+                        let server_first = std::str::from_utf8(&challenge.challenge)
+                            .map_err(|e| ScramErrorKind::Utf8Error(e))?;
+                        let client_final = client.compute_client_final(server_first)?;
+                        let response = SaslResponse {
+                            response: Binary::from(client_final),
+                        };
+
+                        Ok(Negotiation::Response(response))
+                    }
+                }
             }
             Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
             _ => Err(Error::NotImplemented(Some(format!(
@@ -164,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_plain_initial_response() {
-        let profile = SaslProfile::Plain {
+        let mut profile = SaslProfile::Plain {
             username: String::from("user"),
             password: String::from("example"),
         };

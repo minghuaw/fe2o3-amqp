@@ -6,7 +6,7 @@ use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};
 use tokio::{sync::mpsc, task::JoinError};
 
-use crate::transport::{self, error::NegotiationError};
+use crate::{transport::{self, error::NegotiationError}, sasl_profile::ScramErrorKind};
 
 /// Error associated with openning a connection
 #[derive(Debug, thiserror::Error)]
@@ -43,6 +43,10 @@ pub enum OpenError {
         /// Additional information for the failed negotiation
         additional_data: Option<Binary>,
     },
+
+    /// Error with SCRAM
+    #[error(transparent)]
+    ScramError(#[from] ScramErrorKind),
 
     /// Illegal local connection state
     #[error("Illegal local state")]
@@ -85,6 +89,7 @@ impl From<NegotiationError> for OpenError {
             NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
             NegotiationError::IllegalState => Self::IllegalState,
+            NegotiationError::ScramError(e) => Self::ScramError(e),
         }
     }
 }

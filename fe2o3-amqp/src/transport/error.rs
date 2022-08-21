@@ -73,6 +73,10 @@ pub enum NegotiationError {
         code: SaslCode,
         additional_data: Option<Binary>,
     },
+
+    /// Error with SCRAM
+    #[error(transparent)]
+    ScramError(#[from] sasl_profile::ScramErrorKind),
 }
 
 // TODO: What about encode error?
@@ -90,6 +94,7 @@ impl From<sasl_profile::Error> for NegotiationError {
     fn from(err: sasl_profile::Error) -> Self {
         match err {
             sasl_profile::Error::NotImplemented(msg) => Self::NotImplemented(msg),
+            sasl_profile::Error::ScramError(scram_error) => Self::ScramError(scram_error),
         }
     }
 }
