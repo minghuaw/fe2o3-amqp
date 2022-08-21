@@ -1,4 +1,4 @@
-//! SASL-SCRAM-SHA-11, SASL-SCRAM-SHA-256, and SASL-SCRAM-SHA-512
+//! SASL-SCRAM-SHA-1, SASL-SCRAM-SHA-256, and SASL-SCRAM-SHA-512
 
 use crate::scram::{ScramClient, ScramVersion};
 
@@ -9,6 +9,17 @@ use super::SaslProfile;
 /// The SHA-1 hash function should be considered cryptographically
 /// broken and unsuitable for further use in any security critical capacity,
 /// as it is practically vulnerable to chosen-prefix collisions.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// let mut connection = Connection::builder()
+///     .container_id("connection-1")
+///     .sasl_profile(SaslScramSha512::new("username", "password"))
+///     .open("amqp://localhost:5672")
+///     .await
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone)]
 pub struct SaslScramSha1 {
     pub(crate) client: ScramClient,
@@ -29,6 +40,17 @@ impl From<SaslScramSha1> for SaslProfile {
 }
 
 /// SASL-SCRAM-SHA-256
+/// 
+/// # Example
+/// 
+/// ```rust
+/// let mut connection = Connection::builder()
+///     .container_id("connection-1")
+///     .sasl_profile(SaslScramSha512::new("username", "password"))
+///     .open("amqp://localhost:5672")
+///     .await
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone)]
 pub struct SaslScramSha256 {
     pub(crate) client: ScramClient,
@@ -49,6 +71,17 @@ impl From<SaslScramSha256> for SaslProfile {
 }
 
 /// SASL-SCRAM-SHA-512
+/// 
+/// # Example
+/// 
+/// ```rust
+/// let mut connection = Connection::builder()
+///     .container_id("connection-1")
+///     .sasl_profile(SaslScramSha512::new("username", "password"))
+///     .open("amqp://localhost:5672")
+///     .await
+///     .unwrap();
+/// ```
 #[derive(Debug, Clone)]
 pub struct SaslScramSha512 {
     pub(crate) client: ScramClient,
