@@ -14,9 +14,10 @@
 //! | Feature | Description |
 //! |---------|-------------|
 //! |`"rustls"`| enables TLS integration with `tokio-rustls` and `rustls` |
-//! |`"native-tls"`|enables TLS integration with `tokio-native-tls` and `native-tls`|
-//! |`"acceptor"`|enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
+//! |`"native-tls"`| enables TLS integration with `tokio-native-tls` and `native-tls`|
+//! |`"acceptor"`| enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
 //! |`"transaction"`| enables `Controller`, `Transaction`, `OwnedTransaction` and `control_link_acceptor` |
+//! |`"scram"`| enables `SaslScramSha1`, `SaslScramSha256`, and `SaslScramSha512` |
 //!
 //! # Quick start
 //!
