@@ -4,7 +4,11 @@ use serde_amqp::{
     primitives::{Binary, Boolean, Symbol, UByte, UInt, ULong, Uuid},
     value::Value,
 };
-use std::{collections::BTreeMap, fmt::Display, ops::{Deref, DerefMut}};
+use std::{
+    collections::BTreeMap,
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 

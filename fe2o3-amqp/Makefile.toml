@@ -22,6 +22,9 @@ dependencies = [
   "check_feature_group2",
   "check_feature_group3",
   "check_feature_group4",
+  "check_feature_group5",
+  "check_feature_group6",
+  "check_feature_group7",
   "check_all_features",
 ]
 
@@ -109,6 +112,36 @@ args = [
   "--no-default-features",
   "--features",
   "acceptor, native-tls, transaction",
+]
+command = "cargo"
+toolchain = "stable"
+
+[tasks.check_feature_group5]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "scram",
+]
+command = "cargo"
+toolchain = "stable"
+
+[tasks.check_feature_group6]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "native-tls, scram",
+]
+command = "cargo"
+toolchain = "stable"
+
+[tasks.check_feature_group7]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "rustls, scram",
 ]
 command = "cargo"
 toolchain = "stable"

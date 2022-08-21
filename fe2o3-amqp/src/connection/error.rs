@@ -8,6 +8,9 @@ use tokio::{sync::mpsc, task::JoinError};
 
 use crate::transport::{self, error::NegotiationError};
 
+#[cfg(feature = "scram")]
+use crate::sasl_profile::ScramErrorKind;
+
 /// Error associated with openning a connection
 #[derive(Debug, thiserror::Error)]
 pub enum OpenError {
@@ -43,6 +46,12 @@ pub enum OpenError {
         /// Additional information for the failed negotiation
         additional_data: Option<Binary>,
     },
+
+    /// Error with SCRAM
+    #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+    #[cfg(feature = "scram")]
+    #[error(transparent)]
+    ScramError(#[from] ScramErrorKind),
 
     /// Illegal local connection state
     #[error("Illegal local state")]
@@ -85,6 +94,9 @@ impl From<NegotiationError> for OpenError {
             NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
             NegotiationError::IllegalState => Self::IllegalState,
+
+            #[cfg(feature = "scram")]
+            NegotiationError::ScramError(e) => Self::ScramError(e),
         }
     }
 }

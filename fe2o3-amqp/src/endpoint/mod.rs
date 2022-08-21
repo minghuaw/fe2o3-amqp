@@ -103,7 +103,7 @@ impl From<InputHandle> for Handle {
 
 /// A subset of the fields in the Flow performative
 #[derive(Debug, Default)]
-pub struct LinkFlow {
+pub(crate) struct LinkFlow {
     /// Link handle
     pub handle: Handle,
 

@@ -5,21 +5,40 @@ use fe2o3_amqp_types::{
     primitives::{Binary, Symbol},
     sasl::{SaslInit, SaslOutcome, SaslResponse},
 };
-use serde_bytes::ByteBuf;
 use url::Url;
+
+use crate::frames::sasl;
+
+#[cfg(feature = "scram")]
+pub use crate::scram::error::ScramErrorKind;
 
 mod error;
 pub use error::Error;
 
-use crate::frames::sasl;
+#[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+#[cfg(feature = "scram")]
+pub mod scram;
+
+#[cfg(feature = "scram")]
+pub use self::scram::{SaslScramSha1, SaslScramSha256, SaslScramSha512};
 
 // pub const EXTERN: Symbol = Symbol::from("EXTERNAL");
 pub(crate) const ANONYMOUS: &str = "ANONYMOUS";
 pub(crate) const PLAIN: &str = "PLAIN";
 
+#[cfg(feature = "scram")]
+pub(crate) const SCRAM_SHA_1: &str = "SCRAM-SHA-1";
+
+#[cfg(feature = "scram")]
+pub(crate) const SCRAM_SHA_256: &str = "SCRAM-SHA-256";
+
+#[cfg(feature = "scram")]
+pub(crate) const SCRAM_SHA_512: &str = "SCRAM-SHA-512";
+
+#[cfg_attr(not(feature = "scram"), allow(dead_code))]
 pub(crate) enum Negotiation {
     Init(SaslInit),
-    _Response(SaslResponse),
+    Response(SaslResponse),
     Outcome(SaslOutcome),
 }
 
@@ -36,6 +55,21 @@ pub enum SaslProfile {
         /// Password
         password: String,
     },
+
+    /// SASL-SCRAM-SHA-1
+    #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+    #[cfg(feature = "scram")]
+    ScramSha1(SaslScramSha1),
+
+    /// SASL-SCRAM-SHA-256
+    #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+    #[cfg(feature = "scram")]
+    ScramSha256(SaslScramSha256),
+
+    /// SASL-SCRAM-SHA-512
+    #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
+    #[cfg(feature = "scram")]
+    ScramSha512(SaslScramSha512),
 }
 
 impl<T1, T2> From<(T1, T2)> for SaslProfile
@@ -73,11 +107,17 @@ impl SaslProfile {
                 username: _,
                 password: _,
             } => PLAIN,
+            #[cfg(feature = "scram")]
+            SaslProfile::ScramSha1(_) => SCRAM_SHA_1,
+            #[cfg(feature = "scram")]
+            SaslProfile::ScramSha256(_) => SCRAM_SHA_256,
+            #[cfg(feature = "scram")]
+            SaslProfile::ScramSha512(_) => SCRAM_SHA_512,
         };
         Symbol::from(value)
     }
 
-    pub(crate) fn initial_response(&self) -> Option<Binary> {
+    pub(crate) fn initial_response(&mut self) -> Option<Binary> {
         match self {
             SaslProfile::Anonymous => None,
             SaslProfile::Plain { username, password } => {
@@ -88,12 +128,25 @@ impl SaslProfile {
                 buf.put_slice(username);
                 buf.put_u8(0);
                 buf.put_slice(password);
-                Some(ByteBuf::from(buf))
+                Some(Binary::from(buf))
             }
+            #[cfg(feature = "scram")]
+            SaslProfile::ScramSha1(scram_sha1) => Some(Binary::from(
+                scram_sha1.client.compute_client_first_message(),
+            )),
+            #[cfg(feature = "scram")]
+            SaslProfile::ScramSha256(scram_sha256) => Some(Binary::from(
+                scram_sha256.client.compute_client_first_message(),
+            )),
+            #[cfg(feature = "scram")]
+            SaslProfile::ScramSha512(scram_sha512) => Some(Binary::from(
+                scram_sha512.client.compute_client_first_message(),
+            )),
         }
     }
 
     /// How a SASL profile should respond to a SASL frame
+    #[cfg_attr(not(feature = "scram"), allow(unused_variables))]
     pub(crate) async fn on_frame(
         &mut self,
         frame: sasl::Frame,
@@ -118,15 +171,44 @@ impl SaslProfile {
                     ))))
                 }
             }
-            Frame::Challenge(_challenge) => {
-                // TODO: SCRAM-SHA1, SCRAM-SHA256
-                Err(Error::NotImplemented(Some(
-                    "SASL Challenge is not implemented.".to_string(),
-                )))
+            Frame::Challenge(challenge) => match self {
+                SaslProfile::Anonymous | SaslProfile::Plain { .. } => Err(Error::NotImplemented(
+                    Some("SASL Challenge is not implemented for ANONYMOUS or PLAIN.".to_string()),
+                )),
+                #[cfg(feature = "scram")]
+                SaslProfile::ScramSha1(SaslScramSha1 { client })
+                | SaslProfile::ScramSha256(SaslScramSha256 { client })
+                | SaslProfile::ScramSha512(SaslScramSha512 { client }) => {
+                    let server_first = std::str::from_utf8(&challenge.challenge)
+                        .map_err(|e| ScramErrorKind::Utf8Error(e))?;
+                    let client_final = client.compute_client_final_message(server_first)?;
+                    let response = SaslResponse {
+                        response: Binary::from(client_final),
+                    };
+
+                    Ok(Negotiation::Response(response))
+                }
+            },
+            Frame::Outcome(outcome) => {
+                match self {
+                    SaslProfile::Anonymous | SaslProfile::Plain { .. } => {}
+                    #[cfg(feature = "scram")]
+                    SaslProfile::ScramSha1(SaslScramSha1 { client })
+                    | SaslProfile::ScramSha256(SaslScramSha256 { client })
+                    | SaslProfile::ScramSha512(SaslScramSha512 { client }) => {
+                        if matches!(outcome.code, fe2o3_amqp_types::sasl::SaslCode::Ok) {
+                            let server_final = outcome
+                                .additional_data
+                                .as_ref()
+                                .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
+                            client.validate_server_final(server_final)?;
+                        }
+                    }
+                }
+                Ok(Negotiation::Outcome(outcome))
             }
-            Frame::Outcome(outcome) => Ok(Negotiation::Outcome(outcome)),
             _ => Err(Error::NotImplemented(Some(format!(
-                "{:?} is not expected",
+                "{:?} is not expected on client SASL profile",
                 frame
             )))),
         }
@@ -164,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_plain_initial_response() {
-        let profile = SaslProfile::Plain {
+        let mut profile = SaslProfile::Plain {
             username: String::from("user"),
             password: String::from("example"),
         };

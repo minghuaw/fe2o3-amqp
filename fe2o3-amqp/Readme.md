@@ -13,9 +13,10 @@ default = []
 | Feature | Description |
 |---------|-------------|
 |`"rustls"`| enables TLS integration with `tokio-rustls` and `rustls` |
-|`"native-tls"`|enables TLS integration with `tokio-native-tls` and `native-tls`|
-|`"acceptor"`|enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
+|`"native-tls"`| enables TLS integration with `tokio-native-tls` and `native-tls`|
+|`"acceptor"`| enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
 |`"transaction"`| enables `Controller`, `Transaction`, `OwnedTransaction` and `control_link_acceptor` |
+|`"scram"`| enables `SaslScramSha1`, `SaslScramSha256`, and `SaslScramSha512` |
 
 ## Quick start
 
@@ -183,8 +184,9 @@ The items below are listed in the order of priority.
 - [x] Dynamic link
 - [x] Dispose multiple deliveries
 - [x] WebSocket binding [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws)
-- [ ] Pipelined open
-- [ ] SASL SCRAM-SHA1
+- [ ] SASL-SCRAM-SHA-1, SASL-SCRAM-SHA-256, SASL-SCRAM-SHA-512
+  - [x] client
   - [ ] acceptor
+- [ ] Pipelined open
 
 License: MIT/Apache-2.0

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.1
+
+1. Implemented `SaslScramSha1`, `SaslScramSha256`, `SaslScramSha512` for the client side
+
 ## 0.4.0
 
 1. ***Breaking*** changes:

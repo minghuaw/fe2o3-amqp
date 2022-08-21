@@ -542,7 +542,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
                     tracing::trace!(sending = ?frame);
                     transport.send(frame).await?
                 }
-                Negotiation::_Response(response) => {
+                Negotiation::Response(response) => {
                     let frame = sasl::Frame::Response(response);
                     tracing::trace!(sending = ?frame);
                     transport.send(frame).await?

@@ -152,7 +152,8 @@ impl<T> Builder<role::SenderMarker, T, WithoutName, WithSource, WithoutTarget> {
 
 impl Builder<role::ReceiverMarker, Target, WithoutName, WithoutSource, WithTarget> {
     pub(crate) fn new() -> Self {
-        Builder::<role::ReceiverMarker, Target, _, _, _>::default().target(Target::builder().build())
+        Builder::<role::ReceiverMarker, Target, _, _, _>::default()
+            .target(Target::builder().build())
     }
 }
 

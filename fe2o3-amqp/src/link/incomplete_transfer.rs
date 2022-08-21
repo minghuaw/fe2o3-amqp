@@ -1,8 +1,11 @@
 use fe2o3_amqp_types::performatives::Transfer;
 
-use crate::{Payload, util::AsByteIterator};
+use crate::{util::AsByteIterator, Payload};
 
-use super::{ReceiverTransferError, receiver_link::{count_number_of_sections_and_offset, is_section_header}};
+use super::{
+    receiver_link::{count_number_of_sections_and_offset, is_section_header},
+    ReceiverTransferError,
+};
 
 macro_rules! or_assign {
     ($self:ident, $other:ident, $field:ident) => {
@@ -112,7 +115,11 @@ impl IncompleteTransfer {
         self.buffer.push(other);
     }
 
-    fn position_of_section_number_and_offset(&self, section_number: u32, section_offset: u64) -> Option<usize> {
+    fn position_of_section_number_and_offset(
+        &self,
+        section_number: u32,
+        section_offset: u64,
+    ) -> Option<usize> {
         let b0 = self.buffer.as_byte_iterator();
         let b1 = self.buffer.as_byte_iterator().skip(1);
         let b2 = self.buffer.as_byte_iterator().skip(2);
@@ -130,14 +137,18 @@ impl IncompleteTransfer {
             }
 
             if cur_number == section_number && cur_offset == section_offset {
-                return Some(i)
+                return Some(i);
             }
         }
 
         None
     }
 
-    pub fn keep_buffer_till_section_number_and_offset(&mut self, section_number: u32, section_offset: u64) {
+    pub fn keep_buffer_till_section_number_and_offset(
+        &mut self,
+        section_number: u32,
+        section_offset: u64,
+    ) {
         match self.position_of_section_number_and_offset(section_number, section_offset) {
             Some(mut index) => {
                 for chunk in self.buffer.iter_mut() {
@@ -148,10 +159,10 @@ impl IncompleteTransfer {
                         let _ = chunk.split_off(index);
                     }
                 }
-            },
+            }
             None => {
                 // TODO: should this be treated as an error?
-            },
+            }
         }
     }
 }

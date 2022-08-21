@@ -722,9 +722,9 @@ impl endpoint::Connection for Connection {
 }
 
 impl Connection {
-    /// Allocate a new session relay for a locally initiated session upon receiving the response 
+    /// Allocate a new session relay for a locally initiated session upon receiving the response
     /// from the remote peer.
-    /// 
+    ///
     /// Returns `Ok(Some(session_relay))` if a valid response is found and `Ok(None)` if the session
     /// is initated by the remote peer
     pub(crate) fn on_incoming_begin_inner(
@@ -735,7 +735,7 @@ impl Connection {
         match &self.local_state {
             ConnectionState::Opened => {}
             // TODO: what about pipelined
-            _ => return Err(ConnectionInnerError::IllegalState), 
+            _ => return Err(ConnectionInnerError::IllegalState),
         }
 
         match begin.remote_channel {
