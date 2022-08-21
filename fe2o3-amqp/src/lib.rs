@@ -208,6 +208,7 @@ pub mod acceptor;
 #[cfg(feature = "transaction")]
 pub mod transaction;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
 #[cfg(feature = "scram")]
 pub mod scram;
 

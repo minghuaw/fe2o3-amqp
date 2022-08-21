@@ -9,7 +9,7 @@ use serde_bytes::ByteBuf;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, TIMESTAMP, UUID, SYMBOL_REF,
+        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID,
     },
     described::Described,
     descriptor::Descriptor,
@@ -169,8 +169,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         match self.new_type {
             NewType::None => Ok(Value::String(String::from(v))),
-            NewType::Symbol 
-            | NewType::SymbolRef => {
+            NewType::Symbol | NewType::SymbolRef => {
                 self.new_type = NewType::None;
                 Ok(Value::Symbol(Symbol::from(v)))
             }

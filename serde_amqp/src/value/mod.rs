@@ -431,7 +431,7 @@ impl TryFrom<Value> for f32 {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::Float(val) => Ok(val.0),
-            _ => Err(value)
+            _ => Err(value),
         }
     }
 }
@@ -442,7 +442,7 @@ impl TryFrom<Value> for f64 {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::Double(val) => Ok(val.0),
-            _ => Err(value)
+            _ => Err(value),
         }
     }
 }

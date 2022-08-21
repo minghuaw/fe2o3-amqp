@@ -1,4 +1,7 @@
-use std::{ops::{Deref, DerefMut}, borrow::Borrow};
+use std::{
+    borrow::Borrow,
+    ops::{Deref, DerefMut},
+};
 
 use serde::{
     de::{self, Visitor},
@@ -76,22 +79,25 @@ impl<'de> Visitor<'de> for SymbolRefVisitor {
     }
 
     fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
-        where
-            E: de::Error, {
+    where
+        E: de::Error,
+    {
         std::str::from_utf8(v)
             .map(SymbolRef)
             .map_err(|e| de::Error::custom(e))
     }
 
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
-        where
-            E: de::Error, {
+    where
+        E: de::Error,
+    {
         Ok(SymbolRef(v))
     }
 
     fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where
-            D: serde::Deserializer<'de>, {
+    where
+        D: serde::Deserializer<'de>,
+    {
         let val: &'de str = de::Deserialize::deserialize(deserializer)?;
         Ok(SymbolRef(val))
     }
@@ -100,7 +106,8 @@ impl<'de> Visitor<'de> for SymbolRefVisitor {
 impl<'de> de::Deserialize<'de> for SymbolRef<'de> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_newtype_struct(SYMBOL_REF, SymbolRefVisitor {})
     }
 }
@@ -228,9 +235,9 @@ impl<'de> de::Deserialize<'de> for Symbol {
 
 #[cfg(test)]
 mod tests {
-    use crate::{to_vec, from_slice};
+    use crate::{from_slice, to_vec};
 
-    use super::{SymbolRef, Symbol};
+    use super::{Symbol, SymbolRef};
 
     #[test]
     fn test_serialize_symbol_ref() {
@@ -256,8 +263,8 @@ mod tests {
 
     #[test]
     fn test_borrow_str() {
-        use std::collections::BTreeMap;
         use crate::value::Value;
+        use std::collections::BTreeMap;
 
         let mut map = BTreeMap::new();
         map.insert(Symbol::from("hello"), Value::from("world"));

@@ -94,7 +94,7 @@ impl From<NegotiationError> for OpenError {
             NegotiationError::DecodeError(val) => Self::DecodeError(val),
             NegotiationError::NotImplemented(description) => Self::NotImplemented(description),
             NegotiationError::IllegalState => Self::IllegalState,
-            
+
             #[cfg(feature = "scram")]
             NegotiationError::ScramError(e) => Self::ScramError(e),
         }

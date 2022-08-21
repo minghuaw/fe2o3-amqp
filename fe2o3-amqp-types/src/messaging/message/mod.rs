@@ -76,7 +76,7 @@ pub struct Message<T> {
     /// Immutable properties of the message.
     pub properties: Option<Properties>,
 
-    /// The application-properties section is a part of the bare message used for structured application data. 
+    /// The application-properties section is a part of the bare message used for structured application data.
     /// Intermediaries can use the data within this structure for the purposes of filtering or routin
     pub application_properties: Option<ApplicationProperties>,
 

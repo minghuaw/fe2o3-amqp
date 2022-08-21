@@ -96,7 +96,7 @@ impl From<sasl_profile::Error> for NegotiationError {
     fn from(err: sasl_profile::Error) -> Self {
         match err {
             sasl_profile::Error::NotImplemented(msg) => Self::NotImplemented(msg),
-            
+
             #[cfg(feature = "scram")]
             sasl_profile::Error::ScramError(scram_error) => Self::ScramError(scram_error),
         }
