@@ -200,6 +200,7 @@ pub mod link;
 pub mod sasl_profile;
 pub mod session;
 pub mod transport;
+pub mod auth;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]

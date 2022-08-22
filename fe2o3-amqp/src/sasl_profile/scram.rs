@@ -1,6 +1,6 @@
 //! SASL-SCRAM-SHA-1, SASL-SCRAM-SHA-256, and SASL-SCRAM-SHA-512
 
-use crate::scram::{ScramClient, ScramVersion};
+use crate::scram::{client::ScramClient, ScramVersion};
 
 use super::SaslProfile;
 

@@ -20,89 +20,9 @@ use self::{
 };
 
 mod attributes;
+pub(crate) mod client;
 pub(crate) mod error;
-
-#[derive(Debug, Clone)]
-enum ScramClientState {
-    Initial,
-    ClientFirstSent {
-        client_nonce: String,
-        client_first_message_bare: Bytes,
-    },
-    ClientFinalSent {
-        server_signature: Vec<u8>,
-    },
-    Complete,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ScramClient {
-    username: String,
-    password: String,
-    scram: ScramVersion,
-    state: ScramClientState,
-}
-
-impl ScramClient {
-    pub fn new(
-        username: impl Into<String>,
-        password: impl Into<String>,
-        scram_version: ScramVersion,
-    ) -> Self {
-        Self {
-            username: username.into(),
-            password: password.into(),
-            scram: scram_version,
-            state: ScramClientState::Initial,
-        }
-    }
-
-    pub fn compute_client_first_message(&mut self) -> Bytes {
-        let nonce = base64::encode(generate_nonce());
-        let (client_first_message, client_first_message_bare) = self
-            .scram
-            .client_first_message(self.username.as_bytes(), nonce.as_bytes());
-        self.state = ScramClientState::ClientFirstSent {
-            client_nonce: nonce,
-            client_first_message_bare,
-        };
-        client_first_message
-    }
-
-    pub fn compute_client_final_message(
-        &mut self,
-        server_first: &str,
-    ) -> Result<Vec<u8>, ScramErrorKind> {
-        match &self.state {
-            ScramClientState::ClientFirstSent {
-                client_nonce,
-                client_first_message_bare,
-            } => {
-                let (client_final, server_signature) = self.scram.compute_client_final_message(
-                    &client_nonce,
-                    &self.password,
-                    server_first,
-                    &client_first_message_bare,
-                )?;
-                self.state = ScramClientState::ClientFinalSent { server_signature };
-                Ok(client_final)
-            }
-            _ => Err(ScramErrorKind::IllegalClientState),
-        }
-    }
-
-    pub fn validate_server_final(&mut self, server_final: &[u8]) -> Result<(), ScramErrorKind> {
-        match &self.state {
-            ScramClientState::ClientFinalSent { server_signature } => {
-                self.scram
-                    .validate_server_final(server_final, server_signature)?;
-                self.state = ScramClientState::Complete;
-                Ok(())
-            }
-            _ => Err(ScramErrorKind::IllegalClientState),
-        }
-    }
-}
+pub(crate) mod server;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ScramVersion {
@@ -273,14 +193,14 @@ impl ScramVersion {
         base64_salt: &str,
         base64_server_nonce: &str,
         iterations: u32,
-    ) -> Result<(Vec<u8>, &'a str), ServerScramErrorKind> {
+    ) -> Result<ServerFirstMessage<'a>, ServerScramErrorKind> {
         let client_first = std::str::from_utf8(client_first)?;
 
-        let client_first_bare = client_first
+        let client_first_message_bare = client_first
             .strip_prefix(GS2_HEADER)
             .ok_or(ServerScramErrorKind::CannotParseGs2Header)?;
 
-        let parts: Vec<&str> = client_first_bare.split(',').collect();
+        let parts: Vec<&str> = client_first_message_bare.split(',').collect();
 
         let username = parts
             .get(0)
@@ -291,13 +211,13 @@ impl ScramVersion {
             .and_then(|s| s.strip_prefix(NONCE_KEY))
             .ok_or(ServerScramErrorKind::CannotParseClientNonce)?;
 
-        let server_nonce = format!("{}{}", client_nonce, base64_server_nonce);
+        let client_server_nonce = format!("{}{}", client_nonce, base64_server_nonce);
 
-        let mut buf = Vec::new();
+        let mut buf = BytesMut::new();
 
         // nonce
         buf.put_slice(NONCE_KEY.as_bytes());
-        buf.put_slice(server_nonce.as_bytes());
+        buf.put_slice(client_server_nonce.as_bytes());
         buf.put_u8(b',');
 
         // salt
@@ -309,7 +229,12 @@ impl ScramVersion {
         buf.put_slice(ITERATION_COUNT_KEY.as_bytes());
         buf.put_slice(iterations.to_string().as_bytes());
 
-        Ok((buf, username))
+        Ok(ServerFirstMessage {
+            username,
+            client_first_message_bare: Bytes::from(client_first_message_bare.to_string().into_bytes()),
+            client_server_nonce: Bytes::from(client_server_nonce.into_bytes()),
+            message: buf.freeze(),
+        })
     }
 
     fn compute_server_signature<E>(
@@ -328,7 +253,7 @@ impl ScramVersion {
     fn compute_server_final_message(
         &self,
         client_final: &[u8],
-        client_server_nonce: &str,
+        client_server_nonce: &[u8],
         client_first_message_bare: &[u8],
         server_first_message: &[u8],
         salted_password: &[u8],
@@ -349,7 +274,7 @@ impl ScramVersion {
             .get(1)
             .and_then(|s| s.strip_prefix(NONCE_KEY))
             .ok_or(ServerScramErrorKind::CannotParseClientFinalMessage)?;
-        if nonce != client_server_nonce {
+        if nonce.as_bytes() != client_server_nonce {
             return Err(ServerScramErrorKind::IncorrectClientFinalNonce)?;
         }
 
@@ -358,8 +283,10 @@ impl ScramVersion {
             .and_then(|s| s.strip_prefix(PROOF_KEY))
             .ok_or(ServerScramErrorKind::ProofNotFoundInClientFinal)?;
 
-        let without_proof_message_len = client_final.len() - (proof_from_client.len() + PROOF_KEY.len() + 1);
-        let client_final_message_without_proof = &client_final[0..without_proof_message_len].as_bytes();
+        let without_proof_message_len =
+            client_final.len() - (proof_from_client.len() + PROOF_KEY.len() + 1);
+        let client_final_message_without_proof =
+            &client_final[0..without_proof_message_len].as_bytes();
 
         let auth_message = auth_message(
             client_first_message_bare,
@@ -400,6 +327,13 @@ impl ScramVersion {
         let client_signature = self.hmac(&stored_key, auth_message)?;
         xor(&client_key, &client_signature).map_err(Into::into)
     }
+}
+
+pub(crate) struct ServerFirstMessage<'a> {
+    pub username: &'a str,
+    pub client_first_message_bare: Bytes,
+    pub client_server_nonce: Bytes,
+    pub message: Bytes,
 }
 
 fn client_final(client_final_message_without_proof: &[u8], client_proof: &[u8]) -> Vec<u8> {
@@ -498,7 +432,7 @@ fn generate_nonce() -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::attributes::{NONCE_KEY, SALT_KEY, GS2_HEADER};
+    use super::attributes::{GS2_HEADER, NONCE_KEY, SALT_KEY};
 
     mod scram_sha1 {
         use crate::scram::ScramVersion;
@@ -651,10 +585,13 @@ mod tests {
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
-        let client_first_message_bare = get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-        let salted_password = VERSION.compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS).unwrap();
+        let client_first_message_bare =
+            get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
+        let salted_password = VERSION
+            .compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS)
+            .unwrap();
 
-        let (server_first, username) = VERSION
+        let server_first = VERSION
             .compute_server_first_message(
                 EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
                 base64_salt,
@@ -663,16 +600,18 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(username, TEST_USERNAME);
-        assert_eq!(server_first, SERVER_FIRST_MESSAGE.as_bytes());
+        assert_eq!(server_first.username, TEST_USERNAME);
+        assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
 
-        let server_final = VERSION.compute_server_final_message(
-            EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-            &client_server_nonce, 
-            client_first_message_bare.as_bytes(), 
-            SERVER_FIRST_MESSAGE.as_bytes(), 
-            &salted_password[..]
-        ).unwrap();
+        let server_final = VERSION
+            .compute_server_final_message(
+                EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
+                client_server_nonce.as_bytes(),
+                client_first_message_bare.as_bytes(),
+                SERVER_FIRST_MESSAGE.as_bytes(),
+                &salted_password[..],
+            )
+            .unwrap();
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
     }
 
@@ -685,10 +624,13 @@ mod tests {
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
-        let client_first_message_bare = get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-        let salted_password = VERSION.compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS).unwrap();
+        let client_first_message_bare =
+            get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
+        let salted_password = VERSION
+            .compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS)
+            .unwrap();
 
-        let (server_first, username) = VERSION
+        let server_first = VERSION
             .compute_server_first_message(
                 EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
                 base64_salt,
@@ -697,16 +639,18 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(username, TEST_USERNAME);
-        assert_eq!(server_first, SERVER_FIRST_MESSAGE.as_bytes());
+        assert_eq!(server_first.username, TEST_USERNAME);
+        assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
 
-        let server_final = VERSION.compute_server_final_message(
-            EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-            &client_server_nonce, 
-            client_first_message_bare.as_bytes(), 
-            SERVER_FIRST_MESSAGE.as_bytes(), 
-            &salted_password[..]
-        ).unwrap();
+        let server_final = VERSION
+            .compute_server_final_message(
+                EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
+                &client_server_nonce.as_bytes(),
+                client_first_message_bare.as_bytes(),
+                SERVER_FIRST_MESSAGE.as_bytes(),
+                &salted_password[..],
+            )
+            .unwrap();
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
     }
 
@@ -719,10 +663,13 @@ mod tests {
         let base64_server_nonce =
             get_base64_server_nonce_from_server_first_message(SERVER_FIRST_MESSAGE, CLIENT_NONCE);
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
-        let client_first_message_bare = get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-        let salted_password = VERSION.compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS).unwrap();
+        let client_first_message_bare =
+            get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
+        let salted_password = VERSION
+            .compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS)
+            .unwrap();
 
-        let (server_first, username) = VERSION
+        let server_first = VERSION
             .compute_server_first_message(
                 EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
                 base64_salt,
@@ -731,16 +678,18 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(username, TEST_USERNAME);
-        assert_eq!(server_first, SERVER_FIRST_MESSAGE.as_bytes());
+        assert_eq!(server_first.username, TEST_USERNAME);
+        assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
 
-        let server_final = VERSION.compute_server_final_message(
-            EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-            &client_server_nonce, 
-            client_first_message_bare.as_bytes(), 
-            SERVER_FIRST_MESSAGE.as_bytes(), 
-            &salted_password[..]
-        ).unwrap();
+        let server_final = VERSION
+            .compute_server_final_message(
+                EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
+                client_server_nonce.as_bytes(),
+                client_first_message_bare.as_bytes(),
+                SERVER_FIRST_MESSAGE.as_bytes(),
+                &salted_password[..],
+            )
+            .unwrap();
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
     }
 }

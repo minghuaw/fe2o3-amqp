@@ -125,6 +125,10 @@ pub(crate) enum ServerScramErrorKind {
     /// Authentication failed
     #[error("Authentication failed")]
     AuthenticationFailed,
+
+    /// Illegal SCRAM authenticator state
+    #[error("Illegal SCRAM client state")]
+    IllegalAuthenticatorState,
 }
 
 impl From<XorLengthMismatch> for ServerScramErrorKind {
