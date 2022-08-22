@@ -1,6 +1,9 @@
 use std::str::Utf8Error;
 
 use base64::DecodeError;
+use hmac::digest::InvalidLength;
+
+pub(crate) struct XorLengthMismatch {}
 
 /// Error with SCRAM
 #[derive(Debug, thiserror::Error)]
@@ -9,8 +12,8 @@ pub enum ScramErrorKind {
     #[error(transparent)]
     Utf8Error(#[from] Utf8Error),
 
-    /// Less than 3 parts are found in challenge
-    #[error("Less 3 parts are found in challenge")]
+    /// InsufficientParts
+    #[error("InsufficientParts")]
     InsufficientParts,
 
     /// Found "m=" in challenge, which is not supported
@@ -46,8 +49,8 @@ pub enum ScramErrorKind {
     NormalizeError(#[from] stringprep::Error),
 
     /// Error from `Mac::new_from_slice`
-    #[error("Error from `Mac::new_from_slice`")]
-    HmacErrorInvalidLength,
+    #[error(transparent)]
+    HmacErrorInvalidLength(#[from] InvalidLength),
 
     /// LHS and RHS of XOR have different length
     #[error("LHS and RHS of XOR have different length")]
@@ -60,4 +63,72 @@ pub enum ScramErrorKind {
     /// Server signature mismatch
     #[error("Server signature mismatch")]
     ServerSignatureMismatch,
+}
+
+impl From<XorLengthMismatch> for ScramErrorKind {
+    fn from(_: XorLengthMismatch) -> Self {
+        Self::XorLengthMismatch
+    }
+}
+
+/// Server SASL-SCRAM authenticator errors
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ServerScramErrorKind {
+    /// Parsing str error
+    #[error(transparent)]
+    Utf8Error(#[from] Utf8Error),
+
+    /// Error parsing GS2-HEADER error
+    #[error("Cannot parse GS2-header")]
+    CannotParseGs2Header,
+
+    /// Error parsing username
+    #[error("Error parsing username field")]
+    CannotParseUsername,
+
+    /// Error parsing client nonce,
+    #[error("Error parsing client nonce")]
+    CannotParseClientNonce,
+
+    /// Error from `Mac::new_from_slice`
+    #[error(transparent)]
+    HmacErrorInvalidLength(#[from] InvalidLength),
+
+    /// LHS and RHS of XOR have different length
+    #[error("LHS and RHS of XOR have different length")]
+    XorLengthMismatch,
+
+    /// Error normalizing password
+    #[error("Error normalizing password")]
+    NormalizeError(#[from] stringprep::Error),
+
+    /// Error parsing client final message
+    #[error("Error parsing client final message")]
+    CannotParseClientFinalMessage,
+
+    /// Invalid channel binding 
+    #[error("Invalid channel binding")]
+    InvalidChannelBinding,
+
+    /// Error decoding base64 values
+    #[error(transparent)]
+    Base64DecodeError(#[from] DecodeError),
+
+    /// Client final message has an incorrect nonce
+    #[error("Client final message has an incorrect nonce")]
+    IncorrectClientFinalNonce,
+
+    /// Client final message doesn't have a proof
+    #[error("Client final message doesnt' have a proof")]
+    ProofNotFoundInClientFinal,
+
+    /// Authentication failed
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+}
+
+impl From<XorLengthMismatch> for ServerScramErrorKind {
+    fn from(_: XorLengthMismatch) -> Self {
+        Self::XorLengthMismatch
+    }
 }
