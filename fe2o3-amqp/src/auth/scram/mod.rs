@@ -1,26 +1,41 @@
 use std::ops::BitXor;
 
-use bytes::{BytesMut, Bytes, BufMut};
-use hmac::{Hmac, digest::{Digest, InvalidLength, KeyInit, FixedOutput}, Mac};
+use bytes::{BufMut, Bytes, BytesMut};
+use hmac::{
+    digest::{Digest, FixedOutput, InvalidLength, KeyInit},
+    Hmac, Mac,
+};
 use rand::Rng;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
-use attributes::{GS2_HEADER, USERNAME_KEY, NONCE_KEY, RESERVED_MEXT, SALT_KEY, ITERATION_COUNT_KEY, VERIFIER_KEY, CHANNEL_BINDING_KEY, PROOF_KEY};
+use attributes::{
+    CHANNEL_BINDING_KEY, GS2_HEADER, ITERATION_COUNT_KEY, NONCE_KEY, PROOF_KEY, RESERVED_MEXT,
+    SALT_KEY, USERNAME_KEY, VERIFIER_KEY,
+};
 use error::{ServerScramErrorKind, XorLengthMismatch};
 
 mod attributes;
-mod client;
-mod server;
+pub(crate) mod client;
 mod error;
+pub(crate) mod server;
 
-pub use client::*;
-pub use server::*;
 pub use error::*;
+
+/// The server stores only the `username`, `salt`, `iteration-count`, `StoredKey`, `ServerKey`.
+///
+/// `StoredKey` = `H(ClientKey)`
+#[derive(Debug)]
+pub struct StoredPassword<'a> {
+    salt: &'a [u8],
+    iterations: u32,
+    stored_key: &'a [u8],
+    server_key: &'a [u8],
+}
 
 /// Provide credential for SCRAM credentials
 pub trait ScramCredentialProvider {
-
+    fn get_stored_password<'a>(&'a self, username: &str) -> Option<StoredPassword<'a>>;
 }
 
 #[derive(Debug, Clone)]
@@ -186,13 +201,15 @@ impl ScramVersion {
         }
     }
 
-    fn compute_server_first_message<'a>(
+    fn compute_server_first_message<'a, C>(
         &self,
         client_first: &'a [u8],
-        base64_salt: &str,
         base64_server_nonce: &str,
-        iterations: u32,
-    ) -> Result<ServerFirstMessage<'a>, ServerScramErrorKind> {
+        credentials: &C,
+    ) -> Result<Option<ServerFirstMessage<'a>>, ServerScramErrorKind>
+    where
+        C: ScramCredentialProvider,
+    {
         let client_first = std::str::from_utf8(client_first)?;
 
         let client_first_message_bare = client_first
@@ -210,6 +227,13 @@ impl ScramVersion {
             .and_then(|s| s.strip_prefix(NONCE_KEY))
             .ok_or(ServerScramErrorKind::CannotParseClientNonce)?;
 
+        let stored_password = match credentials.get_stored_password(username) {
+            Some(stored) => stored,
+            None => return Ok(None),
+        };
+        let base64_salt = base64::encode(&stored_password.salt);
+        let iterations = stored_password.iterations.to_string();
+
         let client_server_nonce = format!("{}{}", client_nonce, base64_server_nonce);
 
         let mut buf = BytesMut::new();
@@ -226,14 +250,16 @@ impl ScramVersion {
 
         // iterations
         buf.put_slice(ITERATION_COUNT_KEY.as_bytes());
-        buf.put_slice(iterations.to_string().as_bytes());
+        buf.put_slice(iterations.as_bytes());
 
-        Ok(ServerFirstMessage {
+        Ok(Some(ServerFirstMessage {
             username,
-            client_first_message_bare: Bytes::from(client_first_message_bare.to_string().into_bytes()),
+            client_first_message_bare: Bytes::from(
+                client_first_message_bare.to_string().into_bytes(),
+            ),
             client_server_nonce: Bytes::from(client_server_nonce.into_bytes()),
             message: buf.freeze(),
-        })
+        }))
     }
 
     fn compute_server_signature<E>(
@@ -255,7 +281,7 @@ impl ScramVersion {
         client_server_nonce: &[u8],
         client_first_message_bare: &[u8],
         server_first_message: &[u8],
-        salted_password: &[u8],
+        stored_password: &StoredPassword,
     ) -> Result<Vec<u8>, ServerScramErrorKind> {
         let client_final = std::str::from_utf8(client_final)?;
         let parts: Vec<&str> = client_final.split(',').collect();
@@ -277,13 +303,13 @@ impl ScramVersion {
             return Err(ServerScramErrorKind::IncorrectClientFinalNonce)?;
         }
 
-        let proof_from_client = parts
+        let client_proof = parts
             .last()
             .and_then(|s| s.strip_prefix(PROOF_KEY))
             .ok_or(ServerScramErrorKind::ProofNotFoundInClientFinal)?;
 
         let without_proof_message_len =
-            client_final.len() - (proof_from_client.len() + PROOF_KEY.len() + 1);
+            client_final.len() - (client_proof.len() + PROOF_KEY.len() + 1);
         let client_final_message_without_proof =
             &client_final[0..without_proof_message_len].as_bytes();
 
@@ -294,16 +320,19 @@ impl ScramVersion {
         );
 
         // Verify client proof
-        // TODO: proper way other than performing the calculation
-        let computed_client_proof =
-            self.compute_client_proof::<ServerScramErrorKind>(salted_password, &auth_message)?;
-        let proof_form_client = base64::decode(proof_from_client)?;
-        if proof_form_client != computed_client_proof {
+        // ClientProof := ClientKey XOR ClientSignature
+        // ClientSignature := HMAC(StoredKey, AuthMessage)
+        // Inverse of XOR is XOR
+        let client_signature = self.hmac(&stored_password.stored_key, &auth_message)?;
+        let client_proof = base64::decode(client_proof)?;
+        let client_key = xor(&client_proof, &client_signature)?;
+        // StoredKey := H(ClientKey)
+        let stored_key_from_client = self.h(&client_key);
+        if stored_key_from_client != stored_password.stored_key {
             return Err(ServerScramErrorKind::AuthenticationFailed);
         }
 
-        let server_signature_bytes =
-            self.compute_server_signature::<ServerScramErrorKind>(salted_password, &auth_message)?;
+        let server_signature_bytes = self.hmac(&stored_password.server_key, &auth_message)?;
         let server_signature = base64::encode(server_signature_bytes);
 
         // Form server final message
@@ -431,8 +460,55 @@ fn generate_nonce() -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::attributes::{NONCE_KEY, SALT_KEY, GS2_HEADER};
+    use super::attributes::{GS2_HEADER, NONCE_KEY, SALT_KEY};
+    use super::{ScramCredentialProvider, ScramVersion, StoredPassword};
 
+    struct TestScramCredential {
+        username: String,
+        salt: Vec<u8>,
+        iterations: u32,
+        stored_key: Vec<u8>,
+        server_key: Vec<u8>,
+    }
+
+    impl TestScramCredential {
+        pub fn new(
+            scram: &ScramVersion,
+            username: &str,
+            password: &str,
+            salt: Vec<u8>,
+            iterations: u32,
+        ) -> Self {
+            let salted_password = scram
+                .compute_salted_password(password, &salt, iterations)
+                .unwrap();
+            let client_key = scram.hmac(&salted_password, b"Client Key").unwrap();
+            let stored_key = scram.h(&client_key);
+            let server_key = scram.hmac(&salted_password, b"Server Key").unwrap();
+            Self {
+                salt,
+                username: username.into(),
+                iterations,
+                stored_key,
+                server_key,
+            }
+        }
+    }
+
+    impl ScramCredentialProvider for TestScramCredential {
+        fn get_stored_password(&self, username: &str) -> Option<StoredPassword> {
+            if username == self.username {
+                Some(StoredPassword {
+                    salt: &self.salt,
+                    iterations: self.iterations,
+                    stored_key: &self.stored_key,
+                    server_key: &self.server_key,
+                })
+            } else {
+                None
+            }
+        }
+    }
 
     mod scram_sha1 {
         use super::super::ScramVersion;
@@ -470,7 +546,7 @@ mod tests {
 
     mod scram_sha512 {
         use super::super::ScramVersion;
-        
+
         pub(super) static ITERATIONS: u32 = 4096;
         pub(super) static TEST_USERNAME: &str = "user";
         pub(super) static TEST_PASSWORD: &str = "pencil";
@@ -587,29 +663,30 @@ mod tests {
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
         let client_first_message_bare =
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-        let salted_password = VERSION
-            .compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS)
-            .unwrap();
+
+        let test_credential =
+            TestScramCredential::new(&VERSION, TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
 
         let server_first = VERSION
             .compute_server_first_message(
                 EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
-                base64_salt,
                 base64_server_nonce,
-                ITERATIONS,
+                &test_credential,
             )
+            .unwrap()
             .unwrap();
 
         assert_eq!(server_first.username, TEST_USERNAME);
         assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
 
+        let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
         let server_final = VERSION
             .compute_server_final_message(
                 EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
                 client_server_nonce.as_bytes(),
                 client_first_message_bare.as_bytes(),
                 SERVER_FIRST_MESSAGE.as_bytes(),
-                &salted_password[..],
+                &stored_password,
             )
             .unwrap();
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
@@ -626,29 +703,30 @@ mod tests {
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
         let client_first_message_bare =
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-        let salted_password = VERSION
-            .compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS)
-            .unwrap();
+
+        let test_credential =
+            TestScramCredential::new(&VERSION, TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
 
         let server_first = VERSION
             .compute_server_first_message(
                 EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
-                base64_salt,
                 base64_server_nonce,
-                ITERATIONS,
+                &test_credential,
             )
+            .unwrap()
             .unwrap();
 
         assert_eq!(server_first.username, TEST_USERNAME);
         assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
 
+        let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
         let server_final = VERSION
             .compute_server_final_message(
                 EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
-                &client_server_nonce.as_bytes(),
+                client_server_nonce.as_bytes(),
                 client_first_message_bare.as_bytes(),
                 SERVER_FIRST_MESSAGE.as_bytes(),
-                &salted_password[..],
+                &stored_password,
             )
             .unwrap();
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
@@ -665,29 +743,30 @@ mod tests {
         let client_server_nonce = format!("{}{}", CLIENT_NONCE, base64_server_nonce);
         let client_first_message_bare =
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
-        let salted_password = VERSION
-            .compute_salted_password(TEST_PASSWORD, &salt[..], ITERATIONS)
-            .unwrap();
+
+        let test_credential =
+            TestScramCredential::new(&VERSION, TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
 
         let server_first = VERSION
             .compute_server_first_message(
                 EXPECTED_CLIENT_INITIAL_RESPONSE.as_bytes(),
-                base64_salt,
                 base64_server_nonce,
-                ITERATIONS,
+                &test_credential,
             )
+            .unwrap()
             .unwrap();
 
         assert_eq!(server_first.username, TEST_USERNAME);
         assert_eq!(server_first.message, SERVER_FIRST_MESSAGE.as_bytes());
 
+        let stored_password = test_credential.get_stored_password(TEST_USERNAME).unwrap();
         let server_final = VERSION
             .compute_server_final_message(
                 EXPECTED_CLIENT_FINAL_MESSAGE.as_bytes(),
                 client_server_nonce.as_bytes(),
                 client_first_message_bare.as_bytes(),
                 SERVER_FIRST_MESSAGE.as_bytes(),
-                &salted_password[..],
+                &stored_password,
             )
             .unwrap();
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
