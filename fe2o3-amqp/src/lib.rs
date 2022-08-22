@@ -210,9 +210,6 @@ pub mod acceptor;
 #[cfg(feature = "transaction")]
 pub mod transaction;
 
-#[cfg(feature = "scram")]
-pub(crate) mod scram;
-
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`
     pub use fe2o3_amqp_types::*;

@@ -10,7 +10,7 @@ use url::Url;
 use crate::frames::sasl;
 
 #[cfg(feature = "scram")]
-pub use crate::scram::error::ScramErrorKind;
+use crate::auth::error::ScramErrorKind;
 
 mod error;
 pub use error::Error;

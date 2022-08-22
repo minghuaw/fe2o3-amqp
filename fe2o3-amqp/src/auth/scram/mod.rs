@@ -1,28 +1,22 @@
-//! Implements SCRAM for SASL-SCRAM-SHA-1 and SASL-SCRAM-SHA-256 auth
-
 use std::ops::BitXor;
 
-use bytes::{BufMut, Bytes, BytesMut};
-use hmac::{
-    digest::{Digest, FixedOutput, InvalidLength, KeyInit},
-    Hmac, Mac,
-};
+use bytes::{BytesMut, Bytes, BufMut};
+use hmac::{Hmac, digest::{Digest, InvalidLength, KeyInit, FixedOutput}, Mac};
 use rand::Rng;
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
-use self::{
-    attributes::{
-        CHANNEL_BINDING_KEY, GS2_HEADER, ITERATION_COUNT_KEY, NONCE_KEY, PROOF_KEY, RESERVED_MEXT,
-        SALT_KEY, USERNAME_KEY, VERIFIER_KEY,
-    },
-    error::{ScramErrorKind, ServerScramErrorKind, XorLengthMismatch},
-};
+use attributes::{GS2_HEADER, USERNAME_KEY, NONCE_KEY, RESERVED_MEXT, SALT_KEY, ITERATION_COUNT_KEY, VERIFIER_KEY, CHANNEL_BINDING_KEY, PROOF_KEY};
+use error::{ServerScramErrorKind, XorLengthMismatch};
 
 mod attributes;
-pub(crate) mod client;
-pub(crate) mod error;
-pub(crate) mod server;
+mod client;
+mod server;
+mod error;
+
+pub use client::*;
+pub use server::*;
+pub use error::*;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ScramVersion {
@@ -432,10 +426,11 @@ fn generate_nonce() -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::attributes::{GS2_HEADER, NONCE_KEY, SALT_KEY};
+    use super::attributes::{NONCE_KEY, SALT_KEY, GS2_HEADER};
+
 
     mod scram_sha1 {
-        use crate::scram::ScramVersion;
+        use super::super::ScramVersion;
 
         pub(super) static ITERATIONS: u32 = 4096;
         pub(super) static TEST_USERNAME: &str = "user";
@@ -452,7 +447,7 @@ mod tests {
     }
 
     mod scram_sha256 {
-        use crate::scram::ScramVersion;
+        use super::super::ScramVersion;
 
         pub(super) static ITERATIONS: u32 = 4096;
         pub(super) static TEST_USERNAME: &str = "user";
@@ -469,8 +464,8 @@ mod tests {
     }
 
     mod scram_sha512 {
-        use crate::scram::ScramVersion;
-
+        use super::super::ScramVersion;
+        
         pub(super) static ITERATIONS: u32 = 4096;
         pub(super) static TEST_USERNAME: &str = "user";
         pub(super) static TEST_PASSWORD: &str = "pencil";
