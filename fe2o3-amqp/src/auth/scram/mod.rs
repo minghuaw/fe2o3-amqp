@@ -18,6 +18,11 @@ pub use client::*;
 pub use server::*;
 pub use error::*;
 
+/// Provide credential for SCRAM credentials
+pub trait ScramCredentialProvider {
+
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum ScramVersion {
     Sha1,

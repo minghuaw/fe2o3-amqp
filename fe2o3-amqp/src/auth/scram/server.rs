@@ -1,9 +1,7 @@
 use bytes::Bytes;
 use rand::Rng;
 
-use crate::auth::CredentialProvider;
-
-use super::{error::ServerScramErrorKind, generate_nonce, ScramVersion};
+use super::{error::ServerScramErrorKind, generate_nonce, ScramVersion, ScramCredentialProvider};
 
 #[derive(Debug, Clone)]
 enum ScramAuthenticatorState {
@@ -19,7 +17,7 @@ enum ScramAuthenticatorState {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ScramAuthenticator<C: CredentialProvider> {
+pub(crate) struct ScramAuthenticator<C: ScramCredentialProvider> {
     credentials: C,
     iterations: u32,
     scram: ScramVersion,
@@ -28,7 +26,7 @@ pub(crate) struct ScramAuthenticator<C: CredentialProvider> {
 
 impl<C> ScramAuthenticator<C>
 where
-    C: CredentialProvider,
+    C: ScramCredentialProvider,
 {
     pub fn new(credentials: C, iterations: u32, scram_version: ScramVersion) -> Self {
         Self {
@@ -70,38 +68,39 @@ where
         &mut self,
         client_final_message: &[u8],
     ) -> Result<Option<impl Into<Vec<u8>>>, ServerScramErrorKind> {
-        match &self.state {
-            ScramAuthenticatorState::ServerFirstSent {
-                salt,
-                username,
-                client_first_message_bare,
-                client_server_nonce,
-                server_first_message,
-            } => {
-                // look up user
-                let salted_password = match self.credentials.get(username) {
-                    Some(password) => {
-                        self.scram
-                            .compute_salted_password(password, &salt[..], self.iterations)?
-                    }
-                    None => {
-                        // User is not found
-                        self.state = ScramAuthenticatorState::Initial;
-                        return Ok(None);
-                    }
-                };
+        // match &self.state {
+        //     ScramAuthenticatorState::ServerFirstSent {
+        //         salt,
+        //         username,
+        //         client_first_message_bare,
+        //         client_server_nonce,
+        //         server_first_message,
+        //     } => {
+        //         // look up user
+        //         let salted_password = match self.credentials.get(username) {
+        //             Some(password) => {
+        //                 self.scram
+        //                     .compute_salted_password(password, &salt[..], self.iterations)?
+        //             }
+        //             None => {
+        //                 // User is not found
+        //                 self.state = ScramAuthenticatorState::Initial;
+        //                 return Ok(None);
+        //             }
+        //         };
 
-                let server_final_message = self.scram.compute_server_final_message(
-                    client_final_message,
-                    &client_server_nonce,
-                    &client_first_message_bare,
-                    &server_first_message,
-                    &salted_password,
-                )?;
-                self.state = ScramAuthenticatorState::ServerFinalSent;
-                Ok(Some(server_final_message))
-            }
-            _ => Err(ServerScramErrorKind::IllegalAuthenticatorState),
-        }
+        //         let server_final_message = self.scram.compute_server_final_message(
+        //             client_final_message,
+        //             &client_server_nonce,
+        //             &client_first_message_bare,
+        //             &server_first_message,
+        //             &salted_password,
+        //         )?;
+        //         self.state = ScramAuthenticatorState::ServerFinalSent;
+        //         Ok(Some(server_final_message))
+        //     }
+        //     _ => Err(ServerScramErrorKind::IllegalAuthenticatorState),
+        // }
+        todo!()
     }
 }
