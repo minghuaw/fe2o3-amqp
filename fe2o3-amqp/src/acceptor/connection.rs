@@ -252,11 +252,15 @@ where
         tracing::trace!(sending = ?frame);
         transport.send(frame).await?;
 
-        // Wait for Init
-        let next = if let Some(frame) = transport.next().await {
-            tracing::trace!(received = ?frame);
-            match frame? {
-                sasl::Frame::Init(init) => self.sasl_acceptor.on_init(init),
+        let mut sasl_acceptor = self.sasl_acceptor.clone();
+        loop {
+            let frame = match transport.next().await.ok_or(OpenError::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "Expecting SASL frames")))?? {
+                sasl::Frame::Init(init) => {
+                    sasl_acceptor.on_init(init)
+                },
+                sasl::Frame::Response(response) => {
+                    sasl_acceptor.on_response(response)
+                },
                 _ => {
                     let outcome = SaslOutcome {
                         code: SaslCode::Sys,
@@ -268,24 +272,22 @@ where
                         additional_data: None,
                     });
                 }
-            }
-        } else {
-            return Err(OpenError::Io(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "Expecting SASL Init frame",
-            )));
-        };
+            };
 
-        let outcome: SaslOutcome = match next {
-            SaslServerFrame::Challenge(challenge) => {
-                transport.send(sasl::Frame::Challenge(challenge)).await?;
-                self.negotiate_sasl_challenge(&mut transport).await?
+            match frame {
+                SaslServerFrame::Challenge(challenge) => {
+                    let frame = sasl::Frame::Challenge(challenge);
+                    tracing::trace!(sending = ?frame);
+                    transport.send(frame).await?;
+                },
+                SaslServerFrame::Outcome(outcome) => {
+                    let frame = sasl::Frame::Outcome(outcome);
+                    tracing::trace!(sending = ?frame);
+                    transport.send(frame).await?;
+                    break
+                },
             }
-            SaslServerFrame::Outcome(outcome) => outcome,
-        };
-        let frame = sasl::Frame::Outcome(outcome);
-        tracing::trace!(sending = ?frame);
-        transport.send(frame).await?;
+        }
 
         // NOTE: LengthDelimitedCodec itself doesn't seem to carry any buffer, so
         // it should be fine to simply drop it.
@@ -308,47 +310,6 @@ where
         let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
         self.negotiate_sasl_with_framed(framed_write, framed_read)
             .await
-    }
-
-    async fn negotiate_sasl_challenge<Io>(
-        &self,
-        transport: &mut Transport<Io, sasl::Frame>,
-    ) -> Result<SaslOutcome, OpenError>
-    where
-        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-    {
-        // Send initial challenge
-        while let Some(frame) = transport.next().await {
-            match frame? {
-                sasl::Frame::Response(response) => {
-                    match self.sasl_acceptor.on_response(response) {
-                        SaslServerFrame::Challenge(challenge) => {
-                            transport.send(sasl::Frame::Challenge(challenge)).await?;
-                        }
-                        SaslServerFrame::Outcome(outcome) => {
-                            // The Ok result will be sent by the outer function
-                            return Ok(outcome);
-                        }
-                    }
-                }
-                _ => {
-                    let outcome = SaslOutcome {
-                        code: SaslCode::Sys,
-                        additional_data: None,
-                    };
-                    transport.send(sasl::Frame::Outcome(outcome)).await?;
-                    return Err(OpenError::SaslError {
-                        code: SaslCode::Sys,
-                        additional_data: None,
-                    });
-                }
-            }
-        }
-
-        Err(OpenError::Io(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            "Expecting SASL response",
-        )))
     }
 }
 
@@ -410,21 +371,6 @@ where
 {
     connect_tls!(negotiate_tls_with_rustls, negotiate_sasl_with_stream);
 }
-
-// macro_rules! impl_accept {
-//     (<$tls:ty, $sasl:ty>, $proto_header_handler:ident) => {
-//         /// Accepts an incoming connection
-//         pub async fn accept<Io>(
-//             &self,
-//             stream: Io,
-//         ) -> Result<ListenerConnectionHandle, OpenError>
-//         where
-//             Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
-//         {
-//             self.$proto_header_handler(stream).await
-//         }
-//     };
-// }
 
 impl ConnectionAcceptor<(), ()> {
     /// Accepts an incoming connection

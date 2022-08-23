@@ -5,6 +5,28 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = [
+    "scram"
+]
+
+scram = ["fe2o3-amqp/scram"]
+
 [dependencies]
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
 fe2o3-amqp = { features = ["acceptor"], path = "../../fe2o3-amqp" }
+
+[[bin]]
+name = "sasl_scram_sha_1"
+path = "src/bin/sasl_scram_sha_1.rs"
+required-features = ["scram"]
+
+[[bin]]
+name = "sasl_scram_sha_256"
+path = "src/bin/sasl_scram_sha_256.rs"
+required-features = ["scram"]
+
+[[bin]]
+name = "sasl_scram_sha_512"
+path = "src/bin/sasl_scram_sha_512.rs"
+required-features = ["scram"]

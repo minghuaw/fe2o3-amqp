@@ -1,5 +1,5 @@
 #[cfg(feature = "scram")]
-use crate::scram::error::ScramErrorKind;
+use crate::auth::error::ScramErrorKind;
 
 /// SASL profile error
 #[derive(Debug, thiserror::Error)]

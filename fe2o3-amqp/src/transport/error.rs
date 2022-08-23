@@ -5,6 +5,9 @@ use fe2o3_amqp_types::{primitives::Binary, sasl::SaslCode};
 
 use crate::{frames, sasl_profile};
 
+#[cfg(feature = "scram")]
+use crate::auth::error::ScramErrorKind;
+
 /// Transport error
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -78,7 +81,7 @@ pub enum NegotiationError {
     #[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
     #[cfg(feature = "scram")]
     #[error(transparent)]
-    ScramError(#[from] sasl_profile::ScramErrorKind),
+    ScramError(#[from] ScramErrorKind),
 }
 
 // TODO: What about encode error?

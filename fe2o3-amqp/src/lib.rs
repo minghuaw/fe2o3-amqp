@@ -17,7 +17,7 @@
 //! |`"native-tls"`| enables TLS integration with `tokio-native-tls` and `native-tls`|
 //! |`"acceptor"`| enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
 //! |`"transaction"`| enables `Controller`, `Transaction`, `OwnedTransaction` and `control_link_acceptor` |
-//! |`"scram"`| enables `SaslScramSha1`, `SaslScramSha256`, and `SaslScramSha512` |
+//! |`"scram"`| enables SCRAM auth |
 //!
 //! # Quick start
 //!
@@ -185,9 +185,9 @@
 //! - [x] Dynamic link
 //! - [x] Dispose multiple deliveries
 //! - [x] WebSocket binding [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws)
-//! - [ ] SASL-SCRAM-SHA-1, SASL-SCRAM-SHA-256, SASL-SCRAM-SHA-512
+//! - [x] SASL-SCRAM-SHA-1, SASL-SCRAM-SHA-256, SASL-SCRAM-SHA-512
 //!   - [x] client
-//!   - [ ] acceptor
+//!   - [x] acceptor
 //! - [ ] Pipelined open
 
 pub(crate) mod control;
@@ -200,6 +200,7 @@ pub mod link;
 pub mod sasl_profile;
 pub mod session;
 pub mod transport;
+pub mod auth;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]
@@ -208,9 +209,6 @@ pub mod acceptor;
 #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
 #[cfg(feature = "transaction")]
 pub mod transaction;
-
-#[cfg(feature = "scram")]
-pub(crate) mod scram;
 
 pub mod types {
     //! Re-exporting `fe2o3-amqp-types`

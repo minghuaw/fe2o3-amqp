@@ -1,5 +1,7 @@
 //! Supported SASL mechanisms
 
+use std::sync::Arc;
+
 use fe2o3_amqp_types::{
     primitives::{Array, Symbol},
     sasl::{SaslChallenge, SaslCode, SaslInit, SaslMechanisms, SaslOutcome, SaslResponse},
@@ -18,15 +20,15 @@ pub enum SaslServerFrame {
 }
 
 /// Server side SASL negotiation
-pub trait SaslAcceptor {
+pub trait SaslAcceptor: Clone {
     /// List of supported mechanisms
     fn mechanisms(&self) -> Array<Symbol>;
 
     /// Responde to a SaslInit frame
-    fn on_init(&self, init: SaslInit) -> SaslServerFrame;
+    fn on_init(&mut self, init: SaslInit) -> SaslServerFrame;
 
     /// Respond to a SaslResponse frame
-    fn on_response(&self, response: SaslResponse) -> SaslServerFrame;
+    fn on_response(&mut self, response: SaslResponse) -> SaslServerFrame;
 }
 
 /// Extension trait of SaslAcceptor
@@ -62,18 +64,18 @@ impl<T: SaslAcceptor> SaslAcceptorExt for T {}
 // }
 
 /// A naive acceptor for SASL PLAIN mechanism
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SaslPlainMechanism {
-    username: String,
-    password: String,
+    username: Arc<String>,
+    password: Arc<String>,
 }
 
 impl SaslPlainMechanism {
     /// Creates a new PLAIN mechanism acceptor
     pub fn new(username: impl Into<String>, password: impl Into<String>) -> Self {
         Self {
-            username: username.into(),
-            password: password.into(),
+            username: Arc::new(username.into()),
+            password: Arc::new(password.into()),
         }
     }
 }
@@ -103,7 +105,7 @@ impl SaslAcceptor for SaslPlainMechanism {
         Array::from(vec![Symbol::from(PLAIN)])
     }
 
-    fn on_init(&self, init: SaslInit) -> SaslServerFrame {
+    fn on_init(&mut self, init: SaslInit) -> SaslServerFrame {
         let code = self.validate_init(init).unwrap_or(SaslCode::Auth);
         let outcome = SaslOutcome {
             code,
@@ -112,7 +114,7 @@ impl SaslAcceptor for SaslPlainMechanism {
         SaslServerFrame::Outcome(outcome)
     }
 
-    fn on_response(&self, _response: SaslResponse) -> SaslServerFrame {
+    fn on_response(&mut self, _response: SaslResponse) -> SaslServerFrame {
         // This is not expected
         let outcome = SaslOutcome {
             code: SaslCode::Sys,
@@ -123,7 +125,7 @@ impl SaslAcceptor for SaslPlainMechanism {
 }
 
 /// A SASL Anonymous acceptor that is going to accept anything
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SaslAnonymousMechanism {}
 
 impl SaslAnonymousMechanism {
@@ -144,7 +146,7 @@ impl SaslAcceptor for SaslAnonymousMechanism {
         Array::from(vec![Symbol::from(ANONYMOUS)])
     }
 
-    fn on_init(&self, _init: SaslInit) -> SaslServerFrame {
+    fn on_init(&mut self, _init: SaslInit) -> SaslServerFrame {
         let code = SaslCode::Ok;
         let outcome = SaslOutcome {
             code,
@@ -153,7 +155,7 @@ impl SaslAcceptor for SaslAnonymousMechanism {
         SaslServerFrame::Outcome(outcome)
     }
 
-    fn on_response(&self, _response: SaslResponse) -> SaslServerFrame {
+    fn on_response(&mut self, _response: SaslResponse) -> SaslServerFrame {
         let code = SaslCode::Ok;
         let outcome = SaslOutcome {
             code,

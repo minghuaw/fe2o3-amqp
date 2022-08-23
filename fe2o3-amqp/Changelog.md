@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.2
+
+1. Implemented SCRAM authenticator on the server side
+
 ## 0.4.1
 
 1. Implemented `SaslScramSha1`, `SaslScramSha256`, `SaslScramSha512` for the client side
