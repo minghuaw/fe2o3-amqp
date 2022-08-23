@@ -4,6 +4,7 @@ pub(crate) mod error;
 
 pub(crate) mod plain;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "scram")))]
 #[cfg(feature = "scram")]
 pub mod scram;
 

@@ -22,7 +22,11 @@ pub(crate) mod client;
 mod error;
 pub use error::*;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
+#[cfg(feature = "acceptor")]
 mod server;
+
+#[cfg(feature = "acceptor")]
 pub use server::ScramAuthenticator;
 
 use crate::sasl_profile::{SCRAM_SHA_1, SCRAM_SHA_512, SCRAM_SHA_256};
@@ -248,6 +252,7 @@ impl ScramVersion {
         }
     }
 
+    #[cfg(feature = "acceptor")]
     fn compute_server_first_message<'a, C>(
         &self,
         client_first: &'a [u8],
@@ -322,6 +327,7 @@ impl ScramVersion {
         Ok(server_signature)
     }
 
+    #[cfg(feature = "acceptor")]
     fn compute_server_final_message(
         &self,
         client_final: &[u8],
@@ -404,6 +410,7 @@ impl ScramVersion {
     }
 }
 
+#[cfg(feature = "acceptor")]
 pub(crate) struct ServerFirstMessage<'a> {
     pub username: &'a str,
     pub client_first_message_bare: Bytes,
