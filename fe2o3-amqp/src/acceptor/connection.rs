@@ -258,7 +258,9 @@ where
                 sasl::Frame::Init(init) => {
                     sasl_acceptor.on_init(init)
                 },
-                sasl::Frame::Response(_) => todo!(),
+                sasl::Frame::Response(response) => {
+                    sasl_acceptor.on_response(response)
+                },
                 _ => {
                     let outcome = SaslOutcome {
                         code: SaslCode::Sys,

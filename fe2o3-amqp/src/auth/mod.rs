@@ -5,6 +5,6 @@ pub(crate) mod error;
 pub(crate) mod plain;
 
 #[cfg(feature = "scram")]
-pub(crate) mod scram;
+pub mod scram;
 
 pub use plain::PlainCredentialProvider;

@@ -1,6 +1,6 @@
 use bytes::Bytes;
 
-use super::{error::ServerScramErrorKind, generate_nonce, ScramVersion, ScramCredentialProvider};
+use super::{error::ServerScramErrorKind, generate_nonce, ScramCredentialProvider};
 
 #[derive(Debug, Clone)]
 enum ScramAuthenticatorState {
@@ -14,37 +14,45 @@ enum ScramAuthenticatorState {
     ServerFinalSent,
 }
 
+/// SCRAM authenticator
 #[derive(Debug, Clone)]
-pub(crate) struct ScramAuthenticator<C: ScramCredentialProvider> {
+pub struct ScramAuthenticator<C: ScramCredentialProvider + Clone> {
     credentials: C,
-    scram: ScramVersion,
     state: ScramAuthenticatorState,
 }
 
 impl<C> ScramAuthenticator<C>
 where
-    C: ScramCredentialProvider,
+    C: ScramCredentialProvider + Clone,
 {
-    pub fn new(credentials: C, scram_version: ScramVersion) -> Self {
+    /// Creates a new SCRAM authenticator
+    pub fn new(credentials: C) -> Self {
         Self {
             credentials,
-            scram: scram_version,
             state: ScramAuthenticatorState::Initial,
         }
     }
 
-    pub fn compute_server_first_message(
+    /// Get the underlying credentials
+    pub fn credentials(&self) -> &C {
+        &self.credentials
+    }
+
+    pub(crate) fn compute_server_first_message(
         &mut self,
         client_first_message: &[u8],
     ) -> Result<Option<impl Into<Vec<u8>>>, ServerScramErrorKind> {
         let nonce = generate_nonce();
         let base64_server_nonce = base64::encode(nonce);
 
-        let server_first = match self.scram.compute_server_first_message(
-            client_first_message,
-            &base64_server_nonce,
-            &self.credentials
-        )? {
+        let server_first = match self
+            .credentials
+            .scram_version()
+            .compute_server_first_message(
+                client_first_message,
+                &base64_server_nonce,
+                &self.credentials,
+            )? {
             Some(server_first) => server_first,
             None => return Ok(None),
         };
@@ -59,7 +67,7 @@ where
         Ok(Some(server_first.message))
     }
 
-    pub fn compute_server_final_message(
+    pub(crate) fn compute_server_final_message(
         &mut self,
         client_final_message: &[u8],
     ) -> Result<Option<impl Into<Vec<u8>>>, ServerScramErrorKind> {
@@ -76,13 +84,16 @@ where
                     None => return Ok(None),
                 };
 
-                let server_final_message = self.scram.compute_server_final_message(
-                    client_final_message,
-                    &client_server_nonce,
-                    &client_first_message_bare,
-                    &server_first_message,
-                    &stored_password,
-                )?;
+                let server_final_message = self
+                    .credentials
+                    .scram_version()
+                    .compute_server_final_message(
+                        client_final_message,
+                        &client_server_nonce,
+                        &client_first_message_bare,
+                        &server_first_message,
+                        &stored_password,
+                    )?;
                 self.state = ScramAuthenticatorState::ServerFinalSent;
                 Ok(Some(server_final_message))
             }

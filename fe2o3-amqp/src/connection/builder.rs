@@ -34,7 +34,7 @@ use super::{
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
 
-pub mod mode {
+pub(crate) mod mode {
     /// Type state for [`crate::connection::Builder`]
     #[derive(Debug)]
     pub struct ConnectorWithId {}

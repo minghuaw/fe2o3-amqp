@@ -1,3 +1,5 @@
+//! SCRAM
+
 use std::{ops::BitXor, sync::Arc};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -18,9 +20,12 @@ use error::{XorLengthMismatch};
 mod attributes;
 pub(crate) mod client;
 mod error;
-pub(crate) mod server;
-
 pub use error::*;
+
+mod server;
+pub use server::ScramAuthenticator;
+
+use crate::sasl_profile::{SCRAM_SHA_1, SCRAM_SHA_512, SCRAM_SHA_256};
 
 /// Default iterations for SCRAM
 pub const DEFAULT_SCRAM_ITERATIONS: u32 = 4096;
@@ -45,6 +50,10 @@ pub struct StoredPassword<'a> {
 
 /// Provide credential for SCRAM credentials
 pub trait ScramCredentialProvider {
+    /// Get the SCRAM version for this credential
+    fn scram_version(&self) -> &ScramVersion;
+
+    /// Get the stored password
     fn get_stored_password<'a>(&'a self, username: &str) -> Option<StoredPassword<'a>>;
 }
 
@@ -52,11 +61,16 @@ impl<T> ScramCredentialProvider for Arc<T>
 where
     T: ScramCredentialProvider
 { 
+    fn scram_version(&self) -> &ScramVersion {
+        self.as_ref().scram_version()
+    }
+
     fn get_stored_password<'a>(&'a self, username: &str) -> Option<StoredPassword<'a>> {
         self.as_ref().get_stored_password(username)
     }
 }
 
+/// SCRAM version
 #[derive(Debug, Clone)]
 pub enum ScramVersion {
     /// SHA-1
@@ -72,6 +86,15 @@ pub enum ScramVersion {
 // This is shamelessly copied from
 // [MongoDB](https://github.com/mongodb/mongo-rust-driver/blob/main/src/client/auth/scram.rs)
 impl ScramVersion {
+    /// Get the mechanism string
+    pub fn mechanism(&self) -> &'static str {
+        match self {
+            ScramVersion::Sha1 => SCRAM_SHA_1,
+            ScramVersion::Sha256 => SCRAM_SHA_256,
+            ScramVersion::Sha512 => SCRAM_SHA_512,
+        }
+    }
+
     /// Returns (client_first_message, client_first_message_bare)
     pub(crate) fn client_first_message(&self, username: &[u8], nonce: &[u8]) -> (Bytes, Bytes) {
         let mut bytes = BytesMut::new();
@@ -488,6 +511,7 @@ mod tests {
     use super::{ScramCredentialProvider, ScramVersion, StoredPassword};
 
     struct TestScramCredential {
+        scram_version: ScramVersion,
         username: String,
         salt: Vec<u8>,
         iterations: u32,
@@ -497,19 +521,20 @@ mod tests {
 
     impl TestScramCredential {
         pub fn new(
-            scram: &ScramVersion,
+            scram_version: ScramVersion,
             username: &str,
             password: &str,
             salt: Vec<u8>,
             iterations: u32,
         ) -> Self {
-            let salted_password = scram
+            let salted_password = scram_version
                 .compute_salted_password(password, &salt, iterations)
                 .unwrap();
-            let client_key = scram.hmac(&salted_password, b"Client Key").unwrap();
-            let stored_key = scram.h(&client_key);
-            let server_key = scram.hmac(&salted_password, b"Server Key").unwrap();
+            let client_key = scram_version.hmac(&salted_password, b"Client Key").unwrap();
+            let stored_key = scram_version.h(&client_key);
+            let server_key = scram_version.hmac(&salted_password, b"Server Key").unwrap();
             Self {
+                scram_version,
                 salt,
                 username: username.into(),
                 iterations,
@@ -520,6 +545,10 @@ mod tests {
     }
 
     impl ScramCredentialProvider for TestScramCredential {
+        fn scram_version(&self) -> &ScramVersion {
+            &self.scram_version
+        }
+
         fn get_stored_password(&self, username: &str) -> Option<StoredPassword> {
             if username == self.username {
                 Some(StoredPassword {
@@ -689,7 +718,7 @@ mod tests {
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
 
         let test_credential =
-            TestScramCredential::new(&VERSION, TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
+            TestScramCredential::new(VERSION.clone(), TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
 
         let server_first = VERSION
             .compute_server_first_message(
@@ -729,7 +758,7 @@ mod tests {
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
 
         let test_credential =
-            TestScramCredential::new(&VERSION, TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
+            TestScramCredential::new(VERSION.clone(), TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
 
         let server_first = VERSION
             .compute_server_first_message(
@@ -769,7 +798,7 @@ mod tests {
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
 
         let test_credential =
-            TestScramCredential::new(&VERSION, TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
+            TestScramCredential::new(VERSION.clone(), TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
 
         let server_first = VERSION
             .compute_server_first_message(
