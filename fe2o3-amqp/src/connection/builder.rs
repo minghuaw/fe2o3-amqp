@@ -35,16 +35,6 @@ pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
 
 pub mod mode {
-    //! Type states for [`crate::connection::Builder`]
-
-    // /// Type state for [`crate::connection::Builder`] representing state where a valid container id is not present
-    // #[derive(Debug)]
-    // pub struct WithoutContainerId {}
-
-    // /// Type state for [`crate::connection::Builder`] representing state where a valid container id is present
-    // #[derive(Debug)]
-    // pub struct WithContainerId {}
-
     /// Type state for [`crate::connection::Builder`]
     #[derive(Debug)]
     pub struct ConnectorWithId {}

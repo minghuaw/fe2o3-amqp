@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use rand::Rng;
 
 use super::{error::ServerScramErrorKind, generate_nonce, ScramVersion, ScramCredentialProvider};
 
@@ -18,7 +17,6 @@ enum ScramAuthenticatorState {
 #[derive(Debug, Clone)]
 pub(crate) struct ScramAuthenticator<C: ScramCredentialProvider> {
     credentials: C,
-    iterations: u32,
     scram: ScramVersion,
     state: ScramAuthenticatorState,
 }
@@ -27,10 +25,9 @@ impl<C> ScramAuthenticator<C>
 where
     C: ScramCredentialProvider,
 {
-    pub fn new(credentials: C, iterations: u32, scram_version: ScramVersion) -> Self {
+    pub fn new(credentials: C, scram_version: ScramVersion) -> Self {
         Self {
             credentials,
-            iterations,
             scram: scram_version,
             state: ScramAuthenticatorState::Initial,
         }
