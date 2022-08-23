@@ -73,7 +73,7 @@ impl From<XorLengthMismatch> for ScramErrorKind {
 
 /// Server SASL-SCRAM authenticator errors
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ServerScramErrorKind {
+pub enum ServerScramErrorKind {
     /// Parsing str error
     #[error(transparent)]
     Utf8Error(#[from] Utf8Error),

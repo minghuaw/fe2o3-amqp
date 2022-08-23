@@ -1,4 +1,4 @@
-use std::ops::BitXor;
+use std::{ops::BitXor, sync::Arc};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use hmac::{
@@ -13,7 +13,7 @@ use attributes::{
     CHANNEL_BINDING_KEY, GS2_HEADER, ITERATION_COUNT_KEY, NONCE_KEY, PROOF_KEY, RESERVED_MEXT,
     SALT_KEY, USERNAME_KEY, VERIFIER_KEY,
 };
-use error::{ServerScramErrorKind, XorLengthMismatch};
+use error::{XorLengthMismatch};
 
 mod attributes;
 pub(crate) mod client;
@@ -22,15 +22,25 @@ pub(crate) mod server;
 
 pub use error::*;
 
+/// Default iterations for SCRAM
+pub const DEFAULT_SCRAM_ITERATIONS: u32 = 4096;
+
 /// The server stores only the `username`, `salt`, `iteration-count`, `StoredKey`, `ServerKey`.
 ///
 /// `StoredKey` = `H(ClientKey)`
 #[derive(Debug)]
 pub struct StoredPassword<'a> {
-    salt: &'a [u8],
-    iterations: u32,
-    stored_key: &'a [u8],
-    server_key: &'a [u8],
+    /// Salt
+    pub salt: &'a [u8],
+
+    /// Iterators
+    pub iterations: u32,
+
+    /// StoredKey := H(ClientKey)
+    pub stored_key: &'a [u8],
+
+    /// ServerKey := HMAC(SaltedPassword, "Server Key")
+    pub server_key: &'a [u8],
 }
 
 /// Provide credential for SCRAM credentials
@@ -38,10 +48,24 @@ pub trait ScramCredentialProvider {
     fn get_stored_password<'a>(&'a self, username: &str) -> Option<StoredPassword<'a>>;
 }
 
+impl<T> ScramCredentialProvider for Arc<T> 
+where
+    T: ScramCredentialProvider
+{ 
+    fn get_stored_password<'a>(&'a self, username: &str) -> Option<StoredPassword<'a>> {
+        self.as_ref().get_stored_password(username)
+    }
+}
+
 #[derive(Debug, Clone)]
-pub(crate) enum ScramVersion {
+pub enum ScramVersion {
+    /// SHA-1
     Sha1,
+    
+    /// SHA-256
     Sha256,
+
+    /// SHA-512
     Sha512,
 }
 
@@ -67,7 +91,7 @@ impl ScramVersion {
         (client_first_message, client_first_message_bare)
     }
 
-    fn h_i(&self, password: &[u8], salt: &[u8], iterations: u32) -> Vec<u8> {
+    pub(crate) fn h_i(&self, password: &[u8], salt: &[u8], iterations: u32) -> Vec<u8> {
         match self {
             ScramVersion::Sha1 => h_i::<Hmac<Sha1>>(password, salt, iterations, 160 / 8),
             ScramVersion::Sha256 => h_i::<Hmac<Sha256>>(password, salt, iterations, 256 / 8),
@@ -75,7 +99,7 @@ impl ScramVersion {
         }
     }
 
-    fn compute_salted_password(
+    pub(crate) fn compute_salted_password(
         &self,
         password: &str,
         salt: &[u8],
@@ -86,7 +110,7 @@ impl ScramVersion {
     }
 
     /// HMAC function used as part of SCRAM authentication.
-    fn hmac(&self, key: &[u8], input: &[u8]) -> Result<Vec<u8>, InvalidLength> {
+    pub(crate) fn hmac(&self, key: &[u8], input: &[u8]) -> Result<Vec<u8>, InvalidLength> {
         let bytes = match self {
             ScramVersion::Sha1 => mac::<Hmac<Sha1>>(key, input)?.as_ref().into(),
             ScramVersion::Sha256 => mac::<Hmac<Sha256>>(key, input)?.as_ref().into(),
@@ -107,7 +131,7 @@ impl ScramVersion {
     /// result depends on the hash result size for the hash function in use
     ///
     ///  dkLen == output length of HMAC() == output length of H()
-    fn h(&self, str: &[u8]) -> Vec<u8> {
+    pub(crate) fn h(&self, str: &[u8]) -> Vec<u8> {
         match self {
             ScramVersion::Sha1 => hash::<Sha1>(str),
             ScramVersion::Sha256 => hash::<Sha256>(str),

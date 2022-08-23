@@ -1,1 +1,1 @@
-pub use super::scram::ScramErrorKind;
+pub use super::scram::{ScramErrorKind, ServerScramErrorKind};

@@ -9,6 +9,9 @@ pub mod local_sender_link;
 pub mod sasl_acceptor;
 pub mod session;
 
+#[cfg(feature = "scram")]
+pub mod scram;
+
 use fe2o3_amqp_types::{
     definitions::{ReceiverSettleMode, SenderSettleMode},
     performatives::Begin,
