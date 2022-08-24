@@ -1,0 +1,9 @@
+[package]
+name = "fe2o3-amqp-management"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fe2o3-amqp = "0.4.2"
