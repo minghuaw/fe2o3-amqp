@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.4
+
+1. Fixed typos in Readme
+
 ## 0.2.3
 
 1. Added `Borrow<str>` impl for `Symbol` and `SymbolRef`
