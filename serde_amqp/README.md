@@ -46,13 +46,13 @@ struct Foo(Option<bool>, Option<i32>);
 let foo = Foo(Some(true), Some(3));
 let buf = to_vec(&foo).unwrap();
 let value: Value = from_slice(&buf).unwrap();
-let expected = Value::Described(
+let expected = Value::from(
     Described {
         descriptor: Descriptor::Code(0x13),
-        value: Box::new(Value::List(vec![
+        value: Value::List(vec![
             Value::Bool(true),
             Value::Int(3)
-        ]))
+        ])
     }
 );
 assert_eq!(value, expected);
@@ -163,10 +163,10 @@ pub struct Attach {
     pub max_message_size: Option<ULong>,
 
     /// <field name="offered-capabilities" type="symbol" multiple="true"/>
-    pub offered_capabilities: Option<Vec<Symbol>>,
+    pub offered_capabilities: Option<Array<Symbol>>,
 
     /// <field name="desired-capabilities" type="symbol" multiple="true"/>
-    pub desired_capabilities: Option<Vec<Symbol>>,
+    pub desired_capabilities: Option<Array<Symbol>>,
 
     /// <field name="properties" type="fields"/>
     pub properties: Option<Fields>,
