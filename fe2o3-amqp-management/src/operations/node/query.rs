@@ -18,6 +18,8 @@
 //! in the same order. Thus, if there are no changes to the set of entities that match the query
 //! then consistency MUST be maintained between requests for successive pages.
 
+use fe2o3_amqp_types::primitives::Value;
+
 pub struct QueryRequestProperties {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
@@ -41,13 +43,37 @@ pub struct QueryRequestBody {
     attribute_names: Vec<String>,
 }
 
+/// Specifies the number of entries from the result set being returned. Note that the value of count
+/// MUST be the same as number of elements in the list value associated with the results key in the
+/// body of the response message.
 pub struct QueryResponseProperties {
+    count: u32,
+}
 
+/// The body of the message MUST consist of an amqp-value section containing a map which MUST have
+/// the following entries, where all keys MUST be of type string:
+pub struct QueryResponseBody {
+    /// A list of strings where each element represents an attribute name. If the attributeNames
+    /// passed in the body of the request contained a non-empty list then this value MUST consist of
+    /// the exact same sequence of strings. If the body of the request did not contain an
+    /// attributeNames entry then this value MUST contain the union of all attribute names for all
+    /// Manageable Entity Types that match the query.
+    attribute_names: Vec<String>,
+
+    /// This value provides the portion of the result set being requested (as controlled by offset
+    /// and count). Each element MUST provide the list of attribute values for a single Manageable
+    /// Entity where the values are positionally-correlated with the names in the attributeNames
+    /// entry. In the case where an attribute name is not applicable for a particular Manageable
+    /// Entity then the corresponding value should be null.
+    ///
+    /// If the result set is empty then this value MUST be a list of zero elements.
+    results: Vec<Vec<Value>>,
 }
 
 pub struct QueryResponse {
     properties: QueryRequestProperties,
-    
+    body: QueryRequestBody,
+
 }
 
 impl QueryResponse {
