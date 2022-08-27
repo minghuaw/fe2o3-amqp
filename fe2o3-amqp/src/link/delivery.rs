@@ -203,43 +203,14 @@ impl Sendable<Uninitialized> {
     }
 }
 
-impl<T> From<T> for Sendable<T>
+impl<T, U> From<T> for Sendable<U>
 where
-    T: Into<Message<T>>,
+    T: Into<Message<U>>,
 {
     fn from(value: T) -> Self {
         Self {
             message: value.into(),
             message_format: MESSAGE_FORMAT,
-            settled: None,
-        }
-    }
-}
-
-impl<T> From<Message<T>> for Sendable<T> {
-    fn from(message: Message<T>) -> Self {
-        Self {
-            message,
-            message_format: MESSAGE_FORMAT,
-            settled: None,
-        }
-    }
-}
-
-impl<T> From<Body<T>> for Sendable<T> {
-    fn from(body: Body<T>) -> Self {
-        let message = Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body,
-            footer: None,
-        };
-        Self {
-            message,
-            message_format: 0,
             settled: None,
         }
     }
@@ -507,5 +478,52 @@ where
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fe2o3_amqp_types::{
+        messaging::{AmqpValue, Body, Data, Message},
+        primitives::Binary,
+    };
+    use serde_amqp::Value;
+
+    use crate::Sendable;
+
+    struct Foo {}
+
+    impl From<Foo> for Message<Value> {
+        fn from(_: Foo) -> Self {
+            Message::builder().data(Binary::from("Foo")).build()
+        }
+    }
+
+    #[test]
+    fn test_from_primitive_into_sendable() {
+        let value = false;
+        let sendable = Sendable::from(value);
+        assert_eq!(sendable.message.body, Body::Value(AmqpValue(false)));
+    }
+
+    #[test]
+    fn test_from_body_into_sendable() {
+        let body = Body::Value(AmqpValue(3.1415926_f64));
+        let sendable = Sendable::from(body);
+        assert_eq!(sendable.message.body, Body::Value(AmqpValue(3.1415926_f64)));
+    }
+
+    #[test]
+    fn test_from_message_into_sendable() {
+        let message = Message::builder().value(5671_u32).build();
+        let sendable = Sendable::from(message);
+        assert_eq!(sendable.message.body, Body::Value(AmqpValue(5671_u32)));
+    }
+
+    #[test]
+    fn test_from_custom_type_into_sendable() {
+        let value = Foo {};
+        let sendable = Sendable::from(value);
+        assert_eq!(sendable.message.body, Body::Data(Data(Binary::from("Foo"))));
     }
 }
