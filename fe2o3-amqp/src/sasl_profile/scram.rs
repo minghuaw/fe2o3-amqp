@@ -9,12 +9,12 @@ use super::SaslProfile;
 /// The SHA-1 hash function should be considered cryptographically
 /// broken and unsuitable for further use in any security critical capacity,
 /// as it is practically vulnerable to chosen-prefix collisions.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha1};
-/// 
+///
 /// let mut connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .sasl_profile(SaslScramSha1::new("username", "password"))
@@ -42,12 +42,12 @@ impl From<SaslScramSha1> for SaslProfile {
 }
 
 /// SASL-SCRAM-SHA-256
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha256};
-/// 
+///
 /// let mut connection = Connection::builder()
 ///     .container_id("connection-1")
 ///     .sasl_profile(SaslScramSha256::new("username", "password"))
@@ -75,9 +75,9 @@ impl From<SaslScramSha256> for SaslProfile {
 }
 
 /// SASL-SCRAM-SHA-512
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use fe2o3_amqp::{Connection, sasl_profile::SaslScramSha512};
 ///

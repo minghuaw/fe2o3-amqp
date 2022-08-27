@@ -1,11 +1,20 @@
 //! Provide SASL-SCRAM acceptor
 
-use fe2o3_amqp_types::{primitives::{Array, Symbol, Binary}, sasl::{SaslOutcome, SaslCode, SaslChallenge}};
+use fe2o3_amqp_types::{
+    primitives::{Array, Binary, Symbol},
+    sasl::{SaslChallenge, SaslCode, SaslOutcome},
+};
 use rand::Rng;
 
-use crate::{auth::{scram::{ScramCredentialProvider, StoredPassword, ScramVersion, DEFAULT_SCRAM_ITERATIONS, ScramAuthenticator}, error::ServerScramErrorKind}};
+use crate::auth::{
+    error::ServerScramErrorKind,
+    scram::{
+        ScramAuthenticator, ScramCredentialProvider, ScramVersion, StoredPassword,
+        DEFAULT_SCRAM_ITERATIONS,
+    },
+};
 
-use super::{SaslAcceptor, sasl_acceptor::SaslServerFrame};
+use super::{sasl_acceptor::SaslServerFrame, SaslAcceptor};
 
 /// Single SCRAM credential
 #[derive(Debug)]
@@ -21,13 +30,17 @@ pub struct SingleScramCredential {
 impl SingleScramCredential {
     /// Creates a new [`SingleScramCredential`] with the specified [`ScramVersion`]
     pub fn new(
-        username: impl Into<String>, 
+        username: impl Into<String>,
         password: impl AsRef<str>,
         scram_version: ScramVersion,
     ) -> Result<Self, ServerScramErrorKind> {
         let salt: [u8; 32] = rand::thread_rng().gen();
         let salt = Vec::from(salt);
-        let salted_password = scram_version.compute_salted_password(password.as_ref(), &salt, DEFAULT_SCRAM_ITERATIONS)?;
+        let salted_password = scram_version.compute_salted_password(
+            password.as_ref(),
+            &salt,
+            DEFAULT_SCRAM_ITERATIONS,
+        )?;
 
         let client_key = scram_version.hmac(&salted_password, b"Client Key")?;
         let stored_key = scram_version.h(&client_key);
@@ -48,7 +61,10 @@ impl ScramCredentialProvider for SingleScramCredential {
         &self.scram_version
     }
 
-    fn get_stored_password<'a>(&'a self, username: &str) -> Option<crate::auth::scram::StoredPassword<'a>> {
+    fn get_stored_password<'a>(
+        &'a self,
+        username: &str,
+    ) -> Option<crate::auth::scram::StoredPassword<'a>> {
         if username == self.username {
             Some(StoredPassword {
                 salt: &self.salt,
@@ -62,29 +78,33 @@ impl ScramCredentialProvider for SingleScramCredential {
     }
 }
 
-impl<C> SaslAcceptor for ScramAuthenticator<C> 
+impl<C> SaslAcceptor for ScramAuthenticator<C>
 where
     C: ScramCredentialProvider + Clone,
 {
-    fn mechanisms(&self) -> fe2o3_amqp_types::primitives::Array<fe2o3_amqp_types::primitives::Symbol> {
-        Array::from(vec![Symbol::from(self.credentials().scram_version().mechanism())])
+    fn mechanisms(
+        &self,
+    ) -> fe2o3_amqp_types::primitives::Array<fe2o3_amqp_types::primitives::Symbol> {
+        Array::from(vec![Symbol::from(
+            self.credentials().scram_version().mechanism(),
+        )])
     }
 
     fn on_init(&mut self, init: fe2o3_amqp_types::sasl::SaslInit) -> SaslServerFrame {
         if init.mechanism.as_str() == self.credentials().scram_version().mechanism() {
             let client_first = match init.initial_response {
                 Some(client_first) => client_first,
-                None => return SaslServerFrame::Outcome(SaslOutcome {
-                    code: SaslCode::Auth,
-                    additional_data: None,
-                }),
+                None => {
+                    return SaslServerFrame::Outcome(SaslOutcome {
+                        code: SaslCode::Auth,
+                        additional_data: None,
+                    })
+                }
             };
             match self.compute_server_first_message(&client_first) {
-                Ok(Some(server_first)) => {
-                    SaslServerFrame::Challenge(SaslChallenge {
-                        challenge: Binary::from(server_first),
-                    })
-                },
+                Ok(Some(server_first)) => SaslServerFrame::Challenge(SaslChallenge {
+                    challenge: Binary::from(server_first),
+                }),
                 Ok(None) | Err(_) => SaslServerFrame::Outcome(SaslOutcome {
                     code: SaslCode::Auth,
                     additional_data: None,
