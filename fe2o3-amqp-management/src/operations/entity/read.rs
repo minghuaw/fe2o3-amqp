@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
 
+use fe2o3_amqp_types::primitives::Value;
+
 use crate::{Extractor, IntoResponse, error::Result};
 
 pub trait Read {
-    type Req: Extractor;
-    type Res: IntoResponse;
-
-    fn read(&mut self, arg: Self::Req) -> Result<Self::Res>;
+    fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
 }
 
-pub struct ReadRequestProperties {
+/// Retrieve the attributes of a Manageable Entity.
+/// 
+/// Body: No information is carried in the message body therefore any message body is valid and MUST
+/// be ignored
+pub struct ReadRequest {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     pub name: String,
 
@@ -18,7 +21,7 @@ pub struct ReadRequestProperties {
 }
 
 pub struct ReadResponse {
-    entity_attributes: BTreeMap<String, String>,
+    entity_attributes: BTreeMap<String, Value>,
 }
 
 impl ReadResponse {

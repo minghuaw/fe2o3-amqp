@@ -1,20 +1,39 @@
 use std::collections::BTreeMap;
 
+use fe2o3_amqp_types::primitives::Value;
+
 use crate::{Extractor, IntoResponse, error::Result};
 
 pub trait Update {
-    type Req: Extractor;
-    type Res: IntoResponse;
-
-    fn update(&mut self, arg: Self::Req) -> Result<Self::Res>;
+    fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse>;
 }
 
-pub struct UpdateRequestProperties {
+/// Update a Manageable Entity.
+/// 
+/// # Body: 
+/// 
+/// The body MUST consist of an amqp-value section containing a map. The map consists of key-value
+/// pairs where the key represents the name of an attribute of the entity and the value represents
+/// the initial value it SHOULD take. The absence of an attribute name implies that the entity
+/// should retain its existing value.
+/// 
+/// If the map contains a key-value pair where the value is null then the updated entity should have
+/// no value for that attribute, removing any previous value.
+/// 
+/// In the case where the supplied map contains multiple attributes, then the update MUST be treated
+/// as a single, atomic operation so if any of the changes cannot be applied, none of the attributes
+/// in the map should be updated and this MUST result in a failure response.
+/// 
+/// Where the type of the attribute value provided is not as required, type conversion as per the
+/// rules in 3.3.1.1 MUST be provided.
+pub struct UpdateRequest {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     pub name: String,
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     pub identity: String,
+
+    pub body: BTreeMap<String, Value>,
 }
 
 /// If the request was successful then the statusCode MUST contain 200 (OK) and the body of the
@@ -26,7 +45,7 @@ pub struct UpdateRequestProperties {
 /// type conversion as above), MUST result in a failure response with a statusCode of 400 (Bad
 /// Request).
 pub struct UpdateResponse {
-    entity_attributes: BTreeMap<String, String>,
+    entity_attributes: BTreeMap<String, Value>,
 }
 
 impl UpdateResponse {

@@ -1,17 +1,55 @@
 use std::collections::BTreeMap;
 
+use fe2o3_amqp_types::primitives::Value;
+
 use crate::{Extractor, IntoResponse, error::Result, status::StatusCode};
 
 pub trait Create {
-    type Req: Extractor;
-    type Res: IntoResponse;
-
-    fn create(&mut self, req: Self::Req) -> Result<Self::Res>;
+    fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
 }
 
-pub struct CreateRequestProperties {
+pub struct CreateRequest {
+    /// Additional application-properties
+    ///
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     pub name: String,
+
+    /// The body MUST consist of an amqp-value section containing a map. The map consists of
+    /// key-value pairs where the key represents the name of an attribute of the entity and the
+    /// value represents the initial value it SHOULD take.
+    /// 
+    /// The absence of an attribute name implies that the entity should take its default value, if
+    /// defined.
+    /// 
+    /// If the map contains a key-value pair where the value is null then the created entity should
+    /// have no value for that attribute, overriding any default.
+    /// 
+    /// Where the attribute value provided is of type string, but the expected AMQP type of the
+    /// attribute value is not string, conversion into the correct type MUST be performed according
+    /// to the following rules:
+    /// 
+    /// • A string that consists solely of characters from the ASCII character-set, will be
+    /// converted into a symbol if so required.
+    /// 
+    /// • A string that can be parsed as a number according to [RFC7159] will be converted to a
+    /// ubyte, ushort, uint, ulong, byte, short, int, or long if so required and the number lies
+    /// within the domain of the given AMQP type and represents an integral number
+    /// 
+    /// • A string which can be parsed as a number according to [RFC7159] will be converted to an
+    /// float, double, decimal32, decimal64 or decimal128 if so required and the number lies within
+    /// the domain of the given AMQP type.
+    /// 
+    /// • A string which can be parsed as true or false according to [RFC7159] will be converted to
+    /// a boolean value if so required.
+    /// 
+    /// • A string which can be parsed as an array according to [RFC7159] will be converted into a
+    /// list (with the values type-converted into elements as necessary according to the same rules)
+    /// if so required.
+    /// 
+    /// • A string which can be parsed as an object according to [RFC7159] will be converted into a
+    /// map (with the values type-converted into map values as necessary according to the same
+    /// rules) if so required.
+    body: BTreeMap<String, Value>,
 }
 
 /// If the request was successful then the statusCode MUST be 201 (Created) and the body of the
@@ -26,7 +64,7 @@ pub struct CreateRequestProperties {
 /// applicable for the entity being created, or invalid values for a given attribute, MUST result in
 /// a failure response with a statusCode of 400 (Bad Request).
 pub struct CreateResponse {
-    entity_attributes: BTreeMap<String, String>,
+    entity_attributes: BTreeMap<String, Value>,
 }
 
 impl CreateResponse {
