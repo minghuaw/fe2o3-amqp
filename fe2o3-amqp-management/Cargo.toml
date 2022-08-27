@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 fe2o3-amqp = "0.4.2"
+fe2o3-amqp-types = "0.3.4"
+serde = "1"
