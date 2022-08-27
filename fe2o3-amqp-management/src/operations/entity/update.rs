@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::primitives::Value;
 
-use crate::{Extractor, IntoResponse, error::Result};
+use crate::{error::Result};
 
 pub trait Update {
     fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse>;

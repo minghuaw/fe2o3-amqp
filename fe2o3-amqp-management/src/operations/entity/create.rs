@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::primitives::Value;
 
-use crate::{Extractor, IntoResponse, error::Result, status::StatusCode};
+use crate::{error::Result, status::StatusCode};
 
 pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;

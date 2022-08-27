@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::primitives::Value;
 
-use crate::{Extractor, IntoResponse, error::Result};
+use crate::{error::Result};
 
 pub trait Read {
     fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
