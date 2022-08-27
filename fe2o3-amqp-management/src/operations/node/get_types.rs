@@ -2,7 +2,18 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::primitives::Value;
 
-pub struct GetTypesRequestProperties {
+use crate::error::Result;
+
+pub trait GetTypes {
+    fn get_types(&self, req: GetTypesRequest) -> Result<GetTypesResponse>;
+}
+
+/// GET-TYPES
+/// 
+/// Body:
+/// 
+/// No information is carried in the message body therefore any message body is valid and MUST be ignored.
+pub struct GetTypesRequest {
     entity_type: Option<String>
 }
 

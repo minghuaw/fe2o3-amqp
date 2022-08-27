@@ -20,7 +20,13 @@
 
 use fe2o3_amqp_types::primitives::Value;
 
-pub struct QueryRequestProperties {
+use crate::error::Result;
+
+pub trait Query {
+    fn query(&self, req: QueryRequest) -> Result<QueryResponse>;
+}
+
+pub struct QueryRequest {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
     entity_type: Option<String>,
@@ -32,27 +38,23 @@ pub struct QueryRequestProperties {
     /// If set, specifies the number of entries from the result set to return. If not provided, all
     /// results from ‘offset’ onwards MUST be returned.
     count: Option<u32>,
-}
 
-/// The body of the message MUST consist of an amqp-value section containing a map which MUST have
-/// the following entries, where all keys MUST be of type string:
-pub struct QueryRequestBody {
+    /// The body of the message MUST consist of an amqp-value section containing a map which MUST have
+    /// the following entries, where all keys MUST be of type string:
     /// A list of strings representing the names of the attributes of the Manageable Entities being
     /// requested. The list MUST NOT contain duplicate elements. If the list contains no elements
     /// then this indicates that all attributes are being requested.
-    attribute_names: Vec<String>,
+    body: Vec<String>,
 }
 
-/// Specifies the number of entries from the result set being returned. Note that the value of count
-/// MUST be the same as number of elements in the list value associated with the results key in the
-/// body of the response message.
-pub struct QueryResponseProperties {
+pub struct QueryResponse {
+    /// Specifies the number of entries from the result set being returned. Note that the value of count
+    /// MUST be the same as number of elements in the list value associated with the results key in the
+    /// body of the response message.
     count: u32,
-}
 
-/// The body of the message MUST consist of an amqp-value section containing a map which MUST have
-/// the following entries, where all keys MUST be of type string:
-pub struct QueryResponseBody {
+    /// Body
+    /// 
     /// A list of strings where each element represents an attribute name. If the attributeNames
     /// passed in the body of the request contained a non-empty list then this value MUST consist of
     /// the exact same sequence of strings. If the body of the request did not contain an
@@ -60,6 +62,8 @@ pub struct QueryResponseBody {
     /// Manageable Entity Types that match the query.
     attribute_names: Vec<String>,
 
+    /// Body
+    ///
     /// This value provides the portion of the result set being requested (as controlled by offset
     /// and count). Each element MUST provide the list of attribute values for a single Manageable
     /// Entity where the values are positionally-correlated with the names in the attributeNames
@@ -68,11 +72,6 @@ pub struct QueryResponseBody {
     ///
     /// If the result set is empty then this value MUST be a list of zero elements.
     results: Vec<Vec<Value>>,
-}
-
-pub struct QueryResponse {
-    properties: QueryRequestProperties,
-    body: QueryRequestBody,
 
 }
 
