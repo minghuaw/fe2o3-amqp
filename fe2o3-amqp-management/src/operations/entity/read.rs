@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::Value;
+use fe2o3_amqp_types::{primitives::{Value}, messaging::{Message, ApplicationProperties}};
 
-use crate::{error::Result};
+use crate::{error::Result, request::IntoMessageFields};
 
 pub trait Read {
     fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
@@ -18,6 +18,17 @@ pub struct ReadRequest {
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     pub identity: String,
+}
+
+impl<T> IntoMessageFields<T> for ReadRequest {
+    type Body = T;
+
+    fn into_message_fields(self, mut message: Message<T>) -> Message<Self::Body> {
+        let application_properties = message.application_properties.get_or_insert(ApplicationProperties::default());
+        application_properties.insert(String::from("name"), self.name.into());
+        application_properties.insert(String::from("identity"), self.identity.into());
+        message
+    }
 }
 
 pub struct ReadResponse {

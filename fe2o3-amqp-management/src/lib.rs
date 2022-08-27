@@ -1,15 +1,10 @@
-use fe2o3_amqp_types::{primitives::Value, messaging::Message};
-use operations::entity::ManageableEntityOperations;
-
 pub mod operations;
 pub mod error;
 pub mod status;
+pub mod client;
 
 mod request;
 mod response;
-
-use error::Result;
-use serde::Serialize;
 
 pub const MANAGEMENT_NODE_ADDRESS: &str = "$management";
 

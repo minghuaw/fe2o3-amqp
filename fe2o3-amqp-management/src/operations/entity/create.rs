@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::Value;
+use fe2o3_amqp_types::{primitives::{Value, SimpleValue}, messaging::{Message, ApplicationProperties, AmqpValue, Body}};
 
-use crate::{error::Result};
+use crate::{error::Result, request::IntoMessageFields};
 
 pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
@@ -50,6 +50,28 @@ pub struct CreateRequest {
     /// map (with the values type-converted into map values as necessary according to the same
     /// rules) if so required.
     body: BTreeMap<String, Value>,
+}
+
+impl<T> IntoMessageFields<T> for CreateRequest {
+    type Body = BTreeMap<String, Value>;
+
+    fn into_message_fields(self, mut message: Message<T>) -> Message<Self::Body> {
+        message.application_properties.get_or_insert(ApplicationProperties::default())
+            .insert(String::from("name"), SimpleValue::String(self.name));
+
+        let body = Body::Value(AmqpValue(self.body));
+        let message = Message {
+            header: message.header,
+            delivery_annotations: message.delivery_annotations,
+            message_annotations: message.message_annotations,
+            properties: message.properties,
+            application_properties: message.application_properties,
+            body,
+            footer: message.footer,
+        };
+            
+        message
+    }
 }
 
 /// If the request was successful then the statusCode MUST be 201 (Created) and the body of the

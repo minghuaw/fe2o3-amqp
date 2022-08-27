@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::Value;
+use fe2o3_amqp_types::{primitives::Value, messaging::ApplicationProperties};
 
-use crate::{error::Result};
+use crate::{error::Result, request::IntoMessageFields};
 
 pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
@@ -28,6 +28,17 @@ pub struct DeleteRequest {
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     pub identity: String,
+}
+
+impl<T> IntoMessageFields<T> for DeleteRequest {
+    type Body = T;
+
+    fn into_message_fields(self, mut message: fe2o3_amqp_types::messaging::Message<T>) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
+        let application_properties = message.application_properties.get_or_insert(ApplicationProperties::default());
+        application_properties.insert(String::from("name"), self.name.into());
+        application_properties.insert(String::from("identity"), self.identity.into());
+        message
+    }
 }
 
 /// The body of the message MUST consist of an amqp-value section containing a map with zero

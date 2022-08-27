@@ -1,3 +1,5 @@
+use self::{entity::{CreateRequest, ReadRequest, UpdateRequest, DeleteRequest}, node::{QueryRequest, GetTypesRequest, GetAnnotationsRequest, GetAttributesRequest, GetMgmtNodesRequest, GetOperationsRequest, RegisterRequest, DeregisterRequest}};
+
 pub mod entity;
 pub mod node;
 
@@ -13,3 +15,18 @@ pub const GET_OPERATIONS: &str = "GET-OPERATIONS";
 pub const GET_MGMT_NODES: &str = "GET-MGMT-NODES";
 pub const REGISTER: &str = "REGISTER";
 pub const DEREGISTER: &str = "DEREGISTER";
+
+pub enum OperationRequest {
+    Create(CreateRequest),
+    Read(ReadRequest),
+    Update(UpdateRequest),
+    Delete(DeleteRequest),
+    Query(QueryRequest),
+    GetTypes(GetTypesRequest),
+    GetAnnotations(GetAnnotationsRequest),
+    GetAttributes(GetAttributesRequest),
+    GetOperations(GetOperationsRequest),
+    GetMgmtNodes(GetMgmtNodesRequest),
+    Register(RegisterRequest),
+    Deregister(DeregisterRequest),
+}

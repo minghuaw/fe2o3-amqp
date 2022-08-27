@@ -1,3 +1,7 @@
+use fe2o3_amqp_types::messaging::Message;
+
+use crate::operations::OperationRequest;
+
 
 pub struct RequestMessageProperties {
     /// The management operation to be performed. This is case-sensitive.
@@ -21,5 +25,17 @@ pub struct RequestMessageProperties {
     /// supplied in the locales as it is always the fallback.
     /// 
     /// The string is not case-sensitive.
-    pub locales: Option<String>, 
+    pub locales: Option<String>,
+}
+
+pub struct Request {
+    operation: OperationRequest,
+    entity_type: String,
+    locales: Option<String>,
+}
+
+pub(crate) trait IntoMessageFields<T> {
+    type Body;
+
+    fn into_message_fields(self, message: Message<T>) -> Message<Self::Body>;
 }
