@@ -11,3 +11,10 @@ pub use delete::*;
 pub trait ManageableEntityOperations: Create + Read + Update + Delete {
     
 }
+
+impl<T> ManageableEntityOperations for T 
+where
+    T: Create + Read + Update + Delete 
+{
+    
+}
