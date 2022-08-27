@@ -13,18 +13,6 @@ use serde::Serialize;
 
 pub const MANAGEMENT_NODE_ADDRESS: &str = "$management";
 
-pub trait Extractor: Sized {
-    type Value;
-
-    fn from_message(message: Message<Self::Value>) -> Result<Self>;
-}
-
-pub trait IntoResponse {
-    type Value: Serialize;
-
-    fn into_message(self) -> Result<Message<Self::Value>>;
-}
-
 pub trait ManageableEntityAttributes {
     // Attributes
 
