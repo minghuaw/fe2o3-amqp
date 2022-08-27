@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.3
+
+1. Extend conversions into `Sendable<_>` to all types that implements conversion into `Message` (ie. `impl<T: Into<Message<U>>,U> From<T> for Sendable<U>`)
+
 ## 0.4.2
 
 1. Implemented SCRAM authenticator on the server side

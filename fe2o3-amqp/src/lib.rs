@@ -191,16 +191,16 @@
 //! - [ ] Pipelined open
 
 pub(crate) mod control;
-pub(crate) mod util;
 pub(crate) mod endpoint;
+pub(crate) mod util;
 
+pub mod auth;
 pub mod connection;
 pub mod frames;
 pub mod link;
 pub mod sasl_profile;
 pub mod session;
 pub mod transport;
-pub mod auth;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "acceptor")))]
 #[cfg(feature = "acceptor")]

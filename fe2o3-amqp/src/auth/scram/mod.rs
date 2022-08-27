@@ -15,7 +15,7 @@ use attributes::{
     CHANNEL_BINDING_KEY, GS2_HEADER, ITERATION_COUNT_KEY, NONCE_KEY, PROOF_KEY, RESERVED_MEXT,
     SALT_KEY, USERNAME_KEY, VERIFIER_KEY,
 };
-use error::{XorLengthMismatch};
+use error::XorLengthMismatch;
 
 mod attributes;
 pub(crate) mod client;
@@ -29,7 +29,7 @@ mod server;
 #[cfg(feature = "acceptor")]
 pub use server::ScramAuthenticator;
 
-use crate::sasl_profile::{SCRAM_SHA_1, SCRAM_SHA_512, SCRAM_SHA_256};
+use crate::sasl_profile::{SCRAM_SHA_1, SCRAM_SHA_256, SCRAM_SHA_512};
 
 /// Default iterations for SCRAM
 pub const DEFAULT_SCRAM_ITERATIONS: u32 = 4096;
@@ -61,10 +61,10 @@ pub trait ScramCredentialProvider {
     fn get_stored_password<'a>(&'a self, username: &str) -> Option<StoredPassword<'a>>;
 }
 
-impl<T> ScramCredentialProvider for Arc<T> 
+impl<T> ScramCredentialProvider for Arc<T>
 where
-    T: ScramCredentialProvider
-{ 
+    T: ScramCredentialProvider,
+{
     fn scram_version(&self) -> &ScramVersion {
         self.as_ref().scram_version()
     }
@@ -79,7 +79,7 @@ where
 pub enum ScramVersion {
     /// SHA-1
     Sha1,
-    
+
     /// SHA-256
     Sha256,
 
@@ -724,8 +724,13 @@ mod tests {
         let client_first_message_bare =
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
 
-        let test_credential =
-            TestScramCredential::new(VERSION.clone(), TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
+        let test_credential = TestScramCredential::new(
+            VERSION.clone(),
+            TEST_USERNAME,
+            TEST_PASSWORD,
+            salt,
+            ITERATIONS,
+        );
 
         let server_first = VERSION
             .compute_server_first_message(
@@ -764,8 +769,13 @@ mod tests {
         let client_first_message_bare =
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
 
-        let test_credential =
-            TestScramCredential::new(VERSION.clone(), TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
+        let test_credential = TestScramCredential::new(
+            VERSION.clone(),
+            TEST_USERNAME,
+            TEST_PASSWORD,
+            salt,
+            ITERATIONS,
+        );
 
         let server_first = VERSION
             .compute_server_first_message(
@@ -804,8 +814,13 @@ mod tests {
         let client_first_message_bare =
             get_client_first_message_bare(EXPECTED_CLIENT_INITIAL_RESPONSE);
 
-        let test_credential =
-            TestScramCredential::new(VERSION.clone(), TEST_USERNAME, TEST_PASSWORD, salt, ITERATIONS);
+        let test_credential = TestScramCredential::new(
+            VERSION.clone(),
+            TEST_USERNAME,
+            TEST_PASSWORD,
+            salt,
+            ITERATIONS,
+        );
 
         let server_first = VERSION
             .compute_server_first_message(

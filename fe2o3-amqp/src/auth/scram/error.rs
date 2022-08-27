@@ -106,7 +106,7 @@ pub enum ServerScramErrorKind {
     #[error("Error parsing client final message")]
     CannotParseClientFinalMessage,
 
-    /// Invalid channel binding 
+    /// Invalid channel binding
     #[error("Invalid channel binding")]
     InvalidChannelBinding,
 

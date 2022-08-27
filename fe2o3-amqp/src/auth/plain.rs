@@ -1,4 +1,3 @@
-
 /// Provide credential
 pub trait PlainCredentialProvider {
     /// Get the password if user exists

@@ -1,7 +1,6 @@
 use bytes::Bytes;
 
-use super::{ScramVersion, generate_nonce, ScramErrorKind};
-
+use super::{generate_nonce, ScramErrorKind, ScramVersion};
 
 #[derive(Debug, Clone)]
 enum ScramClientState {

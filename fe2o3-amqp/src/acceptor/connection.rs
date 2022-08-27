@@ -254,13 +254,12 @@ where
 
         let mut sasl_acceptor = self.sasl_acceptor.clone();
         loop {
-            let frame = match transport.next().await.ok_or(OpenError::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "Expecting SASL frames")))?? {
-                sasl::Frame::Init(init) => {
-                    sasl_acceptor.on_init(init)
-                },
-                sasl::Frame::Response(response) => {
-                    sasl_acceptor.on_response(response)
-                },
+            let frame = match transport.next().await.ok_or(OpenError::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Expecting SASL frames",
+            )))?? {
+                sasl::Frame::Init(init) => sasl_acceptor.on_init(init),
+                sasl::Frame::Response(response) => sasl_acceptor.on_response(response),
                 _ => {
                     let outcome = SaslOutcome {
                         code: SaslCode::Sys,
@@ -279,13 +278,13 @@ where
                     let frame = sasl::Frame::Challenge(challenge);
                     tracing::trace!(sending = ?frame);
                     transport.send(frame).await?;
-                },
+                }
                 SaslServerFrame::Outcome(outcome) => {
                     let frame = sasl::Frame::Outcome(outcome);
                     tracing::trace!(sending = ?frame);
                     transport.send(frame).await?;
-                    break
-                },
+                    break;
+                }
             }
         }
 
