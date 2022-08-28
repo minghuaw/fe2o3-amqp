@@ -100,7 +100,7 @@ pub(crate) fn where_serialize(generics: &syn::Generics) -> proc_macro2::TokenStr
         })
         .for_each(|id| {
             wheres.push(quote! {
-                #id: serde::ser::Serialize
+                #id: serde_amqp::serde::ser::Serialize
             })
         });
     quote! {
@@ -123,7 +123,7 @@ pub(crate) fn where_deserialize(generics: &syn::Generics) -> proc_macro2::TokenS
         })
         .for_each(|id| {
             wheres.push(quote! {
-                #id: serde::de::Deserialize<'de>
+                #id: serde_amqp::serde::de::Deserialize<'de>
             })
         });
     quote! {
