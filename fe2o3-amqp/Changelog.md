@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.1
+
+1. Added trait bound `Serialize` for `U` in `impl<T, U> From<T> for Sendable<U>`.
+
 ## 0.5.0
 
 1. Updated `fe2o3-amqp-types` to `"0.4.0"` which introduced the following breaking changes

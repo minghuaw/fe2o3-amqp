@@ -10,6 +10,7 @@ use fe2o3_amqp_types::{
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
+use serde::Serialize;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
@@ -206,6 +207,7 @@ impl Sendable<Uninitialized> {
 impl<T, U> From<T> for Sendable<U>
 where
     T: Into<Message<U>>,
+    U: Serialize,
 {
     fn from(value: T) -> Self {
         Self {
