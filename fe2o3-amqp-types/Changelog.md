@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.3.6
+
+1. Bug fix
+   1. `Body::Nothing` is now serialized as `AmqpValue(Value::Null)`
+
 ## 0.3.5
 
 1. Fixed typo

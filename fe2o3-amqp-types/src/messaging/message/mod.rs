@@ -634,6 +634,28 @@ mod tests {
     }
 
     #[test]
+    fn test_encode_message_with_body_nothing() {
+        let message: Message<Value> = Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: Body::Nothing,
+            footer: None,
+        };
+        let serializable = Serializable(message);
+        let buf = to_vec(&serializable).unwrap();
+
+        let expected = Message::builder()
+            .value(())
+            .build();
+        let expected = to_vec(&Serializable(expected)).unwrap();
+
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
     fn test_decode_message_using_reader() {
         let buf = &[
             0x0, 0x53, 0x70, 0xc0, 0xb, 0x5, 0x40, 0x40, 0x70, 0x48, 0x19, 0x8, 0x0, 0x40, 0x52,

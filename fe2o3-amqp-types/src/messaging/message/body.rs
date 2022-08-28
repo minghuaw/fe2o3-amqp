@@ -130,7 +130,7 @@ impl<T: Serialize> Body<T> {
             Body::Data(data) => data.serialize(serializer),
             Body::Sequence(seq) => seq.serialize(serializer),
             Body::Value(val) => val.serialize(serializer),
-            Body::Nothing => ().serialize(serializer),
+            Body::Nothing => AmqpValue(()).serialize(serializer),
         }
     }
 }
