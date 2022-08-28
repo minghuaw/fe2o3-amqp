@@ -1377,6 +1377,16 @@ mod tests {
 
     #[cfg(feature = "json")]
     #[test]
+    fn test_json_vec() {
+        let value = Value::List(vec![Value::Bool(true), Value::Bool(false)]);
+        let json = serde_json::to_string(&value).unwrap();
+        println!("{:?}", json);
+        let value2: Vec<Value> = serde_json::from_str(&json).unwrap();
+        println!("{:?}", value2);
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
     fn test_json_array() {
         use crate::primitives::Array;
 

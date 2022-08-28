@@ -10,6 +10,7 @@ use fe2o3_amqp_types::{
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
+use serde::Serialize;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
@@ -77,7 +78,7 @@ impl<T> Delivery<T> {
             Body::Value(AmqpValue(value)) => Ok(value),
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Nothing => Err(BodyError::IsNothing),
+            Body::Empty => Err(BodyError::IsEmpty),
         }
     }
 
@@ -88,7 +89,7 @@ impl<T> Delivery<T> {
             Body::Data(Data(data)) => Ok(data),
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Nothing => Err(BodyError::IsNothing),
+            Body::Empty => Err(BodyError::IsEmpty),
         }
     }
 
@@ -99,7 +100,7 @@ impl<T> Delivery<T> {
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
             Body::Value(_) => Err(BodyError::IsValue),
-            Body::Nothing => Err(BodyError::IsNothing),
+            Body::Empty => Err(BodyError::IsEmpty),
         }
     }
 
@@ -110,7 +111,7 @@ impl<T> Delivery<T> {
             Body::Value(AmqpValue(value)) => Ok(value),
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Nothing => Err(BodyError::IsNothing),
+            Body::Empty => Err(BodyError::IsEmpty),
         }
     }
 
@@ -121,7 +122,7 @@ impl<T> Delivery<T> {
             Body::Data(Data(data)) => Ok(data),
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Nothing => Err(BodyError::IsNothing),
+            Body::Empty => Err(BodyError::IsEmpty),
         }
     }
 
@@ -132,7 +133,7 @@ impl<T> Delivery<T> {
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
             Body::Value(_) => Err(BodyError::IsValue),
-            Body::Nothing => Err(BodyError::IsNothing),
+            Body::Empty => Err(BodyError::IsEmpty),
         }
     }
 }
@@ -143,7 +144,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
-            Body::Nothing => write!(f, "Nothing"),
+            Body::Empty => write!(f, "Empty"),
         }
     }
 }
@@ -206,6 +207,7 @@ impl Sendable<Uninitialized> {
 impl<T, U> From<T> for Sendable<U>
 where
     T: Into<Message<U>>,
+    U: Serialize,
 {
     fn from(value: T) -> Self {
         Self {

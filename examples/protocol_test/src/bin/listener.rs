@@ -51,6 +51,7 @@ async fn session_main(mut session: ListenerSessionHandle) {
                     let delivery = recver.recv::<Value>().await.unwrap();
                     tracing::info!(id = ?delivery.delivery_id());
                     recver.accept(&delivery).await.unwrap();
+                    tracing::info!("{:?}", delivery.into_message());
                     if let Err(e) = recver.close().await {
                         // The remote may close the session
                         error!(link="receiver", error=?e);

@@ -371,6 +371,35 @@ impl From<&str> for Value {
     }
 }
 
+impl<T> From<Array<T>> for Value 
+where
+    T: Into<Value>,
+{
+    fn from(values: Array<T>) -> Self {
+        let v = values.0.into_iter().map(Into::into).collect();
+        Self::Array(Array(v))
+    }
+}
+
+impl<T> From<Vec<T>> for Value
+where
+    T: Into<Value>,
+{
+    fn from(values: Vec<T>) -> Self {
+        Value::List(values.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<K, V> From<BTreeMap<K, V>> for Value
+where
+    K: Into<Value>,
+    V: Into<Value>,
+{
+    fn from(map: BTreeMap<K, V>) -> Self {
+        Value::Map(map.into_iter().map(|(k, v)| (k.into(), v.into())).collect())
+    }
+}
+
 impl<T: Serialize> TryFromSerializable<T> for Value {
     type Error = Error;
 

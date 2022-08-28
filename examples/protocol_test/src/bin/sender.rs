@@ -77,51 +77,16 @@ async fn main() {
         .await
         .unwrap();
 
-    // let mut sender = Sender::builder()
-    //     .name("rust-sender-link-1")
-    //     .target("q1")
-    //     .sender_settle_mode(SenderSettleMode::Settled)
-    //     .receiver_settle_mode(ReceiverSettleMode::Second)
-    //     .attach(&mut session)
-    //     .await
-    //     .unwrap();
+    struct Foo {}
 
-    // let body = Body::from(());
-    // let message = Message::from("hello");
-    // let props = Properties::builder()
-    //         .message_id(MessageId::ULong(1))
-    //         .build();
-    // let mut application_properties = BTreeMap::new();
-    // application_properties.insert(String::from("sn"), SimpleValue::UInt(100));
-    // let message = Message::builder()
-    //         .properties(props)
-    //         .application_properties(ApplicationProperties(application_properties))
-    //         .value("hello AMQP")
-    //         .build();
-
-    let message = Message::builder()
-        .properties(Properties::builder().message_id(1).build())
-        .application_properties(ApplicationProperties::builder().insert("sn", 10).build())
-        .value("hello AMQP")
-        .build();
-
-    let message = Sendable::from(message);
-    // let message = Sendable::builder()
-    //     .message("hello world")
-    //     .settled(true)
-    //     .build();
-    
-    // let handle = tokio::spawn(async move {
-    //     sender.send(message).await.unwrap();
-    
-    //     sender.send("world").await.unwrap();
-    //     sender.detach().await.unwrap();
-    // });
-
-    // handle.await;
+    impl From<Foo> for Message<Value> {
+        fn from(_: Foo) -> Self {
+            Message::builder().data(Binary::from("Foo")).build()
+        }
+    }
 
     // let outcome = sender.send(message).await.unwrap();
-    let fut = sender.send_batchable(message).await.unwrap();
+    let fut = sender.send_batchable(Foo {}).await.unwrap();
     let outcome = fut.await.unwrap();
 
     // Checks the outcome of delivery
@@ -130,30 +95,6 @@ async fn main() {
     } else {
         tracing::error!("Outcome: {:?}", outcome)
     }
-
-    let data = Binary::from("hello");
-    // let outcome = sender.send(Body::<Value>::Data(Data(data))).await.unwrap();
-    // let outcome = sender.send(Data(data)).await.unwrap();
-    // let outcome = sender.send(Body::Sequence(AmqpSequence(vec![1i32, 2, 3]))).await.unwrap();
-
-    // let message = Message::builder()
-    //     // .value("hello")
-    //     // .sequence(vec![1, 2, 3])
-    //     .data(Binary::from("hello"))
-    //     .build();
-
-    let message = Sendable::builder()
-        .message("hello")
-        .settled(true)
-        .build();
-    let outcome = sender.send(message).await.unwrap();
-    outcome.accepted_or("Not accepted").unwrap();
-
-    // let detached = sender.detach().await.unwrap();
-    // let mut sender = detached.resume().await.unwrap();
-
-    // sender.send("hello again").await.unwrap();
-    
     sender.close().await.unwrap();
 
     session.end().await.unwrap();
