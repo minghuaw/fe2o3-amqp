@@ -7,6 +7,7 @@ mod request;
 mod response;
 
 pub const MANAGEMENT_NODE_ADDRESS: &str = "$management";
+pub const DEFAULT_CLIENT_NODE_ADDRESS: &str = "mgmt-client";
 
 pub trait ManageableEntityAttributes {
     // Attributes

@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::Message;
+use fe2o3_amqp_types::{messaging::Message, primitives::Value};
 
 use crate::operations::OperationRequest;
 
@@ -8,7 +8,7 @@ pub struct RequestMessageProperties {
     pub opertaion: String,
 
     /// The Manageable Entity Type of the Manageable Entity to be managed. This is case-sensitive.
-    pub entity_type: String, 
+    pub mgmt_entity_type: String, 
 
     /// A listing of locales that the sending peer permits for incoming informational text in
     /// response messages. The value MUST be of the form (presented in the augmented BNF defined in
@@ -29,9 +29,9 @@ pub struct RequestMessageProperties {
 }
 
 pub struct Request {
-    operation: OperationRequest,
-    entity_type: String,
-    locales: Option<String>,
+    pub operation: OperationRequest,
+    pub mgmt_entity_type: String,
+    pub locales: Option<String>,
 }
 
 pub(crate) trait MessageSerializer {
