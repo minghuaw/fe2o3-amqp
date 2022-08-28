@@ -490,9 +490,9 @@ impl<T> Builder<T> {
     /// Set application properties
     pub fn application_properties(
         mut self,
-        appplication_properties: impl Into<Option<ApplicationProperties>>,
+        application_properties: impl Into<Option<ApplicationProperties>>,
     ) -> Self {
-        self.application_properties = appplication_properties.into();
+        self.application_properties = application_properties.into();
         self
     }
 
