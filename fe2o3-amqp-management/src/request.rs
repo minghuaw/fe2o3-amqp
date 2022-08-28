@@ -34,8 +34,8 @@ pub struct Request {
     locales: Option<String>,
 }
 
-pub(crate) trait IntoMessageFields<T> {
+pub(crate) trait MessageSerializer {
     type Body;
 
-    fn into_message_fields(self, message: Message<T>) -> Message<Self::Body>;
+    fn into_message(self) -> Message<Self::Body>;
 }

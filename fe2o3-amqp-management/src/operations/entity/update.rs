@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{primitives::Value, messaging::{Message, ApplicationProperties, AmqpValue, Body}};
 
-use crate::{error::Result, request::IntoMessageFields};
+use crate::{error::Result, request::MessageSerializer};
 
 pub trait Update {
     fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse>;
@@ -36,24 +36,19 @@ pub struct UpdateRequest {
     pub body: BTreeMap<String, Value>,
 }
 
-impl<T> IntoMessageFields<T> for UpdateRequest {
+impl MessageSerializer for UpdateRequest {
     type Body = BTreeMap<String, Value>;
 
-    fn into_message_fields(self, mut message: Message<T>) -> Message<Self::Body> {
-        let application_properties = message.application_properties.get_or_insert(ApplicationProperties::default());
-        application_properties.insert(String::from("name"), self.name.into());
-        application_properties.insert(String::from("identity"), self.identity.into());
-
-        let body = Body::Value(AmqpValue(self.body));
-        Message {
-            header: message.header,
-            delivery_annotations: message.delivery_annotations,
-            message_annotations: message.message_annotations,
-            properties: message.properties,
-            application_properties: message.application_properties,
-            body,
-            footer: message.footer,
-        }
+    fn into_message(self) -> Message<Self::Body> {
+        Message::builder()
+            .application_properties(
+                ApplicationProperties::builder()
+                    .insert("name", self.name)
+                    .insert("identity", self.identity)
+                    .build()
+            )
+            .value(self.body)
+            .build()
     }
 }
 

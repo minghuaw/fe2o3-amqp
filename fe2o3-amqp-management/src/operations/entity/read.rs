@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::{Value}, messaging::{Message, ApplicationProperties}};
+use fe2o3_amqp_types::{
+    messaging::{ApplicationProperties, Body, Message},
+    primitives::Value,
+};
 
-use crate::{error::Result, request::IntoMessageFields};
+use crate::{error::Result, request::MessageSerializer};
 
 pub trait Read {
     fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
 }
 
 /// Retrieve the attributes of a Manageable Entity.
-/// 
+///
 /// Body: No information is carried in the message body therefore any message body is valid and MUST
 /// be ignored
 pub struct ReadRequest {
@@ -20,14 +23,19 @@ pub struct ReadRequest {
     pub identity: String,
 }
 
-impl<T> IntoMessageFields<T> for ReadRequest {
-    type Body = T;
+impl MessageSerializer for ReadRequest {
+    type Body = ();
 
-    fn into_message_fields(self, mut message: Message<T>) -> Message<Self::Body> {
-        let application_properties = message.application_properties.get_or_insert(ApplicationProperties::default());
-        application_properties.insert(String::from("name"), self.name.into());
-        application_properties.insert(String::from("identity"), self.identity.into());
-        message
+    fn into_message(self) -> Message<Self::Body> {
+        Message::builder()
+            .application_properties(
+                ApplicationProperties::builder()
+                    .insert("name", self.name)
+                    .insert("identity", self.identity)
+                    .build()
+            )
+            .value(())
+            .build()
     }
 }
 

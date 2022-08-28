@@ -1,8 +1,8 @@
 //! Retrieve selected attributes of Manageable Entities that can be read at this Management Node.
-//! 
+//!
 //! Since the query operation could potentially return a large number of results, this operation
 //! supports pagination through which a request can specify a subset of the results to be returned.
-//! 
+//!
 //! A result set of size N can be considered to containing elements numbered from 0 to N-1. The
 //! elements of the result set returned in a particular request are controlled by specifying offset
 //! and count values. By setting an offset of M then only the elements numbered from M onwards will
@@ -10,7 +10,7 @@
 //! be returned. By additionally setting a count of C, only the elements numbered from M to
 //! Min(M+C-1, N-1) will be returned. Pagination is achieved via two application-properties, offset
 //! and count.
-//! 
+//!
 //! If pagination is used then it cannot be guaranteed that the result set remains consistent
 //! between requests for successive pages. That is, the set of entities matching the query may have
 //! changed between requests. However, stable order MUST be provided, that is, for any two queries
@@ -18,9 +18,14 @@
 //! in the same order. Thus, if there are no changes to the set of entities that match the query
 //! then consistency MUST be maintained between requests for successive pages.
 
-use fe2o3_amqp_types::primitives::Value;
+use std::collections::BTreeMap;
 
-use crate::error::Result;
+use fe2o3_amqp_types::{
+    messaging::{AmqpValue, ApplicationProperties, Body, Message},
+    primitives::Value,
+};
+
+use crate::{error::Result, request::MessageSerializer};
 
 pub trait Query {
     fn query(&self, req: QueryRequest) -> Result<QueryResponse>;
@@ -41,10 +46,49 @@ pub struct QueryRequest {
 
     /// The body of the message MUST consist of an amqp-value section containing a map which MUST have
     /// the following entries, where all keys MUST be of type string:
+    ///
     /// A list of strings representing the names of the attributes of the Manageable Entities being
     /// requested. The list MUST NOT contain duplicate elements. If the list contains no elements
     /// then this indicates that all attributes are being requested.
-    body: Vec<String>,
+    attribute_names: Vec<String>,
+}
+
+impl MessageSerializer for QueryRequest {
+    type Body = BTreeMap<String, Vec<String>>;
+
+    fn into_message(self) -> Message<Self::Body> {
+        let mut builder = ApplicationProperties::builder();
+        if let Some(entity_type) = self.entity_type {
+            builder = builder.insert("entityType", entity_type);
+        }
+        if let Some(offset) = self.offset {
+            builder = builder.insert("offset", offset);
+        }
+        if let Some(count) = self.count {
+            builder = builder.insert("count", count);
+        }
+        let application_properties = builder.build();
+
+        let mut map = BTreeMap::new();
+        map.insert(String::from("attribute_names"), self.attribute_names);
+
+        Message::builder()
+            .application_properties(application_properties)
+            .value(map)
+            .build()
+
+        // let body = Body::Value(AmqpValue(map));
+
+        // Message {
+        //     header: message.header,
+        //     delivery_annotations: message.delivery_annotations,
+        //     message_annotations: message.message_annotations,
+        //     properties: message.properties,
+        //     application_properties: message.application_properties,
+        //     body,
+        //     footer: message.footer,
+        // }
+    }
 }
 
 pub struct QueryResponse {
@@ -54,7 +98,7 @@ pub struct QueryResponse {
     count: u32,
 
     /// Body
-    /// 
+    ///
     /// A list of strings where each element represents an attribute name. If the attributeNames
     /// passed in the body of the request contained a non-empty list then this value MUST consist of
     /// the exact same sequence of strings. If the body of the request did not contain an
@@ -72,7 +116,6 @@ pub struct QueryResponse {
     ///
     /// If the result set is empty then this value MUST be a list of zero elements.
     results: Vec<Vec<Value>>,
-
 }
 
 impl QueryResponse {

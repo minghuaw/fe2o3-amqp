@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::Value, messaging::ApplicationProperties};
+use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message}};
 
-use crate::{error::Result, request::IntoMessageFields};
+use crate::{error::Result, request::MessageSerializer};
 
 pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
@@ -30,14 +30,19 @@ pub struct DeleteRequest {
     pub identity: String,
 }
 
-impl<T> IntoMessageFields<T> for DeleteRequest {
-    type Body = T;
+impl MessageSerializer for DeleteRequest {
+    type Body = ();
 
-    fn into_message_fields(self, mut message: fe2o3_amqp_types::messaging::Message<T>) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        let application_properties = message.application_properties.get_or_insert(ApplicationProperties::default());
-        application_properties.insert(String::from("name"), self.name.into());
-        application_properties.insert(String::from("identity"), self.identity.into());
-        message
+    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
+        Message::builder()
+            .application_properties(
+                ApplicationProperties::builder()
+                    .insert("name", self.name)
+                    .insert("identity", self.identity)
+                    .build()
+            )
+            .value(())
+            .build()
     }
 }
 

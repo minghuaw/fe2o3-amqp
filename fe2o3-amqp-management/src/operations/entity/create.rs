@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::{Value, SimpleValue}, messaging::{Message, ApplicationProperties, AmqpValue, Body}};
+use fe2o3_amqp_types::{primitives::{Value}, messaging::{Message, ApplicationProperties}};
 
-use crate::{error::Result, request::IntoMessageFields};
+use crate::{error::Result, request::MessageSerializer};
 
 pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
@@ -52,25 +52,18 @@ pub struct CreateRequest {
     body: BTreeMap<String, Value>,
 }
 
-impl<T> IntoMessageFields<T> for CreateRequest {
+impl MessageSerializer for CreateRequest {
     type Body = BTreeMap<String, Value>;
 
-    fn into_message_fields(self, mut message: Message<T>) -> Message<Self::Body> {
-        message.application_properties.get_or_insert(ApplicationProperties::default())
-            .insert(String::from("name"), SimpleValue::String(self.name));
-
-        let body = Body::Value(AmqpValue(self.body));
-        let message = Message {
-            header: message.header,
-            delivery_annotations: message.delivery_annotations,
-            message_annotations: message.message_annotations,
-            properties: message.properties,
-            application_properties: message.application_properties,
-            body,
-            footer: message.footer,
-        };
-            
-        message
+    fn into_message(self) -> Message<Self::Body> {
+        Message::builder()
+            .application_properties(
+                ApplicationProperties::builder()
+                    .insert("name", self.name)
+                    .build()
+            )
+            .value(self.body)
+            .build()
     }
 }
 
