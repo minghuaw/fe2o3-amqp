@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{primitives::{Value}, messaging::{Message, ApplicationProperties}};
 
-use crate::{error::Result, request::MessageSerializer};
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, CREATE}};
 
 pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
@@ -59,6 +59,7 @@ impl MessageSerializer for CreateRequest {
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
+                    .insert(OPERATION, CREATE)
                     .insert("name", self.name)
                     .build()
             )

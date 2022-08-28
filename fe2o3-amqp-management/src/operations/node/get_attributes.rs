@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::Value;
+use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message}};
 
-use crate::error::Result;
+use crate::{error::Result, request::MessageSerializer, operations::{GET_ATTRIBUTES, OPERATION}};
 
 pub trait GetAttributes {
     fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse>;
@@ -15,6 +15,22 @@ pub trait GetAttributes {
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAttributesRequest {
     entity_type: Option<String>
+}
+
+impl MessageSerializer for GetAttributesRequest {
+    type Body = ();
+
+    fn into_message(self) -> Message<Self::Body> {
+        let mut builder  = ApplicationProperties::builder();
+        builder = builder.insert(OPERATION, GET_ATTRIBUTES);
+        if let Some(entity_type) = self.entity_type {
+            builder = builder.insert("entityType", entity_type);
+        }
+        Message::builder()
+            .application_properties(builder.build())
+            .value(())
+            .build()
+    }
 }
 
 /// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message

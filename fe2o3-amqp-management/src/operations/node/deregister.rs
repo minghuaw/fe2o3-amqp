@@ -1,5 +1,7 @@
 
-use crate::error::Result;
+use fe2o3_amqp_types::messaging::{Message, ApplicationProperties};
+
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, DEREGISTER}};
 
 pub trait Deregister {
     fn deregister(&mut self,  req: DeregisterRequest) -> Result<DeregisterResponse>;
@@ -14,6 +16,22 @@ pub trait Deregister {
 /// The body of the message MUST be empty.
 pub struct DeregisterRequest {
     address: String
+}
+
+impl MessageSerializer for DeregisterRequest {
+    type Body = ();
+
+    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
+        Message::builder()
+            .application_properties(
+                ApplicationProperties::builder()
+                    .insert(OPERATION, DEREGISTER)
+                    .insert("address", self.address)
+                    .build()
+            )
+            .value(())
+            .build()
+    }
 }
 
 /// No information is carried in the message body therefore any message body is valid and MUST be

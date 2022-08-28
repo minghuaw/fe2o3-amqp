@@ -25,7 +25,7 @@ use fe2o3_amqp_types::{
     primitives::Value,
 };
 
-use crate::{error::Result, request::MessageSerializer};
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, QUERY}};
 
 pub trait Query {
     fn query(&self, req: QueryRequest) -> Result<QueryResponse>;
@@ -58,6 +58,7 @@ impl MessageSerializer for QueryRequest {
 
     fn into_message(self) -> Message<Self::Body> {
         let mut builder = ApplicationProperties::builder();
+        builder = builder.insert(OPERATION, QUERY);
         if let Some(entity_type) = self.entity_type {
             builder = builder.insert("entityType", entity_type);
         }
@@ -76,18 +77,6 @@ impl MessageSerializer for QueryRequest {
             .application_properties(application_properties)
             .value(map)
             .build()
-
-        // let body = Body::Value(AmqpValue(map));
-
-        // Message {
-        //     header: message.header,
-        //     delivery_annotations: message.delivery_annotations,
-        //     message_annotations: message.message_annotations,
-        //     properties: message.properties,
-        //     application_properties: message.application_properties,
-        //     body,
-        //     footer: message.footer,
-        // }
     }
 }
 

@@ -3,6 +3,7 @@ use self::{entity::{CreateRequest, ReadRequest, UpdateRequest, DeleteRequest}, n
 pub mod entity;
 pub mod node;
 
+pub const OPERATION: &str = "operation";
 pub const CREATE: &str = "CREATE";
 pub const READ: &str = "READ";
 pub const UPDATE: &str = "UPDATE";

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::Value;
+use fe2o3_amqp_types::{primitives::Value, messaging::{Message, ApplicationProperties}};
 
-use crate::error::Result;
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, GET_OPERATIONS}};
 
 pub trait GetOperations {
     fn get_operations(&self, req: GetOperationsRequest) -> Result<GetOperationsResponse>;
@@ -18,6 +18,22 @@ pub trait GetOperations {
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetOperationsRequest {
     entity_type: Option<String>
+}
+
+impl MessageSerializer for GetOperationsRequest {
+    type Body = ();
+
+    fn into_message(self) -> Message<Self::Body> {
+        let mut builder  = ApplicationProperties::builder();
+        builder = builder.insert(OPERATION, GET_OPERATIONS);
+        if let Some(entity_type) = self.entity_type {
+            builder = builder.insert("entityType", entity_type);
+        }
+        Message::builder()
+            .application_properties(builder.build())
+            .value(())
+            .build()
+    }
 }
 
 pub struct GetOperationsResponse {

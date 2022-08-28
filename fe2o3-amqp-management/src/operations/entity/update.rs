@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{primitives::Value, messaging::{Message, ApplicationProperties, AmqpValue, Body}};
 
-use crate::{error::Result, request::MessageSerializer};
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, UPDATE}};
 
 pub trait Update {
     fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse>;
@@ -43,6 +43,7 @@ impl MessageSerializer for UpdateRequest {
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
+                    .insert(OPERATION, UPDATE)
                     .insert("name", self.name)
                     .insert("identity", self.identity)
                     .build()

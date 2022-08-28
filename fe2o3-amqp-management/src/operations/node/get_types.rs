@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::primitives::Value;
+use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message}};
 
-use crate::{error::Result, request::MessageSerializer};
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, GET_TYPES}};
 
 pub trait GetTypes {
     fn get_types(&self, req: GetTypesRequest) -> Result<GetTypesResponse>;
@@ -20,8 +20,16 @@ pub struct GetTypesRequest {
 impl MessageSerializer for GetTypesRequest {
     type Body = ();
 
-    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        todo!()
+    fn into_message(self) -> Message<Self::Body> {
+        let mut builder  = ApplicationProperties::builder();
+        builder = builder.insert(OPERATION, GET_TYPES);
+        if let Some(entity_type) = self.entity_type {
+            builder = builder.insert("entityType", entity_type);
+        }
+        Message::builder()
+            .application_properties(builder.build())
+            .value(())
+            .build()
     }
 }
 

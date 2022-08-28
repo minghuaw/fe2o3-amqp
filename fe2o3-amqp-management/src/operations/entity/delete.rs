@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message}};
 
-use crate::{error::Result, request::MessageSerializer};
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, DELETE}};
 
 pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
@@ -37,6 +37,7 @@ impl MessageSerializer for DeleteRequest {
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
+                    .insert(OPERATION, DELETE)
                     .insert("name", self.name)
                     .insert("identity", self.identity)
                     .build()

@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     primitives::Value,
 };
 
-use crate::{error::Result, request::MessageSerializer};
+use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, READ}};
 
 pub trait Read {
     fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
@@ -30,6 +30,7 @@ impl MessageSerializer for ReadRequest {
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
+                    .insert(OPERATION, READ)
                     .insert("name", self.name)
                     .insert("identity", self.identity)
                     .build()
