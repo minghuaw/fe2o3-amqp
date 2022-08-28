@@ -78,6 +78,12 @@ impl<T: Serialize + Clone, const N: usize> From<[T; N]> for Body<T> {
     }
 }
 
+impl<T> From<AmqpValue<T>> for Body<T> {
+    fn from(value: AmqpValue<T>) -> Self {
+        Self::Value(value)
+    }
+}
+
 impl<T> From<AmqpSequence<T>> for Body<T> {
     fn from(val: AmqpSequence<T>) -> Self {
         Self::Sequence(val)
@@ -127,10 +133,10 @@ impl<T: Serialize> Body<T> {
         S: serde::Serializer,
     {
         match self {
-            Body::Data(data) => data.serialize(serializer),
-            Body::Sequence(seq) => seq.serialize(serializer),
-            Body::Value(val) => val.serialize(serializer),
-            Body::Nothing => AmqpValue(()).serialize(serializer),
+            Body::Data(data) => Serializable(data).serialize(serializer),
+            Body::Sequence(seq) => Serializable(seq).serialize(serializer),
+            Body::Value(val) => Serializable(val).serialize(serializer),
+            Body::Nothing => Serializable(AmqpValue(())).serialize(serializer),
         }
     }
 }
@@ -207,15 +213,15 @@ where
 
         match val {
             Field::Data => {
-                let data = variant.newtype_variant()?;
+                let Deserializable(data) = variant.newtype_variant()?;
                 Ok(Body::Data(data))
             }
             Field::Sequence => {
-                let sequence = variant.newtype_variant()?;
+                let Deserializable(sequence) = variant.newtype_variant()?;
                 Ok(Body::Sequence(sequence))
             }
             Field::Value => {
-                let value = variant.newtype_variant()?;
+                let Deserializable(value) = variant.newtype_variant()?;
                 Ok(Body::Value(value))
             }
         }

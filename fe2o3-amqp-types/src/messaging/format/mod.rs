@@ -6,7 +6,6 @@ use serde_amqp::{
 };
 use std::{
     collections::BTreeMap,
-    fmt::Display,
     ops::{Deref, DerefMut},
 };
 
@@ -173,99 +172,14 @@ impl DerefMut for ApplicationProperties {
     }
 }
 
-/// 3.2.6 Data
-/// <type name="data" class="restricted" source="binary" provides="section">
-///     <descriptor name="amqp:data:binary" code="0x00000000:0x00000075"/>
-/// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq)]
-#[amqp_contract(
-    name = "amqp:data:binary",
-    code = 0x0000_0000_0000_0075,
-    encoding = "basic"
-)]
-pub struct Data(pub Binary);
+mod data;
+pub use data::*;
 
-impl TryFrom<Value> for Data {
-    type Error = Value;
+mod amqp_sequence;
+pub use amqp_sequence::*;
 
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        if let Value::Binary(buf) = value {
-            Ok(Data(buf))
-        } else {
-            Err(value)
-        }
-    }
-}
-
-impl Display for Data {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Data of length: {}", self.0.len())
-    }
-}
-
-/// 3.2.7 AMQP Sequence
-/// <type name="amqp-sequence" class="restricted" source="list" provides="section">
-///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
-/// </type>
-#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq)]
-#[amqp_contract(
-    name = "amqp:amqp-sequence:list",
-    code = 0x0000_0000_0000_0076,
-    encoding = "basic"
-)]
-pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
-
-impl<T> Deref for AmqpSequence<T> {
-    type Target = Vec<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for AmqpSequence<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<T> Display for AmqpSequence<T>
-where
-    T: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("AmqpSequence([")?;
-        let len = self.0.len();
-        for (i, val) in self.0.iter().enumerate() {
-            write!(f, "{}", val)?;
-            if i < len - 1 {
-                f.write_str(", ")?;
-            }
-        }
-        f.write_str("])")
-    }
-}
-
-/// 3.2.8 AMQP Value
-/// <type name="amqp-value" class="restricted" source="*" provides="section">
-///     <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
-/// </type>
-#[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq)]
-#[amqp_contract(
-    name = "amqp:amqp-value:*",
-    code = 0x0000_0000_0000_0077,
-    encoding = "basic"
-)]
-pub struct AmqpValue<T>(pub T);
-
-impl<T> Display for AmqpValue<T>
-where
-    T: Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AmqpValue({})", self.0)
-    }
-}
+mod amqp_value;
+pub use amqp_value::*;
 
 /// 3.2.9 Footer
 /// Transport footers for a message.

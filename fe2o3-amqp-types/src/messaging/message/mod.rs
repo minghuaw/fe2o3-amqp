@@ -356,9 +356,9 @@ where
     }
 }
 
-impl<T> From<T> for Message<T>
+impl<T, U> From<T> for Message<U>
 where
-    T: Into<Body<T>>,
+    T: Into<Body<U>>,
 {
     fn from(value: T) -> Self {
         Message {
@@ -368,20 +368,6 @@ where
             properties: None,
             application_properties: None,
             body: value.into(),
-            footer: None,
-        }
-    }
-}
-
-impl<T> From<Body<T>> for Message<T> {
-    fn from(value: Body<T>) -> Self {
-        Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: value,
             footer: None,
         }
     }
@@ -522,7 +508,7 @@ impl<T> Builder<Body<T>> {
 mod tests {
     use std::vec;
 
-    use serde_amqp::{from_reader, from_slice, to_vec, value::Value};
+    use serde_amqp::{from_reader, from_slice, to_vec, value::Value, primitives::Binary};
     use serde_bytes::ByteBuf;
 
     use crate::messaging::{
@@ -537,12 +523,39 @@ mod tests {
     use super::Message;
 
     #[test]
+    fn test_convert_data_into_message() {
+        let data = Data(Binary::from("hello AMQP"));
+        let message = Message::from(data);
+        assert!(matches!(message.body, Body::Data(_)));
+        let buf = to_vec(&Serializable(message)).unwrap();
+        assert_eq!(buf[2], 0x75);
+    }
+
+    #[test]
+    fn test_convert_amqp_sequence_into_message() {
+        let sequence = AmqpSequence(vec![1, 2, 3, 4]);
+        let message = Message::from(sequence);
+        assert!(matches!(message.body, Body::Sequence(_)));
+        let buf = to_vec(&Serializable(message)).unwrap();
+        assert_eq!(buf[2], 0x76);
+    }
+
+    #[test]
+    fn test_convert_amqp_value_into_message() {
+        let value = AmqpValue(vec![1, 2, 3, 4]);
+        let message = Message::from(value);
+        assert!(matches!(message.body, Body::Value(_)));
+        let buf = to_vec(&Serializable(message)).unwrap();
+        assert_eq!(buf[2], 0x77);
+    }
+
+    #[test]
     fn test_serialize_deserialize_null() {
-        let body = AmqpValue(Value::Null);
+        let body = Serializable(AmqpValue(Value::Null));
         let buf = to_vec(&body).unwrap();
         println!("{:#x?}", buf);
 
-        let body2: AmqpValue<Value> = from_slice(&buf).unwrap();
+        let body2: Deserializable<AmqpValue<Value>> = from_slice(&buf).unwrap();
         println!("{:?}", body2.0)
     }
 
@@ -647,9 +660,7 @@ mod tests {
         let serializable = Serializable(message);
         let buf = to_vec(&serializable).unwrap();
 
-        let expected = Message::builder()
-            .value(())
-            .build();
+        let expected = Message::builder().value(()).build();
         let expected = to_vec(&Serializable(expected)).unwrap();
 
         assert_eq!(buf, expected);
