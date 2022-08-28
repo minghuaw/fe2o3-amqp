@@ -31,7 +31,7 @@ where
         use serde_amqp::serde::ser::SerializeTupleStruct;
         let mut state = serializer
             .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(119u64))?;
+        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(0x0000_0000_0000_0077_u64))?;
         state.serialize_field(&self.0.0)?;
         state.end()
     }
@@ -48,7 +48,7 @@ where
         use serde_amqp::serde::ser::SerializeTupleStruct;
         let mut state = serializer
             .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(119u64))?;
+        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(0x0000_0000_0000_0077_u64))?;
         state.serialize_field(&self.0.0)?;
         state.end()
     }
@@ -102,7 +102,7 @@ where
                         }
                     }
                     serde_amqp::descriptor::Descriptor::Code(__c) => {
-                        if __c != 119u64 {
+                        if __c != 0x0000_0000_0000_0077_u64 {
                             return Err(serde_amqp::serde::de::Error::custom(
                                 "Descriptor mismatch",
                             ));
