@@ -11,7 +11,14 @@ pub enum AttachError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Correlation ID or Message ID is not found")]
+    CorrelationIdAndMessageIdAreNone,
 
+    #[error("StatusCode is nor found")]
+    StatusCodeNotFound,
+
+    #[error("Error decoding from message")]
+    DecodeError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
