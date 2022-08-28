@@ -624,7 +624,7 @@ pub enum BodyError {
 
     /// Attempting to unwrap the body but no body section is found
     #[error("Body is nothing")]
-    IsNothing,
+    IsEmpty,
 }
 
 /// Errors associated with resuming a sender link endpoint

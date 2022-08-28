@@ -231,15 +231,15 @@ impl Sender {
     /// let outcome = sender.send(sendable).await.unwrap():
     /// ```
     ///
-    /// ## Specify Message Body Section Type
+    /// # Specify Message Body Section Type
     ///
     /// There are several ways to define the exact type of body section to use.
     ///
     /// - Any type that implements [`serde::Serialize`] will be implicitly wrapped inside an [`AmqpValue`].
-    /// Please note that this includes any value wrapped inside [`AmqpSequence`] or [`Data`]
-    /// (ie. `Data(Binary::from("hello"))` becomes `AmqpValue(Data(Binary::from("hello")))`) unless it is
-    /// explicitly wrapped inside a [`Body`] (please see the next method).
-    ///
+    /// (**BREAKING** change in v0.5.0: `AmqpValue`, `AmqpSequence` and `Data` no longer implement
+    /// `Serialize` unless placed in a `Serializable<T>` wrapper, and thus they can be used to specify body section type. 
+    /// Please see the method below)
+    /// 
     /// ## Example
     ///
     /// The string literal `"hello"` will be implicitly converted to `AmqpValue<&str>("hello")`
@@ -248,6 +248,25 @@ impl Sender {
     /// let outcome = sender.send("hello").await.unwrap();
     /// ```
     ///
+    /// - Use `AmqpValue`, `AmqpSequence` or `Data` wrapper types to specify the body section type
+    /// with all other message field set to None
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust
+    /// use fe2o3_amqp::types::primitives::Binary;
+    /// use fe2o3_amqp::types::messaging::{AmqpValue, AmqpSequence, Data, Body};
+    /// 
+    /// // Send with Body::Value
+    /// let outcome = sender.send(AmqpValue("hello world")).await.unwrap();
+    /// 
+    /// // Send with Body::Sequence
+    /// let outcome = sender.send(AmqpSequence(vec![1i32, 2, 3])).await.unwrap();
+    /// 
+    /// // Send with Body::Data
+    /// let outcome = sender.send(Data(Binary::from("hello world"))).await.unwrap();
+    /// ```
+    /// 
     /// - Use [`Body`] to specify the exact type of body section to use with all other message sections
     /// set to `None`
     ///

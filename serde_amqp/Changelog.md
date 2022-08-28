@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.2.5
+
+1. Added `impl From<Array/Vec/BTreeMap> for Value`
+2. Fixed cannot deserialize `Array<Value>` with `serde_json`
+
 ## 0.2.4
 
 1. Fixed typos in Readme

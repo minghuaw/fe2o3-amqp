@@ -316,7 +316,7 @@ where
             message_annotations,
             properties,
             application_properties,
-            body: body.map(|d| d.0).unwrap_or_else(|| Body::Nothing),
+            body: body.map(|d| d.0).unwrap_or_else(|| Body::Empty),
             footer,
         })
     }
@@ -654,7 +654,7 @@ mod tests {
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body: Body::Nothing,
+            body: Body::Empty,
             footer: None,
         };
         let serializable = Serializable(message);

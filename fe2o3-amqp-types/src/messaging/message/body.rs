@@ -27,7 +27,7 @@ pub enum Body<T> {
     /// the message. However, this is not the way `proton` is implemented, and according to
     /// [PROTON-2574](https://issues.apache.org/jira/browse/PROTON-2574), the wording in the
     /// core specification was an unintended.
-    Nothing,
+    Empty,
 }
 
 impl<T> Body<T> {
@@ -48,7 +48,7 @@ impl<T> Body<T> {
 
     /// Whether the body section is `Nothing`
     pub fn is_nothing(&self) -> bool {
-        matches!(self, Body::Nothing)
+        matches!(self, Body::Empty)
     }
 }
 
@@ -61,7 +61,7 @@ where
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
-            Body::Nothing => write!(f, "Nothing"),
+            Body::Empty => write!(f, "Nothing"),
         }
     }
 }
@@ -136,7 +136,7 @@ impl<T: Serialize> Body<T> {
             Body::Data(data) => Serializable(data).serialize(serializer),
             Body::Sequence(seq) => Serializable(seq).serialize(serializer),
             Body::Value(val) => Serializable(val).serialize(serializer),
-            Body::Nothing => Serializable(AmqpValue(())).serialize(serializer),
+            Body::Empty => Serializable(AmqpValue(())).serialize(serializer),
         }
     }
 }

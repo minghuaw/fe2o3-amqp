@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.4.0
+
+1. Moved `Serialize` and `Deserialize` impl for `AmqpValue`, `AmqpSequence` and `Data` into wrapper types (`Serializable<T>` and `Deserializable<T>`), thus making `Message::from(AmqpSequence(_))` yielding a `Body::Sequence` and `Message::from(Data)` yielding a `Body::Data`
+2. Renamed `Body::Nothing` to `Body::Empty`
+
 ## 0.3.6
 
 1. Bug fix
