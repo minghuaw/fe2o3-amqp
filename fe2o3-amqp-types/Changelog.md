@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.5
+
+1. Fixed typo
+
 ## 0.3.4
 
 1. Added `impl TryFrom<SimpleValue> $variant_ty` for variants of `SimpleValue`
