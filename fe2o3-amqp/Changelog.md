@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.5.0
+
+1. Updated `fe2o3-amqp-types` to `"0.4.0"` which introduced the following breaking changes
+   1. `AmqpValue`, `AmqpSequence`, `Data` no longer implement `Serialize` or `Deserialize` without wrapper. This change allows `Sender::send()` to take `AmqpValue`, `AmqpSequence`, or `Data` as a way to specify the body section type.
+   2. Renamed `Body::Nothing` to `Body::Empty`. This also changed the `BodyError::IsNothing` to `BodyError::IsEmpty`
+
 ## 0.4.3
 
 1. Extend conversions into `Sendable<_>` to all types that implements conversion into `Message` (ie. `impl<T: Into<Message<U>>,U> From<T> for Sendable<U>`)

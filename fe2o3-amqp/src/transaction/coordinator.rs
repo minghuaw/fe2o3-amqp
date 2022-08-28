@@ -150,7 +150,7 @@ impl TxnCoordinator {
             fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
             fe2o3_amqp_types::messaging::Body::Sequence(_)
             | fe2o3_amqp_types::messaging::Body::Data(_)
-            | fe2o3_amqp_types::messaging::Body::Nothing => {
+            | fe2o3_amqp_types::messaging::Body::Empty => {
                 // Message Decode Error?
                 let error = definitions::Error::new(
                     AmqpError::DecodeError,
