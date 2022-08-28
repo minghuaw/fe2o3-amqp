@@ -160,20 +160,38 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Array<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        // deserializer.deserialize_newtype_struct(
-        //     ARRAY,
-        //     Visitor {
-        //         marker: PhantomData,
-        //     },
-        // )
         const VARIANTS: &[&str] = &["Single", "Multiple"];
-        deserializer.deserialize_enum(
-            ARRAY,
-            VARIANTS,
-            Visitor {
-                marker: PhantomData,
-            },
-        )
+
+        #[cfg(not(feature = "json"))]
+        {
+            deserializer.deserialize_enum(
+                ARRAY,
+                VARIANTS,
+                Visitor {
+                    marker: PhantomData,
+                },
+            )
+        }
+
+        #[cfg(feature = "json")]
+        {
+            if deserializer.is_human_readable() {
+                deserializer.deserialize_newtype_struct(
+                    ARRAY,
+                    Visitor {
+                        marker: PhantomData,
+                    },
+                )
+            } else {
+                deserializer.deserialize_enum(
+                    ARRAY,
+                    VARIANTS,
+                    Visitor {
+                        marker: PhantomData,
+                    },
+                )
+            }
+        }
     }
 }
 

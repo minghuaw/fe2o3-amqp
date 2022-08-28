@@ -18,7 +18,10 @@ all-features = true
 
 [features]
 default = []
-# default = ["derive"]
+# default = [
+#     "derive",
+#     "json",
+# ]
 
 derive = ["serde_amqp_derive"]
 
