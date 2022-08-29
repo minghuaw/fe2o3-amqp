@@ -1,5 +1,7 @@
 use fe2o3_amqp::link::{SenderAttachError, ReceiverAttachError};
 
+use crate::status::StatusCode;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AttachError {
     #[error(transparent)]
@@ -19,6 +21,9 @@ pub enum Error {
 
     #[error("Error decoding from message")]
     DecodeError,
+
+    #[error("Wrong status code {}", 0.0)]
+    Status(StatusCode),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

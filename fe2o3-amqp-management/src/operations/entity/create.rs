@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::{Value}, messaging::{Message, ApplicationProperties}};
+use fe2o3_amqp_types::{primitives::{Value}, messaging::{Message, ApplicationProperties, Body, AmqpValue}};
 
-use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, CREATE}};
+use crate::{error::{Result, Error}, request::MessageSerializer, operations::{OPERATION, CREATE}, response::MessageDeserializer};
 
 pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
@@ -85,4 +85,17 @@ pub struct CreateResponse {
 
 impl CreateResponse {
     const STATUS_CODE: u16 = 201;
+}
+
+impl MessageDeserializer<BTreeMap<String, Value>> for CreateResponse {
+    type Error = Error;
+
+    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+        match message.body {
+            Body::Value(AmqpValue(map)) => Ok(Self {
+                entity_attributes: map
+            }),
+            _ => Err(Error::DecodeError)
+        }
+    }
 }

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message}};
+use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message, AmqpValue}};
 
-use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, DELETE}};
+use crate::{error::{Result, Error}, request::MessageSerializer, operations::{OPERATION, DELETE}, response::MessageDeserializer};
 
 pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
@@ -55,4 +55,21 @@ pub struct DeleteResponse {
 
 impl DeleteResponse {
     const STATUS_CODE: u16 = 204;
+}
+
+impl MessageDeserializer<BTreeMap<String, Value>> for DeleteResponse {
+    type Error = Error;
+
+    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+        match message.body {
+            fe2o3_amqp_types::messaging::Body::Value(AmqpValue(map)) => {
+                if map.len() > 0 {
+                    Err(Error::DecodeError)
+                } else {
+                    Ok(Self { empty_map: EmptyBTreeMap::new() })
+                }
+            },
+            _ => Err(Error::DecodeError)
+        }
+    }
 }

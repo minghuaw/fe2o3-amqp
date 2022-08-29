@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Body, Message},
+    messaging::{ApplicationProperties, Body, Message, AmqpValue},
     primitives::Value,
 };
 
-use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, READ}};
+use crate::{error::{Result, Error}, request::MessageSerializer, operations::{OPERATION, READ}, response::MessageDeserializer};
 
 pub trait Read {
     fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
@@ -46,4 +46,17 @@ pub struct ReadResponse {
 
 impl ReadResponse {
     const STATUS_CODE: u16 = 200;
+}
+
+impl MessageDeserializer<BTreeMap<String, Value>> for ReadResponse {
+    type Error = Error;
+
+    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+        match message.body {
+            Body::Value(AmqpValue(map)) => Ok(Self {
+                entity_attributes: map
+            }),
+            _ => Err(Error::DecodeError)
+        }
+    }
 }
