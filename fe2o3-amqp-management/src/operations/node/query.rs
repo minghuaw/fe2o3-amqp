@@ -26,9 +26,10 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    error::Result,
+    error::{Error, Result},
     operations::{OPERATION, QUERY},
     request::MessageSerializer,
+    response::MessageDeserializer,
 };
 
 pub trait Query {
@@ -88,7 +89,7 @@ pub struct QueryResponse {
     /// Specifies the number of entries from the result set being returned. Note that the value of count
     /// MUST be the same as number of elements in the list value associated with the results key in the
     /// body of the response message.
-    count: u32,
+    pub count: u32,
 
     /// Body
     ///
@@ -97,7 +98,7 @@ pub struct QueryResponse {
     /// the exact same sequence of strings. If the body of the request did not contain an
     /// attributeNames entry then this value MUST contain the union of all attribute names for all
     /// Manageable Entity Types that match the query.
-    attribute_names: Vec<String>,
+    pub attribute_names: Vec<String>,
 
     /// Body
     ///
@@ -108,9 +109,47 @@ pub struct QueryResponse {
     /// Entity then the corresponding value should be null.
     ///
     /// If the result set is empty then this value MUST be a list of zero elements.
-    results: Vec<Vec<Value>>,
+    pub results: Vec<Vec<Value>>,
 }
 
 impl QueryResponse {
-    const STATUS_CODE: u16 = 200;
+    pub const STATUS_CODE: u16 = 200;
+}
+
+impl MessageDeserializer<BTreeMap<String, Vec<Value>>> for QueryResponse {
+    type Error = Error;
+
+    fn from_message(mut message: Message<BTreeMap<String, Vec<Value>>>) -> Result<Self> {
+        let count = message
+            .application_properties
+            .as_mut()
+            .and_then(|ap| ap.remove("count"))
+            .map(|v| u32::try_from(v).map_err(|_| Error::DecodeError))
+            .ok_or(Error::DecodeError)??;
+        let mut map = match message.body {
+            Body::Value(AmqpValue(map)) => map,
+            _ => return Err(Error::DecodeError),
+        };
+
+        let attribute_names = map.remove("attributeNames").ok_or(Error::DecodeError)?;
+        let attribute_names = attribute_names
+            .into_iter()
+            .map(|v| String::try_from(v).map_err(|_| Error::DecodeError))
+            .collect::<Result<Vec<String>>>()?;
+
+        let results = map.remove("results").ok_or(Error::DecodeError)?;
+        let results: Vec<Vec<Value>> = results
+            .into_iter()
+            .map(|v| match v {
+                Value::List(vout) => Ok(vout),
+                _ => Err(Error::DecodeError),
+            })
+            .collect::<Result<Vec<Vec<Value>>>>()?;
+
+        Ok(Self {
+            count,
+            attribute_names,
+            results,
+        })
+    }
 }
