@@ -35,7 +35,9 @@ impl ResponseMessageProperties {
             None => return Err(Error::StatusCodeNotFound),
         };
 
-        let status_description: Option<String> = message.application_properties.as_mut()
+        let status_description: Option<String> = message
+            .application_properties
+            .as_mut()
             .and_then(|ap| ap.remove("statusDescription"))
             .map(|value| String::try_from(value).map_err(|_| Error::DecodeError))
             .transpose()?;

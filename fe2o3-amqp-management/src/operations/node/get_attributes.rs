@@ -1,27 +1,34 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message}};
+use fe2o3_amqp_types::{
+    messaging::{ApplicationProperties, Message},
+    primitives::Value,
+};
 
-use crate::{error::Result, request::MessageSerializer, operations::{GET_ATTRIBUTES, OPERATION}};
+use crate::{
+    error::Result,
+    operations::{GET_ATTRIBUTES, OPERATION},
+    request::MessageSerializer,
+};
 
 pub trait GetAttributes {
     fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse>;
 }
 
 /// GET-ATTRIBUTES
-/// 
+///
 /// Body:
-/// 
+///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAttributesRequest {
-    entity_type: Option<String>
+    entity_type: Option<String>,
 }
 
 impl MessageSerializer for GetAttributesRequest {
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
-        let mut builder  = ApplicationProperties::builder();
+        let mut builder = ApplicationProperties::builder();
         builder = builder.insert(OPERATION, GET_ATTRIBUTES);
         if let Some(entity_type) = self.entity_type {
             builder = builder.insert("entityType", entity_type);
@@ -43,7 +50,7 @@ impl MessageSerializer for GetAttributesRequest {
 /// MUST include every attribute name defined by Manageable Entity Types that it extends, either
 /// directly or indirectly.
 pub struct GetAttributesResponse {
-    map: BTreeMap<Value, Vec<String>>
+    map: BTreeMap<Value, Vec<String>>,
 }
 
 impl GetAttributesResponse {

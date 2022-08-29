@@ -41,16 +41,14 @@ pub trait ManagementNodeOperations:
 {
 }
 
-impl<T> ManagementNodeOperations for T
-where
+impl<T> ManagementNodeOperations for T where
     T: Query
-    + GetTypes
-    + GetAnnotations
-    + GetAttributes
-    + GetOperations
-    + GetMgmtNodes
-    + Register
-    + Deregister
+        + GetTypes
+        + GetAnnotations
+        + GetAttributes
+        + GetOperations
+        + GetMgmtNodes
+        + Register
+        + Deregister
 {
-    
 }

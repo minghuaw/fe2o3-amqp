@@ -2,7 +2,18 @@ use fe2o3_amqp_types::primitives::Value;
 
 use crate::request::MessageSerializer;
 
-use self::{entity::{CreateRequest, ReadRequest, UpdateRequest, DeleteRequest, CreateResponse, ReadResponse, UpdateResponse, DeleteResponse}, node::{QueryRequest, GetTypesRequest, GetAnnotationsRequest, GetAttributesRequest, GetMgmtNodesRequest, GetOperationsRequest, RegisterRequest, DeregisterRequest, QueryResponse, GetTypesResponse, GetAnnotationsResponse, GetAttributesResponse, GetOperationsResponse, GetMgmtNodesResponse, RegisterResponse, DeregisterResponse}};
+use self::{
+    entity::{
+        CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, ReadRequest, ReadResponse,
+        UpdateRequest, UpdateResponse,
+    },
+    node::{
+        DeregisterRequest, DeregisterResponse, GetAnnotationsRequest, GetAnnotationsResponse,
+        GetAttributesRequest, GetAttributesResponse, GetMgmtNodesRequest, GetMgmtNodesResponse,
+        GetOperationsRequest, GetOperationsResponse, GetTypesRequest, GetTypesResponse,
+        QueryRequest, QueryResponse, RegisterRequest, RegisterResponse,
+    },
+};
 
 pub mod entity;
 pub mod node;

@@ -25,7 +25,11 @@ use fe2o3_amqp_types::{
     primitives::Value,
 };
 
-use crate::{error::Result, request::MessageSerializer, operations::{OPERATION, QUERY}};
+use crate::{
+    error::Result,
+    operations::{OPERATION, QUERY},
+    request::MessageSerializer,
+};
 
 pub trait Query {
     fn query(&self, req: QueryRequest) -> Result<QueryResponse>;

@@ -1,8 +1,16 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{primitives::Value, messaging::{ApplicationProperties, Message, AmqpValue}};
+use fe2o3_amqp_types::{
+    messaging::{AmqpValue, ApplicationProperties, Message},
+    primitives::Value,
+};
 
-use crate::{error::{Result, Error}, request::MessageSerializer, operations::{OPERATION, DELETE}, response::MessageDeserializer};
+use crate::{
+    error::{Error, Result},
+    operations::{DELETE, OPERATION},
+    request::MessageSerializer,
+    response::MessageDeserializer,
+};
 
 pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
@@ -19,7 +27,7 @@ impl EmptyBTreeMap {
 /// Delete a Manageable Entity.
 ///
 /// # Body:
-/// 
+///
 /// No information is carried in the message body therefore any message body is valid and MUST be
 /// ignored.
 pub struct DeleteRequest {
@@ -40,7 +48,7 @@ impl MessageSerializer for DeleteRequest {
                     .insert(OPERATION, DELETE)
                     .insert("name", self.name)
                     .insert("identity", self.identity)
-                    .build()
+                    .build(),
             )
             .value(())
             .build()
@@ -66,10 +74,12 @@ impl MessageDeserializer<BTreeMap<String, Value>> for DeleteResponse {
                 if map.len() > 0 {
                     Err(Error::DecodeError)
                 } else {
-                    Ok(Self { empty_map: EmptyBTreeMap::new() })
+                    Ok(Self {
+                        empty_map: EmptyBTreeMap::new(),
+                    })
                 }
-            },
-            _ => Err(Error::DecodeError)
+            }
+            _ => Err(Error::DecodeError),
         }
     }
 }

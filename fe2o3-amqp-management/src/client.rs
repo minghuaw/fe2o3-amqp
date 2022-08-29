@@ -20,24 +20,22 @@ pub struct MgmtClient {
 }
 
 macro_rules! send_operation_request {
-    ($client:ident, $operation:ident, $req:ident) => {
-        {
-            let mut message = $operation.into_message();
-            let application_properties = message
-                .application_properties
-                .get_or_insert(ApplicationProperties::default());
-            application_properties.insert(String::from("type"), $req.mgmt_entity_type.into());
-            if let Some(locales) = $req.locales {
-                application_properties.insert(String::from("locales"), locales.into());
-            }
-    
-            let properties = message.properties.get_or_insert(Properties::default());
-            properties.message_id = Some(MessageId::from($client.req_id));
-            properties.reply_to = Some($client.client_node_addr.clone());
-    
-            $client.sender.send(message).await
+    ($client:ident, $operation:ident, $req:ident) => {{
+        let mut message = $operation.into_message();
+        let application_properties = message
+            .application_properties
+            .get_or_insert(ApplicationProperties::default());
+        application_properties.insert(String::from("type"), $req.mgmt_entity_type.into());
+        if let Some(locales) = $req.locales {
+            application_properties.insert(String::from("locales"), locales.into());
         }
-    };
+
+        let properties = message.properties.get_or_insert(Properties::default());
+        properties.message_id = Some(MessageId::from($client.req_id));
+        properties.reply_to = Some($client.client_node_addr.clone());
+
+        $client.sender.send(message).await
+    }};
 }
 
 impl MgmtClient {

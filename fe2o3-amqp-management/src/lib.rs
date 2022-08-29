@@ -1,7 +1,7 @@
-pub mod operations;
-pub mod error;
-pub mod status;
 pub mod client;
+pub mod error;
+pub mod operations;
+pub mod status;
 
 mod request;
 mod response;
@@ -33,13 +33,9 @@ pub trait ManageableEntityAttributes {
     fn entity_type(&self) -> &str;
 }
 
-pub trait TypeAnnotation {
+pub trait TypeAnnotation {}
 
-}
-
-pub trait ManagementNode {
-
-}
+pub trait ManagementNode {}
 
 #[cfg(test)]
 mod tests {
