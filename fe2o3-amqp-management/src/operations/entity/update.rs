@@ -70,11 +70,11 @@ impl MessageSerializer for UpdateRequest {
 /// type conversion as above), MUST result in a failure response with a statusCode of 400 (Bad
 /// Request).
 pub struct UpdateResponse {
-    entity_attributes: BTreeMap<String, Value>,
+    pub entity_attributes: BTreeMap<String, Value>,
 }
 
 impl UpdateResponse {
-    const STATUS_CODE: u16 = 200;
+    pub const STATUS_CODE: u16 = 200;
 }
 
 impl MessageDeserializer<BTreeMap<String, Value>> for UpdateResponse {

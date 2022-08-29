@@ -88,11 +88,11 @@ impl MessageSerializer for CreateRequest {
 /// applicable for the entity being created, or invalid values for a given attribute, MUST result in
 /// a failure response with a statusCode of 400 (Bad Request).
 pub struct CreateResponse {
-    entity_attributes: BTreeMap<String, Value>,
+    pub entity_attributes: BTreeMap<String, Value>,
 }
 
 impl CreateResponse {
-    const STATUS_CODE: u16 = 201;
+    pub const STATUS_CODE: u16 = 201;
 }
 
 impl MessageDeserializer<BTreeMap<String, Value>> for CreateResponse {

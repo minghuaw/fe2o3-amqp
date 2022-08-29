@@ -16,7 +16,7 @@ pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
 }
 
-pub struct EmptyBTreeMap(BTreeMap<Value, Value>);
+pub struct EmptyBTreeMap(BTreeMap<String, Value>);
 
 impl EmptyBTreeMap {
     pub fn new() -> Self {
@@ -58,11 +58,11 @@ impl MessageSerializer for DeleteRequest {
 /// The body of the message MUST consist of an amqp-value section containing a map with zero
 /// entries. If the request was successful then the statusCode MUST be 204 (No Content).
 pub struct DeleteResponse {
-    empty_map: EmptyBTreeMap,
+    pub empty_map: EmptyBTreeMap,
 }
 
 impl DeleteResponse {
-    const STATUS_CODE: u16 = 204;
+    pub const STATUS_CODE: u16 = 204;
 }
 
 impl MessageDeserializer<BTreeMap<String, Value>> for DeleteResponse {
