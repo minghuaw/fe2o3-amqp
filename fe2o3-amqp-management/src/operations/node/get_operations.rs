@@ -1,14 +1,13 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::Value,
+    messaging::{ApplicationProperties, Message, Body, AmqpValue},
 };
 
 use crate::{
-    error::Result,
+    error::{Result, Error},
     operations::{GET_OPERATIONS, OPERATION},
-    request::MessageSerializer,
+    request::MessageSerializer, response::MessageDeserializer,
 };
 
 pub trait GetOperations {
@@ -43,6 +42,30 @@ impl MessageSerializer for GetOperationsRequest {
     }
 }
 
+/// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message
+/// MUST consist of an amqp-value section containing a map. The keys in the map MUST be the set of
+/// Manageable Entity Types for which the list of Management Operations is being provided. For any
+/// given key, the value MUST itself be a map, where each key is the string name of a Management
+/// Operation that can be performed against this Manageable Entity Type via this Management Node,
+/// and the value for a given key is a list of strings giving the names of the arguments (passed via
+/// the application- properties of a request message) which the operation defines. For any given
+/// Manageable Entity Type, the set of operations returned MUST include every operation supported by
+/// Manageable Entity Types that it extends, either directly or indirectly.
 pub struct GetOperationsResponse {
-    map: BTreeMap<Value, BTreeMap<String, Vec<String>>>,
+    pub operations: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+}
+
+impl GetOperationsResponse {
+    pub const STATUS_CODE: u16 = 200;
+}
+
+impl MessageDeserializer<BTreeMap<String, BTreeMap<String, Vec<String>>>> for GetOperationsResponse {
+    type Error = Error;
+
+    fn from_message(message: Message<BTreeMap<String, BTreeMap<String, Vec<String>>>>) -> Result<Self> {
+        match message.body {
+            Body::Value(AmqpValue(operations)) => Ok(Self {operations}),
+            _ => Err(Error::DecodeError)
+        }
+    }
 }

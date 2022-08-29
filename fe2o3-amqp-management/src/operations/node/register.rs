@@ -1,9 +1,9 @@
-use fe2o3_amqp_types::messaging::{ApplicationProperties, Message};
+use fe2o3_amqp_types::{messaging::{ApplicationProperties, Message}, primitives::Value};
 
 use crate::{
-    error::Result,
+    error::{Result, Error},
     operations::{OPERATION, REGISTER},
-    request::MessageSerializer,
+    request::MessageSerializer, response::MessageDeserializer,
 };
 
 pub trait Register {
@@ -46,5 +46,13 @@ impl MessageSerializer for RegisterRequest {
 pub struct RegisterResponse {}
 
 impl RegisterResponse {
-    const STATUS_CODE: u16 = 200;
+    pub const STATUS_CODE: u16 = 200;
+}
+
+impl MessageDeserializer<Value> for RegisterResponse {
+    type Error = Error;
+
+    fn from_message(_message: Message<Value>) -> Result<Self> {
+        Ok(Self { })
+    }
 }

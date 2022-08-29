@@ -1,14 +1,13 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::Value,
+    messaging::{ApplicationProperties, Message, Body, AmqpValue},
 };
 
 use crate::{
-    error::Result,
+    error::{Result, Error},
     operations::{GET_ANNOTATIONS, OPERATION},
-    request::MessageSerializer,
+    request::MessageSerializer, response::MessageDeserializer,
 };
 
 pub trait GetAnnotations {
@@ -41,9 +40,20 @@ impl MessageSerializer for GetAnnotationsRequest {
 }
 
 pub struct GetAnnotationsResponse {
-    map: BTreeMap<Value, Vec<String>>,
+    pub annotations: BTreeMap<String, Vec<String>>,
 }
 
 impl GetAnnotationsResponse {
-    const STATUS_CODE: u16 = 200;
+    pub const STATUS_CODE: u16 = 200;
+}
+
+impl MessageDeserializer<BTreeMap<String, Vec<String>>> for GetAnnotationsResponse {
+    type Error = Error;
+
+    fn from_message(message: Message<BTreeMap<String, Vec<String>>>) -> Result<Self> {
+        match message.body {
+            Body::Value(AmqpValue(annotations)) => Ok(Self { annotations }),
+            _ => Err(Error::DecodeError)
+        }
+    }
 }

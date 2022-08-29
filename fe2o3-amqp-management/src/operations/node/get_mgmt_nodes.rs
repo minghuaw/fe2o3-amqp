@@ -1,9 +1,9 @@
-use fe2o3_amqp_types::messaging::{ApplicationProperties, Message};
+use fe2o3_amqp_types::messaging::{ApplicationProperties, Message, AmqpValue, Body};
 
 use crate::{
-    error::Result,
+    error::{Result, Error},
     operations::{GET_MGMT_NODES, OPERATION},
-    request::MessageSerializer,
+    request::MessageSerializer, response::MessageDeserializer,
 };
 
 pub trait GetMgmtNodes {
@@ -34,10 +34,25 @@ impl MessageSerializer for GetMgmtNodesRequest {
     }
 }
 
+/// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message
+/// MUST consist of an amqp-value section containing a list of addresses of other Management Nodes
+/// known by this Management Node (each element of the list thus being a string). If no other
+/// Management Nodes are known then the amqp-value section MUST contain a list of zero elements.
 pub struct GetMgmtNodesResponse {
-    addresses: Vec<String>,
+    pub addresses: Vec<String>,
 }
 
 impl GetMgmtNodesResponse {
-    const STATUS_CODE: u16 = 200;
+    pub const STATUS_CODE: u16 = 200;
+}
+
+impl MessageDeserializer<Vec<String>> for GetMgmtNodesResponse {
+    type Error = Error;
+
+    fn from_message(message: Message<Vec<String>>) -> Result<Self> {
+        match message.body {
+            Body::Value(AmqpValue(addresses)) => Ok(Self { addresses }),
+            _ => Err(Error::DecodeError)
+        }
+    }
 }
