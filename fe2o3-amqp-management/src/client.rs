@@ -7,7 +7,7 @@ use fe2o3_amqp_types::messaging::{ApplicationProperties, MessageId, Outcome, Pro
 
 use crate::{
     error::{AttachError, Error},
-    operations::OperationRequest,
+    operations::{OperationRequest, Operation, entity::{CreateResponse, CreateRequest, ReadRequest, ReadResponse, UpdateRequest, UpdateResponse, DeleteRequest, DeleteResponse}},
     request::{MessageSerializer, Request},
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
@@ -59,6 +59,22 @@ impl MgmtClient {
         Ok(())
     }
 
+    pub async fn create(&mut self, req: CreateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<CreateResponse, Error> {
+        todo!()
+    }
+
+    pub async fn read(&mut self, req: ReadRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<ReadResponse, Error> {
+        todo!()
+    }
+
+    pub async fn update(&mut self, req: UpdateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<UpdateResponse, Error> {
+        todo!()
+    }
+
+    pub async fn delete(&mut self, req: DeleteRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<DeleteResponse, Error> {
+        todo!()
+    }
+
     async fn send_request(&mut self, req: Request) -> Result<Outcome, SendError> {
         match req.operation {
             OperationRequest::Create(op) => {
@@ -100,7 +116,26 @@ impl MgmtClient {
         }
     }
 
-    async fn recv_response(&mut self) -> Result<(), RecvError> {
+    async fn recv_response(&mut self, operation: Operation) -> Result<(), RecvError> {
+        match operation {
+            Operation::Create => todo!(),
+            Operation::Read => todo!(),
+            Operation::Update => todo!(),
+            Operation::Delete => todo!(),
+            Operation::Query => todo!(),
+            Operation::GetTypes => todo!(),
+            Operation::GetAnnotations => todo!(),
+            Operation::GetAttributes => todo!(),
+            Operation::GetOperations => todo!(),
+            Operation::GetMgmtNodes => todo!(),
+            Operation::Register => todo!(),
+            Operation::Deregister => todo!(),
+        }
+
+        let delivery = self.receiver.recv().await?;
+        self.receiver.accept(&delivery).await?;
+
+
         todo!()
     }
 }

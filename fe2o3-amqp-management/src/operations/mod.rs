@@ -32,6 +32,21 @@ pub const GET_MGMT_NODES: &str = "GET-MGMT-NODES";
 pub const REGISTER: &str = "REGISTER";
 pub const DEREGISTER: &str = "DEREGISTER";
 
+pub enum Operation {
+    Create,
+    Read,
+    Update,
+    Delete,
+    Query,
+    GetTypes,
+    GetAnnotations,
+    GetAttributes,
+    GetOperations,
+    GetMgmtNodes,
+    Register,
+    Deregister,
+}
+
 pub enum OperationRequest {
     Create(CreateRequest),
     Read(ReadRequest),
