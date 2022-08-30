@@ -97,8 +97,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             }
             EncodingCodes::UByte => Field::UByte,
             EncodingCodes::UShort => Field::UShort,
-            EncodingCodes::UInt | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::UInt,
-            EncodingCodes::ULong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+            EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => Field::UInt,
+            EncodingCodes::ULong | EncodingCodes::ULong0 | EncodingCodes::SmallULong => {
                 Field::ULong
             }
             EncodingCodes::Byte => Field::Byte,

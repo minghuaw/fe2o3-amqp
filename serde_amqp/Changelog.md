@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.3.0
+
+1. Breaking Changes
+   1. For consistencies, changed:
+      1. `EncodingCodes::Ulong0` to `EncodingCodes::ULong0`
+      2. `EncodingCodes::SmallUlong` to `EncodingCodes::SmallULong`
+      3. `EncodingCodes::Uint0` to `EncodingCodes::UInt0`
+      4. `EncodingCodes::SmallUint` to `EncodingCodes::SmallUInt`
+
 ## 0.2.5
 
 1. Added `impl From<Array/Vec/BTreeMap> for Value`

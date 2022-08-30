@@ -25,13 +25,13 @@ pub enum EncodingCodes {
 
     /// u32
     UInt = 0x70,
-    SmallUint = 0x52,
-    Uint0 = 0x43,
+    SmallUInt = 0x52,
+    UInt0 = 0x43,
 
     /// u64
     ULong = 0x80,
-    SmallUlong = 0x53,
-    Ulong0 = 0x44,
+    SmallULong = 0x53,
+    ULong0 = 0x44,
 
     /// i8
     Byte = 0x51,
@@ -115,13 +115,13 @@ impl TryFrom<u8> for EncodingCodes {
 
             // u32
             0x70 => EncodingCodes::UInt,
-            0x52 => EncodingCodes::SmallUint,
-            0x43 => EncodingCodes::Uint0,
+            0x52 => EncodingCodes::SmallUInt,
+            0x43 => EncodingCodes::UInt0,
 
             // u64
             0x80 => EncodingCodes::ULong,
-            0x53 => EncodingCodes::SmallUlong,
-            0x44 => EncodingCodes::Ulong0,
+            0x53 => EncodingCodes::SmallULong,
+            0x44 => EncodingCodes::ULong0,
 
             // i8
             0x51 => EncodingCodes::Byte,
