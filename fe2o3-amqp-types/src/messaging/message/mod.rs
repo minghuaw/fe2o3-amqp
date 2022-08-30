@@ -522,6 +522,14 @@ mod tests {
 
     use super::Message;
 
+
+    // NOTE: Messave<Value> mem size is only 8 bytes larger than Message<()>
+    // fn print_message_size() {
+    //     println!("Value: {:?}", std::mem::size_of::<Value>());
+    //     println!("Message<Value>: {:?}", std::mem::size_of::<Message<Value>>());
+    //     println!("Message<()>: {:?}", std::mem::size_of::<Message<()>>());
+    // }
+
     #[test]
     fn test_convert_data_into_message() {
         let data = Data(Binary::from("hello AMQP"));
