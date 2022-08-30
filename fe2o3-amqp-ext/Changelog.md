@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+1. Updated `serde_amqp` to "0.3.1"
+2. Updated `fe2o3-amqp-types` to "0.4.1" which fixed [#95](https://github.com/minghuaw/fe2o3-amqp/issues/95)
+
 ## 0.3.0
 
 1. Updated `fe2o3-amqp-types` version to "0.4.0"
