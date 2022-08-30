@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Binary, Boolean, Symbol, UByte, UInt, ULong, Uuid},
+    primitives::{Boolean, Symbol, UByte, UInt},
     value::Value,
 };
 use std::{
@@ -216,56 +216,17 @@ impl DerefMut for Footer {
 }
 
 /// 3.2.10 Annotations
+///
 /// <type name="annotations" class="restricted" source="map"/>
-pub type Annotations = BTreeMap<Symbol, Value>;
-
+///
 /// The annotations type is a map where the keys are restricted to be of type symbol or of type ulong. All ulong
 /// keys, and all symbolic keys except those beginning with “x-” are reserved. Keys beginning with “x-opt-” MUST be
 /// ignored if not understood. On receiving an annotation key which is not understood, and which does not begin with
 /// “x-opt”, the receiving AMQP container MUST detach the link with a not-implemented error.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum MessageId {
-    /// 3.2.11 Message ID ULong
-    /// <type name="message-id-ulong" class="restricted" source="ulong" provides="message-id"/>
-    ULong(ULong),
+pub type Annotations = BTreeMap<Symbol, Value>;
 
-    /// 3.2.12 Message ID UUID
-    /// <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>
-    Uuid(Uuid),
-
-    /// 3.2.13 Message ID Binary
-    /// <type name="message-id-binary" class="restricted" source="binary" provides="message-id"/>
-    Binary(Binary),
-
-    /// 3.2.14 Message ID String
-    /// <type name="message-id-string" class="restricted" source="string" provides="message-id"/>
-    String(String),
-}
-
-impl From<u64> for MessageId {
-    fn from(value: u64) -> Self {
-        Self::ULong(value)
-    }
-}
-
-impl From<Uuid> for MessageId {
-    fn from(value: Uuid) -> Self {
-        Self::Uuid(value)
-    }
-}
-
-impl From<Binary> for MessageId {
-    fn from(value: Binary) -> Self {
-        Self::Binary(value)
-    }
-}
-
-impl From<String> for MessageId {
-    fn from(value: String) -> Self {
-        Self::String(value)
-    }
-}
+mod message_id;
+pub use message_id::*;
 
 /// 3.2.15 Address String
 /// Address of a node.

@@ -643,7 +643,7 @@ mod tests {
         // try deserialize from list8
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x24, // descriptor code
             EncodingCodes::List8 as u8,
             0, // size
@@ -657,7 +657,7 @@ mod tests {
         // try deserialize from list8
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x24, // descriptor code
             EncodingCodes::List32 as u8,
             0,
@@ -686,7 +686,7 @@ mod tests {
         // try deserialize from list8
         let buf = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x25, // descriptor code
             EncodingCodes::List8 as u8,
             0, // size

@@ -31,8 +31,10 @@ where
         use serde_amqp::serde::ser::SerializeTupleStruct;
         let mut state = serializer
             .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(0x0000_0000_0000_0077_u64))?;
-        state.serialize_field(&self.0.0)?;
+        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
+            0x0000_0000_0000_0077_u64,
+        ))?;
+        state.serialize_field(&self.0 .0)?;
         state.end()
     }
 }
@@ -48,8 +50,10 @@ where
         use serde_amqp::serde::ser::SerializeTupleStruct;
         let mut state = serializer
             .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(0x0000_0000_0000_0077_u64))?;
-        state.serialize_field(&self.0.0)?;
+        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
+            0x0000_0000_0000_0077_u64,
+        ))?;
+        state.serialize_field(&self.0 .0)?;
         state.end()
     }
 }
@@ -84,15 +88,12 @@ where
             where
                 A: serde_amqp::serde::de::SeqAccess<'de>,
             {
-                let __descriptor: serde_amqp::descriptor::Descriptor =
-                    match __seq.next_element()? {
-                        Some(val) => val,
-                        None => {
-                            return Err(serde_amqp::serde::de::Error::custom(
-                                "Expecting descriptor",
-                            ))
-                        }
-                    };
+                let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
+                    Some(val) => val,
+                    None => {
+                        return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
+                    }
+                };
                 match __descriptor {
                     serde_amqp::descriptor::Descriptor::Name(__symbol) => {
                         if __symbol.into_inner() != "amqp:amqp-value:*" {

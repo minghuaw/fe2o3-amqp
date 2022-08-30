@@ -371,7 +371,7 @@ impl From<&str> for Value {
     }
 }
 
-impl<T> From<Array<T>> for Value 
+impl<T> From<Array<T>> for Value
 where
     T: Into<Value>,
 {

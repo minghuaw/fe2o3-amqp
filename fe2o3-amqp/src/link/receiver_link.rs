@@ -6,7 +6,7 @@ use crate::util::{is_consecutive, AsByteIterator, DeliveryInfo, IntoReader};
 use super::*;
 
 pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
-pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallUlong as u8;
+pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallULong as u8;
 pub(crate) const ULONG_TYPE: u8 = EncodingCodes::ULong as u8;
 pub(crate) const HEADER_CODE: u8 = 0x70;
 pub(crate) const DELIV_ANNOT_CODE: u8 = 0x71;
