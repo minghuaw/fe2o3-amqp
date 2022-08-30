@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.4.1
+
+1. Fixed [#95](https://github.com/minghuaw/fe2o3-amqp/issues/95)
+2. Updated `serde_amqp` to "0.3.1"
+
 ## 0.4.0
 
 1. Moved `Serialize` and `Deserialize` impl for `AmqpValue`, `AmqpSequence` and `Data` into wrapper types (`Serializable<T>` and `Deserializable<T>`), thus making `Message::from(AmqpSequence(_))` yielding a `Body::Sequence` and `Message::from(Data)` yielding a `Body::Data`
