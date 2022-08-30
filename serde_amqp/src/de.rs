@@ -878,17 +878,6 @@ where
         } else {
             match self.struct_encoding {
                 StructEncoding::None => {
-                    // if name == DESCRIBED_BASIC {
-                    //     self.struct_encoding = StructEncoding::DescribedBasic;
-                    //     visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
-                    // } else if name == DESCRIBED_LIST {
-                    //     self.struct_encoding = StructEncoding::DescribedList;
-
-                    //     visitor.visit_seq(DescribedAccess::list(self))
-                    // } else if name == DESCRIBED_MAP {
-                    //     self.struct_encoding = StructEncoding::DescribedMap;
-                    //     visitor.visit_map(DescribedAccess::map(self))
-                    // } else {
                     match self.get_elem_code_or_peek_byte()?.try_into()? {
                         EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                             self.deserialize_tuple(fields.len(), visitor)

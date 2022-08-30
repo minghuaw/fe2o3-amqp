@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.3.1
+
+1. Made constant `VALUE` public for possible downstream uses
+
 ## 0.3.0
 
 1. Breaking Changes
