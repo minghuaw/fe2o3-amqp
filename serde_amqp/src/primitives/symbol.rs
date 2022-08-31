@@ -130,7 +130,7 @@ impl<'de> de::Deserialize<'de> for SymbolRef<'de> {
 ///
 /// Symbol should only contain ASCII characters. The implementation, however, wraps
 /// over a String. `AmqpNetLite` also wraps around a String, which in c# is utf-16.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(pub String);
 
 impl Symbol {
