@@ -13,6 +13,8 @@ use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
 pub mod map_builder;
 
+mod annotations;
+
 /// 3.2.1 Header
 /// Transport headers for a message.
 /// <type name="header" class="composite" source="list" provides="section">
