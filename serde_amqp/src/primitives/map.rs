@@ -1,9 +1,9 @@
-use std::{hash::Hash, marker::PhantomData};
+use std::{hash::Hash, marker::PhantomData, ops::RangeBounds};
 
 use indexmap::{Equivalent, IndexMap};
 use serde::{de, ser::SerializeMap, Deserialize, Serialize};
 
-pub use indexmap::map::{Iter, IterMut, IntoKeys};
+pub use indexmap::map::{Drain, IntoKeys, IntoValues, Iter, IterMut, Keys, Values, ValuesMut};
 
 /// A wrapper around [`IndexMap`] with custom implementation of [`PartialEq`], [`Eq`],
 /// [`PartialOrd`], [`Ord`], and [`Hash`].
@@ -25,21 +25,21 @@ impl<K, V> OrderedMap<K, V> {
     }
 
     /// Return the number of key-value pairs in the map.
-    /// 
+    ///
     /// Calls [`IndexMap::len`] internally
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Return an iterator over the key-value pairs of the map, in their order
-    /// 
+    ///
     /// Calls [`IndexMap::iter`] internally
     pub fn iter(&self) -> Iter<'_, K, V> {
         self.0.iter()
     }
 
     /// Return an iterator over the key-value pairs of the map, in their order
-    /// 
+    ///
     /// Calls [`IndexMap::iter_mut`] internally
     pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
         self.0.iter_mut()
@@ -74,6 +74,47 @@ impl<K, V> OrderedMap<K, V> {
     /// Return an owning iterator over the keys of the map, in their order
     pub fn into_keys(self) -> IntoKeys<K, V> {
         self.0.into_keys()
+    }
+
+    /// Return an iterator over the keys of the map, in their order
+    pub fn keys(&self) -> Keys<'_, K, V> {
+        self.0.keys()
+    }
+
+    /// Return an iterator over the values of the map, in their order
+    pub fn values(&self) -> Values<'_, K, V> {
+        self.0.values()
+    }
+
+    /// Return an iterator over mutable references to the values of the map, in their order
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V> {
+        self.0.values_mut()
+    }
+
+    /// Return an owning iterator over the values of the map, in their order
+    pub fn into_values(self) -> IntoValues<K, V> {
+        self.0.into_values()
+    }
+
+    /// Remove all key-value pairs in the map, while preserving its capacity.
+    ///
+    /// Computes in O(n) time.
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    ///Clears the IndexMap in the given index range, returning those key-value pairs as a drain iterator.
+    ///
+    ///The range may be any type that implements RangeBounds<usize>, including all of the std::ops::Range* types, or even a tuple pair of Bound start and end values. To drain the map entirely, use RangeFull like map.drain(..).
+    ///
+    ///This shifts down all entries following the drained range to fill the gap, and keeps the allocated memory for reuse.
+    ///
+    ///Panics if the starting point is greater than the end point or if the end point is greater than the length of the map.
+    pub fn drain<R>(&mut self, range: R) -> Drain<'_, K, V>
+    where
+        R: RangeBounds<usize>,
+    {
+        self.0.drain(range)
     }
 }
 
@@ -113,7 +154,7 @@ where
     /// Return true if an equivalent to key exists in the map.
     pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool
     where
-        Q: Hash + Equivalent<K>, 
+        Q: Hash + Equivalent<K>,
     {
         self.0.contains_key(key)
     }
@@ -261,14 +302,14 @@ impl<K, V> IntoIterator for OrderedMap<K, V> {
     type Item = (K, V);
 
     type IntoIter = indexmap::map::IntoIter<K, V>;
-    
+
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for OrderedMap<K, V> 
+impl<K, V> FromIterator<(K, V)> for OrderedMap<K, V>
 where
     K: Hash + Eq,
 {
