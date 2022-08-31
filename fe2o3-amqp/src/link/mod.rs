@@ -34,7 +34,7 @@ use crate::{
 use self::{
     delivery::Delivery,
     resumption::ResumingDelivery,
-    state::{LinkFlowState, LinkState, UnsettledMap},
+    state::{LinkFlowState, LinkState},
     target_archetype::VerifyTargetArchetype,
 };
 
@@ -59,6 +59,10 @@ pub(crate) mod target_archetype;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
+
+/// An OrderedMap is used because Link may exchange their unsettled map 
+/// and `Map` should be considered ordered
+pub(crate) type UnsettledMap<M> = OrderedMap<DeliveryTag, M>;
 
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::SenderMarker>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::ReceiverMarker>>;

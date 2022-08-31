@@ -1,6 +1,8 @@
 //! Session builder
 
-use fe2o3_amqp_types::{definitions::{Fields, Handle, TransferNumber}, primitives::OrderedMap};
+use std::collections::HashMap;
+
+use fe2o3_amqp_types::{definitions::{Fields, Handle, TransferNumber}};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -110,9 +112,9 @@ impl Builder {
             properties: self.properties,
 
             link_name_by_output_handle: Slab::new(),
-            link_by_name: OrderedMap::new(),
-            link_by_input_handle: OrderedMap::new(),
-            delivery_tag_by_id: OrderedMap::new(),
+            link_by_name: HashMap::new(),
+            link_by_input_handle: HashMap::new(),
+            delivery_tag_by_id: HashMap::new(),
         }
     }
 
