@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
     definitions::Role,
     messaging::{Accepted, DeliveryState, Outcome},
     performatives::{Attach, Disposition, Transfer},
-    transaction::{TransactionId, TransactionalState},
+    transaction::{TransactionId, TransactionalState}, primitives::OrderedMap,
 };
 use tokio::sync::mpsc;
 
@@ -26,7 +26,7 @@ pub(crate) trait HandleControlLink {
 #[derive(Debug)]
 pub(crate) struct TransactionManager {
     pub control_link_outgoing: mpsc::Sender<LinkFrame>,
-    pub txns: BTreeMap<TransactionId, ResourceTransaction>,
+    pub txns: OrderedMap<TransactionId, ResourceTransaction>,
     pub control_link_acceptor: Arc<ControlLinkAcceptor>,
 }
 
@@ -37,7 +37,7 @@ impl TransactionManager {
     ) -> Self {
         Self {
             control_link_outgoing,
-            txns: BTreeMap::new(),
+            txns: OrderedMap::new(),
             control_link_acceptor: Arc::new(control_link_acceptor),
         }
     }

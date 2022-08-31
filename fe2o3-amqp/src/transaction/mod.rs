@@ -44,7 +44,7 @@ use fe2o3_amqp_types::{
         Rejected, Released,
     },
     performatives::Transfer,
-    primitives::Symbol,
+    primitives::{Symbol, OrderedMap},
     transaction::{Declared, Discharge, TransactionId, TransactionalState},
 };
 
@@ -552,7 +552,7 @@ impl<'t> Drop for Transaction<'t> {
                             }
                         };
                         guard
-                            .get_or_insert(BTreeMap::new())
+                            .get_or_insert(OrderedMap::new())
                             .insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {

@@ -3,6 +3,8 @@ use std::{hash::Hash, marker::PhantomData};
 use indexmap::{Equivalent, IndexMap};
 use serde::{de, ser::SerializeMap, Deserialize, Serialize};
 
+pub use indexmap::map::{Iter, IterMut, IntoKeys};
+
 /// A wrapper around [`IndexMap`] with custom implementation of [`PartialEq`], [`Eq`],
 /// [`PartialOrd`], [`Ord`], and [`Hash`].
 ///
@@ -20,6 +22,27 @@ impl<K, V> OrderedMap<K, V> {
     /// Creates a new [`OrderedMap`]
     pub fn new() -> Self {
         Self(IndexMap::new())
+    }
+
+    /// Return the number of key-value pairs in the map.
+    /// 
+    /// Calls [`IndexMap::len`] internally
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Return an iterator over the key-value pairs of the map, in their order
+    /// 
+    /// Calls [`IndexMap::iter`] internally
+    pub fn iter(&self) -> Iter<'_, K, V> {
+        self.0.iter()
+    }
+
+    /// Return an iterator over the key-value pairs of the map, in their order
+    /// 
+    /// Calls [`IndexMap::iter_mut`] internally
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
+        self.0.iter_mut()
     }
 
     /// Get a reference to the inner [`IndexMap`]
@@ -41,6 +64,16 @@ impl<K, V> OrderedMap<K, V> {
     /// Consumes the wrapper and returns the inner [`IndexMap`]
     pub fn into_inner(self) -> IndexMap<K, V> {
         self.0
+    }
+
+    /// Returns true if the map contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Return an owning iterator over the keys of the map, in their order
+    pub fn into_keys(self) -> IntoKeys<K, V> {
+        self.0.into_keys()
     }
 }
 
@@ -75,6 +108,14 @@ where
         Q: Hash + Equivalent<K>,
     {
         self.0.remove(key)
+    }
+
+    /// Return true if an equivalent to key exists in the map.
+    pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool
+    where
+        Q: Hash + Equivalent<K>, 
+    {
+        self.0.contains_key(key)
     }
 }
 

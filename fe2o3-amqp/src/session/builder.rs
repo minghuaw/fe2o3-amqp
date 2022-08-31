@@ -1,8 +1,6 @@
 //! Session builder
 
-use std::collections::BTreeMap;
-
-use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
+use fe2o3_amqp_types::{definitions::{Fields, Handle, TransferNumber}, primitives::OrderedMap};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -112,9 +110,9 @@ impl Builder {
             properties: self.properties,
 
             link_name_by_output_handle: Slab::new(),
-            link_by_name: BTreeMap::new(),
-            link_by_input_handle: BTreeMap::new(),
-            delivery_tag_by_id: BTreeMap::new(),
+            link_by_name: OrderedMap::new(),
+            link_by_input_handle: OrderedMap::new(),
+            delivery_tag_by_id: OrderedMap::new(),
         }
     }
 
@@ -146,9 +144,9 @@ impl Builder {
             properties: self.properties,
 
             link_name_by_output_handle: Slab::new(),
-            link_by_name: BTreeMap::new(),
-            link_by_input_handle: BTreeMap::new(),
-            delivery_tag_by_id: BTreeMap::new(),
+            link_by_name: OrderedMap::new(),
+            link_by_input_handle: OrderedMap::new(),
+            delivery_tag_by_id: OrderedMap::new(),
         };
 
         TxnSession {

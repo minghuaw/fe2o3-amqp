@@ -1,13 +1,13 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::BTreeMap, convert::TryInto, sync::Arc};
+use std::{cmp::min, convert::TryInto, sync::Arc};
 
 use async_trait::async_trait;
 
 use fe2o3_amqp_types::{
     definitions::{self},
     performatives::{Begin, Close, End, Open},
-    states::ConnectionState,
+    states::ConnectionState, primitives::OrderedMap,
 };
 use futures_util::{Sink, SinkExt};
 use slab::Slab;
@@ -347,7 +347,7 @@ pub struct Connection {
     // local
     pub(crate) local_state: ConnectionState,
     pub(crate) local_open: Open,
-    pub(crate) session_by_incoming_channel: BTreeMap<IncomingChannel, SessionRelay>,
+    pub(crate) session_by_incoming_channel: OrderedMap<IncomingChannel, SessionRelay>,
     pub(crate) session_by_outgoing_channel: Slab<SessionRelay>,
 
     // remote
@@ -461,7 +461,7 @@ impl Connection {
             // control,
             local_state,
             local_open,
-            session_by_incoming_channel: BTreeMap::new(),
+            session_by_incoming_channel: OrderedMap::new(),
             session_by_outgoing_channel: Slab::new(),
 
             remote_open: None,

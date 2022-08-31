@@ -136,7 +136,7 @@ where
             .as_ref()
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
         let mut guard = self.unsettled.write().await;
-        let map = guard.get_or_insert(BTreeMap::new());
+        let map = guard.get_or_insert(OrderedMap::new());
 
         if matches!(settled, Some(true)) {
             // FIXME: Simply remove from the unsettled map?
@@ -184,7 +184,7 @@ where
             let mut guard = self.unsettled.write().await;
             // The same key may be writter multiple times
             let _ = guard
-                .get_or_insert(BTreeMap::new())
+                .get_or_insert(OrderedMap::new())
                 .insert(delivery_tag, Some(state));
         }
     }
@@ -263,7 +263,7 @@ where
                 let mut lock = self.unsettled.write().await;
                 // There may be records of incomplete delivery
                 let _ = lock
-                    .get_or_insert(BTreeMap::new())
+                    .get_or_insert(OrderedMap::new())
                     .insert(delivery_tag.clone(), Some(state));
             }
             (message, mode)
@@ -325,7 +325,7 @@ where
             let mut lock = self.unsettled.write().await;
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
-            lock.get_or_insert(BTreeMap::new())
+            lock.get_or_insert(OrderedMap::new())
                 .insert(delivery_info.delivery_tag.clone(), Some(state.clone()))
         };
 
@@ -549,7 +549,7 @@ impl ReceiverLink<Target> {
 impl<T> ReceiverLink<T> {
     async fn handle_unsettled_in_attach(
         &mut self,
-        remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+        remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> ReceiverAttachExchange {
         let remote_is_empty = match remote_unsettled {
             Some(map) => map.is_empty(),
@@ -602,7 +602,7 @@ impl<T> ReceiverLink<T> {
         } else {
             let mut lock = self.unsettled.write().await;
             for info in consecutive_infos {
-                lock.get_or_insert(BTreeMap::new())
+                lock.get_or_insert(OrderedMap::new())
                     .insert(info.delivery_tag.clone(), Some(state.clone()));
             }
         }
@@ -905,14 +905,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use fe2o3_amqp_types::{
         messaging::{
             message::{Body, __private::Serializable},
             AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
         },
-        primitives::Value,
+        primitives::{Value, OrderedMap},
     };
     use serde_amqp::to_vec;
 
@@ -928,9 +926,9 @@ mod tests {
                 ..Default::default()
             }),
             // header: None,
-            delivery_annotations: Some(DeliveryAnnotations(BTreeMap::new())),
+            delivery_annotations: Some(DeliveryAnnotations(OrderedMap::new())),
             // delivery_annotations: None,
-            message_annotations: Some(MessageAnnotations(BTreeMap::new())),
+            message_annotations: Some(MessageAnnotations(OrderedMap::new())),
             // message_annotations: None,
             properties: None,
             application_properties: None,

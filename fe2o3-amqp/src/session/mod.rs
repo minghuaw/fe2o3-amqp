@@ -1,14 +1,12 @@
 //! Implements AMQP1.0 Session
 
-use std::collections::BTreeMap;
-
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
         self, DeliveryNumber, DeliveryTag, Fields, Handle, Role, SequenceNo, TransferNumber,
     },
     performatives::{Attach, Begin, Detach, Disposition, End, Flow, Transfer},
-    primitives::{Symbol, UInt},
+    primitives::{Symbol, UInt, OrderedMap},
     states::SessionState,
 };
 use slab::Slab;
@@ -228,10 +226,10 @@ pub struct Session {
 
     // local links by output handle
     pub(crate) link_name_by_output_handle: Slab<String>,
-    pub(crate) link_by_name: BTreeMap<String, Option<LinkRelay<OutputHandle>>>,
-    pub(crate) link_by_input_handle: BTreeMap<InputHandle, LinkRelay<OutputHandle>>,
+    pub(crate) link_by_name: OrderedMap<String, Option<LinkRelay<OutputHandle>>>,
+    pub(crate) link_by_input_handle: OrderedMap<InputHandle, LinkRelay<OutputHandle>>,
     // Maps from DeliveryId to link.DeliveryCount
-    pub(crate) delivery_tag_by_id: BTreeMap<(Role, DeliveryNumber), (InputHandle, DeliveryTag)>, // Role must be the remote peer's role
+    pub(crate) delivery_tag_by_id: OrderedMap<(Role, DeliveryNumber), (InputHandle, DeliveryTag)>, // Role must be the remote peer's role
 }
 
 impl Session {

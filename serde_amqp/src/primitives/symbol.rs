@@ -235,7 +235,7 @@ impl<'de> de::Deserialize<'de> for Symbol {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, to_vec};
+    use crate::{from_slice, to_vec, primitives::OrderedMap};
 
     use super::{Symbol, SymbolRef};
 
@@ -264,9 +264,8 @@ mod tests {
     #[test]
     fn test_borrow_str() {
         use crate::value::Value;
-        use std::collections::BTreeMap;
 
-        let mut map = BTreeMap::new();
+        let mut map = OrderedMap::new();
         map.insert(Symbol::from("hello"), Value::from("world"));
 
         let val = map.get("hello");

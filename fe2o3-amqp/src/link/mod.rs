@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
@@ -11,7 +11,7 @@ use fe2o3_amqp_types::{
     },
     messaging::{DeliveryState, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
-    primitives::Symbol,
+    primitives::{Symbol, OrderedMap},
 };
 
 pub use error::*;
@@ -222,7 +222,7 @@ where
         &self,
         is_reattaching: bool,
         partial_unsettled: usize,
-    ) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
+    ) -> Option<OrderedMap<DeliveryTag, Option<DeliveryState>>> {
         // When reattaching (as opposed to resuming), the unsettled map MUST be null.
         if is_reattaching {
             return None;
