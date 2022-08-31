@@ -1,15 +1,13 @@
-use std::{
-    hash::Hash,
-};
+use std::{hash::Hash, marker::PhantomData};
 
-use indexmap::{IndexMap, Equivalent};
-use serde::{Deserialize, Serialize};
+use indexmap::{Equivalent, IndexMap};
+use serde::{de, ser::SerializeMap, Deserialize, Serialize};
 
 /// A wrapper around [`IndexMap`] with custom implementation of [`PartialEq`], [`Eq`],
 /// [`PartialOrd`], [`Ord`], and [`Hash`].
-/// 
+///
 /// Only a selected list of methods are re-exported for convenience.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct OrderedMap<K, V>(IndexMap<K, V>);
 
 impl<K, V> From<IndexMap<K, V>> for OrderedMap<K, V> {
@@ -19,17 +17,22 @@ impl<K, V> From<IndexMap<K, V>> for OrderedMap<K, V> {
 }
 
 impl<K, V> OrderedMap<K, V> {
+    /// Creates a new [`OrderedMap`]
+    pub fn new() -> Self {
+        Self(IndexMap::new())
+    }
+
     /// Get a reference to the inner [`IndexMap`]
-    /// 
-    /// It is intentional to NOT implement the `AsRef<IndexMap>` trait to avoid potential 
+    ///
+    /// It is intentional to NOT implement the `AsRef<IndexMap>` trait to avoid potential
     /// misuse
     pub fn as_inner(&self) -> &IndexMap<K, V> {
         &self.0
     }
 
     /// Get a mutable reference to the inner [`IndexMap`]
-    /// 
-    /// It is intentional to NOT implement the `AsMut<IndexMap>` trait to avoid potential 
+    ///
+    /// It is intentional to NOT implement the `AsMut<IndexMap>` trait to avoid potential
     /// misuse
     pub fn as_inner_mut(&mut self) -> &mut IndexMap<K, V> {
         &mut self.0
@@ -41,7 +44,7 @@ impl<K, V> OrderedMap<K, V> {
     }
 }
 
-impl<K, V> OrderedMap<K, V> 
+impl<K, V> OrderedMap<K, V>
 where
     K: Hash + Eq,
 {
@@ -51,25 +54,25 @@ where
     }
 
     /// Calls [`IndexMap::get`] internally
-    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V> 
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
     where
-        Q: Hash + Equivalent<K>
+        Q: Hash + Equivalent<K>,
     {
         self.0.get(key)
     }
 
     /// Calls [`IndexMap::get_mut`] internally
-    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V> 
+    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
     where
-        Q: Hash + Equivalent<K>
+        Q: Hash + Equivalent<K>,
     {
         self.0.get_mut(key)
     }
 
     /// Calls [`IndexMap::remove`] internally
-    pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V> 
+    pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
     where
-        Q: Hash + Equivalent<K>
+        Q: Hash + Equivalent<K>,
     {
         self.0.remove(key)
     }
@@ -84,7 +87,40 @@ where
     where
         S: serde::Serializer,
     {
-        indexmap::serde_seq::serialize(&self.0, serializer)
+        let len = self.0.len();
+        let mut map = serializer.serialize_map(Some(len))?;
+        for (key, value) in self {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+struct Visitor<K, V> {
+    key_marker: PhantomData<K>,
+    value_marker: PhantomData<V>,
+}
+
+impl<'de, K, V> de::Visitor<'de> for Visitor<K, V>
+where
+    K: Deserialize<'de> + Hash + Eq,
+    V: Deserialize<'de>,
+{
+    type Value = OrderedMap<K, V>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("A sequence of map entries")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::MapAccess<'de>,
+    {
+        let mut inner = IndexMap::new();
+        while let Some((key, value)) = map.next_entry()? {
+            inner.insert(key, value);
+        }
+        Ok(OrderedMap(inner))
     }
 }
 
@@ -97,8 +133,10 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let map: IndexMap<K, V> = indexmap::serde_seq::deserialize(deserializer)?;
-        Ok(Self(map))
+        deserializer.deserialize_map(Visitor::<K, V> {
+            key_marker: PhantomData,
+            value_marker: PhantomData,
+        })
     }
 }
 
@@ -116,9 +154,10 @@ impl<K, V> Eq for OrderedMap<K, V>
 where
     K: Eq,
     V: Eq,
-{}
+{
+}
 
-impl<K, V> PartialOrd for OrderedMap<K, V> 
+impl<K, V> PartialOrd for OrderedMap<K, V>
 where
     K: PartialOrd,
     V: PartialOrd,
@@ -129,7 +168,7 @@ where
     }
 }
 
-impl<K, V> Ord for OrderedMap<K, V> 
+impl<K, V> Ord for OrderedMap<K, V>
 where
     K: Ord,
     V: Ord,
@@ -139,7 +178,7 @@ where
     }
 }
 
-impl<K, V> Hash for OrderedMap<K, V> 
+impl<K, V> Hash for OrderedMap<K, V>
 where
     K: Hash,
     V: Hash,
@@ -149,5 +188,35 @@ where
         for entry in &self.0 {
             entry.hash(state)
         }
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a OrderedMap<K, V> {
+    type Item = (&'a K, &'a V);
+
+    type IntoIter = indexmap::map::Iter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a mut OrderedMap<K, V> {
+    type Item = (&'a K, &'a mut V);
+
+    type IntoIter = indexmap::map::IterMut<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
+impl<K, V> IntoIterator for OrderedMap<K, V> {
+    type Item = (K, V);
+
+    type IntoIter = indexmap::map::IntoIter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }

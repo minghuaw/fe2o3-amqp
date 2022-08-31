@@ -1,5 +1,6 @@
 //! Value type for untyped AMQP1.0 data structures.
 
+use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -8,7 +9,7 @@ use std::collections::BTreeMap;
 use crate::{
     described::Described,
     format_code::EncodingCodes,
-    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, OrderedMap},
     util::TryFromSerializable,
     Error,
 };
@@ -256,7 +257,7 @@ pub enum Value {
     /// encoded are not equal.
     ///
     /// Note: Can only use BTreeMap as it must be considered to be ordered
-    Map(BTreeMap<Value, Value>),
+    Map(OrderedMap<Value, Value>),
 
     /// A sequence of values of a single type.
     ///
@@ -396,7 +397,8 @@ where
     V: Into<Value>,
 {
     fn from(map: BTreeMap<K, V>) -> Self {
-        Value::Map(map.into_iter().map(|(k, v)| (k.into(), v.into())).collect())
+        let map: IndexMap<_, _> = map.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        Value::Map(OrderedMap::from(map))
     }
 }
 
@@ -450,7 +452,7 @@ impl_try_from_for_value_variant! {
     String, String,
     Symbol, Symbol,
     List, Vec<Value>,
-    Map, BTreeMap<Value, Value>,
+    Map, OrderedMap<Value, Value>,
     Array, Array<Value>
 }
 
@@ -498,11 +500,12 @@ impl From<serde_json::Value> for Value {
                 let v: Vec<Value> = a.into_iter().map(|value| Value::from(value)).collect();
                 Value::List(v)
             }
-            serde_json::Value::Object(o) => Value::Map(
-                o.into_iter()
+            serde_json::Value::Object(o) => {
+                let map: IndexMap<_, _> =o.into_iter()
                     .map(|(key, value)| (Value::String(key), Value::from(value)))
-                    .collect(),
-            ),
+                    .collect();
+                Value::Map(OrderedMap::from(map))
+            },
         }
     }
 }
@@ -513,6 +516,7 @@ mod tests {
     use serde::de::DeserializeOwned;
 
     use crate::de::from_reader;
+    use crate::primitives::OrderedMap;
     use crate::ser::to_vec;
 
     use super::Value;
@@ -749,8 +753,7 @@ mod tests {
 
     #[test]
     fn test_value_map() {
-        use std::collections::BTreeMap;
-        let mut map = BTreeMap::new();
+        let mut map = OrderedMap::new();
         map.insert(Value::UInt(13), Value::Bool(true));
         map.insert(Value::UInt(45), Value::Bool(false));
         let expected = Value::Map(map);
