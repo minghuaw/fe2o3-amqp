@@ -145,6 +145,7 @@ where
     K: PartialEq,
     V: PartialEq,
 {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.0.len() == other.0.len() && self.0.iter().zip(&other.0).all(|(a, b)| a == b)
     }
@@ -173,6 +174,7 @@ where
     K: Ord,
     V: Ord,
 {
+    #[inline]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.iter().cmp(other.0.iter())
     }
@@ -183,6 +185,7 @@ where
     K: Hash,
     V: Hash,
 {
+    #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         state.write_usize(self.0.len());
         for entry in &self.0 {
@@ -196,6 +199,7 @@ impl<'a, K, V> IntoIterator for &'a OrderedMap<K, V> {
 
     type IntoIter = indexmap::map::Iter<'a, K, V>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
@@ -206,6 +210,7 @@ impl<'a, K, V> IntoIterator for &'a mut OrderedMap<K, V> {
 
     type IntoIter = indexmap::map::IterMut<'a, K, V>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter_mut()
     }
@@ -215,8 +220,20 @@ impl<K, V> IntoIterator for OrderedMap<K, V> {
     type Item = (K, V);
 
     type IntoIter = indexmap::map::IntoIter<K, V>;
-
+    
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for OrderedMap<K, V> 
+where
+    K: Hash + Eq,
+{
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        let index_map = IndexMap::from_iter(iter);
+        Self(index_map)
     }
 }
