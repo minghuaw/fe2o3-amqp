@@ -24,8 +24,6 @@
 //! ```
 //!
 
-use std::collections::BTreeMap;
-
 use crate::{
     endpoint::ReceiverLink,
     link::{

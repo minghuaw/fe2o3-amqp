@@ -1,6 +1,6 @@
 //! Manages incoming transaction on the resource side
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
