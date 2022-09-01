@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.4.0
+
+1. Bug fixes (Breaking)
+   1. Switched from `Value::Map(BTreeMap<Value, Value>)` to `Value::Map(OrderedMap<Value, Value>)` to preserve the encoded order
+2. New features
+   1. Added `OrderedMap` which is a wrapper around `IndexMap` with custom implementation of some traits
+   2. More `TryFrom<Value>` impl for common map types
+
 ## 0.3.1
 
 1. Made constant `VALUE` public for possible downstream uses
