@@ -146,9 +146,9 @@ impl Builder {
             properties: self.properties,
 
             link_name_by_output_handle: Slab::new(),
-            link_by_name: OrderedMap::new(),
-            link_by_input_handle: OrderedMap::new(),
-            delivery_tag_by_id: OrderedMap::new(),
+            link_by_name: HashMap::new(),
+            link_by_input_handle: HashMap::new(),
+            delivery_tag_by_id: HashMap::new(),
         };
 
         TxnSession {
