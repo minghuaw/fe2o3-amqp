@@ -1,5 +1,16 @@
 # Change Log
 
+## 0.5.0
+
+1. Breaking change(s):
+   1. Updated `serde_amqp` to "0.4.0" which introduced breaking change that `Value::Map` now wraps around a `OrderedMap` #96
+   2. Changed the following types to either alias or use an `OrderedMap` instead of `BTreeMap` to preserve the encoded order after deserialization #96
+      1. `Fields`
+      2. `FilterSet`
+      3. `ApplicationProperties`
+      4. `Annotations` (thus any type that is a wrapper around `Annotations`)
+      5. `Attach::unsettled`
+
 ## 0.4.1
 
 1. Fixed [#95](https://github.com/minghuaw/fe2o3-amqp/issues/95)

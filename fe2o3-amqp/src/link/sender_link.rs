@@ -258,7 +258,7 @@ where
                 {
                     let mut guard = self.unsettled.write().await;
                     guard
-                        .get_or_insert(BTreeMap::new())
+                        .get_or_insert(OrderedMap::new())
                         .insert(delivery_tag.clone(), unsettled);
                 }
 
@@ -416,7 +416,7 @@ async fn send_disposition(
 impl<T> SenderLink<T> {
     async fn handle_unsettled_in_attach(
         &mut self,
-        remote_unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+        remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
         let mut guard = self.unsettled.write().await;
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {

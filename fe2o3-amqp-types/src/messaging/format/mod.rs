@@ -1,13 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, Symbol, UByte, UInt},
+    primitives::{Boolean, OrderedMap, Symbol, UByte, UInt},
     value::Value,
 };
-use std::{
-    collections::BTreeMap,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
@@ -181,7 +178,7 @@ use self::map_builder::MapBuilder;
     code = 0x0000_0000_0000_0074,
     encoding = "basic"
 )]
-pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
+pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
 
 impl ApplicationProperties {
     /// Creates a builder for ApplicationProperties
@@ -191,7 +188,7 @@ impl ApplicationProperties {
 }
 
 impl Deref for ApplicationProperties {
-    type Target = BTreeMap<String, SimpleValue>;
+    type Target = OrderedMap<String, SimpleValue>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -255,7 +252,7 @@ impl DerefMut for Footer {
 /// keys, and all symbolic keys except those beginning with “x-” are reserved. Keys beginning with “x-opt-” MUST be
 /// ignored if not understood. On receiving an annotation key which is not understood, and which does not begin with
 /// “x-opt”, the receiving AMQP container MUST detach the link with a not-implemented error.
-pub type Annotations = BTreeMap<Symbol, Value>;
+pub type Annotations = OrderedMap<Symbol, Value>;
 
 mod message_id;
 pub use message_id::*;

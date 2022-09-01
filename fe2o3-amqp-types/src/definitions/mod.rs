@@ -2,10 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
-use std::collections::BTreeMap;
 
 use serde_amqp::{
-    primitives::{Symbol, UInt},
+    primitives::{OrderedMap, Symbol, UInt},
     value::Value,
 };
 
@@ -69,7 +68,7 @@ pub type MessageFormat = UInt;
 pub type IetfLanguageTag = Symbol;
 
 /// 2.8.13 Fields
-pub type Fields = BTreeMap<Symbol, Value>;
+pub type Fields = OrderedMap<Symbol, Value>;
 
 /// 2.8.14 Error
 mod error;

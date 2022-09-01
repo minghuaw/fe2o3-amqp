@@ -1,8 +1,11 @@
 //! AnnotationBuilder for types that are simply a wrapper around Annotation
 
-use std::{collections::BTreeMap, marker::PhantomData};
+use std::{hash::Hash, marker::PhantomData};
 
-use serde_amqp::{primitives::Symbol, Value};
+use serde_amqp::{
+    primitives::{OrderedMap, Symbol},
+    Value,
+};
 
 use crate::primitives::SimpleValue;
 
@@ -13,32 +16,31 @@ use super::{ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotatio
 ///
 /// This simply provides a convenient way of inserting entries into the map
 #[derive(Debug)]
-pub struct MapBuilder<K, V, T>
-where
-    K: Ord,
-{
-    map: BTreeMap<K, V>,
+pub struct MapBuilder<K, V, T> {
+    map: OrderedMap<K, V>,
     marker: PhantomData<T>,
 }
 
-impl<K: Ord, V, T> Default for MapBuilder<K, V, T> {
+impl<K, V, T> Default for MapBuilder<K, V, T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, V, T> MapBuilder<K, V, T>
-where
-    K: Ord,
-{
+impl<K, V, T> MapBuilder<K, V, T> {
     /// Creates a new builder for annotation types
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: OrderedMap::new(),
             marker: PhantomData,
         }
     }
+}
 
+impl<K, V, T> MapBuilder<K, V, T>
+where
+    K: Hash + Eq,
+{
     /// A convenience method to insert an entry into the annotation map
     pub fn insert(mut self, key: impl Into<K>, value: impl Into<V>) -> Self {
         self.map.insert(key.into(), value.into());

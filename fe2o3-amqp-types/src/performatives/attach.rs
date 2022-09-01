@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Array, Boolean, Symbol, ULong},
+    primitives::{Array, Boolean, OrderedMap, Symbol, ULong},
 };
 
 use crate::{
@@ -89,7 +87,7 @@ pub struct Attach {
     pub target: Option<Box<TargetArchetype>>,
 
     /// <field name="unsettled" type="map"/>
-    pub unsettled: Option<BTreeMap<DeliveryTag, Option<DeliveryState>>>,
+    pub unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
 
     /// <field name="incomplete-unsettled" type="boolean" default="false"/>
     #[amqp_contract(default)]
@@ -198,7 +196,7 @@ mod tests {
         let s = std::mem::size_of::<Option<Box<TargetArchetype>>>();
         println!("target {:?}", s);
 
-        let s = std::mem::size_of::<Option<BTreeMap<DeliveryTag, DeliveryState>>>();
+        let s = std::mem::size_of::<Option<OrderedMap<DeliveryTag, DeliveryState>>>();
         println!("unsettled {:?}", s);
 
         let s = std::mem::size_of::<Boolean>();

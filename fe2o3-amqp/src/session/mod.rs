@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Session
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -228,10 +228,10 @@ pub struct Session {
 
     // local links by output handle
     pub(crate) link_name_by_output_handle: Slab<String>,
-    pub(crate) link_by_name: BTreeMap<String, Option<LinkRelay<OutputHandle>>>,
-    pub(crate) link_by_input_handle: BTreeMap<InputHandle, LinkRelay<OutputHandle>>,
+    pub(crate) link_by_name: HashMap<String, Option<LinkRelay<OutputHandle>>>,
+    pub(crate) link_by_input_handle: HashMap<InputHandle, LinkRelay<OutputHandle>>,
     // Maps from DeliveryId to link.DeliveryCount
-    pub(crate) delivery_tag_by_id: BTreeMap<(Role, DeliveryNumber), (InputHandle, DeliveryTag)>, // Role must be the remote peer's role
+    pub(crate) delivery_tag_by_id: HashMap<(Role, DeliveryNumber), (InputHandle, DeliveryTag)>, // Role must be the remote peer's role
 }
 
 impl Session {

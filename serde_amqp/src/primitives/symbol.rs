@@ -130,7 +130,7 @@ impl<'de> de::Deserialize<'de> for SymbolRef<'de> {
 ///
 /// Symbol should only contain ASCII characters. The implementation, however, wraps
 /// over a String. `AmqpNetLite` also wraps around a String, which in c# is utf-16.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(pub String);
 
 impl Symbol {
@@ -235,7 +235,7 @@ impl<'de> de::Deserialize<'de> for Symbol {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, to_vec};
+    use crate::{from_slice, primitives::OrderedMap, to_vec};
 
     use super::{Symbol, SymbolRef};
 
@@ -264,9 +264,8 @@ mod tests {
     #[test]
     fn test_borrow_str() {
         use crate::value::Value;
-        use std::collections::BTreeMap;
 
-        let mut map = BTreeMap::new();
+        let mut map = OrderedMap::new();
         map.insert(Symbol::from("hello"), Value::from("world"));
 
         let val = map.get("hello");
