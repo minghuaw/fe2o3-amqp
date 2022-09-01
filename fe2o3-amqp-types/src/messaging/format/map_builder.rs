@@ -2,14 +2,13 @@
 
 use std::{hash::Hash, marker::PhantomData};
 
-use serde_amqp::{
-    primitives::{OrderedMap},
-    Value,
-};
+use serde_amqp::{primitives::OrderedMap, Value};
 
 use crate::primitives::SimpleValue;
 
-use super::{ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotations, annotations::OwnedKey};
+use super::{
+    annotations::OwnedKey, ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotations,
+};
 
 /// Builder for types that are simply a wrapper around map
 /// ([`DeliveryAnnotations`], [`MessageAnnotations`], [`Footer`], [`ApplicationProperties`])

@@ -25,22 +25,22 @@ use serde_amqp::{
 /// beginning with “x-opt-” MUST be ignored if not understood. On receiving an annotation key which
 /// is not understood, and which does not begin with “x-opt”, the receiving AMQP container MUST
 /// detach the link with a not-implemented error.
-/// 
+///
 /// The key type allows looking up from the map using multiple types. The user may need to
 /// explicitly coerce a type into a trait object
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use fe2o3_amqp_types::primitives::{Value, Symbol};
 /// use fe2o3_amqp_types::messaging::annotations::{Annotations, OwnedKey, AnnotationKey};
-/// 
+///
 /// let key = "key";
 /// let val = Value::Symbol(Symbol::from("value"));
-/// 
+///
 /// let mut annotations = Annotations::new();
 /// annotations.insert(OwnedKey::from(key), val.clone());
-/// 
+///
 /// let removed = annotations.remove(&key as &dyn AnnotationKey);
 /// assert_eq!(removed, Some(val));
 /// ```
@@ -284,11 +284,15 @@ impl<'a> Hash for (dyn AnnotationKey + 'a) {
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp::{Value, primitives::{Symbol, SymbolRef}, to_vec, from_slice};
+    use serde_amqp::{
+        from_slice,
+        primitives::{Symbol, SymbolRef},
+        to_vec, Value,
+    };
 
     use crate::messaging::format::annotations::AnnotationKey;
 
-    use super::{Annotations};
+    use super::Annotations;
 
     const STRING_KEY: &str = "string_key";
     const STR_KEY: &str = "str_key";
@@ -360,7 +364,7 @@ mod tests {
     #[test]
     fn test_annotations_get_with_different_key_types() {
         let mut annotations = create_annotations();
-        
+
         let key = String::from(STRING_KEY);
         let val = annotations.remove(&key as &dyn AnnotationKey);
         assert_eq!(val, Some(string_val()));
