@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Link
 
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
@@ -11,7 +11,7 @@ use fe2o3_amqp_types::{
     },
     messaging::{DeliveryState, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
-    primitives::Symbol,
+    primitives::{Symbol, OrderedMap},
 };
 
 pub use error::*;
@@ -34,7 +34,7 @@ use crate::{
 use self::{
     delivery::Delivery,
     resumption::ResumingDelivery,
-    state::{LinkFlowState, LinkState, UnsettledMap},
+    state::{LinkFlowState, LinkState},
     target_archetype::VerifyTargetArchetype,
 };
 
@@ -59,6 +59,10 @@ pub(crate) mod target_archetype;
 
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
+
+/// An OrderedMap is used because Link may exchange their unsettled map 
+/// and `Map` should be considered ordered
+pub(crate) type UnsettledMap<M> = OrderedMap<DeliveryTag, M>;
 
 pub(crate) type SenderFlowState = Consumer<Arc<LinkFlowState<role::SenderMarker>>>;
 pub(crate) type ReceiverFlowState = Arc<LinkFlowState<role::ReceiverMarker>>;
@@ -222,7 +226,7 @@ where
         &self,
         is_reattaching: bool,
         partial_unsettled: usize,
-    ) -> Option<BTreeMap<DeliveryTag, Option<DeliveryState>>> {
+    ) -> Option<OrderedMap<DeliveryTag, Option<DeliveryState>>> {
         // When reattaching (as opposed to resuming), the unsettled map MUST be null.
         if is_reattaching {
             return None;

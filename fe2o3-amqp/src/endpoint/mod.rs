@@ -62,7 +62,7 @@ impl From<OutgoingChannel> for u16 {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub(crate) struct IncomingChannel(pub u16);
 
 impl From<IncomingChannel> for u16 {
@@ -71,7 +71,7 @@ impl From<IncomingChannel> for u16 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub(crate) struct OutputHandle(pub UInt);
 
 impl From<Handle> for OutputHandle {
@@ -86,7 +86,7 @@ impl From<OutputHandle> for Handle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub(crate) struct InputHandle(pub UInt);
 
 impl From<Handle> for InputHandle {

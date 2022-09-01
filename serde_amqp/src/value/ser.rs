@@ -1,6 +1,6 @@
 //! Value serializer
 
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::convert::TryFrom;
 
 use ordered_float::OrderedFloat;
 use serde::ser::{self};
@@ -14,7 +14,7 @@ use crate::{
     described::Described,
     descriptor::Descriptor,
     error::Error,
-    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+    primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
     util::{FieldRole, NewType},
 };
 
@@ -337,7 +337,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Ok(MapSerializer {
             se: self,
-            map: BTreeMap::new(),
+            map: OrderedMap::new(),
         })
     }
 
@@ -691,7 +691,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
 #[derive(Debug)]
 pub struct MapSerializer<'a> {
     se: &'a mut Serializer,
-    map: BTreeMap<Value, Value>,
+    map: OrderedMap<Value, Value>,
 }
 
 impl<'a> MapSerializer<'a> {
@@ -826,15 +826,13 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use serde::{Deserialize, Serialize};
     use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     use crate::{
         described::Described,
         from_slice,
-        primitives::{Array, Timestamp},
+        primitives::{Array, OrderedMap, Timestamp},
         to_vec,
         value::Value,
     };
@@ -887,16 +885,18 @@ mod tests {
 
     #[test]
     fn test_serialize_value_map() {
-        let mut val = BTreeMap::new();
+        let mut val = OrderedMap::new();
         val.insert("a", 1i32);
         val.insert("m", 2);
         val.insert("q", 3);
         val.insert("p", 4);
-        let expected = Value::Map(
-            val.iter()
-                .map(|(k, v)| (to_value(k).unwrap(), to_value(v).unwrap()))
-                .collect(),
-        );
+
+        let mut expected: OrderedMap<Value, Value> = OrderedMap::new();
+        expected.insert("a".into(), 1i32.into());
+        expected.insert("m".into(), 2.into());
+        expected.insert("q".into(), 3.into());
+        expected.insert("p".into(), 4.into());
+        let expected = Value::Map(expected);
         assert_eq_on_value_vs_expected(val, expected);
     }
 

@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, collections::BTreeMap, convert::TryInto, sync::Arc};
+use std::{cmp::min, convert::TryInto, sync::Arc, collections::HashMap};
 
 use async_trait::async_trait;
 
@@ -347,7 +347,7 @@ pub struct Connection {
     // local
     pub(crate) local_state: ConnectionState,
     pub(crate) local_open: Open,
-    pub(crate) session_by_incoming_channel: BTreeMap<IncomingChannel, SessionRelay>,
+    pub(crate) session_by_incoming_channel: HashMap<IncomingChannel, SessionRelay>,
     pub(crate) session_by_outgoing_channel: Slab<SessionRelay>,
 
     // remote
@@ -461,7 +461,7 @@ impl Connection {
             // control,
             local_state,
             local_open,
-            session_by_incoming_channel: BTreeMap::new(),
+            session_by_incoming_channel: HashMap::new(),
             session_by_outgoing_channel: Slab::new(),
 
             remote_open: None,
