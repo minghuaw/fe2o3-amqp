@@ -3,13 +3,13 @@
 use std::{hash::Hash, marker::PhantomData};
 
 use serde_amqp::{
-    primitives::{OrderedMap, Symbol},
+    primitives::{OrderedMap},
     Value,
 };
 
 use crate::primitives::SimpleValue;
 
-use super::{ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotations};
+use super::{ApplicationProperties, DeliveryAnnotations, Footer, MessageAnnotations, annotations::OwnedKey};
 
 /// Builder for types that are simply a wrapper around map
 /// ([`DeliveryAnnotations`], [`MessageAnnotations`], [`Footer`], [`ApplicationProperties`])
@@ -48,21 +48,21 @@ where
     }
 }
 
-impl MapBuilder<Symbol, Value, DeliveryAnnotations> {
+impl MapBuilder<OwnedKey, Value, DeliveryAnnotations> {
     /// Build [`DeliveryAnnotations`]
     pub fn build(self) -> DeliveryAnnotations {
         DeliveryAnnotations(self.map)
     }
 }
 
-impl MapBuilder<Symbol, Value, MessageAnnotations> {
+impl MapBuilder<OwnedKey, Value, MessageAnnotations> {
     /// Build [`MessageAnnotations`]
     pub fn build(self) -> MessageAnnotations {
         MessageAnnotations(self.map)
     }
 }
 
-impl MapBuilder<Symbol, Value, Footer> {
+impl MapBuilder<OwnedKey, Value, Footer> {
     /// Build [`Footer`]
     pub fn build(self) -> Footer {
         Footer(self.map)

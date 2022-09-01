@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, OrderedMap, Symbol, UByte, UInt},
+    primitives::{Boolean, OrderedMap, UByte, UInt},
     value::Value,
 };
 use std::ops::{Deref, DerefMut};
@@ -10,7 +10,8 @@ use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
 pub mod map_builder;
 
-mod annotations;
+pub mod annotations;
+pub use annotations::Annotations;
 
 /// 3.2.1 Header
 /// Transport headers for a message.
@@ -96,7 +97,7 @@ pub struct DeliveryAnnotations(pub Annotations);
 
 impl DeliveryAnnotations {
     /// Creates a builder for [`DeliveryAnnotations`]
-    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+    pub fn builder() -> MapBuilder<OwnedKey, Value, Self> {
         MapBuilder::new()
     }
 }
@@ -144,7 +145,7 @@ pub struct MessageAnnotations(pub Annotations);
 
 impl MessageAnnotations {
     /// Creates a builder for [`MessageAnnotations`]
-    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+    pub fn builder() -> MapBuilder<OwnedKey, Value, Self> {
         MapBuilder::new()
     }
 }
@@ -166,7 +167,7 @@ impl DerefMut for MessageAnnotations {
 pub mod properties;
 pub use properties::Properties;
 
-use self::map_builder::MapBuilder;
+use self::{map_builder::MapBuilder, annotations::OwnedKey};
 
 /// 3.2.5 Application Properties
 /// <type name="application-properties" class="restricted" source="map" provides="section">
@@ -225,7 +226,7 @@ pub struct Footer(pub Annotations);
 
 impl Footer {
     /// Creates a builder for [`Footer`]
-    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+    pub fn builder() -> MapBuilder<OwnedKey, Value, Self> {
         MapBuilder::new()
     }
 }
@@ -243,16 +244,6 @@ impl DerefMut for Footer {
         &mut self.0
     }
 }
-
-/// 3.2.10 Annotations
-///
-/// <type name="annotations" class="restricted" source="map"/>
-///
-/// The annotations type is a map where the keys are restricted to be of type symbol or of type ulong. All ulong
-/// keys, and all symbolic keys except those beginning with “x-” are reserved. Keys beginning with “x-opt-” MUST be
-/// ignored if not understood. On receiving an annotation key which is not understood, and which does not begin with
-/// “x-opt”, the receiving AMQP container MUST detach the link with a not-implemented error.
-pub type Annotations = OrderedMap<Symbol, Value>;
 
 mod message_id;
 pub use message_id::*;
