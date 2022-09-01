@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.1
+
+1. Updated `fe2o3-amqp-types` to "0.5.1" which fixes #94.
+
 ## 0.6.0
 
 1. Breaking change(s):
