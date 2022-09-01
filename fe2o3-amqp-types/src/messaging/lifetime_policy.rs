@@ -213,10 +213,10 @@ impl ser::Serialize for LifetimePolicy {
 }
 
 enum Field {
-    DeleteOnClose,
-    DeleteOnNoLinks,
-    DeleteOnNoMessages,
-    DeleteOnNoLinksOrMessages,
+    Close,
+    NoLinks,
+    NoMessages,
+    NoLinksOrMessages,
 }
 
 struct FieldVisitor {}
@@ -233,10 +233,10 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let val = match v {
-            "amqp:delete-on-close:list" => Field::DeleteOnClose,
-            "amqp:delete-on-no-links:list" => Field::DeleteOnNoLinks,
-            "amqp:delete-on-no-messages:list" => Field::DeleteOnNoMessages,
-            "amqp:delete-on-no-links-or-messages:list" => Field::DeleteOnNoLinksOrMessages,
+            "amqp:delete-on-close:list" => Field::Close,
+            "amqp:delete-on-no-links:list" => Field::NoLinks,
+            "amqp:delete-on-no-messages:list" => Field::NoMessages,
+            "amqp:delete-on-no-links-or-messages:list" => Field::NoLinksOrMessages,
             _ => return Err(de::Error::custom("Wrong symbol value for descriptor")),
         };
 
@@ -248,10 +248,10 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let val = match v {
-            0x0000_0000_0000_002b => Field::DeleteOnClose,
-            0x0000_0000_0000_002c => Field::DeleteOnNoLinks,
-            0x0000_0000_0000_002d => Field::DeleteOnNoMessages,
-            0x0000_0000_0000_002e => Field::DeleteOnNoLinksOrMessages,
+            0x0000_0000_0000_002b => Field::Close,
+            0x0000_0000_0000_002c => Field::NoLinks,
+            0x0000_0000_0000_002d => Field::NoMessages,
+            0x0000_0000_0000_002e => Field::NoLinksOrMessages,
             _ => {
                 return Err(de::Error::custom(format!(
                     "Wrong code value for descriptor, found {:#x?}",
@@ -289,19 +289,19 @@ impl<'de> de::Visitor<'de> for Visitor {
         let (field, variant) = data.variant()?;
 
         match field {
-            Field::DeleteOnClose => {
+            Field::Close => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnClose(value))
             }
-            Field::DeleteOnNoLinks => {
+            Field::NoLinks => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnNoLinks(value))
             }
-            Field::DeleteOnNoMessages => {
+            Field::NoMessages => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnNoMessages(value))
             }
-            Field::DeleteOnNoLinksOrMessages => {
+            Field::NoLinksOrMessages => {
                 let value = variant.newtype_variant()?;
                 Ok(LifetimePolicy::DeleteOnNoLinksOrMessages(value))
             }

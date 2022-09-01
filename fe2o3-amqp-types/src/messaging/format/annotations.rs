@@ -196,17 +196,17 @@ pub enum BorrowedKey<'k> {
 /// This trait allows using different types as keys to get entry/value from [`Annotations`]
 pub trait AnnotationKey {
     /// Returns a [`BorrowedKey`] that will be used to as the key
-    fn key<'k>(&'k self) -> BorrowedKey<'k>;
+    fn key(&self) -> BorrowedKey<'_>;
 }
 
 impl<'a> AnnotationKey for BorrowedKey<'a> {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         self.clone()
     }
 }
 
 impl AnnotationKey for OwnedKey {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         match self {
             OwnedKey::Symbol(Symbol(s)) => BorrowedKey::Symbol(SymbolRef(s)),
             OwnedKey::ULong(v) => BorrowedKey::ULong(v),
@@ -215,37 +215,37 @@ impl AnnotationKey for OwnedKey {
 }
 
 impl AnnotationKey for u64 {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::ULong(self)
     }
 }
 
 impl AnnotationKey for str {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::Symbol(SymbolRef(self))
     }
 }
 
 impl AnnotationKey for &str {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::Symbol(SymbolRef(self))
     }
 }
 
 impl AnnotationKey for String {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::Symbol(SymbolRef(self))
     }
 }
 
 impl AnnotationKey for Symbol {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::Symbol(SymbolRef(&self.0))
     }
 }
 
 impl<'a> AnnotationKey for SymbolRef<'a> {
-    fn key<'k>(&'k self) -> BorrowedKey<'k> {
+    fn key(&self) -> BorrowedKey<'_> {
         BorrowedKey::Symbol(SymbolRef(self.0))
     }
 }
