@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "A serde implementation of AMQP1.0 protocol."
 license = "MIT/Apache-2.0"

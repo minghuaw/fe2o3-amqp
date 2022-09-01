@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.1
+
+1. Added `impl<'a> From<SymbolRef<'a>> for Symbol`
+
 ## 0.4.0
 
 1. Bug fixes (Breaking)
