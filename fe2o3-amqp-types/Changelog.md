@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.1
+
+1. Fixed #94 by switching `Annotations` map key type to `OwnedKey` to allow both `Symbol` and `u64` as the key type. It then uses a trait object `dyn AnnotationKey` to allow looking up the map using multiple types including `&str`, `String`, `u64`, `Symbol`, `SymbolRef`
+
 ## 0.5.0
 
 1. Breaking change(s):
