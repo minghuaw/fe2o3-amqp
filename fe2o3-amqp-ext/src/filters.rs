@@ -1,11 +1,13 @@
 //! Define filters from AMQP Capabilities Registry: Filters
 //! https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
 
-use fe2o3_amqp_types::primitives::{OrderedMap, SimpleValue, Symbol};
+use fe2o3_amqp_types::primitives::{SimpleValue, Symbol};
 use serde_amqp::{
     described::Described, descriptor::Descriptor, value::Value, DeserializeComposite,
     SerializeComposite,
 };
+
+pub use fe2o3_amqp_types::primitives::OrderedMap;
 
 /// 1.1 Legacy Amqp Direct Binding
 /// <type name="legacy-amqp-direct-binding" class="restricted" source="string" provides="filter">
