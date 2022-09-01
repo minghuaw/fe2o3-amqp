@@ -286,13 +286,13 @@ impl<'a> Hash for (dyn AnnotationKey + 'a) {
 mod tests {
     use serde_amqp::{
         from_slice,
-        primitives::{Symbol, SymbolRef},
+        primitives::{OrderedMap, Symbol, SymbolRef},
         to_vec, Value,
     };
 
     use crate::messaging::format::annotations::AnnotationKey;
 
-    use super::Annotations;
+    use super::{Annotations, OwnedKey};
 
     const STRING_KEY: &str = "string_key";
     const STR_KEY: &str = "str_key";
@@ -347,6 +347,23 @@ mod tests {
     }
 
     #[test]
+    fn test_serde_owned_key() {
+        let val = 6u64;
+        let buf = to_vec(&val).unwrap();
+        let owned: OwnedKey = from_slice(&buf).unwrap();
+        assert_eq!(owned, OwnedKey::ULong(val));
+        let buf2 = to_vec(&owned).unwrap();
+        assert_eq!(buf, buf2);
+
+        let sym = Symbol::from("key");
+        let buf = to_vec(&sym).unwrap();
+        let owned: OwnedKey = from_slice(&buf).unwrap();
+        assert_eq!(owned, OwnedKey::Symbol(Symbol::from("key")));
+        let buf2 = to_vec(&owned).unwrap();
+        assert_eq!(buf, buf2);
+    }
+
+    #[test]
     fn test_annotations_with_different_order() {
         let annotations_1 = create_annotations();
         let annotations_2 = create_annotations_with_different_order();
@@ -390,10 +407,16 @@ mod tests {
 
     #[test]
     fn test_serde_annotations() {
-        let annotations = create_annotations();
+        let mut annotations: OrderedMap<Symbol, Value> = OrderedMap::new();
+        annotations.insert("key".into(), "value".into());
+
         let buf = to_vec(&annotations).unwrap();
-        let deserialized = from_slice(&buf).unwrap();
-        assert_eq!(annotations, deserialized);
+        let deserialized: Annotations = from_slice(&buf).unwrap();
+
+        assert_eq!(
+            annotations.values().collect::<Vec<&Value>>(),
+            deserialized.values().collect::<Vec<&Value>>()
+        );
     }
 
     #[test]
