@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.6.0
+
+1. Breaking change(s):
+   1. Updated `serde_amqp` to "0.4.0" which introduced breaking change that `Value::Map` now wraps around a `OrderedMap` #96
+2. Switched link's unsettled map to `OrderedMap`
+
 ## 0.5.2
 
 1. Updated `serde_amqp` to "0.3.1"
