@@ -44,8 +44,8 @@ tokio-test = { version = "0.4" }
 testcontainers = "0.14"
 
 [dependencies]
-# serde_amqp = "0.3.1"
-serde_amqp = { path = "../serde_amqp" }
+serde_amqp = "0.4.0"
+# serde_amqp = { path = "../serde_amqp" }
 # fe2o3-amqp-types = "0.4.1"
 fe2o3-amqp-types = { path = "../fe2o3-amqp-types" }
 

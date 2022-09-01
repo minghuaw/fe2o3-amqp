@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
 use serde_amqp::{
-    primitives::{Symbol, UInt, OrderedMap},
+    primitives::{OrderedMap, Symbol, UInt},
     value::Value,
 };
 

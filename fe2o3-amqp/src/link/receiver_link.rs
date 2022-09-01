@@ -910,7 +910,7 @@ mod tests {
             message::{Body, __private::Serializable},
             AmqpValue, DeliveryAnnotations, Header, Message, MessageAnnotations,
         },
-        primitives::{Value, OrderedMap},
+        primitives::{OrderedMap, Value},
     };
     use serde_amqp::to_vec;
 

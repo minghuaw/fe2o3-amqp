@@ -1,6 +1,6 @@
 //! Implements AMQP1.0 Connection
 
-use std::{cmp::min, convert::TryInto, sync::Arc, collections::HashMap};
+use std::{cmp::min, collections::HashMap, convert::TryInto, sync::Arc};
 
 use async_trait::async_trait;
 

@@ -42,7 +42,7 @@ use fe2o3_amqp_types::{
         Rejected, Released,
     },
     performatives::Transfer,
-    primitives::{Symbol, OrderedMap},
+    primitives::{OrderedMap, Symbol},
     transaction::{Declared, Discharge, TransactionId, TransactionalState},
 };
 

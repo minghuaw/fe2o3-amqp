@@ -1,12 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, Symbol, UByte, UInt, OrderedMap},
+    primitives::{Boolean, OrderedMap, Symbol, UByte, UInt},
     value::Value,
 };
-use std::{
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 

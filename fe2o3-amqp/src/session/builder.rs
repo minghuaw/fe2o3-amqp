@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use fe2o3_amqp_types::{definitions::{Fields, Handle, TransferNumber}};
+use fe2o3_amqp_types::definitions::{Fields, Handle, TransferNumber};
 use serde_amqp::primitives::Symbol;
 use slab::Slab;
 use tokio::{sync::mpsc, task::JoinHandle};

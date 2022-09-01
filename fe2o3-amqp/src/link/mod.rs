@@ -11,7 +11,7 @@ use fe2o3_amqp_types::{
     },
     messaging::{DeliveryState, Received, Source, Target, TargetArchetype},
     performatives::{Attach, Detach, Disposition, Transfer},
-    primitives::{Symbol, OrderedMap},
+    primitives::{OrderedMap, Symbol},
 };
 
 pub use error::*;
@@ -60,7 +60,7 @@ pub(crate) mod target_archetype;
 /// Default amount of link credit
 pub const DEFAULT_CREDIT: SequenceNo = 200;
 
-/// An OrderedMap is used because Link may exchange their unsettled map 
+/// An OrderedMap is used because Link may exchange their unsettled map
 /// and `Map` should be considered ordered
 pub(crate) type UnsettledMap<M> = OrderedMap<DeliveryTag, M>;
 

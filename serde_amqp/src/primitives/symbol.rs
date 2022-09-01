@@ -235,7 +235,7 @@ impl<'de> de::Deserialize<'de> for Symbol {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, to_vec, primitives::OrderedMap};
+    use crate::{from_slice, primitives::OrderedMap, to_vec};
 
     use super::{Symbol, SymbolRef};
 

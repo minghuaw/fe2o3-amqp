@@ -1,13 +1,14 @@
 //! Manages incoming transaction on the resource side
 
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::Role,
     messaging::{Accepted, DeliveryState, Outcome},
     performatives::{Attach, Disposition, Transfer},
-    transaction::{TransactionId, TransactionalState}, primitives::OrderedMap,
+    primitives::OrderedMap,
+    transaction::{TransactionId, TransactionalState},
 };
 use tokio::sync::mpsc;
 

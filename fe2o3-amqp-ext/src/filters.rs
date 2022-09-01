@@ -1,7 +1,7 @@
 //! Define filters from AMQP Capabilities Registry: Filters
 //! https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
 
-use fe2o3_amqp_types::primitives::{SimpleValue, Symbol, OrderedMap};
+use fe2o3_amqp_types::primitives::{OrderedMap, SimpleValue, Symbol};
 use serde_amqp::{
     described::Described, descriptor::Descriptor, value::Value, DeserializeComposite,
     SerializeComposite,

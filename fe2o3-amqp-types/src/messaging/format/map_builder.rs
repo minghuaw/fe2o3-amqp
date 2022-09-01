@@ -27,8 +27,7 @@ impl<K, V, T> Default for MapBuilder<K, V, T> {
     }
 }
 
-impl<K, V, T> MapBuilder<K, V, T>
-{
+impl<K, V, T> MapBuilder<K, V, T> {
     /// Creates a new builder for annotation types
     pub fn new() -> Self {
         Self {

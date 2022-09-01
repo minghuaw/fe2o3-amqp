@@ -492,23 +492,21 @@ impl TryFrom<Value> for f64 {
 impl<K, V> TryFrom<Value> for BTreeMap<K, V>
 where
     K: TryFrom<Value, Error = Value> + Ord,
-    V: TryFrom<Value, Error = Value>
+    V: TryFrom<Value, Error = Value>,
 {
     type Error = Value;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::Map(map) => {
-                map.into_iter()
-                    .map(|(k,v)| {
-                        match (K::try_from(k), V::try_from(v)) {
-                            (Ok(k), Ok(v)) => Ok((k, v)),
-                            (Err(err), _) => Err(err),
-                            (_, Err(err)) => Err(err),
-                        }
-                    }).collect()
-            },
-            _ => Err(value)
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
+            _ => Err(value),
         }
     }
 }
@@ -516,23 +514,21 @@ where
 impl<K, V> TryFrom<Value> for HashMap<K, V>
 where
     K: TryFrom<Value, Error = Value> + std::hash::Hash + Eq,
-    V: TryFrom<Value, Error = Value>
+    V: TryFrom<Value, Error = Value>,
 {
     type Error = Value;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::Map(map) => {
-                map.into_iter()
-                    .map(|(k,v)| {
-                        match (K::try_from(k), V::try_from(v)) {
-                            (Ok(k), Ok(v)) => Ok((k, v)),
-                            (Err(err), _) => Err(err),
-                            (_, Err(err)) => Err(err),
-                        }
-                    }).collect()
-            },
-            _ => Err(value)
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
+            _ => Err(value),
         }
     }
 }
@@ -540,23 +536,21 @@ where
 impl<K, V> TryFrom<Value> for IndexMap<K, V>
 where
     K: TryFrom<Value, Error = Value> + std::hash::Hash + Eq,
-    V: TryFrom<Value, Error = Value>
+    V: TryFrom<Value, Error = Value>,
 {
     type Error = Value;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::Map(map) => {
-                map.into_iter()
-                    .map(|(k,v)| {
-                        match (K::try_from(k), V::try_from(v)) {
-                            (Ok(k), Ok(v)) => Ok((k, v)),
-                            (Err(err), _) => Err(err),
-                            (_, Err(err)) => Err(err),
-                        }
-                    }).collect()
-            },
-            _ => Err(value)
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
+            _ => Err(value),
         }
     }
 }

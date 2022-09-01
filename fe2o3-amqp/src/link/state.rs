@@ -3,7 +3,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
-use fe2o3_amqp_types::{definitions::{Fields, SequenceNo}};
+use fe2o3_amqp_types::definitions::{Fields, SequenceNo};
 use tokio::sync::RwLock;
 
 use crate::{
