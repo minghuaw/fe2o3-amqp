@@ -11,7 +11,8 @@ pub const DESCRIPTOR: &str = "AMQP1.0_DESCRIPTOR";
 #[doc(hidden)]
 pub const UNTAGGED_ENUM: &str = "FE2O3_AMQP_UNTAGGED";
 
-#[doc(hidden)]
+/// Use [`VALUE`] as the name if an enum needs to peek the format code before performing
+/// deserialization
 pub const VALUE: &str = "AMQP1.0_VALUE";
 
 // These constants should only be public on the crate level
