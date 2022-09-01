@@ -162,6 +162,12 @@ impl From<&str> for Symbol {
     }
 }
 
+impl<'a> From<SymbolRef<'a>> for Symbol {
+    fn from(value: SymbolRef<'a>) -> Self {
+        Self(value.0.into())
+    }
+}
+
 impl Deref for Symbol {
     type Target = String;
 
