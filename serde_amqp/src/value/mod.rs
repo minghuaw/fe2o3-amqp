@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use crate::{
     described::Described,
     format_code::EncodingCodes,
-    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid, OrderedMap},
+    primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
     util::TryFromSerializable,
     Error,
 };
@@ -402,6 +402,17 @@ where
     }
 }
 
+impl<K, V> From<OrderedMap<K, V>> for Value
+where
+    K: Into<Value>,
+    V: Into<Value>,
+{
+    fn from(map: OrderedMap<K, V>) -> Self {
+        let map = map.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        Value::Map(map)
+    }
+}
+
 impl<T: Serialize> TryFromSerializable<T> for Value {
     type Error = Error;
 
@@ -501,11 +512,12 @@ impl From<serde_json::Value> for Value {
                 Value::List(v)
             }
             serde_json::Value::Object(o) => {
-                let map: IndexMap<_, _> =o.into_iter()
+                let map: IndexMap<_, _> = o
+                    .into_iter()
                     .map(|(key, value)| (Value::String(key), Value::from(value)))
                     .collect();
                 Value::Map(OrderedMap::from(map))
-            },
+            }
         }
     }
 }

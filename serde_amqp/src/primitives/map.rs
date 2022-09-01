@@ -6,7 +6,7 @@ use serde::{de, ser::SerializeMap, Deserialize, Serialize};
 pub use indexmap::map::{Drain, IntoKeys, IntoValues, Iter, IterMut, Keys, Values, ValuesMut};
 
 /// A wrapper around [`IndexMap`] with custom implementation of [`PartialEq`], [`Eq`],
-/// [`PartialOrd`], [`Ord`], and [`Hash`].
+/// [`PartialOrd`], [`Ord`], [`Hash`], [`Serialize`], and [`Deserialize`].
 ///
 /// Only a selected list of methods are re-exported for convenience.
 #[derive(Debug, Clone, Default)]
@@ -122,6 +122,8 @@ impl<K, V> OrderedMap<K, V>
 where
     K: Hash + Eq,
 {
+    /// Insert a key-value pair in the map.
+    /// 
     /// Calls [`IndexMap::insert`] internally
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.0.insert(key, value)
@@ -143,6 +145,8 @@ where
         self.0.get_mut(key)
     }
 
+    /// Remove the key-value pair equivalent to key and return its value.
+    /// 
     /// Calls [`IndexMap::remove`] internally
     pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
     where
@@ -151,12 +155,38 @@ where
         self.0.remove(key)
     }
 
+    /// Remove and return the key-value pair equivalent to key.
+    /// 
+    /// Calls [`IndexMap::remove_entry`] internally
+    pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+    where
+        Q: Hash + Equivalent<K>,
+    {
+        self.0.remove_entry(key)
+    }
+
     /// Return true if an equivalent to key exists in the map.
+    /// 
+    /// Calls [`IndexMap::contains_key`] internally
     pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool
     where
         Q: Hash + Equivalent<K>,
     {
         self.0.contains_key(key)
+    }
+
+    /// Create a new map with capacity for n key-value pairs. (Does not allocate if n is zero.)
+    /// 
+    /// Calls [`IndexMap::with_capacity`] internally
+    pub fn with_capacity(n: usize) -> Self {
+        Self(IndexMap::with_capacity(n))
+    }
+
+    /// Shrink the capacity of the map as much as possible.
+    /// 
+    /// Calss [`IndexMap::shrink_to_fit`] internally
+    pub fn shrink_to_fit(&mut self) {
+        self.0.shrink_to_fit()
     }
 }
 
