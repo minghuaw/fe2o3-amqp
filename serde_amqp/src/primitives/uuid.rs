@@ -145,7 +145,9 @@ mod tests {
 
     #[test]
     fn test_lower_hex_formatting() {
-        let uuid = [b'a', b'm', b'q', b'p', 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let uuid = [
+            b'a', b'm', b'q', b'p', 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        ];
         let uuid = Uuid::from(uuid);
         let s = format!("{:x}", uuid);
         assert_eq!(s.len(), 36);
@@ -154,7 +156,9 @@ mod tests {
 
     #[test]
     fn test_upper_hex_formatting() {
-        let uuid = [b'a', b'm', b'q', b'p', 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let uuid = [
+            b'a', b'm', b'q', b'p', 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+        ];
         let uuid = Uuid::from(uuid);
         let s = format!("{:X}", uuid);
         assert_eq!(s.len(), 36);

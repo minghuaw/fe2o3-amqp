@@ -1,21 +1,21 @@
 //! Definition of the primitive types
 
 mod array;
+mod binary_ref;
 mod decimal;
 mod map;
 mod symbol;
 mod timestamp;
 mod uuid;
-mod binary_ref;
 
 // to avoid ambiguity
 pub use crate::primitives::array::*;
+pub use crate::primitives::binary_ref::*;
 pub use crate::primitives::decimal::*;
 pub use crate::primitives::map::*;
 pub use crate::primitives::symbol::*;
 pub use crate::primitives::timestamp::*;
 pub use crate::primitives::uuid::*;
-pub use crate::primitives::binary_ref::*;
 
 // Alias for the primitive types to match those in the spec
 use serde_bytes::ByteBuf;

@@ -1,6 +1,6 @@
 use std::fmt::{LowerHex, UpperHex};
 
-use serde::{Serialize, de};
+use serde::{de, Serialize};
 
 use super::Binary;
 
@@ -27,8 +27,9 @@ impl<'a> Serialize for BinaryRef<'a> {
 impl<'de> de::Deserialize<'de> for BinaryRef<'de> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de> {
-            serde::Deserialize::deserialize(deserializer).map(BinaryRef)
+        D: serde::Deserializer<'de>,
+    {
+        serde::Deserialize::deserialize(deserializer).map(BinaryRef)
     }
 }
 
@@ -52,7 +53,7 @@ impl<'a> UpperHex for BinaryRef<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{to_vec, primitives::Binary, from_slice};
+    use crate::{from_slice, primitives::Binary, to_vec};
 
     use super::BinaryRef;
 
