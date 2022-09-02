@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.4.2
+
+1. Added `BinaryRef<'a>` which allows serialize/deserialize as bytes on the wrapped `&[u8]`, and
+   implements `LowerHex` and `UpperHex` formatting.
+2. Added `LowerHex` and `UpperHex` formatting for `serde_amqp::primitives::Uuid`
+
 ## 0.4.1
 
 1. Added `impl<'a> From<SymbolRef<'a>> for Symbol`
