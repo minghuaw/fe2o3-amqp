@@ -15,6 +15,7 @@ tokio-rustls = "0.23"
 rustls = "0.20"
 webpki-roots = "0.22.4"
 fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
+uuid = { version = "1", features = ["v4"] }
 
 [[bin]]
 name = "queue_dlq"

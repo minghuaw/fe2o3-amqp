@@ -59,6 +59,7 @@ async fn main() {
     let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
     println!("Received: {:?}", msg);
     receiver.accept(&delivery).await.unwrap();
+    println!("{:?}", delivery);
     
     receiver.close().await.unwrap();
     session.end().await.unwrap();
