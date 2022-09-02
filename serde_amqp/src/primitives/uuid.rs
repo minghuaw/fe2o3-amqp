@@ -10,9 +10,6 @@ use crate::__constants::UUID;
 use crate::error::Error;
 use crate::fixed_width::UUID_WIDTH;
 
-// const HYPENED_BYTE_GROUP_NUMS: &[u8] = &[4, 2, 2, 2, 6];
-// const HYPHENED_LENGTH: usize = 32 + 4;
-
 /// A universally unique identifier as defined by RFC-4122 in section 4.1.2
 ///
 /// encoding code = 0x98,
@@ -117,10 +114,10 @@ impl LowerHex for Uuid {
             f,
             "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
             self.0[0], self.0[1], self.0[2], self.0[3],
-            self.0[4], self.0[5], 
+            self.0[4], self.0[5],
             self.0[6], self.0[7],
             self.0[8], self.0[9],
-            self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15], 
+            self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15],
         )
     }
 }
@@ -131,10 +128,10 @@ impl UpperHex for Uuid {
             f,
             "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
             self.0[0], self.0[1], self.0[2], self.0[3],
-            self.0[4], self.0[5], 
+            self.0[4], self.0[5],
             self.0[6], self.0[7],
             self.0[8], self.0[9],
-            self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15], 
+            self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15],
         )
     }
 }
