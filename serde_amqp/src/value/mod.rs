@@ -1,14 +1,15 @@
 //! Value type for untyped AMQP1.0 data structures.
 
+use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     described::Described,
     format_code::EncodingCodes,
-    primitives::{Array, Dec128, Dec32, Dec64, Symbol, Timestamp, Uuid},
+    primitives::{Array, Dec128, Dec32, Dec64, OrderedMap, Symbol, Timestamp, Uuid},
     util::TryFromSerializable,
     Error,
 };
@@ -256,7 +257,7 @@ pub enum Value {
     /// encoded are not equal.
     ///
     /// Note: Can only use BTreeMap as it must be considered to be ordered
-    Map(BTreeMap<Value, Value>),
+    Map(OrderedMap<Value, Value>),
 
     /// A sequence of values of a single type.
     ///
@@ -371,7 +372,7 @@ impl From<&str> for Value {
     }
 }
 
-impl<T> From<Array<T>> for Value 
+impl<T> From<Array<T>> for Value
 where
     T: Into<Value>,
 {
@@ -396,7 +397,19 @@ where
     V: Into<Value>,
 {
     fn from(map: BTreeMap<K, V>) -> Self {
-        Value::Map(map.into_iter().map(|(k, v)| (k.into(), v.into())).collect())
+        let map: IndexMap<_, _> = map.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        Value::Map(OrderedMap::from(map))
+    }
+}
+
+impl<K, V> From<OrderedMap<K, V>> for Value
+where
+    K: Into<Value>,
+    V: Into<Value>,
+{
+    fn from(map: OrderedMap<K, V>) -> Self {
+        let map = map.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        Value::Map(map)
     }
 }
 
@@ -450,7 +463,7 @@ impl_try_from_for_value_variant! {
     String, String,
     Symbol, Symbol,
     List, Vec<Value>,
-    Map, BTreeMap<Value, Value>,
+    Map, OrderedMap<Value, Value>,
     Array, Array<Value>
 }
 
@@ -471,6 +484,72 @@ impl TryFrom<Value> for f64 {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::Double(val) => Ok(val.0),
+            _ => Err(value),
+        }
+    }
+}
+
+impl<K, V> TryFrom<Value> for BTreeMap<K, V>
+where
+    K: TryFrom<Value, Error = Value> + Ord,
+    V: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
+            _ => Err(value),
+        }
+    }
+}
+
+impl<K, V> TryFrom<Value> for HashMap<K, V>
+where
+    K: TryFrom<Value, Error = Value> + std::hash::Hash + Eq,
+    V: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
+            _ => Err(value),
+        }
+    }
+}
+
+impl<K, V> TryFrom<Value> for IndexMap<K, V>
+where
+    K: TryFrom<Value, Error = Value> + std::hash::Hash + Eq,
+    V: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
             _ => Err(value),
         }
     }
@@ -498,11 +577,13 @@ impl From<serde_json::Value> for Value {
                 let v: Vec<Value> = a.into_iter().map(|value| Value::from(value)).collect();
                 Value::List(v)
             }
-            serde_json::Value::Object(o) => Value::Map(
-                o.into_iter()
+            serde_json::Value::Object(o) => {
+                let map: IndexMap<_, _> = o
+                    .into_iter()
                     .map(|(key, value)| (Value::String(key), Value::from(value)))
-                    .collect(),
-            ),
+                    .collect();
+                Value::Map(OrderedMap::from(map))
+            }
         }
     }
 }
@@ -513,6 +594,7 @@ mod tests {
     use serde::de::DeserializeOwned;
 
     use crate::de::from_reader;
+    use crate::primitives::OrderedMap;
     use crate::ser::to_vec;
 
     use super::Value;
@@ -749,8 +831,7 @@ mod tests {
 
     #[test]
     fn test_value_map() {
-        use std::collections::BTreeMap;
-        let mut map = BTreeMap::new();
+        let mut map = OrderedMap::new();
         map.insert(Value::UInt(13), Value::Bool(true));
         map.insert(Value::UInt(45), Value::Bool(false));
         let expected = Value::Map(map);

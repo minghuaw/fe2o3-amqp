@@ -76,7 +76,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             .map_err(|_| de::Error::custom("Unable to convert to EncodingCodes"))?
         {
             EncodingCodes::Sym32 | EncodingCodes::Sym8 => Ok(Field::Name),
-            EncodingCodes::ULong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+            EncodingCodes::ULong | EncodingCodes::ULong0 | EncodingCodes::SmallULong => {
                 Ok(Field::Code)
             }
             _ => Err(de::Error::custom("Invalid format code")),

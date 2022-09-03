@@ -1,6 +1,6 @@
 //! Value deserializer
 
-use std::{collections::BTreeMap, convert::TryInto};
+use std::convert::TryInto;
 
 use ordered_float::OrderedFloat;
 use serde::de::{self};
@@ -13,6 +13,7 @@ use crate::{
     },
     error::Error,
     format_code::EncodingCodes,
+    primitives::OrderedMap,
     util::{EnumType, NewType},
 };
 
@@ -97,8 +98,8 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
             }
             EncodingCodes::UByte => Field::UByte,
             EncodingCodes::UShort => Field::UShort,
-            EncodingCodes::UInt | EncodingCodes::Uint0 | EncodingCodes::SmallUint => Field::UInt,
-            EncodingCodes::ULong | EncodingCodes::Ulong0 | EncodingCodes::SmallUlong => {
+            EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => Field::UInt,
+            EncodingCodes::ULong | EncodingCodes::ULong0 | EncodingCodes::SmallULong => {
                 Field::ULong
             }
             EncodingCodes::Byte => Field::Byte,
@@ -479,7 +480,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
     where
         A: de::MapAccess<'de>,
     {
-        let mut map = BTreeMap::new();
+        let mut map = OrderedMap::new();
         while let Some((key, val)) = map_accessor.next_entry()? {
             map.insert(key, val);
         }
@@ -1064,7 +1065,7 @@ impl<'de> de::SeqAccess<'de> for SeqAccess {
 /// Accssor for map types
 #[derive(Debug)]
 pub struct MapAccess {
-    iter: <BTreeMap<Value, Value> as IntoIterator>::IntoIter,
+    iter: <OrderedMap<Value, Value> as IntoIterator>::IntoIter,
 }
 
 impl<'de> de::MapAccess<'de> for MapAccess {
@@ -1180,7 +1181,9 @@ mod tests {
     use crate::{
         described::Described,
         descriptor::Descriptor,
-        from_slice, to_vec,
+        from_slice,
+        primitives::OrderedMap,
+        to_vec,
         value::{ser::to_value, Value},
     };
 
@@ -1264,6 +1267,18 @@ mod tests {
         let expected = Array::from(vec![1i32, 2, 3, 4]);
         let buf = to_value(&expected).unwrap();
         assert_eq_from_value_vs_expected(buf, expected);
+    }
+
+    #[test]
+    fn test_deserialize_map() {
+        let mut expected: OrderedMap<Value, Value> = OrderedMap::new();
+        expected.insert("a".into(), 1i32.into());
+        expected.insert("m".into(), 2.into());
+        expected.insert("q".into(), 3.into());
+        expected.insert("p".into(), 4.into());
+
+        let value = Value::Map(expected.clone());
+        assert_eq_from_value_vs_expected(value, expected);
     }
 
     #[test]

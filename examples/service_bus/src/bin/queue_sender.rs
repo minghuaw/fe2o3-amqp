@@ -1,7 +1,9 @@
 use dotenv::dotenv;
 use fe2o3_amqp::types::messaging::Message;
+use fe2o3_amqp::types::messaging::MessageId;
 use fe2o3_amqp::types::messaging::Properties;
 use fe2o3_amqp::types::primitives::Binary;
+use fe2o3_amqp::types::primitives::Uuid;
 use std::env;
 use std::sync::Arc;
 
@@ -59,8 +61,17 @@ async fn main() {
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
     let data = "hello AMQP from rust".as_bytes().to_vec();
+    // let message_id = MessageId::Binary(Binary::from("amqp"));
+    let uuid = uuid::Uuid::new_v4();
+    let bytes = uuid.into_bytes();
+    println!("{:x?}", bytes);
+    let message_id = MessageId::Uuid(Uuid::from(bytes));
     let message = Message::builder()
-        .properties(Properties::builder().message_id(1).build())
+        .properties(
+            Properties::builder()
+                .message_id(message_id)
+                .build()
+            )
         .data(Binary::from(data))
         .build();
 

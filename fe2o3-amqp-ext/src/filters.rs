@@ -1,13 +1,13 @@
 //! Define filters from AMQP Capabilities Registry: Filters
 //! https://svn.apache.org/repos/asf/qpid/trunk/qpid/specs/apache-filters.xml#section-legacy-amqp
 
-use std::collections::BTreeMap;
-
 use fe2o3_amqp_types::primitives::{SimpleValue, Symbol};
 use serde_amqp::{
     described::Described, descriptor::Descriptor, value::Value, DeserializeComposite,
     SerializeComposite,
 };
+
+pub use fe2o3_amqp_types::primitives::OrderedMap;
 
 /// 1.1 Legacy Amqp Direct Binding
 /// <type name="legacy-amqp-direct-binding" class="restricted" source="string" provides="filter">
@@ -130,7 +130,7 @@ impl From<LegacyAmqpTopicBinding> for Option<Described<Value>> {
     code = 0x0000_468c_0000_0002,
     encoding = "basic"
 )]
-pub struct LegacyAmqpHeadersBinding(pub BTreeMap<String, SimpleValue>);
+pub struct LegacyAmqpHeadersBinding(pub OrderedMap<String, SimpleValue>);
 
 impl LegacyAmqpHeadersBinding {
     /// Returns the descriptor code
@@ -144,7 +144,7 @@ impl LegacyAmqpHeadersBinding {
     }
 }
 
-impl From<LegacyAmqpHeadersBinding> for Described<BTreeMap<String, SimpleValue>> {
+impl From<LegacyAmqpHeadersBinding> for Described<OrderedMap<String, SimpleValue>> {
     fn from(value: LegacyAmqpHeadersBinding) -> Self {
         Self {
             descriptor: Descriptor::Code(0x0000_468c_0000_0002),

@@ -292,12 +292,12 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 match v {
                     // uint0
                     0 => {
-                        let buf = [EncodingCodes::Uint0 as u8];
+                        let buf = [EncodingCodes::UInt0 as u8];
                         self.writer.write_all(&buf)?;
                     }
                     // smalluint
                     val @ 1..=255 => {
-                        let buf = [EncodingCodes::SmallUint as u8, val as u8];
+                        let buf = [EncodingCodes::SmallUInt as u8, val as u8];
                         self.writer.write_all(&buf)?;
                     }
                     // uint
@@ -330,12 +330,12 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 match v {
                     // ulong0
                     0 => {
-                        let buf = [EncodingCodes::Ulong0 as u8];
+                        let buf = [EncodingCodes::ULong0 as u8];
                         self.writer.write_all(&buf)?;
                     }
                     // small ulong
                     val @ 1..=255 => {
-                        let buf = [EncodingCodes::SmallUlong as u8, val as u8];
+                        let buf = [EncodingCodes::SmallULong as u8, val as u8];
                         self.writer.write_all(&buf)?;
                     }
                     // ulong
@@ -1533,12 +1533,12 @@ mod test {
     fn test_u32() {
         // uint0
         let val = 0u32;
-        let expected = vec![EncodingCodes::Uint0 as u8];
+        let expected = vec![EncodingCodes::UInt0 as u8];
         assert_eq_on_serialized_vs_expected(val, &expected);
 
         // small uint
         let val = 255u32;
-        let expected = vec![EncodingCodes::SmallUint as u8, 255];
+        let expected = vec![EncodingCodes::SmallUInt as u8, 255];
         assert_eq_on_serialized_vs_expected(val, &expected);
 
         // uint
@@ -1552,12 +1552,12 @@ mod test {
     fn test_u64() {
         // ulong0
         let val = 0u64;
-        let expected = vec![EncodingCodes::Ulong0 as u8];
+        let expected = vec![EncodingCodes::ULong0 as u8];
         assert_eq_on_serialized_vs_expected(val, &expected);
 
         // small ulong
         let val = 255u64;
-        let expected = vec![EncodingCodes::SmallUlong as u8, 255];
+        let expected = vec![EncodingCodes::SmallULong as u8, 255];
         assert_eq_on_serialized_vs_expected(val, &expected);
 
         // ulong
@@ -1919,7 +1919,7 @@ mod test {
 
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             1,
             EncodingCodes::List0 as u8,
         ];
@@ -1973,7 +1973,7 @@ mod test {
         let wrapper = Wrapper(map.clone());
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             1,
             EncodingCodes::Map8 as u8,
             0x0b,
@@ -2014,7 +2014,7 @@ mod test {
         };
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List0 as u8,
         ];
@@ -2026,7 +2026,7 @@ mod test {
         };
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             2,
@@ -2041,7 +2041,7 @@ mod test {
         };
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2058,7 +2058,7 @@ mod test {
         };
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2083,13 +2083,13 @@ mod test {
         };
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
             2,
             EncodingCodes::Null as u8,
-            EncodingCodes::SmallUint as u8,
+            EncodingCodes::SmallUInt as u8,
             0x13,
         ];
         assert_eq_on_serialized_vs_expected(bar, &expected);
@@ -2108,7 +2108,7 @@ mod test {
         let foo = Foo(None, None);
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List0 as u8,
         ];
@@ -2117,7 +2117,7 @@ mod test {
         let foo = Foo(Some(true), None);
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             2,
@@ -2129,7 +2129,7 @@ mod test {
         let foo = Foo(Some(true), Some(1));
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2143,7 +2143,7 @@ mod test {
         let foo = Foo(None, Some(1));
         let expected = vec![
             EncodingCodes::DescribedType as u8,
-            EncodingCodes::SmallUlong as u8,
+            EncodingCodes::SmallULong as u8,
             0x13,
             EncodingCodes::List8 as u8,
             4,
@@ -2167,7 +2167,7 @@ mod test {
     #[test]
     fn test_serialize_unit_variant() {
         let val = Enumeration::UnitVariant;
-        let expected = vec![EncodingCodes::Uint0 as u8];
+        let expected = vec![EncodingCodes::UInt0 as u8];
         assert_eq_on_serialized_vs_expected(val, &expected)
     }
 
@@ -2178,9 +2178,9 @@ mod test {
             EncodingCodes::Map8 as u8,
             1 + 2 * 2, // len
             2,         // count
-            EncodingCodes::SmallUint as u8,
+            EncodingCodes::SmallUInt as u8,
             1,
-            EncodingCodes::SmallUint as u8,
+            EncodingCodes::SmallUInt as u8,
             13,
         ];
         assert_eq_on_serialized_vs_expected(val, &expected)

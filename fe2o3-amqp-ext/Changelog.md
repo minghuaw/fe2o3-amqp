@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+1. Breaking change(s):
+   1. Updated `serde_amqp` to "0.4.0" which introduced breaking change that `Value::Map` now wraps around a `OrderedMap` #96
+   2. Changed the following type to either alias or use an `OrderedMap` instead of `BTreeMap` to preserve the encoded order after deserialization #96
+      1. `LegacyAmqpHeadersBinding`
+2. Re-exporting `OrderedMap`
+
+## 0.3.1
+
+1. Updated `serde_amqp` to "0.3.1"
+2. Updated `fe2o3-amqp-types` to "0.4.1" which fixed [#95](https://github.com/minghuaw/fe2o3-amqp/issues/95)
+
 ## 0.3.0
 
 1. Updated `fe2o3-amqp-types` version to "0.4.0"

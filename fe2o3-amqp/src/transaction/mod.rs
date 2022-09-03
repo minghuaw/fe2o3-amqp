@@ -24,8 +24,6 @@
 //! ```
 //!
 
-use std::collections::BTreeMap;
-
 use crate::{
     endpoint::ReceiverLink,
     link::{
@@ -44,7 +42,7 @@ use fe2o3_amqp_types::{
         Rejected, Released,
     },
     performatives::Transfer,
-    primitives::Symbol,
+    primitives::{OrderedMap, Symbol},
     transaction::{Declared, Discharge, TransactionId, TransactionalState},
 };
 
@@ -552,7 +550,7 @@ impl<'t> Drop for Transaction<'t> {
                             }
                         };
                         guard
-                            .get_or_insert(BTreeMap::new())
+                            .get_or_insert(OrderedMap::new())
                             .insert(delivery_tag, unsettled);
                     }
                     match rx.blocking_recv() {

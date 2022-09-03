@@ -1,5 +1,25 @@
 # Change Log
 
+## 0.5.1
+
+1. Fixed #94 by switching `Annotations` map key type to `OwnedKey` to allow both `Symbol` and `u64` as the key type. It then uses a trait object `dyn AnnotationKey` to allow looking up the map using multiple types including `&str`, `String`, `u64`, `Symbol`, `SymbolRef`
+
+## 0.5.0
+
+1. Breaking change(s):
+   1. Updated `serde_amqp` to "0.4.0" which introduced breaking change that `Value::Map` now wraps around a `OrderedMap` #96
+   2. Changed the following types to either alias or use an `OrderedMap` instead of `BTreeMap` to preserve the encoded order after deserialization #96
+      1. `Fields`
+      2. `FilterSet`
+      3. `ApplicationProperties`
+      4. `Annotations` (thus any type that is a wrapper around `Annotations`)
+      5. `Attach::unsettled`
+
+## 0.4.1
+
+1. Fixed [#95](https://github.com/minghuaw/fe2o3-amqp/issues/95)
+2. Updated `serde_amqp` to "0.3.1"
+
 ## 0.4.0
 
 1. Moved `Serialize` and `Deserialize` impl for `AmqpValue`, `AmqpSequence` and `Data` into wrapper types (`Serializable<T>` and `Deserializable<T>`), thus making `Message::from(AmqpSequence(_))` yielding a `Body::Sequence` and `Message::from(Data)` yielding a `Body::Data`

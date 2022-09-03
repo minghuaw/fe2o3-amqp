@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use serde_amqp::described::Described;
 use serde_amqp::macros::{DeserializeComposite, SerializeComposite};
-use serde_amqp::primitives::{Array, Boolean, Symbol};
+use serde_amqp::primitives::{Array, Boolean, OrderedMap, Symbol};
 use serde_amqp::Value;
 
 use crate::definitions::{Fields, Seconds};
@@ -239,7 +237,7 @@ impl SourceBuilder {
     ) -> Self {
         self.source
             .filter
-            .get_or_insert(BTreeMap::new())
+            .get_or_insert(OrderedMap::new())
             .insert(key.into(), value.into());
         self
     }

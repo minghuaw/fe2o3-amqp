@@ -1,17 +1,17 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Binary, Boolean, Symbol, UByte, UInt, ULong, Uuid},
+    primitives::{Boolean, OrderedMap, UByte, UInt},
     value::Value,
 };
-use std::{
-    collections::BTreeMap,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{definitions::Milliseconds, primitives::SimpleValue};
 
 pub mod map_builder;
+
+pub mod annotations;
+pub use annotations::Annotations;
 
 /// 3.2.1 Header
 /// Transport headers for a message.
@@ -69,9 +69,24 @@ impl From<Priority> for UByte {
 }
 
 /// 3.2.2 Delivery Annotations
+///
 /// <type name="delivery-annotations" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:delivery-annotations:map" code="0x00000000:0x00000071"/>
 /// </type>
+///
+/// The delivery-annotations section is used for delivery-specific non-standard properties at the
+/// head of the message. Delivery annotations convey information from the sending peer to the
+/// receiving peer. If the recipient does not understand the annotation it cannot be acted upon and
+/// its effects (such as any implied propagation) cannot be acted upon. Annotations might be
+/// specific to one implementation, or common to multiple implementations. The capabilities
+/// negotiated on link attach and on the source and target SHOULD be used to establish which anno-
+/// tations a peer supports. A registry of defined annotations and their meanings is maintained
+/// [AMQPDELANN]. The symbolic key “rejected” is reserved for the use of communicating error
+/// information regarding rejected messages. Any values associated with the “rejected” key MUST be
+/// of type error.
+///
+/// If the delivery-annotations section is omitted, it is equivalent to a delivery-annotations
+/// section containing an empty map of annotations.
 #[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
@@ -82,7 +97,7 @@ pub struct DeliveryAnnotations(pub Annotations);
 
 impl DeliveryAnnotations {
     /// Creates a builder for [`DeliveryAnnotations`]
-    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+    pub fn builder() -> MapBuilder<OwnedKey, Value, Self> {
         MapBuilder::new()
     }
 }
@@ -101,10 +116,25 @@ impl DerefMut for DeliveryAnnotations {
     }
 }
 
-/// 3.2.3 Message Annotations
-/// <type name="message-annotations" class="restricted" source="annotations" provides="section">
-///     <descriptor name="amqp:message-annotations:map" code="0x00000000:0x00000072"/>
-/// </type>
+/// 3.2.3 Message Annotations <type name="message-annotations" class="restricted"
+/// source="annotations" provides="section"> <descriptor name="amqp:message-annotations:map"
+///     code="0x00000000:0x00000072"/> </type>
+///
+/// The message-annotations section is used for properties of the message which are aimed at the
+/// infrastructure and SHOULD be propagated across every delivery step. Message annotations convey
+/// information about the message. Intermediaries MUST propagate the annotations unless the
+/// annotations are explicitly augmented or modified (e.g., by the use of the modified outcome).
+///
+/// The capabilities negotiated on link attach and on the source and target can be used to establish
+/// which annotations a peer understands; however, in a network of AMQP intermediaries it might
+/// not be possible to know if every intermediary will understand the annotation. Note that for some
+/// annotations it might not be necessary for the intermediary to understand their purpose, i.e.,
+/// they could be used purely as an attribute which can be filtered on.
+///
+/// A registry of defined annotations and their meanings is maintained [AMQPMESSANN].
+///
+/// If the message-annotations section is omitted, it is equivalent to a message-annotations section
+/// containing an empty map of annotations.
 #[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
@@ -115,7 +145,7 @@ pub struct MessageAnnotations(pub Annotations);
 
 impl MessageAnnotations {
     /// Creates a builder for [`MessageAnnotations`]
-    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+    pub fn builder() -> MapBuilder<OwnedKey, Value, Self> {
         MapBuilder::new()
     }
 }
@@ -137,7 +167,7 @@ impl DerefMut for MessageAnnotations {
 pub mod properties;
 pub use properties::Properties;
 
-use self::map_builder::MapBuilder;
+use self::{annotations::OwnedKey, map_builder::MapBuilder};
 
 /// 3.2.5 Application Properties
 /// <type name="application-properties" class="restricted" source="map" provides="section">
@@ -149,7 +179,7 @@ use self::map_builder::MapBuilder;
     code = 0x0000_0000_0000_0074,
     encoding = "basic"
 )]
-pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
+pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
 
 impl ApplicationProperties {
     /// Creates a builder for ApplicationProperties
@@ -159,7 +189,7 @@ impl ApplicationProperties {
 }
 
 impl Deref for ApplicationProperties {
-    type Target = BTreeMap<String, SimpleValue>;
+    type Target = OrderedMap<String, SimpleValue>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -196,7 +226,7 @@ pub struct Footer(pub Annotations);
 
 impl Footer {
     /// Creates a builder for [`Footer`]
-    pub fn builder() -> MapBuilder<Symbol, Value, Self> {
+    pub fn builder() -> MapBuilder<OwnedKey, Value, Self> {
         MapBuilder::new()
     }
 }
@@ -215,57 +245,8 @@ impl DerefMut for Footer {
     }
 }
 
-/// 3.2.10 Annotations
-/// <type name="annotations" class="restricted" source="map"/>
-pub type Annotations = BTreeMap<Symbol, Value>;
-
-/// The annotations type is a map where the keys are restricted to be of type symbol or of type ulong. All ulong
-/// keys, and all symbolic keys except those beginning with “x-” are reserved. Keys beginning with “x-opt-” MUST be
-/// ignored if not understood. On receiving an annotation key which is not understood, and which does not begin with
-/// “x-opt”, the receiving AMQP container MUST detach the link with a not-implemented error.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum MessageId {
-    /// 3.2.11 Message ID ULong
-    /// <type name="message-id-ulong" class="restricted" source="ulong" provides="message-id"/>
-    ULong(ULong),
-
-    /// 3.2.12 Message ID UUID
-    /// <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>
-    Uuid(Uuid),
-
-    /// 3.2.13 Message ID Binary
-    /// <type name="message-id-binary" class="restricted" source="binary" provides="message-id"/>
-    Binary(Binary),
-
-    /// 3.2.14 Message ID String
-    /// <type name="message-id-string" class="restricted" source="string" provides="message-id"/>
-    String(String),
-}
-
-impl From<u64> for MessageId {
-    fn from(value: u64) -> Self {
-        Self::ULong(value)
-    }
-}
-
-impl From<Uuid> for MessageId {
-    fn from(value: Uuid) -> Self {
-        Self::Uuid(value)
-    }
-}
-
-impl From<Binary> for MessageId {
-    fn from(value: Binary) -> Self {
-        Self::Binary(value)
-    }
-}
-
-impl From<String> for MessageId {
-    fn from(value: String) -> Self {
-        Self::String(value)
-    }
-}
+mod message_id;
+pub use message_id::*;
 
 /// 3.2.15 Address String
 /// Address of a node.

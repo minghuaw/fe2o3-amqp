@@ -2,9 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_amqp::described::Described;
-use serde_amqp::primitives::Array;
+use serde_amqp::primitives::{Array, OrderedMap};
 use serde_amqp::{primitives::Symbol, value::Value};
-use std::collections::BTreeMap;
 
 pub mod message;
 pub use message::{Body, Message};
@@ -52,7 +51,7 @@ pub use lifetime_policy::*;
 /// A registry of commonly defined filter types and their capabilities is
 /// maintained \[AMQPFILTERS\].
 ///
-pub type FilterSet = BTreeMap<Symbol, Option<Described<Value>>>;
+pub type FilterSet = OrderedMap<Symbol, Option<Described<Value>>>;
 
 use crate::definitions::Fields;
 

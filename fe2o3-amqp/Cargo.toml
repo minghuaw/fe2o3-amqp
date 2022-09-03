@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.5.1"
+version = "0.6.1"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -44,9 +44,9 @@ tokio-test = { version = "0.4" }
 testcontainers = "0.14"
 
 [dependencies]
-serde_amqp = "0.2.3"
+serde_amqp = "0.4.0"
 # serde_amqp = { path = "../serde_amqp" }
-fe2o3-amqp-types = "0.4.0"
+fe2o3-amqp-types = "0.5.1"
 # fe2o3-amqp-types = { path = "../fe2o3-amqp-types" }
 
 bytes = "1"

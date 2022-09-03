@@ -508,7 +508,7 @@ impl<T> Builder<Body<T>> {
 mod tests {
     use std::vec;
 
-    use serde_amqp::{from_reader, from_slice, to_vec, value::Value, primitives::Binary};
+    use serde_amqp::{from_reader, from_slice, primitives::Binary, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
     use crate::messaging::{
@@ -521,6 +521,13 @@ mod tests {
     };
 
     use super::Message;
+
+    // NOTE: Messave<Value> mem size is only 8 bytes larger than Message<()>
+    // fn print_message_size() {
+    //     println!("Value: {:?}", std::mem::size_of::<Value>());
+    //     println!("Message<Value>: {:?}", std::mem::size_of::<Message<Value>>());
+    //     println!("Message<()>: {:?}", std::mem::size_of::<Message<()>>());
+    // }
 
     #[test]
     fn test_convert_data_into_message() {

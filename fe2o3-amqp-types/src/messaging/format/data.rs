@@ -68,7 +68,7 @@ impl<'de> de::Deserialize<'de> for Deserializable<Data> {
         D: serde::Deserializer<'de>,
     {
         struct Visitor {}
-        
+
         impl Visitor {
             fn new() -> Self {
                 Self {}

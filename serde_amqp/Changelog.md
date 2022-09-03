@@ -1,5 +1,36 @@
 # Change Log
 
+## 0.4.2
+
+1. Added `BinaryRef<'a>` which allows serialize/deserialize as bytes on the wrapped `&[u8]`, and
+   implements `LowerHex` and `UpperHex` formatting.
+2. Added `LowerHex` and `UpperHex` formatting for `serde_amqp::primitives::Uuid`
+
+## 0.4.1
+
+1. Added `impl<'a> From<SymbolRef<'a>> for Symbol`
+
+## 0.4.0
+
+1. Bug fixes (Breaking)
+   1. Switched from `Value::Map(BTreeMap<Value, Value>)` to `Value::Map(OrderedMap<Value, Value>)` to preserve the encoded order
+2. New features
+   1. Added `OrderedMap` which is a wrapper around `IndexMap` with custom implementation of some traits
+   2. More `TryFrom<Value>` impl for common map types
+
+## 0.3.1
+
+1. Made constant `VALUE` public for possible downstream uses
+
+## 0.3.0
+
+1. Breaking Changes
+   1. For consistencies, changed:
+      1. `EncodingCodes::Ulong0` to `EncodingCodes::ULong0`
+      2. `EncodingCodes::SmallUlong` to `EncodingCodes::SmallULong`
+      3. `EncodingCodes::Uint0` to `EncodingCodes::UInt0`
+      4. `EncodingCodes::SmallUint` to `EncodingCodes::SmallUInt`
+
 ## 0.2.5
 
 1. Added `impl From<Array/Vec/BTreeMap> for Value`
