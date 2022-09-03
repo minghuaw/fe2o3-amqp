@@ -10,6 +10,35 @@ impl TryFrom<SimpleValue> for StatusCode {
     type Error = SimpleValue;
 
     fn try_from(value: SimpleValue) -> Result<Self, Self::Error> {
-        todo!()
+        let code = match value {
+            SimpleValue::UShort(val) => {
+                let val = val as u16;
+                NonZeroU16::new(val)
+            }
+            SimpleValue::UInt(val) => {
+                let val = val as u16;
+                NonZeroU16::new(val)
+            }
+            SimpleValue::ULong(val) => {
+                let val = val as u16;
+                NonZeroU16::new(val)
+            }
+            SimpleValue::Short(val) => {
+                let val = val as u16;
+                NonZeroU16::new(val)
+            }
+            SimpleValue::Int(val) => {
+                let val = val as u16;
+                NonZeroU16::new(val)
+            }
+            SimpleValue::Long(val) => {
+                let val = val as u16;
+                NonZeroU16::new(val)
+            }
+            _ => return Err(value),
+        }
+        .ok_or(value)?;
+
+        Ok(StatusCode(code))
     }
 }

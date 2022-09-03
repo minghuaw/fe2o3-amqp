@@ -1,7 +1,3 @@
-use fe2o3_amqp_types::primitives::Value;
-
-use crate::request::MessageSerializer;
-
 use self::{
     entity::{
         CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, ReadRequest, ReadResponse,

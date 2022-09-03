@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::messaging::{Message, MessageId};
 
-use crate::{error::Error, operations::OperationResponse, status::StatusCode};
+use crate::{error::Error, status::StatusCode};
 
 /// The correlation-id of the response message MUST be the correlation-id from the request message
 /// (if present), else the message-id from the request message. Response messages have the following
@@ -50,14 +50,28 @@ impl ResponseMessageProperties {
     }
 }
 
-pub struct Response {
+pub struct Response<R> {
     pub correlation_id: MessageId,
     pub status_code: StatusCode,
     pub status_description: Option<String>,
-    pub operation: OperationResponse,
+    pub operation: R,
 }
 
-pub trait MessageDeserializer<T>: Sized {
+impl<R> Response<R> {
+    pub fn from_parts(properties: ResponseMessageProperties, operation: R) -> Self {
+        Self {
+            correlation_id: properties.correlation_id,
+            status_code: properties.status_code,
+            status_description: properties.status_description,
+            operation,
+        }
+    }
+}
+
+pub trait MessageDeserializer<T>: Sized
+where
+    for<'de> T: serde::de::Deserialize<'de>,
+{
     type Error;
 
     fn from_message(message: Message<T>) -> Result<Self, Self::Error>;

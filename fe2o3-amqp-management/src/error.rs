@@ -1,4 +1,4 @@
-use fe2o3_amqp::link::{ReceiverAttachError, SenderAttachError};
+use fe2o3_amqp::link::{ReceiverAttachError, SenderAttachError, RecvError, DispositionError};
 
 use crate::status::StatusCode;
 
@@ -24,6 +24,12 @@ pub enum Error {
 
     #[error("Wrong status code {}", 0.0)]
     Status(StatusCode),
+
+    #[error(transparent)]
+    Recv(#[from] RecvError),
+
+    #[error(transparent)]
+    Disposition(#[from] DispositionError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

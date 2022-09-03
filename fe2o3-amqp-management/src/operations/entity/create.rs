@@ -57,7 +57,7 @@ pub struct CreateRequest {
     /// • A string which can be parsed as an object according to [RFC7159] will be converted into a
     /// map (with the values type-converted into map values as necessary according to the same
     /// rules) if so required.
-    body: BTreeMap<String, Value>,
+    pub body: BTreeMap<String, Value>,
 }
 
 impl MessageSerializer for CreateRequest {

@@ -1,15 +1,17 @@
 use fe2o3_amqp::{
-    link::{DetachError, RecvError, SendError},
+    link::{DetachError, SendError},
     session::SessionHandle,
-    Receiver, Sender,
+    Receiver, Sender, Delivery,
 };
-use fe2o3_amqp_types::messaging::{ApplicationProperties, MessageId, Outcome, Properties};
+use fe2o3_amqp_types::{
+    messaging::{ApplicationProperties, MessageId, Outcome, Properties},
+    primitives::SimpleValue,
+};
 
 use crate::{
     error::{AttachError, Error},
-    operations::{OperationRequest, Operation, entity::{CreateResponse, CreateRequest, ReadRequest, ReadResponse, UpdateRequest, UpdateResponse, DeleteRequest, DeleteResponse}},
-    request::{MessageSerializer, Request},
-    DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
+    request::{MessageSerializer},
+    DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS, response::{MessageDeserializer, ResponseMessageProperties, Response},
 };
 
 pub struct MgmtClient {
@@ -17,25 +19,6 @@ pub struct MgmtClient {
     client_node_addr: String,
     sender: Sender,
     receiver: Receiver,
-}
-
-macro_rules! send_operation_request {
-    ($client:ident, $operation:ident, $req:ident) => {{
-        let mut message = $operation.into_message();
-        let application_properties = message
-            .application_properties
-            .get_or_insert(ApplicationProperties::default());
-        application_properties.insert(String::from("type"), $req.mgmt_entity_type.into());
-        if let Some(locales) = $req.locales {
-            application_properties.insert(String::from("locales"), locales.into());
-        }
-
-        let properties = message.properties.get_or_insert(Properties::default());
-        properties.message_id = Some(MessageId::from($client.req_id));
-        properties.reply_to = Some($client.client_node_addr.clone());
-
-        $client.sender.send(message).await
-    }};
 }
 
 impl MgmtClient {
@@ -59,84 +42,81 @@ impl MgmtClient {
         Ok(())
     }
 
-    pub async fn create(&mut self, req: CreateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<CreateResponse, Error> {
-        todo!()
-    }
+    // pub async fn create(&mut self, req: CreateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<CreateResponse, Error> {
+    //     todo!()
+    // }
 
-    pub async fn read(&mut self, req: ReadRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<ReadResponse, Error> {
-        todo!()
-    }
+    // pub async fn read(&mut self, req: ReadRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<ReadResponse, Error> {
+    //     todo!()
+    // }
 
-    pub async fn update(&mut self, req: UpdateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<UpdateResponse, Error> {
-        todo!()
-    }
+    // pub async fn update(&mut self, req: UpdateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<UpdateResponse, Error> {
+    //     todo!()
+    // }
 
-    pub async fn delete(&mut self, req: DeleteRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<DeleteResponse, Error> {
-        todo!()
-    }
+    // pub async fn delete(&mut self, req: DeleteRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<DeleteResponse, Error> {
+    //     todo!()
+    // }
 
-    async fn send_request(&mut self, req: Request) -> Result<Outcome, SendError> {
-        match req.operation {
-            OperationRequest::Create(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::Read(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::Update(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::Delete(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::Query(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::GetTypes(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::GetAnnotations(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::GetAttributes(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::GetOperations(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::GetMgmtNodes(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::Register(op) => {
-                send_operation_request!(self, op, req)
-            }
-            OperationRequest::Deregister(op) => {
-                send_operation_request!(self, op, req)
-            }
-        }
-    }
+    // pub async fn query(&mut self, req: QueryRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<QueryResponse, Error> {
+    //     todo!()
+    // }
 
-    async fn recv_response(&mut self, operation: Operation) -> Result<(), RecvError> {
-        match operation {
-            Operation::Create => todo!(),
-            Operation::Read => todo!(),
-            Operation::Update => todo!(),
-            Operation::Delete => todo!(),
-            Operation::Query => todo!(),
-            Operation::GetTypes => todo!(),
-            Operation::GetAnnotations => todo!(),
-            Operation::GetAttributes => todo!(),
-            Operation::GetOperations => todo!(),
-            Operation::GetMgmtNodes => todo!(),
-            Operation::Register => todo!(),
-            Operation::Deregister => todo!(),
+    // pub async fn get_types(&mut self, req: GetTypesRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<GetTypesResponse, Error> {
+    //     todo!()
+    // }
+
+    // pub async fn get_annotations(&mut self, req: UpdateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<UpdateResponse, Error> {
+    //     todo!()
+    // }
+
+    // pub async fn delete(&mut self, req: DeleteRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<DeleteResponse, Error> {
+    //     todo!()
+    // }
+
+    pub async fn send_request(
+        &mut self,
+        operation: impl MessageSerializer,
+        entity_type: impl Into<String>,
+        locales: Option<impl Into<String>>,
+    ) -> Result<Outcome, SendError> {
+        let mut message = operation.into_message();
+        let application_properties = message
+            .application_properties
+            .get_or_insert(ApplicationProperties::default());
+        application_properties.insert(
+            String::from("type"),
+            SimpleValue::String(entity_type.into()),
+        );
+        if let Some(locales) = locales {
+            application_properties
+                .insert(String::from("locales"), SimpleValue::String(locales.into()));
         }
 
-        let delivery = self.receiver.recv().await?;
+        let properties = message.properties.get_or_insert(Properties::default());
+        properties.message_id = Some(MessageId::from(self.req_id));
+        properties.reply_to = Some(self.client_node_addr.clone());
+
+        self.req_id += 1;
+
+        self.sender.send(message).await
+    }
+
+    pub async fn recv_response<O, T>(&mut self) -> Result<Response<O>, Error> 
+    where
+        O: MessageDeserializer<T>,
+        O::Error: Into<Error>,
+        for<'de> T: serde::de::Deserialize<'de> + Send,
+    {
+        let delivery: Delivery<T> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;
-
-
-        todo!()
+        
+        let mut message = delivery.into_message();
+        let properties = ResponseMessageProperties::try_take_from_message(&mut message)?;
+        let operation = MessageDeserializer::from_message(message)
+            .map_err(Into::into)?;
+        
+        Ok(Response::from_parts(properties, operation))
     }
 }
 
