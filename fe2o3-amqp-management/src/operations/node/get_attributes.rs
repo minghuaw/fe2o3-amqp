@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message, Body, AmqpValue},
+    messaging::{AmqpValue, ApplicationProperties, Body, Message},
     primitives::Value,
 };
 
 use crate::{
-    error::{Result, Error},
+    error::{Error, Result},
     operations::{GET_ATTRIBUTES, OPERATION},
-    request::MessageSerializer, response::MessageDeserializer,
+    request::MessageSerializer,
+    response::MessageDeserializer,
 };
 
 pub trait GetAttributes {
@@ -63,7 +64,7 @@ impl MessageDeserializer<BTreeMap<String, Vec<String>>> for GetAttributesRespons
     fn from_message(message: Message<BTreeMap<String, Vec<String>>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(attributes)) => Ok(Self { attributes }),
-            _ => Err(Error::DecodeError)
+            _ => Err(Error::DecodeError),
         }
     }
 }

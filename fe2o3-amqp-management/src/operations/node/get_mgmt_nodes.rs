@@ -1,9 +1,10 @@
-use fe2o3_amqp_types::messaging::{ApplicationProperties, Message, AmqpValue, Body};
+use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
 
 use crate::{
-    error::{Result, Error},
+    error::{Error, Result},
     operations::{GET_MGMT_NODES, OPERATION},
-    request::MessageSerializer, response::MessageDeserializer,
+    request::MessageSerializer,
+    response::MessageDeserializer,
 };
 
 pub trait GetMgmtNodes {
@@ -52,7 +53,7 @@ impl MessageDeserializer<Vec<String>> for GetMgmtNodesResponse {
     fn from_message(message: Message<Vec<String>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(addresses)) => Ok(Self { addresses }),
-            _ => Err(Error::DecodeError)
+            _ => Err(Error::DecodeError),
         }
     }
 }

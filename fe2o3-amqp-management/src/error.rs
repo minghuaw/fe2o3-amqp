@@ -1,4 +1,4 @@
-use fe2o3_amqp::link::{ReceiverAttachError, SenderAttachError, RecvError, DispositionError};
+use fe2o3_amqp::link::{DispositionError, ReceiverAttachError, RecvError, SenderAttachError};
 
 use crate::status::StatusCode;
 

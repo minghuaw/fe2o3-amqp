@@ -1,7 +1,4 @@
-use fe2o3_amqp_types::{
-    messaging::Message, 
-    // primitives::Value
-};
+use fe2o3_amqp_types::messaging::Message;
 use serde::Serialize;
 
 // use crate::operations::OperationRequest;

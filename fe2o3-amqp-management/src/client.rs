@@ -1,7 +1,7 @@
 use fe2o3_amqp::{
     link::{DetachError, SendError},
     session::SessionHandle,
-    Receiver, Sender, Delivery,
+    Delivery, Receiver, Sender,
 };
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, MessageId, Outcome, Properties},
@@ -10,8 +10,9 @@ use fe2o3_amqp_types::{
 
 use crate::{
     error::{AttachError, Error},
-    request::{MessageSerializer},
-    DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS, response::{MessageDeserializer, ResponseMessageProperties, Response},
+    request::MessageSerializer,
+    response::{MessageDeserializer, Response, ResponseMessageProperties},
+    DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
 
 pub struct MgmtClient {
@@ -102,7 +103,7 @@ impl MgmtClient {
         self.sender.send(message).await
     }
 
-    pub async fn recv_response<O, T>(&mut self) -> Result<Response<O>, Error> 
+    pub async fn recv_response<O, T>(&mut self) -> Result<Response<O>, Error>
     where
         O: MessageDeserializer<T>,
         O::Error: Into<Error>,
@@ -110,12 +111,11 @@ impl MgmtClient {
     {
         let delivery: Delivery<T> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;
-        
+
         let mut message = delivery.into_message();
         let properties = ResponseMessageProperties::try_take_from_message(&mut message)?;
-        let operation = MessageDeserializer::from_message(message)
-            .map_err(Into::into)?;
-        
+        let operation = MessageDeserializer::from_message(message).map_err(Into::into)?;
+
         Ok(Response::from_parts(properties, operation))
     }
 }

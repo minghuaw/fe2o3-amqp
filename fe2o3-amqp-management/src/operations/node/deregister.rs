@@ -1,9 +1,13 @@
-use fe2o3_amqp_types::{messaging::{ApplicationProperties, Message}, primitives::Value};
+use fe2o3_amqp_types::{
+    messaging::{ApplicationProperties, Message},
+    primitives::Value,
+};
 
 use crate::{
-    error::{Result, Error},
+    error::{Error, Result},
     operations::{DEREGISTER, OPERATION},
-    request::MessageSerializer, response::MessageDeserializer,
+    request::MessageSerializer,
+    response::MessageDeserializer,
 };
 
 pub trait Deregister {
@@ -53,6 +57,6 @@ impl MessageDeserializer<Value> for DeregisterResponse {
     type Error = Error;
 
     fn from_message(_message: Message<Value>) -> Result<Self> {
-        Ok(Self { })
+        Ok(Self {})
     }
 }

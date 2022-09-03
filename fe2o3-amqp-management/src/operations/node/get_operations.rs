@@ -1,13 +1,12 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message, Body, AmqpValue},
-};
+use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
 
 use crate::{
-    error::{Result, Error},
+    error::{Error, Result},
     operations::{GET_OPERATIONS, OPERATION},
-    request::MessageSerializer, response::MessageDeserializer,
+    request::MessageSerializer,
+    response::MessageDeserializer,
 };
 
 pub trait GetOperations {
@@ -59,13 +58,17 @@ impl GetOperationsResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, BTreeMap<String, Vec<String>>>> for GetOperationsResponse {
+impl MessageDeserializer<BTreeMap<String, BTreeMap<String, Vec<String>>>>
+    for GetOperationsResponse
+{
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, BTreeMap<String, Vec<String>>>>) -> Result<Self> {
+    fn from_message(
+        message: Message<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
+    ) -> Result<Self> {
         match message.body {
-            Body::Value(AmqpValue(operations)) => Ok(Self {operations}),
-            _ => Err(Error::DecodeError)
+            Body::Value(AmqpValue(operations)) => Ok(Self { operations }),
+            _ => Err(Error::DecodeError),
         }
     }
 }
