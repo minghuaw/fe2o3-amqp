@@ -1,3 +1,5 @@
+//! An experimental implementation of AMQP 1.0 management working draft with `fe2o3-amqp`
+
 pub mod client;
 pub mod error;
 pub mod operations;
