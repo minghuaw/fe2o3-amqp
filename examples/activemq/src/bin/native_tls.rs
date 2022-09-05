@@ -29,9 +29,8 @@ use fe2o3_amqp::Session;
 async fn main() {
     let addr = "amqps://guest:guest@localhost:5671";
 
-    // Customize TLS connector to allow invalid cert (DO NOT do this for work)
+    // You can customize TlsConnector. Here, we will just use the default connector as an example
     let connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true) // FIXME: uncomment this if you just need a quick test with a self-signed cert
         .build()
         .unwrap();
     let connector = tokio_native_tls::TlsConnector::from(connector);
