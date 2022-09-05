@@ -59,6 +59,15 @@ async fn main() {
         .await
         .unwrap();
 
+    // // The commented code below is equivalent to the codes above with "rustls" feature enabled
+    // let addr = "amqps://guest:guest@localhost:5671";
+    // let mut connection = Connection::builder()
+    //     .container_id("rust-connection-1")
+    //     .alt_tls_establishment(true) // uses alternative TLS establishement
+    //     .open(addr)
+    //     .await
+    //     .unwrap();
+
     let mut session = Session::begin(&mut connection).await.unwrap();
     let mut sender = Sender::attach(&mut session, "rust-sender-link-1", "q1")
         .await
