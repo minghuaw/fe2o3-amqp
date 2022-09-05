@@ -115,7 +115,7 @@ pub struct Builder<'a, Mode, Tls> {
     pub sasl_profile: Option<SaslProfile>,
 
     /// TLS establishment
-    /// 
+    ///
     /// This determines whether an AMQP TLS protocol header exchange will be performed prior to
     /// actual TLS handshake
     pub tls_establishment: TlsEstablishment,
@@ -864,7 +864,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         let connector = libnative_tls::TlsConnector::new()
             .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
         let connector = tokio_native_tls::TlsConnector::from(connector);
-        let tls_stream = Transport::connect_tls_with_native_tls(stream, domain, &connector, &self.tls_establishment).await?;
+        let tls_stream = Transport::connect_tls_with_native_tls(
+            stream,
+            domain,
+            &connector,
+            &self.tls_establishment,
+        )
+        .await?;
         self.connect_with_stream(tls_stream).await
     }
 }
@@ -976,8 +982,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                let tls_stream =
-                    Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector, &self.tls_establishment).await?;
+                let tls_stream = Transport::connect_tls_with_rustls(
+                    stream,
+                    domain,
+                    &self.tls_connector,
+                    &self.tls_establishment,
+                )
+                .await?;
                 self.connect_with_stream(tls_stream).await
             }
             _ => Err(OpenError::InvalidScheme),
@@ -1092,9 +1103,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                let tls_stream =
-                    Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector, &self.tls_establishment)
-                        .await?;
+                let tls_stream = Transport::connect_tls_with_native_tls(
+                    stream,
+                    domain,
+                    &self.tls_connector,
+                    &self.tls_establishment,
+                )
+                .await?;
                 self.connect_with_stream(tls_stream).await
             }
             _ => Err(OpenError::InvalidScheme),

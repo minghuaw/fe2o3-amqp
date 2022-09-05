@@ -1,8 +1,8 @@
-//! 
+//!
 
 /// Determins how TLS connection will be established implicitly
 ///
-/// For more details, please see [part 5.2 of the core 
+/// For more details, please see [part 5.2 of the core
 /// spec](http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-security-v1.0-os.html#section-tls).
 #[derive(Debug, Clone)]
 pub enum TlsEstablishment {

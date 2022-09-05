@@ -153,7 +153,7 @@ where
         if matches!(tls_establishment, TlsEstablishment::ExchangeHeader) {
             send_tls_proto_header(&mut stream).await?;
             let incoming_header = recv_tls_proto_header(&mut stream).await?;
-    
+
             if !incoming_header.is_tls() {
                 return Err(NegotiationError::ProtocolHeaderMismatch(
                     incoming_header.into(),
