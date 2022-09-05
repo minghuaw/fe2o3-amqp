@@ -15,7 +15,7 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let mut connection = Connection::open("connection-1", "amqp://guest:guest@localhost:5672")
+    let mut connection = Connection::open("connection-1", "amqp://b-1ed97578-b1d0-4354-bccb-22c52b8e1a7c-1.mq.us-west-2.amazonaws.com:5671")
         .await
         .unwrap();
 

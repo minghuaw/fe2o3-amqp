@@ -15,7 +15,7 @@ async fn main() {
     tracing::info!("Starting connection");
 
     let mut connection =
-        Connection::open("receiver_connection", "amqp://guest:guest@localhost:5672")
+        Connection::open("receiver_connection", "amqps://guest:guest@localhost:5671")
             .await
             .unwrap();
 

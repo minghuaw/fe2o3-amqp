@@ -8,7 +8,9 @@
 //! access to layer 1 for types that implement Encoder
 
 pub(crate) mod error;
+pub(crate) mod adaptor;
 pub mod protocol_header;
+pub mod priority;
 pub use error::Error;
 use fe2o3_amqp_types::{
     definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},

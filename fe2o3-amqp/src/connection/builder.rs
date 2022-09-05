@@ -23,7 +23,7 @@ use crate::{
     frames::sasl,
     sasl_profile::{Negotiation, SaslProfile},
     transport::Transport,
-    transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec},
+    transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec, priority::NegotiationPriority},
 };
 
 use super::{
@@ -113,6 +113,9 @@ pub struct Builder<'a, Mode, Tls> {
     /// If username and password are supplied with the url, this field will be overriden with a
     /// PLAIN SASL profile that is interpreted from the url.
     pub sasl_profile: Option<SaslProfile>,
+
+    /// Negotiation priority
+    pub negotiation_priority: NegotiationPriority,
 
     // type state marker
     marker: PhantomData<Mode>,
@@ -241,6 +244,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             sasl_profile: None,
+            negotiation_priority: NegotiationPriority::TlsSaslAmqp,
 
             marker: PhantomData,
         }
@@ -272,6 +276,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
+            negotiation_priority: NegotiationPriority::TlsSaslAmqp,
+
             marker: PhantomData,
         }
     }
@@ -319,6 +325,8 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
+            negotiation_priority: self.negotiation_priority,
+
             marker: PhantomData,
         }
     }
@@ -365,6 +373,8 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
+            negotiation_priority: self.negotiation_priority,
+
             marker: PhantomData,
         }
     }
@@ -514,7 +524,6 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     pub async fn negotiate_sasl<Io>(
         &mut self,
         transport: &mut Transport<Io, sasl::Frame>,
-        // hostname: Option<&str>,
         mut profile: SaslProfile,
     ) -> Result<(), NegotiationError>
     where
@@ -771,32 +780,62 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     ///     .await
     ///     .unwrap();
     /// ```
-    #[allow(unreachable_code)]
     pub async fn open_with_stream<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
-            "amqps" => {
-                #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
-                {
-                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
-                    return self.connect_tls_with_rustls_default(stream, domain).await;
+            "amqps" | "amqp+ssl" => {
+                match self.negotiation_priority {
+                    NegotiationPriority::TlsSaslAmqp => self.open_tls_sasl_amqp(stream).await,
+                    NegotiationPriority::SaslTlsAmqp => todo!(),
                 }
-
-                #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
-                {
-                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
-                    return self
-                        .connect_tls_with_native_tls_default(stream, domain)
-                        .await;
-                }
-
-                Err(OpenError::TlsConnectorNotFound)
             }
             _ => Err(OpenError::InvalidScheme),
         }
+    }
+
+    #[allow(unreachable_code)]
+    async fn open_tls_sasl_amqp<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+        {
+            let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+            return self.connect_tls_with_rustls_default(stream, domain).await;
+        }
+
+        #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+        {
+            let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+            return self
+                .connect_tls_with_native_tls_default(stream, domain)
+                .await;
+        }
+
+        Err(OpenError::TlsConnectorNotFound)
+    }
+
+    async fn open_sasl_tls_amqp<Io>(mut self, stream: Io) -> Result<ConnectionHandle<()>, OpenError> 
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                let (reader, writer) = tokio::io::split(stream);
+                let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+                let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+                let mut transport =
+                    Transport::negotiate_sasl_header(framed_write, framed_read).await?;
+                self.negotiate_sasl(&mut transport, profile).await?;
+
+                
+            },
+            None => todo!(),
+        }
+        todo!()
     }
 
     #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
@@ -953,7 +992,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
-            "amqps" => {
+            "amqps" | "amqp+ssl" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
                     Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
@@ -1069,7 +1108,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
-            "amqps" => {
+            "amqps" | "amqp+ssl" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
                     Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector)
@@ -1085,7 +1124,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
 mod tests {
     #[test]
     fn test_url_name_resolution() {
-        let url = url::Url::parse("amqp://example.net/").unwrap();
+        let url = url::Url::parse("amqp+ssl://example.net/").unwrap();
+        let scheme = url.scheme();
+        println!("{:?}", scheme);
         let addrs = url.socket_addrs(|| Some(5671)).unwrap();
         println!("{:?}", addrs);
     }
