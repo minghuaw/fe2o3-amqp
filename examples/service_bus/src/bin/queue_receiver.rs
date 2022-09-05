@@ -1,5 +1,4 @@
 use dotenv::dotenv;
-use fe2o3_amqp::transport::TlsEstablishment;
 use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Receiver;
 use std::env;
@@ -21,7 +20,7 @@ async fn main() {
     let url = format!("amqps://{}:{}", hostname, port);
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
-        .tls_establishment(TlsEstablishment::Alternative) // ServiceBus uses alternative TLS establishement
+        .alt_tls_establishment(true) // ServiceBus uses alternative TLS establishement
         .hostname(&hostname[..])
         .sasl_profile(SaslProfile::Plain {
             username: sa_key_name,
@@ -41,7 +40,7 @@ async fn main() {
     println!("Received: {:?}", msg);
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery);
-    
+
     receiver.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();

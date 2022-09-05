@@ -1,17 +1,16 @@
 //! Dead letter queue for Service Bus Queue
 
 use dotenv::dotenv;
-use fe2o3_amqp::Sender;
 use fe2o3_amqp::connection::ConnectionHandle;
 use fe2o3_amqp::transaction::OwnedTransaction;
 use fe2o3_amqp::transaction::TransactionDischarge;
 use fe2o3_amqp::transaction::TransactionalRetirement;
-use fe2o3_amqp::transport::TlsEstablishment;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::messaging::Properties;
 use fe2o3_amqp::types::primitives::Binary;
 use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Receiver;
+use fe2o3_amqp::Sender;
 use std::env;
 
 use fe2o3_amqp::sasl_profile::SaslProfile;
@@ -62,7 +61,7 @@ async fn main() {
     let url = format!("amqps://{}:{}", hostname, port);
     let mut connection = Connection::builder()
         .container_id("rust-sender-connection-1")
-        .tls_establishment(TlsEstablishment::Alternative) // ServiceBus uses alternative TLS establishement
+        .alt_tls_establishment(true) // ServiceBus uses alternative TLS establishement
         .hostname(&hostname[..])
         .sasl_profile(SaslProfile::Plain {
             username: sa_key_name,
@@ -88,10 +87,12 @@ async fn main() {
     println!("Received from DLQ: {:?}", delivery);
 
     // The Azure ServiceBus SDK disposes the DLQ message in a txn
-    let mut txn = OwnedTransaction::declare(&mut session, "complete_dlq_message_controller", None).await.unwrap();
+    let mut txn = OwnedTransaction::declare(&mut session, "complete_dlq_message_controller", None)
+        .await
+        .unwrap();
     txn.accept(&mut receiver, &delivery).await.unwrap();
     txn.commit().await.unwrap();
-    
+
     receiver.close().await.unwrap();
     session.end().await.unwrap();
     connection.close().await.unwrap();

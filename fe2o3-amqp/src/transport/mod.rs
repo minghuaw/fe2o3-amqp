@@ -35,8 +35,6 @@ use self::{error::NegotiationError, protocol_header::ProtocolHeaderCodec};
 pub(crate) mod error;
 pub use error::Error;
 pub mod protocol_header;
-pub(crate) mod tls_establishment;
-pub use tls_establishment::*;
 
 // #[cfg(featrue = "rustls")]
 // use tokio_rustls::{TlsConnector};
@@ -121,11 +119,11 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_rustls::TlsConnector,
-        tls_establishment: &TlsEstablishment,
+        alt_tls: bool
     ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
         use librustls::ServerName;
 
-        if matches!(tls_establishment, TlsEstablishment::ExchangeHeader) {
+        if !alt_tls {
             send_tls_proto_header(&mut stream).await?;
             let incoming_header = recv_tls_proto_header(&mut stream).await?;
 
@@ -148,9 +146,9 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_native_tls::TlsConnector,
-        tls_establishment: &TlsEstablishment,
+        alt_tls: bool,
     ) -> Result<tokio_native_tls::TlsStream<Io>, NegotiationError> {
-        if matches!(tls_establishment, TlsEstablishment::ExchangeHeader) {
+        if !alt_tls {
             send_tls_proto_header(&mut stream).await?;
             let incoming_header = recv_tls_proto_header(&mut stream).await?;
 

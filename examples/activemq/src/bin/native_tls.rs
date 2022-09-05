@@ -12,32 +12,27 @@
 //! <transportConnector name="amqp+ssl" uri="amqp+ssl://0.0.0.0:5671?transport.enabledProtocols=TLSv1.2"/>
 //! ```
 
-use fe2o3_amqp::sasl_profile::SaslProfile;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Receiver;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
-use tokio::net::TcpStream;
 
 #[tokio::main]
 async fn main() {
-    let addr = "localhost:5671";
-    let domain = "localhost";
-    let stream = TcpStream::connect(addr).await.unwrap();
+    let addr = "amqps://guest:guest@localhost:5671";
+
+    // Customize TLS connector to allow invalid cert (DO NOT do this for work)
     let connector = native_tls::TlsConnector::builder()
-        // .danger_accept_invalid_certs(true) // FIXME: uncomment this if you just need a quick test with a self-signed cert
+        .danger_accept_invalid_certs(true) // FIXME: uncomment this if you just need a quick test with a self-signed cert
         .build()
         .unwrap();
     let connector = tokio_native_tls::TlsConnector::from(connector);
-    let tls_stream = connector.connect(domain, stream).await.unwrap();
 
     let mut connection = Connection::builder()
         .container_id("connection-1")
-        .sasl_profile(SaslProfile::Plain {
-            username: "guest".into(),
-            password: "guest".into(),
-        })
-        .open_with_stream(tls_stream)
+        .native_tls_connector(connector)
+        .tls_establishment(Tls::A)
+        .open(addr)
         .await
         .unwrap();
 

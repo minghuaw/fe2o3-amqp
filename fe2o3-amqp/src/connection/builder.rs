@@ -23,7 +23,7 @@ use crate::{
     frames::sasl,
     sasl_profile::{Negotiation, SaslProfile},
     transport::Transport,
-    transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec, TlsEstablishment},
+    transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec},
 };
 
 use super::{
@@ -118,7 +118,7 @@ pub struct Builder<'a, Mode, Tls> {
     ///
     /// This determines whether an AMQP TLS protocol header exchange will be performed prior to
     /// actual TLS handshake
-    pub tls_establishment: TlsEstablishment,
+    pub alt_tls_estab: bool,
 
     // type state marker
     marker: PhantomData<Mode>,
@@ -247,7 +247,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             sasl_profile: None,
-            tls_establishment: TlsEstablishment::default(),
+            alt_tls_estab: false,
 
             marker: PhantomData,
         }
@@ -279,7 +279,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
-            tls_establishment: self.tls_establishment,
+            alt_tls_estab: self.alt_tls_estab,
 
             marker: PhantomData,
         }
@@ -328,7 +328,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
-            tls_establishment: self.tls_establishment,
+            alt_tls_estab: self.alt_tls_estab,
 
             marker: PhantomData,
         }
@@ -376,7 +376,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
-            tls_establishment: self.tls_establishment,
+            alt_tls_estab: self.alt_tls_estab,
 
             marker: PhantomData,
         }
@@ -520,9 +520,11 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
         self
     }
 
-    /// Set the tls_establishment
-    pub fn tls_establishment(mut self, value: TlsEstablishment) -> Self {
-        self.tls_establishment = value;
+    /// Set the alternative tls_establishment
+    /// 
+    /// Please see part 5.2.1 of the core spec
+    pub fn alt_tls_establishment(mut self, value: bool) -> Self {
+        self.alt_tls_estab = value;
         self
     }
 }
@@ -847,7 +849,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             .with_no_client_auth();
         let connector = TlsConnector::from(Arc::new(config));
         let tls_stream =
-            Transport::connect_tls_with_rustls(stream, domain, &connector, &self.tls_establishment)
+            Transport::connect_tls_with_rustls(stream, domain, &connector, self.alt_tls_estab)
                 .await?;
         self.connect_with_stream(tls_stream).await
     }
@@ -868,7 +870,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             stream,
             domain,
             &connector,
-            &self.tls_establishment,
+            self.alt_tls_estab,
         )
         .await?;
         self.connect_with_stream(tls_stream).await
@@ -986,7 +988,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
                     stream,
                     domain,
                     &self.tls_connector,
-                    &self.tls_establishment,
+                    self.alt_tls_estab,
                 )
                 .await?;
                 self.connect_with_stream(tls_stream).await
@@ -1107,7 +1109,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
                     stream,
                     domain,
                     &self.tls_connector,
-                    &self.tls_establishment,
+                    self.alt_tls_estab,
                 )
                 .await?;
                 self.connect_with_stream(tls_stream).await
