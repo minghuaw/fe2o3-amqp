@@ -1,6 +1,10 @@
+use std::ptr::addr_of_mut;
+
 use fe2o3_amqp::{
     connection::Connection, link::Receiver, session::Session, types::primitives::Value,
+    transport::priority::NegotiationPriority,
 };
+use tokio::net::TcpStream;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -10,12 +14,17 @@ async fn main() {
         .with_max_level(Level::DEBUG)
         .finish();
 
+    tracing::info!("aws");
+
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     tracing::info!("Starting connection");
 
     let mut connection =
-        Connection::open("receiver_connection", "amqps://guest:guest@localhost:5671")
+        Connection::builder()
+            .container_id("receiver_connection")
+            .negotiation_priority(NegotiationPriority::TlsSaslAmqp)
+            .open("amqp://guest:guest@localhost:5672")
             .await
             .unwrap();
 

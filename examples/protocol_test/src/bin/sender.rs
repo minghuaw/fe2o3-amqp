@@ -4,6 +4,7 @@ use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
 use fe2o3_amqp::types::primitives::Binary;
 use fe2o3_amqp::types::primitives::Value;
+use tokio::net::TcpStream;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -14,6 +15,9 @@ async fn main() {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    let stream = TcpStream::connect("localhost:5671").await.unwrap();
+    drop(stream);
 
     let mut connection = Connection::open("connection-1", "amqp://localhost:5672")
         .await

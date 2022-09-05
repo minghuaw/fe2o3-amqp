@@ -1,6 +1,7 @@
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Sender;
 use fe2o3_amqp::Session;
+use fe2o3_amqp::sasl_profile::SaslProfile;
 use tokio::net::TcpStream;
 
 #[tokio::main]
@@ -8,12 +9,23 @@ async fn main() {
     let addr = "localhost:5671";
     let domain = "localhost";
     let stream = TcpStream::connect(addr).await.unwrap();
-    let connector = native_tls::TlsConnector::new().unwrap();
+    let connector = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
     let connector = tokio_native_tls::TlsConnector::from(connector);
+
+    // let connector = native_tls::TlsConnector::new().unwrap();
+    // let connector = tokio_native_tls::TlsConnector::from(connector);
+
     let tls_stream = connector.connect(domain, stream).await.unwrap();
 
     let mut connection = Connection::builder()
         .container_id("connection-1")
+        .sasl_profile(SaslProfile::Plain {
+            username: "guest".to_string(),
+            password: "guest".to_string(),
+        })
         .open_with_stream(tls_stream)
         .await
         .unwrap();

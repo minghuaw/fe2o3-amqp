@@ -348,6 +348,7 @@ where
     Io: AsyncWrite + Unpin,
 {
     let proto_header = ProtocolHeader::tls();
+    tracing::trace!(?proto_header);
     let buf: [u8; 8] = proto_header.into();
     stream.write_all(&buf).await
 }
@@ -361,12 +362,16 @@ where
 {
     let mut buf = [0u8; 8];
     stream.read_exact(&mut buf).await?;
-    ProtocolHeader::try_from(buf).map_err(|buf| {
-        NegotiationError::Io(std::io::Error::new(
+    match ProtocolHeader::try_from(buf) {
+        Ok(proto_header) => {
+            trace!(?proto_header);
+            Ok(proto_header)
+        },
+        Err(buf) => Err(NegotiationError::Io(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("Invalid protocol header {:?}", buf),
-        ))
-    })
+        ))),
+    }
 }
 
 async fn read_and_compare_amqp_proto_header<R>(

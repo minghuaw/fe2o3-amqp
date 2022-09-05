@@ -60,7 +60,7 @@ where
                 None => return Poll::Ready(Ok(())), // EOF
             };
 
-            *this.read_buffer = Some(Cursor::new(msg.into()))
+            *this.read_buffer = Some(Cursor::new(msg.to_vec()))
         };
 
         // Copy it!
