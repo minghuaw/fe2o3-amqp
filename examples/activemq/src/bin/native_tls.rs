@@ -31,7 +31,7 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("connection-1")
         .native_tls_connector(connector)
-        .tls_establishment(Tls::A)
+        .alt_tls_establishment(true)
         .open(addr)
         .await
         .unwrap();
