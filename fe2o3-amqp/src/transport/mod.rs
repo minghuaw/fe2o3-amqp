@@ -7,23 +7,20 @@
 //! Layer 0 should be hidden within the connection and there should be API that provide
 //! access to layer 1 for types that implement Encoder
 
-pub(crate) mod error;
-pub mod protocol_header;
-pub use error::Error;
+/* -------------------------------- Transport ------------------------------- */
+
 use fe2o3_amqp_types::{
     definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
 use tracing::{event, instrument, span, trace, Level};
 
-/* -------------------------------- Transport ------------------------------- */
-
-use std::{convert::TryFrom, io, marker::PhantomData, task::Poll, time::Duration};
+use std::{io, marker::PhantomData, task::Poll, time::Duration};
 
 use bytes::BytesMut;
 use futures_util::{Future, Sink, SinkExt, Stream, StreamExt};
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::{
@@ -35,11 +32,9 @@ use protocol_header::ProtocolHeader;
 
 use self::{error::NegotiationError, protocol_header::ProtocolHeaderCodec};
 
-// #[cfg(featrue = "rustls")]
-// use tokio_rustls::{TlsConnector};
-
-// #[cfg(feature = "native-tls")]
-// use tokio_native_tls::{TlsConnector};
+pub(crate) mod error;
+pub use error::Error;
+pub mod protocol_header;
 
 pin_project! {
     /// Frame transport
@@ -118,16 +113,19 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_rustls::TlsConnector,
+        alt_tls: bool
     ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
         use librustls::ServerName;
 
-        send_tls_proto_header(&mut stream).await?;
-        let incoming_header = recv_tls_proto_header(&mut stream).await?;
+        if !alt_tls {
+            send_tls_proto_header(&mut stream).await?;
+            let incoming_header = recv_tls_proto_header(&mut stream).await?;
 
-        if !incoming_header.is_tls() {
-            return Err(NegotiationError::ProtocolHeaderMismatch(
-                incoming_header.into(),
-            ));
+            if !incoming_header.is_tls() {
+                return Err(NegotiationError::ProtocolHeaderMismatch(
+                    incoming_header.into(),
+                ));
+            }
         }
 
         // TLS negotiation
@@ -142,14 +140,17 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_native_tls::TlsConnector,
+        alt_tls: bool,
     ) -> Result<tokio_native_tls::TlsStream<Io>, NegotiationError> {
-        send_tls_proto_header(&mut stream).await?;
-        let incoming_header = recv_tls_proto_header(&mut stream).await?;
+        if !alt_tls {
+            send_tls_proto_header(&mut stream).await?;
+            let incoming_header = recv_tls_proto_header(&mut stream).await?;
 
-        if !incoming_header.is_tls() {
-            return Err(NegotiationError::ProtocolHeaderMismatch(
-                incoming_header.into(),
-            ));
+            if !incoming_header.is_tls() {
+                return Err(NegotiationError::ProtocolHeaderMismatch(
+                    incoming_header.into(),
+                ));
+            }
         }
 
         connector.connect(domain, stream).await.map_err(|e| {
@@ -340,16 +341,20 @@ where
     Ok(proto_header)
 }
 
+#[cfg(any(feature = "rustls", feature = "native-tls"))]
 #[instrument(name = "SEND", skip_all)]
 async fn send_tls_proto_header<Io>(stream: &mut Io) -> Result<(), io::Error>
 where
     Io: AsyncWrite + Unpin,
 {
+    use tokio::io::AsyncWriteExt;
+
     let proto_header = ProtocolHeader::tls();
     let buf: [u8; 8] = proto_header.into();
     stream.write_all(&buf).await
 }
 
+#[cfg(any(feature = "rustls", feature = "native-tls"))]
 #[instrument(name = "RECV", skip_all)]
 pub(crate) async fn recv_tls_proto_header<Io>(
     stream: &mut Io,
@@ -357,6 +362,9 @@ pub(crate) async fn recv_tls_proto_header<Io>(
 where
     Io: AsyncRead + Unpin,
 {
+    use std::convert::TryFrom;
+    use tokio::io::AsyncReadExt;
+
     let mut buf = [0u8; 8];
     stream.read_exact(&mut buf).await?;
     ProtocolHeader::try_from(buf).map_err(|buf| {
