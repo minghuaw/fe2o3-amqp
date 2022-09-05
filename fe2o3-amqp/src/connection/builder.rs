@@ -114,6 +114,12 @@ pub struct Builder<'a, Mode, Tls> {
     /// PLAIN SASL profile that is interpreted from the url.
     pub sasl_profile: Option<SaslProfile>,
 
+    /// TLS establishment
+    ///
+    /// This determines whether an AMQP TLS protocol header exchange will be performed prior to
+    /// actual TLS handshake
+    pub alt_tls_estab: bool,
+
     // type state marker
     marker: PhantomData<Mode>,
 }
@@ -241,6 +247,7 @@ impl<'a, Mode> Builder<'a, Mode, ()> {
 
             buffer_size: DEFAULT_OUTGOING_BUFFER_SIZE,
             sasl_profile: None,
+            alt_tls_estab: false,
 
             marker: PhantomData,
         }
@@ -272,6 +279,8 @@ impl<'a, Tls> Builder<'a, mode::ConnectorNoId, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
+            alt_tls_estab: self.alt_tls_estab,
+
             marker: PhantomData,
         }
     }
@@ -319,6 +328,8 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
+            alt_tls_estab: self.alt_tls_estab,
+
             marker: PhantomData,
         }
     }
@@ -365,6 +376,8 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
             buffer_size: self.buffer_size,
             sasl_profile: self.sasl_profile,
+            alt_tls_estab: self.alt_tls_estab,
+
             marker: PhantomData,
         }
     }
@@ -504,6 +517,14 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     /// PLAIN SASL profile that is interpreted from the url.
     pub fn sasl_profile(mut self, profile: impl Into<SaslProfile>) -> Self {
         self.sasl_profile = Some(profile.into());
+        self
+    }
+
+    /// Set the alternative tls_establishment
+    /// 
+    /// Please see part 5.2.1 of the core spec
+    pub fn alt_tls_establishment(mut self, value: bool) -> Self {
+        self.alt_tls_estab = value;
         self
     }
 }
@@ -827,7 +848,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             .with_root_certificates(root_cert_store)
             .with_no_client_auth();
         let connector = TlsConnector::from(Arc::new(config));
-        let tls_stream = Transport::connect_tls_with_rustls(stream, domain, &connector).await?;
+        let tls_stream =
+            Transport::connect_tls_with_rustls(stream, domain, &connector, self.alt_tls_estab)
+                .await?;
         self.connect_with_stream(tls_stream).await
     }
 
@@ -843,7 +866,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         let connector = libnative_tls::TlsConnector::new()
             .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
         let connector = tokio_native_tls::TlsConnector::from(connector);
-        let tls_stream = Transport::connect_tls_with_native_tls(stream, domain, &connector).await?;
+        let tls_stream = Transport::connect_tls_with_native_tls(
+            stream,
+            domain,
+            &connector,
+            self.alt_tls_estab,
+        )
+        .await?;
         self.connect_with_stream(tls_stream).await
     }
 }
@@ -955,8 +984,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                let tls_stream =
-                    Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
+                let tls_stream = Transport::connect_tls_with_rustls(
+                    stream,
+                    domain,
+                    &self.tls_connector,
+                    self.alt_tls_estab,
+                )
+                .await?;
                 self.connect_with_stream(tls_stream).await
             }
             _ => Err(OpenError::InvalidScheme),
@@ -1071,9 +1105,13 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
             "amqp" => self.connect_with_stream(stream).await,
             "amqps" => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
-                let tls_stream =
-                    Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector)
-                        .await?;
+                let tls_stream = Transport::connect_tls_with_native_tls(
+                    stream,
+                    domain,
+                    &self.tls_connector,
+                    self.alt_tls_estab,
+                )
+                .await?;
                 self.connect_with_stream(tls_stream).await
             }
             _ => Err(OpenError::InvalidScheme),

@@ -5,9 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+
 [dependencies]
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros"] }
-fe2o3-amqp = { features = [],  path = "../../fe2o3-amqp" }
+fe2o3-amqp = { features = ["native-tls"],  path = "../../fe2o3-amqp" }
+
+# The crates below are only needed depending on which TLS crate you use
+
 tokio-native-tls = "0.3.0"
 native-tls = "0.2.8"
 tokio-rustls = "0.23"

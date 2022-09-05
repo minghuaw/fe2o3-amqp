@@ -7,16 +7,13 @@
 //! Layer 0 should be hidden within the connection and there should be API that provide
 //! access to layer 1 for types that implement Encoder
 
-pub(crate) mod error;
-pub mod protocol_header;
-pub use error::Error;
+/* -------------------------------- Transport ------------------------------- */
+
 use fe2o3_amqp_types::{
     definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
 use tracing::{event, instrument, span, trace, Level};
-
-/* -------------------------------- Transport ------------------------------- */
 
 use std::{convert::TryFrom, io, marker::PhantomData, task::Poll, time::Duration};
 
@@ -34,6 +31,10 @@ use crate::{
 use protocol_header::ProtocolHeader;
 
 use self::{error::NegotiationError, protocol_header::ProtocolHeaderCodec};
+
+pub(crate) mod error;
+pub use error::Error;
+pub mod protocol_header;
 
 // #[cfg(featrue = "rustls")]
 // use tokio_rustls::{TlsConnector};
@@ -118,16 +119,19 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_rustls::TlsConnector,
+        alt_tls: bool
     ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
         use librustls::ServerName;
 
-        send_tls_proto_header(&mut stream).await?;
-        let incoming_header = recv_tls_proto_header(&mut stream).await?;
+        if !alt_tls {
+            send_tls_proto_header(&mut stream).await?;
+            let incoming_header = recv_tls_proto_header(&mut stream).await?;
 
-        if !incoming_header.is_tls() {
-            return Err(NegotiationError::ProtocolHeaderMismatch(
-                incoming_header.into(),
-            ));
+            if !incoming_header.is_tls() {
+                return Err(NegotiationError::ProtocolHeaderMismatch(
+                    incoming_header.into(),
+                ));
+            }
         }
 
         // TLS negotiation
@@ -142,14 +146,17 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_native_tls::TlsConnector,
+        alt_tls: bool,
     ) -> Result<tokio_native_tls::TlsStream<Io>, NegotiationError> {
-        send_tls_proto_header(&mut stream).await?;
-        let incoming_header = recv_tls_proto_header(&mut stream).await?;
+        if !alt_tls {
+            send_tls_proto_header(&mut stream).await?;
+            let incoming_header = recv_tls_proto_header(&mut stream).await?;
 
-        if !incoming_header.is_tls() {
-            return Err(NegotiationError::ProtocolHeaderMismatch(
-                incoming_header.into(),
-            ));
+            if !incoming_header.is_tls() {
+                return Err(NegotiationError::ProtocolHeaderMismatch(
+                    incoming_header.into(),
+                ));
+            }
         }
 
         connector.connect(domain, stream).await.map_err(|e| {
