@@ -10,6 +10,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
 
 pin_project! {
+    #[derive(Debug)]
     pub(crate) struct ReadWriteAdaptor<R, W> {
         #[pin]
         framed_read: FramedRead<R, BytesCodec>,

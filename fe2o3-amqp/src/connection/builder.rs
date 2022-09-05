@@ -14,7 +14,7 @@ use tokio::{
     net::TcpStream,
     sync::mpsc::{self},
 };
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
 use tracing::instrument;
 use url::Url;
 
@@ -23,7 +23,10 @@ use crate::{
     frames::sasl,
     sasl_profile::{Negotiation, SaslProfile},
     transport::Transport,
-    transport::{error::NegotiationError, protocol_header::ProtocolHeaderCodec, priority::NegotiationPriority},
+    transport::{
+        adaptor::ReadWriteAdaptor, error::NegotiationError, priority::NegotiationPriority,
+        protocol_header::ProtocolHeaderCodec,
+    },
 };
 
 use super::{
@@ -516,6 +519,12 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
         self.sasl_profile = Some(profile.into());
         self
     }
+
+    /// Set the negotiation priority
+    pub fn negotiation_priority(mut self, priority: NegotiationPriority) -> Self {
+        self.negotiation_priority = priority;
+        self
+    }
 }
 
 impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
@@ -786,18 +795,16 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
-            "amqps" | "amqp+ssl" => {
-                match self.negotiation_priority {
-                    NegotiationPriority::TlsSaslAmqp => self.open_tls_sasl_amqp(stream).await,
-                    NegotiationPriority::SaslTlsAmqp => todo!(),
-                }
-            }
+            "amqps" | "amqp+ssl" => match self.negotiation_priority {
+                NegotiationPriority::TlsSaslAmqp => self.open_tls_sasl_amqp(stream).await,
+                NegotiationPriority::SaslTlsAmqp => self.open_sasl_tls_amqp(stream).await,
+            },
             _ => Err(OpenError::InvalidScheme),
         }
     }
 
-    #[allow(unreachable_code)]
-    async fn open_tls_sasl_amqp<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError> 
+    #[allow(unreachable_code, unused_variables)]
+    async fn open_tls_sasl_amqp<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
@@ -818,10 +825,12 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         Err(OpenError::TlsConnectorNotFound)
     }
 
-    async fn open_sasl_tls_amqp<Io>(mut self, stream: Io) -> Result<ConnectionHandle<()>, OpenError> 
+    #[allow(unreachable_code, unused_variables)]
+    async fn open_sasl_tls_amqp<Io>(mut self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
     where
         Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
     {
+        // SASL
         match self.sasl_profile.take() {
             Some(profile) => {
                 let (reader, writer) = tokio::io::split(stream);
@@ -831,11 +840,51 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
                     Transport::negotiate_sasl_header(framed_write, framed_read).await?;
                 self.negotiate_sasl(&mut transport, profile).await?;
 
-                
-            },
-            None => todo!(),
+                // TLS and AMQP
+                //
+                // Use an adaptor to preserve buffered bytes
+                let (framed_write, framed_read) = transport.into_framed_codec();
+                let framed_write = framed_write.map_encoder(|_| BytesCodec::new());
+                let framed_read = framed_read.map_decoder(|_| BytesCodec::new());
+                let stream_adaptor = ReadWriteAdaptor::new(framed_read, framed_write);
+
+                #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self
+                        .connect_tls_with_rustls_default(stream_adaptor, domain)
+                        .await;
+                }
+
+                #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self
+                        .connect_tls_with_native_tls_default(stream_adaptor, domain)
+                        .await;
+                }
+
+                Err(OpenError::TlsConnectorNotFound)
+            }
+            // TLS and AMQP
+            None => {
+                #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self.connect_tls_with_rustls_default(stream, domain).await;
+                }
+
+                #[cfg(all(feature = "native-tls", not(feature = "rustls")))]
+                {
+                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    return self
+                        .connect_tls_with_native_tls_default(stream, domain)
+                        .await;
+                }
+
+                Err(OpenError::TlsConnectorNotFound)
+            }
         }
-        todo!()
     }
 
     #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
@@ -992,13 +1041,58 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
-            "amqps" | "amqp+ssl" => {
+            "amqps" | "amqp+ssl" => match self.negotiation_priority {
+                NegotiationPriority::TlsSaslAmqp => self.open_tls_sasl_amqp(stream).await,
+                NegotiationPriority::SaslTlsAmqp => self.open_sasl_tls_amqp(stream).await,
+            },
+            _ => Err(OpenError::InvalidScheme),
+        }
+    }
+
+    async fn open_tls_sasl_amqp<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
+        let tls_stream =
+            Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
+        self.connect_with_stream(tls_stream).await
+    }
+    
+    async fn open_sasl_tls_amqp<Io>(mut self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                let (reader, writer) = tokio::io::split(stream);
+                let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+                let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+                let mut transport =
+                    Transport::negotiate_sasl_header(framed_write, framed_read).await?;
+                self.negotiate_sasl(&mut transport, profile).await?;
+
+                // TLS and AMQP
+                //
+                // Use an adaptor to preserve buffered bytes
+                let (framed_write, framed_read) = transport.into_framed_codec();
+                let framed_write = framed_write.map_encoder(|_| BytesCodec::new());
+                let framed_read = framed_read.map_decoder(|_| BytesCodec::new());
+                let stream_adaptor = ReadWriteAdaptor::new(framed_read, framed_write);
+
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
-                    Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector).await?;
+                    Transport::connect_tls_with_rustls(stream_adaptor, domain, &self.tls_connector)
+                        .await?;
+                self.connect_with_stream(tls_stream).await
+            },
+            None => {
+                let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
+                let tls_stream =
+                    Transport::connect_tls_with_rustls(stream, domain, &self.tls_connector)
+                        .await?;
                 self.connect_with_stream(tls_stream).await
             }
-            _ => Err(OpenError::InvalidScheme),
         }
     }
 }
@@ -1108,14 +1202,58 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     {
         match self.scheme {
             "amqp" => self.connect_with_stream(stream).await,
-            "amqps" | "amqp+ssl" => {
+            "amqps" | "amqp+ssl" => match self.negotiation_priority {
+                NegotiationPriority::TlsSaslAmqp => self.open_tls_sasl_amqp(stream).await,
+                NegotiationPriority::SaslTlsAmqp => self.open_sasl_tls_amqp(stream).await,
+            },
+            _ => Err(OpenError::InvalidScheme),
+        }
+    }
+
+    async fn open_tls_sasl_amqp<Io>(self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
+        let tls_stream =
+            Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector).await?;
+        self.connect_with_stream(tls_stream).await
+    }
+
+    async fn open_sasl_tls_amqp<Io>(mut self, stream: Io) -> Result<ConnectionHandle<()>, OpenError>
+    where
+        Io: AsyncRead + AsyncWrite + std::fmt::Debug + Send + Unpin + 'static,
+    {
+        match self.sasl_profile.take() {
+            Some(profile) => {
+                let (reader, writer) = tokio::io::split(stream);
+                let framed_write = FramedWrite::new(writer, ProtocolHeaderCodec::new());
+                let framed_read = FramedRead::new(reader, ProtocolHeaderCodec::new());
+                let mut transport =
+                    Transport::negotiate_sasl_header(framed_write, framed_read).await?;
+                self.negotiate_sasl(&mut transport, profile).await?;
+
+                // TLS and AMQP
+                //
+                // Use an adaptor to preserve buffered bytes
+                let (framed_write, framed_read) = transport.into_framed_codec();
+                let framed_write = framed_write.map_encoder(|_| BytesCodec::new());
+                let framed_read = framed_read.map_decoder(|_| BytesCodec::new());
+                let stream_adaptor = ReadWriteAdaptor::new(framed_read, framed_write);
+
+                let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
+                let tls_stream =
+                    Transport::connect_tls_with_native_tls(stream_adaptor, domain, &self.tls_connector)
+                        .await?;
+                self.connect_with_stream(tls_stream).await
+            },
+            None => {
                 let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                 let tls_stream =
                     Transport::connect_tls_with_native_tls(stream, domain, &self.tls_connector)
                         .await?;
                 self.connect_with_stream(tls_stream).await
             }
-            _ => Err(OpenError::InvalidScheme),
         }
     }
 }
