@@ -35,6 +35,7 @@ exclude = [
     "examples/service_bus",
     "examples/service_bus_over_websocket",
     "examples/event_hubs",
+    "examples/activemq",
 
     "examples/macro_expand",
 ]
