@@ -1,12 +1,10 @@
-use std::{env, sync::Arc};
+use std::env;
 
 use dotenv::dotenv;
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, types::primitives::Value, Connection, Receiver, Session,
+    sasl_profile::SaslProfile, transport::TlsEstablishment, types::primitives::Value, Connection,
+    Receiver, Session,
 };
-use rustls::OwnedTrustAnchor;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {
@@ -19,32 +17,16 @@ async fn main() {
     let topic_name = env::var("TOPIC_NAME").unwrap();
     let topic_subscription = env::var("TOPIC_SUBSCRIPTION").unwrap();
 
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-    let config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let stream = TcpStream::connect((&hostname[..], port)).await.unwrap();
-    let domain = hostname.as_str().try_into().unwrap();
-    let connector = TlsConnector::from(Arc::new(config));
-    let tls_stream = connector.connect(domain, stream).await.unwrap();
-
+    let url = format!("amqps://{}:{}", hostname, port);
     let mut connection = Connection::builder()
         .container_id("rust-receiver-connection-1")
+        .tls_establishment(TlsEstablishment::Alternative) // ServiceBus uses alternative TLS establishement
         .hostname(&hostname[..])
         .sasl_profile(SaslProfile::Plain {
             username: sa_key_name,
             password: sa_key_value,
         })
-        .open_with_stream(tls_stream)
+        .open(&url[..])
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
