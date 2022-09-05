@@ -2,8 +2,15 @@
 //! running on your localhost
 //! 
 //! `ActiveMQ` uses alternative TLS establishment (ie. establish TLS without 
-//! exchanging ['A', 'M', 'Q', 'P', '2', '1', '0', '0'] header). The user should
-//! follow the alternative TLS establishment example which is also copied below.
+//! exchanging ['A', 'M', 'Q', 'P', '2', '1', '0', '0'] header). 
+//! 
+//! - The `"rustls"` example shows 
+//! the more complicated way to perform alternative TLS establishment - manually/explicitly establish
+//! a `tls_stream` and then pass it to `Connection`. 
+//! 
+//! - The `"native_tls"` example will show how to 
+//! use a config to ask the `Connection` to do this implicitly. The user should also check the 
+//! `service_bus` example to see how to establish alternative TLS connection implicitly.
 //! 
 //! Please note that you may need to explicitly set you `ActiveMQ` to use TLSv1.2 or higher
 //! in the xml configuration file.
@@ -11,6 +18,7 @@
 //! ```xml
 //! <transportConnector name="amqp+ssl" uri="amqp+ssl://0.0.0.0:5671?transport.enabledProtocols=TLSv1.2"/>
 //! ```
+
 
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Receiver;
