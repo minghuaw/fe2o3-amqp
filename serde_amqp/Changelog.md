@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.3
+
+1. Changed `Read` trait to reflect `UnexpectedEof` as a `None`
+
 ## 0.4.2
 
 1. Added `BinaryRef<'a>` which allows serialize/deserialize as bytes on the wrapped `&[u8]`, and
