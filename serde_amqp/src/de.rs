@@ -1493,7 +1493,11 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for DescribedAccess<'a, R> {
         if self.counter >= self.field_count {
             return Ok(None);
         }
-        let code = self.de.reader.peek().ok_or_else(|| Error::unexpected_eof("Expecting format code"))?.try_into()?;
+        let byte = match self.de.reader.peek() {
+            Some(b) => b,
+            None => return Ok(None),
+        };
+        let code = byte.try_into()?;
         let result = match code {
             EncodingCodes::DescribedType => {
                 let result = seed.deserialize(self.as_mut()).map(Some);
@@ -1527,7 +1531,11 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         if self.counter >= self.field_count {
             return Ok(None);
         }
-        let code = self.de.reader.peek().ok_or_else(|| Error::unexpected_eof("Expecting format code"))?.try_into()?;
+        let byte = match self.de.reader.peek() {
+            Some(b) => b,
+            None => return Ok(None),
+        };
+        let code = byte.try_into()?;
         let result = match code {
             EncodingCodes::Null => {
                 let _ = self.de.reader.next(); // consume the Null byte
@@ -1574,7 +1582,11 @@ impl<'a, 'de, R: Read<'de>> de::MapAccess<'de> for DescribedAccess<'a, R> {
         if self.counter >= self.field_count {
             return Ok(None);
         }
-        let code = self.de.reader.peek().ok_or_else(|| Error::unexpected_eof("Expecting format code"))?.try_into()?;
+        let byte = match self.de.reader.peek() {
+            Some(b) => b,
+            None => return Ok(None),
+        };
+        let code = byte.try_into()?;
 
         match code {
             EncodingCodes::Null => {
