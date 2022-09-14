@@ -1,8 +1,13 @@
 # Change Log
 
+## 0.6.3
+
+1. Updated `fe2o3-amqp-types` to "0.5.2" and `serde_amqp` to "0.4.3" which fix #103
+2. Fixed some clippy warnings
+
 ## 0.6.2
 
-1. Adde `alt_tls_establishment` option to connection builder, which then asks the connection to implicitly perform alternative tls establishment.
+1. Added `alt_tls_establishment` option to connection builder, which then asks the connection to implicitly perform alternative tls establishment.
 
 ## 0.6.1
 
