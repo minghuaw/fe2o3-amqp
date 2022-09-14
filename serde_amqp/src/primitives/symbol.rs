@@ -35,7 +35,7 @@ pub struct SymbolRef<'a>(pub &'a str);
 impl<'a> SymbolRef<'a> {
     /// Returns the inner value as str
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0
     }
 }
 

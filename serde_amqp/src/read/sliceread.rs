@@ -36,7 +36,7 @@ impl<'s> private::Sealed for SliceReader<'s> {}
 
 impl<'s> Read<'s> for SliceReader<'s> {
     fn peek(&mut self) -> Option<u8> {
-        self.slice.first().map(|byte| *byte)
+        self.slice.first().copied()
     }
 
     fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error> {
