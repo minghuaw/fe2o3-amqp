@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.5.2
+
+1. Updated `serde_amqp` to "0.4.3", which is needed to fix #103
+2. Fixed #103, and EoF will simply return a None and other errors associated with deserialization will be passed along.
+
 ## 0.5.1
 
 1. Fixed #94 by switching `Annotations` map key type to `OwnedKey` to allow both `Symbol` and `u64` as the key type. It then uses a trait object `dyn AnnotationKey` to allow looking up the map using multiple types including `&str`, `String`, `u64`, `Symbol`, `SymbolRef`
