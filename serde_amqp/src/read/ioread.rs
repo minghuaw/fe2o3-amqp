@@ -61,13 +61,15 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
         }
     }
 
-    fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error> {
+    fn peek_bytes(&mut self, n: usize) -> Option<&[u8]> {
         let l = self.buf.len();
         if l < n {
-            self.fill_buffer(n)?;
-            Ok(&self.buf[..n])
+            match self.fill_buffer(n) {
+                Ok(_) => Some(&self.buf[..n]),
+                Err(_) => None,
+            }
         } else {
-            Ok(&self.buf[..n])
+            Some(&self.buf[..n])
         }
     }
 

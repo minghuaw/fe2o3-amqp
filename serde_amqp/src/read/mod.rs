@@ -34,7 +34,7 @@ pub trait Read<'de>: private::Sealed {
     }
 
     /// Peek `n` number of bytes without consuming
-    fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error>;
+    fn peek_bytes(&mut self, n: usize) -> Option<&[u8]>;
 
     /// Consuming `n` number of bytes
     fn read_bytes(&mut self, n: usize) -> Option<Vec<u8>> {

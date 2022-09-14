@@ -16,10 +16,6 @@ impl<'s> SliceReader<'s> {
         Self { slice }
     }
 
-    pub(crate) fn unexpected_eof(msg: &str) -> Error {
-        Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, msg))
-    }
-
     /// Return a slice of the given length. If the internal slice doesn't have
     /// enough bytes, an `Err(_)` will be returned.
     pub fn get_byte_slice(&mut self, n: usize) -> Result<&'s [u8], io::Error> {
@@ -39,10 +35,9 @@ impl<'s> Read<'s> for SliceReader<'s> {
         self.slice.first().copied()
     }
 
-    fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error> {
+    fn peek_bytes(&mut self, n: usize) -> Option<&[u8]> {
         self.slice
             .get(..n)
-            .ok_or_else(|| Self::unexpected_eof("Insufficient bytes in slice"))
     }
 
     fn next(&mut self) -> Option<u8> {

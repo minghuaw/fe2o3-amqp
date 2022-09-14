@@ -145,7 +145,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 Ok(i32::from_be_bytes(bytes))
             }
             EncodingCodes::SmallInt => {
-                let signed = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as i8;
+                let signed = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as i8;
                 Ok(signed as i32)
             }
             _ => Err(Error::InvalidFormatCode),
@@ -166,7 +169,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 Ok(i64::from_be_bytes(bytes))
             }
             EncodingCodes::SmallLong => {
-                let signed = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as i8;
+                let signed = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as i8;
                 Ok(signed as i64)
             }
             _ => Err(Error::InvalidFormatCode),
@@ -450,16 +456,25 @@ impl<'de, R: Read<'de>> Deserializer<R> {
     {
         // [0] is 0x00,
         // [1] is format code
-        let buf = self.reader.peek_bytes(2)?;
+        let buf = self
+            .reader
+            .peek_bytes(2)
+            .ok_or_else(|| Error::unexpected_eof("parse_described_identifier"))?;
         let code = buf[1];
         match code.try_into()? {
             EncodingCodes::Sym8 => {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2] is size
-                let _buf = self.reader.peek_bytes(3)?;
+                let _buf = self
+                    .reader
+                    .peek_bytes(3)
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let size = _buf[2] as usize;
-                let _buf = self.reader.peek_bytes(3 + size)?;
+                let _buf = self
+                    .reader
+                    .peek_bytes(3 + size)
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let slice = std::str::from_utf8(&_buf[3..])?;
                 visitor.visit_str(slice)
             }
@@ -467,11 +482,17 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2..6] are size
-                let _buf = self.reader.peek_bytes(2 + 4)?;
+                let _buf = self
+                    .reader
+                    .peek_bytes(2 + 4)
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let mut size_bytes = [0u8; 4];
                 size_bytes.copy_from_slice(&_buf[2..]);
                 let size = u32::from_be_bytes(size_bytes) as usize;
-                let _buf = self.reader.peek_bytes(6 + size)?;
+                let _buf = self
+                    .reader
+                    .peek_bytes(6 + size)
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let slice = std::str::from_utf8(&_buf[6..])?;
                 visitor.visit_str(slice)
             }
@@ -480,7 +501,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2] is the value
-                let buf = self.reader.peek_bytes(3)?;
+                let buf = self
+                    .reader
+                    .peek_bytes(3)
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let value = buf[2];
                 visitor.visit_u64(value as u64)
             }
@@ -488,7 +512,10 @@ impl<'de, R: Read<'de>> Deserializer<R> {
                 // [0] is 0x00,
                 // [1] is format code
                 // [2..10] is value bytes
-                let slice = self.reader.peek_bytes(2 + 8)?;
+                let slice = self
+                    .reader
+                    .peek_bytes(2 + 8)
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let mut bytes = [0u8; 8];
                 bytes.copy_from_slice(&slice[2..]);
                 let value = u64::from_be_bytes(bytes);
@@ -695,7 +722,9 @@ where
             .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
         {
             EncodingCodes::Str8 | EncodingCodes::Sym8 => {
-                self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize
+                self.reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize
             }
             EncodingCodes::Str32 | EncodingCodes::Sym32 => {
                 let len_bytes = self
@@ -732,11 +761,20 @@ where
                 self.parse_uuid(visitor)
             }
             _ => {
-                let len = match self.get_elem_code_or_read_format_code()
-                .ok_or_else(|| Error::unexpected_eof("Expecting format code"))?? {
-                    EncodingCodes::VBin8 => self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize,
+                let len = match self
+                    .get_elem_code_or_read_format_code()
+                    .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+                {
+                    EncodingCodes::VBin8 => self
+                        .reader
+                        .next()
+                        .ok_or_else(|| Error::unexpected_eof(""))?
+                        as usize,
                     EncodingCodes::VBin32 => {
-                        let bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                        let bytes = self
+                            .reader
+                            .read_const_bytes()
+                            .ok_or_else(|| Error::unexpected_eof(""))?;
                         u32::from_be_bytes(bytes) as usize
                     }
                     _ => return Err(Error::InvalidFormatCode),
@@ -750,12 +788,16 @@ where
     where
         V: de::Visitor<'de>,
     {
-        match self.get_elem_code_or_peek_byte()
-        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??.try_into()? {
+        match self
+            .get_elem_code_or_peek_byte()
+            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+            .try_into()?
+        {
             EncodingCodes::Null => {
                 // consume the Null byte
-                let _ = self.get_elem_code_or_read_format_code()
-                .ok_or_else(|| Error::unexpected_eof(""))?;
+                let _ = self
+                    .get_elem_code_or_read_format_code()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 visitor.visit_none()
             }
             _ => visitor.visit_some(self),
@@ -820,14 +862,23 @@ where
     where
         V: de::Visitor<'de>,
     {
-        let code = self.get_elem_code_or_read_format_code()
-        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+        let code = self
+            .get_elem_code_or_read_format_code()
+            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
         match code {
             EncodingCodes::Array8 => {
                 // Read "header" bytes
-                let len = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
-                let count = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
-                let format_code = self.read_format_code().ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+                let len = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let count = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let format_code = self
+                    .read_format_code()
+                    .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
                 self.elem_format_code = Some(format_code);
 
                 // Account for offset
@@ -838,9 +889,17 @@ where
             }
             EncodingCodes::Array32 => {
                 // Read "header" bytes
-                let len_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
-                let count_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
-                let format_code = self.read_format_code().ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+                let len_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let count_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let format_code = self
+                    .read_format_code()
+                    .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
                 self.elem_format_code = Some(format_code);
 
                 // Conversion
@@ -859,8 +918,14 @@ where
                 visitor.visit_seq(ListAccess::new(self, len, count))
             }
             EncodingCodes::List8 => {
-                let len = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
-                let count = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let len = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let count = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
 
                 // Account for offset
                 let len = len - OFFSET_LIST8;
@@ -870,8 +935,14 @@ where
                 visitor.visit_seq(ListAccess::new(self, len, count))
             }
             EncodingCodes::List32 => {
-                let len_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
-                let count_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let len_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let count_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let len = u32::from_be_bytes(len_bytes) as usize;
                 let count = u32::from_be_bytes(count_bytes) as usize;
 
@@ -891,8 +962,9 @@ where
         V: de::Visitor<'de>,
     {
         // Tuple will always be deserialized as List
-        let code = self.get_elem_code_or_read_format_code()
-        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+        let code = self
+            .get_elem_code_or_read_format_code()
+            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
 
         let (size, count) = match code {
             EncodingCodes::List0 => {
@@ -901,8 +973,14 @@ where
                 (size, count)
             }
             EncodingCodes::List8 => {
-                let size = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
-                let count = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let size = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let count = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
 
                 // Account for offset
                 let size = size - OFFSET_LIST8;
@@ -912,8 +990,14 @@ where
                 (size, count)
             }
             EncodingCodes::List32 => {
-                let size_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
-                let count_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let size_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let count_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let size = u32::from_be_bytes(size_bytes) as usize;
                 let count = u32::from_be_bytes(count_bytes) as usize;
 
@@ -938,12 +1022,19 @@ where
     where
         V: de::Visitor<'de>,
     {
-        let code = self.get_elem_code_or_read_format_code()
-        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
+        let code = self
+            .get_elem_code_or_read_format_code()
+            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??;
         let (size, count) = match code {
             EncodingCodes::Map8 => {
-                let size = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
-                let count = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let size = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                let count = self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))? as usize;
 
                 // Account for offset
                 let size = size - OFFSET_MAP8;
@@ -951,8 +1042,14 @@ where
                 (size, count)
             }
             EncodingCodes::Map32 => {
-                let size_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
-                let count_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let size_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let count_bytes = self
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
 
                 let size = u32::from_be_bytes(size_bytes) as usize;
                 let count = u32::from_be_bytes(count_bytes) as usize;
@@ -986,8 +1083,11 @@ where
             self.struct_encoding = StructEncoding::DescribedList;
             visitor.visit_seq(DescribedAccess::list(self))
         } else {
-            match self.get_elem_code_or_peek_byte()
-            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??.try_into()? {
+            match self
+                .get_elem_code_or_peek_byte()
+                .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+                .try_into()?
+            {
                 EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
                 _ => self.deserialize_tuple(len, visitor),
             }
@@ -1017,8 +1117,11 @@ where
         } else {
             match self.struct_encoding {
                 StructEncoding::None => {
-                    match self.get_elem_code_or_peek_byte()
-                    .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??.try_into()? {
+                    match self
+                        .get_elem_code_or_peek_byte()
+                        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+                        .try_into()?
+                    {
                         EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
                             self.deserialize_tuple(fields.len(), visitor)
                         }
@@ -1071,26 +1174,49 @@ where
             // `unit_variant` - a single u32
             // generic `newtype_variant` - List([u32, Value])
             // `tuple_variant` and `struct_variant` - List([u32, List([Value, *])])
-            match self.get_elem_code_or_peek_byte()
-            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??.try_into()? {
+            match self
+                .get_elem_code_or_peek_byte()
+                .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+                .try_into()?
+            {
                 EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => {
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 EncodingCodes::List0 => Err(Error::InvalidFormatCode),
                 EncodingCodes::List8 | EncodingCodes::Map8 => {
-                    let _code = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))?;
-                    let _size = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
-                    let count = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))? as usize;
+                    let _code = self
+                        .reader
+                        .next()
+                        .ok_or_else(|| Error::unexpected_eof(""))?;
+                    let _size = self
+                        .reader
+                        .next()
+                        .ok_or_else(|| Error::unexpected_eof(""))?
+                        as usize;
+                    let count = self
+                        .reader
+                        .next()
+                        .ok_or_else(|| Error::unexpected_eof(""))?
+                        as usize;
                     if count != 2 {
                         return Err(Error::InvalidLength);
                     }
                     visitor.visit_enum(VariantAccess::new(self))
                 }
                 EncodingCodes::List32 | EncodingCodes::Map32 => {
-                    let _code = self.reader.next().ok_or_else(|| Error::unexpected_eof(""))?;
-                    let size_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                    let _code = self
+                        .reader
+                        .next()
+                        .ok_or_else(|| Error::unexpected_eof(""))?;
+                    let size_bytes = self
+                        .reader
+                        .read_const_bytes()
+                        .ok_or_else(|| Error::unexpected_eof(""))?;
                     let _size = u32::from_be_bytes(size_bytes);
-                    let count_bytes = self.reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                    let count_bytes = self
+                        .reader
+                        .read_const_bytes()
+                        .ok_or_else(|| Error::unexpected_eof(""))?;
                     let count = u32::from_be_bytes(count_bytes);
 
                     if count != 2 {
@@ -1121,28 +1247,40 @@ where
     {
         match self.enum_type {
             EnumType::Value => {
-                let code = self.get_elem_code_or_peek_byte()
-                .ok_or_else(|| Error::unexpected_eof(""))??;
+                let code = self
+                    .get_elem_code_or_peek_byte()
+                    .ok_or_else(|| Error::unexpected_eof(""))??;
                 visitor.visit_u8(code)
             }
             EnumType::Descriptor => {
                 // Consume the EncodingCodes::Described byte
-                match self.reader.next().ok_or_else(|| Error::unexpected_eof(""))?.try_into()? {
+                match self
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))?
+                    .try_into()?
+                {
                     EncodingCodes::DescribedType => {}
                     _ => return Err(Error::InvalidFormatCode),
                 };
                 // Reset the enum type
                 self.enum_type = EnumType::None;
-                let code = self.get_elem_code_or_peek_byte().ok_or_else(|| Error::unexpected_eof(""))??;
+                let code = self
+                    .get_elem_code_or_peek_byte()
+                    .ok_or_else(|| Error::unexpected_eof(""))??;
                 visitor.visit_u8(code)
             }
             EnumType::Array => {
-                let code = self.get_elem_code_or_peek_byte().ok_or_else(|| Error::unexpected_eof(""))??;
+                let code = self
+                    .get_elem_code_or_peek_byte()
+                    .ok_or_else(|| Error::unexpected_eof(""))??;
                 visitor.visit_u8(code)
             }
             EnumType::None => {
                 // The following are the possible identifiers
-                let code = self.get_elem_code_or_peek_byte().ok_or_else(|| Error::unexpected_eof(""))??;
+                let code = self
+                    .get_elem_code_or_peek_byte()
+                    .ok_or_else(|| Error::unexpected_eof(""))??;
                 match code.try_into()? {
                     // If a struct is serialized as a map, then the fields are serialized as str
                     EncodingCodes::Str32 | EncodingCodes::Str8 => self.deserialize_str(visitor),
@@ -1173,7 +1311,10 @@ where
         V: de::Visitor<'de>,
     {
         // The deserializer will only peek the next u8
-        let code = self.reader.peek().ok_or_else(|| Error::unexpected_eof(""))?;
+        let code = self
+            .reader
+            .peek()
+            .ok_or_else(|| Error::unexpected_eof(""))?;
         match code.try_into()? {
             EncodingCodes::DescribedType => self.parse_described_identifier(visitor),
             _ => visitor.visit_u8(code),
@@ -1437,18 +1578,37 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
 
     pub(crate) fn consume_list_header(&mut self) -> Result<u32, Error> {
         // consume the list headers if
-        match self.as_mut().get_elem_code_or_read_format_code()
-        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))?? {
+        match self
+            .as_mut()
+            .get_elem_code_or_read_format_code()
+            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+        {
             EncodingCodes::List0 => Ok(0),
             EncodingCodes::List8 => {
-                let _size = self.as_mut().reader.next().ok_or_else(|| Error::unexpected_eof(""))?;
-                let count = self.as_mut().reader.next().ok_or_else(|| Error::unexpected_eof(""))?;
+                let _size = self
+                    .as_mut()
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let count = self
+                    .as_mut()
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 Ok(count as u32)
             }
             EncodingCodes::List32 => {
-                let bytes = self.as_mut().reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let bytes = self
+                    .as_mut()
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let _size = u32::from_be_bytes(bytes);
-                let bytes = self.as_mut().reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let bytes = self
+                    .as_mut()
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let count = u32::from_be_bytes(bytes);
                 Ok(count)
             }
@@ -1458,17 +1618,36 @@ impl<'a, 'de, R: Read<'de>> DescribedAccess<'a, R> {
 
     pub(crate) fn consume_map_header(&mut self) -> Result<u32, Error> {
         // consume the list headers if
-        match self.as_mut().get_elem_code_or_read_format_code()
-        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))?? {
+        match self
+            .as_mut()
+            .get_elem_code_or_read_format_code()
+            .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+        {
             EncodingCodes::Map8 => {
-                let _size = self.as_mut().reader.next().ok_or_else(|| Error::unexpected_eof(""))?;
-                let count = self.as_mut().reader.next().ok_or_else(|| Error::unexpected_eof(""))?;
+                let _size = self
+                    .as_mut()
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
+                let count = self
+                    .as_mut()
+                    .reader
+                    .next()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 Ok(count as u32)
             }
             EncodingCodes::Map32 => {
-                let bytes = self.as_mut().reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let bytes = self
+                    .as_mut()
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let _size = u32::from_be_bytes(bytes);
-                let bytes = self.as_mut().reader.read_const_bytes().ok_or_else(|| Error::unexpected_eof(""))?;
+                let bytes = self
+                    .as_mut()
+                    .reader
+                    .read_const_bytes()
+                    .ok_or_else(|| Error::unexpected_eof(""))?;
                 let count = u32::from_be_bytes(bytes);
                 Ok(count)
             }
