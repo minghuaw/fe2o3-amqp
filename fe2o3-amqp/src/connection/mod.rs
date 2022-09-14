@@ -590,7 +590,7 @@ impl endpoint::Connection for Connection {
         let relay = self
             .session_by_incoming_channel
             .remove(&channel)
-            .ok_or_else(|| ConnectionInnerError::NotFound(None))?;
+            .ok_or(ConnectionInnerError::NotFound(None))?;
         relay.send(sframe).await?;
 
         Ok(())
@@ -744,7 +744,7 @@ impl Connection {
                 let relay = self
                     .session_by_outgoing_channel
                     .get(outgoing_channel as usize)
-                    .ok_or_else(|| ConnectionInnerError::NotFound(None))?; // Close with error NotFound
+                    .ok_or(ConnectionInnerError::NotFound(None))?; // Close with error NotFound
 
                 self.session_by_incoming_channel
                     .insert(channel, relay.clone());

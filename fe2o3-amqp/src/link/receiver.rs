@@ -691,7 +691,7 @@ where
                             .await?;
                     }
 
-                    return Ok(Some(delivery));
+                    Ok(Some(delivery))
                 } else {
                     // The new Transfer belongs to the buffered incomplete transfer
                     self.on_complete_transfer(transfer, payload).await
@@ -778,13 +778,11 @@ where
             self.on_incomplete_transfer(transfer, payload).await?;
             // Partial delivery doesn't yield a complete message
             Ok(None)
+        } else if transfer.resume {
+            self.on_resuming_transfer(transfer, payload).await
         } else {
-            if transfer.resume {
-                self.on_resuming_transfer(transfer, payload).await
-            } else {
-                // Final transfer of the delivery
-                self.on_complete_transfer(transfer, payload).await
-            }
+            // Final transfer of the delivery
+            self.on_complete_transfer(transfer, payload).await
         }
     }
 

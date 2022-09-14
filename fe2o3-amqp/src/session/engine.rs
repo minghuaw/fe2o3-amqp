@@ -53,7 +53,7 @@ where
         };
 
         // send a begin
-        engine.session.send_begin(&mut engine.outgoing).await?;
+        engine.session.send_begin(&engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
@@ -173,7 +173,7 @@ where
                     self.on_outgoing_link_frames(frame).await?;
                 }
 
-                self.session.send_end(&mut self.outgoing, error).await?;
+                self.session.send_end(&self.outgoing, error).await?;
             }
             SessionControl::AllocateLink {
                 link_name,

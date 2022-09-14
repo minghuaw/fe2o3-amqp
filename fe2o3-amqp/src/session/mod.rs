@@ -537,7 +537,7 @@ impl endpoint::Session for Session {
                 let disposition = Disposition {
                     role: Role::Sender,
                     first: slice[0],
-                    last: slice.last().map(|id| *id),
+                    last: slice.last().copied(),
                     settled: true,
                     state: disposition.state.clone(),
                     batchable: false,
@@ -756,8 +756,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
         self.deallocate_link(detach.handle.clone().into());
         let body = SessionFrameBody::Detach(detach);
-        let frame = SessionFrame::new(self.outgoing_channel, body);
-        frame
+        SessionFrame::new(self.outgoing_channel, body)
     }
 }
 

@@ -93,7 +93,7 @@ where
                 self.transport
                     .next()
                     .await
-                    .ok_or(transport::Error::Io(io::Error::new(
+                    .ok_or_else(|| transport::Error::Io(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
                         "Expecting remote close",
                     )))??;

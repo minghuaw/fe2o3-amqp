@@ -111,6 +111,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
     ) -> Result<(), Self::FlowError>;
 
     /// Send message via transfer frame and return whether the message is already settled
+    #[allow(clippy::too_many_arguments)]
     async fn send_payload<Fut>(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
