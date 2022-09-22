@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.4
+
+1. Lazily evaluate some values and return early if a preceding value is already erroneous.
+
 ## 0.6.3
 
 1. Updated `fe2o3-amqp-types` to "0.5.2" and `serde_amqp` to "0.4.3" which fix #103
