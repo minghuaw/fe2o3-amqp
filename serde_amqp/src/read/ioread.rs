@@ -54,7 +54,7 @@ impl<'de, R: io::Read + 'de> Read<'de> for IoReader<R> {
                     Ok(_) => {
                         self.buf.push(buf[0]);
                         Some(buf[0])
-                    },
+                    }
                     Err(_) => None, // EOF
                 }
             }

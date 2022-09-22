@@ -36,19 +36,16 @@ impl<'s> Read<'s> for SliceReader<'s> {
     }
 
     fn peek_bytes(&mut self, n: usize) -> Option<&[u8]> {
-        self.slice
-            .get(..n)
+        self.slice.get(..n)
     }
 
     fn next(&mut self) -> Option<u8> {
         match self.slice.len() {
             0 => None, // EOF
-            _ => {
-                match self.get_byte_slice(1) {
-                    Ok(buf) => Some(buf[0]),
-                    Err(_) => None,
-                }
-            }
+            _ => match self.get_byte_slice(1) {
+                Ok(buf) => Some(buf[0]),
+                Err(_) => None,
+            },
         }
     }
 

@@ -47,7 +47,9 @@ impl Error {
         Self::Io(io_err)
     }
 
-    pub(crate) fn unexpected_eof(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
+    pub(crate) fn unexpected_eof(
+        error: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+    ) -> Self {
         let io_err = std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error);
         Self::Io(io_err)
     }

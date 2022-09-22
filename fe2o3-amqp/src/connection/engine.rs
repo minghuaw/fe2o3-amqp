@@ -89,14 +89,12 @@ where
         discard_other: bool,
     ) -> Result<(IncomingChannel, Close), ConnectionInnerError> {
         loop {
-            let frame =
-                self.transport
-                    .next()
-                    .await
-                    .ok_or_else(|| transport::Error::Io(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "Expecting remote close",
-                    )))??;
+            let frame = self.transport.next().await.ok_or_else(|| {
+                transport::Error::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Expecting remote close",
+                ))
+            })??;
 
             match frame.body {
                 FrameBody::Close(close) => return Ok((IncomingChannel(frame.channel), close)),

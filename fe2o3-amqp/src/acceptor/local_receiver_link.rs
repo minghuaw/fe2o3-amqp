@@ -16,7 +16,7 @@ use crate::{
     link::{
         receiver::{CreditMode, ReceiverInner},
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        target_archetype::{TargetArchetypeExt, VerifyTargetArchetype},
+        target_archetype::TargetArchetypeExt,
         LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
     },
     session::SessionHandle,
@@ -221,12 +221,17 @@ where
                     }
                     _ => {
                         return Err(link
-                            .handle_attach_error(attach_error, &outgoing, &mut incoming_rx, &control)
+                            .handle_attach_error(
+                                attach_error,
+                                &outgoing,
+                                &mut incoming_rx,
+                                &control,
+                            )
                             .await)
                     }
                 }
-            },
-            _ => link.send_attach(&outgoing, &control, false).await?
+            }
+            _ => link.send_attach(&outgoing, &control, false).await?,
         }
 
         let mut inner = ReceiverInner {
