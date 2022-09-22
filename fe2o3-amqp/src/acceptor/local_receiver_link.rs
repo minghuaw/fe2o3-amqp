@@ -16,7 +16,7 @@ use crate::{
     link::{
         receiver::{CreditMode, ReceiverInner},
         state::{LinkFlowState, LinkFlowStateInner, LinkState},
-        target_archetype::TargetArchetypeExt,
+        target_archetype::{TargetArchetypeExt, VerifyTargetArchetype},
         LinkFrame, LinkIncomingItem, LinkRelay, ReceiverAttachError, ReceiverLink,
     },
     session::SessionHandle,
@@ -209,28 +209,27 @@ where
             unsettled,
         };
 
-        match (err, link.on_incoming_attach(remote_attach).await) {
-            (Some(attach_error), _) | (_, Err(attach_error)) => {
-                // Complete attach anyway
-                link.send_attach(&outgoing, &control, false).await?;
-                match attach_error {
-                    // ReceiverAttachError::SndSettleModeNotSupported
-                    ReceiverAttachError::RcvSettleModeNotSupported => {
-                        // FIXME: Ths initiating end should be responsible for checking whether the mode is supported
-                    }
-                    _ => {
-                        return Err(link
-                            .handle_attach_error(
-                                attach_error,
-                                &outgoing,
-                                &mut incoming_rx,
-                                &control,
-                            )
-                            .await)
-                    }
-                }
-            }
-            (_, Ok(_)) => link.send_attach(&outgoing, &control, false).await?,
+        // Lazily evaluate `on_incoming_attach` if there is err
+        if let Some(attach_error) = err {
+            complete_attach_with_error(
+                &mut link,
+                &outgoing,
+                &mut incoming_rx,
+                &control,
+                attach_error,
+            )
+            .await?
+        } else if let Err(attach_error) = link.on_incoming_attach(remote_attach).await {
+            complete_attach_with_error(
+                &mut link,
+                &outgoing,
+                &mut incoming_rx,
+                &control,
+                attach_error,
+            )
+            .await?
+        } else {
+            link.send_attach(&outgoing, &control, false).await?
         }
 
         let mut inner = ReceiverInner {
@@ -251,5 +250,36 @@ where
         }
 
         Ok(inner)
+    }
+}
+
+async fn complete_attach_with_error<T>(
+    link: &mut ReceiverLink<T>,
+    writer: &mpsc::Sender<LinkFrame>,
+    reader: &mut mpsc::Receiver<LinkFrame>,
+    session: &mpsc::Sender<SessionControl>,
+    attach_error: ReceiverAttachError,
+) -> Result<(), ReceiverAttachError>
+where
+    T: Into<TargetArchetype>
+        + TryFrom<TargetArchetype>
+        + VerifyTargetArchetype
+        + Clone
+        + Send
+        + Sync,
+{
+    // Complete attach anyway
+    link.send_attach(writer, session, false).await?;
+    match attach_error {
+        // ReceiverAttachError::SndSettleModeNotSupported
+        ReceiverAttachError::RcvSettleModeNotSupported => {
+            // FIXME: Ths initiating end should be responsible for checking whether the mode is supported
+            Ok(())
+        }
+        _ => {
+            return Err(link
+                .handle_attach_error(attach_error, writer, reader, session)
+                .await)
+        }
     }
 }
