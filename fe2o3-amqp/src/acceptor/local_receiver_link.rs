@@ -218,8 +218,9 @@ where
                 &control,
                 attach_error,
             )
-            .await?
-        } else if let Err(attach_error) = link.on_incoming_attach(remote_attach).await {
+            .await?;
+        }
+        if let Err(attach_error) = link.on_incoming_attach(remote_attach).await {
             complete_attach_with_error(
                 &mut link,
                 &outgoing,
@@ -227,10 +228,9 @@ where
                 &control,
                 attach_error,
             )
-            .await?
-        } else {
-            link.send_attach(&outgoing, &control, false).await?
+            .await?;
         }
+        link.send_attach(&outgoing, &control, false).await?;
 
         let mut inner = ReceiverInner {
             link,
