@@ -1,10 +1,14 @@
 # Change Log
 
-## 0.6.5
+## 0.6.6
+
+1. `on_incoming_attach` should always be evaluated before sending back `Attach`. The only lazy evaluation left is when parsing SaslPlainProfile from url
+
+~~## 0.6.5~~
 
 1. Fixed logic error with lazy evaluation of `link.on_incoming_attach` introduced in 0.6.4
 
-## 0.6.4
+~~## 0.6.4~~
 
 1. Lazily evaluate some values and return early if a preceding value is already erroneous.
 
