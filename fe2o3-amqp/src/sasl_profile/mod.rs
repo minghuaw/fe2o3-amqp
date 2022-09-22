@@ -89,13 +89,21 @@ impl<'a> TryFrom<&'a Url> for SaslProfile {
     type Error = ();
 
     fn try_from(value: &'a Url) -> Result<Self, Self::Error> {
-        match (value.username(), value.password()) {
-            ("", _) | (_, None) => Err(()),
-            (username, Some(password)) => Ok(SaslProfile::Plain {
-                username: username.to_string(),
-                password: password.to_string(),
-            }),
-        }
+        let username = match value.username() {
+            "" => return Err(()),
+            username => username,
+        };
+
+        // Lazily evaluate value.password() if username is err
+        let password = match value.password() {
+            Some(password) => password,
+            None => return Err(()),
+        };
+
+        Ok(SaslProfile::Plain {
+            username: username.to_string(),
+            password: password.to_string(),
+        })
     }
 }
 
