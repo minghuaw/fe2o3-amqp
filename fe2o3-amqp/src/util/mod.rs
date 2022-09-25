@@ -215,12 +215,6 @@ impl AsDeliveryState for Option<DeliveryState> {
     }
 }
 
-pub(crate) struct DeliveryInfo {
-    pub delivery_id: DeliveryNumber,
-    pub delivery_tag: DeliveryTag,
-    pub rcv_settle_mode: Option<ReceiverSettleMode>,
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Read;

@@ -21,13 +21,12 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    util::DeliveryInfo,
     Payload,
 };
 
 use super::{
     builder::{self, WithTarget, WithoutName, WithoutSource},
-    delivery::Delivery,
+    delivery::{Delivery, DeliveryInfo},
     error::DetachError,
     incomplete_transfer::IncompleteTransfer,
     receiver_link::count_number_of_sections_and_offset,
@@ -278,9 +277,11 @@ impl Receiver {
     /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
+    pub async fn accept(
+        &mut self,
+        delivery_info: impl Into<DeliveryInfo>,
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
@@ -298,24 +299,23 @@ impl Receiver {
     /// ```
     pub async fn accept_all<'a, T: 'a>(
         &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
     /// to `Reject`
-    pub async fn reject<T>(
+    pub async fn reject(
         &mut self,
-        delivery: &Delivery<T>,
+        delivery_info: impl Into<DeliveryInfo>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
@@ -323,21 +323,20 @@ impl Receiver {
     /// to `Reject`
     pub async fn reject_all<'a, T: 'a>(
         &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
+    pub async fn release<T>(&mut self, delivery_info: impl Into<DeliveryInfo>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
@@ -345,10 +344,10 @@ impl Receiver {
     /// to `Release`
     pub async fn release_all<'a, T: 'a>(
         &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 
@@ -356,11 +355,10 @@ impl Receiver {
     /// to `Modify`
     pub async fn modify<T>(
         &mut self,
-        delivery: &Delivery<T>,
+        delivery_info: impl Into<DeliveryInfo>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
@@ -368,11 +366,11 @@ impl Receiver {
     /// to `Modify`
     pub async fn modify_all<'a, T: 'a>(
         &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 }
@@ -737,9 +735,7 @@ where
 
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
         if self.auto_accept {
-            let delivery_info = delivery.clone_info();
-            self.dispose(delivery_info, None, Accepted {}.into())
-                .await?;
+            self.dispose(&delivery, None, Accepted {}.into()).await?;
         }
 
         Ok(Some(delivery))
@@ -802,10 +798,11 @@ where
     #[inline]
     pub(crate) async fn dispose(
         &mut self,
-        delivery_info: DeliveryInfo,
+        delivery_info: impl Into<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
+        let delivery_info = delivery_info.into();
         self.link
             .dispose(&self.outgoing, delivery_info, settled, state, false)
             .await?;

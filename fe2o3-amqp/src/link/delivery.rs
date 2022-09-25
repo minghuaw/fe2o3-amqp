@@ -16,11 +16,44 @@ use tokio::sync::oneshot::{self, error::RecvError};
 
 use crate::{
     endpoint::Settlement,
-    util::{DeliveryInfo, Uninitialized},
+    util::{Uninitialized},
 };
 use crate::{util::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
+
+/// Delivery information that is needed for disposing a message
+#[derive(Debug)]
+pub struct DeliveryInfo {
+    /// Delivery ID carried by the transfer frame
+    pub delivery_id: DeliveryNumber,
+
+    /// Delivery Tag carried by the transfer frame
+    pub delivery_tag: DeliveryTag,
+
+    /// Receiver settle mode that is carried by the transfer frame
+    pub rcv_settle_mode: Option<ReceiverSettleMode>,
+}
+
+impl<T> From<Delivery<T>> for DeliveryInfo {
+    fn from(delivery: Delivery<T>) -> Self {
+        Self {
+            delivery_id: delivery.delivery_id,
+            delivery_tag: delivery.delivery_tag,
+            rcv_settle_mode: delivery.rcv_settle_mode,
+        }
+    }
+}
+
+impl<T> From<&Delivery<T>> for DeliveryInfo {
+    fn from(delivery: &Delivery<T>) -> Self {
+        Self {
+            delivery_id: delivery.delivery_id,
+            delivery_tag: delivery.delivery_tag.clone(),
+            rcv_settle_mode: delivery.rcv_settle_mode.clone(),
+        }
+    }
+}
 
 /// Reserved for receiver side
 #[derive(Debug)]

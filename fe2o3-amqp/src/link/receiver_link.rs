@@ -1,9 +1,9 @@
 use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{is_consecutive, AsByteIterator, DeliveryInfo, IntoReader};
+use crate::util::{is_consecutive, AsByteIterator, IntoReader};
 
-use super::*;
+use super::{*, delivery::DeliveryInfo};
 
 pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
 pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallULong as u8;
