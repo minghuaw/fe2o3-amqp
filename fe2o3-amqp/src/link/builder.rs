@@ -1,6 +1,6 @@
 //! Implements the builder for a link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::{Arc, atomic::AtomicU32}};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
@@ -620,7 +620,7 @@ where
             link,
             buffer_size,
             credit_mode,
-            processed: 0,
+            processed: AtomicU32::new(0),
             auto_accept,
             session: session.control.clone(),
             outgoing,

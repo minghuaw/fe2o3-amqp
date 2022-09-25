@@ -34,7 +34,7 @@ where
 
     /// Set and send flow state
     async fn send_flow(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
@@ -287,7 +287,7 @@ where
     }
 
     async fn dispose(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
         settled: Option<bool>,
@@ -350,7 +350,7 @@ where
     }
 
     async fn dispose_all(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         mut delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
@@ -570,7 +570,7 @@ impl<T> ReceiverLink<T> {
     }
 
     async fn dispose_consecutive(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         consecutive_infos: &[DeliveryInfo],
         settled: Option<bool>,

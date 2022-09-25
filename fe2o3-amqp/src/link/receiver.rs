@@ -1,6 +1,6 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::time::Duration;
+use std::{time::Duration, sync::atomic::{AtomicU32, Ordering}};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -278,7 +278,7 @@ impl Receiver {
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
     pub async fn accept(
-        &mut self,
+        &self,
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
@@ -298,7 +298,7 @@ impl Receiver {
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
     pub async fn accept_all<'a, T: 'a>(
-        &mut self,
+        &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
@@ -309,7 +309,7 @@ impl Receiver {
     /// Reject the message by sending a disposition with the `delivery_state` field set
     /// to `Reject`
     pub async fn reject(
-        &mut self,
+        &self,
         delivery_info: impl Into<DeliveryInfo>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
@@ -322,7 +322,7 @@ impl Receiver {
     /// Reject the message by sending a disposition with the `delivery_state` field set
     /// to `Reject`
     pub async fn reject_all<'a, T: 'a>(
-        &mut self,
+        &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
@@ -335,7 +335,7 @@ impl Receiver {
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    pub async fn release<T>(&mut self, delivery_info: impl Into<DeliveryInfo>) -> Result<(), DispositionError> {
+    pub async fn release<T>(&self, delivery_info: impl Into<DeliveryInfo>) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         self.inner.dispose(delivery_info, None, state).await
     }
@@ -343,7 +343,7 @@ impl Receiver {
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
     pub async fn release_all<'a, T: 'a>(
-        &mut self,
+        &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
@@ -354,7 +354,7 @@ impl Receiver {
     /// Modify the message by sending a disposition with the `delivery_state` field set
     /// to `Modify`
     pub async fn modify<T>(
-        &mut self,
+        &self,
         delivery_info: impl Into<DeliveryInfo>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
@@ -365,7 +365,7 @@ impl Receiver {
     /// Modify the message by sending a disposition with the `delivery_state` field set
     /// to `Modify`
     pub async fn modify_all<'a, T: 'a>(
-        &mut self,
+        &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
@@ -380,7 +380,7 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
-    pub(crate) processed: SequenceNo,
+    pub(crate) processed: AtomicU32, // SequenceNo,
     pub(crate) auto_accept: bool,
 
     // Control sender to the session
@@ -785,7 +785,7 @@ where
     /// Set the link credit. This will stop draining if the link is in a draining cycle
     #[inline]
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
-        self.processed = 0;
+        self.processed = AtomicU32::new(0);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
         }
@@ -797,7 +797,7 @@ where
 
     #[inline]
     pub(crate) async fn dispose(
-        &mut self,
+        &self,
         delivery_info: impl Into<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
@@ -807,34 +807,39 @@ where
             .dispose(&self.outgoing, delivery_info, settled, state, false)
             .await?;
 
-        self.processed += 1;
-        self.update_credit_if_auto().await?;
+        // self.processed += 1;
+        let prev = self.processed.fetch_add(1, Ordering::Release);
+        self.update_credit_if_auto(prev + 1).await?;
         Ok(())
     }
 
     #[inline]
     pub(crate) async fn dispose_all(
-        &mut self,
+        &self,
         delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
-        let total = delivery_infos.len();
+        let total = delivery_infos.len() as u32;
         self.link
             .dispose_all(&self.outgoing, delivery_infos, settled, state, false)
             .await?;
 
-        self.processed += total as u32;
-        self.update_credit_if_auto().await?;
+        // self.processed += total as u32;
+        let prev = self.processed.fetch_add(total, Ordering::Release);
+        self.update_credit_if_auto(prev + total).await?;
         Ok(())
     }
 
     #[inline]
-    async fn update_credit_if_auto(&mut self) -> Result<(), DispositionError> {
+    async fn update_credit_if_auto(&self, processed: u32) -> Result<(), DispositionError> {
         if let CreditMode::Auto(max_credit) = self.credit_mode {
-            if self.processed >= max_credit / 2 {
-                // self.processed will be set to zero when setting link credit
-                self.set_credit(max_credit).await?;
+            if processed >= max_credit / 2 {
+                // Reset link credit
+                self.processed.swap(0, Ordering::Release);
+                self.link
+                    .send_flow(&self.outgoing, Some(max_credit), Some(false), false)
+                    .await?;
             }
         }
         Ok(())
@@ -846,7 +851,7 @@ where
     /// Setting the credit will set the `drain` field to false and stop draining
     #[inline]
     pub async fn drain(&mut self) -> Result<(), DispositionError> {
-        self.processed = 0;
+        self.processed = AtomicU32::new(0);
 
         // Return if already draining
         if self.link.flow_state().drain().await {

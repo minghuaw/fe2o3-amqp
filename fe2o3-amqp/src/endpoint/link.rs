@@ -165,7 +165,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     /// Set and send flow state
     async fn send_flow(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
@@ -201,7 +201,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
 
     async fn dispose(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
         settled: Option<bool>,
@@ -210,7 +210,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     ) -> Result<(), Self::DispositionError>;
 
     async fn dispose_all(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
