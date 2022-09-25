@@ -1,6 +1,9 @@
 //! Implements the builder for a link
 
-use std::{marker::PhantomData, sync::{Arc, atomic::AtomicU32}};
+use std::{
+    marker::PhantomData,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},

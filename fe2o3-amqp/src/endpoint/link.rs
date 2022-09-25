@@ -13,7 +13,11 @@ use tokio::sync::mpsc;
 
 use crate::{
     control::SessionControl,
-    link::{delivery::{Delivery, DeliveryInfo}, state::LinkState, LinkFrame},
+    link::{
+        delivery::{Delivery, DeliveryInfo},
+        state::LinkState,
+        LinkFrame,
+    },
     util::{AsByteIterator, IntoReader},
     Payload,
 };

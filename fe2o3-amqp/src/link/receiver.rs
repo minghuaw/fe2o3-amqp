@@ -1,6 +1,9 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::{time::Duration, sync::atomic::{AtomicU32, Ordering}};
+use std::{
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -335,7 +338,10 @@ impl Receiver {
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    pub async fn release<T>(&self, delivery_info: impl Into<DeliveryInfo>) -> Result<(), DispositionError> {
+    pub async fn release<T>(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
         self.inner.dispose(delivery_info, None, state).await
     }

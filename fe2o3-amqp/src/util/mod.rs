@@ -1,7 +1,7 @@
 //! Common utilities
 
 use bytes::{buf, Buf};
-use fe2o3_amqp_types::definitions::{DeliveryNumber};
+use fe2o3_amqp_types::definitions::DeliveryNumber;
 use fe2o3_amqp_types::messaging::DeliveryState;
 use futures_util::Future;
 use std::io;

@@ -14,10 +14,7 @@ use serde::Serialize;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
-use crate::{
-    endpoint::Settlement,
-    util::{Uninitialized},
-};
+use crate::{endpoint::Settlement, util::Uninitialized};
 use crate::{util::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
