@@ -417,7 +417,7 @@ async fn send_disposition(
 }
 
 impl<T> SenderLink<T> {
-    async fn handle_unsettled_in_attach(
+    fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
@@ -559,7 +559,7 @@ where
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         self.handle_unsettled_in_attach(remote_attach.unsettled)
-            .await
+            
     }
 
     async fn send_attach(
