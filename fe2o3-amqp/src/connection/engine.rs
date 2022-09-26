@@ -61,7 +61,7 @@ where
                     .send_close(&mut self.transport, error)
                     .await?;
                 let (channel, close) = self.wait_for_remote_close(false).await?;
-                self.connection.on_incoming_close(channel, close).await?;
+                self.connection.on_incoming_close(channel, close)?;
                 Ok(Running::Stop)
             }
             ConnectionState::CloseReceived => {
@@ -72,12 +72,12 @@ where
             }
             ConnectionState::ClosePipe | ConnectionState::CloseSent => {
                 let (channel, close) = self.wait_for_remote_close(false).await?;
-                self.connection.on_incoming_close(channel, close).await?;
+                self.connection.on_incoming_close(channel, close)?;
                 Ok(Running::Stop)
             }
             ConnectionState::Discarding => {
                 let (channel, close) = self.wait_for_remote_close(true).await?;
-                self.connection.on_incoming_close(channel, close).await?;
+                self.connection.on_incoming_close(channel, close)?;
                 Ok(Running::Stop)
             }
             ConnectionState::End => Ok(Running::Stop),
@@ -138,8 +138,7 @@ where
         let remote_max_frame_size = remote_open.max_frame_size.0 as usize;
         let remote_idle_timeout = remote_open.idle_time_out;
         self.connection
-            .on_incoming_open(channel, remote_open)
-            .await?;
+            .on_incoming_open(channel, remote_open)?;
 
         // update transport setting
         let local_max_frame_size = self.connection.local_open().max_frame_size.0 as usize;
@@ -237,7 +236,7 @@ where
         match body {
             FrameBody::Open(open) => {
                 let remote_idle_timeout = open.idle_time_out;
-                self.connection.on_incoming_open(channel, open).await?;
+                self.connection.on_incoming_open(channel, open)?;
 
                 // Set heartbeat here because in pipelined-open, the Open frame
                 // may be recved after mux loop is started
@@ -250,7 +249,7 @@ where
                 };
             }
             FrameBody::Begin(begin) => {
-                self.connection.on_incoming_begin(channel, begin).await?;
+                self.connection.forward_incoming_begin(channel, begin).await?;
             }
             FrameBody::Attach(attach) => {
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Attach(attach));
@@ -282,10 +281,10 @@ where
                 self.forward_to_session(channel, sframe).await?;
             }
             FrameBody::End(end) => {
-                self.connection.on_incoming_end(channel, end).await?;
+                self.connection.forward_incoming_end(channel, end).await?;
             }
             FrameBody::Close(close) => {
-                let result = self.connection.on_incoming_close(channel, close).await;
+                let result = self.connection.on_incoming_close(channel, close);
                 if matches!(
                     self.connection.local_state(),
                     ConnectionState::CloseReceived

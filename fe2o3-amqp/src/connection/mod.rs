@@ -526,7 +526,7 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote Open frame
     #[instrument(skip_all)]
-    async fn on_incoming_open(
+    fn on_incoming_open(
         &mut self,
         _channel: IncomingChannel,
         open: Open,
@@ -548,7 +548,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Begin frame
-    async fn on_incoming_begin(
+    async fn forward_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
@@ -573,7 +573,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(
+    async fn forward_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
@@ -596,7 +596,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(
+    fn on_incoming_close(
         &mut self,
         _channel: IncomingChannel,
         close: Close,

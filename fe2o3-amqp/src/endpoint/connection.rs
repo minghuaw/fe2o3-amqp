@@ -37,7 +37,7 @@ pub(crate) trait Connection {
     // async fn forward_to_session(&mut self, incoming_channel: u16, frame: SessionFrame) -> Result<(), Self::Error>;
 
     /// Reacting to remote Open frame
-    async fn on_incoming_open(
+    fn on_incoming_open(
         &mut self,
         channel: IncomingChannel,
         open: Open,
@@ -46,21 +46,21 @@ pub(crate) trait Connection {
     /// Reacting to remote Begin frame
     ///
     /// Do NOT forward to session here. Forwarding is handled elsewhere.
-    async fn on_incoming_begin(
+    async fn forward_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
     ) -> Result<(), Self::Error>;
 
     /// Reacting to remote End frame
-    async fn on_incoming_end(
+    async fn forward_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
     ) -> Result<(), Self::Error>;
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(
+    fn on_incoming_close(
         &mut self,
         channel: IncomingChannel,
         close: Close,
