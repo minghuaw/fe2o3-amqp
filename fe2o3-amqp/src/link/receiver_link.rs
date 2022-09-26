@@ -48,7 +48,7 @@ where
 
         let flow = match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
-                let mut guard = self.flow_state.lock.write().await;
+                let mut guard = self.flow_state.lock.write();
                 guard.link_credit = link_credit;
                 guard.drain = drain;
                 LinkFlow {
@@ -67,7 +67,7 @@ where
                 }
             }
             (Some(link_credit), None) => {
-                let mut guard = self.flow_state.lock.write().await;
+                let mut guard = self.flow_state.lock.write();
                 guard.link_credit = link_credit;
                 LinkFlow {
                     handle,
@@ -85,7 +85,7 @@ where
                 }
             }
             (None, Some(drain)) => {
-                let mut guard = self.flow_state.lock.write().await;
+                let mut guard = self.flow_state.lock.write();
                 guard.drain = drain;
                 LinkFlow {
                     handle,
@@ -103,7 +103,7 @@ where
                 }
             }
             (None, None) => {
-                let guard = self.flow_state.lock.read().await;
+                let guard = self.flow_state.lock.read();
                 LinkFlow {
                     handle,
                     // When the flow state is being sent from the receiver endpoint to the sender
@@ -126,7 +126,7 @@ where
             .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
-    async fn on_transfer_state(
+    fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
@@ -135,7 +135,7 @@ where
         let delivery_tag = delivery_tag
             .as_ref()
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
-        let mut guard = self.unsettled.write().await;
+        let mut guard = self.unsettled.write();
         let map = guard.get_or_insert(OrderedMap::new());
 
         if matches!(settled, Some(true)) {
@@ -164,7 +164,7 @@ where
         Ok(())
     }
 
-    async fn on_incomplete_transfer(
+    fn on_incomplete_transfer(
         &mut self,
         delivery_tag: DeliveryTag,
         section_number: u32,
@@ -181,7 +181,7 @@ where
         });
 
         {
-            let mut guard = self.unsettled.write().await;
+            let mut guard = self.unsettled.write();
             // The same key may be writter multiple times
             let _ = guard
                 .get_or_insert(OrderedMap::new())
@@ -189,7 +189,7 @@ where
         }
     }
 
-    async fn on_complete_transfer<'a, T, P>(
+    fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
         payload: P,
@@ -207,7 +207,7 @@ where
 
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
-        self.flow_state.consume(1).await?;
+        self.flow_state.consume(1)?;
 
         // This only takes care of whether the message is considered
         // sett
@@ -260,7 +260,7 @@ where
             // (ie. thus doesn't call `link.dispose()`) and thus need to manually
             // set the delivery state
             {
-                let mut lock = self.unsettled.write().await;
+                let mut lock = self.unsettled.write();
                 // There may be records of incomplete delivery
                 let _ = lock
                     .get_or_insert(OrderedMap::new())
@@ -318,11 +318,11 @@ where
         });
 
         let unsettled_state = if settled {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             lock.as_mut()
                 .and_then(|map| map.remove(&delivery_info.delivery_tag))
         } else {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
             lock.get_or_insert(OrderedMap::new())
@@ -360,7 +360,7 @@ where
         // sorting before filtering may be more cache/branch-prediction friendly?
         delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
         {
-            let reader = self.unsettled.read().await;
+            let reader = self.unsettled.read();
             delivery_infos.retain(|info| {
                 reader
                     .as_ref()
@@ -595,12 +595,12 @@ impl<T> ReceiverLink<T> {
 
         // TODO: Individually checking whether a delivery is already dropped is probably too heavy?
         if settled {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             for info in consecutive_infos {
                 lock.as_mut().and_then(|map| map.remove(&info.delivery_tag));
             }
         } else {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             for info in consecutive_infos {
                 lock.get_or_insert(OrderedMap::new())
                     .insert(info.delivery_tag.clone(), Some(state.clone()));

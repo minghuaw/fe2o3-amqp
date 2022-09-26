@@ -618,7 +618,6 @@ where
 
         self.link
             .on_transfer_state(delivery_tag, settled, state)
-            .await
             .map_err(Into::into)
     }
 
@@ -640,8 +639,7 @@ where
                             delivery_tag,
                             incomplete.section_number.unwrap_or(0),
                             incomplete.section_offset,
-                        )
-                        .await;
+                        );
                 }
             }
             None => {
@@ -653,8 +651,7 @@ where
                             delivery_tag,
                             incomplete.section_number.unwrap_or(0),
                             incomplete.section_offset,
-                        )
-                        .await;
+                        );
                 }
                 self.incomplete_transfer = Some(Box::new(incomplete));
             }
@@ -685,8 +682,7 @@ where
                         count_number_of_sections_and_offset(&payload);
                     let delivery = self
                         .link
-                        .on_complete_transfer(transfer, payload, section_number, section_offset)
-                        .await?;
+                        .on_complete_transfer(transfer, payload, section_number, section_offset)?;
 
                     // Auto accept the message and leave settled to be determined based on rcv_settle_mode
                     if self.auto_accept {
@@ -727,15 +723,13 @@ where
                         incomplete.buffer,
                         incomplete.section_number.unwrap_or(0),
                         incomplete.section_offset,
-                    )
-                    .await?
+                    )?
             }
             None => {
                 let (section_number, section_offset) =
                     count_number_of_sections_and_offset(&payload);
                 self.link
-                    .on_complete_transfer(transfer, payload, section_number, section_offset)
-                    .await?
+                    .on_complete_transfer(transfer, payload, section_number, section_offset)?
             }
         };
 

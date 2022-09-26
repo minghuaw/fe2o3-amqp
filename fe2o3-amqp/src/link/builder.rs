@@ -10,7 +10,8 @@ use fe2o3_amqp_types::{
     messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
-use tokio::sync::{mpsc, Notify, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::{mpsc, Notify};
 use tracing::instrument;
 
 use crate::{

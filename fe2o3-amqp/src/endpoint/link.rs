@@ -177,14 +177,14 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     ) -> Result<(), Self::FlowError>;
 
     /// Handles delivery state that is carried in a Transfer
-    async fn on_transfer_state(
+    fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), Self::TransferError>;
 
-    async fn on_incomplete_transfer(
+    fn on_incomplete_transfer(
         &mut self,
         delivery_tag: DeliveryTag,
         section_number: u32,
@@ -193,7 +193,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_complete_transfer<'a, T, P>(
+    fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
         payload: P,

@@ -33,7 +33,7 @@ where
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
-                let mut writer = self.flow_state.as_ref().lock.write().await;
+                let mut writer = self.flow_state.as_ref().lock.write();
                 writer.delivery_count = delivery_count;
                 writer.available = available;
                 LinkFlow {
@@ -50,7 +50,7 @@ where
                 }
             }
             (Some(delivery_count), None) => {
-                let mut writer = self.flow_state.as_ref().lock.write().await;
+                let mut writer = self.flow_state.as_ref().lock.write();
                 writer.delivery_count = delivery_count;
                 LinkFlow {
                     handle,
@@ -66,7 +66,7 @@ where
                 }
             }
             (None, Some(available)) => {
-                let mut writer = self.flow_state.as_ref().lock.write().await;
+                let mut writer = self.flow_state.as_ref().lock.write();
                 writer.available = available;
                 LinkFlow {
                     handle,
@@ -82,7 +82,7 @@ where
                 }
             }
             (None, None) => {
-                let reader = self.flow_state.as_ref().lock.read().await;
+                let reader = self.flow_state.as_ref().lock.read();
                 LinkFlow {
                     handle,
                     delivery_count: Some(reader.delivery_count),
@@ -256,7 +256,7 @@ where
                 let (tx, rx) = oneshot::channel();
                 let unsettled = UnsettledMessage::new(payload_copy, tx);
                 {
-                    let mut guard = self.unsettled.write().await;
+                    let mut guard = self.unsettled.write();
                     guard
                         .get_or_insert(OrderedMap::new())
                         .insert(delivery_tag.clone(), unsettled);
@@ -284,7 +284,7 @@ where
         }
 
         {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             if settled {
                 if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                     let _ = msg.settle();
@@ -313,16 +313,19 @@ where
         let mut last = None;
 
         ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
-        let mut lock = self.unsettled.write().await;
-
+        
         // Find continuous ranges
         for (delivery_id, delivery_tag) in ids_and_tags {
-            if settled {
-                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
-                    let _ = msg.settle();
+            {
+                // Make sure there is not .await point during the lifetime of the guard
+                let mut guard = self.unsettled.write();
+                if settled {
+                    if let Some(msg) = guard.as_mut().and_then(|m| m.remove(&delivery_tag)) {
+                        let _ = msg.settle();
+                    }
+                } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                    *msg.state_mut() = Some(state.clone());
                 }
-            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                *msg.state_mut() = Some(state.clone());
             }
 
             match (first, last) {
@@ -418,7 +421,7 @@ impl<T> SenderLink<T> {
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
-        let mut guard = self.unsettled.write().await;
+        let mut guard = self.unsettled.write();
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
             (None, None) => return Ok(SenderAttachExchange::Complete),
             (None, Some(remote_map)) => {

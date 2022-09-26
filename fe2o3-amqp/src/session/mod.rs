@@ -497,8 +497,7 @@ impl endpoint::Session for Session {
                                 disposition.settled,
                                 disposition.state.clone(),
                                 delivery_tag,
-                            )
-                            .await;
+                            );
                     }
                 }
             }
@@ -518,8 +517,7 @@ impl endpoint::Session for Session {
                                 disposition.settled,
                                 disposition.state.clone(),
                                 delivery_tag.clone(),
-                            )
-                            .await;
+                            );
 
                         if echo {
                             delivery_ids.push(delivery_id);
