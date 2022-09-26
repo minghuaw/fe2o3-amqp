@@ -85,8 +85,6 @@ impl LinkFlowStateInner {
 /// The Sender and Receiver handle link flow control differently
 #[derive(Debug)]
 pub struct LinkFlowState<R> {
-    // Sender(RwLock<LinkFlowStateInner>),
-    // Receiver(RwLock<LinkFlowStateInner>),
     pub(crate) lock: RwLock<LinkFlowStateInner>,
     role: PhantomData<R>,
 }
