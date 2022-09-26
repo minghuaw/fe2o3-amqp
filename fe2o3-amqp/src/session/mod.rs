@@ -491,13 +491,12 @@ impl endpoint::Session for Session {
                 let key = (disposition.role.clone(), delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&key) {
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
-                        let _echo = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                disposition.settled,
-                                disposition.state.clone(),
-                                delivery_tag,
-                            );
+                        let _echo = link_handle.on_incoming_disposition(
+                            disposition.role.clone(),
+                            disposition.settled,
+                            disposition.state.clone(),
+                            delivery_tag,
+                        );
                     }
                 }
             }
@@ -511,13 +510,12 @@ impl endpoint::Session for Session {
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(handle) {
                         // In mode Second, the receiver will first send a non-settled disposition,
                         // and wait for sender's settled disposition
-                        let echo = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                disposition.settled,
-                                disposition.state.clone(),
-                                delivery_tag.clone(),
-                            );
+                        let echo = link_handle.on_incoming_disposition(
+                            disposition.role.clone(),
+                            disposition.settled,
+                            disposition.state.clone(),
+                            delivery_tag.clone(),
+                        );
 
                         if echo {
                             delivery_ids.push(delivery_id);

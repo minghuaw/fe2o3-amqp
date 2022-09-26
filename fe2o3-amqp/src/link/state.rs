@@ -322,7 +322,10 @@ impl TryConsume for SenderFlowState {
     type Error = SenderTryConsumeError;
 
     fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
-        let mut state = self.state().lock.try_write()
+        let mut state = self
+            .state()
+            .lock
+            .try_write()
             .ok_or(SenderTryConsumeError::TryLockError)?;
         if state.link_credit < item {
             Err(Self::Error::InsufficientCredit)

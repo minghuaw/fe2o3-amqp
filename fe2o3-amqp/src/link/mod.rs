@@ -639,8 +639,7 @@ impl LinkRelay<OutputHandle> {
                 output_handle,
                 ..
             } => {
-                let ret = flow_state
-                    .on_incoming_flow(flow, output_handle.clone());
+                let ret = flow_state.on_incoming_flow(flow, output_handle.clone());
                 Ok(ret)
             }
         }

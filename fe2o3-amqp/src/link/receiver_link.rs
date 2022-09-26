@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::{messaging::message::DecodeIntoMessage, definitions::Handle};
+use fe2o3_amqp_types::{definitions::Handle, messaging::message::DecodeIntoMessage};
 use serde_amqp::format_code::EncodingCodes;
 
 use crate::util::{is_consecutive, AsByteIterator, IntoReader};
@@ -476,7 +476,13 @@ impl<T> ReceiverLink<T> {
             .map_err(|_| DispositionError::IllegalSessionState)
     }
 
-    fn get_link_flow(&self, handle: Handle, link_credit: Option<u32>, drain: Option<bool>, echo: bool) -> LinkFlow {
+    fn get_link_flow(
+        &self,
+        handle: Handle,
+        link_credit: Option<u32>,
+        drain: Option<bool>,
+        echo: bool,
+    ) -> LinkFlow {
         match (link_credit, drain) {
             (Some(link_credit), Some(drain)) => {
                 let mut guard = self.flow_state.lock.write();

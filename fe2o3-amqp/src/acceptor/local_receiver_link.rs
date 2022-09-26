@@ -1,6 +1,9 @@
 //! Implements acceptor for a remote sender link
 
-use std::{marker::PhantomData, sync::{Arc, atomic::AtomicU32}};
+use std::{
+    marker::PhantomData,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use fe2o3_amqp_types::{
     messaging::{Target, TargetArchetype},
@@ -8,7 +11,7 @@ use fe2o3_amqp_types::{
     primitives::Symbol,
 };
 use parking_lot::RwLock;
-use tokio::sync::{mpsc};
+use tokio::sync::mpsc;
 use tracing::instrument;
 
 use crate::{

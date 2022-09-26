@@ -313,7 +313,7 @@ where
         let mut last = None;
 
         ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
-        
+
         // Find continuous ranges
         for (delivery_id, delivery_tag) in ids_and_tags {
             {

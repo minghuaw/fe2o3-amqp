@@ -17,9 +17,10 @@ use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
     control::SessionControl,
     link::{
+        delivery::DeliveryInfo,
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError, delivery::DeliveryInfo,
+        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
     },
     util::{Initialized, Running},
     Delivery,
