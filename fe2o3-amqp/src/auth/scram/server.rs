@@ -64,7 +64,7 @@ where
             server_first_message: server_first.message.clone(),
         };
 
-        Ok(Some(server_first.message))
+        Ok(Some(server_first.message.to_vec()))
     }
 
     pub(crate) fn compute_server_final_message(
