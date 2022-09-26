@@ -1,5 +1,5 @@
 [package]
-name = "cancellation_safety_workaround"
+name = "cancellation_safety"
 version = "0.1.0"
 edition = "2021"
 

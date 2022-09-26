@@ -28,7 +28,7 @@ use super::{OutputHandle, Settlement};
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
+    fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_detach(
         &mut self,
@@ -43,7 +43,7 @@ pub(crate) trait LinkAttach {
     type AttachExchange: Send;
     type AttachError: Send;
 
-    async fn on_incoming_attach(
+    fn on_incoming_attach(
         &mut self,
         attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError>;

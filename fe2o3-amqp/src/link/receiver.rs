@@ -493,12 +493,13 @@ where
             .await
     }
 
+    /// # Cancel safety
     async fn send_detach(
         &mut self,
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
-        self.link.send_detach(&self.outgoing, closed, error).await
+        self.link.send_detach(&self.outgoing, closed, error).await // cancel safe
     }
 }
 
@@ -543,13 +544,17 @@ where
         T: DecodeIntoMessage + Send,
     {
         loop {
-            match self.recv_inner().await? {
+            match self.recv_inner().await? // FIXME: cancel safe? if oneshot channel is cancel safe
+            {
                 Some(delivery) => return Ok(delivery),
                 None => continue, // Incomplete transfer, there are more transfer frames coming
             }
         }
     }
 
+    /// # Cancel safety
+    /// 
+    /// This should be cancel safe if oneshot channel is cancel safe
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
@@ -557,17 +562,16 @@ where
     {
         let frame = self
             .incoming
-            .recv()
-            .await
+            .recv() 
+            .await // cancel safe
             .ok_or(LinkStateError::IllegalSessionState)?;
 
         match frame {
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
-                self.link.send_detach(&self.outgoing, closed, None).await?;
+                self.link.send_detach(&self.outgoing, closed, None).await?; // cancel safe
                 self.link
                     .on_incoming_detach(detach)
-                    .await
                     .map_err(Into::into)
                     .and_then(|_| match closed {
                         true => Err(LinkStateError::RemoteClosed.into()),
@@ -578,7 +582,7 @@ where
                 input_handle: _,
                 performative,
                 payload,
-            } => self.on_incoming_transfer(performative, payload).await,
+            } => self.on_incoming_transfer(performative, payload).await, // cancel safe
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
@@ -592,7 +596,7 @@ where
                     "Transactional acquisition is not implemented".to_string(),
                     None,
                 );
-                self.close_with_error(Some(error)).await?;
+                self.close_with_error(Some(error)).await?; // FIXME: cancel safe? if oneshot chanenl is cancel safe
                 Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
             }
         }
@@ -658,6 +662,9 @@ where
         Ok(())
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe because all internal `.await` point(s) are cancel safe
     async fn on_resuming_transfer<T>(
         &mut self,
         transfer: Transfer,
@@ -687,22 +694,25 @@ where
 
                     // Auto accept the message and leave settled to be determined based on rcv_settle_mode
                     if self.auto_accept {
-                        self.dispose(&delivery, None, Accepted {}.into()).await?;
+                        self.dispose(&delivery, None, Accepted {}.into()).await?; // cancel safe
                     }
 
                     Ok(Some(delivery))
                 } else {
                     // The new Transfer belongs to the buffered incomplete transfer
-                    self.on_complete_transfer(transfer, payload).await
+                    self.on_complete_transfer(transfer, payload).await // cancel safe
                 }
             }
             _ => {
                 // The new Transfer belongs to the buffered incomplete transfer that there isn't an incomplete_transfer
-                self.on_complete_transfer(transfer, payload).await
+                self.on_complete_transfer(transfer, payload).await // cancel safe
             }
         }
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe because all internal `.await` point(s) are cancel safe
     async fn on_complete_transfer<T>(
         &mut self,
         transfer: Transfer,
@@ -733,12 +743,15 @@ where
 
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
         if self.auto_accept {
-            self.dispose(&delivery, None, Accepted {}.into()).await?;
+            self.dispose(&delivery, None, Accepted {}.into()).await?; // cancel safe
         }
 
         Ok(Some(delivery))
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe because all internal `.await` point(s) are cancel safe
     #[inline]
     async fn on_incoming_transfer<T>(
         &mut self,
@@ -773,14 +786,18 @@ where
             // Partial delivery doesn't yield a complete message
             Ok(None)
         } else if transfer.resume {
-            self.on_resuming_transfer(transfer, payload).await
+            self.on_resuming_transfer(transfer, payload).await // cancel safe
         } else {
             // Final transfer of the delivery
-            self.on_complete_transfer(transfer, payload).await
+            self.on_complete_transfer(transfer, payload).await // cancel safe
         }
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
+    /// 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
         self.processed = AtomicU32::new(0);
@@ -790,9 +807,10 @@ where
 
         self.link
             .send_flow(&self.outgoing, Some(credit), Some(false), false)
-            .await
+            .await // cancel safe
     }
 
+    /// This is cancel safe because all internal `.await` points are cancel safe
     #[inline]
     pub(crate) async fn dispose(
         &self,
@@ -803,14 +821,15 @@ where
         let delivery_info = delivery_info.into();
         self.link
             .dispose(&self.outgoing, delivery_info, settled, state, false)
-            .await?;
+            .await?; // cancel safe
 
         // self.processed += 1;
         let prev = self.processed.fetch_add(1, Ordering::Release);
-        self.update_credit_if_auto(prev + 1).await?;
+        self.update_credit_if_auto(prev + 1).await?; // cancel safe
         Ok(())
     }
 
+    /// This is cancel safe because all internal `.await` points are cancel safe
     #[inline]
     pub(crate) async fn dispose_all(
         &self,
@@ -821,14 +840,15 @@ where
         let total = delivery_infos.len() as u32;
         self.link
             .dispose_all(&self.outgoing, delivery_infos, settled, state, false)
-            .await?;
+            .await?; // cancel safe
 
         // self.processed += total as u32;
         let prev = self.processed.fetch_add(total, Ordering::Release);
-        self.update_credit_if_auto(prev + total).await?;
+        self.update_credit_if_auto(prev + total).await?; // cancel safe
         Ok(())
     }
 
+    /// This is cancel safe because it only `.await` on a cancel safe future
     #[inline]
     async fn update_credit_if_auto(&self, processed: u32) -> Result<(), DispositionError> {
         if let CreditMode::Auto(max_credit) = self.credit_mode {
@@ -837,7 +857,7 @@ where
                 self.processed.swap(0, Ordering::Release);
                 self.link
                     .send_flow(&self.outgoing, Some(max_credit), Some(false), false)
-                    .await?;
+                    .await?; // cancel safe
             }
         }
         Ok(())
@@ -992,7 +1012,7 @@ impl DetachedReceiver {
                     .link
                     .send_attach(&self.inner.outgoing, &self.inner.session, false)
                     .await?;
-                self.inner.link.on_incoming_attach(remote_attach).await?
+                self.inner.link.on_incoming_attach(remote_attach)?
             }
             None => self.inner.exchange_attach(false).await?,
         };

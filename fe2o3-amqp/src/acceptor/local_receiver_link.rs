@@ -213,8 +213,8 @@ where
             unsettled,
         };
 
-        // `on_incoming_attach` should always be called
-        match (err, link.on_incoming_attach(remote_attach).await) {
+        // `on_incoming_attach` should always be evaluated
+        match (err, link.on_incoming_attach(remote_attach)) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 // Complete attach anyway
                 link.send_attach(&outgoing, &control, false).await?;

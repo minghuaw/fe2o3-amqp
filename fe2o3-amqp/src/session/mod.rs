@@ -141,6 +141,10 @@ impl<R> SessionHandle<R> {
     }
 }
 
+/// # Cancel safety
+/// 
+/// It internally `.await` on a send on `tokio::mpsc::Sender` and on a `oneshot::Receiver`. 
+/// This should be cancel safe
 pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,
     link_name: String,
@@ -154,14 +158,14 @@ pub(crate) async fn allocate_link(
             link_relay,
             responder,
         })
-        .await
+        .await // cancel safe
         // The `SendError` could only happen when the receiving half is
         // dropped, meaning the `SessionEngine::event_loop` has stopped.
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
         .map_err(|_| AllocLinkError::IllegalSessionState)?;
     resp_rx
-        .await
+        .await // FIXME: Is oneshot channel cancel safe?
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state

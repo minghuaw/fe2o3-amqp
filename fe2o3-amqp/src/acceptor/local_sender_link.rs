@@ -159,7 +159,7 @@ where
 
         let outgoing = session.outgoing.clone();
 
-        match link.on_incoming_attach(remote_attach).await {
+        match link.on_incoming_attach(remote_attach) {
             Ok(_) => link.send_attach(&outgoing, &session.control, false).await?,
             Err(attach_error) => {
                 // Complete attach then detach should any error happen

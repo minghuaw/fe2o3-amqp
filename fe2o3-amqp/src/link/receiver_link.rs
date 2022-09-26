@@ -33,6 +33,8 @@ where
     type DispositionError = DispositionError;
 
     /// Set and send flow state
+    /// 
+    /// This is cancel safe because it only `.await` on sending over a `tokio::mpsc::Sender`
     async fn send_flow(
         &self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -49,7 +51,7 @@ where
         let flow = self.get_link_flow(handle, link_credit, drain, echo);
         writer
             .send(LinkFrame::Flow(flow))
-            .await
+            .await // cancel safe
             .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
@@ -213,6 +215,7 @@ where
         Ok(delivery)
     }
 
+    /// This is cancel safe because it only `.await` on sending over `tokio::mpsc::Sender`
     async fn dispose(
         &self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -269,13 +272,14 @@ where
             let frame = LinkFrame::Disposition(disposition);
             writer
                 .send(frame)
-                .await
+                .await // cancel safe
                 .map_err(|_| Self::DispositionError::IllegalSessionState)?;
         }
 
         Ok(())
     }
 
+    /// This is cancel safe because all internal `.await` points are cancel safe
     async fn dispose_all(
         &self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -301,12 +305,12 @@ where
         for ind in chunk_inds {
             let slice = &delivery_infos[prev_ind..ind];
             self.dispose_consecutive(writer, slice, settled, state.clone(), batchable)
-                .await?;
+                .await?; // cancel safe
             prev_ind = ind;
         }
         let final_slice = &delivery_infos[prev_ind..];
         self.dispose_consecutive(writer, final_slice, settled, state, batchable)
-            .await
+            .await // cancel safe
     }
 }
 
@@ -423,6 +427,7 @@ impl<T> ReceiverLink<T> {
         }
     }
 
+    /// This is cancel safe because it only `.await` on sending over a `tokio::mpsc::Sender`
     async fn dispose_consecutive(
         &self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -472,7 +477,7 @@ impl<T> ReceiverLink<T> {
         let frame = LinkFrame::Disposition(disposition);
         writer
             .send(frame)
-            .await
+            .await // cancel safe
             .map_err(|_| DispositionError::IllegalSessionState)
     }
 
@@ -573,7 +578,7 @@ where
     type AttachExchange = ReceiverAttachExchange;
     type AttachError = ReceiverAttachError;
 
-    async fn on_incoming_attach(
+    fn on_incoming_attach(
         &mut self,
         remote_attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError> {
@@ -660,6 +665,9 @@ where
             )
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe if oneshot channel is cancel safe
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -667,7 +675,7 @@ where
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
         self.send_attach_inner(writer, session, is_reattaching)
-            .await?;
+            .await?; // FIXME: cancel safe? if oneshot channel is cancel safe
         Ok(())
     }
 }
@@ -732,6 +740,9 @@ where
         &self.target
     }
 
+    /// # Cancel safety
+    /// 
+    /// This should be cancel safe if oneshot channel is cancel safe
     async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -740,19 +751,19 @@ where
         is_reattaching: bool,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?;
+        self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
 
         // Wait for remote attach
         let remote_attach = match reader
             .recv()
-            .await
+            .await // cancel safe
             .ok_or(ReceiverAttachError::IllegalSessionState)?
         {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
         };
 
-        self.on_incoming_attach(remote_attach).await
+        self.on_incoming_attach(remote_attach)
     }
 
     async fn handle_attach_error(
@@ -828,7 +839,7 @@ where
 {
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => {
-            match link.on_incoming_detach(remote_detach).await {
+            match link.on_incoming_detach(remote_detach) {
                 Ok(_) => err,
                 Err(detach_error) => detach_error.try_into().unwrap_or(err),
             }

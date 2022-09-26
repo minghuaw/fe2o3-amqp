@@ -333,6 +333,9 @@ where
         Ok(attach)
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe if oneshot channel is cancel safe
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -353,7 +356,7 @@ where
         let attach = match unsettled_map_len {
             Some(0) | None => self.as_complete_attach(handle, is_reattaching),
             Some(_) => {
-                let max_frame_size = get_max_frame_size(session).await?;
+                let max_frame_size = get_max_frame_size(session).await?; // FIXME: cancel safe?
                 self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)
                     ?
             }
@@ -365,7 +368,7 @@ where
             LinkState::Unattached
             | LinkState::Detached // May attempt to resume
             | LinkState::DetachSent => {
-                writer.send(frame).await
+                writer.send(frame).await // cancel safe
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachSent
@@ -374,7 +377,7 @@ where
                 }
             }
             LinkState::AttachReceived => {
-                writer.send(frame).await
+                writer.send(frame).await // cancel safe
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachExchanged
@@ -389,15 +392,18 @@ where
     }
 }
 
+/// # Cancel safety
+/// 
+/// This should cancel safe if oneshot channel is cancel safe
 pub(crate) async fn get_max_frame_size(
     control: &mpsc::Sender<SessionControl>,
 ) -> Result<usize, SendAttachErrorKind> {
     let (tx, rx) = oneshot::channel();
     control
         .send(SessionControl::GetMaxFrameSize(tx))
-        .await
+        .await // cancel safe
         .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-    rx.await
+    rx.await // FIXME: is oneshot channel cancel safe?
         .map_err(|_| SendAttachErrorKind::IllegalSessionState)
 }
 
@@ -413,7 +419,7 @@ where
 
     /// Closing or not isn't taken care of here but outside
     #[instrument(skip_all)]
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+    fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         trace!(detach = ?detach);
 
         match detach.closed {
@@ -466,6 +472,9 @@ where
         }
     }
 
+    /// # Cancel safety
+    ///
+    /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
     #[instrument(skip_all)]
     async fn send_detach(
         &mut self,
@@ -485,7 +494,7 @@ where
 
                 writer
                     .send(LinkFrame::Detach(detach))
-                    .await
+                    .await // cancel safe
                     .map_err(|_| DetachError::IllegalSessionState)?;
 
                 match (&self.local_state, closed) {
@@ -798,13 +807,14 @@ impl LinkRelay<OutputHandle> {
         }
     }
 
+    /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
     pub async fn on_incoming_detach(
         &mut self,
         detach: Detach,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
             LinkRelay::Sender { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?;
+                tx.send(LinkFrame::Detach(detach)).await?; 
             }
             LinkRelay::Receiver { tx, .. } => {
                 tx.send(LinkFrame::Detach(detach)).await?;

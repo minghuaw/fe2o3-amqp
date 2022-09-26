@@ -137,7 +137,7 @@ where
                         // probably not responsive enough
                         let closed = detach.closed;
                         self.send_detach(writer, closed, None).await?;
-                        let result = self.on_incoming_detach(detach).await;
+                        let result = self.on_incoming_detach(detach);
 
                         match (result, closed) {
                             (Ok(_), true) => return Err(Self::TransferError::RemoteClosed),
@@ -490,7 +490,7 @@ where
     type AttachExchange = SenderAttachExchange;
     type AttachError = SenderAttachError;
 
-    async fn on_incoming_attach(
+    fn on_incoming_attach(
         &mut self,
         remote_attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError> {
@@ -655,7 +655,7 @@ where
             _ => return Err(SenderAttachError::NonAttachFrameReceived),
         };
 
-        self.on_incoming_attach(remote_attach).await
+        self.on_incoming_attach(remote_attach)
     }
 
     #[instrument(skip_all)]
@@ -727,7 +727,7 @@ where
             match link.send_detach(writer, true, Some(err)).await {
                 Ok(_) => match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        let _ = link.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
+                        let _ = link.on_incoming_detach(remote_detach); // FIXME: hadnle detach errors?
                         attach_error
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
@@ -755,7 +755,7 @@ where
 {
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => {
-            match link.on_incoming_detach(remote_detach).await {
+            match link.on_incoming_detach(remote_detach) {
                 Ok(_) => err,
                 Err(detach_error) => detach_error.try_into().unwrap_or(err),
             }
