@@ -205,7 +205,7 @@ where
         let delivery = Delivery {
             link_output_handle,
             delivery_id,
-            delivery_tag: delivery_tag.clone(),
+            delivery_tag,
             rcv_settle_mode: mode,
             message,
         };
@@ -401,7 +401,7 @@ impl ReceiverLink<Target> {
 }
 
 impl<T> ReceiverLink<T> {
-    async fn handle_unsettled_in_attach(
+    fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> ReceiverAttachExchange {
@@ -649,17 +649,15 @@ where
 
         self.flow_state
             .as_ref()
-            .initial_delivery_count_mut(|_| initial_delivery_count)
-            .await;
+            .initial_delivery_count_mut(|_| initial_delivery_count);
         self.flow_state
             .as_ref()
-            .delivery_count_mut(|_| initial_delivery_count)
-            .await;
+            .delivery_count_mut(|_| initial_delivery_count);
 
         // Ok(Self::AttachExchange::Complete)
         Ok(self
             .handle_unsettled_in_attach(remote_attach.unsettled)
-            .await)
+            )
     }
 
     async fn send_attach(

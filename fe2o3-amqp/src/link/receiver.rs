@@ -598,7 +598,7 @@ where
         }
     }
 
-    async fn on_transfer_state(
+    fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
@@ -621,7 +621,7 @@ where
             .map_err(Into::into)
     }
 
-    async fn on_incomplete_transfer(
+    fn on_incomplete_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -762,14 +762,14 @@ where
             // the transfer performative, i.e., it is the state of the delivery (not the transfer) that existed at the
             // point the frame was sent.
             self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)
-                .await?;
+                ?;
         }
 
         if transfer.more {
             // Partial transfer of the delivery
             // There is only ONE incomplet transfer locally, so the partial transfer must belong to the
             // same delivery
-            self.on_incomplete_transfer(transfer, payload).await?;
+            self.on_incomplete_transfer(transfer, payload)?;
             // Partial delivery doesn't yield a complete message
             Ok(None)
         } else if transfer.resume {
@@ -852,7 +852,7 @@ where
         self.processed = AtomicU32::new(0);
 
         // Return if already draining
-        if self.link.flow_state().drain().await {
+        if self.link.flow_state().drain() {
             return Ok(());
         }
 
@@ -998,7 +998,7 @@ impl DetachedReceiver {
         };
         tracing::debug!(?exchange);
 
-        let credit = self.inner.link.flow_state.link_credit().await;
+        let credit = self.inner.link.flow_state.link_credit();
         self.inner.set_credit(credit).await?;
 
         Ok(exchange)

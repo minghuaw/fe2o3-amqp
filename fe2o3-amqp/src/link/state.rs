@@ -230,11 +230,11 @@ impl LinkFlowState<role::ReceiverMarker> {
 }
 
 impl<R> LinkFlowState<R> {
-    pub async fn link_credit(&self) -> u32 {
+    pub fn link_credit(&self) -> u32 {
         self.lock.read().link_credit
     }
 
-    pub async fn drain(&self) -> bool {
+    pub fn drain(&self) -> bool {
         self.lock.read().drain
     }
 
@@ -244,11 +244,11 @@ impl<R> LinkFlowState<R> {
     //     guard.drain = new;
     // }
 
-    pub async fn initial_delivery_count(&self) -> SequenceNo {
+    pub fn initial_delivery_count(&self) -> SequenceNo {
         self.lock.read().initial_delivery_count
     }
 
-    pub async fn initial_delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
+    pub fn initial_delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
         let mut guard = self.lock.write();
         let new = f(guard.initial_delivery_count);
         guard.initial_delivery_count = new;
@@ -258,14 +258,14 @@ impl<R> LinkFlowState<R> {
     //     self.lock.read().await.delivery_count
     // }
 
-    pub async fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
+    pub fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
         let mut guard = self.lock.write();
         let new = f(guard.delivery_count);
         guard.delivery_count = new;
     }
 
     /// This is async because it is protected behind an async RwLock
-    pub async fn properties(&self) -> Option<Fields> {
+    pub fn properties(&self) -> Option<Fields> {
         self.lock.read().properties.clone()
     }
 }

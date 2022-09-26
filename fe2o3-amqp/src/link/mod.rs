@@ -223,7 +223,7 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsDeliveryState + Send + Sync,
 {
-    async fn get_unsettled_map(
+    fn get_unsettled_map(
         &self,
         is_reattaching: bool,
         partial_unsettled: usize,
@@ -256,10 +256,10 @@ where
     }
 
     async fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        self.as_attach_inner(handle, is_reattaching, 1).await
+        self.as_attach_inner(handle, is_reattaching, 1)
     }
 
-    async fn as_attach_inner(
+    fn as_attach_inner(
         &self,
         handle: OutputHandle,
         is_reattaching: bool,
@@ -267,14 +267,14 @@ where
     ) -> Attach {
         let unsettled = self
             .get_unsettled_map(is_reattaching, partial_unsettled)
-            .await;
+            ;
 
         let max_message_size = match self.max_message_size {
             0 => None,
             val => Some(val as u64),
         };
-        let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
-        let properties = self.flow_state.as_ref().properties().await;
+        let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count());
+        let properties = self.flow_state.as_ref().properties();
         let incomplete_unsettled = !matches!(partial_unsettled, 0..=1);
 
         Attach {
@@ -311,7 +311,7 @@ where
 
         let mut attach = self
             .as_attach_inner(handle.clone(), is_reattaching, denominator)
-            .await;
+            ;
         let mut serializer = Serializer::from((&mut buf).writer());
         attach
             .serialize(&mut serializer)
@@ -323,7 +323,7 @@ where
 
             attach = self
                 .as_attach_inner(handle.clone(), is_reattaching, denominator)
-                .await;
+                ;
             let mut serializer = Serializer::from((&mut buf).writer());
             attach
                 .serialize(&mut serializer)
