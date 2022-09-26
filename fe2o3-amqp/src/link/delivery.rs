@@ -14,22 +14,53 @@ use serde::Serialize;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
-use crate::{endpoint::Settlement, util::Uninitialized};
+use crate::{
+    endpoint::Settlement,
+    util::{Sealed, Uninitialized},
+};
 use crate::{util::AsDeliveryState, Payload};
 
 use super::{BodyError, LinkStateError, SendError};
 
 /// Delivery information that is needed for disposing a message
-#[derive(Debug)]
 pub struct DeliveryInfo {
     /// Delivery ID carried by the transfer frame
-    pub delivery_id: DeliveryNumber,
+    pub(crate) delivery_id: DeliveryNumber,
 
     /// Delivery Tag carried by the transfer frame
-    pub delivery_tag: DeliveryTag,
+    pub(crate) delivery_tag: DeliveryTag,
 
     /// Receiver settle mode that is carried by the transfer frame
-    pub rcv_settle_mode: Option<ReceiverSettleMode>,
+    pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>,
+
+    _sealed: Sealed,
+}
+
+impl DeliveryInfo {
+    /// Get the delivery ID carried by the transfer frame
+    pub fn delivery_id(&self) -> DeliveryNumber {
+        self.delivery_id
+    }
+
+    /// get the delivery Tag carried by the transfer frame
+    pub fn delivery_tag(&self) -> &DeliveryTag {
+        &self.delivery_tag
+    }
+
+    /// Get the receiver settle mode that is carried by the transfer frame
+    pub fn rcv_settle_mode(&self) -> &Option<ReceiverSettleMode> {
+        &self.rcv_settle_mode
+    }
+}
+
+impl std::fmt::Debug for DeliveryInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeliveryInfo")
+            .field("delivery_id", &self.delivery_id)
+            .field("delivery_tag", &self.delivery_tag)
+            .field("rcv_settle_mode", &self.rcv_settle_mode)
+            .finish()
+    }
 }
 
 impl<T> From<Delivery<T>> for DeliveryInfo {
@@ -38,6 +69,7 @@ impl<T> From<Delivery<T>> for DeliveryInfo {
             delivery_id: delivery.delivery_id,
             delivery_tag: delivery.delivery_tag,
             rcv_settle_mode: delivery.rcv_settle_mode,
+            _sealed: Sealed {},
         }
     }
 }
@@ -48,6 +80,7 @@ impl<T> From<&Delivery<T>> for DeliveryInfo {
             delivery_id: delivery.delivery_id,
             delivery_tag: delivery.delivery_tag.clone(),
             rcv_settle_mode: delivery.rcv_settle_mode.clone(),
+            _sealed: Sealed {},
         }
     }
 }
@@ -175,25 +208,6 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
             Body::Empty => write!(f, "Empty"),
-        }
-    }
-}
-
-impl<T> Delivery<T> {
-    #[cfg(all(feature = "transaction", feature = "acceptor"))]
-    pub(crate) fn into_info(self) -> DeliveryInfo {
-        DeliveryInfo {
-            delivery_id: self.delivery_id,
-            delivery_tag: self.delivery_tag,
-            rcv_settle_mode: self.rcv_settle_mode,
-        }
-    }
-
-    pub(crate) fn clone_info(&self) -> DeliveryInfo {
-        DeliveryInfo {
-            delivery_id: self.delivery_id,
-            delivery_tag: self.delivery_tag.clone(),
-            rcv_settle_mode: self.rcv_settle_mode.clone(),
         }
     }
 }

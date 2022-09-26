@@ -1,13 +1,14 @@
 //! Implements acceptor for a remote sender link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::{Arc, atomic::AtomicU32}};
 
 use fe2o3_amqp_types::{
     messaging::{Target, TargetArchetype},
     performatives::Attach,
     primitives::Symbol,
 };
-use tokio::sync::{mpsc, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::{mpsc};
 use tracing::instrument;
 
 use crate::{
@@ -238,7 +239,7 @@ where
             link,
             buffer_size: shared.buffer_size,
             credit_mode: self.credit_mode.clone(),
-            processed: 0,
+            processed: AtomicU32::new(0),
             auto_accept: self.auto_accept,
             session: control.clone(),
             outgoing,

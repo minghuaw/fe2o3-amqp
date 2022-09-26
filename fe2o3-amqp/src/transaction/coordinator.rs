@@ -19,9 +19,9 @@ use crate::{
     link::{
         receiver::ReceiverInner,
         shared_inner::{LinkEndpointInner, LinkEndpointInnerDetach},
-        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError,
+        IllegalLinkStateError, LinkFrame, ReceiverAttachError, ReceiverLink, RecvError, delivery::DeliveryInfo,
     },
-    util::{DeliveryInfo, Initialized, Running},
+    util::{Initialized, Running},
     Delivery,
 };
 
@@ -174,7 +174,7 @@ impl TxnCoordinator {
                 .await
                 .map(SuccessfulOutcome::Accepted),
         };
-        let delivery_info = delivery.into_info();
+        let delivery_info: DeliveryInfo = delivery.into();
         self.handle_delivery_result(delivery_info, result).await
     }
 

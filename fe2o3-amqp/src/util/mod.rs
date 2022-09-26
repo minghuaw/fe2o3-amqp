@@ -215,6 +215,9 @@ impl AsDeliveryState for Option<DeliveryState> {
     }
 }
 
+/// A private zero-sized type that makes struct not constructable by users
+pub(crate) struct Sealed {}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;

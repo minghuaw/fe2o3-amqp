@@ -634,24 +634,22 @@ where
 
                 if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
                     // Update unsettled map in the link
-                    self.link
-                        .on_incomplete_transfer(
-                            delivery_tag,
-                            incomplete.section_number.unwrap_or(0),
-                            incomplete.section_offset,
-                        );
+                    self.link.on_incomplete_transfer(
+                        delivery_tag,
+                        incomplete.section_number.unwrap_or(0),
+                        incomplete.section_offset,
+                    );
                 }
             }
             None => {
                 let incomplete = IncompleteTransfer::new(transfer, payload);
                 if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
                     // Update unsettled map in the link
-                    self.link
-                        .on_incomplete_transfer(
-                            delivery_tag,
-                            incomplete.section_number.unwrap_or(0),
-                            incomplete.section_offset,
-                        );
+                    self.link.on_incomplete_transfer(
+                        delivery_tag,
+                        incomplete.section_number.unwrap_or(0),
+                        incomplete.section_offset,
+                    );
                 }
                 self.incomplete_transfer = Some(Box::new(incomplete));
             }
@@ -680,15 +678,16 @@ where
                 if remote != local {
                     let (section_number, section_offset) =
                         count_number_of_sections_and_offset(&payload);
-                    let delivery = self
-                        .link
-                        .on_complete_transfer(transfer, payload, section_number, section_offset)?;
+                    let delivery = self.link.on_complete_transfer(
+                        transfer,
+                        payload,
+                        section_number,
+                        section_offset,
+                    )?;
 
                     // Auto accept the message and leave settled to be determined based on rcv_settle_mode
                     if self.auto_accept {
-                        let delivery_info = delivery.clone_info();
-                        self.dispose(delivery_info, None, Accepted {}.into())
-                            .await?;
+                        self.dispose(&delivery, None, Accepted {}.into()).await?;
                     }
 
                     Ok(Some(delivery))
@@ -717,13 +716,12 @@ where
                 incomplete.or_assign(transfer)?;
                 incomplete.append(payload); // This also computes the section number and offset incrementally
 
-                self.link
-                    .on_complete_transfer(
-                        incomplete.performative,
-                        incomplete.buffer,
-                        incomplete.section_number.unwrap_or(0),
-                        incomplete.section_offset,
-                    )?
+                self.link.on_complete_transfer(
+                    incomplete.performative,
+                    incomplete.buffer,
+                    incomplete.section_number.unwrap_or(0),
+                    incomplete.section_offset,
+                )?
             }
             None => {
                 let (section_number, section_offset) =

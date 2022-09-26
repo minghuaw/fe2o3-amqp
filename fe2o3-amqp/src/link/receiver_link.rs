@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
+use fe2o3_amqp_types::{messaging::message::DecodeIntoMessage, definitions::Handle};
 use serde_amqp::format_code::EncodingCodes;
 
 use crate::util::{is_consecutive, AsByteIterator, IntoReader};
@@ -46,80 +46,7 @@ where
             .ok_or(Self::FlowError::IllegalState)?
             .into();
 
-        let flow = match (link_credit, drain) {
-            (Some(link_credit), Some(drain)) => {
-                let mut guard = self.flow_state.lock.write();
-                guard.link_credit = link_credit;
-                guard.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-            (Some(link_credit), None) => {
-                let mut guard = self.flow_state.lock.write();
-                guard.link_credit = link_credit;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: guard.drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-            (None, Some(drain)) => {
-                let mut guard = self.flow_state.lock.write();
-                guard.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(guard.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-            (None, None) => {
-                let guard = self.flow_state.lock.read();
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(guard.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: guard.drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-        };
+        let flow = self.get_link_flow(handle, link_credit, drain, echo);
         writer
             .send(LinkFrame::Flow(flow))
             .await
@@ -466,80 +393,7 @@ impl ReceiverLink<Target> {
             .ok_or(FlowError::IllegalState)?
             .into();
 
-        let flow = match (link_credit, drain) {
-            (Some(link_credit), Some(drain)) => {
-                let mut writer = self.flow_state.lock.blocking_write();
-                writer.link_credit = link_credit;
-                writer.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (Some(link_credit), None) => {
-                let mut writer = self.flow_state.lock.blocking_write();
-                writer.link_credit = link_credit;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: writer.drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (None, Some(drain)) => {
-                let mut writer = self.flow_state.lock.blocking_write();
-                writer.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(writer.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (None, None) => {
-                let reader = self.flow_state.lock.blocking_read();
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(reader.delivery_count),
-                    link_credit: Some(reader.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: reader.drain,
-                    echo,
-                    properties: reader.properties.clone(),
-                }
-            }
-        };
+        let flow = self.get_link_flow(handle, link_credit, drain, echo);
         writer
             .blocking_send(LinkFrame::Flow(flow))
             .map_err(|_| FlowError::IllegalSessionState)
@@ -620,6 +474,83 @@ impl<T> ReceiverLink<T> {
             .send(frame)
             .await
             .map_err(|_| DispositionError::IllegalSessionState)
+    }
+
+    fn get_link_flow(&self, handle: Handle, link_credit: Option<u32>, drain: Option<bool>, echo: bool) -> LinkFlow {
+        match (link_credit, drain) {
+            (Some(link_credit), Some(drain)) => {
+                let mut guard = self.flow_state.lock.write();
+                guard.link_credit = link_credit;
+                guard.drain = drain;
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+            (Some(link_credit), None) => {
+                let mut guard = self.flow_state.lock.write();
+                guard.link_credit = link_credit;
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: guard.drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+            (None, Some(drain)) => {
+                let mut guard = self.flow_state.lock.write();
+                guard.drain = drain;
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(guard.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+            (None, None) => {
+                let guard = self.flow_state.lock.read();
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(guard.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: guard.drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+        }
     }
 }
 

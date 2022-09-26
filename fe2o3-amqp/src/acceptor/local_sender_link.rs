@@ -8,7 +8,8 @@ use fe2o3_amqp_types::{
     performatives::Attach,
     primitives::Symbol,
 };
-use tokio::sync::{mpsc, Notify, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::{mpsc, Notify};
 
 use crate::{
     endpoint::{InputHandle, LinkAttach, LinkExt},
