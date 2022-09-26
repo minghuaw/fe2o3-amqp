@@ -47,6 +47,7 @@ The examples below are individual examples which you need to `cd` into the corre
 |[service_bus_over_websocket](./service_bus_over_websocket) | Sending to / receiving from Azure Service Bus over WebSocket |
 |[event_hubs](./event_hubs) | Send to and receive from Azure Event Hubs |
 |[activemq](./activemq)| `ActiveMQ` requires alternative TLS establishment |
+|[cancel safety](./cancel_safety)| Shows cancel safety with `Receiver::recv()` |
 
 ## More examples coming
 
