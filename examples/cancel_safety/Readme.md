@@ -1,5 +1,5 @@
-# Cancellation safety workaround
+# Cancel safety
 
-The current impelmentation of `Receiver::recv()` does not guarantee cancellation safety and thus may lead to data loss if `Receiver::recv()` is put inside a `select!` block.
+Cancel safety of `Receiver::recv()` was reviewed and fixed in version "0.6.7". This is an example where people can test that.
 
-This example aims to demonstrate a workaround while cancellation safety issue is being resolved.
+Please note that you will need an AMQP 1.0 broker running on your localhost in order to run this example.
