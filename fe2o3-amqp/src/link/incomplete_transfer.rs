@@ -149,19 +149,14 @@ impl IncompleteTransfer {
         section_number: u32,
         section_offset: u64,
     ) {
-        match self.position_of_section_number_and_offset(section_number, section_offset) {
-            Some(mut index) => {
-                for chunk in self.buffer.iter_mut() {
-                    if chunk.len() < index {
-                        index -= chunk.len();
-                    } else {
-                        // Found the chunk and split the chunk
-                        let _ = chunk.split_off(index);
-                    }
+        if let Some(mut index) = self.position_of_section_number_and_offset(section_number, section_offset) {
+            for chunk in self.buffer.iter_mut() {
+                if chunk.len() < index {
+                    index -= chunk.len();
+                } else {
+                    // Found the chunk and split the chunk
+                    let _ = chunk.split_off(index);
                 }
-            }
-            None => {
-                // TODO: should this be treated as an error?
             }
         }
     }

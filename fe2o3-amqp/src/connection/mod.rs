@@ -137,8 +137,7 @@ impl<R> ConnectionHandle<R> {
             .send(ConnectionControl::AllocateSession { tx, responder })
             .await
             .map_err(|_| AllocSessionError::IllegalState)?; // Connection must have stopped
-        let result = resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?;
-        result
+        resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?
     }
 }
 
