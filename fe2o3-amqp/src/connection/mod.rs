@@ -622,7 +622,7 @@ impl endpoint::Connection for Connection {
                     None => Ok(()),
                 }
             }
-            _ => return Err(CloseError::IllegalState),
+            _ => Err(CloseError::IllegalState),
         }
     }
 
