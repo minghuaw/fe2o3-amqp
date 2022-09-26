@@ -52,7 +52,7 @@ async fn receiver_task(mut receiver: Receiver) {
 async fn process_delivery(delivery: Delivery<String>, tx: mpsc::Sender<DeliveryInfo>) {
     use rand::{Rng, SeedableRng};
 
-    // Randomly wait for some time (between 0 to 255 milliseconds) to simulate processing
+    // Randomly wait for some time (between 0 to MAX_PROCESSING_TIME_MILLIS) to simulate processing
     let mut rng = rand::rngs::StdRng::from_entropy();
     let millis = rng.gen_range(0..MAX_PROCESSING_TIME_MILLIS);
     tokio::time::sleep(Duration::from_millis(millis)).await;
@@ -83,6 +83,8 @@ async fn main() {
     // Add an additional 10 secs to be safe
     let duration =
         Duration::from_millis(NUMBER_OF_MESSAGES as u64 * u8::MAX as u64) + Duration::from_secs(10);
+    // If the receiver failed to receive any message because of cancel safety issue, the receiver_task will
+    // never finish within the maximum test duration
     tokio::time::timeout(duration, receiver_task_handle)
         .await
         .unwrap()
