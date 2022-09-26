@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use fe2o3_amqp::{Connection, Delivery, Receiver, Sender, Session};
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use fe2o3_amqp::{Connection, Delivery, Receiver, Sender, Session, link::delivery::DeliveryInfo};
+use tokio::sync::mpsc;
 
-const NUMBER_OF_MESSAGES: usize = 100_000;
+const NUMBER_OF_MESSAGES: usize = 1_000_000;
 const MAX_PROCESSING_TIME_MILLIS: u64 = 10; // in milliseconds
 
 async fn sender_task(mut sender: Sender) {
@@ -28,26 +28,17 @@ async fn receiver_task(mut receiver: Receiver) {
     let mut processed_count = 0;
 
     loop {
-        {
-            let mut fut = receiver.recv::<String>();
-            tokio::pin!(fut);
-    
-            // This timeout could cause cancellation safety issue as well
-            match tokio::time::timeout(Duration::from_millis(1), &mut fut).await {
-                Ok(result) => {
-                    let delivery = result.unwrap();
-                    tokio::spawn(process_delivery(delivery, tx.clone()));
-                    // processed_count += try_dispose_processed(&mut rx, &mut receiver).await;
-                }
-                Err(_) => {
-                    todo!()
-                }
-            };
-        };
-        
-        processed_count += try_dispose_processed(&mut rx, &mut receiver).await;
-        // This is for debugging purpose only
-        // println!("processed_count: {}", processed_count);
+        tokio::select! {
+            result = receiver.recv::<String>() => {
+                let delivery = result.unwrap();
+                tokio::spawn(process_delivery(delivery, tx.clone()));
+            },
+            processed = rx.recv() => {
+                let delivery_info = processed.unwrap();
+                receiver.accept(delivery_info).await.unwrap();
+                processed_count += 1;
+            }
+        }
 
         if processed_count >= NUMBER_OF_MESSAGES {
             println!("processed_count: {}", processed_count);
@@ -58,33 +49,7 @@ async fn receiver_task(mut receiver: Receiver) {
     receiver.close().await.unwrap()
 }
 
-async fn try_dispose_processed(
-    rx: &mut mpsc::Receiver<Delivery<String>>,
-    receiver: &mut Receiver,
-) -> usize {
-    let mut processed_count = 0;
-    // Try to see whether there are processed deliveries
-    loop {
-        match rx.try_recv() {
-            Ok(processed_delivery) => {
-                receiver.accept(&processed_delivery).await.unwrap();
-                processed_count += 1;
-            }
-            Err(err) => match err {
-                TryRecvError::Empty => {
-                    // The channel is empty, break out of the loop
-                    return processed_count;
-                }
-                TryRecvError::Disconnected => {
-                    // Something went wrong, there should always be at least one copy of `tx` in this task
-                    panic!("TryRecvError::Disconnected")
-                }
-            },
-        }
-    }
-}
-
-async fn process_delivery(delivery: Delivery<String>, tx: mpsc::Sender<Delivery<String>>) {
+async fn process_delivery(delivery: Delivery<String>, tx: mpsc::Sender<DeliveryInfo>) {
     use rand::{Rng, SeedableRng};
 
     // Randomly wait for some time (between 0 to 255 milliseconds) to simulate processing
@@ -94,7 +59,7 @@ async fn process_delivery(delivery: Delivery<String>, tx: mpsc::Sender<Delivery<
 
     // Send back
     // TODO: only `DeliveryInfo` is required for disposition. This is subject to change
-    tx.send(delivery).await.unwrap()
+    tx.send(DeliveryInfo::from(delivery)).await.unwrap()
 }
 
 #[tokio::main]

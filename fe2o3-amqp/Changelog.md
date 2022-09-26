@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.6.7
+
+1. Disposition of message (`accept()`, `reject()`, `release()`, `modify()`, `accept_all()`, `reject_all()`, `release_all()`, `modify_all()`) on the receiver side no longer requires `&mut self`. They only need `&self` now.
+2. Allow receiver disposition methods (`accept()`, `reject()`, `release()`, `modify()`, `accept_all()`, `reject_all()`, `release_all()`, `modify_all()`) to take any type that implement `Into<DeliveryInfo>`. This includes both `Delivery<T>` and `&Delivery<T>`
+3. Switched internal `RwLock` from `tokio::sync::RwLock` to `parking_lot::RwLock` to resolve cancel safety issue with `Receiver::recv()` [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
+   1. Switching from an async `RwLock` to a blocking `RwLock` is fine because the lock guard will never be held across `.await` points.
+
 ## 0.6.6
 
 1. `on_incoming_attach` should always be evaluated before sending back `Attach`. The only lazy evaluation left is when parsing SaslPlainProfile from url

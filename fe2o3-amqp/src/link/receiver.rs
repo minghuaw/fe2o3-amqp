@@ -270,7 +270,9 @@ impl Receiver {
     }
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
-    /// to `Accept`
+    /// to `Accept`.
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
     ///
     /// # Example
     ///
@@ -288,9 +290,11 @@ impl Receiver {
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Accept the message by sending a disposition with the `delivery_state` field set
+    /// Accept the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Accept`
     ///
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// 
     /// # Example
     ///
     /// The code of the example below can be found in the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/blob/main/examples/dispose_multiple/src/main.rs)
@@ -311,6 +315,8 @@ impl Receiver {
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
     /// to `Reject`
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn reject(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -322,8 +328,10 @@ impl Receiver {
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Reject the message by sending a disposition with the `delivery_state` field set
+    /// Reject the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Reject`
+    /// 
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn reject_all<'a, T: 'a>(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -338,6 +346,8 @@ impl Receiver {
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn release<T>(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -346,8 +356,10 @@ impl Receiver {
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Release the message by sending a disposition with the `delivery_state` field set
+    /// Release the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Release`
+    /// 
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn release_all<'a, T: 'a>(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
@@ -359,6 +371,8 @@ impl Receiver {
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
     /// to `Modify`
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn modify<T>(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
@@ -368,8 +382,10 @@ impl Receiver {
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Modify the message by sending a disposition with the `delivery_state` field set
+    /// Modify the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Modify`
+    /// 
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn modify_all<'a, T: 'a>(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
