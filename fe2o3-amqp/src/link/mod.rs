@@ -345,7 +345,12 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let attach = match self.unsettled.read().as_ref().map(|m| m.len()) {
+        let unsettled_map_len = {
+            let guard = self.unsettled.read();
+            guard.as_ref().map(|m| m.len())
+        };
+
+        let attach = match unsettled_map_len {
             Some(0) | None => self.as_complete_attach(handle, is_reattaching).await,
             Some(_) => {
                 let max_frame_size = get_max_frame_size(session).await?;
