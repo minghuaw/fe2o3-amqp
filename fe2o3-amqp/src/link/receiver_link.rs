@@ -1,9 +1,9 @@
-use fe2o3_amqp_types::messaging::message::DecodeIntoMessage;
+use fe2o3_amqp_types::{definitions::Handle, messaging::message::DecodeIntoMessage};
 use serde_amqp::format_code::EncodingCodes;
 
-use crate::util::{is_consecutive, AsByteIterator, DeliveryInfo, IntoReader};
+use crate::util::{is_consecutive, AsByteIterator, IntoReader};
 
-use super::*;
+use super::{delivery::DeliveryInfo, *};
 
 pub(crate) const DESCRIBED_TYPE: u8 = EncodingCodes::DescribedType as u8;
 pub(crate) const SMALL_ULONG_TYPE: u8 = EncodingCodes::SmallULong as u8;
@@ -33,8 +33,10 @@ where
     type DispositionError = DispositionError;
 
     /// Set and send flow state
+    /// 
+    /// This is cancel safe because it only `.await` on sending over a `tokio::mpsc::Sender`
     async fn send_flow(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
@@ -46,87 +48,14 @@ where
             .ok_or(Self::FlowError::IllegalState)?
             .into();
 
-        let flow = match (link_credit, drain) {
-            (Some(link_credit), Some(drain)) => {
-                let mut guard = self.flow_state.lock.write().await;
-                guard.link_credit = link_credit;
-                guard.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-            (Some(link_credit), None) => {
-                let mut guard = self.flow_state.lock.write().await;
-                guard.link_credit = link_credit;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: guard.drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-            (None, Some(drain)) => {
-                let mut guard = self.flow_state.lock.write().await;
-                guard.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(guard.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-            (None, None) => {
-                let guard = self.flow_state.lock.read().await;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(guard.delivery_count),
-                    link_credit: Some(guard.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: guard.drain,
-                    echo,
-                    properties: guard.properties.clone(),
-                }
-            }
-        };
+        let flow = self.get_link_flow(handle, link_credit, drain, echo);
         writer
             .send(LinkFrame::Flow(flow))
-            .await
+            .await // cancel safe
             .map_err(|_| Self::FlowError::IllegalSessionState)
     }
 
-    async fn on_transfer_state(
+    fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
@@ -135,7 +64,7 @@ where
         let delivery_tag = delivery_tag
             .as_ref()
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
-        let mut guard = self.unsettled.write().await;
+        let mut guard = self.unsettled.write();
         let map = guard.get_or_insert(OrderedMap::new());
 
         if matches!(settled, Some(true)) {
@@ -164,7 +93,7 @@ where
         Ok(())
     }
 
-    async fn on_incomplete_transfer(
+    fn on_incomplete_transfer(
         &mut self,
         delivery_tag: DeliveryTag,
         section_number: u32,
@@ -181,7 +110,7 @@ where
         });
 
         {
-            let mut guard = self.unsettled.write().await;
+            let mut guard = self.unsettled.write();
             // The same key may be writter multiple times
             let _ = guard
                 .get_or_insert(OrderedMap::new())
@@ -189,7 +118,7 @@ where
         }
     }
 
-    async fn on_complete_transfer<'a, T, P>(
+    fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
         payload: P,
@@ -207,7 +136,7 @@ where
 
         // ReceiverFlowState will not wait until link credit is available.
         // Will return with an error if there is not enough link credit.
-        self.flow_state.consume(1).await?;
+        self.flow_state.consume(1)?;
 
         // This only takes care of whether the message is considered
         // sett
@@ -260,7 +189,7 @@ where
             // (ie. thus doesn't call `link.dispose()`) and thus need to manually
             // set the delivery state
             {
-                let mut lock = self.unsettled.write().await;
+                let mut lock = self.unsettled.write();
                 // There may be records of incomplete delivery
                 let _ = lock
                     .get_or_insert(OrderedMap::new())
@@ -278,7 +207,7 @@ where
         let delivery = Delivery {
             link_output_handle,
             delivery_id,
-            delivery_tag: delivery_tag.clone(),
+            delivery_tag,
             rcv_settle_mode: mode,
             message,
         };
@@ -286,8 +215,9 @@ where
         Ok(delivery)
     }
 
+    /// This is cancel safe because it only `.await` on sending over `tokio::mpsc::Sender`
     async fn dispose(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
         settled: Option<bool>,
@@ -318,11 +248,11 @@ where
         });
 
         let unsettled_state = if settled {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             lock.as_mut()
                 .and_then(|map| map.remove(&delivery_info.delivery_tag))
         } else {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             // If the key is present in the map, the old value will be returned, which
             // we don't really need
             lock.get_or_insert(OrderedMap::new())
@@ -342,15 +272,16 @@ where
             let frame = LinkFrame::Disposition(disposition);
             writer
                 .send(frame)
-                .await
+                .await // cancel safe
                 .map_err(|_| Self::DispositionError::IllegalSessionState)?;
         }
 
         Ok(())
     }
 
+    /// This is cancel safe because all internal `.await` points are cancel safe
     async fn dispose_all(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         mut delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
@@ -360,7 +291,7 @@ where
         // sorting before filtering may be more cache/branch-prediction friendly?
         delivery_infos.sort_by(|left, right| left.delivery_id.cmp(&right.delivery_id));
         {
-            let reader = self.unsettled.read().await;
+            let reader = self.unsettled.read();
             delivery_infos.retain(|info| {
                 reader
                     .as_ref()
@@ -374,12 +305,12 @@ where
         for ind in chunk_inds {
             let slice = &delivery_infos[prev_ind..ind];
             self.dispose_consecutive(writer, slice, settled, state.clone(), batchable)
-                .await?;
+                .await?; // cancel safe
             prev_ind = ind;
         }
         let final_slice = &delivery_infos[prev_ind..];
         self.dispose_consecutive(writer, final_slice, settled, state, batchable)
-            .await
+            .await // cancel safe
     }
 }
 
@@ -466,80 +397,7 @@ impl ReceiverLink<Target> {
             .ok_or(FlowError::IllegalState)?
             .into();
 
-        let flow = match (link_credit, drain) {
-            (Some(link_credit), Some(drain)) => {
-                let mut writer = self.flow_state.lock.blocking_write();
-                writer.link_credit = link_credit;
-                writer.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (Some(link_credit), None) => {
-                let mut writer = self.flow_state.lock.blocking_write();
-                writer.link_credit = link_credit;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: writer.drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (None, Some(drain)) => {
-                let mut writer = self.flow_state.lock.blocking_write();
-                writer.drain = drain;
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(writer.delivery_count),
-                    link_credit: Some(writer.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain,
-                    echo,
-                    properties: writer.properties.clone(),
-                }
-            }
-            (None, None) => {
-                let reader = self.flow_state.lock.blocking_read();
-                LinkFlow {
-                    handle,
-                    // When the flow state is being sent from the receiver endpoint to the sender
-                    // endpoint this field MUST be set to the last known value of the corresponding
-                    // sending endpoint.
-                    delivery_count: Some(reader.delivery_count),
-                    link_credit: Some(reader.link_credit),
-                    // The receiver sets this to the last known value seen from the sender
-                    // available: Some(writer.available),
-                    available: None,
-                    drain: reader.drain,
-                    echo,
-                    properties: reader.properties.clone(),
-                }
-            }
-        };
+        let flow = self.get_link_flow(handle, link_credit, drain, echo);
         writer
             .blocking_send(LinkFrame::Flow(flow))
             .map_err(|_| FlowError::IllegalSessionState)
@@ -547,7 +405,7 @@ impl ReceiverLink<Target> {
 }
 
 impl<T> ReceiverLink<T> {
-    async fn handle_unsettled_in_attach(
+    fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> ReceiverAttachExchange {
@@ -569,8 +427,9 @@ impl<T> ReceiverLink<T> {
         }
     }
 
+    /// This is cancel safe because it only `.await` on sending over a `tokio::mpsc::Sender`
     async fn dispose_consecutive(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         consecutive_infos: &[DeliveryInfo],
         settled: Option<bool>,
@@ -595,12 +454,12 @@ impl<T> ReceiverLink<T> {
 
         // TODO: Individually checking whether a delivery is already dropped is probably too heavy?
         if settled {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             for info in consecutive_infos {
                 lock.as_mut().and_then(|map| map.remove(&info.delivery_tag));
             }
         } else {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             for info in consecutive_infos {
                 lock.get_or_insert(OrderedMap::new())
                     .insert(info.delivery_tag.clone(), Some(state.clone()));
@@ -618,8 +477,91 @@ impl<T> ReceiverLink<T> {
         let frame = LinkFrame::Disposition(disposition);
         writer
             .send(frame)
-            .await
+            .await // cancel safe
             .map_err(|_| DispositionError::IllegalSessionState)
+    }
+
+    fn get_link_flow(
+        &self,
+        handle: Handle,
+        link_credit: Option<u32>,
+        drain: Option<bool>,
+        echo: bool,
+    ) -> LinkFlow {
+        match (link_credit, drain) {
+            (Some(link_credit), Some(drain)) => {
+                let mut guard = self.flow_state.lock.write();
+                guard.link_credit = link_credit;
+                guard.drain = drain;
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+            (Some(link_credit), None) => {
+                let mut guard = self.flow_state.lock.write();
+                guard.link_credit = link_credit;
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: guard.drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+            (None, Some(drain)) => {
+                let mut guard = self.flow_state.lock.write();
+                guard.drain = drain;
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(guard.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+            (None, None) => {
+                let guard = self.flow_state.lock.read();
+                LinkFlow {
+                    handle,
+                    // When the flow state is being sent from the receiver endpoint to the sender
+                    // endpoint this field MUST be set to the last known value of the corresponding
+                    // sending endpoint.
+                    delivery_count: Some(guard.delivery_count),
+                    link_credit: Some(guard.link_credit),
+                    // The receiver sets this to the last known value seen from the sender
+                    // available: Some(writer.available),
+                    available: None,
+                    drain: guard.drain,
+                    echo,
+                    properties: guard.properties.clone(),
+                }
+            }
+        }
     }
 }
 
@@ -636,7 +578,7 @@ where
     type AttachExchange = ReceiverAttachExchange;
     type AttachError = ReceiverAttachError;
 
-    async fn on_incoming_attach(
+    fn on_incoming_attach(
         &mut self,
         remote_attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError> {
@@ -712,19 +654,20 @@ where
 
         self.flow_state
             .as_ref()
-            .initial_delivery_count_mut(|_| initial_delivery_count)
-            .await;
+            .initial_delivery_count_mut(|_| initial_delivery_count);
         self.flow_state
             .as_ref()
-            .delivery_count_mut(|_| initial_delivery_count)
-            .await;
+            .delivery_count_mut(|_| initial_delivery_count);
 
         // Ok(Self::AttachExchange::Complete)
         Ok(self
             .handle_unsettled_in_attach(remote_attach.unsettled)
-            .await)
+            )
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe if oneshot channel is cancel safe
     async fn send_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -732,7 +675,7 @@ where
         is_reattaching: bool,
     ) -> Result<(), Self::AttachError> {
         self.send_attach_inner(writer, session, is_reattaching)
-            .await?;
+            .await?; // FIXME: cancel safe? if oneshot channel is cancel safe
         Ok(())
     }
 }
@@ -797,6 +740,9 @@ where
         &self.target
     }
 
+    /// # Cancel safety
+    /// 
+    /// This should be cancel safe if oneshot channel is cancel safe
     async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -805,19 +751,19 @@ where
         is_reattaching: bool,
     ) -> Result<Self::AttachExchange, ReceiverAttachError> {
         // Send out local attach
-        self.send_attach(writer, session, is_reattaching).await?;
+        self.send_attach(writer, session, is_reattaching).await?; // FIXME: cancel safe? if oneshot channel is cancel safe
 
         // Wait for remote attach
         let remote_attach = match reader
             .recv()
-            .await
+            .await // cancel safe
             .ok_or(ReceiverAttachError::IllegalSessionState)?
         {
             LinkFrame::Attach(attach) => attach,
             _ => return Err(ReceiverAttachError::NonAttachFrameReceived),
         };
 
-        self.on_incoming_attach(remote_attach).await
+        self.on_incoming_attach(remote_attach)
     }
 
     async fn handle_attach_error(
@@ -893,7 +839,7 @@ where
 {
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => {
-            match link.on_incoming_detach(remote_detach).await {
+            match link.on_incoming_detach(remote_detach) {
                 Ok(_) => err,
                 Err(detach_error) => detach_error.try_into().unwrap_or(err),
             }

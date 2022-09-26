@@ -141,8 +141,7 @@ impl TransactionalRetirement for OwnedTransaction {
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
-        let delivery_info = delivery.clone_info();
-        recver.inner.dispose(delivery_info, None, state).await
+        recver.inner.dispose(delivery, None, state).await
     }
 }
 
@@ -243,7 +242,7 @@ impl OwnedTransaction {
         credit: SequenceNo,
     ) -> Result<TxnAcquisition<'_, OwnedTransaction>, FlowError> {
         {
-            let mut writer = recver.inner.link.flow_state.lock.write().await;
+            let mut writer = recver.inner.link.flow_state.lock.write();
             let value = Value::Binary(self.declared.txn_id.clone());
             match &mut writer.properties {
                 Some(fields) => {
@@ -268,7 +267,7 @@ impl OwnedTransaction {
         {
             Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
             Err(error) => {
-                let mut writer = recver.inner.link.flow_state.lock.write().await;
+                let mut writer = recver.inner.link.flow_state.lock.write();
                 if let Some(fields) = &mut writer.properties {
                     fields.remove(TXN_ID_KEY);
                 }

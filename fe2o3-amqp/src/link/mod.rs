@@ -16,11 +16,12 @@ use fe2o3_amqp_types::{
 
 pub use error::*;
 
+use parking_lot::RwLock;
 pub use receiver::Receiver;
 pub use sender::Sender;
 use serde::Serialize;
 use serde_amqp::ser::Serializer;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, instrument, trace};
 
 use crate::{
@@ -222,7 +223,7 @@ where
     F: AsRef<LinkFlowState<R>> + Send + Sync,
     M: AsDeliveryState + Send + Sync,
 {
-    async fn get_unsettled_map(
+    fn get_unsettled_map(
         &self,
         is_reattaching: bool,
         partial_unsettled: usize,
@@ -232,7 +233,7 @@ where
             return None;
         }
 
-        let guard = self.unsettled.read().await;
+        let guard = self.unsettled.read();
         let map = guard.as_ref()?;
         match (map.len(), partial_unsettled) {
             (0, _) => None,
@@ -254,11 +255,11 @@ where
         }
     }
 
-    async fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
-        self.as_attach_inner(handle, is_reattaching, 1).await
+    fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
+        self.as_attach_inner(handle, is_reattaching, 1)
     }
 
-    async fn as_attach_inner(
+    fn as_attach_inner(
         &self,
         handle: OutputHandle,
         is_reattaching: bool,
@@ -266,14 +267,14 @@ where
     ) -> Attach {
         let unsettled = self
             .get_unsettled_map(is_reattaching, partial_unsettled)
-            .await;
+            ;
 
         let max_message_size = match self.max_message_size {
             0 => None,
             val => Some(val as u64),
         };
-        let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count().await);
-        let properties = self.flow_state.as_ref().properties().await;
+        let initial_delivery_count = Some(self.flow_state.as_ref().initial_delivery_count());
+        let properties = self.flow_state.as_ref().properties();
         let incomplete_unsettled = !matches!(partial_unsettled, 0..=1);
 
         Attach {
@@ -299,7 +300,7 @@ where
         }
     }
 
-    async fn as_maybe_incomplete_attach(
+    fn as_maybe_incomplete_attach(
         &self,
         max_frame_size: usize,
         handle: OutputHandle,
@@ -310,7 +311,7 @@ where
 
         let mut attach = self
             .as_attach_inner(handle.clone(), is_reattaching, denominator)
-            .await;
+            ;
         let mut serializer = Serializer::from((&mut buf).writer());
         attach
             .serialize(&mut serializer)
@@ -322,7 +323,7 @@ where
 
             attach = self
                 .as_attach_inner(handle.clone(), is_reattaching, denominator)
-                .await;
+                ;
             let mut serializer = Serializer::from((&mut buf).writer());
             attach
                 .serialize(&mut serializer)
@@ -332,6 +333,9 @@ where
         Ok(attach)
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe if oneshot channel is cancel safe
     pub(crate) async fn send_attach_inner(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -344,12 +348,17 @@ where
             None => return Err(SendAttachErrorKind::IllegalState),
         };
 
-        let attach = match self.unsettled.read().await.as_ref().map(|m| m.len()) {
-            Some(0) | None => self.as_complete_attach(handle, is_reattaching).await,
+        let unsettled_map_len = {
+            let guard = self.unsettled.read();
+            guard.as_ref().map(|m| m.len())
+        };
+
+        let attach = match unsettled_map_len {
+            Some(0) | None => self.as_complete_attach(handle, is_reattaching),
             Some(_) => {
-                let max_frame_size = get_max_frame_size(session).await?;
+                let max_frame_size = get_max_frame_size(session).await?; // FIXME: cancel safe?
                 self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)
-                    .await?
+                    ?
             }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;
@@ -359,7 +368,7 @@ where
             LinkState::Unattached
             | LinkState::Detached // May attempt to resume
             | LinkState::DetachSent => {
-                writer.send(frame).await
+                writer.send(frame).await // cancel safe
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachSent
@@ -368,7 +377,7 @@ where
                 }
             }
             LinkState::AttachReceived => {
-                writer.send(frame).await
+                writer.send(frame).await // cancel safe
                     .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
                 if incomplete_unsettled {
                     self.local_state = LinkState::IncompleteAttachExchanged
@@ -383,15 +392,18 @@ where
     }
 }
 
+/// # Cancel safety
+/// 
+/// This should cancel safe if oneshot channel is cancel safe
 pub(crate) async fn get_max_frame_size(
     control: &mpsc::Sender<SessionControl>,
 ) -> Result<usize, SendAttachErrorKind> {
     let (tx, rx) = oneshot::channel();
     control
         .send(SessionControl::GetMaxFrameSize(tx))
-        .await
+        .await // cancel safe
         .map_err(|_| SendAttachErrorKind::IllegalSessionState)?;
-    rx.await
+    rx.await // FIXME: is oneshot channel cancel safe?
         .map_err(|_| SendAttachErrorKind::IllegalSessionState)
 }
 
@@ -407,7 +419,7 @@ where
 
     /// Closing or not isn't taken care of here but outside
     #[instrument(skip_all)]
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
+    fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
         trace!(detach = ?detach);
 
         match detach.closed {
@@ -460,6 +472,9 @@ where
         }
     }
 
+    /// # Cancel safety
+    ///
+    /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
     #[instrument(skip_all)]
     async fn send_detach(
         &mut self,
@@ -479,7 +494,7 @@ where
 
                 writer
                     .send(LinkFrame::Detach(detach))
-                    .await
+                    .await // cancel safe
                     .map_err(|_| DetachError::IllegalSessionState)?;
 
                 match (&self.local_state, closed) {
@@ -638,9 +653,7 @@ impl LinkRelay<OutputHandle> {
                 output_handle,
                 ..
             } => {
-                let ret = flow_state
-                    .on_incoming_flow(flow, output_handle.clone())
-                    .await;
+                let ret = flow_state.on_incoming_flow(flow, output_handle.clone());
                 Ok(ret)
             }
         }
@@ -648,7 +661,7 @@ impl LinkRelay<OutputHandle> {
 
     /// Returns whether an echo is needed
     #[instrument(skip_all)]
-    pub(crate) async fn on_incoming_disposition(
+    pub(crate) fn on_incoming_disposition(
         &mut self,
         _role: Role, // Is a role check necessary?
         settled: bool,
@@ -671,7 +684,7 @@ impl LinkRelay<OutputHandle> {
                     // Since we are settling (ie. forgetting) this message, we don't care whether the
                     // receiving end is alive or not
                     {
-                        let mut guard = unsettled.write().await;
+                        let mut guard = unsettled.write();
                         guard
                             .as_mut()
                             .and_then(|m| m.remove(&delivery_tag))
@@ -684,7 +697,7 @@ impl LinkRelay<OutputHandle> {
                         None => false, // Probably should not assume the state is not specified
                     };
                     {
-                        let mut guard = unsettled.write().await;
+                        let mut guard = unsettled.write();
                         // Once the receiving application has finished processing the message,
                         // it indicates to the link endpoint a **terminal delivery state** that
                         // reflects the outcome of the application processing
@@ -722,11 +735,11 @@ impl LinkRelay<OutputHandle> {
             }
             LinkRelay::Receiver { unsettled, .. } => {
                 if settled {
-                    let mut guard = unsettled.write().await;
+                    let mut guard = unsettled.write();
                     // let _state = remove_from_unsettled(unsettled, &delivery_tag).await;
                     let _state = guard.as_mut().and_then(|m| m.remove(&delivery_tag));
                 } else {
-                    let mut guard = unsettled.write().await;
+                    let mut guard = unsettled.write();
                     if let Some(msg_state) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
                         *msg_state = state;
                     }
@@ -794,13 +807,14 @@ impl LinkRelay<OutputHandle> {
         }
     }
 
+    /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
     pub async fn on_incoming_detach(
         &mut self,
         detach: Detach,
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
             LinkRelay::Sender { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?;
+                tx.send(LinkFrame::Detach(detach)).await?; 
             }
             LinkRelay::Receiver { tx, .. } => {
                 tx.send(LinkFrame::Detach(detach)).await?;

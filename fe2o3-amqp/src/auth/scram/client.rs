@@ -59,10 +59,10 @@ impl ScramClient {
                 client_first_message_bare,
             } => {
                 let (client_final, server_signature) = self.scram.compute_client_final_message(
-                    &client_nonce,
+                    client_nonce,
                     &self.password,
                     server_first,
-                    &client_first_message_bare,
+                    client_first_message_bare,
                 )?;
                 self.state = ScramClientState::ClientFinalSent { server_signature };
                 Ok(client_final)

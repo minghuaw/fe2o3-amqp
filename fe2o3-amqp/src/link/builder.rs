@@ -1,13 +1,17 @@
 //! Implements the builder for a link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use fe2o3_amqp_types::{
     definitions::{Fields, ReceiverSettleMode, SenderSettleMode, SequenceNo},
     messaging::{Source, Target, TargetArchetype},
     primitives::{Symbol, ULong},
 };
-use tokio::sync::{mpsc, Notify, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::{mpsc, Notify};
 use tracing::instrument;
 
 use crate::{
@@ -620,7 +624,7 @@ where
             link,
             buffer_size,
             credit_mode,
-            processed: 0,
+            processed: AtomicU32::new(0),
             auto_accept,
             session: session.control.clone(),
             outgoing,

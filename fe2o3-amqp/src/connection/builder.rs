@@ -547,7 +547,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
             tracing::trace!(received = ?frame);
 
-            match profile.on_frame(frame, self.hostname).await? {
+            match profile.on_frame(frame, self.hostname)? {
                 Negotiation::Init(init) => {
                     let frame = sasl::Frame::Init(init);
                     tracing::trace!(sending = ?frame);

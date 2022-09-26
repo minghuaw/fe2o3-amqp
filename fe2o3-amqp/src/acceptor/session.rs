@@ -77,13 +77,12 @@ pub(crate) async fn allocate_incoming_link(
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
         .map_err(|_| AllocLinkError::IllegalSessionState)?;
-    let result = resp_rx
+    resp_rx
         .await
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state
-        .map_err(|_| AllocLinkError::IllegalSessionState)?;
-    result
+        .map_err(|_| AllocLinkError::IllegalSessionState)?
 }
 
 /// An acceptor for incoming session
@@ -148,6 +147,7 @@ impl SessionAcceptor {
     }
 
     #[cfg(not(feature = "transaction"))]
+    #[allow(clippy::too_many_arguments)]
     async fn launch_listener_session_engine<R>(
         &self,
         listener_session: ListenerSession,
@@ -171,6 +171,7 @@ impl SessionAcceptor {
     }
 
     #[cfg(feature = "transaction")]
+    #[allow(clippy::too_many_arguments)]
     async fn launch_listener_session_engine<R>(
         &self,
         listener_session: ListenerSession,
@@ -324,7 +325,7 @@ where
         };
 
         // send a begin
-        engine.session.send_begin(&mut engine.outgoing).await?;
+        engine.session.send_begin(&engine.outgoing).await?;
         Ok(engine)
     }
 }

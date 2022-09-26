@@ -424,7 +424,7 @@ where
         loop {
             let result = tokio::select! {
                 incoming = self.incoming.recv() => {
-                    let result = match incoming {
+                    match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
                             // Check local state
@@ -435,13 +435,11 @@ where
                                 },
                                 Running::Stop => Ok(Running::Stop),
                             }
-
                         }
-                    };
-                    result
+                    }
                 },
                 control = self.control.recv() => {
-                    let result = match control {
+                    match control {
                         Some(control) => {
                             self.on_control(control).await
                         },
@@ -449,11 +447,10 @@ where
                             // all Links and SessionHandle are dropped
                             Ok(Running::Stop)
                         }
-                    };
-                    result
+                    }
                 },
                 frame = self.outgoing_link_frames.recv() => {
-                    let result = match frame {
+                    match frame {
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
                             // All Links and SessionHandle are dropped
@@ -462,8 +459,7 @@ where
                             // first while the session is still waitint for remote end frame.
                             Ok(Running::Continue)
                         }
-                    };
-                    result
+                    }
                 }
             };
 

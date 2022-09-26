@@ -141,6 +141,10 @@ impl<R> SessionHandle<R> {
     }
 }
 
+/// # Cancel safety
+/// 
+/// It internally `.await` on a send on `tokio::mpsc::Sender` and on a `oneshot::Receiver`. 
+/// This should be cancel safe
 pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,
     link_name: String,
@@ -154,14 +158,14 @@ pub(crate) async fn allocate_link(
             link_relay,
             responder,
         })
-        .await
+        .await // cancel safe
         // The `SendError` could only happen when the receiving half is
         // dropped, meaning the `SessionEngine::event_loop` has stopped.
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
         .map_err(|_| AllocLinkError::IllegalSessionState)?;
     resp_rx
-        .await
+        .await // FIXME: Is oneshot channel cancel safe?
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state
@@ -491,14 +495,12 @@ impl endpoint::Session for Session {
                 let key = (disposition.role.clone(), delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&key) {
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
-                        let _echo = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                disposition.settled,
-                                disposition.state.clone(),
-                                delivery_tag,
-                            )
-                            .await;
+                        let _echo = link_handle.on_incoming_disposition(
+                            disposition.role.clone(),
+                            disposition.settled,
+                            disposition.state.clone(),
+                            delivery_tag,
+                        );
                     }
                 }
             }
@@ -512,14 +514,12 @@ impl endpoint::Session for Session {
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(handle) {
                         // In mode Second, the receiver will first send a non-settled disposition,
                         // and wait for sender's settled disposition
-                        let echo = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                disposition.settled,
-                                disposition.state.clone(),
-                                delivery_tag.clone(),
-                            )
-                            .await;
+                        let echo = link_handle.on_incoming_disposition(
+                            disposition.role.clone(),
+                            disposition.settled,
+                            disposition.state.clone(),
+                            delivery_tag.clone(),
+                        );
 
                         if echo {
                             delivery_ids.push(delivery_id);

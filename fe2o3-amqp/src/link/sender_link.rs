@@ -33,7 +33,7 @@ where
 
         let flow = match (delivery_count, available) {
             (Some(delivery_count), Some(available)) => {
-                let mut writer = self.flow_state.as_ref().lock.write().await;
+                let mut writer = self.flow_state.as_ref().lock.write();
                 writer.delivery_count = delivery_count;
                 writer.available = available;
                 LinkFlow {
@@ -50,7 +50,7 @@ where
                 }
             }
             (Some(delivery_count), None) => {
-                let mut writer = self.flow_state.as_ref().lock.write().await;
+                let mut writer = self.flow_state.as_ref().lock.write();
                 writer.delivery_count = delivery_count;
                 LinkFlow {
                     handle,
@@ -66,7 +66,7 @@ where
                 }
             }
             (None, Some(available)) => {
-                let mut writer = self.flow_state.as_ref().lock.write().await;
+                let mut writer = self.flow_state.as_ref().lock.write();
                 writer.available = available;
                 LinkFlow {
                     handle,
@@ -82,7 +82,7 @@ where
                 }
             }
             (None, None) => {
-                let reader = self.flow_state.as_ref().lock.read().await;
+                let reader = self.flow_state.as_ref().lock.read();
                 LinkFlow {
                     handle,
                     delivery_count: Some(reader.delivery_count),
@@ -137,7 +137,7 @@ where
                         // probably not responsive enough
                         let closed = detach.closed;
                         self.send_detach(writer, closed, None).await?;
-                        let result = self.on_incoming_detach(detach).await;
+                        let result = self.on_incoming_detach(detach);
 
                         match (result, closed) {
                             (Ok(_), true) => return Err(Self::TransferError::RemoteClosed),
@@ -256,7 +256,7 @@ where
                 let (tx, rx) = oneshot::channel();
                 let unsettled = UnsettledMessage::new(payload_copy, tx);
                 {
-                    let mut guard = self.unsettled.write().await;
+                    let mut guard = self.unsettled.write();
                     guard
                         .get_or_insert(OrderedMap::new())
                         .insert(delivery_tag.clone(), unsettled);
@@ -284,7 +284,7 @@ where
         }
 
         {
-            let mut lock = self.unsettled.write().await;
+            let mut lock = self.unsettled.write();
             if settled {
                 if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
                     let _ = msg.settle();
@@ -313,16 +313,19 @@ where
         let mut last = None;
 
         ids_and_tags.sort_by(|left, right| left.0.cmp(&right.0));
-        let mut lock = self.unsettled.write().await;
 
         // Find continuous ranges
         for (delivery_id, delivery_tag) in ids_and_tags {
-            if settled {
-                if let Some(msg) = lock.as_mut().and_then(|m| m.remove(&delivery_tag)) {
-                    let _ = msg.settle();
+            {
+                // Make sure there is not .await point during the lifetime of the guard
+                let mut guard = self.unsettled.write();
+                if settled {
+                    if let Some(msg) = guard.as_mut().and_then(|m| m.remove(&delivery_tag)) {
+                        let _ = msg.settle();
+                    }
+                } else if let Some(msg) = guard.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
+                    *msg.state_mut() = Some(state.clone());
                 }
-            } else if let Some(msg) = lock.as_mut().and_then(|m| m.get_mut(&delivery_tag)) {
-                *msg.state_mut() = Some(state.clone());
             }
 
             match (first, last) {
@@ -414,11 +417,12 @@ async fn send_disposition(
 }
 
 impl<T> SenderLink<T> {
-    async fn handle_unsettled_in_attach(
+    #[allow(clippy::needless_collect)]
+    fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
     ) -> Result<SenderAttachExchange, SenderAttachError> {
-        let mut guard = self.unsettled.write().await;
+        let mut guard = self.unsettled.write();
         let v: Vec<(DeliveryTag, ResumingDelivery)> = match (guard.take(), remote_unsettled) {
             (None, None) => return Ok(SenderAttachExchange::Complete),
             (None, Some(remote_map)) => {
@@ -486,7 +490,7 @@ where
     type AttachExchange = SenderAttachExchange;
     type AttachError = SenderAttachError;
 
-    async fn on_incoming_attach(
+    fn on_incoming_attach(
         &mut self,
         remote_attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError> {
@@ -556,7 +560,7 @@ where
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         self.handle_unsettled_in_attach(remote_attach.unsettled)
-            .await
+            
     }
 
     async fn send_attach(
@@ -651,7 +655,7 @@ where
             _ => return Err(SenderAttachError::NonAttachFrameReceived),
         };
 
-        self.on_incoming_attach(remote_attach).await
+        self.on_incoming_attach(remote_attach)
     }
 
     #[instrument(skip_all)]
@@ -723,7 +727,7 @@ where
             match link.send_detach(writer, true, Some(err)).await {
                 Ok(_) => match reader.recv().await {
                     Some(LinkFrame::Detach(remote_detach)) => {
-                        let _ = link.on_incoming_detach(remote_detach).await; // FIXME: hadnle detach errors?
+                        let _ = link.on_incoming_detach(remote_detach); // FIXME: hadnle detach errors?
                         attach_error
                     }
                     Some(_) => SenderAttachError::NonAttachFrameReceived,
@@ -751,7 +755,7 @@ where
 {
     match reader.recv().await {
         Some(LinkFrame::Detach(remote_detach)) => {
-            match link.on_incoming_detach(remote_detach).await {
+            match link.on_incoming_detach(remote_detach) {
                 Ok(_) => err,
                 Err(detach_error) => detach_error.try_into().unwrap_or(err),
             }

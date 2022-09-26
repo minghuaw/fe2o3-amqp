@@ -13,8 +13,12 @@ use tokio::sync::mpsc;
 
 use crate::{
     control::SessionControl,
-    link::{delivery::Delivery, state::LinkState, LinkFrame},
-    util::{AsByteIterator, DeliveryInfo, IntoReader},
+    link::{
+        delivery::{Delivery, DeliveryInfo},
+        state::LinkState,
+        LinkFrame,
+    },
+    util::{AsByteIterator, IntoReader},
     Payload,
 };
 
@@ -24,7 +28,7 @@ use super::{OutputHandle, Settlement};
 pub(crate) trait LinkDetach {
     type DetachError: Send;
 
-    async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
+    fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError>;
 
     async fn send_detach(
         &mut self,
@@ -39,7 +43,7 @@ pub(crate) trait LinkAttach {
     type AttachExchange: Send;
     type AttachError: Send;
 
-    async fn on_incoming_attach(
+    fn on_incoming_attach(
         &mut self,
         attach: Attach,
     ) -> Result<Self::AttachExchange, Self::AttachError>;
@@ -165,7 +169,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     /// Set and send flow state
     async fn send_flow(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         link_credit: Option<u32>,
         drain: Option<bool>,
@@ -173,14 +177,14 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     ) -> Result<(), Self::FlowError>;
 
     /// Handles delivery state that is carried in a Transfer
-    async fn on_transfer_state(
+    fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), Self::TransferError>;
 
-    async fn on_incomplete_transfer(
+    fn on_incomplete_transfer(
         &mut self,
         delivery_tag: DeliveryTag,
         section_number: u32,
@@ -189,7 +193,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
 
     // More than one transfer frames should be hanlded by the
     // `Receiver`
-    async fn on_complete_transfer<'a, T, P>(
+    fn on_complete_transfer<'a, T, P>(
         &'a mut self,
         transfer: Transfer,
         payload: P,
@@ -201,7 +205,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
 
     async fn dispose(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_info: DeliveryInfo,
         settled: Option<bool>,
@@ -210,7 +214,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
     ) -> Result<(), Self::DispositionError>;
 
     async fn dispose_all(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,

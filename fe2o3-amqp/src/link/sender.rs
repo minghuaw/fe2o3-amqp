@@ -384,7 +384,7 @@ impl Sender {
         match recv_remote_detach(&mut self.inner).await {
             Ok(detach) => {
                 let closed = detach.closed;
-                match self.inner.link.on_incoming_detach(detach).await {
+                match self.inner.link.on_incoming_detach(detach) {
                     Ok(_) => {
                         if closed {
                             DetachError::ClosedByRemote
@@ -804,7 +804,7 @@ impl DetachedSender {
                         .link
                         .send_attach(&self.inner.outgoing, &self.inner.session, false)
                         .await?;
-                    self.inner.link.on_incoming_attach(remote_attach).await?
+                    self.inner.link.on_incoming_attach(remote_attach)?
                 }
                 None => self.inner.exchange_attach(false).await?,
             };

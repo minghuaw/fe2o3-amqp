@@ -475,18 +475,16 @@ where
                     result
                 },
                 control = self.control.recv() => {
-                    let result = match control {
+                    match control {
                         Some(control) => self.on_control(control).await,
                         None => {
                             // All control channel are dropped (which is impossible)
                             Ok(Running::Stop)
                         }
-                    };
-
-                    result
+                    }
                 },
                 frame = self.outgoing_session_frames.recv() => {
-                    let result = match frame {
+                    match frame {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
                         None => {
                             // Upon closing, the outgoing_session_frames channel will be closed
@@ -494,9 +492,7 @@ where
                             // close frame.
                             Ok(Running::Continue)
                         }
-                    };
-
-                    result
+                    }
                 }
             };
 

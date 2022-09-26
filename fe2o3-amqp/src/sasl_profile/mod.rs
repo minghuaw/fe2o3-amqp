@@ -155,7 +155,7 @@ impl SaslProfile {
 
     /// How a SASL profile should respond to a SASL frame
     #[cfg_attr(not(feature = "scram"), allow(unused_variables))]
-    pub(crate) async fn on_frame(
+    pub(crate) fn on_frame(
         &mut self,
         frame: sasl::Frame,
         hostname: Option<&str>,
@@ -188,7 +188,7 @@ impl SaslProfile {
                 | SaslProfile::ScramSha256(SaslScramSha256 { client })
                 | SaslProfile::ScramSha512(SaslScramSha512 { client }) => {
                     let server_first = std::str::from_utf8(&challenge.challenge)
-                        .map_err(|e| ScramErrorKind::Utf8Error(e))?;
+                        .map_err(ScramErrorKind::Utf8Error)?;
                     let client_final = client.compute_client_final_message(server_first)?;
                     let response = SaslResponse {
                         response: Binary::from(client_final),
