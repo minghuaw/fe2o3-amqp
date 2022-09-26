@@ -107,7 +107,7 @@ impl ScramVersion {
         bytes.put_slice(USERNAME_KEY.as_bytes());
         bytes.put_slice(username);
 
-        bytes.put_u8(',' as u8);
+        bytes.put_u8(b',');
 
         bytes.put_slice(NONCE_KEY.as_bytes());
         bytes.put_slice(nonce);
@@ -241,7 +241,7 @@ impl ScramVersion {
         let parts: Vec<&str> = server_final.split(',').collect();
 
         let signature = parts
-            .get(0)
+            .first()
             .and_then(|signature| signature.strip_prefix(VERIFIER_KEY))
             .ok_or(ScramErrorKind::ServerSignatureMismatch)?;
         let signature_bytes = base64::decode(signature)?;
@@ -271,7 +271,7 @@ impl ScramVersion {
         let parts: Vec<&str> = client_first_message_bare.split(',').collect();
 
         let username = parts
-            .get(0)
+            .first()
             .and_then(|s| s.strip_prefix(USERNAME_KEY))
             .ok_or(ServerScramErrorKind::CannotParseUsername)?;
         let client_nonce = parts
@@ -322,8 +322,8 @@ impl ScramVersion {
     where
         E: From<stringprep::Error> + From<InvalidLength>,
     {
-        let server_key = self.hmac(&salted_password, b"Server Key")?;
-        let server_signature = self.hmac(&server_key, &auth_message)?;
+        let server_key = self.hmac(salted_password, b"Server Key")?;
+        let server_signature = self.hmac(&server_key, auth_message)?;
         Ok(server_signature)
     }
 
@@ -340,7 +340,7 @@ impl ScramVersion {
         let parts: Vec<&str> = client_final.split(',').collect();
 
         let channel_binding = parts
-            .get(0)
+            .first()
             .and_then(|s| s.strip_prefix(CHANNEL_BINDING_KEY))
             .ok_or(ServerScramErrorKind::CannotParseClientFinalMessage)?;
         let channel_binding = base64::decode(channel_binding)?;
@@ -376,7 +376,7 @@ impl ScramVersion {
         // ClientProof := ClientKey XOR ClientSignature
         // ClientSignature := HMAC(StoredKey, AuthMessage)
         // Inverse of XOR is XOR
-        let client_signature = self.hmac(&stored_password.stored_key, &auth_message)?;
+        let client_signature = self.hmac(stored_password.stored_key, &auth_message)?;
         let client_proof = base64::decode(client_proof)?;
         let client_key = xor(&client_proof, &client_signature)?;
         // StoredKey := H(ClientKey)
@@ -385,7 +385,7 @@ impl ScramVersion {
             return Err(ServerScramErrorKind::AuthenticationFailed);
         }
 
-        let server_signature_bytes = self.hmac(&stored_password.server_key, &auth_message)?;
+        let server_signature_bytes = self.hmac(stored_password.server_key, &auth_message)?;
         let server_signature = base64::encode(server_signature_bytes);
 
         // Form server final message
@@ -403,7 +403,7 @@ impl ScramVersion {
     where
         E: From<InvalidLength> + From<XorLengthMismatch>,
     {
-        let client_key = self.hmac(&salted_password, b"Client Key")?;
+        let client_key = self.hmac(salted_password, b"Client Key")?;
         let stored_key = self.h(&client_key);
         let client_signature = self.hmac(&stored_key, auth_message)?;
         xor(&client_key, &client_signature).map_err(Into::into)
