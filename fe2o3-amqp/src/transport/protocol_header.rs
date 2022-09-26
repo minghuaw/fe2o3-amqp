@@ -13,7 +13,7 @@ use super::error::NegotiationError;
 const PROTOCOL_HEADER_PREFIX: &[u8; 4] = b"AMQP";
 
 /// Protocol header
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProtocolHeader {
     /// Protocol ID
     pub id: ProtocolId,
@@ -180,7 +180,7 @@ impl TryFrom<Bytes> for ProtocolHeader {
 }
 
 /// Protocol ID
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProtocolId {
     /// AMQP
     Amqp = 0x0,

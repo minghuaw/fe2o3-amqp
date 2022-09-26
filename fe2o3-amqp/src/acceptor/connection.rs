@@ -254,7 +254,7 @@ where
 
         let mut sasl_acceptor = self.sasl_acceptor.clone();
         loop {
-            let frame = match transport.next().await.ok_or(OpenError::Io(io::Error::new(
+            let frame = match transport.next().await.ok_or_else(|| OpenError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "Expecting SASL frames",
             )))?? {

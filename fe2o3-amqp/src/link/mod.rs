@@ -255,7 +255,7 @@ where
         }
     }
 
-    async fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
+    fn as_complete_attach(&self, handle: OutputHandle, is_reattaching: bool) -> Attach {
         self.as_attach_inner(handle, is_reattaching, 1)
     }
 
@@ -300,7 +300,7 @@ where
         }
     }
 
-    async fn as_maybe_incomplete_attach(
+    fn as_maybe_incomplete_attach(
         &self,
         max_frame_size: usize,
         handle: OutputHandle,
@@ -351,11 +351,11 @@ where
         };
 
         let attach = match unsettled_map_len {
-            Some(0) | None => self.as_complete_attach(handle, is_reattaching).await,
+            Some(0) | None => self.as_complete_attach(handle, is_reattaching),
             Some(_) => {
                 let max_frame_size = get_max_frame_size(session).await?;
                 self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)
-                    .await?
+                    ?
             }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;
