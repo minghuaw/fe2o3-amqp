@@ -417,6 +417,7 @@ async fn send_disposition(
 }
 
 impl<T> SenderLink<T> {
+    #[allow(clippy::needless_collect)]
     fn handle_unsettled_in_attach(
         &mut self,
         remote_unsettled: Option<OrderedMap<DeliveryTag, Option<DeliveryState>>>,
