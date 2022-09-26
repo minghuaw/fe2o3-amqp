@@ -124,7 +124,7 @@ where
             }
             SessionFrameBody::Disposition(disposition) => {
                 if let Some(dispositions) =
-                    self.session.on_incoming_disposition(disposition).await?
+                    self.session.on_incoming_disposition(disposition)?
                 {
                     for disposition in dispositions {
                         let disposition = self.session.on_outgoing_disposition(disposition)?;
@@ -141,7 +141,7 @@ where
                 self.session.on_incoming_detach(detach).await?;
             }
             SessionFrameBody::End(end) => {
-                let result = self.session.on_incoming_end(channel, end).await;
+                let result = self.session.on_incoming_end(channel, end);
                 if matches!(self.session.local_state(), SessionState::EndReceived) {
                     // if control is closing, finish sending all buffered messages before closing
                     self.outgoing_link_frames.close();
@@ -363,7 +363,7 @@ where
                     .await
                     .map_err(|_| SessionInnerError::IllegalConnectionState)?;
                 let (channel, end) = self.wait_for_remote_end(false).await?;
-                self.session.on_incoming_end(channel, end).await?;
+                self.session.on_incoming_end(channel, end)?;
             }
             SessionState::EndSent => {
                 self.wait_for_remote_end(false).await?;

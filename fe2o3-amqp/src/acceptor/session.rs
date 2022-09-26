@@ -449,23 +449,23 @@ impl endpoint::Session for ListenerSession {
         self.session.on_incoming_transfer(transfer, payload).await
     }
 
-    async fn on_incoming_disposition(
+    fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
-        self.session.on_incoming_disposition(disposition).await
+        self.session.on_incoming_disposition(disposition)
     }
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
         self.session.on_incoming_detach(detach).await
     }
 
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
     ) -> Result<(), Self::EndError> {
-        self.session.on_incoming_end(channel, end).await
+        self.session.on_incoming_end(channel, end)
     }
 
     // Handling SessionFrames

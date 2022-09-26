@@ -60,14 +60,14 @@ pub(crate) trait Session {
     ) -> Result<Option<Disposition>, Self::Error>;
 
     /// An `Ok(Some(Disposition))` means an immediate disposition should be sent back
-    async fn on_incoming_disposition(
+    fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error>;
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
 
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,

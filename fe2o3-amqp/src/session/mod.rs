@@ -425,17 +425,6 @@ impl endpoint::Session for Session {
             let input_handle = InputHandle::from(link_flow.handle.clone());
             match self.link_by_input_handle.get_mut(&input_handle) {
                 Some(link_relay) => {
-                    // if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await? {
-                    //     self.control
-                    //         .send(SessionControl::LinkFlow(echo_flow))
-                    //         .await
-                    //         // Sending control to self. This will only give an error if the receiving
-                    //         // half is dropped. An error would thus indicate that the event loop
-                    //         // has stopped, so it could be considered illegal state.
-                    //         //
-                    //         // If the event loop has stopped, this should not be executed at all
-                    //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
-                    // }
                     return link_relay
                         .on_incoming_flow(link_flow)
                         .await
@@ -478,7 +467,7 @@ impl endpoint::Session for Session {
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_disposition(
+    fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
@@ -566,7 +555,7 @@ impl endpoint::Session for Session {
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         _channel: IncomingChannel,
         end: End,

@@ -249,7 +249,7 @@ where
                 };
             }
             FrameBody::Begin(begin) => {
-                self.connection.forward_incoming_begin(channel, begin).await?;
+                self.connection.on_incoming_begin(channel, begin).await?;
             }
             FrameBody::Attach(attach) => {
                 let sframe = SessionFrame::new(channel, SessionFrameBody::Attach(attach));
@@ -281,7 +281,7 @@ where
                 self.forward_to_session(channel, sframe).await?;
             }
             FrameBody::End(end) => {
-                self.connection.forward_incoming_end(channel, end).await?;
+                self.connection.on_incoming_end(channel, end).await?;
             }
             FrameBody::Close(close) => {
                 let result = self.connection.on_incoming_close(channel, close);

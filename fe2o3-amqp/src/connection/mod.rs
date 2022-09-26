@@ -548,7 +548,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Begin frame
-    async fn forward_incoming_begin(
+    async fn on_incoming_begin(
         &mut self,
         channel: IncomingChannel,
         begin: Begin,
@@ -573,7 +573,7 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote End frame
-    async fn forward_incoming_end(
+    async fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
