@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::Value,
+    primitives::{Value, OrderedMap},
 };
 
 use crate::{
@@ -59,7 +59,7 @@ pub struct QueryRequest {
 }
 
 impl MessageSerializer for QueryRequest {
-    type Body = BTreeMap<String, Vec<String>>;
+    type Body = OrderedMap<String, Vec<String>>;
 
     fn into_message(self) -> Message<Self::Body> {
         let mut builder = ApplicationProperties::builder();
@@ -75,7 +75,7 @@ impl MessageSerializer for QueryRequest {
         }
         let application_properties = builder.build();
 
-        let mut map = BTreeMap::new();
+        let mut map = OrderedMap::new();
         map.insert(String::from("attribute_names"), self.attribute_names);
 
         Message::builder()
@@ -116,10 +116,10 @@ impl QueryResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, Vec<Value>>> for QueryResponse {
+impl MessageDeserializer<OrderedMap<String, Vec<Value>>> for QueryResponse {
     type Error = Error;
 
-    fn from_message(mut message: Message<BTreeMap<String, Vec<Value>>>) -> Result<Self> {
+    fn from_message(mut message: Message<OrderedMap<String, Vec<Value>>>) -> Result<Self> {
         let count = message
             .application_properties
             .as_mut()

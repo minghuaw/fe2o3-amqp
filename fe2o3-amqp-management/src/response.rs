@@ -29,7 +29,7 @@ impl ResponseMessageProperties {
         let status_code = match message
             .application_properties
             .as_mut()
-            .and_then(|ap| ap.remove("statusCode"))
+            .and_then(|ap| ap.remove("status-code"))
         {
             Some(value) => StatusCode::try_from(value).map_err(|_| Error::DecodeError)?,
             None => return Err(Error::StatusCodeNotFound),
@@ -38,7 +38,7 @@ impl ResponseMessageProperties {
         let status_description: Option<String> = message
             .application_properties
             .as_mut()
-            .and_then(|ap| ap.remove("statusDescription"))
+            .and_then(|ap| ap.remove("status-description"))
             .map(|value| String::try_from(value).map_err(|_| Error::DecodeError))
             .transpose()?;
 
@@ -50,6 +50,7 @@ impl ResponseMessageProperties {
     }
 }
 
+#[derive(Debug)]
 pub struct Response<R> {
     pub correlation_id: MessageId,
     pub status_code: StatusCode,

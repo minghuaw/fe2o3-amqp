@@ -79,7 +79,7 @@ impl MgmtClient {
         &mut self,
         operation: impl MessageSerializer,
         entity_type: impl Into<String>,
-        locales: Option<impl Into<String>>,
+        locales: impl Into<Option<String>>,
     ) -> Result<Outcome, SendError> {
         let mut message = operation.into_message();
         let application_properties = message
@@ -89,7 +89,7 @@ impl MgmtClient {
             String::from("type"),
             SimpleValue::String(entity_type.into()),
         );
-        if let Some(locales) = locales {
+        if let Some(locales) = locales.into() {
             application_properties
                 .insert(String::from("locales"), SimpleValue::String(locales.into()));
         }
@@ -107,12 +107,13 @@ impl MgmtClient {
     where
         O: MessageDeserializer<T>,
         O::Error: Into<Error>,
-        for<'de> T: serde::de::Deserialize<'de> + Send,
+        for<'de> T: serde::de::Deserialize<'de> + std::fmt::Debug + Send,
     {
         let delivery: Delivery<T> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;
 
         let mut message = delivery.into_message();
+        println!("{:?}", message);
         let properties = ResponseMessageProperties::try_take_from_message(&mut message)?;
         let operation = MessageDeserializer::from_message(message).map_err(Into::into)?;
 

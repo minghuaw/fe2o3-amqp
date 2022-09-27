@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
+use fe2o3_amqp_types::{messaging::{AmqpValue, ApplicationProperties, Body, Message}, primitives::OrderedMap};
 
 use crate::{
     error::{Error, Result},
@@ -48,17 +48,17 @@ impl MessageSerializer for GetAttributesRequest {
 /// MUST include every attribute name defined by Manageable Entity Types that it extends, either
 /// directly or indirectly.
 pub struct GetAttributesResponse {
-    pub attributes: BTreeMap<String, Vec<String>>,
+    pub attributes: OrderedMap<String, Vec<String>>,
 }
 
 impl GetAttributesResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, Vec<String>>> for GetAttributesResponse {
+impl MessageDeserializer<OrderedMap<String, Vec<String>>> for GetAttributesResponse {
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, Vec<String>>>) -> Result<Self> {
+    fn from_message(message: Message<OrderedMap<String, Vec<String>>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(attributes)) => Ok(Self { attributes }),
             _ => Err(Error::DecodeError),

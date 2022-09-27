@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::Value,
+    primitives::{Value, OrderedMap},
 };
 
 use crate::{
@@ -57,11 +57,11 @@ pub struct CreateRequest {
     /// • A string which can be parsed as an object according to [RFC7159] will be converted into a
     /// map (with the values type-converted into map values as necessary according to the same
     /// rules) if so required.
-    pub body: BTreeMap<String, Value>,
+    pub body: OrderedMap<String, Value>,
 }
 
 impl MessageSerializer for CreateRequest {
-    type Body = BTreeMap<String, Value>;
+    type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
         Message::builder()
@@ -88,21 +88,22 @@ impl MessageSerializer for CreateRequest {
 /// applicable for the entity being created, or invalid values for a given attribute, MUST result in
 /// a failure response with a statusCode of 400 (Bad Request).
 pub struct CreateResponse {
-    pub entity_attributes: BTreeMap<String, Value>,
+    pub entity_attributes: OrderedMap<String, Value>,
 }
 
 impl CreateResponse {
     pub const STATUS_CODE: u16 = 201;
 }
 
-impl MessageDeserializer<BTreeMap<String, Value>> for CreateResponse {
+impl MessageDeserializer<OrderedMap<String, Value>> for CreateResponse {
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+    fn from_message(message: Message<OrderedMap<String, Value>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(map)) => Ok(Self {
                 entity_attributes: map,
             }),
+            Body::Empty => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
             _ => Err(Error::DecodeError),
         }
     }

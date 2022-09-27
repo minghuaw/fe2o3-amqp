@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::{borrow::Cow};
 
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::Value,
+    primitives::{Value, OrderedMap},
 };
 
 use crate::{
@@ -18,26 +18,45 @@ pub trait Read {
 
 /// Retrieve the attributes of a Manageable Entity.
 ///
+/// Exactly one of name or identity MUST be provided
+/// 
 /// Body: No information is carried in the message body therefore any message body is valid and MUST
 /// be ignored
-pub struct ReadRequest {
+#[derive(Debug)]
+pub enum ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub name: String,
+    Name(Cow<'a, str>),
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    pub identity: String,
+    Identity(Cow<'a, str>),
 }
 
-impl MessageSerializer for ReadRequest {
+impl<'a> ReadRequest<'a> {
+    /// The name of the Manageable Entity to be managed. This is case-sensitive.
+    pub fn name(value: impl Into<Cow<'static, str>>) -> Self {
+        Self::Name(value.into())
+    }
+
+    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
+    pub fn identity(value: impl Into<Cow<'static, str>>) -> Self {
+        Self::Identity(value.into())
+    }
+}
+
+impl<'a> MessageSerializer for ReadRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
+        let (key, value) = match self {
+            ReadRequest::Name(value) => ("name", value),
+            ReadRequest::Identity(value) => ("identity", value),
+        };
+
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, READ)
-                    .insert("name", self.name)
-                    .insert("identity", self.identity)
+                    .insert(key, value.to_string())
                     .build(),
             )
             .value(())
@@ -45,22 +64,24 @@ impl MessageSerializer for ReadRequest {
     }
 }
 
+#[derive(Debug)]
 pub struct ReadResponse {
-    pub entity_attributes: BTreeMap<String, Value>,
+    pub entity_attributes: OrderedMap<String, Value>,
 }
 
 impl ReadResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, Value>> for ReadResponse {
+impl MessageDeserializer<OrderedMap<String, Value>> for ReadResponse {
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+    fn from_message(message: Message<OrderedMap<String, Value>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(map)) => Ok(Self {
                 entity_attributes: map,
             }),
+            Body::Empty => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
             _ => Err(Error::DecodeError),
         }
     }

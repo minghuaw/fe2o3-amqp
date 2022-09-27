@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
+use fe2o3_amqp_types::{messaging::{AmqpValue, ApplicationProperties, Body, Message}, primitives::OrderedMap};
 
 use crate::{
     error::{Error, Result},
@@ -51,20 +51,20 @@ impl MessageSerializer for GetOperationsRequest {
 /// Manageable Entity Type, the set of operations returned MUST include every operation supported by
 /// Manageable Entity Types that it extends, either directly or indirectly.
 pub struct GetOperationsResponse {
-    pub operations: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    pub operations: OrderedMap<String, OrderedMap<String, Vec<String>>>,
 }
 
 impl GetOperationsResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, BTreeMap<String, Vec<String>>>>
+impl MessageDeserializer<OrderedMap<String, OrderedMap<String, Vec<String>>>>
     for GetOperationsResponse
 {
     type Error = Error;
 
     fn from_message(
-        message: Message<BTreeMap<String, BTreeMap<String, Vec<String>>>>,
+        message: Message<OrderedMap<String, OrderedMap<String, Vec<String>>>>,
     ) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(operations)) => Ok(Self { operations }),

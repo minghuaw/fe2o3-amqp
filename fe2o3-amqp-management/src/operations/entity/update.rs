@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::Value,
+    primitives::{Value, OrderedMap},
 };
 
 use crate::{
@@ -41,11 +41,11 @@ pub struct UpdateRequest {
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
     pub identity: String,
 
-    pub body: BTreeMap<String, Value>,
+    pub body: OrderedMap<String, Value>,
 }
 
 impl MessageSerializer for UpdateRequest {
-    type Body = BTreeMap<String, Value>;
+    type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
         Message::builder()
@@ -70,21 +70,22 @@ impl MessageSerializer for UpdateRequest {
 /// type conversion as above), MUST result in a failure response with a statusCode of 400 (Bad
 /// Request).
 pub struct UpdateResponse {
-    pub entity_attributes: BTreeMap<String, Value>,
+    pub entity_attributes: OrderedMap<String, Value>,
 }
 
 impl UpdateResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, Value>> for UpdateResponse {
+impl MessageDeserializer<OrderedMap<String, Value>> for UpdateResponse {
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+    fn from_message(message: Message<OrderedMap<String, Value>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(map)) => Ok(Self {
                 entity_attributes: map,
             }),
+            Body::Empty => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
             _ => Err(Error::DecodeError),
         }
     }

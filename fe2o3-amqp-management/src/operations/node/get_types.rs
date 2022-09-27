@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
+use fe2o3_amqp_types::{messaging::{AmqpValue, ApplicationProperties, Body, Message}, primitives::OrderedMap};
 
 use crate::{
     error::{Error, Result},
@@ -39,17 +39,17 @@ impl MessageSerializer for GetTypesRequest {
 }
 
 pub struct GetTypesResponse {
-    pub types: BTreeMap<String, Vec<String>>,
+    pub types: OrderedMap<String, Vec<String>>,
 }
 
 impl GetTypesResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<BTreeMap<String, Vec<String>>> for GetTypesResponse {
+impl MessageDeserializer<OrderedMap<String, Vec<String>>> for GetTypesResponse {
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, Vec<String>>>) -> Result<Self> {
+    fn from_message(message: Message<OrderedMap<String, Vec<String>>>) -> Result<Self> {
         match message.body {
             Body::Value(AmqpValue(types)) => Ok(Self { types }),
             _ => Err(Error::DecodeError),

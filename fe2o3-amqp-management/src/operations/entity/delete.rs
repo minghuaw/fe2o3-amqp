@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Message},
-    primitives::Value,
+    primitives::{Value, OrderedMap},
 };
 
 use crate::{
@@ -16,11 +16,11 @@ pub trait Delete {
     fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
 }
 
-pub struct EmptyBTreeMap(BTreeMap<String, Value>);
+pub struct EmptyMap(OrderedMap<String, Value>);
 
-impl EmptyBTreeMap {
+impl EmptyMap {
     pub fn new() -> Self {
-        Self(BTreeMap::new())
+        Self(OrderedMap::with_capacity(0))
     }
 }
 
@@ -58,24 +58,24 @@ impl MessageSerializer for DeleteRequest {
 /// The body of the message MUST consist of an amqp-value section containing a map with zero
 /// entries. If the request was successful then the statusCode MUST be 204 (No Content).
 pub struct DeleteResponse {
-    pub empty_map: EmptyBTreeMap,
+    pub empty_map: EmptyMap,
 }
 
 impl DeleteResponse {
     pub const STATUS_CODE: u16 = 204;
 }
 
-impl MessageDeserializer<BTreeMap<String, Value>> for DeleteResponse {
+impl MessageDeserializer<OrderedMap<String, Value>> for DeleteResponse {
     type Error = Error;
 
-    fn from_message(message: Message<BTreeMap<String, Value>>) -> Result<Self> {
+    fn from_message(message: Message<OrderedMap<String, Value>>) -> Result<Self> {
         match message.body {
             fe2o3_amqp_types::messaging::Body::Value(AmqpValue(map)) => {
                 if map.len() > 0 {
                     Err(Error::DecodeError)
                 } else {
                     Ok(Self {
-                        empty_map: EmptyBTreeMap::new(),
+                        empty_map: EmptyMap::new(),
                     })
                 }
             }
