@@ -24,7 +24,6 @@ async fn main() {
     let mut connection = Connection::builder()
         .container_id("rust-sender-connection-1")
         .alt_tls_establishment(true) // ServiceBus uses alternative TLS establishement
-        .hostname(&hostname[..])
         .sasl_profile(SaslProfile::Plain {
             username: sa_key_name,
             password: sa_key_value,
