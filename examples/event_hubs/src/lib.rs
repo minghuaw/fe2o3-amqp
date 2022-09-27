@@ -48,6 +48,7 @@ pub async fn get_event_hub_partitions(
         .accepted_or(anyhow!("request not accepted"))?;
 
     let response: Delivery<BTreeMap<String, Value>> = receiver.recv().await?;
+    println!("{:?}", response);
     receiver.accept(&response).await?;
 
     let mut response = response.try_into_value()?;

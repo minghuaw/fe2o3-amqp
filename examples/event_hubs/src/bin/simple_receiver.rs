@@ -33,6 +33,7 @@ async fn main() {
     let partitions = get_event_hub_partitions(&mut connection, &event_hub_name)
         .await
         .unwrap();
+    println!("{:?}", partitions);
 
     let mut session = Session::begin(&mut connection).await.unwrap();
 
