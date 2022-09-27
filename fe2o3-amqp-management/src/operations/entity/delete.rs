@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Message},
-    primitives::{Value, OrderedMap},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{

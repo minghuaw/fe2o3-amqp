@@ -1,8 +1,8 @@
-use std::{borrow::Cow};
+use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::{Value, OrderedMap},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{
@@ -19,7 +19,7 @@ pub trait Read {
 /// Retrieve the attributes of a Manageable Entity.
 ///
 /// Exactly one of name or identity MUST be provided
-/// 
+///
 /// Body: No information is carried in the message body therefore any message body is valid and MUST
 /// be ignored
 #[derive(Debug)]
@@ -81,7 +81,9 @@ impl MessageDeserializer<OrderedMap<String, Value>> for ReadResponse {
             Body::Value(AmqpValue(map)) => Ok(Self {
                 entity_attributes: map,
             }),
-            Body::Empty => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
+            Body::Empty => Ok(Self {
+                entity_attributes: OrderedMap::with_capacity(0),
+            }),
             _ => Err(Error::DecodeError),
         }
     }

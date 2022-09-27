@@ -18,11 +18,9 @@
 //! in the same order. Thus, if there are no changes to the set of entities that match the query
 //! then consistency MUST be maintained between requests for successive pages.
 
-use std::collections::BTreeMap;
-
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::{Value, OrderedMap},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{

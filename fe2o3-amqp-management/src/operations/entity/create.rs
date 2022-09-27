@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
-    primitives::{Value, OrderedMap},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{
@@ -103,7 +101,9 @@ impl MessageDeserializer<OrderedMap<String, Value>> for CreateResponse {
             Body::Value(AmqpValue(map)) => Ok(Self {
                 entity_attributes: map,
             }),
-            Body::Empty => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
+            Body::Empty => Ok(Self {
+                entity_attributes: OrderedMap::with_capacity(0),
+            }),
             _ => Err(Error::DecodeError),
         }
     }
