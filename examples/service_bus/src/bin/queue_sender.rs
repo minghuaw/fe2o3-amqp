@@ -21,7 +21,7 @@ async fn main() {
     let url = format!("amqps://{}:{}", hostname, port);
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
-        .alt_tls_establishment(true) // ServiceBus uses alternative TLS establishement
+        .alt_tls_establishment(true) // ServiceBus uses alternative TLS establishment
         .hostname(&hostname[..])
         .sasl_profile(SaslProfile::Plain {
             username: sa_key_name,
