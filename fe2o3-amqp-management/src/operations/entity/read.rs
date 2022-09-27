@@ -33,12 +33,12 @@ pub enum ReadRequest<'a> {
 
 impl<'a> ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub fn name(value: impl Into<Cow<'static, str>>) -> Self {
+    pub fn name(value: impl Into<Cow<'a, str>>) -> Self {
         Self::Name(value.into())
     }
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    pub fn identity(value: impl Into<Cow<'static, str>>) -> Self {
+    pub fn identity(value: impl Into<Cow<'a, str>>) -> Self {
         Self::Identity(value.into())
     }
 }

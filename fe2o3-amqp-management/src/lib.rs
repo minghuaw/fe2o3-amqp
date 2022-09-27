@@ -5,8 +5,8 @@ pub mod error;
 pub mod operations;
 pub mod status;
 
-mod request;
-mod response;
+pub mod request;
+pub mod response;
 
 pub const MANAGEMENT_NODE_ADDRESS: &str = "$management";
 pub const DEFAULT_CLIENT_NODE_ADDRESS: &str = "mgmt-client";

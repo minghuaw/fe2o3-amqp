@@ -113,7 +113,6 @@ impl MgmtClient {
         self.receiver.accept(&delivery).await?;
 
         let mut message = delivery.into_message();
-        println!("{:?}", message);
         let properties = ResponseMessageProperties::try_take_from_message(&mut message)?;
         let operation = MessageDeserializer::from_message(message).map_err(Into::into)?;
 
