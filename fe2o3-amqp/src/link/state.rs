@@ -238,12 +238,6 @@ impl<R> LinkFlowState<R> {
         self.lock.read().drain
     }
 
-    // pub async fn drain_mut(&self, f: impl Fn(bool) -> bool) {
-    //     let mut guard = self.lock.write().await;
-    //     let new = f(guard.drain);
-    //     guard.drain = new;
-    // }
-
     pub fn initial_delivery_count(&self) -> SequenceNo {
         self.lock.read().initial_delivery_count
     }
@@ -253,10 +247,6 @@ impl<R> LinkFlowState<R> {
         let new = f(guard.initial_delivery_count);
         guard.initial_delivery_count = new;
     }
-
-    // pub async fn delivery_count(&self) -> SequenceNo {
-    //     self.lock.read().await.delivery_count
-    // }
 
     pub fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
         let mut guard = self.lock.write();
@@ -308,7 +298,9 @@ impl Consume for SenderFlowState {
     ///
     /// # Cancel safety
     ///
-    /// `Notify` itself is not cancel safe in the way
+    /// `Notify` itself is not cancel safe in the way that it would lose its place in the queue.
+    /// However, since there can be only one consumer for a producer, losing the place in the queue
+    /// does not have any effect. Thus, this IS cancel safe.
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
         loop {
             match consume_link_credit(&self.state().lock, item) {
@@ -471,6 +463,7 @@ mod tests {
         let item = (link_flow, OutputHandle(0));
         producer.produce(item).await;
 
+        // If it is not cancel safe, we cannot consume all 2 credits
         assert_ready!(consumer.consume(1));
         assert_ready!(consumer.consume(1));
 
@@ -497,6 +490,7 @@ mod tests {
         
         drop(pinned);
 
+        // If it is not cancel safe, we cannot consume all 2 credits
         assert_ready!(consumer.consume(1));
         assert_ready!(consumer.consume(1));
 
