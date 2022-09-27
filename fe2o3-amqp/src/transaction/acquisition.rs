@@ -59,7 +59,7 @@ where
     pub async fn cleanup(&mut self) -> Result<(), FlowError> {
         // clear txn-id
         {
-            let mut writer = self.recver.inner.link.flow_state.lock.write().await;
+            let mut writer = self.recver.inner.link.flow_state.lock.write();
             writer.properties.as_mut().map(|map| map.remove(TXN_ID_KEY));
         }
 
@@ -151,7 +151,7 @@ where
         if !self.txn.is_discharged() {
             // clear txn-id from the link's properties
             {
-                let mut writer = self.recver.inner.link.flow_state.lock.blocking_write();
+                let mut writer = self.recver.inner.link.flow_state.lock.write();
                 writer
                     .properties
                     .as_mut()
@@ -159,7 +159,7 @@ where
             }
 
             // Set drain to true
-            if let Err(err) = (&mut self.recver.inner.link).blocking_send_flow(
+            if let Err(err) = self.recver.inner.link.blocking_send_flow(
                 &self.recver.inner.outgoing,
                 Some(0),
                 Some(true),

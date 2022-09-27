@@ -288,13 +288,7 @@ where
         let mut footer = None;
 
         for _ in 0..7 {
-            let opt = match seq.next_element() {
-                Ok(o) => o,
-                // FIXME: all errors here are just treated as end of stream
-                Err(_) => break,
-            };
-            // let opt =  seq.next_element()?;
-            let field: Field = match opt {
+            let field: Field = match seq.next_element()? {
                 Some(val) => val,
                 None => break,
             };
@@ -645,12 +639,31 @@ mod tests {
     }
 
     #[test]
-    fn test_decoding_message_with_no_body_section() {
+    fn test_decoding_message_with_no_body_section_from_slice() {
         let buf: [u8; 8] = [0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45];
         let result: Result<Deserializable<Message<Value>>, _> = from_slice(&buf);
-        assert!(result.is_ok());
         let message = result.unwrap().0;
-        println!("{:?}", message);
+        assert!(message.header.is_some());
+        assert!(message.delivery_annotations.is_none());
+        assert!(message.message_annotations.is_none());
+        assert!(message.properties.is_some());
+        assert!(message.application_properties.is_none());
+        assert!(message.body.is_empty());
+        assert!(message.footer.is_none());
+    }
+
+    #[test]
+    fn test_decoding_message_with_no_body_section_from_reader() {
+        let buf: [u8; 8] = [0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45];
+        let result: Result<Deserializable<Message<Value>>, _> = from_reader(&buf[..]);
+        let message = result.unwrap().0;
+        assert!(message.header.is_some());
+        assert!(message.delivery_annotations.is_none());
+        assert!(message.message_annotations.is_none());
+        assert!(message.properties.is_some());
+        assert!(message.application_properties.is_none());
+        assert!(message.body.is_empty());
+        assert!(message.footer.is_none());
     }
 
     #[test]

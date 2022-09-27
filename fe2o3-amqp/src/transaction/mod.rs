@@ -321,8 +321,7 @@ impl<'t> TransactionalRetirement for Transaction<'t> {
             outcome: Some(outcome),
         };
         let state = DeliveryState::TransactionalState(txn_state);
-        let delivery_info = delivery.clone_info();
-        recver.inner.dispose(delivery_info, None, state).await
+        recver.inner.dispose(delivery, None, state).await
     }
 }
 
@@ -414,7 +413,7 @@ impl<'t> Transaction<'t> {
     ) -> Result<TxnAcquisition<'r, Transaction<'t>>, FlowError> {
         let value = Value::Binary(self.declared.txn_id.clone());
         {
-            let mut writer = recver.inner.link.flow_state.lock.write().await;
+            let mut writer = recver.inner.link.flow_state.lock.write();
             match &mut writer.properties {
                 Some(fields) => {
                     if fields.contains_key(TXN_ID_KEY) {
@@ -438,7 +437,7 @@ impl<'t> Transaction<'t> {
         {
             Ok(_) => Ok(TxnAcquisition { txn: self, recver }),
             Err(error) => {
-                let mut writer = recver.inner.link.flow_state.lock.write().await;
+                let mut writer = recver.inner.link.flow_state.lock.write();
                 if let Some(fields) = &mut writer.properties {
                     fields.remove(TXN_ID_KEY);
                 }
@@ -491,11 +490,8 @@ impl<'t> Drop for Transaction<'t> {
                     };
                     // let tag = self.flow_state.state().delivery_count().await.to_be_bytes();
                     let tag = match inner.link.flow_state.state().lock.try_read() {
-                        Ok(inner) => inner.delivery_count.to_be_bytes(),
-                        Err(error) => {
-                            tracing::error!(?error);
-                            return;
-                        }
+                        Some(inner) => inner.delivery_count.to_be_bytes(),
+                        None => return,
                     };
                     let delivery_tag = DeliveryTag::from(tag);
 
@@ -543,11 +539,8 @@ impl<'t> Drop for Transaction<'t> {
                     let unsettled = UnsettledMessage::new(payload_copy, tx);
                     {
                         let mut guard = match inner.link.unsettled.try_write() {
-                            Ok(guard) => guard,
-                            Err(error) => {
-                                tracing::error!(?error);
-                                return;
-                            }
+                            Some(guard) => guard,
+                            None => return,
                         };
                         guard
                             .get_or_insert(OrderedMap::new())

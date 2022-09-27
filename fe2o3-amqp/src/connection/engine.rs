@@ -61,7 +61,7 @@ where
                     .send_close(&mut self.transport, error)
                     .await?;
                 let (channel, close) = self.wait_for_remote_close(false).await?;
-                self.connection.on_incoming_close(channel, close).await?;
+                self.connection.on_incoming_close(channel, close)?;
                 Ok(Running::Stop)
             }
             ConnectionState::CloseReceived => {
@@ -72,12 +72,12 @@ where
             }
             ConnectionState::ClosePipe | ConnectionState::CloseSent => {
                 let (channel, close) = self.wait_for_remote_close(false).await?;
-                self.connection.on_incoming_close(channel, close).await?;
+                self.connection.on_incoming_close(channel, close)?;
                 Ok(Running::Stop)
             }
             ConnectionState::Discarding => {
                 let (channel, close) = self.wait_for_remote_close(true).await?;
-                self.connection.on_incoming_close(channel, close).await?;
+                self.connection.on_incoming_close(channel, close)?;
                 Ok(Running::Stop)
             }
             ConnectionState::End => Ok(Running::Stop),
@@ -89,14 +89,12 @@ where
         discard_other: bool,
     ) -> Result<(IncomingChannel, Close), ConnectionInnerError> {
         loop {
-            let frame =
-                self.transport
-                    .next()
-                    .await
-                    .ok_or(transport::Error::Io(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "Expecting remote close",
-                    )))??;
+            let frame = self.transport.next().await.ok_or_else(|| {
+                transport::Error::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Expecting remote close",
+                ))
+            })??;
 
             match frame.body {
                 FrameBody::Close(close) => return Ok((IncomingChannel(frame.channel), close)),
@@ -140,8 +138,7 @@ where
         let remote_max_frame_size = remote_open.max_frame_size.0 as usize;
         let remote_idle_timeout = remote_open.idle_time_out;
         self.connection
-            .on_incoming_open(channel, remote_open)
-            .await?;
+            .on_incoming_open(channel, remote_open)?;
 
         // update transport setting
         let local_max_frame_size = self.connection.local_open().max_frame_size.0 as usize;
@@ -239,7 +236,7 @@ where
         match body {
             FrameBody::Open(open) => {
                 let remote_idle_timeout = open.idle_time_out;
-                self.connection.on_incoming_open(channel, open).await?;
+                self.connection.on_incoming_open(channel, open)?;
 
                 // Set heartbeat here because in pipelined-open, the Open frame
                 // may be recved after mux loop is started
@@ -287,7 +284,7 @@ where
                 self.connection.on_incoming_end(channel, end).await?;
             }
             FrameBody::Close(close) => {
-                let result = self.connection.on_incoming_close(channel, close).await;
+                let result = self.connection.on_incoming_close(channel, close);
                 if matches!(
                     self.connection.local_state(),
                     ConnectionState::CloseReceived
@@ -477,18 +474,16 @@ where
                     result
                 },
                 control = self.control.recv() => {
-                    let result = match control {
+                    match control {
                         Some(control) => self.on_control(control).await,
                         None => {
                             // All control channel are dropped (which is impossible)
                             Ok(Running::Stop)
                         }
-                    };
-
-                    result
+                    }
                 },
                 frame = self.outgoing_session_frames.recv() => {
-                    let result = match frame {
+                    match frame {
                         Some(frame) => self.on_outgoing_session_frames(frame).await,
                         None => {
                             // Upon closing, the outgoing_session_frames channel will be closed
@@ -496,9 +491,7 @@ where
                             // close frame.
                             Ok(Running::Continue)
                         }
-                    };
-
-                    result
+                    }
                 }
             };
 

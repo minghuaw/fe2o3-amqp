@@ -1,19 +1,13 @@
-use std::{env, sync::Arc};
+use std::env;
 
 use dotenv::dotenv;
 use event_hubs::get_event_hub_partitions;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
-    types::{
-        definitions::SECURE_PORT,
-        primitives::{Value}, messaging::Source,
-    },
+    types::{definitions::SECURE_PORT, messaging::Source, primitives::Value},
     Connection, Receiver, Session,
 };
 use fe2o3_amqp_ext::filters::SelectorFilter;
-use rustls::OwnedTrustAnchor;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {
@@ -25,33 +19,15 @@ async fn main() {
     let sa_key_value = env::var("SHARED_ACCESS_KEY_VALUE").unwrap();
     let event_hub_name = env::var("EVENT_HUB_NAME").unwrap();
 
-    // Service Bus requires alternative TLS establishment
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-    let config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let stream = TcpStream::connect((&hostname[..], port)).await.unwrap();
-    let domain = hostname.as_str().try_into().unwrap();
-    let connector = TlsConnector::from(Arc::new(config));
-    let tls_stream = connector.connect(domain, stream).await.unwrap();
-
+    let url = format!("amqps://{}:{}", hostname, port);
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
-        .hostname(&hostname[..])
+        .alt_tls_establishment(true) // EventHubs uses alternative TLS establishment
         .sasl_profile(SaslProfile::Plain {
             username: sa_key_name,
             password: sa_key_value,
         })
-        .open_with_stream(tls_stream)
+        .open(&url[..])
         .await
         .unwrap();
 
@@ -75,9 +51,9 @@ async fn main() {
                 .address(partition_address)
                 .add_to_filter(
                     "filter_latest",
-                    SelectorFilter::new("amqp.annotation.x-opt-offset > @latest")
+                    SelectorFilter::new("amqp.annotation.x-opt-offset > @latest"),
                 )
-                .build()
+                .build(),
         )
         .attach(&mut session)
         .await

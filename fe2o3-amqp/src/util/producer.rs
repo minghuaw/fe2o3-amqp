@@ -23,12 +23,11 @@ pub(crate) trait Produce {
     async fn produce(&mut self, item: Self::Item) -> Self::Outcome;
 }
 
-#[async_trait]
 pub(crate) trait ProducerState {
     type Item: Send;
     type Outcome: Send;
 
-    async fn update_state(&mut self, item: Self::Item) -> Self::Outcome;
+    fn update_state(&mut self, item: Self::Item) -> Self::Outcome;
 }
 
 #[async_trait]
@@ -40,7 +39,7 @@ where
     type Outcome = T::Outcome;
 
     async fn produce(&mut self, item: Self::Item) -> Self::Outcome {
-        let outcome = self.state.update_state(item).await;
+        let outcome = self.state.update_state(item);
         self.notifier.notify_waiters();
         outcome
     }

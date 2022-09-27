@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs, missing_debug_implementations)]
+#![warn(clippy::unused_async)]
 
 //! A rust implementation of AMQP 1.0 protocol based on serde and tokio.
 //!

@@ -141,6 +141,10 @@ impl<R> SessionHandle<R> {
     }
 }
 
+/// # Cancel safety
+/// 
+/// It internally `.await` on a send on `tokio::mpsc::Sender` and on a `oneshot::Receiver`. 
+/// This should be cancel safe
 pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,
     link_name: String,
@@ -154,14 +158,14 @@ pub(crate) async fn allocate_link(
             link_relay,
             responder,
         })
-        .await
+        .await // cancel safe
         // The `SendError` could only happen when the receiving half is
         // dropped, meaning the `SessionEngine::event_loop` has stopped.
         // This would also mean the `Session` is Unmapped, and thus it
         // may be treated as illegal state
         .map_err(|_| AllocLinkError::IllegalSessionState)?;
     resp_rx
-        .await
+        .await // FIXME: Is oneshot channel cancel safe?
         // The error could only occur when the sending half is dropped,
         // indicating the `SessionEngine::even_loop` has stopped or
         // unmapped. Thus it could be considered as illegal state
@@ -421,17 +425,6 @@ impl endpoint::Session for Session {
             let input_handle = InputHandle::from(link_flow.handle.clone());
             match self.link_by_input_handle.get_mut(&input_handle) {
                 Some(link_relay) => {
-                    // if let Some(echo_flow) = link_relay.on_incoming_flow(link_flow).await? {
-                    //     self.control
-                    //         .send(SessionControl::LinkFlow(echo_flow))
-                    //         .await
-                    //         // Sending control to self. This will only give an error if the receiving
-                    //         // half is dropped. An error would thus indicate that the event loop
-                    //         // has stopped, so it could be considered illegal state.
-                    //         //
-                    //         // If the event loop has stopped, this should not be executed at all
-                    //         .map_err(|_| SessionInnerError::IllegalConnectionState)?;
-                    // }
                     return link_relay
                         .on_incoming_flow(link_flow)
                         .await
@@ -474,7 +467,7 @@ impl endpoint::Session for Session {
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_disposition(
+    fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
@@ -491,14 +484,12 @@ impl endpoint::Session for Session {
                 let key = (disposition.role.clone(), delivery_id);
                 if let Some((handle, delivery_tag)) = self.delivery_tag_by_id.remove(&key) {
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(&handle) {
-                        let _echo = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                disposition.settled,
-                                disposition.state.clone(),
-                                delivery_tag,
-                            )
-                            .await;
+                        let _echo = link_handle.on_incoming_disposition(
+                            disposition.role.clone(),
+                            disposition.settled,
+                            disposition.state.clone(),
+                            delivery_tag,
+                        );
                     }
                 }
             }
@@ -512,14 +503,12 @@ impl endpoint::Session for Session {
                     if let Some(link_handle) = self.link_by_input_handle.get_mut(handle) {
                         // In mode Second, the receiver will first send a non-settled disposition,
                         // and wait for sender's settled disposition
-                        let echo = link_handle
-                            .on_incoming_disposition(
-                                disposition.role.clone(),
-                                disposition.settled,
-                                disposition.state.clone(),
-                                delivery_tag.clone(),
-                            )
-                            .await;
+                        let echo = link_handle.on_incoming_disposition(
+                            disposition.role.clone(),
+                            disposition.settled,
+                            disposition.state.clone(),
+                            delivery_tag.clone(),
+                        );
 
                         if echo {
                             delivery_ids.push(delivery_id);
@@ -537,7 +526,7 @@ impl endpoint::Session for Session {
                 let disposition = Disposition {
                     role: Role::Sender,
                     first: slice[0],
-                    last: slice.last().map(|id| *id),
+                    last: slice.last().copied(),
                     settled: true,
                     state: disposition.state.clone(),
                     batchable: false,
@@ -566,7 +555,7 @@ impl endpoint::Session for Session {
     }
 
     #[instrument(skip_all)]
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         _channel: IncomingChannel,
         end: End,
@@ -756,8 +745,7 @@ impl endpoint::Session for Session {
     fn on_outgoing_detach(&mut self, detach: Detach) -> SessionFrame {
         self.deallocate_link(detach.handle.clone().into());
         let body = SessionFrameBody::Detach(detach);
-        let frame = SessionFrame::new(self.outgoing_channel, body);
-        frame
+        SessionFrame::new(self.outgoing_channel, body)
     }
 }
 

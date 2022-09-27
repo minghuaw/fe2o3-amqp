@@ -180,7 +180,7 @@ where
 
                     // TODO: Where should the echoing disposition be sent?
                     if let Some(dispositions) =
-                        self.session.on_incoming_disposition(disposition).await?
+                        self.session.on_incoming_disposition(disposition)?
                     {
                         for disposition in dispositions {
                             self.control
@@ -305,7 +305,7 @@ where
         Ok(txn.on_incoming_post(txn_id, transfer, payload))
     }
 
-    async fn on_incoming_disposition(
+    fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
     ) -> Result<Option<Vec<Disposition>>, Self::Error> {
@@ -323,7 +323,7 @@ where
                     }
                 }
             }
-            Some(_) | None => self.session.on_incoming_disposition(disposition).await,
+            Some(_) | None => self.session.on_incoming_disposition(disposition),
         }
     }
 
@@ -331,12 +331,12 @@ where
         self.session.on_incoming_detach(detach).await
     }
 
-    async fn on_incoming_end(
+    fn on_incoming_end(
         &mut self,
         channel: IncomingChannel,
         end: End,
     ) -> Result<(), Self::EndError> {
-        self.session.on_incoming_end(channel, end).await
+        self.session.on_incoming_end(channel, end)
     }
 
     // Handling SessionFrames

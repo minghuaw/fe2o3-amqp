@@ -254,7 +254,7 @@ where
 
         let mut sasl_acceptor = self.sasl_acceptor.clone();
         loop {
-            let frame = match transport.next().await.ok_or(OpenError::Io(io::Error::new(
+            let frame = match transport.next().await.ok_or_else(|| OpenError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "Expecting SASL frames",
             )))?? {
@@ -488,12 +488,12 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn on_incoming_open(
+    fn on_incoming_open(
         &mut self,
         channel: IncomingChannel,
         open: Open,
     ) -> Result<(), Self::OpenError> {
-        self.connection.on_incoming_open(channel, open).await
+        self.connection.on_incoming_open(channel, open)
     }
 
     #[inline]
@@ -545,12 +545,12 @@ impl endpoint::Connection for ListenerConnection {
     }
 
     #[inline]
-    async fn on_incoming_close(
+    fn on_incoming_close(
         &mut self,
         channel: IncomingChannel,
         close: Close,
     ) -> Result<(), Self::CloseError> {
-        self.connection.on_incoming_close(channel, close).await
+        self.connection.on_incoming_close(channel, close)
     }
 
     #[inline]

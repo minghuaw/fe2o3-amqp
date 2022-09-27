@@ -521,7 +521,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
     }
 
     /// Set the alternative tls_establishment
-    /// 
+    ///
     /// Please see part 5.2.1 of the core spec
     pub fn alt_tls_establishment(mut self, value: bool) -> Self {
         self.alt_tls_estab = value;
@@ -547,7 +547,7 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
 
             tracing::trace!(received = ?frame);
 
-            match profile.on_frame(frame, self.hostname).await? {
+            match profile.on_frame(frame, self.hostname)? {
                 Negotiation::Init(init) => {
                     let frame = sasl::Frame::Init(init);
                     tracing::trace!(sending = ?frame);
@@ -866,13 +866,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         let connector = libnative_tls::TlsConnector::new()
             .map_err(|e| OpenError::Io(io::Error::new(io::ErrorKind::Other, format!("{:?}", e))))?;
         let connector = tokio_native_tls::TlsConnector::from(connector);
-        let tls_stream = Transport::connect_tls_with_native_tls(
-            stream,
-            domain,
-            &connector,
-            self.alt_tls_estab,
-        )
-        .await?;
+        let tls_stream =
+            Transport::connect_tls_with_native_tls(stream, domain, &connector, self.alt_tls_estab)
+                .await?;
         self.connect_with_stream(tls_stream).await
     }
 }

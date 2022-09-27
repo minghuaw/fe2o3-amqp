@@ -1,13 +1,17 @@
 //! Implements acceptor for a remote sender link
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use fe2o3_amqp_types::{
     messaging::{Target, TargetArchetype},
     performatives::Attach,
     primitives::Symbol,
 };
-use tokio::sync::{mpsc, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::mpsc;
 use tracing::instrument;
 
 use crate::{
@@ -209,7 +213,8 @@ where
             unsettled,
         };
 
-        match (err, link.on_incoming_attach(remote_attach).await) {
+        // `on_incoming_attach` should always be evaluated
+        match (err, link.on_incoming_attach(remote_attach)) {
             (Some(attach_error), _) | (_, Err(attach_error)) => {
                 // Complete attach anyway
                 link.send_attach(&outgoing, &control, false).await?;
@@ -230,14 +235,14 @@ where
                     }
                 }
             }
-            (_, Ok(_)) => link.send_attach(&outgoing, &control, false).await?,
+            _ => link.send_attach(&outgoing, &control, false).await?,
         }
 
         let mut inner = ReceiverInner {
             link,
             buffer_size: shared.buffer_size,
             credit_mode: self.credit_mode.clone(),
-            processed: 0,
+            processed: AtomicU32::new(0),
             auto_accept: self.auto_accept,
             session: control.clone(),
             outgoing,

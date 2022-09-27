@@ -16,15 +16,11 @@ impl<'s> SliceReader<'s> {
         Self { slice }
     }
 
-    pub(crate) fn unexpected_eof(msg: &str) -> Error {
-        Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, msg))
-    }
-
     /// Return a slice of the given length. If the internal slice doesn't have
     /// enough bytes, an `Err(_)` will be returned.
-    pub fn get_byte_slice(&mut self, n: usize) -> Result<&'s [u8], Error> {
+    pub fn get_byte_slice(&mut self, n: usize) -> Result<&'s [u8], io::Error> {
         if self.slice.len() < n {
-            return Err(Self::unexpected_eof(""));
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""));
         }
         let (read_slice, remaining) = self.slice.split_at(n);
         self.slice = remaining;
@@ -35,34 +31,29 @@ impl<'s> SliceReader<'s> {
 impl<'s> private::Sealed for SliceReader<'s> {}
 
 impl<'s> Read<'s> for SliceReader<'s> {
-    fn peek(&mut self) -> Result<u8, Error> {
-        match self.slice.first() {
-            Some(b) => Ok(*b),
-            None => Err(Self::unexpected_eof("")),
-        }
+    fn peek(&mut self) -> Option<u8> {
+        self.slice.first().copied()
     }
 
-    fn peek_bytes(&mut self, n: usize) -> Result<&[u8], Error> {
-        self.slice
-            .get(..n)
-            .ok_or_else(|| Self::unexpected_eof("Insufficient bytes in slice"))
+    fn peek_bytes(&mut self, n: usize) -> Option<&[u8]> {
+        self.slice.get(..n)
     }
 
-    fn next(&mut self) -> Result<u8, Error> {
+    fn next(&mut self) -> Option<u8> {
         match self.slice.len() {
-            0 => Err(Self::unexpected_eof("")),
-            _ => {
-                let buf = self.get_byte_slice(1)?;
-                Ok(buf[0])
-            }
+            0 => None, // EOF
+            _ => match self.get_byte_slice(1) {
+                Ok(buf) => Some(buf[0]),
+                Err(_) => None,
+            },
         }
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), io::Error> {
         let n = buf.len();
 
         if self.slice.len() < n {
-            Err(Self::unexpected_eof(""))
+            Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
         } else {
             let read_slice = self.get_byte_slice(n)?;
             buf.copy_from_slice(read_slice);
@@ -124,8 +115,8 @@ mod tests {
         let peek_none = reader.peek();
         let next_none = reader.next();
 
-        assert!(peek_none.is_err());
-        assert!(next_none.is_err());
+        assert!(peek_none.is_none());
+        assert!(next_none.is_none());
     }
 
     #[test]
@@ -150,7 +141,7 @@ mod tests {
 
         // Read None
         let bytes = reader.read_const_bytes::<N>();
-        assert!(bytes.is_err());
+        assert!(bytes.is_none());
     }
 
     #[test]
@@ -161,7 +152,7 @@ mod tests {
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = reader.read_const_bytes::<N>();
-        assert!(bytes.is_err());
+        assert!(bytes.is_none());
 
         for i in 0..slice.len() {
             let peek = reader.peek().expect("Should not return error");
@@ -174,8 +165,8 @@ mod tests {
         let peek_none = reader.peek();
         let next_none = reader.next();
 
-        assert!(peek_none.is_err());
-        assert!(next_none.is_err());
+        assert!(peek_none.is_none());
+        assert!(next_none.is_none());
     }
 
     #[test]
@@ -203,7 +194,7 @@ mod tests {
 
         // Read None
         let bytes = reader.read_const_bytes::<N>();
-        assert!(bytes.is_err());
+        assert!(bytes.is_none());
     }
 
     #[test]
@@ -217,7 +208,7 @@ mod tests {
         // Read first 10 bytes
         const N: usize = 10;
         let bytes = reader.read_const_bytes::<N>();
-        assert!(bytes.is_err());
+        assert!(bytes.is_none());
 
         for i in 0..slice.len() {
             let peek = reader.peek().expect("Should not return error");
@@ -230,7 +221,7 @@ mod tests {
         let peek_err = reader.peek();
         let next_err = reader.next();
 
-        assert!(peek_err.is_err());
-        assert!(next_err.is_err());
+        assert!(peek_err.is_none());
+        assert!(next_err.is_none());
     }
 }

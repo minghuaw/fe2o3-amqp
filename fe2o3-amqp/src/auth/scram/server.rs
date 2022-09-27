@@ -64,7 +64,7 @@ where
             server_first_message: server_first.message.clone(),
         };
 
-        Ok(Some(server_first.message))
+        Ok(Some(server_first.message.to_vec()))
     }
 
     pub(crate) fn compute_server_final_message(
@@ -89,9 +89,9 @@ where
                     .scram_version()
                     .compute_server_final_message(
                         client_final_message,
-                        &client_server_nonce,
-                        &client_first_message_bare,
-                        &server_first_message,
+                        client_server_nonce,
+                        client_first_message_bare,
+                        server_first_message,
                         &stored_password,
                     )?;
                 self.state = ScramAuthenticatorState::ServerFinalSent;

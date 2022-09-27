@@ -21,7 +21,7 @@ pub(crate) fn resume_delivery(
     remote: Option<Option<DeliveryState>>,
 ) -> Option<ResumingDelivery> {
     // The outer None indicates absence of entry
-    let remote = remote.map(|inner| {
+    let remote_state = remote.map(|inner| {
         // The inner None indicates absence of DeliveryState, which is equivalent to
         // no recorded data
         inner.unwrap_or(DeliveryState::Received(Received {
@@ -29,7 +29,7 @@ pub(crate) fn resume_delivery(
             section_offset: 0,
         }))
     });
-    match (&local.state(), &remote) {
+    match (&local.state(), &remote_state) {
         #[cfg(feature = "transaction")]
         (_, Some(DeliveryState::Declared(_)))
         | (_, Some(DeliveryState::TransactionalState(_)))
@@ -61,7 +61,7 @@ pub(crate) fn resume_delivery(
             )
             .unwrap_or_else(|| local.payload().clone());
             Some(ResumingDelivery::Resume {
-                state: remote,
+                state: remote_state,
                 payload: remaining,
             })
         }
@@ -74,7 +74,7 @@ pub(crate) fn resume_delivery(
             // This will fail if the oneshot receiver is already dropped
             // which means the application probably doesn't care about the
             // delivery state anyway
-            let _ = local.settle_with_state(remote);
+            let _ = local.settle_with_state(remote_state);
             tracing::error!(error = "Delivery handles are already dropped");
             None
         }
@@ -98,7 +98,7 @@ pub(crate) fn resume_delivery(
                 )
                 .unwrap_or_else(|| local.payload().clone());
                 Some(ResumingDelivery::Resume {
-                    state: remote,
+                    state: remote_state,
                     payload: remaining,
                 })
             } else {
@@ -120,7 +120,7 @@ pub(crate) fn resume_delivery(
             // This will fail if the oneshot receiver is already dropped
             // which means the application probably doesn't care about the
             // delivery state anyway
-            let _ = local.settle_with_state(remote);
+            let _ = local.settle_with_state(remote_state);
             tracing::error!(error = "Delivery handles are already dropped");
             None
         }

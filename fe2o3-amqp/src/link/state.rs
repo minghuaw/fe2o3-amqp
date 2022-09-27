@@ -4,7 +4,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::definitions::{Fields, SequenceNo};
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
 
 use crate::{
     endpoint::{LinkFlow, OutputHandle},
@@ -85,8 +85,6 @@ impl LinkFlowStateInner {
 /// The Sender and Receiver handle link flow control differently
 #[derive(Debug)]
 pub struct LinkFlowState<R> {
-    // Sender(RwLock<LinkFlowStateInner>),
-    // Receiver(RwLock<LinkFlowStateInner>),
     pub(crate) lock: RwLock<LinkFlowStateInner>,
     role: PhantomData<R>,
 }
@@ -118,12 +116,12 @@ impl LinkFlowState<role::SenderMarker> {
     /// If an echo (reply with the local flow state) is requested, return an `Ok(Some(Flow))`,
     /// otherwise, return a `Ok(None)`
     #[inline]
-    pub(crate) async fn on_incoming_flow(
+    pub(crate) fn on_incoming_flow(
         &self,
         flow: LinkFlow,
         output_handle: OutputHandle,
     ) -> Option<LinkFlow> {
-        let mut state = self.lock.write().await;
+        let mut state = self.lock.write();
 
         // delivery count
         //
@@ -181,12 +179,12 @@ impl LinkFlowState<role::SenderMarker> {
 
 impl LinkFlowState<role::ReceiverMarker> {
     #[inline]
-    pub(crate) async fn on_incoming_flow(
+    pub(crate) fn on_incoming_flow(
         &self,
         flow: LinkFlow,
         output_handle: OutputHandle,
     ) -> Option<LinkFlow> {
-        let mut state = self.lock.write().await;
+        let mut state = self.lock.write();
 
         // delivery count
         //
@@ -232,51 +230,41 @@ impl LinkFlowState<role::ReceiverMarker> {
 }
 
 impl<R> LinkFlowState<R> {
-    pub async fn link_credit(&self) -> u32 {
-        self.lock.read().await.link_credit
+    pub fn link_credit(&self) -> u32 {
+        self.lock.read().link_credit
     }
 
-    pub async fn drain(&self) -> bool {
-        self.lock.read().await.drain
+    pub fn drain(&self) -> bool {
+        self.lock.read().drain
     }
 
-    // pub async fn drain_mut(&self, f: impl Fn(bool) -> bool) {
-    //     let mut guard = self.lock.write().await;
-    //     let new = f(guard.drain);
-    //     guard.drain = new;
-    // }
-
-    pub async fn initial_delivery_count(&self) -> SequenceNo {
-        self.lock.read().await.initial_delivery_count
+    pub fn initial_delivery_count(&self) -> SequenceNo {
+        self.lock.read().initial_delivery_count
     }
 
-    pub async fn initial_delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
-        let mut guard = self.lock.write().await;
+    pub fn initial_delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
+        let mut guard = self.lock.write();
         let new = f(guard.initial_delivery_count);
         guard.initial_delivery_count = new;
     }
 
-    // pub async fn delivery_count(&self) -> SequenceNo {
-    //     self.lock.read().await.delivery_count
-    // }
-
-    pub async fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
-        let mut guard = self.lock.write().await;
+    pub fn delivery_count_mut(&self, f: impl Fn(u32) -> u32) {
+        let mut guard = self.lock.write();
         let new = f(guard.delivery_count);
         guard.delivery_count = new;
     }
 
     /// This is async because it is protected behind an async RwLock
-    pub async fn properties(&self) -> Option<Fields> {
-        self.lock.read().await.properties.clone()
+    pub fn properties(&self) -> Option<Fields> {
+        self.lock.read().properties.clone()
     }
 }
 
 impl LinkFlowState<role::ReceiverMarker> {
     /// Consume one link credit if available. Returns an error if there is
     /// not enough link credit
-    pub async fn consume(&self, count: u32) -> Result<(), ReceiverTransferError> {
-        let mut state = self.lock.write().await;
+    pub fn consume(&self, count: u32) -> Result<(), ReceiverTransferError> {
+        let mut state = self.lock.write();
         if state.link_credit < count {
             Err(ReceiverTransferError::TransferLimitExceeded)
         } else {
@@ -287,15 +275,14 @@ impl LinkFlowState<role::ReceiverMarker> {
     }
 }
 
-#[async_trait]
 impl ProducerState for Arc<LinkFlowState<role::SenderMarker>> {
     type Item = (LinkFlow, OutputHandle);
     // If echo is requested, a Some(LinkFlow) will be returned
     type Outcome = Option<LinkFlow>;
 
     #[inline]
-    async fn update_state(&mut self, (flow, output_handle): Self::Item) -> Self::Outcome {
-        self.on_incoming_flow(flow, output_handle).await
+    fn update_state(&mut self, (flow, output_handle): Self::Item) -> Self::Outcome {
+        self.on_incoming_flow(flow, output_handle)
     }
 }
 
@@ -308,11 +295,17 @@ impl Consume for SenderFlowState {
 
     /// Increment delivery count and decrement link_credit. Wait asynchronously
     /// if there is not enough credit
+    ///
+    /// # Cancel safety
+    ///
+    /// `Notify` itself is not cancel safe in the way that it would lose its place in the queue.
+    /// However, since there can be only one consumer for a producer, losing the place in the queue
+    /// does not have any effect. Thus, this IS cancel safe.
     async fn consume(&mut self, item: Self::Item) -> Self::Outcome {
         loop {
-            match consume_link_credit(&self.state().lock, item).await {
+            match consume_link_credit(&self.state().lock, item) {
                 Ok(outcome) => return outcome,
-                Err(_) => self.notifier.notified().await,
+                Err(_) => self.notifier.notified().await, // **NOT** cancel safe
             }
         }
     }
@@ -322,7 +315,11 @@ impl TryConsume for SenderFlowState {
     type Error = SenderTryConsumeError;
 
     fn try_consume(&mut self, item: Self::Item) -> Result<Self::Outcome, Self::Error> {
-        let mut state = self.state().lock.try_write()?;
+        let mut state = self
+            .state()
+            .lock
+            .try_write()
+            .ok_or(SenderTryConsumeError::TryLockError)?;
         if state.link_credit < item {
             Err(Self::Error::InsufficientCredit)
         } else {
@@ -334,11 +331,11 @@ impl TryConsume for SenderFlowState {
     }
 }
 
-async fn consume_link_credit(
+fn consume_link_credit(
     lock: &RwLock<LinkFlowStateInner>,
     count: u32,
 ) -> Result<[u8; 4], InsufficientCredit> {
-    let mut state = lock.write().await;
+    let mut state = lock.write();
 
     if state.link_credit < count {
         Err(InsufficientCredit {})
@@ -347,5 +344,157 @@ async fn consume_link_credit(
         state.delivery_count += count;
         state.link_credit -= count;
         Ok(tag)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use futures_util::poll;
+    use tokio::{sync::Notify, time::timeout};
+
+    use crate::{
+        endpoint::{LinkFlow, OutputHandle},
+        link::{
+            role,
+            state::{LinkFlowState, LinkFlowStateInner},
+            SenderFlowState,
+        },
+        util::{Consume, Consumer, Produce, Producer},
+    };
+
+    macro_rules! assert_pending {
+        ($fut:expr) => {
+            let fut = $fut;
+            let poll = poll!(fut);
+            assert!(poll.is_pending());
+        };
+    }
+
+    macro_rules! assert_ready {
+        ($fut:expr) => {
+            let fut = $fut;
+            let poll = poll!(fut);
+            assert!(poll.is_ready());
+        };
+    }
+
+    fn create_sender_flow_state_producer_and_consumer() -> (
+        Producer<Arc<LinkFlowState<role::SenderMarker>>>,
+        SenderFlowState,
+    ) {
+        let flow_state_inner = LinkFlowStateInner {
+            initial_delivery_count: 0,
+            delivery_count: 0,
+            link_credit: 0,
+            available: 0,
+            drain: false,
+            properties: None,
+        };
+        let flow_state = Arc::new(LinkFlowState::sender(flow_state_inner));
+        let notifier = Arc::new(Notify::new());
+        let producer = Producer::new(notifier.clone(), flow_state.clone());
+        let consumer = Consumer::new(notifier, flow_state);
+        (producer, consumer)
+    }
+
+    #[tokio::test]
+    async fn test_sender_flow_state_producer_and_consumer() {
+        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+
+        // .await on notify
+        assert_pending!(consumer.consume(1));
+
+        // .await after notify with zero credit
+        let item = (LinkFlow::default(), OutputHandle(0));
+        producer.produce(item).await;
+        assert_pending!(consumer.consume(1));
+
+        // .await after notify with non-zero credit
+        let link_flow = LinkFlow {
+            link_credit: Some(2),
+            ..Default::default()
+        };
+        let item = (link_flow, OutputHandle(0));
+        producer.produce(item).await;
+        assert_ready!(consumer.consume(1));
+        assert_ready!(consumer.consume(1));
+
+        // All credits have been consumed already
+        assert_pending!(consumer.consume(1));
+    }
+
+    #[tokio::test]
+    async fn test_spawned_flow_state_producer_and_consumer() {
+        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+
+        let handle = tokio::spawn(async move {consumer.consume(1).await});
+        let mut fut = Box::pin(handle);
+        assert_pending!(&mut fut);
+
+        // .await after notify with non-zero credit
+        let link_flow = LinkFlow {
+            link_credit: Some(1),
+            ..Default::default()
+        };
+        let item = (link_flow, OutputHandle(0));
+        producer.produce(item).await;
+
+        let wait = timeout(Duration::from_millis(500), fut).await;
+        assert!(wait.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_drop_consume_fut_before_produce() {
+        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+
+        // Drop before notify
+        let fut = consumer.consume(1);
+        let mut pinned = Box::pin(fut);
+        assert!(poll!(&mut pinned).is_pending());
+        drop(pinned);
+
+        // .await after notify with non-zero credit
+        let link_flow = LinkFlow {
+            link_credit: Some(2),
+            ..Default::default()
+        };
+        let item = (link_flow, OutputHandle(0));
+        producer.produce(item).await;
+
+        // If it is not cancel safe, we cannot consume all 2 credits
+        assert_ready!(consumer.consume(1));
+        assert_ready!(consumer.consume(1));
+
+        // All credits have been consumed already
+        assert_pending!(consumer.consume(1));
+    }
+
+    #[tokio::test]
+    async fn test_drop_consume_fut_after_produce() {
+        let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
+
+        // Drop before notify
+        let fut = consumer.consume(1);
+        let mut pinned = Box::pin(fut);
+        assert!(poll!(&mut pinned).is_pending());
+        
+        // .await after notify with non-zero credit
+        let link_flow = LinkFlow {
+            link_credit: Some(2),
+            ..Default::default()
+        };
+        let item = (link_flow, OutputHandle(0));
+        producer.produce(item).await;
+        
+        drop(pinned);
+
+        // If it is not cancel safe, we cannot consume all 2 credits
+        assert_ready!(consumer.consume(1));
+        assert_ready!(consumer.consume(1));
+
+        // All credits have been consumed already
+        assert_pending!(consumer.consume(1));
     }
 }

@@ -8,7 +8,8 @@ use fe2o3_amqp_types::{
     performatives::Attach,
     primitives::Symbol,
 };
-use tokio::sync::{mpsc, Notify, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::{mpsc, Notify};
 
 use crate::{
     endpoint::{InputHandle, LinkAttach, LinkExt},
@@ -158,7 +159,7 @@ where
 
         let outgoing = session.outgoing.clone();
 
-        match link.on_incoming_attach(remote_attach).await {
+        match link.on_incoming_attach(remote_attach) {
             Ok(_) => link.send_attach(&outgoing, &session.control, false).await?,
             Err(attach_error) => {
                 // Complete attach then detach should any error happen

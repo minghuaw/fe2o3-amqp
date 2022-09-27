@@ -89,13 +89,21 @@ impl<'a> TryFrom<&'a Url> for SaslProfile {
     type Error = ();
 
     fn try_from(value: &'a Url) -> Result<Self, Self::Error> {
-        match (value.username(), value.password()) {
-            ("", _) | (_, None) => Err(()),
-            (username, Some(password)) => Ok(SaslProfile::Plain {
-                username: username.to_string(),
-                password: password.to_string(),
-            }),
-        }
+        let username = match value.username() {
+            "" => return Err(()),
+            username => username,
+        };
+
+        // Lazily evaluate value.password() if username is err
+        let password = match value.password() {
+            Some(password) => password,
+            None => return Err(()),
+        };
+
+        Ok(SaslProfile::Plain {
+            username: username.to_string(),
+            password: password.to_string(),
+        })
     }
 }
 
@@ -147,7 +155,7 @@ impl SaslProfile {
 
     /// How a SASL profile should respond to a SASL frame
     #[cfg_attr(not(feature = "scram"), allow(unused_variables))]
-    pub(crate) async fn on_frame(
+    pub(crate) fn on_frame(
         &mut self,
         frame: sasl::Frame,
         hostname: Option<&str>,
@@ -180,7 +188,7 @@ impl SaslProfile {
                 | SaslProfile::ScramSha256(SaslScramSha256 { client })
                 | SaslProfile::ScramSha512(SaslScramSha512 { client }) => {
                     let server_first = std::str::from_utf8(&challenge.challenge)
-                        .map_err(|e| ScramErrorKind::Utf8Error(e))?;
+                        .map_err(ScramErrorKind::Utf8Error)?;
                     let client_final = client.compute_client_final_message(server_first)?;
                     let response = SaslResponse {
                         response: Binary::from(client_final),

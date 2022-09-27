@@ -1,6 +1,9 @@
 //! Implementation of AMQP1.0 receiver
 
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
@@ -21,13 +24,12 @@ use crate::{
     control::SessionControl,
     endpoint::{self, LinkAttach, LinkDetach, LinkExt},
     session::SessionHandle,
-    util::DeliveryInfo,
     Payload,
 };
 
 use super::{
     builder::{self, WithTarget, WithoutName, WithoutSource},
-    delivery::Delivery,
+    delivery::{Delivery, DeliveryInfo},
     error::DetachError,
     incomplete_transfer::IncompleteTransfer,
     receiver_link::count_number_of_sections_and_offset,
@@ -268,7 +270,9 @@ impl Receiver {
     }
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
-    /// to `Accept`
+    /// to `Accept`.
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
     ///
     /// # Example
     ///
@@ -278,15 +282,19 @@ impl Receiver {
     /// let delivery: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
-    pub async fn accept<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
+    pub async fn accept(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Accept the message by sending a disposition with the `delivery_state` field set
+    /// Accept the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Accept`
     ///
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
+    /// 
     /// # Example
     ///
     /// The code of the example below can be found in the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/blob/main/examples/dispose_multiple/src/main.rs)
@@ -297,82 +305,94 @@ impl Receiver {
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
     pub async fn accept_all<'a, T: 'a>(
-        &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        &self,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Accepted(Accepted {});
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
     /// to `Reject`
-    pub async fn reject<T>(
-        &mut self,
-        delivery: &Delivery<T>,
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
+    pub async fn reject(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Reject the message by sending a disposition with the `delivery_state` field set
+    /// Reject the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Reject`
+    /// 
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn reject_all<'a, T: 'a>(
-        &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        &self,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Rejected(Rejected {
             error: error.into(),
         });
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    pub async fn release<T>(&mut self, delivery: &Delivery<T>) -> Result<(), DispositionError> {
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
+    pub async fn release<T>(
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
+    ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Release the message by sending a disposition with the `delivery_state` field set
+    /// Release the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Release`
+    /// 
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn release_all<'a, T: 'a>(
-        &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        &self,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Released(Released {});
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
     /// to `Modify`
+    /// 
+    /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn modify<T>(
-        &mut self,
-        delivery: &Delivery<T>,
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
-        let delivery_info = delivery.clone_info();
         self.inner.dispose(delivery_info, None, state).await
     }
 
-    /// Modify the message by sending a disposition with the `delivery_state` field set
+    /// Modify the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Modify`
+    /// 
+    /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn modify_all<'a, T: 'a>(
-        &mut self,
-        deliveries: impl IntoIterator<Item = &'a Delivery<T>>,
+        &self,
+        deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
     ) -> Result<(), DispositionError> {
         let state = DeliveryState::Modified(modified);
-        let delivery_infos = deliveries.into_iter().map(|d| d.clone_info()).collect();
+        let delivery_infos = deliveries.into_iter().map(|d| d.into()).collect();
         self.inner.dispose_all(delivery_infos, None, state).await
     }
 }
@@ -382,7 +402,7 @@ pub(crate) struct ReceiverInner<L: endpoint::ReceiverLink> {
     pub(crate) link: L,
     pub(crate) buffer_size: usize,
     pub(crate) credit_mode: CreditMode,
-    pub(crate) processed: SequenceNo,
+    pub(crate) processed: AtomicU32, // SequenceNo,
     pub(crate) auto_accept: bool,
 
     // Control sender to the session
@@ -489,12 +509,13 @@ where
             .await
     }
 
+    /// # Cancel safety
     async fn send_detach(
         &mut self,
         closed: bool,
         error: Option<definitions::Error>,
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError> {
-        self.link.send_detach(&self.outgoing, closed, error).await
+        self.link.send_detach(&self.outgoing, closed, error).await // cancel safe
     }
 }
 
@@ -539,13 +560,17 @@ where
         T: DecodeIntoMessage + Send,
     {
         loop {
-            match self.recv_inner().await? {
+            match self.recv_inner().await? // FIXME: cancel safe? if oneshot channel is cancel safe
+            {
                 Some(delivery) => return Ok(delivery),
                 None => continue, // Incomplete transfer, there are more transfer frames coming
             }
         }
     }
 
+    /// # Cancel safety
+    /// 
+    /// This should be cancel safe if oneshot channel is cancel safe
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
@@ -553,17 +578,16 @@ where
     {
         let frame = self
             .incoming
-            .recv()
-            .await
+            .recv() 
+            .await // cancel safe
             .ok_or(LinkStateError::IllegalSessionState)?;
 
         match frame {
             LinkFrame::Detach(detach) => {
                 let closed = detach.closed;
-                self.link.send_detach(&self.outgoing, closed, None).await?;
+                self.link.send_detach(&self.outgoing, closed, None).await?; // cancel safe
                 self.link
                     .on_incoming_detach(detach)
-                    .await
                     .map_err(Into::into)
                     .and_then(|_| match closed {
                         true => Err(LinkStateError::RemoteClosed.into()),
@@ -574,7 +598,7 @@ where
                 input_handle: _,
                 performative,
                 payload,
-            } => self.on_incoming_transfer(performative, payload).await,
+            } => self.on_incoming_transfer(performative, payload).await, // cancel safe
             LinkFrame::Attach(_) => Err(LinkStateError::IllegalState.into()),
             LinkFrame::Flow(_) | LinkFrame::Disposition(_) => {
                 // Flow and Disposition are handled by LinkRelay which runs
@@ -588,13 +612,13 @@ where
                     "Transactional acquisition is not implemented".to_string(),
                     None,
                 );
-                self.close_with_error(Some(error)).await?;
+                self.close_with_error(Some(error)).await?; // FIXME: cancel safe? if oneshot chanenl is cancel safe
                 Err(RecvError::TransactionalAcquisitionIsNotImeplemented)
             }
         }
     }
 
-    async fn on_transfer_state(
+    fn on_transfer_state(
         &mut self,
         delivery_tag: &Option<DeliveryTag>,
         settled: Option<bool>,
@@ -614,11 +638,10 @@ where
 
         self.link
             .on_transfer_state(delivery_tag, settled, state)
-            .await
             .map_err(Into::into)
     }
 
-    async fn on_incomplete_transfer(
+    fn on_incomplete_transfer(
         &mut self,
         transfer: Transfer,
         payload: Payload,
@@ -631,26 +654,22 @@ where
 
                 if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
                     // Update unsettled map in the link
-                    self.link
-                        .on_incomplete_transfer(
-                            delivery_tag,
-                            incomplete.section_number.unwrap_or(0),
-                            incomplete.section_offset,
-                        )
-                        .await;
+                    self.link.on_incomplete_transfer(
+                        delivery_tag,
+                        incomplete.section_number.unwrap_or(0),
+                        incomplete.section_offset,
+                    );
                 }
             }
             None => {
                 let incomplete = IncompleteTransfer::new(transfer, payload);
                 if let Some(delivery_tag) = incomplete.performative.delivery_tag.clone() {
                     // Update unsettled map in the link
-                    self.link
-                        .on_incomplete_transfer(
-                            delivery_tag,
-                            incomplete.section_number.unwrap_or(0),
-                            incomplete.section_offset,
-                        )
-                        .await;
+                    self.link.on_incomplete_transfer(
+                        delivery_tag,
+                        incomplete.section_number.unwrap_or(0),
+                        incomplete.section_offset,
+                    );
                 }
                 self.incomplete_transfer = Some(Box::new(incomplete));
             }
@@ -659,6 +678,9 @@ where
         Ok(())
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe because all internal `.await` point(s) are cancel safe
     async fn on_resuming_transfer<T>(
         &mut self,
         transfer: Transfer,
@@ -679,31 +701,34 @@ where
                 if remote != local {
                     let (section_number, section_offset) =
                         count_number_of_sections_and_offset(&payload);
-                    let delivery = self
-                        .link
-                        .on_complete_transfer(transfer, payload, section_number, section_offset)
-                        .await?;
+                    let delivery = self.link.on_complete_transfer(
+                        transfer,
+                        payload,
+                        section_number,
+                        section_offset,
+                    )?;
 
                     // Auto accept the message and leave settled to be determined based on rcv_settle_mode
                     if self.auto_accept {
-                        let delivery_info = delivery.clone_info();
-                        self.dispose(delivery_info, None, Accepted {}.into())
-                            .await?;
+                        self.dispose(&delivery, None, Accepted {}.into()).await?; // cancel safe
                     }
 
-                    return Ok(Some(delivery));
+                    Ok(Some(delivery))
                 } else {
                     // The new Transfer belongs to the buffered incomplete transfer
-                    self.on_complete_transfer(transfer, payload).await
+                    self.on_complete_transfer(transfer, payload).await // cancel safe
                 }
             }
             _ => {
                 // The new Transfer belongs to the buffered incomplete transfer that there isn't an incomplete_transfer
-                self.on_complete_transfer(transfer, payload).await
+                self.on_complete_transfer(transfer, payload).await // cancel safe
             }
         }
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe because all internal `.await` point(s) are cancel safe
     async fn on_complete_transfer<T>(
         &mut self,
         transfer: Transfer,
@@ -717,34 +742,32 @@ where
                 incomplete.or_assign(transfer)?;
                 incomplete.append(payload); // This also computes the section number and offset incrementally
 
-                self.link
-                    .on_complete_transfer(
-                        incomplete.performative,
-                        incomplete.buffer,
-                        incomplete.section_number.unwrap_or(0),
-                        incomplete.section_offset,
-                    )
-                    .await?
+                self.link.on_complete_transfer(
+                    incomplete.performative,
+                    incomplete.buffer,
+                    incomplete.section_number.unwrap_or(0),
+                    incomplete.section_offset,
+                )?
             }
             None => {
                 let (section_number, section_offset) =
                     count_number_of_sections_and_offset(&payload);
                 self.link
-                    .on_complete_transfer(transfer, payload, section_number, section_offset)
-                    .await?
+                    .on_complete_transfer(transfer, payload, section_number, section_offset)?
             }
         };
 
         // Auto accept the message and leave settled to be determined based on rcv_settle_mode
         if self.auto_accept {
-            let delivery_info = delivery.clone_info();
-            self.dispose(delivery_info, None, Accepted {}.into())
-                .await?;
+            self.dispose(&delivery, None, Accepted {}.into()).await?; // cancel safe
         }
 
         Ok(Some(delivery))
     }
 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe because all internal `.await` point(s) are cancel safe
     #[inline]
     async fn on_incoming_transfer<T>(
         &mut self,
@@ -768,78 +791,89 @@ where
             // the transfer performative, i.e., it is the state of the delivery (not the transfer) that existed at the
             // point the frame was sent.
             self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)
-                .await?;
+                ?;
         }
 
         if transfer.more {
             // Partial transfer of the delivery
             // There is only ONE incomplet transfer locally, so the partial transfer must belong to the
             // same delivery
-            self.on_incomplete_transfer(transfer, payload).await?;
+            self.on_incomplete_transfer(transfer, payload)?;
             // Partial delivery doesn't yield a complete message
             Ok(None)
+        } else if transfer.resume {
+            self.on_resuming_transfer(transfer, payload).await // cancel safe
         } else {
-            if transfer.resume {
-                self.on_resuming_transfer(transfer, payload).await
-            } else {
-                // Final transfer of the delivery
-                self.on_complete_transfer(transfer, payload).await
-            }
+            // Final transfer of the delivery
+            self.on_complete_transfer(transfer, payload).await // cancel safe
         }
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
+    /// 
+    /// # Cancel safety
+    /// 
+    /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {
-        self.processed = 0;
+        self.processed = AtomicU32::new(0);
         if let CreditMode::Auto(_) = self.credit_mode {
             self.credit_mode = CreditMode::Auto(credit)
         }
 
         self.link
             .send_flow(&self.outgoing, Some(credit), Some(false), false)
-            .await
+            .await // cancel safe
     }
 
+    /// This is cancel safe because all internal `.await` points are cancel safe
     #[inline]
     pub(crate) async fn dispose(
-        &mut self,
-        delivery_info: DeliveryInfo,
+        &self,
+        delivery_info: impl Into<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
+        let delivery_info = delivery_info.into();
         self.link
             .dispose(&self.outgoing, delivery_info, settled, state, false)
-            .await?;
+            .await?; // cancel safe
 
-        self.processed += 1;
-        self.update_credit_if_auto().await?;
+        // self.processed += 1;
+        let prev = self.processed.fetch_add(1, Ordering::Release);
+        self.update_credit_if_auto(prev + 1).await?; // cancel safe
         Ok(())
     }
 
+    /// This is cancel safe because all internal `.await` points are cancel safe
     #[inline]
     pub(crate) async fn dispose_all(
-        &mut self,
+        &self,
         delivery_infos: Vec<DeliveryInfo>,
         settled: Option<bool>,
         state: DeliveryState,
     ) -> Result<(), DispositionError> {
-        let total = delivery_infos.len();
+        let total = delivery_infos.len() as u32;
         self.link
             .dispose_all(&self.outgoing, delivery_infos, settled, state, false)
-            .await?;
+            .await?; // cancel safe
 
-        self.processed += total as u32;
-        self.update_credit_if_auto().await?;
+        // self.processed += total as u32;
+        let prev = self.processed.fetch_add(total, Ordering::Release);
+        self.update_credit_if_auto(prev + total).await?; // cancel safe
         Ok(())
     }
 
+    /// This is cancel safe because it only `.await` on a cancel safe future
     #[inline]
-    async fn update_credit_if_auto(&mut self) -> Result<(), DispositionError> {
+    async fn update_credit_if_auto(&self, processed: u32) -> Result<(), DispositionError> {
         if let CreditMode::Auto(max_credit) = self.credit_mode {
-            if self.processed >= max_credit / 2 {
-                // self.processed will be set to zero when setting link credit
-                self.set_credit(max_credit).await?;
+            if processed >= max_credit / 2 {
+                // Reset link credit
+                self.processed.swap(0, Ordering::Release);
+                self.link
+                    .send_flow(&self.outgoing, Some(max_credit), Some(false), false)
+                    .await?; // cancel safe
             }
         }
         Ok(())
@@ -851,10 +885,10 @@ where
     /// Setting the credit will set the `drain` field to false and stop draining
     #[inline]
     pub async fn drain(&mut self) -> Result<(), DispositionError> {
-        self.processed = 0;
+        self.processed = AtomicU32::new(0);
 
         // Return if already draining
-        if self.link.flow_state().drain().await {
+        if self.link.flow_state().drain() {
             return Ok(());
         }
 
@@ -994,13 +1028,13 @@ impl DetachedReceiver {
                     .link
                     .send_attach(&self.inner.outgoing, &self.inner.session, false)
                     .await?;
-                self.inner.link.on_incoming_attach(remote_attach).await?
+                self.inner.link.on_incoming_attach(remote_attach)?
             }
             None => self.inner.exchange_attach(false).await?,
         };
         tracing::debug!(?exchange);
 
-        let credit = self.inner.link.flow_state.link_credit().await;
+        let credit = self.inner.link.flow_state.link_credit();
         self.inner.set_credit(credit).await?;
 
         Ok(exchange)

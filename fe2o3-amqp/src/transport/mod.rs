@@ -113,7 +113,7 @@ where
         mut stream: Io,
         domain: &str,
         connector: &tokio_rustls::TlsConnector,
-        alt_tls: bool
+        alt_tls: bool,
     ) -> Result<tokio_rustls::client::TlsStream<Io>, NegotiationError> {
         use librustls::ServerName;
 

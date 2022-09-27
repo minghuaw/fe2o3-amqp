@@ -137,8 +137,7 @@ impl<R> ConnectionHandle<R> {
             .send(ConnectionControl::AllocateSession { tx, responder })
             .await
             .map_err(|_| AllocSessionError::IllegalState)?; // Connection must have stopped
-        let result = resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?;
-        result
+        resp_rx.await.map_err(|_| AllocSessionError::IllegalState)?
     }
 }
 
@@ -527,7 +526,7 @@ impl endpoint::Connection for Connection {
 
     /// Reacting to remote Open frame
     #[instrument(skip_all)]
-    async fn on_incoming_open(
+    fn on_incoming_open(
         &mut self,
         _channel: IncomingChannel,
         open: Open,
@@ -590,14 +589,14 @@ impl endpoint::Connection for Connection {
         let relay = self
             .session_by_incoming_channel
             .remove(&channel)
-            .ok_or_else(|| ConnectionInnerError::NotFound(None))?;
+            .ok_or(ConnectionInnerError::NotFound(None))?;
         relay.send(sframe).await?;
 
         Ok(())
     }
 
     /// Reacting to remote Close frame
-    async fn on_incoming_close(
+    fn on_incoming_close(
         &mut self,
         _channel: IncomingChannel,
         close: Close,
@@ -623,7 +622,7 @@ impl endpoint::Connection for Connection {
                     None => Ok(()),
                 }
             }
-            _ => return Err(CloseError::IllegalState),
+            _ => Err(CloseError::IllegalState),
         }
     }
 
@@ -744,7 +743,7 @@ impl Connection {
                 let relay = self
                     .session_by_outgoing_channel
                     .get(outgoing_channel as usize)
-                    .ok_or_else(|| ConnectionInnerError::NotFound(None))?; // Close with error NotFound
+                    .ok_or(ConnectionInnerError::NotFound(None))?; // Close with error NotFound
 
                 self.session_by_incoming_channel
                     .insert(channel, relay.clone());

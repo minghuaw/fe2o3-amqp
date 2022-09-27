@@ -1,8 +1,32 @@
 # Change Log
 
+## 0.6.7
+
+1. Disposition of message (`accept()`, `reject()`, `release()`, `modify()`, `accept_all()`, `reject_all()`, `release_all()`, `modify_all()`) on the receiver side no longer requires `&mut self`. They only need `&self` now.
+2. Allow receiver disposition methods (`accept()`, `reject()`, `release()`, `modify()`, `accept_all()`, `reject_all()`, `release_all()`, `modify_all()`) to take any type that implement `Into<DeliveryInfo>`. This includes both `Delivery<T>` and `&Delivery<T>`
+3. Switched internal `RwLock` from `tokio::sync::RwLock` to `parking_lot::RwLock` to resolve cancel safety issue with `Receiver::recv()` [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
+   1. Switching from an async `RwLock` to a blocking `RwLock` is fine because the lock guard will never be held across `.await` points.
+
+## 0.6.6
+
+1. `on_incoming_attach` should always be evaluated before sending back `Attach`. The only lazy evaluation left is when parsing SaslPlainProfile from url
+
+## ~~0.6.5~~
+
+1. Fixed logic error with lazy evaluation of `link.on_incoming_attach` introduced in 0.6.4
+
+## ~~0.6.4~~
+
+1. Lazily evaluate some values and return early if a preceding value is already erroneous.
+
+## 0.6.3
+
+1. Updated `fe2o3-amqp-types` to "0.5.2" and `serde_amqp` to "0.4.3" which fix #103
+2. Fixed some clippy warnings
+
 ## 0.6.2
 
-1. Adde `alt_tls_establishment` option to connection builder, which then asks the connection to implicitly perform alternative tls establishment.
+1. Added `alt_tls_establishment` option to connection builder, which then asks the connection to implicitly perform alternative tls establishment.
 
 ## 0.6.1
 

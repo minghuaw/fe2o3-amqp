@@ -53,7 +53,7 @@ where
         };
 
         // send a begin
-        engine.session.send_begin(&mut engine.outgoing).await?;
+        engine.session.send_begin(&engine.outgoing).await?;
         // wait for an incoming begin
         let frame = match engine.incoming.recv().await {
             Some(frame) => frame,
@@ -124,7 +124,7 @@ where
             }
             SessionFrameBody::Disposition(disposition) => {
                 if let Some(dispositions) =
-                    self.session.on_incoming_disposition(disposition).await?
+                    self.session.on_incoming_disposition(disposition)?
                 {
                     for disposition in dispositions {
                         let disposition = self.session.on_outgoing_disposition(disposition)?;
@@ -141,7 +141,7 @@ where
                 self.session.on_incoming_detach(detach).await?;
             }
             SessionFrameBody::End(end) => {
-                let result = self.session.on_incoming_end(channel, end).await;
+                let result = self.session.on_incoming_end(channel, end);
                 if matches!(self.session.local_state(), SessionState::EndReceived) {
                     // if control is closing, finish sending all buffered messages before closing
                     self.outgoing_link_frames.close();
@@ -173,7 +173,7 @@ where
                     self.on_outgoing_link_frames(frame).await?;
                 }
 
-                self.session.send_end(&mut self.outgoing, error).await?;
+                self.session.send_end(&self.outgoing, error).await?;
             }
             SessionControl::AllocateLink {
                 link_name,
@@ -363,7 +363,7 @@ where
                     .await
                     .map_err(|_| SessionInnerError::IllegalConnectionState)?;
                 let (channel, end) = self.wait_for_remote_end(false).await?;
-                self.session.on_incoming_end(channel, end).await?;
+                self.session.on_incoming_end(channel, end)?;
             }
             SessionState::EndSent => {
                 self.wait_for_remote_end(false).await?;
@@ -424,7 +424,7 @@ where
         loop {
             let result = tokio::select! {
                 incoming = self.incoming.recv() => {
-                    let result = match incoming {
+                    match incoming {
                         Some(incoming) => self.on_incoming(incoming).await,
                         None => {
                             // Check local state
@@ -435,13 +435,11 @@ where
                                 },
                                 Running::Stop => Ok(Running::Stop),
                             }
-
                         }
-                    };
-                    result
+                    }
                 },
                 control = self.control.recv() => {
-                    let result = match control {
+                    match control {
                         Some(control) => {
                             self.on_control(control).await
                         },
@@ -449,11 +447,10 @@ where
                             // all Links and SessionHandle are dropped
                             Ok(Running::Stop)
                         }
-                    };
-                    result
+                    }
                 },
                 frame = self.outgoing_link_frames.recv() => {
-                    let result = match frame {
+                    match frame {
                         Some(frame) => self.on_outgoing_link_frames(frame).await,
                         None => {
                             // All Links and SessionHandle are dropped
@@ -462,8 +459,7 @@ where
                             // first while the session is still waitint for remote end frame.
                             Ok(Running::Continue)
                         }
-                    };
-                    result
+                    }
                 }
             };
 

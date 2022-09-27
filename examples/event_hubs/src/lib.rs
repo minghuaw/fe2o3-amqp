@@ -42,9 +42,11 @@ pub async fn get_event_hub_partitions(
         )
         .value(())
         .build();
-    sender.send(request).await?
+    sender
+        .send(request)
+        .await?
         .accepted_or(anyhow!("request not accepted"))?;
-        
+
     let response: Delivery<BTreeMap<String, Value>> = receiver.recv().await?;
     receiver.accept(&response).await?;
 
@@ -58,7 +60,7 @@ pub async fn get_event_hub_partitions(
         .into_iter()
         .map(|el| el.try_into())
         .collect::<std::result::Result<Vec<String>, Value>>()
-            .map_err(|val| anyhow!("Expect string found {:?}", val))?;
+        .map_err(|val| anyhow!("Expect string found {:?}", val))?;
 
     sender.close().await?;
     receiver.close().await?;

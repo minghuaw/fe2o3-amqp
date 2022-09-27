@@ -158,6 +158,7 @@ impl Builder {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[cfg(not(all(feature = "transaction", feature = "acceptor")))]
     async fn launch_client_session_engine<R>(
         self,
@@ -183,6 +184,7 @@ impl Builder {
         Ok(engine.spawn())
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[cfg(all(feature = "transaction", feature = "acceptor"))]
     async fn launch_client_session_engine<R>(
         mut self,

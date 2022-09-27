@@ -119,6 +119,7 @@ impl From<LinkRelayError> for SessionInnerError {
 }
 
 /// Error with session operations
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.

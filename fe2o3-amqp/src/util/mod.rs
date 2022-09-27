@@ -1,7 +1,7 @@
 //! Common utilities
 
 use bytes::{buf, Buf};
-use fe2o3_amqp_types::definitions::{DeliveryNumber, DeliveryTag, ReceiverSettleMode};
+use fe2o3_amqp_types::definitions::DeliveryNumber;
 use fe2o3_amqp_types::messaging::DeliveryState;
 use futures_util::Future;
 use std::io;
@@ -215,11 +215,8 @@ impl AsDeliveryState for Option<DeliveryState> {
     }
 }
 
-pub(crate) struct DeliveryInfo {
-    pub delivery_id: DeliveryNumber,
-    pub delivery_tag: DeliveryTag,
-    pub rcv_settle_mode: Option<ReceiverSettleMode>,
-}
+/// A private zero-sized type that makes struct not constructable by users
+pub(crate) struct Sealed {}
 
 #[cfg(test)]
 mod tests {
