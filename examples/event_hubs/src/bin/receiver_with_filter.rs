@@ -1,19 +1,13 @@
-use std::{env, sync::Arc};
+use std::env;
 
 use dotenv::dotenv;
 use event_hubs::get_event_hub_partitions;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
-    types::{
-        definitions::SECURE_PORT,
-        primitives::{Value}, messaging::Source,
-    },
+    types::{definitions::SECURE_PORT, messaging::Source, primitives::Value},
     Connection, Receiver, Session,
 };
 use fe2o3_amqp_ext::filters::SelectorFilter;
-use rustls::OwnedTrustAnchor;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {
@@ -58,9 +52,9 @@ async fn main() {
                 .address(partition_address)
                 .add_to_filter(
                     "filter_latest",
-                    SelectorFilter::new("amqp.annotation.x-opt-offset > @latest")
+                    SelectorFilter::new("amqp.annotation.x-opt-offset > @latest"),
                 )
-                .build()
+                .build(),
         )
         .attach(&mut session)
         .await

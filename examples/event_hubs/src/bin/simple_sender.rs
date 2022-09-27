@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::env;
 
 use dotenv::dotenv;
 use fe2o3_amqp::{
@@ -10,9 +10,6 @@ use fe2o3_amqp::{
     },
     Connection, Sender, Session,
 };
-use rustls::OwnedTrustAnchor;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {

@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::env;
 
 use dotenv::dotenv;
 use event_hubs::get_event_hub_partitions;
@@ -11,9 +11,6 @@ use fe2o3_amqp::{
     },
     Connection, Sender, Session,
 };
-use rustls::OwnedTrustAnchor;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {
@@ -39,7 +36,9 @@ async fn main() {
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
 
-    let partitions = get_event_hub_partitions(&mut connection, &event_hub_name).await.unwrap();
+    let partitions = get_event_hub_partitions(&mut connection, &event_hub_name)
+        .await
+        .unwrap();
     let partition = &partitions[0];
 
     let partition_address = format!("{}/Partitions/{}", event_hub_name, partition);

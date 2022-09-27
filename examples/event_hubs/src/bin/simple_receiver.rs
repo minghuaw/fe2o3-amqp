@@ -1,18 +1,12 @@
-use std::{env, sync::Arc};
+use std::env;
 
 use dotenv::dotenv;
 use event_hubs::get_event_hub_partitions;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
-    types::{
-        definitions::SECURE_PORT,
-        primitives::{Value},
-    },
+    types::{definitions::SECURE_PORT, primitives::Value},
     Connection, Receiver, Session,
 };
-use rustls::OwnedTrustAnchor;
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
 
 #[tokio::main]
 async fn main() {
