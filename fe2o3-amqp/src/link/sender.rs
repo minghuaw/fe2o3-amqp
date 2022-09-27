@@ -596,7 +596,7 @@ where
         E: From<L::TransferError> + From<serde_amqp::Error>,
     {
         // send a transfer, checking state will be implemented in SenderLink
-        let detached_fut = self.incoming.recv();
+        let detached_fut = self.incoming.recv(); // cancel safe
         let settlement = self
             .link
             .send_payload(
