@@ -70,6 +70,43 @@ impl<T: ser::Serialize> ser::Serialize for Array<T> {
     }
 }
 
+impl<T> IntoIterator for Array<T> {
+    type Item = T;
+
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Array<T> {
+    type Item = &'a T;
+
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut Array<T> {
+    type Item = &'a mut T;
+
+    type IntoIter = std::slice::IterMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
+impl<T> FromIterator<T> for Array<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let v = Vec::from_iter(iter);
+        Self(v)
+    }
+}
+
 enum Field {
     Single,
     Multiple,
@@ -192,13 +229,6 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Array<T> {
                 )
             }
         }
-    }
-}
-
-impl<T> FromIterator<T> for Array<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let v = Vec::from_iter(iter);
-        Self(v)
     }
 }
 
