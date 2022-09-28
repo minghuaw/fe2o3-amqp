@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.4.4
+
+1. Impl `IntoIterator` for `Array<T>`
+2. Impl `TryFrom<Value>` for `Vec<T>`, `Array<T>`, and `OrderedMap<K,V>`
+
 ## 0.4.3
 
 1. Changed `Read` trait to reflect `UnexpectedEof` as a `None`
