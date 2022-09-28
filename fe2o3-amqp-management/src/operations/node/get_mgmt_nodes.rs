@@ -2,7 +2,7 @@ use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Messag
 
 use crate::{
     error::{Error, Result},
-    operations::{GET_MGMT_NODES, OPERATION},
+    constants::{GET_MGMT_NODES, OPERATION},
     request::MessageSerializer,
     response::MessageDeserializer,
 };

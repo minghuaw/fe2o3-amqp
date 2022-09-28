@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
     primitives::{OrderedMap, Value},
@@ -5,7 +7,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     error::{Error, Result},
-    operations::{OPERATION, UPDATE},
+    constants::{OPERATION, UPDATE, NAME, IDENTITY},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -32,26 +34,34 @@ pub trait Update {
 ///
 /// Where the type of the attribute value provided is not as required, type conversion as per the
 /// rules in 3.3.1.1 MUST be provided.
-pub struct UpdateRequest {
-    /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub name: String,
-
-    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    pub identity: String,
-
+pub struct UpdateRequest<'a> {
+    pub property: UpdateRequestProperty<'a>,
+    
     pub body: OrderedMap<String, Value>,
 }
 
-impl MessageSerializer for UpdateRequest {
+pub enum UpdateRequestProperty<'a> {
+    /// The name of the Manageable Entity to be managed. This is case-sensitive.
+    Name(Cow<'a, str>),
+
+    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
+    Identity(Cow<'a, str>),
+}
+
+impl<'a> MessageSerializer for UpdateRequest<'a> {
     type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
+        let (key, value) = match self.property {
+            UpdateRequestProperty::Name(value) => (NAME, value),
+            UpdateRequestProperty::Identity(value) => (IDENTITY, value),
+        };
+
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, UPDATE)
-                    .insert("name", self.name)
-                    .insert("identity", self.identity)
+                    .insert(key, &value[..])
                     .build(),
             )
             .value(self.body)

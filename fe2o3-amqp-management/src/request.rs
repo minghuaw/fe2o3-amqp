@@ -1,7 +1,7 @@
 use fe2o3_amqp_types::messaging::Message;
 use serde::Serialize;
 
-// use crate::operations::OperationRequest;
+// use crate::constantsOperationRequest;
 
 // pub struct RequestMessageProperties {
 //     /// The management operation to be performed. This is case-sensitive.

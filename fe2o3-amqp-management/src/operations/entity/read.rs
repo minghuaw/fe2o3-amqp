@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     error::{Error, Result},
-    operations::{OPERATION, READ},
+    constants::{OPERATION, READ, NAME, IDENTITY},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -48,15 +48,15 @@ impl<'a> MessageSerializer for ReadRequest<'a> {
 
     fn into_message(self) -> Message<Self::Body> {
         let (key, value) = match self {
-            ReadRequest::Name(value) => ("name", value),
-            ReadRequest::Identity(value) => ("identity", value),
+            ReadRequest::Name(value) => (NAME, value),
+            ReadRequest::Identity(value) => (IDENTITY, value),
         };
 
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, READ)
-                    .insert(key, value.to_string())
+                    .insert(key, &value[..])
                     .build(),
             )
             .value(())

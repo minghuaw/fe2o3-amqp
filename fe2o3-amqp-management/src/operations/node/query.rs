@@ -25,7 +25,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     error::{Error, Result},
-    operations::{OPERATION, QUERY},
+    constants::{OPERATION, QUERY},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
