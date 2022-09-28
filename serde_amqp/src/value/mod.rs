@@ -496,29 +496,6 @@ where
     }
 }
 
-impl<K, V> TryFrom<Value> for OrderedMap<K, V> 
-where
-    K: TryFrom<Value, Error = Value> + Hash + Eq,
-    V: TryFrom<Value, Error = Value>,
-{
-    type Error = Value;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Map(map) => {
-                let mut out = OrderedMap::with_capacity(map.len());
-                for (k,v) in map {
-                    let key = K::try_from(k)?;
-                    let val = V::try_from(v)?;
-                    out.insert(key, val);
-                }
-                Ok(out)
-            },
-            _ => Err(value)
-        }
-    }
-}
-
 impl TryFrom<Value> for f32 {
     type Error = Value;
 
@@ -544,6 +521,28 @@ impl TryFrom<Value> for f64 {
 impl<K, V> TryFrom<Value> for BTreeMap<K, V>
 where
     K: TryFrom<Value, Error = Value> + Ord,
+    V: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Map(map) => map
+                .into_iter()
+                .map(|(k, v)| match (K::try_from(k), V::try_from(v)) {
+                    (Ok(k), Ok(v)) => Ok((k, v)),
+                    (Err(err), _) => Err(err),
+                    (_, Err(err)) => Err(err),
+                })
+                .collect(),
+            _ => Err(value),
+        }
+    }
+}
+
+impl<K, V> TryFrom<Value> for OrderedMap<K, V>
+where
+    K: TryFrom<Value, Error = Value> + Hash + Eq,
     V: TryFrom<Value, Error = Value>,
 {
     type Error = Value;
