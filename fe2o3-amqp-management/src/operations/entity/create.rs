@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
     primitives::{OrderedMap, Value},
@@ -14,11 +16,11 @@ pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
 }
 
-pub struct CreateRequest {
+pub struct CreateRequest<'a> {
     /// Additional application-properties
     ///
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub name: String,
+    pub name: Cow<'a, str>,
 
     /// The body MUST consist of an amqp-value section containing a map. The map consists of
     /// key-value pairs where the key represents the name of an attribute of the entity and the
@@ -58,7 +60,7 @@ pub struct CreateRequest {
     pub body: OrderedMap<String, Value>,
 }
 
-impl MessageSerializer for CreateRequest {
+impl<'a> MessageSerializer for CreateRequest<'a> {
     type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
@@ -66,7 +68,7 @@ impl MessageSerializer for CreateRequest {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, CREATE)
-                    .insert("name", self.name)
+                    .insert("name", &self.name[..])
                     .build(),
             )
             .value(self.body)

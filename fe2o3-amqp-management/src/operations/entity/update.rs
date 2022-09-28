@@ -34,27 +34,24 @@ pub trait Update {
 ///
 /// Where the type of the attribute value provided is not as required, type conversion as per the
 /// rules in 3.3.1.1 MUST be provided.
-pub struct UpdateRequest<'a> {
-    pub property: UpdateRequestProperty<'a>,
-    
-    pub body: OrderedMap<String, Value>,
-}
-
-pub enum UpdateRequestProperty<'a> {
-    /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    Name(Cow<'a, str>),
-
-    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    Identity(Cow<'a, str>),
+pub enum UpdateRequest<'a> {
+    Name{
+        value: Cow<'a, str>,
+        body: OrderedMap<String, Value>,
+    },
+    Identity {
+        value: Cow<'a, str>,
+        body: OrderedMap<String, Value>,
+    }
 }
 
 impl<'a> MessageSerializer for UpdateRequest<'a> {
     type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
-        let (key, value) = match self.property {
-            UpdateRequestProperty::Name(value) => (NAME, value),
-            UpdateRequestProperty::Identity(value) => (IDENTITY, value),
+        let (key, value, body) = match self {
+            UpdateRequest::Name { value, body } => (NAME, value, body),
+            UpdateRequest::Identity { value, body } => (IDENTITY, value, body),
         };
 
         Message::builder()
@@ -64,7 +61,7 @@ impl<'a> MessageSerializer for UpdateRequest<'a> {
                     .insert(key, &value[..])
                     .build(),
             )
-            .value(self.body)
+            .value(body)
             .build()
     }
 }

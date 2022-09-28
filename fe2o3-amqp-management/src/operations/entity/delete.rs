@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Message},
     primitives::{OrderedMap, Value},
@@ -5,7 +7,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     error::{Error, Result},
-    constants::{DELETE, OPERATION},
+    constants::{DELETE, OPERATION, NAME, IDENTITY},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -28,24 +30,27 @@ impl EmptyMap {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be
 /// ignored.
-pub struct DeleteRequest {
+pub enum DeleteRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub name: String,
-
+    Name(Cow<'a, str>),
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    pub identity: String,
+    Identity(Cow<'a, str>)
 }
 
-impl MessageSerializer for DeleteRequest {
+impl<'a> MessageSerializer for DeleteRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
+        let (key, value) = match self {
+            DeleteRequest::Name(value) => (NAME, value),
+            DeleteRequest::Identity(value) => (IDENTITY, value),
+        };
+
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, DELETE)
-                    .insert("name", self.name)
-                    .insert("identity", self.identity)
+                    .insert(key, &value[..])
                     .build(),
             )
             .value(())
