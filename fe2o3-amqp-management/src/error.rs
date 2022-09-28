@@ -1,4 +1,6 @@
-use fe2o3_amqp::link::{DispositionError, ReceiverAttachError, RecvError, SenderAttachError, SendError};
+use fe2o3_amqp::link::{
+    DispositionError, ReceiverAttachError, RecvError, SendError, SenderAttachError,
+};
 use fe2o3_amqp_types::messaging::Outcome;
 
 use crate::status::StatusCode;
@@ -20,7 +22,11 @@ pub struct StatusError {
 
 impl std::fmt::Display for StatusError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "StatusError {{code: {:?}, description: {:?} }}", self.code, self.description)
+        writeln!(
+            f,
+            "StatusError {{code: {:?}, description: {:?} }}",
+            self.code, self.description
+        )
     }
 }
 

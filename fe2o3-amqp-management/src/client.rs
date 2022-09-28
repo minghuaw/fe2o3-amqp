@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use fe2o3_amqp::{
     link::{DetachError, SendError},
     session::SessionHandle,
@@ -7,12 +5,19 @@ use fe2o3_amqp::{
 };
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, MessageId, Outcome, Properties},
-    primitives::{OrderedMap, SimpleValue, Value},
+    primitives::SimpleValue,
 };
 
 use crate::{
     error::{AttachError, Error, StatusError},
-    operations::{CreateRequest, CreateResponse, ReadRequest, ReadResponse, UpdateRequest, UpdateResponse, DeleteRequest, DeleteResponse},
+    operations::{
+        CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, DeregisterRequest,
+        DeregisterResponse, GetAnnotationsRequest, GetAnnotationsResponse, GetAttributesRequest,
+        GetAttributesResponse, GetMgmtNodesRequest, GetMgmtNodesResponse, GetOperationsRequest,
+        GetOperationsResponse, GetTypesRequest, GetTypesResponse, QueryRequest, QueryResponse,
+        ReadRequest, ReadResponse, RegisterRequest, RegisterResponse, UpdateRequest,
+        UpdateResponse,
+    },
     request::MessageSerializer,
     response::{MessageDeserializer, Response, ResponseMessageProperties},
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
@@ -23,6 +28,52 @@ pub struct MgmtClient {
     client_node_addr: String,
     sender: Sender,
     receiver: Receiver,
+}
+
+macro_rules! operation {
+    ($op:ident, $lt:lifetime, $req_ty:ty, $res_ty:ty) => {
+        pub async fn $op<$lt>(
+            &mut self,
+            req: $req_ty,
+            entity_type: impl Into<String>,
+            locales: Option<String>,
+        ) -> Result<$res_ty, Error> {
+            self.send_request(req, entity_type, locales)
+                .await?
+                .accepted_or_else(|o| Error::NotAccepted(o))?;
+            let response: Response<$res_ty> = self.recv_response().await?;
+            match response.status_code.0.get() {
+                <$res_ty>::STATUS_CODE => Ok(response.operation),
+                _ => Err(StatusError {
+                    code: response.status_code,
+                    description: response.status_description,
+                }
+                .into()),
+            }
+        }
+    };
+
+    ($op:ident, $req_ty:ty, $res_ty:ty) => {
+        pub async fn $op(
+            &mut self,
+            req: $req_ty,
+            entity_type: impl Into<String>,
+            locales: Option<String>,
+        ) -> Result<$res_ty, Error> {
+            self.send_request(req, entity_type, locales)
+                .await?
+                .accepted_or_else(|o| Error::NotAccepted(o))?;
+            let response: Response<$res_ty> = self.recv_response().await?;
+            match response.status_code.0.get() {
+                <$res_ty>::STATUS_CODE => Ok(response.operation),
+                _ => Err(StatusError {
+                    code: response.status_code,
+                    description: response.status_description,
+                }
+                .into()),
+            }
+        }
+    };
 }
 
 impl MgmtClient {
@@ -46,98 +97,29 @@ impl MgmtClient {
         Ok(())
     }
 
-    pub async fn create<'a>(
-        &mut self,
-        name: impl Into<Cow<'a, str>>,
-        body: impl Into<OrderedMap<String, Value>>,
-        entity_type: impl Into<String>,
-        locales: Option<String>,
-    ) -> Result<CreateResponse, Error> {
-        let operation = CreateRequest::new(name, body);
-        self.send_request(operation, entity_type, locales)
-            .await?
-            .accepted_or_else(|o| Error::NotAccepted(o))?;
-        let response: Response<CreateResponse> = self.recv_response().await?;
-        match response.status_code.0.get() {
-            CreateResponse::STATUS_CODE => Ok(response.operation),
-            _ => Err(StatusError {
-                code: response.status_code,
-                description: response.status_description,
-            }
-            .into()),
-        }
-    }
+    operation!(create, 'a,  CreateRequest<'a>, CreateResponse);
 
-    pub async fn read<'a>(
-        &mut self,
-        req: ReadRequest<'a>,
-        entity_type: impl Into<String>,
-        locales: Option<String>,
-    ) -> Result<ReadResponse, Error> {
-        self.send_request(req, entity_type, locales).await?
-            .accepted_or_else(|o| Error::NotAccepted(o))?;
-        let response: Response<ReadResponse> = self.recv_response().await?;
-        match response.status_code.0.get() {
-            ReadResponse::STATUS_CODE => Ok(response.operation),
-            _ => Err(StatusError {
-                code: response.status_code,
-                description: response.status_description
-            }.into())
-        }
-    }
+    operation!(read, 'a, ReadRequest<'a>, ReadResponse);
 
-    pub async fn update<'a>(
-        &mut self,
-        req: UpdateRequest<'a>,
-        entity_type: impl Into<String>,
-        locales: Option<String>,
-    ) -> Result<UpdateResponse, Error> {
-        self.send_request(req, entity_type, locales).await?
-            .accepted_or_else(|o| Error::NotAccepted(o))?;
-        let response: Response<UpdateResponse> = self.recv_response().await?;
-        match response.status_code.0.get() {
-            UpdateResponse::STATUS_CODE => Ok(response.operation),
-            _ => Err(StatusError {
-                code: response.status_code,
-                description: response.status_description
-            }.into())
-        }
-    }
+    operation!(update, 'a, UpdateRequest<'a>, UpdateResponse);
 
-    
-    pub async fn delete<'a>(
-        &mut self,
-        req: DeleteRequest<'a>,
-        entity_type: impl Into<String>,
-        locales: Option<String>,
-    ) -> Result<DeleteResponse, Error> {
-        self.send_request(req, entity_type, locales).await?
-            .accepted_or_else(|o| Error::NotAccepted(o))?;
-        let response: Response<DeleteResponse> = self.recv_response().await?;
-        match response.status_code.0.get() {
-            DeleteResponse::STATUS_CODE => Ok(response.operation),
-            _ => Err(StatusError {
-                code: response.status_code,
-                description: response.status_description
-            }.into())
-        }
-    }
+    operation!(delete, 'a, DeleteRequest<'a>, DeleteResponse);
 
-    // pub async fn query(&mut self, req: QueryRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<QueryResponse, Error> {
-    //     todo!()
-    // }
+    operation!(query, 'a, QueryRequest<'a>, QueryResponse);
 
-    // pub async fn get_types(&mut self, req: GetTypesRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<GetTypesResponse, Error> {
-    //     todo!()
-    // }
+    operation!(get_types, 'a, GetTypesRequest<'a>, GetTypesResponse);
 
-    // pub async fn get_annotations(&mut self, req: UpdateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<UpdateResponse, Error> {
-    //     todo!()
-    // }
+    operation!(get_annotations, 'a, GetAnnotationsRequest<'a>, GetAnnotationsResponse);
 
-    // pub async fn delete(&mut self, req: DeleteRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<DeleteResponse, Error> {
-    //     todo!()
-    // }
+    operation!(get_attributes, 'a, GetAttributesRequest<'a>, GetAttributesResponse);
+
+    operation!(get_operations, 'a, GetOperationsRequest<'a>, GetOperationsResponse);
+
+    operation!(get_mgmt_nodes, GetMgmtNodesRequest, GetMgmtNodesResponse);
+
+    operation!(register, 'a, RegisterRequest<'a>, RegisterResponse);
+
+    operation!(deregister, 'a, DeregisterRequest<'a>, DeregisterResponse);
 
     pub async fn send_request(
         &mut self,

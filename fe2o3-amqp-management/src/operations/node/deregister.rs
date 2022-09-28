@@ -6,8 +6,8 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    error::{Error, Result},
     constants::{DEREGISTER, OPERATION},
+    error::{Error, Result},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -29,7 +29,9 @@ pub struct DeregisterRequest<'a> {
 
 impl<'a> DeregisterRequest<'a> {
     pub fn new(address: impl Into<Cow<'a, str>>) -> Self {
-        Self { address: address.into() }
+        Self {
+            address: address.into(),
+        }
     }
 }
 

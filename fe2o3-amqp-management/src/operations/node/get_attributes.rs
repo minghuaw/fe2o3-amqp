@@ -6,8 +6,8 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    error::{Error, Result},
     constants::{GET_ATTRIBUTES, OPERATION},
+    error::{Error, Result},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -27,7 +27,9 @@ pub struct GetAttributesRequest<'a> {
 
 impl<'a> GetAttributesRequest<'a> {
     pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
-        Self { entity_type: entity_type.into() }
+        Self {
+            entity_type: entity_type.into(),
+        }
     }
 }
 

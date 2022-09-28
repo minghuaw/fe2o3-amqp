@@ -6,8 +6,8 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
+    constants::{DELETE, IDENTITY, NAME, OPERATION},
     error::{Error, Result},
-    constants::{DELETE, OPERATION, NAME, IDENTITY},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -34,7 +34,7 @@ pub enum DeleteRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     Name(Cow<'a, str>),
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    Identity(Cow<'a, str>)
+    Identity(Cow<'a, str>),
 }
 
 impl<'a> DeleteRequest<'a> {
