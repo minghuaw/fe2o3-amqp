@@ -18,14 +18,16 @@
 //! in the same order. Thus, if there are no changes to the set of entities that match the query
 //! then consistency MUST be maintained between requests for successive pages.
 
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
     primitives::{OrderedMap, Value},
 };
 
 use crate::{
-    error::{Error, Result},
     constants::{OPERATION, QUERY},
+    error::{Error, Result},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -34,10 +36,10 @@ pub trait Query {
     fn query(&self, req: QueryRequest) -> Result<QueryResponse>;
 }
 
-pub struct QueryRequest {
+pub struct QueryRequest<'a> {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
-    entity_type: Option<String>,
+    entity_type: Option<Cow<'a, str>>,
 
     /// If set, specifies the number of the first element of the result set to be returned. If not
     /// provided, a default of 0 MUST be assumed.
@@ -53,17 +55,17 @@ pub struct QueryRequest {
     /// A list of strings representing the names of the attributes of the Manageable Entities being
     /// requested. The list MUST NOT contain duplicate elements. If the list contains no elements
     /// then this indicates that all attributes are being requested.
-    attribute_names: Vec<String>,
+    attribute_names: Vec<Cow<'a, str>>,
 }
 
-impl MessageSerializer for QueryRequest {
+impl<'a> MessageSerializer for QueryRequest<'a> {
     type Body = OrderedMap<String, Vec<String>>;
 
     fn into_message(self) -> Message<Self::Body> {
         let mut builder = ApplicationProperties::builder();
         builder = builder.insert(OPERATION, QUERY);
         if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type);
+            builder = builder.insert("entityType", &entity_type[..]);
         }
         if let Some(offset) = self.offset {
             builder = builder.insert("offset", offset);
@@ -74,7 +76,12 @@ impl MessageSerializer for QueryRequest {
         let application_properties = builder.build();
 
         let mut map = OrderedMap::new();
-        map.insert(String::from("attribute_names"), self.attribute_names);
+        let value = self
+            .attribute_names
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        map.insert(String::from("attribute_names"), value);
 
         Message::builder()
             .application_properties(application_properties)

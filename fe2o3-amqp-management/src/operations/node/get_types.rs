@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{AmqpValue, ApplicationProperties, Body, Message},
     primitives::OrderedMap,
@@ -19,18 +21,18 @@ pub trait GetTypes {
 /// Body:
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
-pub struct GetTypesRequest {
-    entity_type: Option<String>,
+pub struct GetTypesRequest<'a> {
+    entity_type: Option<Cow<'a, str>>,
 }
 
-impl MessageSerializer for GetTypesRequest {
+impl<'a> MessageSerializer for GetTypesRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
         let mut builder = ApplicationProperties::builder();
         builder = builder.insert(OPERATION, GET_TYPES);
         if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type);
+            builder = builder.insert("entityType", entity_type.to_string());
         }
         Message::builder()
             .application_properties(builder.build())

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
     primitives::Value,
@@ -21,11 +23,11 @@ pub trait Register {
 /// Body
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
-pub struct RegisterRequest {
-    address: String,
+pub struct RegisterRequest<'a> {
+    address: Cow<'a, str>,
 }
 
-impl MessageSerializer for RegisterRequest {
+impl<'a> MessageSerializer for RegisterRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
@@ -33,7 +35,7 @@ impl MessageSerializer for RegisterRequest {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, REGISTER)
-                    .insert("address", self.address)
+                    .insert("address", self.address.to_string())
                     .build(),
             )
             .value(())

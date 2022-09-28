@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
     primitives::Value,
@@ -21,11 +23,11 @@ pub trait Deregister {
 /// # Body
 ///
 /// The body of the message MUST be empty.
-pub struct DeregisterRequest {
-    address: String,
+pub struct DeregisterRequest<'a> {
+    address: Cow<'a, str>,
 }
 
-impl MessageSerializer for DeregisterRequest {
+impl<'a> MessageSerializer for DeregisterRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
@@ -33,7 +35,7 @@ impl MessageSerializer for DeregisterRequest {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, DEREGISTER)
-                    .insert("address", self.address)
+                    .insert("address", self.address.to_string())
                     .build(),
             )
             .value(())
