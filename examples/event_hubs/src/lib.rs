@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use fe2o3_amqp::{connection::ConnectionHandle, types::primitives::Value, Session};
+use fe2o3_amqp::{connection::ConnectionHandle, types::primitives::Array, Session};
 use fe2o3_amqp_management::{
     client::MgmtClient,
     operations::{ReadRequest, ReadResponse},
@@ -20,22 +20,17 @@ pub async fn get_event_hub_partitions(
         .accepted_or(anyhow!("Request is not accepted"))?;
 
     let mut response: Response<ReadResponse> = mgmt_client.recv_response().await?;
-    let value = response
+
+    mgmt_client.close().await?;
+    session.end().await?;
+
+    let partition_value = response
         .operation
         .entity_attributes
         .remove("partition_ids")
         .ok_or(anyhow!("partition_ids not found"))?;
-    let partitions = match value {
-        Value::Array(array) => array
-            .into_inner()
-            .into_iter()
-            .map(|el| el.try_into())
-            .collect::<std::result::Result<Vec<String>, Value>>()
-            .map_err(|val| anyhow!("Expect string found {:?}", val))?,
-        _ => return Err(anyhow!("Invalid partition_ids value")),
-    };
-
-    mgmt_client.close().await?;
-    session.end().await?;
-    Ok(partitions)
+    let partitions: Array<String> = partition_value
+        .try_into()
+        .map_err(|val| anyhow!("Invalid partitions value: {:?}", val))?;
+    Ok(partitions.into_inner())
 }

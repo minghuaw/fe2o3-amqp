@@ -77,7 +77,7 @@ impl<'a> MessageSerializer for CreateRequest<'a> {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, CREATE)
-                    .insert("name", &self.name[..])
+                    .insert("name", self.name.to_string())
                     .build(),
             )
             .value(self.body)
