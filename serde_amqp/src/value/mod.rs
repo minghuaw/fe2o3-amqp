@@ -2,9 +2,9 @@
 
 use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
-use serde::Serialize;
+use serde::{Serialize};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, HashMap};
+use std::{collections::{BTreeMap, HashMap}, hash::Hash};
 
 use crate::{
     described::Described,
@@ -461,10 +461,62 @@ impl_try_from_for_value_variant! {
     Uuid, Uuid,
     Binary, ByteBuf,
     String, String,
-    Symbol, Symbol,
-    List, Vec<Value>,
-    Map, OrderedMap<Value, Value>,
-    Array, Array<Value>
+    Symbol, Symbol
+}
+
+impl<T> TryFrom<Value> for Vec<T> 
+where
+    T: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::List(val) => {
+                val.into_iter().map(TryFrom::try_from).collect()
+            },
+            _ => Err(value)
+        }
+    }
+}
+
+impl<T> TryFrom<Value> for Array<T>
+where
+    T: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Array(arr) => {
+                arr.into_iter().map(TryFrom::try_from).collect()
+            },
+            _ => Err(value)
+        }
+    }
+}
+
+impl<K, V> TryFrom<Value> for OrderedMap<K, V> 
+where
+    K: TryFrom<Value, Error = Value> + Hash + Eq,
+    V: TryFrom<Value, Error = Value>,
+{
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Map(map) => {
+                let mut out = OrderedMap::with_capacity(map.len());
+                for (k,v) in map {
+                    let key = K::try_from(k)?;
+                    let val = V::try_from(v)?;
+                    out.insert(key, val);
+                }
+                Ok(out)
+            },
+            _ => Err(value)
+        }
+    }
 }
 
 impl TryFrom<Value> for f32 {
