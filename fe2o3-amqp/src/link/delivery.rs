@@ -550,6 +550,10 @@ mod tests {
         let value = false;
         let sendable = Sendable::from(value);
         assert_eq!(sendable.message.body, Body::Value(AmqpValue(false)));
+
+        // let mut map = std::collections::BTreeMap::new();
+        // map.insert(String::from("hello"), String::from("world"));
+        // let sendable = Sendable::from(map);
     }
 
     #[test]
