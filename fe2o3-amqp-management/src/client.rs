@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fe2o3_amqp::{
     link::{DetachError, SendError},
     session::SessionHandle,
@@ -5,11 +7,12 @@ use fe2o3_amqp::{
 };
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, MessageId, Outcome, Properties},
-    primitives::SimpleValue,
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    error::{AttachError, Error},
+    error::{AttachError, Error, StatusError},
+    operations::{CreateRequest, CreateResponse, ReadRequest, ReadResponse, UpdateRequest, UpdateResponse, DeleteRequest, DeleteResponse},
     request::MessageSerializer,
     response::{MessageDeserializer, Response, ResponseMessageProperties},
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
@@ -43,21 +46,82 @@ impl MgmtClient {
         Ok(())
     }
 
-    // pub async fn create(&mut self, req: CreateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<CreateResponse, Error> {
-    //     todo!()
-    // }
+    pub async fn create<'a>(
+        &mut self,
+        name: impl Into<Cow<'a, str>>,
+        body: impl Into<OrderedMap<String, Value>>,
+        entity_type: impl Into<String>,
+        locales: Option<String>,
+    ) -> Result<CreateResponse, Error> {
+        let operation = CreateRequest::new(name, body);
+        self.send_request(operation, entity_type, locales)
+            .await?
+            .accepted_or_else(|o| Error::NotAccepted(o))?;
+        let response: Response<CreateResponse> = self.recv_response().await?;
+        match response.status_code.0.get() {
+            CreateResponse::STATUS_CODE => Ok(response.operation),
+            _ => Err(StatusError {
+                code: response.status_code,
+                description: response.status_description,
+            }
+            .into()),
+        }
+    }
 
-    // pub async fn read(&mut self, req: ReadRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<ReadResponse, Error> {
-    //     todo!()
-    // }
+    pub async fn read<'a>(
+        &mut self,
+        req: ReadRequest<'a>,
+        entity_type: impl Into<String>,
+        locales: Option<String>,
+    ) -> Result<ReadResponse, Error> {
+        self.send_request(req, entity_type, locales).await?
+            .accepted_or_else(|o| Error::NotAccepted(o))?;
+        let response: Response<ReadResponse> = self.recv_response().await?;
+        match response.status_code.0.get() {
+            ReadResponse::STATUS_CODE => Ok(response.operation),
+            _ => Err(StatusError {
+                code: response.status_code,
+                description: response.status_description
+            }.into())
+        }
+    }
 
-    // pub async fn update(&mut self, req: UpdateRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<UpdateResponse, Error> {
-    //     todo!()
-    // }
+    pub async fn update<'a>(
+        &mut self,
+        req: UpdateRequest<'a>,
+        entity_type: impl Into<String>,
+        locales: Option<String>,
+    ) -> Result<UpdateResponse, Error> {
+        self.send_request(req, entity_type, locales).await?
+            .accepted_or_else(|o| Error::NotAccepted(o))?;
+        let response: Response<UpdateResponse> = self.recv_response().await?;
+        match response.status_code.0.get() {
+            UpdateResponse::STATUS_CODE => Ok(response.operation),
+            _ => Err(StatusError {
+                code: response.status_code,
+                description: response.status_description
+            }.into())
+        }
+    }
 
-    // pub async fn delete(&mut self, req: DeleteRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<DeleteResponse, Error> {
-    //     todo!()
-    // }
+    
+    pub async fn delete<'a>(
+        &mut self,
+        req: DeleteRequest<'a>,
+        entity_type: impl Into<String>,
+        locales: Option<String>,
+    ) -> Result<DeleteResponse, Error> {
+        self.send_request(req, entity_type, locales).await?
+            .accepted_or_else(|o| Error::NotAccepted(o))?;
+        let response: Response<DeleteResponse> = self.recv_response().await?;
+        match response.status_code.0.get() {
+            DeleteResponse::STATUS_CODE => Ok(response.operation),
+            _ => Err(StatusError {
+                code: response.status_code,
+                description: response.status_description
+            }.into())
+        }
+    }
 
     // pub async fn query(&mut self, req: QueryRequest, entity_type: impl Into<String>, locales: Option<String>) -> Result<QueryResponse, Error> {
     //     todo!()

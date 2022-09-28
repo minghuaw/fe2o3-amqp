@@ -4,7 +4,7 @@ use fe2o3_amqp_types::primitives::SimpleValue;
 
 /// HTTP status code
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct StatusCode(NonZeroU16);
+pub struct StatusCode(pub NonZeroU16);
 
 impl TryFrom<SimpleValue> for StatusCode {
     type Error = SimpleValue;
