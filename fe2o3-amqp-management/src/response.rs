@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::messaging::{Message, MessageId};
 
-use crate::{error::Error, status::StatusCode};
+use crate::{error::Error, status::StatusCode, constants::{STATUS_CODE, STATUS_DESCRIPTION}};
 
 /// The correlation-id of the response message MUST be the correlation-id from the request message
 /// (if present), else the message-id from the request message. Response messages have the following
@@ -29,7 +29,7 @@ impl ResponseMessageProperties {
         let status_code = match message
             .application_properties
             .as_mut()
-            .and_then(|ap| ap.remove("status-code"))
+            .and_then(|ap| ap.remove(STATUS_CODE))
         {
             Some(value) => StatusCode::try_from(value).map_err(|_| Error::DecodeError)?,
             None => return Err(Error::StatusCodeNotFound),
@@ -38,7 +38,7 @@ impl ResponseMessageProperties {
         let status_description: Option<String> = message
             .application_properties
             .as_mut()
-            .and_then(|ap| ap.remove("status-description"))
+            .and_then(|ap| ap.remove(STATUS_DESCRIPTION))
             .map(|value| String::try_from(value).map_err(|_| Error::DecodeError))
             .transpose()?;
 
