@@ -24,7 +24,15 @@ pub trait Register {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct RegisterRequest<'a> {
-    address: Cow<'a, str>,
+    pub address: Cow<'a, str>,
+}
+
+impl<'a> RegisterRequest<'a> {
+    pub fn new(address: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            address: address.into(),
+        }
+    }
 }
 
 impl<'a> MessageSerializer for RegisterRequest<'a> {

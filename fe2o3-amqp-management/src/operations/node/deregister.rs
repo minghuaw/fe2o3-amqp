@@ -24,7 +24,13 @@ pub trait Deregister {
 ///
 /// The body of the message MUST be empty.
 pub struct DeregisterRequest<'a> {
-    address: Cow<'a, str>,
+    pub address: Cow<'a, str>,
+}
+
+impl<'a> DeregisterRequest<'a> {
+    pub fn new(address: impl Into<Cow<'a, str>>) -> Self {
+        Self { address: address.into() }
+    }
 }
 
 impl<'a> MessageSerializer for DeregisterRequest<'a> {

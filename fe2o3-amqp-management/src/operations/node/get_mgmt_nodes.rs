@@ -1,8 +1,8 @@
 use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
 
 use crate::{
-    error::{Error, Result},
     constants::{GET_MGMT_NODES, OPERATION},
+    error::{Error, Result},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -19,6 +19,12 @@ pub trait GetMgmtNodes {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetMgmtNodesRequest {}
+
+impl GetMgmtNodesRequest {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl MessageSerializer for GetMgmtNodesRequest {
     type Body = ();

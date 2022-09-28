@@ -25,7 +25,13 @@ pub trait GetOperations {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetOperationsRequest<'a> {
-    entity_type: Option<Cow<'a, str>>,
+    pub entity_type: Option<Cow<'a, str>>,
+}
+
+impl<'a> GetOperationsRequest<'a> {
+    pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
+        Self { entity_type: entity_type.into() }
+    }
 }
 
 impl<'a> MessageSerializer for GetOperationsRequest<'a> {

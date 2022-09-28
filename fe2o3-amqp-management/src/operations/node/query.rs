@@ -39,15 +39,15 @@ pub trait Query {
 pub struct QueryRequest<'a> {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
-    entity_type: Option<Cow<'a, str>>,
+    pub entity_type: Option<Cow<'a, str>>,
 
     /// If set, specifies the number of the first element of the result set to be returned. If not
     /// provided, a default of 0 MUST be assumed.
-    offset: Option<u32>,
+    pub offset: Option<u32>,
 
     /// If set, specifies the number of entries from the result set to return. If not provided, all
     /// results from ‘offset’ onwards MUST be returned.
-    count: Option<u32>,
+    pub count: Option<u32>,
 
     /// The body of the message MUST consist of an amqp-value section containing a map which MUST have
     /// the following entries, where all keys MUST be of type string:
@@ -55,7 +55,23 @@ pub struct QueryRequest<'a> {
     /// A list of strings representing the names of the attributes of the Manageable Entities being
     /// requested. The list MUST NOT contain duplicate elements. If the list contains no elements
     /// then this indicates that all attributes are being requested.
-    attribute_names: Vec<Cow<'a, str>>,
+    pub attribute_names: Vec<Cow<'a, str>>,
+}
+
+impl<'a> QueryRequest<'a> {
+    pub fn new(
+        entity_type: impl Into<Option<Cow<'a, str>>>,
+        offset: impl Into<Option<u32>>,
+        count: impl Into<Option<u32>>,
+        attribute_names: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
+    ) -> Self {
+        Self {
+            entity_type: entity_type.into(),
+            offset: offset.into(),
+            count: count.into(),
+            attribute_names: attribute_names.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 impl<'a> MessageSerializer for QueryRequest<'a> {
