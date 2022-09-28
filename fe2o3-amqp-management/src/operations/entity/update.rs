@@ -6,8 +6,8 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
+    constants::{IDENTITY, NAME, OPERATION, UPDATE},
     error::{Error, Result},
-    constants::{OPERATION, UPDATE, NAME, IDENTITY},
     request::MessageSerializer,
     response::MessageDeserializer,
 };
@@ -35,13 +35,32 @@ pub trait Update {
 /// Where the type of the attribute value provided is not as required, type conversion as per the
 /// rules in 3.3.1.1 MUST be provided.
 pub enum UpdateRequest<'a> {
-    Name{
+    Name {
         value: Cow<'a, str>,
         body: OrderedMap<String, Value>,
     },
     Identity {
         value: Cow<'a, str>,
         body: OrderedMap<String, Value>,
+    },
+}
+
+impl<'a> UpdateRequest<'a> {
+    pub fn name(name: impl Into<Cow<'a, str>>, body: impl Into<OrderedMap<String, Value>>) -> Self {
+        Self::Name {
+            value: name.into(),
+            body: body.into(),
+        }
+    }
+
+    pub fn identity(
+        identity: impl Into<Cow<'a, str>>,
+        body: impl Into<OrderedMap<String, Value>>,
+    ) -> Self {
+        Self::Identity {
+            value: identity.into(),
+            body: body.into(),
+        }
     }
 }
 

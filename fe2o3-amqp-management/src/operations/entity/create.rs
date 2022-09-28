@@ -60,6 +60,15 @@ pub struct CreateRequest<'a> {
     pub body: OrderedMap<String, Value>,
 }
 
+impl<'a> CreateRequest<'a> {
+    pub fn new(name: impl Into<Cow<'a, str>>, body: impl Into<OrderedMap<String, Value>>) -> Self {
+        Self {
+            name: name.into(),
+            body: body.into(),
+        }
+    }
+}
+
 impl<'a> MessageSerializer for CreateRequest<'a> {
     type Body = OrderedMap<String, Value>;
 

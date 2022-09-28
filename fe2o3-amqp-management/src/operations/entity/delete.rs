@@ -37,6 +37,16 @@ pub enum DeleteRequest<'a> {
     Identity(Cow<'a, str>)
 }
 
+impl<'a> DeleteRequest<'a> {
+    pub fn name(name: impl Into<Cow<'a, str>>) -> Self {
+        Self::Name(name.into())
+    }
+
+    pub fn identity(identity: impl Into<Cow<'a, str>>) -> Self {
+        Self::Identity(identity.into())
+    }
+}
+
 impl<'a> MessageSerializer for DeleteRequest<'a> {
     type Body = ();
 
