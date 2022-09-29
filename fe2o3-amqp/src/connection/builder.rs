@@ -802,7 +802,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             "amqps" => {
                 #[cfg(all(feature = "rustls", not(feature = "native-tls")))]
                 {
-                    let domain = self.domain.ok_or_else(|| OpenError::InvalidDomain)?;
+                    let domain = self.domain.ok_or(OpenError::InvalidDomain)?;
                     return self.connect_tls_with_rustls_default(stream, domain).await;
                 }
 
