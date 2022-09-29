@@ -107,7 +107,7 @@ pub(crate) trait SenderLink: Link + LinkExt {
 
     /// Set and send flow state
     async fn send_flow(
-        &mut self,
+        &self,
         writer: &mpsc::Sender<LinkFrame>,
         delivery_count: Option<SequenceNo>,
         available: Option<u32>,
