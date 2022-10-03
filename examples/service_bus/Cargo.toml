@@ -8,11 +8,9 @@ edition = "2021"
 [features]
 default = [
     "dlq",
-    "management"
 ]
 
 dlq = ["fe2o3-amqp/transaction"]
-management = ["fe2o3-amqp-management"]
 
 [dependencies]
 dotenv = "0.15.0"
@@ -23,15 +21,7 @@ webpki-roots = "0.22.4"
 fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
 uuid = { version = "1", features = ["v4"] }
 
-# Optional deps
-fe2o3-amqp-management = { path = "../../fe2o3-amqp-management", optional = true }
-
 [[bin]]
 name = "queue_dlq"
 path = "src/bin/queue_dlq.rs"
 required-features = ["dlq"]
-
-[[bin]]
-name = "management"
-path = "src/bin/management.rs"
-required-features = ["management"]
