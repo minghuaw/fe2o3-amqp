@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    constants::{CREATE, OPERATION},
+    constants::{CREATE, OPERATION, NAME},
     error::{Error, Result},
     request::MessageSerializer,
     response::MessageDeserializer,
@@ -77,7 +77,7 @@ impl<'a> MessageSerializer for CreateRequest<'a> {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, CREATE)
-                    .insert("name", self.name.to_string())
+                    .insert(NAME, self.name.to_string())
                     .build(),
             )
             .value(self.body)
