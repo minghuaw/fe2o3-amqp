@@ -184,9 +184,6 @@ impl Encoder<Frame> for FrameEncoder {
                 performative,
                 payload,
             } => {
-                // performative.serialize(&mut serializer)?;
-                // dst.put(payload);
-                // Ok(())
                 self.encode_transfer(dst, item.channel, performative, payload)
             }
             FrameBody::Disposition(performative) => {

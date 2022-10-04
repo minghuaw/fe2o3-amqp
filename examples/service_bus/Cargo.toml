@@ -7,12 +7,12 @@ edition = "2021"
 
 [features]
 default = [
-    "dlq",
-    "management"
+    # "dlq",
+    # "cbs",
 ]
 
 dlq = ["fe2o3-amqp/transaction"]
-management = ["fe2o3-amqp-management"]
+cbs = ["urlencoding", "sha2", "hmac", "base64"]
 
 [dependencies]
 dotenv = "0.15.0"
@@ -23,8 +23,10 @@ webpki-roots = "0.22.4"
 fe2o3-amqp = { path = "../../fe2o3-amqp", features = ["rustls"] }
 uuid = { version = "1", features = ["v4"] }
 
-# Optional deps
-fe2o3-amqp-management = { path = "../../fe2o3-amqp-management", optional = true }
+urlencoding = { version = "2.1.2", optional = true }
+sha2 = { version = "0.10.6", optional = true }
+hmac = { version = "0.12.1", optional = true }
+base64 = { version = "0.13.0", optional = true }
 
 [[bin]]
 name = "queue_dlq"
@@ -32,6 +34,6 @@ path = "src/bin/queue_dlq.rs"
 required-features = ["dlq"]
 
 [[bin]]
-name = "management"
-path = "src/bin/management.rs"
-required-features = ["management"]
+name = "cbs"
+path = "src/bin/cbs.rs"
+required-features = ["cbs"]
