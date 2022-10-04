@@ -1,50 +1,20 @@
 use serde::{Deserialize, Serialize};
 use serde_amqp::{
     macros::{DeserializeComposite, SerializeComposite},
-    primitives::{Boolean, OrderedMap, UByte, UInt},
+    primitives::{OrderedMap, UByte},
     value::Value,
 };
 use std::ops::{Deref, DerefMut};
 
-use crate::{definitions::Milliseconds, primitives::SimpleValue};
+use crate::primitives::SimpleValue;
 
 pub mod map_builder;
 
 pub mod annotations;
 pub use annotations::Annotations;
 
-/// 3.2.1 Header
-/// Transport headers for a message.
-/// <type name="header" class="composite" source="list" provides="section">
-///     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
-/// </type>
-#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
-#[amqp_contract(
-    name = "amqp:header:list",
-    code = 0x0000_0000_0000_0070,
-    encoding = "list",
-    rename_all = "kebab-case"
-)]
-pub struct Header {
-    /// <field name="durable" type="boolean" default="false"/>
-    #[amqp_contract(default)]
-    pub durable: Boolean,
-
-    /// <field name="priority" type="ubyte" default="4"/>
-    #[amqp_contract(default)]
-    pub priority: Priority,
-
-    /// <field name="ttl" type="milliseconds"/>
-    pub ttl: Option<Milliseconds>,
-
-    /// <field name="first-acquirer" type="boolean" default="false"/>
-    #[amqp_contract(default)]
-    pub first_acquirer: Boolean,
-
-    /// <field name="delivery-count" type="uint" default="0"/>
-    #[amqp_contract(default)]
-    pub delivery_count: UInt,
-}
+pub mod header;
+pub use header::Header;
 
 /// relative message priority
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -116,6 +86,12 @@ impl DerefMut for DeliveryAnnotations {
     }
 }
 
+impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for DeliveryAnnotations {
+    fn from(builder: MapBuilder<OwnedKey, Value, DeliveryAnnotations>) -> Self {
+        builder.build()
+    }
+}
+
 /// 3.2.3 Message Annotations <type name="message-annotations" class="restricted"
 /// source="annotations" provides="section"> <descriptor name="amqp:message-annotations:map"
 ///     code="0x00000000:0x00000072"/> </type>
@@ -164,6 +140,12 @@ impl DerefMut for MessageAnnotations {
     }
 }
 
+impl From<MapBuilder<OwnedKey, Value, MessageAnnotations>> for MessageAnnotations {
+    fn from(builder: MapBuilder<OwnedKey, Value, MessageAnnotations>) -> Self {
+        builder.build()
+    }
+}
+
 pub mod properties;
 pub use properties::Properties;
 
@@ -199,6 +181,12 @@ impl Deref for ApplicationProperties {
 impl DerefMut for ApplicationProperties {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl From<MapBuilder<String, SimpleValue, ApplicationProperties>> for ApplicationProperties {
+    fn from(builder: MapBuilder<String, SimpleValue, ApplicationProperties>) -> Self {
+        builder.build()
     }
 }
 
@@ -242,6 +230,12 @@ impl Deref for Footer {
 impl DerefMut for Footer {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl From<MapBuilder<OwnedKey, Value, Footer>> for Footer {
+    fn from(builder: MapBuilder<OwnedKey, Value, Footer>) -> Self {
+        builder.build()
     }
 }
 

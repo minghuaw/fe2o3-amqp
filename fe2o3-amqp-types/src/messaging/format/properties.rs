@@ -95,6 +95,12 @@ impl Properties {
     }
 }
 
+impl From<Builder> for Properties {
+    fn from(builder: Builder) -> Self {
+        builder.build()
+    }
+}
+
 /// Builder for [`Properties`]
 #[derive(Debug, Clone)]
 pub struct Builder {
