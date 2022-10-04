@@ -6,6 +6,8 @@ use fe2o3_amqp_management::client::MgmtClient;
 pub mod client;
 pub mod constants;
 pub mod error;
+pub mod request;
+pub mod response;
 
 /// Open connection with `SaslProfile::Anonymous` and then perform CBS
 pub async fn open_connection_and_perform_cbs<'a, Mode, Tls>(
