@@ -8,7 +8,7 @@ use fe2o3_amqp::{
     connection::ConnectionHandle,
     sasl_profile::SaslProfile,
     types::{
-        messaging::{ApplicationProperties, Properties, Message},
+        messaging::{ApplicationProperties, Message, Properties},
         primitives::Value,
     },
     Connection, Receiver, Sender, Session,
@@ -48,7 +48,7 @@ async fn put_token(
     sas_token: String,
     namespace: &str,
     entity: &str,
-) {
+) -> i32 {
     let mut session = Session::begin(connection).await.unwrap();
 
     let cbs_client_addr = "cbs-client-reply-to";
@@ -88,12 +88,22 @@ async fn put_token(
         .unwrap();
 
     let delivery = cbs_receiver.recv::<Value>().await.unwrap();
-    println!("{:?}", delivery);
     cbs_receiver.accept(&delivery).await.unwrap();
+
+    let mut message = delivery.into_message();
+    let status_code: i32 = message
+        .application_properties
+        .as_mut()
+        .and_then(|m| m.remove("status-code"))
+        .map(TryInto::try_into)
+        .unwrap()
+        .unwrap();
 
     cbs_sender.close().await.unwrap();
     cbs_receiver.close().await.unwrap();
     session.close().await.unwrap();
+    
+    status_code
 }
 
 fn mac<M: Mac + KeyInit>(key: &[u8], input: &[u8]) -> Result<impl AsRef<[u8]>, InvalidLength> {
@@ -128,7 +138,31 @@ async fn main() {
         &request_url,
         Duration::from_secs(30 * 60),
     );
-    put_token(&mut connection, sas_token, &hostname, &queue_name).await;
+    let status_code = put_token(&mut connection, sas_token, &hostname, &queue_name).await;
+    assert_eq!(status_code, 202);
 
+    let mut session = Session::begin(&mut connection).await.unwrap();
+    let mut sender = Sender::attach(&mut session, "test-sender", "q1")
+        .await
+        .unwrap();
+    let mut receiver = Receiver::attach(&mut session, "test-receiver", "q1")
+        .await
+        .unwrap();
+
+    sender
+        .send("hello cbs")
+        .await
+        .unwrap()
+        .accepted_or("Not accepted")
+        .unwrap();
+
+    let delivery = receiver.recv::<String>().await.unwrap();
+    receiver.accept(&delivery).await.unwrap();
+
+    println!("{:?}", delivery.body());
+
+    sender.close().await.unwrap();
+    receiver.close().await.unwrap();
+    session.close().await.unwrap();
     connection.close().await.unwrap();
 }
