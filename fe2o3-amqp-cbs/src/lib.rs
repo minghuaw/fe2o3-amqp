@@ -7,17 +7,9 @@ pub mod client;
 pub mod constants;
 pub mod error;
 
+/// Open connection with `SaslProfile::Anonymous` and then perform CBS
 pub async fn open_connection_and_perform_cbs<'a, Mode, Tls>(
     builder: connection::Builder<'a, Mode, Tls>,
 ) -> Result<ConnectionHandle<()>, CbsClientError> {
     todo!()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
 }
