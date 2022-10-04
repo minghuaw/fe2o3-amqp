@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.5.3
+
+1. Quality of life update
+   1. Added `Header::builder()`
+   2. Implement `From<Builder>` for message sections and for `Option<message section>`.
+
 ## 0.5.2
 
 1. Updated `serde_amqp` to "0.4.3", which is needed to fix #103

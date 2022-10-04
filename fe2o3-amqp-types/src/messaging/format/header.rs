@@ -95,3 +95,9 @@ impl From<Builder> for Header {
         builder.build()
     }
 }
+
+impl From<Builder> for Option<Header> {
+    fn from(builder: Builder) -> Self {
+        Some(builder.build())
+    }
+}

@@ -101,6 +101,12 @@ impl From<Builder> for Properties {
     }
 }
 
+impl From<Builder> for Option<Properties> {
+    fn from(builder: Builder) -> Self {
+        Some(builder.build())
+    }
+}
+
 /// Builder for [`Properties`]
 #[derive(Debug, Clone)]
 pub struct Builder {

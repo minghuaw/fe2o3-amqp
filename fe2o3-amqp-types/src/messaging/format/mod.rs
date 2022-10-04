@@ -92,6 +92,12 @@ impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for DeliveryAnnotati
     }
 }
 
+impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for Option<DeliveryAnnotations> {
+    fn from(builder: MapBuilder<OwnedKey, Value, DeliveryAnnotations>) -> Self {
+        Some(builder.build())
+    }
+}
+
 /// 3.2.3 Message Annotations <type name="message-annotations" class="restricted"
 /// source="annotations" provides="section"> <descriptor name="amqp:message-annotations:map"
 ///     code="0x00000000:0x00000072"/> </type>
@@ -146,6 +152,12 @@ impl From<MapBuilder<OwnedKey, Value, MessageAnnotations>> for MessageAnnotation
     }
 }
 
+impl From<MapBuilder<OwnedKey, Value, MessageAnnotations>> for Option<MessageAnnotations> {
+    fn from(builder: MapBuilder<OwnedKey, Value, MessageAnnotations>) -> Self {
+        Some(builder.build())
+    }
+}
+
 pub mod properties;
 pub use properties::Properties;
 
@@ -187,6 +199,12 @@ impl DerefMut for ApplicationProperties {
 impl From<MapBuilder<String, SimpleValue, ApplicationProperties>> for ApplicationProperties {
     fn from(builder: MapBuilder<String, SimpleValue, ApplicationProperties>) -> Self {
         builder.build()
+    }
+}
+
+impl From<MapBuilder<String, SimpleValue, ApplicationProperties>> for Option<ApplicationProperties> {
+    fn from(builder: MapBuilder<String, SimpleValue, ApplicationProperties>) -> Self {
+        Some(builder.build())
     }
 }
 
@@ -236,6 +254,12 @@ impl DerefMut for Footer {
 impl From<MapBuilder<OwnedKey, Value, Footer>> for Footer {
     fn from(builder: MapBuilder<OwnedKey, Value, Footer>) -> Self {
         builder.build()
+    }
+}
+
+impl From<MapBuilder<OwnedKey, Value, Footer>> for Option<Footer> {
+    fn from(builder: MapBuilder<OwnedKey, Value, Footer>) -> Self {
+        Some(builder.build())
     }
 }
 
