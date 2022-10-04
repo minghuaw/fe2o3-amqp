@@ -102,7 +102,7 @@ async fn put_token(
     cbs_sender.close().await.unwrap();
     cbs_receiver.close().await.unwrap();
     session.close().await.unwrap();
-    
+
     status_code
 }
 
