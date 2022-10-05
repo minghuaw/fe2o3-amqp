@@ -14,6 +14,8 @@ use crate::{
 };
 
 /// CBS client
+/// 
+/// The connection should be opened with an ANONYMOUS SASL profile.
 pub struct CbsClient {
     mgmt_client: MgmtClient,
 }

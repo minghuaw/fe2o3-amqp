@@ -7,12 +7,9 @@ use dotenv::dotenv;
 use fe2o3_amqp::{
     connection::ConnectionHandle,
     sasl_profile::SaslProfile,
-    types::{
-        messaging::{ApplicationProperties, Message, Properties},
-        primitives::Value,
-    },
     Connection, Receiver, Sender, Session,
 };
+use fe2o3_amqp_cbs::client::CbsClient;
 use hmac::{
     digest::{InvalidLength, KeyInit},
     Hmac, Mac,
@@ -48,62 +45,16 @@ async fn put_token(
     sas_token: String,
     namespace: &str,
     entity: &str,
-) -> i32 {
+) {
     let mut session = Session::begin(connection).await.unwrap();
 
-    let cbs_client_addr = "cbs-client-reply-to";
-    let mut cbs_sender = Sender::attach(&mut session, "cbs-sender", "$cbs")
-        .await
-        .unwrap();
-    let mut cbs_receiver = Receiver::builder()
-        .name("cbs-receiver")
-        .source("$cbs")
-        .target(cbs_client_addr)
-        .attach(&mut session)
-        .await
-        .unwrap();
+    let mut cbs_client = CbsClient::attach(&mut session).await.unwrap();
+    let name = format!("amqp://{}/{}", namespace, entity);
+    let entity_type = "servicebus.windows.net:sastoken";
+    cbs_client.put_token(name, sas_token, entity_type).await.unwrap();
 
-    let message = Message::builder()
-        .properties(
-            Properties::builder()
-                .message_id("1".to_string())
-                .reply_to(cbs_client_addr)
-                .build(),
-        )
-        .application_properties(
-            ApplicationProperties::builder()
-                .insert("operation", "put-token")
-                .insert("type", "servicebus.windows.net:sastoken")
-                .insert("name", format!("amqp://{}/{}", namespace, entity))
-                .build(),
-        )
-        .value(sas_token)
-        .build();
-
-    cbs_sender
-        .send(message)
-        .await
-        .unwrap()
-        .accepted_or("Not accepted")
-        .unwrap();
-
-    let delivery = cbs_receiver.recv::<Value>().await.unwrap();
-    cbs_receiver.accept(&delivery).await.unwrap();
-
-    let mut message = delivery.into_message();
-    let status_code: i32 = message
-        .application_properties
-        .as_mut()
-        .and_then(|m| m.remove("status-code"))
-        .map(TryInto::try_into)
-        .unwrap()
-        .unwrap();
-
-    cbs_sender.close().await.unwrap();
-    cbs_receiver.close().await.unwrap();
+    cbs_client.close().await.unwrap();
     session.close().await.unwrap();
-
-    status_code
 }
 
 fn mac<M: Mac + KeyInit>(key: &[u8], input: &[u8]) -> Result<impl AsRef<[u8]>, InvalidLength> {
@@ -138,8 +89,7 @@ async fn main() {
         &request_url,
         Duration::from_secs(30 * 60),
     );
-    let status_code = put_token(&mut connection, sas_token, &hostname, &queue_name).await;
-    assert_eq!(status_code, 202);
+    put_token(&mut connection, sas_token, &hostname, &queue_name).await;
 
     let mut session = Session::begin(&mut connection).await.unwrap();
     let mut sender = Sender::attach(&mut session, "test-sender", "q1")
