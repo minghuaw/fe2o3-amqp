@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use fe2o3_amqp::types::{
     messaging::{ApplicationProperties, Message},
     primitives::Value,
@@ -8,8 +7,9 @@ use fe2o3_amqp_management::{
     request::MessageSerializer,
     response::MessageDeserializer,
 };
+use std::borrow::Cow;
 
-use crate::{constants::PUT_TOKEN};
+use crate::constants::PUT_TOKEN;
 
 pub struct PutTokenRequest<'a> {
     pub name: Cow<'a, str>,
