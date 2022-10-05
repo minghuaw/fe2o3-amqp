@@ -1,10 +1,7 @@
-use client::CbsClient;
-use fe2o3_amqp::connection::{self, ConnectionHandle, OpenError};
-use fe2o3_amqp_management::client::MgmtClient;
+//! Experimental implementation of AMQP 1.0 CBS extension protocol
 
 pub mod client;
 pub mod constants;
-pub mod error;
 pub mod put_token;
 
 // /// Open connection with `SaslProfile::Anonymous` and then perform CBS

@@ -9,7 +9,6 @@ use fe2o3_amqp_management::{
 
 use crate::{
     constants::{CBS_NODE_ADDR, DEFAULT_CBS_CLIENT_NODE},
-    error::CbsClientError,
     put_token::{PutTokenRequest, PutTokenResponse},
 };
 

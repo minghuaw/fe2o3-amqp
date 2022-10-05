@@ -50,7 +50,7 @@ impl PutTokenResponse {
 impl MessageDeserializer<Value> for PutTokenResponse {
     type Error = fe2o3_amqp_management::error::Error;
 
-    fn from_message(message: Message<Value>) -> Result<Self, Self::Error> {
+    fn from_message(_message: Message<Value>) -> Result<Self, Self::Error> {
         Ok(Self {})
     }
 }
