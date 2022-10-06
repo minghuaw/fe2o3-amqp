@@ -732,9 +732,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
     ///
     pub async fn open(
         mut self,
-        url: impl TryInto<Url, Error = url::ParseError>,
+        url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = url.try_into()?;
+        let url: Url = url.try_into().map_err(Into::into)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -942,9 +942,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
     ///
     pub async fn open(
         mut self,
-        url: impl TryInto<Url, Error = url::ParseError>,
+        url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = url.try_into()?;
+        let url: Url = url.try_into().map_err(Into::into)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -1063,9 +1063,9 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     ///
     pub async fn open(
         mut self,
-        url: impl TryInto<Url, Error = url::ParseError>,
+        url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = url.try_into()?;
+        let url: Url = url.try_into().map_err(Into::into)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -1117,10 +1117,14 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
 
 #[cfg(test)]
 mod tests {
+    use crate::Connection;
+
     #[test]
     fn test_url_name_resolution() {
         let url = url::Url::parse("amqp://example.net/").unwrap();
         let addrs = url.socket_addrs(|| Some(5671)).unwrap();
-        println!("{:?}", addrs);
+        let _ = Connection::builder()
+            .container_id("test")
+            .open(url); // This is just to see an url is accepted
     }
 }

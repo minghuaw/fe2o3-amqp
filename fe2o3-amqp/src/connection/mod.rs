@@ -439,7 +439,7 @@ impl Connection {
     ///
     pub async fn open(
         container_id: impl Into<String>,
-        url: impl TryInto<Url, Error = url::ParseError>,
+        url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
         Connection::builder()
             .container_id(container_id)
