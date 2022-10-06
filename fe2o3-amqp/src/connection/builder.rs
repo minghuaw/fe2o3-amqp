@@ -1122,7 +1122,7 @@ mod tests {
     #[test]
     fn test_url_name_resolution() {
         let url = url::Url::parse("amqp://example.net/").unwrap();
-        let addrs = url.socket_addrs(|| Some(5671)).unwrap();
+        let _addrs = url.socket_addrs(|| Some(5671)).unwrap();
         let _ = Connection::builder()
             .container_id("test")
             .open(url); // This is just to see an url is accepted

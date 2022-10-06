@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.6.8
+
+1. Impl `From<Infallible> for OpenError`
+2. Relaxed associated type bound for url on connection and connection builder fn `open()`
+   1. `open()` fn previously doesn't work if the `url` argument is actually a `url::Url` instance because the `TryInto::Error` type is `Infallible`. This will work in this patch.
+
 ## 0.6.7
 
 1. Disposition of message (`accept()`, `reject()`, `release()`, `modify()`, `accept_all()`, `reject_all()`, `release_all()`, `modify_all()`) on the receiver side no longer requires `&mut self`. They only need `&self` now.
