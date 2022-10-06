@@ -4,14 +4,12 @@ use fe2o3_amqp::{
 };
 use fe2o3_amqp_ws::WebSocketStream;
 use std::env;
-use tokio::net::TcpStream;
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
     let hostname = env::var("HOST_NAME").unwrap();
-    let port = 443;
     let sa_key_name = env::var("SHARED_ACCESS_KEY_NAME").unwrap();
     let sa_key_value = env::var("SHARED_ACCESS_KEY_VALUE").unwrap();
     let queue_name = env::var("QUEUE_NAME").unwrap();
@@ -20,8 +18,7 @@ async fn main() {
     let ws_address =
         format!("wss://{sa_key_name}:{sa_key_value}@{hostname}/$servicebus/websocket");
 
-    let stream = TcpStream::connect((&hostname[..], port)).await.unwrap();
-    let (ws_stream, _) = WebSocketStream::connect_tls_with_stream(ws_address, stream)
+    let (ws_stream, _) = WebSocketStream::connect(ws_address)
         .await
         .unwrap();
 
