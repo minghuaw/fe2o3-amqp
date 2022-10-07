@@ -290,7 +290,8 @@ where
         let mut body: Body<T> = Body::Empty;
         let mut footer = None;
 
-        loop {
+        let mut count = 0;
+        while count < 7 {
             let field: Field = match seq.next_element()? {
                 Some(val) => val,
                 None => break,
@@ -300,18 +301,23 @@ where
             match field {
                 Field::Header => {
                     header = seq.next_element()?;
+                    count += 1;
                 }
                 Field::DeliveryAnnotations => {
                     delivery_annotations = seq.next_element()?;
+                    count += 1;
                 }
                 Field::MessageAnnotations => {
                     message_annotations = seq.next_element()?;
+                    count += 1;
                 }
                 Field::Properties => {
                     properties = seq.next_element()?;
+                    count += 1;
                 }
                 Field::ApplicationProperties => {
                     application_properties = seq.next_element()?;
+                    count += 1;
                 }
                 Field::Body => match body {
                     Body::Value(_) => {
@@ -363,9 +369,13 @@ where
                             .next_element::<Deserializable<Body<T>>>()?
                             .map(|de| de.0)
                             .unwrap_or(Body::Empty);
+                        count += 1; // Only count body once even with DataBatch or SequenceBatch
                     }
                 },
-                Field::Footer => footer = seq.next_element()?,
+                Field::Footer => {
+                    footer = seq.next_element()?;
+                    count += 1;
+                },
             }
         }
 
