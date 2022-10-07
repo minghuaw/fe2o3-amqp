@@ -1,6 +1,6 @@
 //! Implement transparent vec
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::{Deref, DerefMut}};
 
 use serde::{de, Serialize};
 
@@ -22,6 +22,38 @@ impl<T> TransparentVec<T> {
     /// Consumes self and returns the wrapped `Vec`
     pub fn into_inner(self) -> Vec<T> {
         self.0
+    }
+}
+
+impl<T> From<Vec<T>> for TransparentVec<T> {
+    fn from(inner: Vec<T>) -> Self {
+        Self(inner)
+    }
+}
+
+impl<T> From<TransparentVec<T>> for Vec<T> {
+    fn from(val: TransparentVec<T>) -> Self {
+        val.0
+    }
+}
+
+impl<T> AsMut<Vec<T>> for TransparentVec<T> {
+    fn as_mut(&mut self) -> &mut Vec<T> {
+        &mut self.0
+    }
+}
+
+impl<T> Deref for TransparentVec<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for TransparentVec<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
