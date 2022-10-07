@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.6.9
+
+1. Changed visibiltiy of  `sesssion::Error` and `session::BeginError` to `pub`
+2. Changed visibility of internal types `LinkFlowState` and `SenderTryConsumeError` to `pub(crate)`
+
 ## 0.6.8
 
 1. Impl `From<Infallible> for OpenError`
