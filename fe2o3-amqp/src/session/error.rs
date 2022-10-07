@@ -126,6 +126,7 @@ pub enum Error {
     #[error("A frame (other than attach) was received referencing a handle which is not currently in use of an attached link.")]
     UnattachedHandle,
 
+    /// A remote attach frame is referring to a link name that is not found locally
     #[error("Remote sent an attach with a name that cannot be found locally")]
     RemoteAttachingLinkNameNotFound,
 
