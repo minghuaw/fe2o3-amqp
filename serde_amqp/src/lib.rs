@@ -2,7 +2,7 @@
 #![deny(missing_docs, missing_debug_implementations)]
 
 //! A serde implementation of AMQP1.0 protocol.
-//!
+//! 
 //! # Serializing and deserializing data structures
 //!
 //! Any type that implement `serde::Serialize` and `serde::Deserialize` trait can be serialized/deserialized with
@@ -90,7 +90,14 @@
 //!
 //! # Feature flag
 //!
-//! - `"derive"`: enables custom derive macros: `SerializeComposite` and `DeserializeComposite`.
+//! ```toml
+//! default = []
+//! ```
+//!
+//! | Feature | Description |
+//! |---------|-------------|
+//! |`"derive"`| enables [`SerializeComposite` and `DeserializeComposite`](#serializecomposite-and-deserializecomposite) |
+//! |`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)) |
 //!
 //! ## `SerializeComposite` and `DeserializeComposite`
 //!
@@ -187,6 +194,13 @@
 //! )]
 //! pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
 //! ```
+//! 
+//! ## Extensions
+//! 
+//! The following type(s) are provided in the `extensions` mod and require the `extensions` feature
+//! 
+//! 1. `TransparentVec` - a thin wrapper around `Vec` that is serialized/deserialized as a sequence of elements
+//!    `Vec` is treated as an AMQP `List` in the core spec
 
 // Public mods
 pub mod de;
