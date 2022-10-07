@@ -9,9 +9,12 @@ use serde::{
 };
 use serde_amqp::{
     __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    primitives::{Binary, TransparentVec},
+    primitives::{Binary},
     value::Value,
 };
+
+#[cfg(feature = "batch-body")]
+use serde_amqp::extensions::TransparentVec;
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
@@ -293,6 +296,7 @@ where
                 None => break,
             };
 
+            #[allow(unused_variables)]
             match field {
                 Field::Header => {
                     header = seq.next_element()?;
@@ -313,12 +317,19 @@ where
                     Body::Value(_) => {
                         return Err(de::Error::custom("Only one AmqpValue section is expected"))
                     }
-                    Body::Data(first) => match seq.next_element::<Deserializable<Data>>()? {
-                        Some(second) => {
-                            body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
+                    Body::Data(first) => {
+                        #[cfg(feature = "batch-body")]
+                        match seq.next_element::<Deserializable<Data>>()? {
+                            Some(second) => {
+                                body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
+                            }
+                            None => body = Body::Data(first),
                         }
-                        None => body = Body::Data(first),
+
+                        #[cfg(not(feature = "batch-body"))]
+                        return Err(de::Error::custom(r#"Using Data batch as body section requires "batch-body" feature"#))
                     },
+                    #[cfg(feature = "batch-body")]
                     Body::DataBatch(mut batch) => {
                         if let Some(data) = seq.next_element::<Deserializable<Data>>()? {
                             batch.push(data.0);
@@ -326,6 +337,7 @@ where
                         body = Body::DataBatch(batch);
                     }
                     Body::Sequence(first) => {
+                        #[cfg(feature = "batch-body")]
                         match seq.next_element::<Deserializable<AmqpSequence<T>>>()? {
                             Some(second) => {
                                 body =
@@ -333,7 +345,11 @@ where
                             }
                             None => body = Body::Sequence(first),
                         }
+
+                        #[cfg(not(feature = "batch-body"))]
+                        return Err(de::Error::custom(r#"Using AmqpSequence batch as body section requires "batch-body" feature"#))
                     }
+                    #[cfg(feature = "batch-body")]
                     Body::SequenceBatch(mut batch) => {
                         if let Some(sequence) =
                             seq.next_element::<Deserializable<AmqpSequence<T>>>()?
@@ -474,6 +490,8 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body::SequenceBatch`
+    #[cfg_attr(docsrs, doc(cfg(feature = "batch-body")))]
+    #[cfg(feature = "batch-body")]
     pub fn sequence_batch<V: Serialize>(
         self,
         batch: TransparentVec<AmqpSequence<V>>,
@@ -503,6 +521,8 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body::DataBatch`
+    #[cfg_attr(docsrs, doc(cfg(feature = "batch-body")))]
+    #[cfg(feature = "batch-body")]
     pub fn data_batch(self, batch: TransparentVec<Data>) -> Builder<Body<Value>> {
         Builder {
             header: self.header,
@@ -582,7 +602,7 @@ mod tests {
 
     use serde_amqp::{
         from_reader, from_slice,
-        primitives::{Binary, TransparentVec},
+        primitives::{Binary},
         to_vec,
         value::Value,
     };
@@ -797,7 +817,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "batch-body")]
     fn test_encode_message_with_data_batch() {
+        use serde_amqp::extensions::TransparentVec;
+
         let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
         let data_batch = TransparentVec::new(vec![data.clone(), data.clone(), data.clone()]);
         let message = Message::builder()
@@ -814,7 +837,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "batch-body")]
     fn test_decode_message_with_data_batch() {
+        use serde_amqp::extensions::TransparentVec;
+
         let buf = &[
             0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
             0x8, 0x9, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0,
@@ -832,7 +858,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "batch-body")]
     fn test_encode_message_with_sequence_batch() {
+        use serde_amqp::extensions::TransparentVec;
+
         let batch = TransparentVec::new(vec![
             AmqpSequence::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]),
             AmqpSequence::new(vec![Value::Int(4), Value::Int(5), Value::Int(6)]),
@@ -852,7 +881,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "batch-body")]
     fn test_decode_message_with_sequence_batch() {
+        use serde_amqp::extensions::TransparentVec;
+
         let buf = &[
             0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x76, 0xc0, 0x07, 0x3, 0x54, 0x1, 0x54, 0x2, 0x54,
             0x3, 0x0, 0x53, 0x76, 0xc0, 0x07, 0x3, 0x54, 0x4, 0x54, 0x5, 0x54, 0x6, 0x0, 0x53,
