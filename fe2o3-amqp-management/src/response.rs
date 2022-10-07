@@ -1,6 +1,10 @@
 use fe2o3_amqp_types::messaging::{Message, MessageId};
 
-use crate::{error::Error, status::StatusCode, constants::{STATUS_CODE, STATUS_DESCRIPTION}};
+use crate::{
+    constants::{STATUS_CODE, STATUS_DESCRIPTION},
+    error::Error,
+    status::StatusCode,
+};
 
 /// The correlation-id of the response message MUST be the correlation-id from the request message
 /// (if present), else the message-id from the request message. Response messages have the following

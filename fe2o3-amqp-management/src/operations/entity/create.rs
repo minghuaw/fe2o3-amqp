@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    constants::{CREATE, OPERATION, NAME},
+    constants::{CREATE, NAME, OPERATION},
     error::{Error, Result},
     request::MessageSerializer,
     response::MessageDeserializer,

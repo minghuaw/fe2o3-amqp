@@ -202,7 +202,9 @@ impl From<MapBuilder<String, SimpleValue, ApplicationProperties>> for Applicatio
     }
 }
 
-impl From<MapBuilder<String, SimpleValue, ApplicationProperties>> for Option<ApplicationProperties> {
+impl From<MapBuilder<String, SimpleValue, ApplicationProperties>>
+    for Option<ApplicationProperties>
+{
     fn from(builder: MapBuilder<String, SimpleValue, ApplicationProperties>) -> Self {
         Some(builder.build())
     }

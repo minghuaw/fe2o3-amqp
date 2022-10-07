@@ -2,9 +2,12 @@
 
 use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
-use serde::{Serialize};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
-use std::{collections::{BTreeMap, HashMap}, hash::Hash};
+use std::{
+    collections::{BTreeMap, HashMap},
+    hash::Hash,
+};
 
 use crate::{
     described::Described,
@@ -464,7 +467,7 @@ impl_try_from_for_value_variant! {
     Symbol, Symbol
 }
 
-impl<T> TryFrom<Value> for Vec<T> 
+impl<T> TryFrom<Value> for Vec<T>
 where
     T: TryFrom<Value, Error = Value>,
 {
@@ -472,10 +475,8 @@ where
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::List(val) => {
-                val.into_iter().map(TryFrom::try_from).collect()
-            },
-            _ => Err(value)
+            Value::List(val) => val.into_iter().map(TryFrom::try_from).collect(),
+            _ => Err(value),
         }
     }
 }
@@ -488,10 +489,8 @@ where
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            Value::Array(arr) => {
-                arr.into_iter().map(TryFrom::try_from).collect()
-            },
-            _ => Err(value)
+            Value::Array(arr) => arr.into_iter().map(TryFrom::try_from).collect(),
+            _ => Err(value),
         }
     }
 }

@@ -1,11 +1,13 @@
 //! Implementation of message header
 
-use serde_amqp::{DeserializeComposite, SerializeComposite, primitives::{Boolean, UInt}};
+use serde_amqp::{
+    primitives::{Boolean, UInt},
+    DeserializeComposite, SerializeComposite,
+};
 
 use crate::definitions::Milliseconds;
 
 use super::Priority;
-
 
 /// 3.2.1 Header
 /// Transport headers for a message.
@@ -50,7 +52,7 @@ impl Header {
 /// Builder for [`Header`]
 #[derive(Debug, Default, Clone)]
 pub struct Builder {
-    inner: Header
+    inner: Header,
 }
 
 impl Builder {
