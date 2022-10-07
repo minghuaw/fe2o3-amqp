@@ -57,6 +57,45 @@ impl<T> DerefMut for TransparentVec<T> {
     }
 }
 
+
+impl<T> IntoIterator for TransparentVec<T> {
+    type Item = T;
+
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a TransparentVec<T> {
+    type Item = &'a T;
+
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut TransparentVec<T> {
+    type Item = &'a mut T;
+
+    type IntoIter = std::slice::IterMut<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
+impl<T> FromIterator<T> for TransparentVec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let v = Vec::from_iter(iter);
+        Self(v)
+    }
+}
+
+
 impl<T> Serialize for TransparentVec<T>
 where
     T: Serialize,
