@@ -97,7 +97,7 @@
 //! | Feature | Description |
 //! |---------|-------------|
 //! |`"derive"`| enables [`SerializeComposite` and `DeserializeComposite`](#serializecomposite-and-deserializecomposite) |
-//! |`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)) |
+//! |`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)), added since "0.4.5" |
 //!
 //! ## `SerializeComposite` and `DeserializeComposite`
 //!
