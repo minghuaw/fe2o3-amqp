@@ -137,8 +137,7 @@ where
         // Handle incoming remote_open
         let remote_max_frame_size = remote_open.max_frame_size.0 as usize;
         let remote_idle_timeout = remote_open.idle_time_out;
-        self.connection
-            .on_incoming_open(channel, remote_open)?;
+        self.connection.on_incoming_open(channel, remote_open)?;
 
         // update transport setting
         let local_max_frame_size = self.connection.local_open().max_frame_size.0 as usize;

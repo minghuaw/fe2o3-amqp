@@ -179,9 +179,7 @@ where
                     disposition.settled = true;
 
                     // TODO: Where should the echoing disposition be sent?
-                    if let Some(dispositions) =
-                        self.session.on_incoming_disposition(disposition)?
-                    {
+                    if let Some(dispositions) = self.session.on_incoming_disposition(disposition)? {
                         for disposition in dispositions {
                             self.control
                                 .send(SessionControl::Disposition(disposition))

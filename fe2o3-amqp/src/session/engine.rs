@@ -123,9 +123,7 @@ where
                     .await?;
             }
             SessionFrameBody::Disposition(disposition) => {
-                if let Some(dispositions) =
-                    self.session.on_incoming_disposition(disposition)?
-                {
+                if let Some(dispositions) = self.session.on_incoming_disposition(disposition)? {
                     for disposition in dispositions {
                         let disposition = self.session.on_outgoing_disposition(disposition)?;
                         self.outgoing

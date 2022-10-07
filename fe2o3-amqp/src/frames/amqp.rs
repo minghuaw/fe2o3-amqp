@@ -183,9 +183,7 @@ impl Encoder<Frame> for FrameEncoder {
             FrameBody::Transfer {
                 performative,
                 payload,
-            } => {
-                self.encode_transfer(dst, item.channel, performative, payload)
-            }
+            } => self.encode_transfer(dst, item.channel, performative, payload),
             FrameBody::Disposition(performative) => {
                 write_header(dst, item.channel);
                 let mut serializer = Serializer::from(dst.writer());

@@ -52,7 +52,7 @@ where
     ) -> Result<(), <Self::Link as LinkDetach>::DetachError>;
 
     /// # Cancel safety
-    /// 
+    ///
     /// This should be cancel safe if oneshot channel is cancel safe
     async fn reallocate_output_handle(
         &mut self,
@@ -79,7 +79,7 @@ where
     ) -> Result<&mut Self, <Self::Link as LinkAttach>::AttachError>;
 
     /// # Cancel safety
-    /// 
+    ///
     /// This should be cancel safe if oneshot channel is cancel safe
     async fn reattach_inner(
         &mut self,
@@ -184,7 +184,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This should be cancel safe if oneshot channel is cancel safe
     async fn close_with_error(
         &mut self,
@@ -245,7 +245,7 @@ where
 }
 
 /// # Cancel safety
-/// 
+///
 /// This is cancel safe if oneshot channel is cancel safe
 async fn reattach_and_then_close<T>(link_inner: &mut T) -> Result<(), DetachError>
 where
@@ -270,14 +270,12 @@ where
         .map_err(|_| DetachError::DetachedByRemote)?;
     link_inner.send_detach(true, None).await?; // cancel safe
     let remote_detach = recv_remote_detach(link_inner).await?; // cancel safe
-    link_inner
-        .link_mut()
-        .on_incoming_detach(remote_detach)?;
+    link_inner.link_mut().on_incoming_detach(remote_detach)?;
     Ok(())
 }
 
 /// # Cancel safety
-/// 
+///
 /// This is cancel safe because it only `.await` on `recv()` from a `tokio::mpsc::Receiver`
 pub(super) async fn recv_remote_detach<T>(link_inner: &mut T) -> Result<Detach, DetachError>
 where

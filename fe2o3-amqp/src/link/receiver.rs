@@ -271,7 +271,7 @@ impl Receiver {
 
     /// Accept the message by sending a disposition with the `delivery_state` field set
     /// to `Accept`.
-    /// 
+    ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
     ///
     /// # Example
@@ -294,7 +294,7 @@ impl Receiver {
     /// to `Accept`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    /// 
+    ///
     /// # Example
     ///
     /// The code of the example below can be found in the [GitHub repo](https://github.com/minghuaw/fe2o3-amqp/blob/main/examples/dispose_multiple/src/main.rs)
@@ -315,7 +315,7 @@ impl Receiver {
 
     /// Reject the message by sending a disposition with the `delivery_state` field set
     /// to `Reject`
-    /// 
+    ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn reject(
         &self,
@@ -330,7 +330,7 @@ impl Receiver {
 
     /// Reject the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Reject`
-    /// 
+    ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn reject_all<'a, T: 'a>(
         &self,
@@ -346,7 +346,7 @@ impl Receiver {
 
     /// Release the message by sending a disposition with the `delivery_state` field set
     /// to `Release`
-    /// 
+    ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn release<T>(
         &self,
@@ -358,7 +358,7 @@ impl Receiver {
 
     /// Release the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Release`
-    /// 
+    ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn release_all<'a, T: 'a>(
         &self,
@@ -371,7 +371,7 @@ impl Receiver {
 
     /// Modify the message by sending a disposition with the `delivery_state` field set
     /// to `Modify`
-    /// 
+    ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
     pub async fn modify<T>(
         &self,
@@ -384,7 +384,7 @@ impl Receiver {
 
     /// Modify the message by sending one or more disposition(s) with the `delivery_state` field set
     /// to `Modify`
-    /// 
+    ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
     pub async fn modify_all<'a, T: 'a>(
         &self,
@@ -569,7 +569,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This should be cancel safe if oneshot channel is cancel safe
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
@@ -578,7 +578,7 @@ where
     {
         let frame = self
             .incoming
-            .recv() 
+            .recv()
             .await // cancel safe
             .ok_or(LinkStateError::IllegalSessionState)?;
 
@@ -679,7 +679,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe because all internal `.await` point(s) are cancel safe
     async fn on_resuming_transfer<T>(
         &mut self,
@@ -710,7 +710,8 @@ where
 
                     // Auto accept the message and leave settled to be determined based on rcv_settle_mode
                     if self.auto_accept {
-                        self.dispose(&delivery, None, Accepted {}.into()).await?; // cancel safe
+                        self.dispose(&delivery, None, Accepted {}.into()).await?;
+                        // cancel safe
                     }
 
                     Ok(Some(delivery))
@@ -727,7 +728,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe because all internal `.await` point(s) are cancel safe
     async fn on_complete_transfer<T>(
         &mut self,
@@ -766,7 +767,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe because all internal `.await` point(s) are cancel safe
     #[inline]
     async fn on_incoming_transfer<T>(
@@ -790,8 +791,7 @@ where
             // on the transfer can be thought of as being equivalent to sending a disposition immediately before
             // the transfer performative, i.e., it is the state of the delivery (not the transfer) that existed at the
             // point the frame was sent.
-            self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)
-                ?;
+            self.on_transfer_state(&transfer.delivery_tag, transfer.settled, state)?;
         }
 
         if transfer.more {
@@ -810,9 +810,9 @@ where
     }
 
     /// Set the link credit. This will stop draining if the link is in a draining cycle
-    /// 
+    ///
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe as internanlly it only `.await` on sending over `tokio::mpsc::Sender`
     #[inline]
     pub async fn set_credit(&mut self, credit: SequenceNo) -> Result<(), IllegalLinkStateError> {

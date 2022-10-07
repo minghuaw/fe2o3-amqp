@@ -1,6 +1,6 @@
 //! Implements errors associated with the connection
 
-use std::{io, convert::Infallible};
+use std::{convert::Infallible, io};
 
 use bytes::Bytes;
 use fe2o3_amqp_types::{definitions, primitives::Binary, sasl::SaslCode};

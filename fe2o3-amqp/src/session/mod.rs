@@ -143,8 +143,8 @@ impl<R> SessionHandle<R> {
 }
 
 /// # Cancel safety
-/// 
-/// It internally `.await` on a send on `tokio::mpsc::Sender` and on a `oneshot::Receiver`. 
+///
+/// It internally `.await` on a send on `tokio::mpsc::Sender` and on a `oneshot::Receiver`.
 /// This should be cancel safe
 pub(crate) async fn allocate_link(
     control: &mpsc::Sender<SessionControl>,

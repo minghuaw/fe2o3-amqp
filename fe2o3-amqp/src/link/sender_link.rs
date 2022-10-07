@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::definitions::{SequenceNo, Handle};
+use fe2o3_amqp_types::definitions::{Handle, SequenceNo};
 use futures_util::Future;
 
 use super::{resumption::resume_delivery, *};
@@ -131,7 +131,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe because all internal `.await` are cancel safe
     async fn send_payload_with_transfer(
         &mut self,
@@ -162,7 +162,8 @@ where
         let more = (self.max_message_size != 0) && (payload.len() as u64 > self.max_message_size);
         if !more {
             transfer.more = false;
-            send_transfer(writer, input_handle, transfer, payload.clone()).await?; // cancel safe
+            send_transfer(writer, input_handle, transfer, payload.clone()).await?;
+        // cancel safe
         } else {
             // Send the first frame
             let partial = payload.split_to(self.max_message_size as usize);
@@ -175,7 +176,8 @@ where
                 transfer.delivery_tag = None;
                 transfer.message_format = None;
                 transfer.settled = None;
-                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?; // cancel safe
+                send_transfer(writer, input_handle.clone(), transfer.clone(), partial).await?;
+                // cancel safe
             }
 
             // Send the last transfer
@@ -313,7 +315,7 @@ where
 }
 
 /// # Cancel safety
-/// 
+///
 /// This is cancel safe because it only involves `.await` on sending over `tokio::mpsc::Sender`
 #[inline]
 async fn send_transfer(
@@ -359,9 +361,9 @@ async fn send_disposition(
 
 impl<T> SenderLink<T> {
     fn get_link_flow(
-        &self, 
+        &self,
         handle: Handle,
-        delivery_count: Option<SequenceNo>, 
+        delivery_count: Option<SequenceNo>,
         available: Option<u32>,
         echo: bool,
     ) -> LinkFlow {
@@ -576,7 +578,6 @@ where
             get_max_message_size(self.max_message_size, remote_attach.max_message_size);
 
         self.handle_unsettled_in_attach(remote_attach.unsettled)
-            
     }
 
     async fn send_attach(
@@ -770,12 +771,10 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => {
-            match link.on_incoming_detach(remote_detach) {
-                Ok(_) => err,
-                Err(detach_error) => detach_error.try_into().unwrap_or(err),
-            }
-        }
+        Some(LinkFrame::Detach(remote_detach)) => match link.on_incoming_detach(remote_detach) {
+            Ok(_) => err,
+            Err(detach_error) => detach_error.try_into().unwrap_or(err),
+        },
         Some(_) => SenderAttachError::NonAttachFrameReceived,
         None => SenderAttachError::IllegalSessionState,
     }

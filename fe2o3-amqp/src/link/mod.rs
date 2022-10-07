@@ -265,9 +265,7 @@ where
         is_reattaching: bool,
         partial_unsettled: usize,
     ) -> Attach {
-        let unsettled = self
-            .get_unsettled_map(is_reattaching, partial_unsettled)
-            ;
+        let unsettled = self.get_unsettled_map(is_reattaching, partial_unsettled);
 
         let max_message_size = match self.max_message_size {
             0 => None,
@@ -309,9 +307,7 @@ where
         let mut denominator = 1usize; // This is going to be the denominator
         let mut buf = BytesMut::new();
 
-        let mut attach = self
-            .as_attach_inner(handle.clone(), is_reattaching, denominator)
-            ;
+        let mut attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
         let mut serializer = Serializer::from((&mut buf).writer());
         attach
             .serialize(&mut serializer)
@@ -321,9 +317,7 @@ where
             buf.clear();
             denominator *= 2;
 
-            attach = self
-                .as_attach_inner(handle.clone(), is_reattaching, denominator)
-                ;
+            attach = self.as_attach_inner(handle.clone(), is_reattaching, denominator);
             let mut serializer = Serializer::from((&mut buf).writer());
             attach
                 .serialize(&mut serializer)
@@ -334,7 +328,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe if oneshot channel is cancel safe
     pub(crate) async fn send_attach_inner(
         &mut self,
@@ -357,8 +351,7 @@ where
             Some(0) | None => self.as_complete_attach(handle, is_reattaching),
             Some(_) => {
                 let max_frame_size = get_max_frame_size(session).await?; // FIXME: cancel safe?
-                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)
-                    ?
+                self.as_maybe_incomplete_attach(max_frame_size, handle, is_reattaching)?
             }
         };
         let incomplete_unsettled = attach.incomplete_unsettled;
@@ -393,7 +386,7 @@ where
 }
 
 /// # Cancel safety
-/// 
+///
 /// This should cancel safe if oneshot channel is cancel safe
 pub(crate) async fn get_max_frame_size(
     control: &mpsc::Sender<SessionControl>,
@@ -814,7 +807,7 @@ impl LinkRelay<OutputHandle> {
     ) -> Result<(), mpsc::error::SendError<LinkFrame>> {
         match self {
             LinkRelay::Sender { tx, .. } => {
-                tx.send(LinkFrame::Detach(detach)).await?; 
+                tx.send(LinkFrame::Detach(detach)).await?;
             }
             LinkRelay::Receiver { tx, .. } => {
                 tx.send(LinkFrame::Detach(detach)).await?;

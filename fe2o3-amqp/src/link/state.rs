@@ -429,7 +429,7 @@ mod tests {
     async fn test_spawned_flow_state_producer_and_consumer() {
         let (mut producer, mut consumer) = create_sender_flow_state_producer_and_consumer();
 
-        let handle = tokio::spawn(async move {consumer.consume(1).await});
+        let handle = tokio::spawn(async move { consumer.consume(1).await });
         let mut fut = Box::pin(handle);
         assert_pending!(&mut fut);
 
@@ -479,7 +479,7 @@ mod tests {
         let fut = consumer.consume(1);
         let mut pinned = Box::pin(fut);
         assert!(poll!(&mut pinned).is_pending());
-        
+
         // .await after notify with non-zero credit
         let link_flow = LinkFlow {
             link_credit: Some(2),
@@ -487,7 +487,7 @@ mod tests {
         };
         let item = (link_flow, OutputHandle(0));
         producer.produce(item).await;
-        
+
         drop(pinned);
 
         // If it is not cancel safe, we cannot consume all 2 credits

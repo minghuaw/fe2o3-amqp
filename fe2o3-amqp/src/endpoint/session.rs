@@ -67,11 +67,8 @@ pub(crate) trait Session {
 
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error>;
 
-    fn on_incoming_end(
-        &mut self,
-        channel: IncomingChannel,
-        end: End,
-    ) -> Result<(), Self::EndError>;
+    fn on_incoming_end(&mut self, channel: IncomingChannel, end: End)
+        -> Result<(), Self::EndError>;
 
     // Handling SessionFrames
     async fn send_begin(

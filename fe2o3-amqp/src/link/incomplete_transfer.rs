@@ -149,7 +149,9 @@ impl IncompleteTransfer {
         section_number: u32,
         section_offset: u64,
     ) {
-        if let Some(mut index) = self.position_of_section_number_and_offset(section_number, section_offset) {
+        if let Some(mut index) =
+            self.position_of_section_number_and_offset(section_number, section_offset)
+        {
             for chunk in self.buffer.iter_mut() {
                 if chunk.len() < index {
                     index -= chunk.len();

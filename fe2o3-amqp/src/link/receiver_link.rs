@@ -33,7 +33,7 @@ where
     type DispositionError = DispositionError;
 
     /// Set and send flow state
-    /// 
+    ///
     /// This is cancel safe because it only `.await` on sending over a `tokio::mpsc::Sender`
     async fn send_flow(
         &self,
@@ -660,13 +660,11 @@ where
             .delivery_count_mut(|_| initial_delivery_count);
 
         // Ok(Self::AttachExchange::Complete)
-        Ok(self
-            .handle_unsettled_in_attach(remote_attach.unsettled)
-            )
+        Ok(self.handle_unsettled_in_attach(remote_attach.unsettled))
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This is cancel safe if oneshot channel is cancel safe
     async fn send_attach(
         &mut self,
@@ -741,7 +739,7 @@ where
     }
 
     /// # Cancel safety
-    /// 
+    ///
     /// This should be cancel safe if oneshot channel is cancel safe
     async fn exchange_attach(
         &mut self,
@@ -838,12 +836,10 @@ where
         + Sync,
 {
     match reader.recv().await {
-        Some(LinkFrame::Detach(remote_detach)) => {
-            match link.on_incoming_detach(remote_detach) {
-                Ok(_) => err,
-                Err(detach_error) => detach_error.try_into().unwrap_or(err),
-            }
-        }
+        Some(LinkFrame::Detach(remote_detach)) => match link.on_incoming_detach(remote_detach) {
+            Ok(_) => err,
+            Err(detach_error) => detach_error.try_into().unwrap_or(err),
+        },
         Some(_) => ReceiverAttachError::NonAttachFrameReceived,
         None => ReceiverAttachError::IllegalSessionState,
     }
