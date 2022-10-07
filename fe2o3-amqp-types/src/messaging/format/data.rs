@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use serde::{de, Serialize};
-use serde_amqp::{primitives::Binary, Value};
+use serde_amqp::{primitives::{Binary}, Value};
 
 use crate::messaging::message::__private::{Deserializable, Serializable};
 

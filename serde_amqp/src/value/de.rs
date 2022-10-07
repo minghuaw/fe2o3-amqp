@@ -83,7 +83,9 @@ impl From<EncodingCodes> for ValueType {
             }
             EncodingCodes::UByte => ValueType::UByte,
             EncodingCodes::UShort => ValueType::UShort,
-            EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => ValueType::UInt,
+            EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => {
+                ValueType::UInt
+            }
             EncodingCodes::ULong | EncodingCodes::ULong0 | EncodingCodes::SmallULong => {
                 ValueType::ULong
             }

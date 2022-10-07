@@ -186,7 +186,8 @@ mod tests {
         de::Deserializer,
         descriptor::{Descriptor, PeekDescriptor},
         from_slice,
-        read::SliceReader, primitives::Symbol,
+        primitives::Symbol,
+        read::SliceReader,
     };
 
     #[test]

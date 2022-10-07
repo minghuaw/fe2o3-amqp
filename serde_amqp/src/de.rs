@@ -9,7 +9,7 @@ use std::convert::TryInto;
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID, VALUE, TRANSPARENT_VEC,
+        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
     },
     descriptor::PeekDescriptor,
     error::Error,
@@ -857,7 +857,7 @@ where
         } else if name == TIMESTAMP {
             self.new_type = NewType::Timestamp;
             self.deserialize_i64(visitor)
-        } else if name == TRANSPARENT_VEC { 
+        } else if name == TRANSPARENT_VEC {
             self.new_type = NewType::TransparentVec;
             visitor.visit_seq(TransparentVecAccess::new(self))
         } else {

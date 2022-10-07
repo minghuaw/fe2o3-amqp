@@ -9,7 +9,7 @@ use serde::{
 };
 use serde_amqp::{
     __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    primitives::Binary,
+    primitives::{Binary, TransparentVec},
     value::Value,
 };
 
@@ -284,22 +284,68 @@ where
         let mut message_annotations = None;
         let mut properties = None;
         let mut application_properties = None;
-        let mut body: Option<Deserializable<Body<T>>> = None;
+        let mut body: Body<T> = Body::Empty;
         let mut footer = None;
 
-        for _ in 0..7 {
+        loop {
             let field: Field = match seq.next_element()? {
                 Some(val) => val,
                 None => break,
             };
 
             match field {
-                Field::Header => header = seq.next_element()?,
-                Field::DeliveryAnnotations => delivery_annotations = seq.next_element()?,
-                Field::MessageAnnotations => message_annotations = seq.next_element()?,
-                Field::Properties => properties = seq.next_element()?,
-                Field::ApplicationProperties => application_properties = seq.next_element()?,
-                Field::Body => body = seq.next_element()?,
+                Field::Header => {
+                    header = seq.next_element()?;
+                }
+                Field::DeliveryAnnotations => {
+                    delivery_annotations = seq.next_element()?;
+                }
+                Field::MessageAnnotations => {
+                    message_annotations = seq.next_element()?;
+                }
+                Field::Properties => {
+                    properties = seq.next_element()?;
+                }
+                Field::ApplicationProperties => {
+                    application_properties = seq.next_element()?;
+                }
+                Field::Body => match body {
+                    Body::Value(_) => {
+                        return Err(de::Error::custom("Only one AmqpValue section is expected"))
+                    }
+                    Body::Data(first) => match seq.next_element::<Deserializable<Data>>()? {
+                        Some(second) => {
+                            body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
+                        }
+                        None => body = Body::Data(first),
+                    },
+                    Body::DataBatch(mut batch) => {
+                        if let Some(data) = seq.next_element::<Deserializable<Data>>()? {
+                            batch.push(data.0);
+                        };
+                        body = Body::DataBatch(batch);
+                    }
+                    Body::Sequence(first) => {
+                        match seq.next_element::<Deserializable<AmqpSequence<T>>>()? {
+                            Some(second) => {
+                                body = Body::SequenceBatch(TransparentVec::new(vec![first, second.0]));
+                            },
+                            None => body = Body::Sequence(first),
+                        }
+                    },
+                    Body::SequenceBatch(mut batch) => {
+                        if let Some(sequence) = seq.next_element::<Deserializable<AmqpSequence<T>>>()? {
+                            batch.push(sequence.0);
+                        }
+                        body = Body::SequenceBatch(batch);
+                    },
+                    Body::Empty => {
+                        body = seq
+                            .next_element::<Deserializable<Body<T>>>()?
+                            .map(|de| de.0)
+                            .unwrap_or(Body::Empty);
+                    }
+                },
                 Field::Footer => footer = seq.next_element()?,
             }
         }
@@ -310,7 +356,7 @@ where
             message_annotations,
             properties,
             application_properties,
-            body: body.map(|d| d.0).unwrap_or_else(|| Body::Empty),
+            body,
             footer,
         })
     }

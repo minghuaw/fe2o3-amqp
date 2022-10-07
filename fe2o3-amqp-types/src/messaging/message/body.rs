@@ -4,7 +4,7 @@ use serde::{
     de::{self, VariantAccess},
     Serialize,
 };
-use serde_amqp::Value;
+use serde_amqp::{primitives::TransparentVec, Value};
 
 use crate::messaging::{AmqpSequence, AmqpValue, Data};
 
@@ -20,6 +20,12 @@ pub enum Body<T> {
     Sequence(AmqpSequence<T>),
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
+
+    /// More than one data section
+    DataBatch(TransparentVec<Data>),
+
+    /// More than one sequence section
+    SequenceBatch(TransparentVec<AmqpSequence<T>>),
 
     /// There is no body section at all
     ///
@@ -67,6 +73,8 @@ where
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
+            Body::DataBatch(_) => write!(f, "DataBatch"),
+            Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
             Body::Empty => write!(f, "Nothing"),
         }
     }
@@ -142,6 +150,15 @@ impl<T: Serialize> Body<T> {
             Body::Data(data) => Serializable(data).serialize(serializer),
             Body::Sequence(seq) => Serializable(seq).serialize(serializer),
             Body::Value(val) => Serializable(val).serialize(serializer),
+            Body::DataBatch(vec) => {
+                let v: TransparentVec<Serializable<&Data>> = vec.iter().map(Serializable).collect();
+                v.serialize(serializer)
+            }
+            Body::SequenceBatch(vec) => {
+                let v: TransparentVec<Serializable<&AmqpSequence<T>>> =
+                    vec.iter().map(Serializable).collect();
+                v.serialize(serializer)
+            }
             Body::Empty => Serializable(AmqpValue(())).serialize(serializer),
         }
     }

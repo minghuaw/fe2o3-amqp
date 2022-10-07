@@ -1,6 +1,9 @@
 //! Implement transparent vec
 
-use std::{marker::PhantomData, ops::{Deref, DerefMut}};
+use std::{
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+};
 
 use serde::{de, Serialize};
 
@@ -57,7 +60,6 @@ impl<T> DerefMut for TransparentVec<T> {
     }
 }
 
-
 impl<T> IntoIterator for TransparentVec<T> {
     type Item = T;
 
@@ -94,7 +96,6 @@ impl<T> FromIterator<T> for TransparentVec<T> {
         Self(v)
     }
 }
-
 
 impl<T> Serialize for TransparentVec<T>
 where
@@ -158,7 +159,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serde_amqp_derive::{SerializeComposite, DeserializeComposite};
+    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     use crate::{format_code::EncodingCodes, from_slice, to_vec};
 
@@ -204,9 +205,18 @@ mod tests {
 
     #[test]
     fn test_serialize_composite_transparent_vec() {
-        let foo1 = Foo { field_num: 9, field_bool: true };
-        let foo2 = Foo { field_num: 63, field_bool: false };
-        let foo3 = Foo { field_num: 88, field_bool: true };
+        let foo1 = Foo {
+            field_num: 9,
+            field_bool: true,
+        };
+        let foo2 = Foo {
+            field_num: 63,
+            field_bool: false,
+        };
+        let foo3 = Foo {
+            field_num: 88,
+            field_bool: true,
+        };
         let vec = TransparentVec::new(vec![foo1.clone(), foo2.clone(), foo3.clone()]);
         let buf = to_vec(&vec).unwrap();
 
@@ -220,9 +230,18 @@ mod tests {
 
     #[test]
     fn test_deserialize_composite_transparent_vec() {
-        let foo1 = Foo { field_num: 9, field_bool: true };
-        let foo2 = Foo { field_num: 63, field_bool: false };
-        let foo3 = Foo { field_num: 88, field_bool: true };
+        let foo1 = Foo {
+            field_num: 9,
+            field_bool: true,
+        };
+        let foo2 = Foo {
+            field_num: 63,
+            field_bool: false,
+        };
+        let foo3 = Foo {
+            field_num: 88,
+            field_bool: true,
+        };
 
         let mut buf = Vec::new();
         buf.extend(to_vec(&foo1).unwrap());
