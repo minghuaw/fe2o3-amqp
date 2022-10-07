@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs, missing_debug_implementations)]
 
 //! A serde implementation of AMQP1.0 protocol.
@@ -198,6 +199,10 @@ pub mod primitives;
 pub mod read;
 pub mod ser;
 pub mod value;
+
+#[cfg_attr(docsrs, doc(cfg(feature = "extensions")))]
+#[cfg(feature = "extensions")]
+pub mod extensions;
 
 // Private mod but is used by derive macros
 // This is to avoid accidental misuse

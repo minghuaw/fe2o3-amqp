@@ -6,7 +6,6 @@ mod decimal;
 mod map;
 mod symbol;
 mod timestamp;
-mod transparent_vec;
 mod uuid;
 
 // to avoid ambiguity
@@ -16,7 +15,6 @@ pub use crate::primitives::decimal::*;
 pub use crate::primitives::map::*;
 pub use crate::primitives::symbol::*;
 pub use crate::primitives::timestamp::*;
-pub use crate::primitives::transparent_vec::*;
 pub use crate::primitives::uuid::*;
 
 // Alias for the primitive types to match those in the spec

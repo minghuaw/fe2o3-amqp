@@ -20,6 +20,7 @@ all-features = true
 default = []
 
 derive = ["serde_amqp_derive"]
+extensions = []
 
 # Provide conversion from json::Value to amqp::Value
 # and the value will use deserialize any instead of deserialize enum

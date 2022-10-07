@@ -1,10 +1,17 @@
 [tasks.test]
 command = "cargo"
-args = ["test", "--features", "derive"]
+args = ["test", "--features", "derive extensions"]
 
 [tasks.doctest]
-toolchain = "nightly"
-command = "cargo"
 args = [
-    "doc", "--no-deps", "--all-features", "--open"
+  "doc",
+  "--no-deps",
+  "--all-features",
+  "--open",
+  "-Z",
+  "unstable-options",
+  "--config",
+  "build.rustdocflags=[\"--cfg\", \"docsrs\"]",
 ]
+command = "cargo"
+toolchain = "nightly"
