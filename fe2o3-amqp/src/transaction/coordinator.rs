@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, LinkError},
-    messaging::{Accepted, DeliveryState, Rejected, Body},
+    messaging::{Accepted, Body, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{
         Coordinator, Declare, Declared, Discharge, TransactionError, TransactionId, TxnCapability,

@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
         message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome,
         MESSAGE_FORMAT,
     },
-    primitives::{Binary},
+    primitives::Binary,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
