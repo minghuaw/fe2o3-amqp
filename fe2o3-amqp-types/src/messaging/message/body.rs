@@ -11,7 +11,7 @@ use crate::messaging::{AmqpSequence, AmqpValue, Data};
 
 use super::__private::{Deserializable, Serializable};
 
-#[cfg(feature = "batch-body")]
+#[cfg(feature = "message-batch")]
 use serde_amqp::extensions::TransparentVec;
 
 /// Only one section of Data and one section of AmqpSequence
@@ -26,13 +26,13 @@ pub enum Body<T> {
     Value(AmqpValue<T>),
 
     /// More than one data section
-    #[cfg_attr(docsrs, doc(cfg(feature = "batch-body")))]
-    #[cfg(feature = "batch-body")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
+    #[cfg(feature = "message-batch")]
     DataBatch(TransparentVec<Data>),
 
     /// More than one sequence section
-    #[cfg_attr(docsrs, doc(cfg(feature = "batch-body")))]
-    #[cfg(feature = "batch-body")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
+    #[cfg(feature = "message-batch")]
     SequenceBatch(TransparentVec<AmqpSequence<T>>),
 
     /// There is no body section at all
@@ -81,9 +81,9 @@ where
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
-            #[cfg(feature = "batch-body")]
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => write!(f, "DataBatch"),
-            #[cfg(feature = "batch-body")]
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
             Body::Empty => write!(f, "Nothing"),
         }
@@ -160,12 +160,12 @@ impl<T: Serialize> Body<T> {
             Body::Data(data) => Serializable(data).serialize(serializer),
             Body::Sequence(seq) => Serializable(seq).serialize(serializer),
             Body::Value(val) => Serializable(val).serialize(serializer),
-            #[cfg(feature = "batch-body")]
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(vec) => {
                 let v: TransparentVec<Serializable<&Data>> = vec.iter().map(Serializable).collect();
                 v.serialize(serializer)
             }
-            #[cfg(feature = "batch-body")]
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(vec) => {
                 let v: TransparentVec<Serializable<&AmqpSequence<T>>> =
                     vec.iter().map(Serializable).collect();

@@ -33,7 +33,7 @@ transaction = ["primitive", "messaging"]
 security = ["primitive"]
 
 # Enables `DataBatch` and `SequenceBatch` as body section
-batch-body = ["serde_amqp/extensions"]
+message-batch = ["serde_amqp/extensions"]
 
 [dependencies]
 serde_amqp = { path = "../serde_amqp", features = ["derive"] }
