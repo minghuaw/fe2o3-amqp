@@ -11,7 +11,7 @@ use serde::{
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID,
+        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
     },
     error::Error,
     format::{OFFSET_LIST32, OFFSET_LIST8, OFFSET_MAP32, OFFSET_MAP8},
@@ -572,6 +572,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             NewType::Array => unreachable!(),
             NewType::Symbol => unreachable!(),
             NewType::SymbolRef => unreachable!(),
+            NewType::TransparentVec => unreachable!(),
         }
 
         self.writer.write_all(v).map_err(Into::into)
@@ -646,7 +647,9 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
         } else if name == TIMESTAMP {
             self.new_type = NewType::Timestamp
         } else if name == UUID {
-            self.new_type = NewType::Uuid
+            self.new_type = NewType::Uuid;
+        } else if name == TRANSPARENT_VEC {
+            self.new_type = NewType::TransparentVec;
         }
         value.serialize(self)
     }
@@ -840,13 +843,14 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
     where
         T: Serialize,
     {
-        let mut se = match self.se.new_type {
+        match self.se.new_type {
             NewType::None => {
                 // Element in the list always has it own constructor
-                Serializer::new(&mut self.buf)
+                let mut se = Serializer::new(&mut self.buf);
+                value.serialize(&mut se)?;
             }
             NewType::Array => {
-                match self.num {
+                let mut se = match self.num {
                     // The first element should include the contructor code
                     0 => {
                         let mut serializer = Serializer::new(&mut self.buf);
@@ -859,13 +863,25 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
                         serializer.is_array_elem = IsArrayElement::OtherElement;
                         serializer
                     }
-                }
+                };
+                value.serialize(&mut se)?;
             }
-            _ => unreachable!(),
-        };
+            NewType::TransparentVec => {
+                // FIXME: Directly write to the writer
+                let mut se = Serializer::new(&mut self.buf);
+                value.serialize(&mut se)?;
+            }
+            NewType::Dec32
+            | NewType::Dec64
+            | NewType::Dec128
+            | NewType::Symbol
+            | NewType::SymbolRef
+            | NewType::Timestamp
+            | NewType::Uuid => unreachable!(),
+        }
 
         self.num += 1;
-        value.serialize(&mut se)
+        Ok(())
     }
 
     #[inline]
@@ -874,7 +890,14 @@ impl<'a, W: Write + 'a> ser::SerializeSeq for SeqSerializer<'a, W> {
         match se.new_type {
             NewType::None => write_list(&mut se.writer, num, &buf, &se.is_array_elem),
             NewType::Array => write_array(&mut se.writer, num, &buf, &se.is_array_elem),
-            _ => unreachable!(),
+            NewType::TransparentVec => write_transparent_vec(&mut se.writer, &buf),
+            NewType::Dec32
+            | NewType::Dec64
+            | NewType::Dec128
+            | NewType::Symbol
+            | NewType::SymbolRef
+            | NewType::Timestamp
+            | NewType::Uuid => unreachable!(),
         }
     }
 }
@@ -912,6 +935,11 @@ fn write_array<'a, W: Write + 'a>(
         }
         _ => return Err(Error::too_long()),
     }
+    writer.write_all(buf)?;
+    Ok(())
+}
+
+fn write_transparent_vec<'a, W: Write + 'a>(mut writer: W, buf: &'a [u8]) -> Result<(), Error> {
     writer.write_all(buf)?;
     Ok(())
 }

@@ -7,6 +7,7 @@ mod map;
 mod symbol;
 mod timestamp;
 mod uuid;
+mod transparent_vec;
 
 // to avoid ambiguity
 pub use crate::primitives::array::*;
@@ -16,6 +17,7 @@ pub use crate::primitives::map::*;
 pub use crate::primitives::symbol::*;
 pub use crate::primitives::timestamp::*;
 pub use crate::primitives::uuid::*;
+pub use crate::primitives::transparent_vec::*;
 
 // Alias for the primitive types to match those in the spec
 use serde_bytes::ByteBuf;
@@ -149,3 +151,6 @@ pub type Char = char;
 /// category = variable, width = 4,
 /// label="up to 2^32 - 1 octets of binary data"
 pub type Binary = ByteBuf;
+
+/// A sequence of polymorphic values.
+pub type List<T> = Vec<T>;

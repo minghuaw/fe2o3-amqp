@@ -25,3 +25,6 @@ pub(crate) const SYMBOL: &str = "AMQP1.0_SYMBOL";
 pub(crate) const SYMBOL_REF: &str = "AMQP1.0_SYMBOL_REF";
 pub(crate) const TIMESTAMP: &str = "AMQP1.0_TIMESTAMP";
 pub(crate) const UUID: &str = "AMQP1.0_UUID";
+
+// This is not a type defined in the standard
+pub(crate) const TRANSPARENT_VEC: &str = "__TRANSPARENT_VEC";

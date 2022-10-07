@@ -1,3 +1,5 @@
+use crate::{descriptor::PeekDescriptor, value::de::ValueType};
+
 #[derive(Debug)]
 pub(crate) enum NewType {
     None,
@@ -9,6 +11,7 @@ pub(crate) enum NewType {
     SymbolRef,
     Timestamp,
     Uuid,
+    TransparentVec,
 }
 
 impl Default for NewType {
@@ -64,4 +67,10 @@ pub trait TryFromSerializable<T: serde::ser::Serialize>: Sized {
     type Error: std::error::Error;
 
     fn try_from(value: T) -> Result<Self, Self::Error>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PeekTypeCode {
+    Primitive(ValueType),
+    Composite(PeekDescriptor),
 }
