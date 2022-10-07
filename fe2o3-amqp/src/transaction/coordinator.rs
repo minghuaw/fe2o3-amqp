@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, LinkError},
-    messaging::{Accepted, DeliveryState, Rejected},
+    messaging::{Accepted, DeliveryState, Rejected, Body},
     performatives::Attach,
     transaction::{
         Coordinator, Declare, Declared, Discharge, TransactionError, TransactionId, TxnCapability,
@@ -148,10 +148,12 @@ impl TxnCoordinator {
     #[instrument(skip(self, delivery))]
     async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
         let body = match delivery.body() {
-            fe2o3_amqp_types::messaging::Body::Value(v) => &v.0,
-            fe2o3_amqp_types::messaging::Body::Sequence(_)
-            | fe2o3_amqp_types::messaging::Body::Data(_)
-            | fe2o3_amqp_types::messaging::Body::Empty => {
+            Body::Value(v) => &v.0,
+            Body::Sequence(_)
+            | Body::Data(_)
+            | Body::DataBatch(_)
+            | Body::SequenceBatch(_)
+            | Body::Empty => {
                 // Message Decode Error?
                 let error = definitions::Error::new(
                     AmqpError::DecodeError,

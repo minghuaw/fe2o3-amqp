@@ -6,7 +6,7 @@ use fe2o3_amqp_types::{
         message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome,
         MESSAGE_FORMAT,
     },
-    primitives::Binary,
+    primitives::{Binary},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
@@ -142,6 +142,8 @@ impl<T> Delivery<T> {
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
@@ -153,6 +155,21 @@ impl<T> Delivery<T> {
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
+        }
+    }
+
+    /// Consume the delivery into the body if the body is a batch of [`Data`].
+    /// An error will be returned if the body is not a batch of [`Data`]
+    pub fn try_into_data_batch(self) -> Result<impl Iterator<Item = Binary>, BodyError> {
+        match self.into_body() {
+            Body::Data(_) => Err(BodyError::IsData),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(batch) => Ok(batch.into_iter().map(|d| d.0)),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
@@ -164,6 +181,21 @@ impl<T> Delivery<T> {
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
+        }
+    }
+
+    /// Consume the delivery into the body if the body is a batch of [`AmqpSequence`].
+    /// An error will be returned if the body is not a batch of [`AmqpSequence`]
+    pub fn try_into_sequence_batch(self) -> Result<impl Iterator<Item = Vec<T>>, BodyError> {
+        match self.into_body() {
+            Body::Data(_) => Err(BodyError::IsData),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(batch) => Ok(batch.into_iter().map(|s| s.0)),
         }
     }
 
@@ -175,6 +207,8 @@ impl<T> Delivery<T> {
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
@@ -186,6 +220,21 @@ impl<T> Delivery<T> {
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
+        }
+    }
+
+    /// Get a reference to the delivery into the body if the body is a batch of [`Data`].
+    /// An error will be returned if the body is not a batch of [`Data`]
+    pub fn try_as_data_batch(&self) -> Result<impl Iterator<Item = &Binary>, BodyError> {
+        match self.body() {
+            Body::Data(_) => Err(BodyError::IsData),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(batch) => Ok(batch.iter().map(|d| &d.0)),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
@@ -197,6 +246,21 @@ impl<T> Delivery<T> {
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
+        }
+    }
+
+    /// Get a reference to the delivery into the body if the body is a batch of [`AmqpSequence`].
+    /// An error will be returned if the body is not a batch of [`AmqpSequence`]
+    pub fn try_as_sequence_batch(&self) -> Result<impl Iterator<Item = &Vec<T>>, BodyError> {
+        match self.body() {
+            Body::Data(_) => Err(BodyError::IsData),
+            Body::Value(_) => Err(BodyError::IsValue),
+            Body::Sequence(_) => Err(BodyError::IsSequence),
+            Body::Empty => Err(BodyError::IsEmpty),
+            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            Body::SequenceBatch(batch) => Ok(batch.iter().map(|s| &s.0)),
         }
     }
 }
@@ -207,6 +271,8 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
+            Body::DataBatch(_) => write!(f, "DataBatch"),
+            Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
             Body::Empty => write!(f, "Empty"),
         }
     }
