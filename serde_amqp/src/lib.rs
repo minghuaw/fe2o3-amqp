@@ -192,7 +192,7 @@
 //!     code = 0x0000_0000_0000_0074,
 //!     encoding = "basic"
 //! )]
-//! pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
+//! pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
 //! ```
 //! 
 //! ## Extensions
