@@ -149,11 +149,7 @@ impl TxnCoordinator {
     async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
         let body = match delivery.body() {
             Body::Value(v) => &v.0,
-            Body::Sequence(_)
-            | Body::Data(_)
-            | Body::DataBatch(_)
-            | Body::SequenceBatch(_)
-            | Body::Empty => {
+            _ => {
                 // Message Decode Error?
                 let error = definitions::Error::new(
                     AmqpError::DecodeError,

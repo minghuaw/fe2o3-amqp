@@ -142,7 +142,9 @@ impl<T> Delivery<T> {
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
@@ -155,13 +157,17 @@ impl<T> Delivery<T> {
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
     /// Consume the delivery into the body if the body is a batch of [`Data`].
     /// An error will be returned if the body is not a batch of [`Data`]
+    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
+    #[cfg(feature = "message-batch")]
     pub fn try_into_data_batch(self) -> Result<impl Iterator<Item = Binary>, BodyError> {
         match self.into_body() {
             Body::Data(_) => Err(BodyError::IsData),
@@ -181,13 +187,17 @@ impl<T> Delivery<T> {
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Empty => Err(BodyError::IsEmpty),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
     /// Consume the delivery into the body if the body is a batch of [`AmqpSequence`].
     /// An error will be returned if the body is not a batch of [`AmqpSequence`]
+    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
+    #[cfg(feature = "message-batch")]
     pub fn try_into_sequence_batch(self) -> Result<impl Iterator<Item = Vec<T>>, BodyError> {
         match self.into_body() {
             Body::Data(_) => Err(BodyError::IsData),
@@ -207,7 +217,9 @@ impl<T> Delivery<T> {
             Body::Data(_) => Err(BodyError::IsData),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
@@ -220,13 +232,17 @@ impl<T> Delivery<T> {
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Sequence(_) => Err(BodyError::IsSequence),
             Body::Empty => Err(BodyError::IsEmpty),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
     /// Get a reference to the delivery into the body if the body is a batch of [`Data`].
     /// An error will be returned if the body is not a batch of [`Data`]
+    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
+    #[cfg(feature = "message-batch")]
     pub fn try_as_data_batch(&self) -> Result<impl Iterator<Item = &Binary>, BodyError> {
         match self.body() {
             Body::Data(_) => Err(BodyError::IsData),
@@ -246,13 +262,17 @@ impl<T> Delivery<T> {
             Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
             Body::Value(_) => Err(BodyError::IsValue),
             Body::Empty => Err(BodyError::IsEmpty),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => Err(BodyError::IsDataBatch),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
         }
     }
 
     /// Get a reference to the delivery into the body if the body is a batch of [`AmqpSequence`].
     /// An error will be returned if the body is not a batch of [`AmqpSequence`]
+    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
+    #[cfg(feature = "message-batch")]
     pub fn try_as_sequence_batch(&self) -> Result<impl Iterator<Item = &Vec<T>>, BodyError> {
         match self.body() {
             Body::Data(_) => Err(BodyError::IsData),
@@ -271,7 +291,9 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
+            #[cfg(feature = "message-batch")]
             Body::DataBatch(_) => write!(f, "DataBatch"),
+            #[cfg(feature = "message-batch")]
             Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
             Body::Empty => write!(f, "Empty"),
         }
