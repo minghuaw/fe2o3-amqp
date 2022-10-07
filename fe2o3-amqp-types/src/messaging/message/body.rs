@@ -12,7 +12,7 @@ use super::__private::{Deserializable, Serializable};
 
 /// Only one section of Data and one section of AmqpSequence
 /// is supported for now
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Body<T> {
     /// A data section contains opaque binary data
     Data(Data),

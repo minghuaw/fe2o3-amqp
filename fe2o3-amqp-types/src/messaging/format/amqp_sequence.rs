@@ -11,6 +11,13 @@ use crate::messaging::message::__private::{Deserializable, Serializable};
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
 
+impl<T> AmqpSequence<T> {
+    /// Creates a new [`AmqpSequence`]
+    pub fn new(vec: Vec<T>) -> Self {
+        Self(vec)
+    }
+}
+
 impl<T> Display for AmqpSequence<T>
 where
     T: Display,
