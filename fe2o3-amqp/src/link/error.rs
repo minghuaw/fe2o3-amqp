@@ -157,7 +157,7 @@ impl From<DetachError> for SendError {
 ///
 /// This is only used in
 #[derive(Debug, thiserror::Error)]
-pub enum SenderTryConsumeError {
+pub(crate) enum SenderTryConsumeError {
     /// The sender is unable to acquire lock to inner state
     #[error("Try lock error")]
     TryLockError,
@@ -445,7 +445,7 @@ impl From<DetachError> for LinkStateError {
 
 /// Errors associated with receiving a transfer
 #[derive(Debug, thiserror::Error)]
-pub enum ReceiverTransferError {
+pub(crate) enum ReceiverTransferError {
     /// ILlegal link state
     #[error("Illegal local state")]
     IllegalState,
