@@ -12,7 +12,6 @@ enabled.
 - `"messaging"`: enables the types defined in part 2.7 and part 3 defined in the core specification
 - `"transaction"`: enables the types defined in part 4.5 of the core specification
 - `"security"`: enables the types defined in part 5 of the core specifiction.
-- `"message-batch"`: enables using `DataBatch` and `SequenceBatch` as the message body section
 
 ```toml
 default = [

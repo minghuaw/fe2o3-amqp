@@ -623,14 +623,10 @@ pub enum BodyError {
     IsSequence,
 
     /// Attempting to unwrap the body as either sequence or value but body is DataBatch
-    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
-    #[cfg(feature = "message-batch")]
     #[error("Body is DataBatch")]
     IsDataBatch,
 
     /// Attempting to unwrap the body as either sequence or value but body is SequenceBatch
-    #[cfg_attr(docsrs, doc(cfg(feature = "message-batch")))]
-    #[cfg(feature = "message-batch")]
     #[error("Body is SequenceBatch")]
     IsSequenceBatch,
 

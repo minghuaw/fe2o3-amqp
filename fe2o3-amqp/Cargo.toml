@@ -38,9 +38,6 @@ acceptor = []
 # SASL SCRAM
 scram = ["sha-1", "sha2", "rand", "base64", "stringprep", "hmac", "pbkdf2"]
 
-# Allow `DataBatch` and `SequenceBatch` as body section
-message-batch = ["fe2o3-amqp-types/message-batch"]
-
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-test = { version = "0.4" }
