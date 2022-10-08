@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.0
+
+1. Allow more than one `Data` or `Sequence` section in message body by adding `Body::DataBatch` and `Body::SequenceBatch` variants.
+
 ## 0.5.3
 
 1. Quality of life update
