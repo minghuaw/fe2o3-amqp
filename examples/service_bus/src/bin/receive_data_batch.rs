@@ -12,10 +12,12 @@ use fe2o3_amqp::Session;
 
 fn process_delivery_data(delivery: &Delivery<Value>) {
     match delivery.body() {
+        // A batch of only one `Data` section will be treated as `Body::Data`
         Body::Data(Data(data)) => {
             let msg = std::str::from_utf8(&data).unwrap();
             println!("Received: {:?}", msg);
         },
+        // A batch of more than one `Data` section will be treated as `Body::DataBatch`
         Body::DataBatch(batch) => {
             for Data(data) in batch {
                 let msg = std::str::from_utf8(&data).unwrap();
