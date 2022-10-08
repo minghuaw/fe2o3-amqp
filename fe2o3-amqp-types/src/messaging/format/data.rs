@@ -1,15 +1,20 @@
 use std::fmt::Display;
 
 use serde::{de, Serialize};
-use serde_amqp::{primitives::Binary, Value};
+use serde_amqp::{primitives::Binary, Value, SerializeComposite, DeserializeComposite};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, SerializableBodySection, sealed::Sealed, Batch, DeserializableBodySection};
+use crate::messaging::{message::__private::{Deserializable, Serializable}, SerializableBody, sealed::Sealed, Batch, DeserializableBody};
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
 ///     <descriptor name="amqp:data:binary" code="0x00000000:0x00000075"/>
 /// </type>
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite)]
+#[amqp_contract(
+    name="amqp:data:binary",
+    code=0x0000_0000_0000_0075,
+    encoding = "basic",
+)]
 pub struct Data(pub Binary);
 
 impl TryFrom<Value> for Data {
@@ -30,158 +35,142 @@ impl Display for Data {
     }
 }
 
-impl Serialize for Serializable<Data> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde_amqp::serde::ser::SerializeTupleStruct;
-        let mut state = serializer
-            .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
-            0x0000_0000_0000_0075_u64,
-        ))?;
-        state.serialize_field(&self.0 .0)?;
-        state.end()
-    }
-}
+// impl Serialize for Serializable<Data> {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         use serde_amqp::serde::ser::SerializeTupleStruct;
+//         let mut state = serializer
+//             .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
+//         state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
+//             0x0000_0000_0000_0075_u64,
+//         ))?;
+//         state.serialize_field(&self.0 .0)?;
+//         state.end()
+//     }
+// }
 
-impl Serialize for Serializable<&Data> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde_amqp::serde::ser::SerializeTupleStruct;
-        let mut state = serializer
-            .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
-            0x0000_0000_0000_0075_u64,
-        ))?;
-        state.serialize_field(&self.0 .0)?;
-        state.end()
-    }
-}
+// impl Serialize for Serializable<&Data> {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         use serde_amqp::serde::ser::SerializeTupleStruct;
+//         let mut state = serializer
+//             .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
+//         state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
+//             0x0000_0000_0000_0075_u64,
+//         ))?;
+//         state.serialize_field(&self.0 .0)?;
+//         state.end()
+//     }
+// }
 
-impl<'de> de::Deserialize<'de> for Deserializable<Data> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct Visitor {}
+// impl<'de> de::Deserialize<'de> for Deserializable<Data> {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         struct Visitor {}
 
-        impl Visitor {
-            fn new() -> Self {
-                Self {}
-            }
-        }
+//         impl Visitor {
+//             fn new() -> Self {
+//                 Self {}
+//             }
+//         }
 
-        impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
-            type Value = Deserializable<Data>;
+//         impl<'de> serde_amqp::serde::de::Visitor<'de> for Visitor {
+//             type Value = Deserializable<Data>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("amqp:data:binary")
-            }
+//             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//                 formatter.write_str("amqp:data:binary")
+//             }
 
-            fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde_amqp::serde::de::SeqAccess<'de>,
-            {
-                let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
-                    Some(val) => val,
-                    None => {
-                        return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
-                    }
-                };
-                match __descriptor {
-                    serde_amqp::descriptor::Descriptor::Name(__symbol) => {
-                        if __symbol.into_inner() != "amqp:data:binary" {
-                            return Err(serde_amqp::serde::de::Error::custom(
-                                "Descriptor mismatch",
-                            ));
-                        }
-                    }
-                    serde_amqp::descriptor::Descriptor::Code(__c) => {
-                        if __c != 0x0000_0000_0000_0075_u64 {
-                            return Err(serde_amqp::serde::de::Error::custom(
-                                "Descriptor mismatch",
-                            ));
-                        }
-                    }
-                }
-                let field0: Binary = match __seq.next_element()? {
-                    Some(val) => val,
-                    None => {
-                        return Err(serde_amqp::serde::de::Error::custom(
-                            "Insufficient number of items",
-                        ))
-                    }
-                };
-                Ok(Deserializable(Data(field0)))
-            }
-        }
+//             fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
+//             where
+//                 A: serde_amqp::serde::de::SeqAccess<'de>,
+//             {
+//                 let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
+//                     Some(val) => val,
+//                     None => {
+//                         return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
+//                     }
+//                 };
+//                 match __descriptor {
+//                     serde_amqp::descriptor::Descriptor::Name(__symbol) => {
+//                         if __symbol.into_inner() != "amqp:data:binary" {
+//                             return Err(serde_amqp::serde::de::Error::custom(
+//                                 "Descriptor mismatch",
+//                             ));
+//                         }
+//                     }
+//                     serde_amqp::descriptor::Descriptor::Code(__c) => {
+//                         if __c != 0x0000_0000_0000_0075_u64 {
+//                             return Err(serde_amqp::serde::de::Error::custom(
+//                                 "Descriptor mismatch",
+//                             ));
+//                         }
+//                     }
+//                 }
+//                 let field0: Binary = match __seq.next_element()? {
+//                     Some(val) => val,
+//                     None => {
+//                         return Err(serde_amqp::serde::de::Error::custom(
+//                             "Insufficient number of items",
+//                         ))
+//                     }
+//                 };
+//                 Ok(Deserializable(Data(field0)))
+//             }
+//         }
 
-        deserializer.deserialize_tuple_struct(
-            serde_amqp::__constants::DESCRIBED_BASIC,
-            1usize + 1,
-            Visitor::new(),
-        )
-    }
-}
+//         deserializer.deserialize_tuple_struct(
+//             serde_amqp::__constants::DESCRIBED_BASIC,
+//             1usize + 1,
+//             Visitor::new(),
+//         )
+//     }
+// }
 
 impl Sealed for Data {}
 
 impl<'se> Sealed for &'se Data {}
 
-impl SerializableBodySection for Data {
-    type Serializable = Serializable<Data>;
+impl SerializableBody for Data {
+    type Serializable = Data;
 
-    fn serializable(self) -> Self::Serializable {
-        Serializable(self)
+    fn serializable(&self) -> &Self::Serializable {
+        self
     }
 }
 
-impl<'se> SerializableBodySection for &'se Data {
-    type Serializable = Serializable<&'se Data>;
-
-    fn serializable(self) -> Self::Serializable {
-        Serializable(self)
-    }
-}
-
-impl DeserializableBodySection for Data {
-    type Deserializable = Deserializable<Data>;
+impl DeserializableBody for Data {
+    type Deserializable = Data;
 
     fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable.0
+        deserializable
     }
 }
 
-// TODO: impl DeserializableBodySection for &'de Data
+// TODO: impl DeserializableBody for &'de Data
 
 impl Sealed for Batch<Data> { }
 
-impl SerializableBodySection for Batch<Data> {
-    type Serializable = Batch<Serializable<Data>>;
+impl<'se> Sealed for Batch<&'se Data> { }
 
-    fn serializable(self) -> Self::Serializable {
-        self.into_iter().map(Serializable).collect()
+impl SerializableBody for Batch<Data> {
+    type Serializable = Batch<Data>;
+
+    fn serializable(&self) -> &Self::Serializable {
+        self
     }    
 }
 
-impl<'se> Sealed for Batch<&'se Data> { }
-
-impl<'se> SerializableBodySection for Batch<&'se Data> {
-    type Serializable = Batch<Serializable<&'se Data>>;
-
-    fn serializable(self) -> Self::Serializable {
-        self.into_iter().map(Serializable).collect()
-    }
-}
-
-impl DeserializableBodySection for Batch<Data> {
-    type Deserializable = Batch<Deserializable<Data>>;
+impl DeserializableBody for Batch<Data> {
+    type Deserializable = Batch<Data>;
 
     fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable.into_iter().map(|d| d.0).collect()
+        deserializable
     }
 }

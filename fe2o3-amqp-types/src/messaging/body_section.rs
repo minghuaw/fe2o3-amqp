@@ -7,21 +7,21 @@ pub(crate) mod sealed {
 }
 
 /// Trait for message body
-pub trait BodySection: Sealed + SerializableBodySection + DeserializableBodySection { }
+pub trait BodySection: Sealed + SerializableBody + DeserializableBody { }
 
-impl<T> BodySection for T where T: Sealed + SerializableBodySection + DeserializableBodySection { }
+impl<T> BodySection for T where T: Sealed + SerializableBody + DeserializableBody { }
 
 /// Trait for a serializable body section
-pub trait SerializableBodySection: Sealed {
+pub trait SerializableBody: Sealed {
     /// The serializable type
     type Serializable: ser::Serialize;
 
     /// Get a reference to the serializable type
-    fn serializable(self) -> Self::Serializable;
+    fn serializable(&self) -> &Self::Serializable;
 }
 
 /// Trait for a deserializable body section
-pub trait DeserializableBodySection: Sealed {
+pub trait DeserializableBody: Sealed {
     /// The deserializable type
     /// 
     /// TODO: change to GAT once it stablizes
@@ -31,14 +31,14 @@ pub trait DeserializableBodySection: Sealed {
     fn from_deserializable(deserializable: Self::Deserializable) -> Self;
 }
 
-pub trait IntoBodySection {
-    type BodySection: BodySection;
+// pub trait IntoBodySection {
+//     type BodySection: BodySection;
 
-    fn into_body_section(self) -> Self::BodySection;
-}
+//     fn into_body_section(self) -> Self::BodySection;
+// }
 
-pub trait IntoSerializableBodySection {
-    type SerializableBodySection: SerializableBodySection;
+// pub trait IntoSerializableBody {
+//     type SerializableBody: SerializableBody;
 
-    fn into_serializable_body_section(self) -> Self::SerializableBodySection;
-}
+//     fn into_serializable_body_section(self) -> Self::SerializableBody;
+// }

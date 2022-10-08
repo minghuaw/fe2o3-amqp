@@ -161,19 +161,16 @@ impl<T: Serialize> Body<T> {
         S: serde::Serializer,
     {
         match self {
-            Body::Data(data) => Serializable(data).serialize(serializer),
-            Body::Sequence(seq) => Serializable(seq).serialize(serializer),
-            Body::Value(val) => Serializable(val).serialize(serializer),
+            Body::Data(data) => data.serialize(serializer),
+            Body::Sequence(seq) => seq.serialize(serializer),
+            Body::Value(val) => val.serialize(serializer),
             Body::DataBatch(vec) => {
-                let v: TransparentVec<Serializable<&Data>> = vec.iter().map(Serializable).collect();
-                v.serialize(serializer)
+                vec.serialize(serializer)
             }
             Body::SequenceBatch(vec) => {
-                let v: TransparentVec<Serializable<&AmqpSequence<T>>> =
-                    vec.iter().map(Serializable).collect();
-                v.serialize(serializer)
+                vec.serialize(serializer)
             }
-            Body::Empty => Serializable(AmqpValue(())).serialize(serializer),
+            Body::Empty => AmqpValue(()).serialize(serializer),
         }
     }
 }
@@ -250,15 +247,15 @@ where
 
         match val {
             Field::Data => {
-                let Deserializable(data) = variant.newtype_variant()?;
+                let data = variant.newtype_variant()?;
                 Ok(Body::Data(data))
             }
             Field::Sequence => {
-                let Deserializable(sequence) = variant.newtype_variant()?;
+                let sequence = variant.newtype_variant()?;
                 Ok(Body::Sequence(sequence))
             }
             Field::Value => {
-                let Deserializable(value) = variant.newtype_variant()?;
+                let value = variant.newtype_variant()?;
                 Ok(Body::Value(value))
             }
         }

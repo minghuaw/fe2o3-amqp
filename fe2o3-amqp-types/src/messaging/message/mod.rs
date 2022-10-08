@@ -17,7 +17,7 @@ use serde_amqp::extensions::TransparentVec;
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
-    MessageAnnotations, Properties, BodySection, SerializableBodySection, DeserializableBodySection,
+    MessageAnnotations, Properties, BodySection, SerializableBody, DeserializableBody,
 };
 
 mod body;
@@ -167,7 +167,7 @@ impl<T> Message<T> {
 // impl<T> Serialize for Message<T>
 impl<B> Message<B>
 where
-    B: SerializableBodySection,
+    B: SerializableBody,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -266,7 +266,7 @@ struct Visitor<B> {
 
 impl<'de, B> de::Visitor<'de> for Visitor<B>
 where
-    B: DeserializableBodySection,
+    B: DeserializableBody,
 {
     type Value = Message<B>;
 
@@ -342,7 +342,7 @@ where
 // impl<'de, T> de::Deserialize<'de> for Message<T>
 impl<'de, B> Message<B>
 where
-    B: DeserializableBodySection,
+    B: DeserializableBody,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
