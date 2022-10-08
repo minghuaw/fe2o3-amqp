@@ -12,8 +12,7 @@ use super::__private::{Deserializable, Serializable};
 
 use serde_amqp::extensions::TransparentVec;
 
-/// Only one section of Data and one section of AmqpSequence
-/// is supported for now
+/// Body section of message
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Body<T> {
     /// A data section contains opaque binary data
@@ -24,9 +23,13 @@ pub enum Body<T> {
     Value(AmqpValue<T>),
 
     /// More than one data section
+    /// 
+    /// Added since `"0.6.0"`
     DataBatch(TransparentVec<Data>),
 
     /// More than one sequence section
+    /// 
+    /// Added since `"0.6.0"`
     SequenceBatch(TransparentVec<AmqpSequence<T>>),
 
     /// There is no body section at all
