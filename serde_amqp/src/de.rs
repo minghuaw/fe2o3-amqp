@@ -1,13 +1,17 @@
 //! Deserializer implementation
 
-use serde::de::{self};
+use serde::{
+    de::{self},
+    Deserialize,
+};
 use std::convert::TryInto;
 
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID, VALUE,
+        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
     },
+    descriptor::PeekDescriptor,
     error::Error,
     fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
     format::{
@@ -15,7 +19,7 @@ use crate::{
     },
     format_code::EncodingCodes,
     read::{IoReader, Read, SliceReader},
-    util::{EnumType, NewType, StructEncoding},
+    util::{EnumType, NewType, PeekTypeCode, StructEncoding},
 };
 
 /// Deserialize an instance of type T from an IO stream
@@ -853,6 +857,9 @@ where
         } else if name == TIMESTAMP {
             self.new_type = NewType::Timestamp;
             self.deserialize_i64(visitor)
+        } else if name == TRANSPARENT_VEC {
+            self.new_type = NewType::TransparentVec;
+            visitor.visit_seq(TransparentVecAccess::new(self))
         } else {
             visitor.visit_newtype_struct(self)
         }
@@ -1404,6 +1411,63 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
                 seed.deserialize(self.as_mut()).map(Some)
             }
         }
+    }
+}
+
+/// Accessor for transparent vec type
+#[derive(Debug)]
+pub struct TransparentVecAccess<'a, R> {
+    de: &'a mut Deserializer<R>,
+    cached: Option<PeekTypeCode>,
+}
+
+impl<'a, R> TransparentVecAccess<'a, R> {
+    pub(crate) fn new(de: &'a mut Deserializer<R>) -> Self {
+        Self { de, cached: None }
+    }
+}
+
+impl<'a, R> AsMut<Deserializer<R>> for TransparentVecAccess<'a, R> {
+    fn as_mut(&mut self) -> &mut Deserializer<R> {
+        self.de
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for TransparentVecAccess<'a, R> {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        match self.de.reader.peek().map(|b| b.try_into()).transpose()? {
+            Some(EncodingCodes::DescribedType) => {
+                let peek = PeekDescriptor::deserialize(self.as_mut())?;
+                let peek = PeekTypeCode::Composite(peek);
+                match &self.cached {
+                    Some(cached) => {
+                        if *cached != peek {
+                            return Ok(None); // Treat as end of vec
+                        }
+                    }
+                    None => self.cached = Some(peek),
+                }
+            }
+            Some(code) => {
+                let peek = PeekTypeCode::Primitive(code.into());
+                match &self.cached {
+                    Some(cached) => {
+                        if *cached != peek {
+                            return Ok(None); // Treat as end of vec
+                        }
+                    }
+                    None => self.cached = Some(peek),
+                }
+            }
+            None => return Ok(None),
+        }
+
+        seed.deserialize(self.as_mut()).map(Some)
     }
 }
 

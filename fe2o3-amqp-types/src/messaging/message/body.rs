@@ -10,9 +10,19 @@ use crate::messaging::{AmqpSequence, AmqpValue, Data};
 
 use super::__private::{Deserializable, Serializable};
 
-/// Only one section of Data and one section of AmqpSequence
-/// is supported for now
-#[derive(Debug, Clone, PartialEq)]
+use serde_amqp::extensions::TransparentVec;
+
+/// The body consists of one of the following three choices: one or more data sections, one or more
+/// amqp-sequence sections, or a single amqp-value section.
+/// 
+/// Support for more than one `Data` or `AmqpSequence` sections are added since version "0.6.0".
+/// 
+/// # Why separating `Data`/`Sequence` and `DataBatch`/`SequenceBatch`
+/// 
+/// 1. Compatibility. Only the `Data` and `Sequence` variants were provided in the earlier versions
+/// 2. It seems like `DataBatch` and `SequenceBatch` are used much rarely than `Data` or `Sequence`.
+/// Allocating a Vec for just one element constantly seems a waste.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Body<T> {
     /// A data section contains opaque binary data
     Data(Data),
@@ -20,6 +30,16 @@ pub enum Body<T> {
     Sequence(AmqpSequence<T>),
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
+
+    /// More than one data section
+    /// 
+    /// Added since `"0.6.0"`
+    DataBatch(TransparentVec<Data>),
+
+    /// More than one sequence section
+    /// 
+    /// Added since `"0.6.0"`
+    SequenceBatch(TransparentVec<AmqpSequence<T>>),
 
     /// There is no body section at all
     ///
@@ -67,6 +87,8 @@ where
             Body::Data(data) => write!(f, "{}", data),
             Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
+            Body::DataBatch(_) => write!(f, "DataBatch"),
+            Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
             Body::Empty => write!(f, "Nothing"),
         }
     }
@@ -142,6 +164,15 @@ impl<T: Serialize> Body<T> {
             Body::Data(data) => Serializable(data).serialize(serializer),
             Body::Sequence(seq) => Serializable(seq).serialize(serializer),
             Body::Value(val) => Serializable(val).serialize(serializer),
+            Body::DataBatch(vec) => {
+                let v: TransparentVec<Serializable<&Data>> = vec.iter().map(Serializable).collect();
+                v.serialize(serializer)
+            }
+            Body::SequenceBatch(vec) => {
+                let v: TransparentVec<Serializable<&AmqpSequence<T>>> =
+                    vec.iter().map(Serializable).collect();
+                v.serialize(serializer)
+            }
             Body::Empty => Serializable(AmqpValue(())).serialize(serializer),
         }
     }

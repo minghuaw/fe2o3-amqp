@@ -149,3 +149,6 @@ pub type Char = char;
 /// category = variable, width = 4,
 /// label="up to 2^32 - 1 octets of binary data"
 pub type Binary = ByteBuf;
+
+/// A sequence of polymorphic values.
+pub type List<T> = Vec<T>;

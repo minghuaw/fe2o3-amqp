@@ -622,6 +622,18 @@ pub enum BodyError {
     #[error("Body is Sequence")]
     IsSequence,
 
+    /// Attempting to unwrap the body as either sequence or value but body is DataBatch
+    /// 
+    /// Added since `"0.6.0"`
+    #[error("Body is DataBatch")]
+    IsDataBatch,
+
+    /// Attempting to unwrap the body as either sequence or value but body is SequenceBatch
+    /// 
+    /// Added since `"0.6.0"`
+    #[error("Body is SequenceBatch")]
+    IsSequenceBatch,
+
     /// Attempting to unwrap the body but no body section is found
     #[error("Body is nothing")]
     IsEmpty,

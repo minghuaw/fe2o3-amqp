@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs, missing_debug_implementations)]
 
 //! A serde implementation of AMQP1.0 protocol.
@@ -89,7 +90,14 @@
 //!
 //! # Feature flag
 //!
-//! - `"derive"`: enables custom derive macros: `SerializeComposite` and `DeserializeComposite`.
+//! ```toml
+//! default = []
+//! ```
+//!
+//! | Feature | Description |
+//! |---------|-------------|
+//! |`"derive"`| enables [`SerializeComposite` and `DeserializeComposite`](#serializecomposite-and-deserializecomposite) |
+//! |`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)), added since "0.4.5" |
 //!
 //! ## `SerializeComposite` and `DeserializeComposite`
 //!
@@ -184,8 +192,15 @@
 //!     code = 0x0000_0000_0000_0074,
 //!     encoding = "basic"
 //! )]
-//! pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
+//! pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
 //! ```
+//!
+//! ## Extensions
+//!
+//! The following type(s) are provided in the `extensions` mod and require the `extensions` feature
+//!
+//! 1. `TransparentVec` - a thin wrapper around `Vec` that is serialized/deserialized as a sequence of elements
+//!    `Vec` is treated as an AMQP `List` in the core spec
 
 // Public mods
 pub mod de;
@@ -198,6 +213,10 @@ pub mod primitives;
 pub mod read;
 pub mod ser;
 pub mod value;
+
+#[cfg_attr(docsrs, doc(cfg(feature = "extensions")))]
+#[cfg(feature = "extensions")]
+pub mod extensions;
 
 // Private mod but is used by derive macros
 // This is to avoid accidental misuse

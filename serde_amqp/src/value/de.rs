@@ -1,7 +1,5 @@
 //! Value deserializer
 
-use std::convert::TryInto;
-
 use ordered_float::OrderedFloat;
 use serde::de::{self};
 use serde_bytes::ByteBuf;
@@ -47,7 +45,8 @@ const VARIANTS: &[&str] = &[
     "Array",
 ];
 
-enum Field {
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ValueType {
     Described,
     Null,
     Bool,
@@ -75,10 +74,48 @@ enum Field {
     Array,
 }
 
+impl From<EncodingCodes> for ValueType {
+    fn from(code: EncodingCodes) -> Self {
+        match code {
+            EncodingCodes::Null => ValueType::Null,
+            EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
+                ValueType::Bool
+            }
+            EncodingCodes::UByte => ValueType::UByte,
+            EncodingCodes::UShort => ValueType::UShort,
+            EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => {
+                ValueType::UInt
+            }
+            EncodingCodes::ULong | EncodingCodes::ULong0 | EncodingCodes::SmallULong => {
+                ValueType::ULong
+            }
+            EncodingCodes::Byte => ValueType::Byte,
+            EncodingCodes::Short => ValueType::Short,
+            EncodingCodes::Int | EncodingCodes::SmallInt => ValueType::Int,
+            EncodingCodes::Long | EncodingCodes::SmallLong => ValueType::Long,
+            EncodingCodes::Float => ValueType::Float,
+            EncodingCodes::Double => ValueType::Double,
+            EncodingCodes::Decimal32 => ValueType::Decimal32,
+            EncodingCodes::Decimal64 => ValueType::Decimal64,
+            EncodingCodes::Decimal128 => ValueType::Decimal128,
+            EncodingCodes::Char => ValueType::Char,
+            EncodingCodes::Timestamp => ValueType::Timestamp,
+            EncodingCodes::Uuid => ValueType::Uuid,
+            EncodingCodes::VBin32 | EncodingCodes::VBin8 => ValueType::Binary,
+            EncodingCodes::Str32 | EncodingCodes::Str8 => ValueType::String,
+            EncodingCodes::Sym32 | EncodingCodes::Sym8 => ValueType::Symbol,
+            EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => ValueType::List,
+            EncodingCodes::Map32 | EncodingCodes::Map8 => ValueType::Map,
+            EncodingCodes::Array32 | EncodingCodes::Array8 => ValueType::Array,
+            EncodingCodes::DescribedType => ValueType::Described,
+        }
+    }
+}
+
 struct FieldVisitor {}
 
 impl<'de> de::Visitor<'de> for FieldVisitor {
-    type Value = Field;
+    type Value = ValueType;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("field of enum Value")
@@ -88,45 +125,14 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
     where
         E: de::Error,
     {
-        let field = match v
-            .try_into()
-            .map_err(|err: Error| de::Error::custom(err.to_string()))?
-        {
-            EncodingCodes::Null => Field::Null,
-            EncodingCodes::Boolean | EncodingCodes::BooleanFalse | EncodingCodes::BooleanTrue => {
-                Field::Bool
-            }
-            EncodingCodes::UByte => Field::UByte,
-            EncodingCodes::UShort => Field::UShort,
-            EncodingCodes::UInt | EncodingCodes::UInt0 | EncodingCodes::SmallUInt => Field::UInt,
-            EncodingCodes::ULong | EncodingCodes::ULong0 | EncodingCodes::SmallULong => {
-                Field::ULong
-            }
-            EncodingCodes::Byte => Field::Byte,
-            EncodingCodes::Short => Field::Short,
-            EncodingCodes::Int | EncodingCodes::SmallInt => Field::Int,
-            EncodingCodes::Long | EncodingCodes::SmallLong => Field::Long,
-            EncodingCodes::Float => Field::Float,
-            EncodingCodes::Double => Field::Double,
-            EncodingCodes::Decimal32 => Field::Decimal32,
-            EncodingCodes::Decimal64 => Field::Decimal64,
-            EncodingCodes::Decimal128 => Field::Decimal128,
-            EncodingCodes::Char => Field::Char,
-            EncodingCodes::Timestamp => Field::Timestamp,
-            EncodingCodes::Uuid => Field::Uuid,
-            EncodingCodes::VBin32 | EncodingCodes::VBin8 => Field::Binary,
-            EncodingCodes::Str32 | EncodingCodes::Str8 => Field::String,
-            EncodingCodes::Sym32 | EncodingCodes::Sym8 => Field::Symbol,
-            EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => Field::List,
-            EncodingCodes::Map32 | EncodingCodes::Map8 => Field::Map,
-            EncodingCodes::Array32 | EncodingCodes::Array8 => Field::Array,
-            EncodingCodes::DescribedType => Field::Described,
-        };
+        let field = EncodingCodes::try_from(v)
+            .map(|c| ValueType::from(c))
+            .map_err(|err: Error| de::Error::custom(err.to_string()))?;
         Ok(field)
     }
 }
 
-impl<'de> de::Deserialize<'de> for Field {
+impl<'de> de::Deserialize<'de> for ValueType {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -198,103 +204,103 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
         let (val, de) = data.variant()?;
 
         match val {
-            Field::Described => {
+            ValueType::Described => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Described(val))
             }
-            Field::Null => {
+            ValueType::Null => {
                 de.newtype_variant()?;
                 Ok(Value::Null)
             }
-            Field::Bool => {
+            ValueType::Bool => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Bool(val))
             }
-            Field::UByte => {
+            ValueType::UByte => {
                 let val = de.newtype_variant()?;
                 Ok(Value::UByte(val))
             }
-            Field::UShort => {
+            ValueType::UShort => {
                 let val = de.newtype_variant()?;
                 Ok(Value::UShort(val))
             }
-            Field::UInt => {
+            ValueType::UInt => {
                 let val = de.newtype_variant()?;
                 Ok(Value::UInt(val))
             }
-            Field::ULong => {
+            ValueType::ULong => {
                 let val = de.newtype_variant()?;
                 Ok(Value::ULong(val))
             }
-            Field::Byte => {
+            ValueType::Byte => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Byte(val))
             }
-            Field::Short => {
+            ValueType::Short => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Short(val))
             }
-            Field::Int => {
+            ValueType::Int => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Int(val))
             }
-            Field::Long => {
+            ValueType::Long => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Long(val))
             }
-            Field::Float => {
+            ValueType::Float => {
                 let val: f32 = de.newtype_variant()?;
                 Ok(Value::Float(OrderedFloat::from(val)))
             }
-            Field::Double => {
+            ValueType::Double => {
                 let val: f64 = de.newtype_variant()?;
                 Ok(Value::Double(OrderedFloat::from(val)))
             }
-            Field::Decimal32 => {
+            ValueType::Decimal32 => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Decimal32(val))
             }
-            Field::Decimal64 => {
+            ValueType::Decimal64 => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Decimal64(val))
             }
-            Field::Decimal128 => {
+            ValueType::Decimal128 => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Decimal128(val))
             }
-            Field::Char => {
+            ValueType::Char => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Char(val))
             }
-            Field::Timestamp => {
+            ValueType::Timestamp => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Timestamp(val))
             }
-            Field::Uuid => {
+            ValueType::Uuid => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Uuid(val))
             }
-            Field::Binary => {
+            ValueType::Binary => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Binary(val))
             }
-            Field::String => {
+            ValueType::String => {
                 let val = de.newtype_variant()?;
                 Ok(Value::String(val))
             }
-            Field::Symbol => {
+            ValueType::Symbol => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Symbol(val))
             }
-            Field::List => {
+            ValueType::List => {
                 let val = de.newtype_variant()?;
                 Ok(Value::List(val))
             }
-            Field::Map => {
+            ValueType::Map => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Map(val))
             }
-            Field::Array => {
+            ValueType::Array => {
                 let val = de.newtype_variant()?;
                 Ok(Value::Array(val))
             }

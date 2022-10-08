@@ -89,7 +89,14 @@ variant index being the key and a list of the fields being the value.
 
 ## Feature flag
 
-- `"derive"`: enables custom derive macros: `SerializeComposite` and `DeserializeComposite`.
+```toml
+default = []
+```
+
+| Feature | Description |
+|---------|-------------|
+|`"derive"`| enables [`SerializeComposite` and `DeserializeComposite`](#serializecomposite-and-deserializecomposite) |
+|`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)), added since "0.4.5" |
 
 ### `SerializeComposite` and `DeserializeComposite`
 
@@ -184,7 +191,14 @@ pub struct Attach {
     code = 0x0000_0000_0000_0074,
     encoding = "basic"
 )]
-pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
+pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
 ```
+
+### Extensions
+
+The following type(s) are provided in the `extensions` mod and require the `extensions` feature
+
+1. `TransparentVec` - a thin wrapper around `Vec` that is serialized/deserialized as a sequence of elements
+   `Vec` is treated as an AMQP `List` in the core spec
 
 License: MIT/Apache-2.0

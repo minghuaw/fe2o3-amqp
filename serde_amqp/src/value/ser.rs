@@ -201,6 +201,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
             NewType::Array => Err(Error::InvalidValue),
             NewType::Symbol => Err(Error::InvalidValue),
             NewType::SymbolRef => Err(Error::InvalidValue),
+            NewType::TransparentVec => Err(Error::InvalidValue),
         }
     }
 
