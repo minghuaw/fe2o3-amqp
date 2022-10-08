@@ -9,7 +9,7 @@ use serde::{
 };
 use serde_amqp::{
     __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    primitives::{Binary},
+    primitives::Binary,
     value::Value,
 };
 
@@ -321,13 +321,11 @@ where
                     Body::Value(_) => {
                         return Err(de::Error::custom("Only one AmqpValue section is expected"))
                     }
-                    Body::Data(first) => {
-                        match seq.next_element::<Deserializable<Data>>()? {
-                            Some(second) => {
-                                body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
-                            }
-                            None => body = Body::Data(first),
+                    Body::Data(first) => match seq.next_element::<Deserializable<Data>>()? {
+                        Some(second) => {
+                            body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
                         }
+                        None => body = Body::Data(first),
                     },
                     Body::DataBatch(mut batch) => {
                         if let Some(data) = seq.next_element::<Deserializable<Data>>()? {
@@ -363,7 +361,7 @@ where
                 Field::Footer => {
                     footer = seq.next_element()?;
                     count += 1;
-                },
+                }
             }
         }
 
@@ -594,12 +592,7 @@ impl<T> Builder<Body<T>> {
 mod tests {
     use std::vec;
 
-    use serde_amqp::{
-        from_reader, from_slice,
-        primitives::{Binary},
-        to_vec,
-        value::Value,
-    };
+    use serde_amqp::{from_reader, from_slice, primitives::Binary, to_vec, value::Value};
     use serde_bytes::ByteBuf;
 
     use crate::messaging::{

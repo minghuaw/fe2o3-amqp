@@ -14,7 +14,9 @@ use super::Priority;
 /// <type name="header" class="composite" source="list" provides="section">
 ///     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>
 /// </type>
-#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[amqp_contract(
     name = "amqp:header:list",
     code = 0x0000_0000_0000_0070,

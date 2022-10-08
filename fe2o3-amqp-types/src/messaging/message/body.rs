@@ -4,8 +4,7 @@ use serde::{
     de::{self, VariantAccess},
     Serialize,
 };
-use serde_amqp::{Value};
-
+use serde_amqp::Value;
 
 use crate::messaging::{AmqpSequence, AmqpValue, Data};
 
