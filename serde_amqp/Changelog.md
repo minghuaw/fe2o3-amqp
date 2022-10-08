@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.5
+
+1. Added `extensions::TransparentVec` type that is feature gated behind `"extensions"` feature flag.
+
 ## 0.4.4
 
 1. Impl `IntoIterator` for `Array<T>`
