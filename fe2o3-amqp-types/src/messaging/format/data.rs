@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, Serialize};
 use serde_amqp::{primitives::Binary, Value};
 
-use crate::messaging::message::__private::{Deserializable, Serializable};
+use crate::messaging::{message::__private::{Deserializable, Serializable}, SerializableBodySection, sealed::Sealed, Batch, DeserializableBodySection};
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
@@ -125,5 +125,63 @@ impl<'de> de::Deserialize<'de> for Deserializable<Data> {
             1usize + 1,
             Visitor::new(),
         )
+    }
+}
+
+impl Sealed for Data {}
+
+impl<'se> Sealed for &'se Data {}
+
+impl SerializableBodySection for Data {
+    type Serializable = Serializable<Data>;
+
+    fn serializable(self) -> Self::Serializable {
+        Serializable(self)
+    }
+}
+
+impl<'se> SerializableBodySection for &'se Data {
+    type Serializable = Serializable<&'se Data>;
+
+    fn serializable(self) -> Self::Serializable {
+        Serializable(self)
+    }
+}
+
+impl DeserializableBodySection for Data {
+    type Deserializable = Deserializable<Data>;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable.0
+    }
+}
+
+// TODO: impl DeserializableBodySection for &'de Data
+
+impl Sealed for Batch<Data> { }
+
+impl SerializableBodySection for Batch<Data> {
+    type Serializable = Batch<Serializable<Data>>;
+
+    fn serializable(self) -> Self::Serializable {
+        self.into_iter().map(Serializable).collect()
+    }    
+}
+
+impl<'se> Sealed for Batch<&'se Data> { }
+
+impl<'se> SerializableBodySection for Batch<&'se Data> {
+    type Serializable = Batch<Serializable<&'se Data>>;
+
+    fn serializable(self) -> Self::Serializable {
+        self.into_iter().map(Serializable).collect()
+    }
+}
+
+impl DeserializableBodySection for Batch<Data> {
+    type Deserializable = Batch<Deserializable<Data>>;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable.into_iter().map(|d| d.0).collect()
     }
 }

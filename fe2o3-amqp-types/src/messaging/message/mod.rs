@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::{io, marker::PhantomData};
+use std::{marker::PhantomData};
 
 use serde::{
     de::{self},
@@ -17,7 +17,7 @@ use serde_amqp::extensions::TransparentVec;
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
-    MessageAnnotations, Properties,
+    MessageAnnotations, Properties, BodySection, SerializableBodySection, DeserializableBodySection,
 };
 
 mod body;
@@ -33,37 +33,37 @@ pub mod __private {
 }
 use __private::{Deserializable, Serializable};
 
-/// Determines how a `Message<T>` should be docoded.
-///
-/// This is a byproduct of the workaround chosen for #49.
-///
-/// Why not `tokio_util::Decoder`
-///
-/// 1. avoid confusion
-/// 2. The decoder type `T` itself is also the returned type
-pub trait DecodeIntoMessage: Sized {
-    /// Error type associated with decoding
-    type DecodeError;
+// /// Determines how a `Message<T>` should be docoded.
+// ///
+// /// This is a byproduct of the workaround chosen for #49.
+// ///
+// /// Why not `tokio_util::Decoder`
+// ///
+// /// 1. avoid confusion
+// /// 2. The decoder type `T` itself is also the returned type
+// pub trait DecodeIntoMessage: Sized {
+//     /// Error type associated with decoding
+//     type DecodeError;
 
-    /// Decode reader into [`Message<T>`]
-    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
-}
+//     /// Decode reader into [`Message<T>`]
+//     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
+// }
 
-impl<T> DecodeIntoMessage for T
-where
-    for<'de> T: de::Deserialize<'de>,
-{
-    type DecodeError = serde_amqp::Error;
+// impl<T> DecodeIntoMessage for T
+// where
+//     for<'de> T: de::Deserialize<'de>,
+// {
+//     type DecodeError = serde_amqp::Error;
 
-    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
-        let message: Deserializable<Message<T>> = serde_amqp::from_reader(reader)?;
-        Ok(message.0)
-    }
-}
+//     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
+//         let message: Deserializable<Message<T>> = serde_amqp::from_reader(reader)?;
+//         Ok(message.0)
+//     }
+// }
 
 /// AMQP 1.0 Message
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Message<T> {
+pub struct Message<B> {
     /// Transport headers for a message.
     pub header: Option<Header>,
 
@@ -83,13 +83,13 @@ pub struct Message<T> {
 
     /// The body consists of one of the following three choices: one or more data sections, one or more amqp-sequence
     /// sections, or a single amqp-value section.
-    pub body: Body<T>,
+    pub body: B,
 
     /// Transport footers for a message.
     pub footer: Option<Footer>,
 }
 
-impl<T: Serialize> Serialize for Serializable<Message<T>> {
+impl<B> Serialize for Serializable<Message<B>> where B: BodySection {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -98,7 +98,7 @@ impl<T: Serialize> Serialize for Serializable<Message<T>> {
     }
 }
 
-impl<T: Serialize> Serialize for Serializable<&Message<T>> {
+impl<B: BodySection> Serialize for Serializable<&Message<B>> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -107,15 +107,13 @@ impl<T: Serialize> Serialize for Serializable<&Message<T>> {
     }
 }
 
-impl<'de, T> de::Deserialize<'de> for Deserializable<Message<T>>
-where
-    T: de::Deserialize<'de>,
+impl<'de, B: BodySection> de::Deserialize<'de> for Deserializable<Message<B>>
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let value = Message::<T>::deserialize(deserializer)?;
+        let value = Message::<B>::deserialize(deserializer)?;
         Ok(Deserializable(value))
     }
 }
@@ -167,9 +165,9 @@ impl<T> Message<T> {
 }
 
 // impl<T> Serialize for Message<T>
-impl<T> Message<T>
+impl<B> Message<B>
 where
-    T: Serialize,
+    B: SerializableBodySection,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -191,7 +189,7 @@ where
         if let Some(application_properties) = &self.application_properties {
             state.serialize_field("application_properties", application_properties)?
         }
-        state.serialize_field("body", &Serializable(&self.body))?;
+        state.serialize_field("body", self.body.serializable())?;
         if let Some(footer) = &self.footer {
             state.serialize_field("footer", footer)?;
         }
@@ -262,15 +260,15 @@ impl<'de> de::Deserialize<'de> for Field {
     }
 }
 
-struct Visitor<T> {
-    marker: PhantomData<T>,
+struct Visitor<B> {
+    marker: PhantomData<B>,
 }
 
-impl<'de, T> de::Visitor<'de> for Visitor<T>
+impl<'de, B> de::Visitor<'de> for Visitor<B>
 where
-    T: de::Deserialize<'de>,
+    B: DeserializableBodySection,
 {
-    type Value = Message<T>;
+    type Value = Message<B>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("struct Message")
@@ -285,7 +283,7 @@ where
         let mut message_annotations = None;
         let mut properties = None;
         let mut application_properties = None;
-        let mut body: Body<T> = Body::Empty;
+        let mut body: Option<B> = None;
         let mut footer = None;
 
         let mut count = 0;
@@ -317,46 +315,10 @@ where
                     application_properties = seq.next_element()?;
                     count += 1;
                 }
-                Field::Body => match body {
-                    Body::Value(_) => {
-                        return Err(de::Error::custom("Only one AmqpValue section is expected"))
-                    }
-                    Body::Data(first) => match seq.next_element::<Deserializable<Data>>()? {
-                        Some(second) => {
-                            body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
-                        }
-                        None => body = Body::Data(first),
-                    },
-                    Body::DataBatch(mut batch) => {
-                        if let Some(data) = seq.next_element::<Deserializable<Data>>()? {
-                            batch.push(data.0);
-                        };
-                        body = Body::DataBatch(batch);
-                    }
-                    Body::Sequence(first) => {
-                        match seq.next_element::<Deserializable<AmqpSequence<T>>>()? {
-                            Some(second) => {
-                                body =
-                                    Body::SequenceBatch(TransparentVec::new(vec![first, second.0]));
-                            }
-                            None => body = Body::Sequence(first),
-                        }
-                    }
-                    Body::SequenceBatch(mut batch) => {
-                        if let Some(sequence) =
-                            seq.next_element::<Deserializable<AmqpSequence<T>>>()?
-                        {
-                            batch.push(sequence.0);
-                        }
-                        body = Body::SequenceBatch(batch);
-                    }
-                    Body::Empty => {
-                        body = seq
-                            .next_element::<Deserializable<Body<T>>>()?
-                            .map(|de| de.0)
-                            .unwrap_or(Body::Empty);
-                        count += 1; // Only count body once even with DataBatch or SequenceBatch
-                    }
+                Field::Body => {
+                    let deserializable: Option<B::Deserializable> = seq.next_element()?;
+                    body = deserializable.map(B::from_deserializable);
+                    count += 1;
                 },
                 Field::Footer => {
                     footer = seq.next_element()?;
@@ -371,16 +333,16 @@ where
             message_annotations,
             properties,
             application_properties,
-            body,
+            body: body.ok_or(de::Error::custom("An empty body section is found. Consider use Message<Option<B>> or Message<Body<Value>> instead"))?,
             footer,
         })
     }
 }
 
 // impl<'de, T> de::Deserialize<'de> for Message<T>
-impl<'de, T> Message<T>
+impl<'de, B> Message<B>
 where
-    T: de::Deserialize<'de>,
+    B: DeserializableBodySection,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
@@ -404,14 +366,14 @@ where
                 DESCRIPTOR,
                 "footer",
             ],
-            Visitor::<T> {
+            Visitor::<B> {
                 marker: PhantomData,
             },
         )
     }
 }
 
-impl<T, U> From<T> for Message<U>
+impl<T, U> From<T> for Message<Body<U>>
 where
     T: Into<Body<U>>,
 {
@@ -573,9 +535,9 @@ impl<T> Builder<T> {
     }
 }
 
-impl<T> Builder<Body<T>> {
+impl<B> Builder<B> {
     /// Build the [`Message`]
-    pub fn build(self) -> Message<T> {
+    pub fn build(self) -> Message<B> {
         Message {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
