@@ -472,7 +472,7 @@ impl<T> Builder<T> {
         }
     }
 
-    /// Set the body as `Body::Sequence`
+    /// Set the body as a single `Body::Sequence` section
     pub fn sequence<V: Serialize>(self, values: Vec<V>) -> Builder<Body<V>> {
         Builder {
             header: self.header,
@@ -488,7 +488,7 @@ impl<T> Builder<T> {
     /// Set the body as `Body::SequenceBatch`
     pub fn sequence_batch<V: Serialize>(
         self,
-        batch: TransparentVec<AmqpSequence<V>>,
+        batch: impl Into<TransparentVec<AmqpSequence<V>>>,
     ) -> Builder<Body<V>> {
         Builder {
             header: self.header,
@@ -496,12 +496,12 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: Body::SequenceBatch(batch),
+            body: Body::SequenceBatch(batch.into()),
             footer: self.footer,
         }
     }
 
-    /// Set the body as `Body::Data`
+    /// Set the body as a single `Body::Data` section
     pub fn data(self, data: impl Into<Binary>) -> Builder<Body<Value>> {
         Builder {
             header: self.header,
@@ -515,14 +515,14 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body::DataBatch`
-    pub fn data_batch(self, batch: TransparentVec<Data>) -> Builder<Body<Value>> {
+    pub fn data_batch(self, batch: impl Into<TransparentVec<Data>>) -> Builder<Body<Value>> {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: Body::DataBatch(batch),
+            body: Body::DataBatch(batch.into()),
             footer: self.footer,
         }
     }
