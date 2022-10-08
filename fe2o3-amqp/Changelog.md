@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.0 (OCT/07/2022)
+
+1. Upgraded `fe2o3-amqp-types` to "0.6.0", which introduced breaking changes to `Body`
+
 ## 0.6.9
 
 1. Changed visibiltiy of  `sesssion::Error` and `session::BeginError` to `pub`
