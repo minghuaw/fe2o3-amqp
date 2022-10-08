@@ -12,7 +12,16 @@ use super::__private::{Deserializable, Serializable};
 
 use serde_amqp::extensions::TransparentVec;
 
-/// Body section of message
+/// The body consists of one of the following three choices: one or more data sections, one or more
+/// amqp-sequence sections, or a single amqp-value section.
+/// 
+/// Support for more than one `Data` or `AmqpSequence` sections are added since version "0.6.0".
+/// 
+/// # Why separating `Data`/`Sequence` and `DataBatch`/`SequenceBatch`
+/// 
+/// 1. Compatibility. Only the `Data` and `Sequence` variants were provided in the earlier versions
+/// 2. It seems like `DataBatch` and `SequenceBatch` are used much rarely than `Data` or `Sequence`.
+/// Allocating a Vec for just one element constantly seems a waste.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Body<T> {
     /// A data section contains opaque binary data
