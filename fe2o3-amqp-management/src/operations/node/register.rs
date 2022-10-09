@@ -46,7 +46,7 @@ impl<'a> MessageSerializer for RegisterRequest<'a> {
                     .insert("address", self.address.to_string())
                     .build(),
             )
-            .value(())
+            .body(())
             .build()
     }
 }

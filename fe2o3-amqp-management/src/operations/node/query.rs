@@ -21,7 +21,7 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{AmqpValue, ApplicationProperties, Body, Message},
+    messaging::{ApplicationProperties, Message},
     primitives::{OrderedMap, Value},
 };
 
@@ -101,7 +101,7 @@ impl<'a> MessageSerializer for QueryRequest<'a> {
 
         Message::builder()
             .application_properties(application_properties)
-            .value(map)
+            .body(map)
             .build()
     }
 }
@@ -147,10 +147,7 @@ impl MessageDeserializer<OrderedMap<String, Vec<Value>>> for QueryResponse {
             .and_then(|ap| ap.remove("count"))
             .map(|v| u32::try_from(v).map_err(|_| Error::DecodeError))
             .ok_or(Error::DecodeError)??;
-        let mut map = match message.body {
-            Body::Value(AmqpValue(map)) => map,
-            _ => return Err(Error::DecodeError),
-        };
+        let mut map = message.body;
 
         let attribute_names = map.remove("attributeNames").ok_or(Error::DecodeError)?;
         let attribute_names = attribute_names

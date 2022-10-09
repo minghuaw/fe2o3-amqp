@@ -44,7 +44,7 @@ impl<'a> MessageSerializer for GetAnnotationsRequest<'a> {
         }
         Message::builder()
             .application_properties(builder.build())
-            .value(())
+            .body(())
             .build()
     }
 }
@@ -57,13 +57,13 @@ impl GetAnnotationsResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<OrderedMap<String, Vec<String>>> for GetAnnotationsResponse {
+impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetAnnotationsResponse {
     type Error = Error;
 
-    fn from_message(message: Message<OrderedMap<String, Vec<String>>>) -> Result<Self> {
+    fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
         match message.body {
-            Body::Value(AmqpValue(annotations)) => Ok(Self { annotations }),
-            _ => Err(Error::DecodeError),
+            Some(annotations) => Ok(Self { annotations }),
+            None => Ok(Self { annotations: OrderedMap::with_capacity(0) })
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{AmqpValue, ApplicationProperties, Body, Message},
+    messaging::{ApplicationProperties, Message},
     primitives::OrderedMap,
 };
 
@@ -47,10 +47,12 @@ impl<'a> MessageSerializer for GetOperationsRequest<'a> {
         }
         Message::builder()
             .application_properties(builder.build())
-            .value(())
+            .body(())
             .build()
     }
 }
+
+type Operations = OrderedMap<String, OrderedMap<String, Vec<String>>>;
 
 /// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message
 /// MUST consist of an amqp-value section containing a map. The keys in the map MUST be the set of
@@ -62,24 +64,24 @@ impl<'a> MessageSerializer for GetOperationsRequest<'a> {
 /// Manageable Entity Type, the set of operations returned MUST include every operation supported by
 /// Manageable Entity Types that it extends, either directly or indirectly.
 pub struct GetOperationsResponse {
-    pub operations: OrderedMap<String, OrderedMap<String, Vec<String>>>,
+    pub operations: Operations,
 }
 
 impl GetOperationsResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<OrderedMap<String, OrderedMap<String, Vec<String>>>>
+impl MessageDeserializer<Option<Operations>>
     for GetOperationsResponse
 {
     type Error = Error;
 
     fn from_message(
-        message: Message<OrderedMap<String, OrderedMap<String, Vec<String>>>>,
+        message: Message<Option<OrderedMap<String, OrderedMap<String, Vec<String>>>>>,
     ) -> Result<Self> {
         match message.body {
-            Body::Value(AmqpValue(operations)) => Ok(Self { operations }),
-            _ => Err(Error::DecodeError),
+            Some(operations) => Ok(Self { operations }),
+            None => Ok(Self { operations: Operations::with_capacity(0) })
         }
     }
 }

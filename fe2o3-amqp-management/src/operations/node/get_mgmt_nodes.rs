@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::{AmqpValue, ApplicationProperties, Body, Message};
+use fe2o3_amqp_types::messaging::{ApplicationProperties, Message};
 
 use crate::{
     constants::{GET_MGMT_NODES, OPERATION},
@@ -36,7 +36,7 @@ impl MessageSerializer for GetMgmtNodesRequest {
                     .insert(OPERATION, GET_MGMT_NODES)
                     .build(),
             )
-            .value(())
+            .body(())
             .build()
     }
 }
@@ -53,13 +53,13 @@ impl GetMgmtNodesResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Vec<String>> for GetMgmtNodesResponse {
+impl MessageDeserializer<Option<Vec<String>>> for GetMgmtNodesResponse {
     type Error = Error;
 
-    fn from_message(message: Message<Vec<String>>) -> Result<Self> {
+    fn from_message(message: Message<Option<Vec<String>>>) -> Result<Self> {
         match message.body {
-            Body::Value(AmqpValue(addresses)) => Ok(Self { addresses }),
-            _ => Err(Error::DecodeError),
+            Some(addresses) => Ok(Self { addresses }),
+            None => Ok(Self { addresses: Vec::with_capacity(0) })
         }
     }
 }
