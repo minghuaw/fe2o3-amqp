@@ -46,7 +46,7 @@ pub trait DecodeIntoMessage: Sized {
 
 impl<T> DecodeIntoMessage for T
 where
-    T: FromDeserializableBody, // TODO: change to higher rank trait bound once GAT stablises
+    for<'de> T: FromDeserializableBody<'de>, // TODO: change to higher rank trait bound once GAT stablises
 {
     type DecodeError = serde_amqp::Error;
 
@@ -108,7 +108,7 @@ where
     }
 }
 
-impl<'de, B: FromDeserializableBody> de::Deserialize<'de> for Deserializable<Message<B>> {
+impl<'de, B: FromDeserializableBody<'de>> de::Deserialize<'de> for Deserializable<Message<B>> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -282,7 +282,7 @@ struct Visitor<B> {
 
 impl<'de, B> de::Visitor<'de> for Visitor<B>
 where
-    B: FromDeserializableBody,
+    B: FromDeserializableBody<'de>,
 {
     type Value = Message<B>;
 
@@ -332,11 +332,8 @@ where
                     count += 1;
                 }
                 Field::Body => {
-                    let deserializable: Option<
-                        <B::DeserializableBody as DeserializableBody>::Deserializable,
-                    > = seq.next_element()?;
+                    let deserializable: Option<B::DeserializableBody> = seq.next_element()?;
                     body = deserializable
-                        .map(<B::DeserializableBody as DeserializableBody>::from_deserializable)
                         .map(<B as FromDeserializableBody>::from_deserializable_body);
                     count += 1;
                 }
@@ -367,7 +364,7 @@ where
 // impl<'de, T> de::Deserialize<'de> for Message<T>
 impl<'de, B> Message<B>
 where
-    B: FromDeserializableBody,
+    B: FromDeserializableBody<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
@@ -423,7 +420,7 @@ pub trait FromMessage<B> {
 
 impl<T, B> FromMessage<B> for T
 where
-    T: FromDeserializableBody<DeserializableBody = B>,
+    for<'de> T: FromDeserializableBody<'de, DeserializableBody = B>,
 {
     fn from_message(message: Message<B>) -> Self {
         Self::from_deserializable_body(message.body)

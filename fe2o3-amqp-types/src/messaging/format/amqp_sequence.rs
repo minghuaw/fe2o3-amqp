@@ -54,16 +54,10 @@ impl<T> BodySection for AmqpSequence<T> {}
 
 impl<T> SerializableBody for AmqpSequence<T> where T: Serialize {}
 
-impl<T> DeserializableBody for AmqpSequence<T>
+impl<'de, T> DeserializableBody<'de> for AmqpSequence<T>
 where
-    for<'de> T: de::Deserialize<'de>,
-{
-    type Deserializable = Self;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}
+    T: de::Deserialize<'de>,
+{}
 
 impl<T> IntoSerializableBody for AmqpSequence<T>
 where
@@ -76,9 +70,9 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for AmqpSequence<T>
+impl<'de, T> FromDeserializableBody<'de> for AmqpSequence<T>
 where
-    for<'de> T: de::Deserialize<'de>,
+    T: de::Deserialize<'de>,
 {
     type DeserializableBody = Self;
 
@@ -99,16 +93,10 @@ impl<T> BodySection for Batch<AmqpSequence<T>> {}
 
 impl<T> SerializableBody for Batch<AmqpSequence<T>> where T: Serialize {}
 
-impl<T> DeserializableBody for Batch<AmqpSequence<T>>
+impl<'de, T> DeserializableBody<'de> for Batch<AmqpSequence<T>>
 where
-    for<'de> T: de::Deserialize<'de>,
-{
-    type Deserializable = Self;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}
+    T: de::Deserialize<'de>,
+{}
 
 impl<T> IntoSerializableBody for Batch<AmqpSequence<T>>
 where
@@ -121,9 +109,9 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for Batch<AmqpSequence<T>>
+impl<'de, T> FromDeserializableBody<'de> for Batch<AmqpSequence<T>>
 where
-    for<'de> T: de::Deserialize<'de>,
+    T: de::Deserialize<'de>,
 {
     type DeserializableBody = Self;
 

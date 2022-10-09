@@ -62,15 +62,7 @@ pub trait FromEmptyBody: Sized {
 /// 4. [`Data`]
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
-pub trait DeserializableBody: BodySection {
-    /// The deserializable type
-    ///
-    /// TODO: change to GAT once it stablizes
-    type Deserializable: de::DeserializeOwned;
-
-    /// Convert from deserializable to self
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self;
-}
+pub trait DeserializableBody<'de>: Deserialize<'de> + BodySection {}
 
 /// Convert the type to a `SerializableBody` which includes:
 ///
@@ -97,9 +89,9 @@ pub trait IntoSerializableBody {
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
 /// 7. [`Option<T>`] where `T` implements `DeserializableBody`
-pub trait FromDeserializableBody: Sized + FromEmptyBody {
+pub trait FromDeserializableBody<'de>: Sized + FromEmptyBody {
     /// Deserializable body
-    type DeserializableBody: DeserializableBody;
+    type DeserializableBody: DeserializableBody<'de>;
 
     /// Convert back to the type from a `DeserializableBody`
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self;
@@ -111,9 +103,9 @@ pub trait FromDeserializableBody: Sized + FromEmptyBody {
 
 // Option can only be used on deserializing becuase the user should be certain
 // on whether an empty body is going to be serialized
-impl<T> FromDeserializableBody for Option<T>
+impl<'de, T> FromDeserializableBody<'de> for Option<T>
 where
-    T: FromDeserializableBody,
+    T: FromDeserializableBody<'de>,
 {
     type DeserializableBody = T::DeserializableBody;
 
@@ -142,7 +134,7 @@ impl IntoSerializableBody for Value {
     }
 }
 
-impl FromDeserializableBody for Value {
+impl<'de> FromDeserializableBody<'de> for Value {
     type DeserializableBody = AmqpValue<Value>;
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
@@ -294,9 +286,9 @@ macro_rules! impl_from_deserializable_or_empty_body {
     };
 
     (AmqpValue, $($generics:ident: $bound:ident<$lt:lifetime>),*; $type:tt) => {
-        impl<$($generics),*> FromDeserializableBody for $type<$($generics),*>
+        impl<'de, $($generics),*> FromDeserializableBody<'de> for $type<$($generics),*>
         where
-            $(for <$lt> $generics: $bound<$lt>),*
+            $($generics: $bound<$lt>),*
         {
             type DeserializableBody = AmqpValue<Self>;
 
@@ -309,7 +301,7 @@ macro_rules! impl_from_deserializable_or_empty_body {
     };
 
     (AmqpValue, $type:ty) => {
-        impl FromDeserializableBody for $type {
+        impl<'de> FromDeserializableBody<'de> for $type {
             type DeserializableBody = AmqpValue<Self>;
 
             fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
@@ -333,10 +325,10 @@ impl_from_deserializable_or_empty_body!(AmqpValue, T:Deserialize<'de>; Vec);
 impl_from_deserializable_or_empty_body!(AmqpValue, T:Deserialize<'de>; Array);
 
 impl_from_empty_body!(K, V; OrderedMap);
-impl<K, V> FromDeserializableBody for OrderedMap<K, V>
+impl<'de, K, V> FromDeserializableBody<'de> for OrderedMap<K, V>
 where
-    for<'de> K: de::Deserialize<'de> + std::hash::Hash + Eq,
-    for<'de> V: de::Deserialize<'de>,
+    K: de::Deserialize<'de> + std::hash::Hash + Eq,
+    V: de::Deserialize<'de>,
 {
     type DeserializableBody = AmqpValue<Self>;
 
@@ -346,10 +338,10 @@ where
 }
 
 impl_from_empty_body!(K, V; HashMap);
-impl<K, V> FromDeserializableBody for HashMap<K, V>
+impl<'de, K, V> FromDeserializableBody<'de> for HashMap<K, V>
 where
-    for<'de> K: de::Deserialize<'de> + std::hash::Hash + Eq,
-    for<'de> V: de::Deserialize<'de>,
+    K: de::Deserialize<'de> + std::hash::Hash + Eq,
+    V: de::Deserialize<'de>,
 {
     type DeserializableBody = AmqpValue<Self>;
 
@@ -359,10 +351,10 @@ where
 }
 
 impl_from_empty_body!(K, V; BTreeMap);
-impl<K, V> FromDeserializableBody for BTreeMap<K, V>
+impl<'de, K, V> FromDeserializableBody<'de> for BTreeMap<K, V>
 where
-    for<'de> K: de::Deserialize<'de> + Ord,
-    for<'de> V: de::Deserialize<'de>,
+    K: de::Deserialize<'de> + Ord,
+    V: de::Deserialize<'de>,
 {
     type DeserializableBody = AmqpValue<Self>;
 

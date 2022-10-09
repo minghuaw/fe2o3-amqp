@@ -290,16 +290,10 @@ impl<T> BodySection for Body<T> {}
 
 impl<T> SerializableBody for Body<T> where T: ser::Serialize {}
 
-impl<T> DeserializableBody for Body<T>
+impl<'de, T> DeserializableBody<'de> for Body<T>
 where
-    for<'de> T: de::Deserialize<'de>,
-{
-    type Deserializable = Self;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}
+    T: de::Deserialize<'de>,
+{}
 
 impl<T> IntoSerializableBody for Body<T>
 where
@@ -312,9 +306,9 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for Body<T>
+impl<'de, T> FromDeserializableBody<'de> for Body<T>
 where
-    for<'de> T: de::Deserialize<'de>,
+    T: de::Deserialize<'de>,
 {
     type DeserializableBody = Self;
 

@@ -35,16 +35,10 @@ impl<T> BodySection for AmqpValue<T> {}
 
 impl<T> SerializableBody for AmqpValue<T> where T: Serialize {}
 
-impl<T> DeserializableBody for AmqpValue<T>
+impl<'de, T> DeserializableBody<'de> for AmqpValue<T>
 where
-    for<'de> T: de::Deserialize<'de>,
-{
-    type Deserializable = Self;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}
+    T: de::Deserialize<'de>,
+{}
 
 impl<T> IntoSerializableBody for AmqpValue<T>
 where
@@ -57,9 +51,9 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for AmqpValue<T>
+impl<'de, T> FromDeserializableBody<'de> for AmqpValue<T>
 where
-    for<'de> T: de::Deserialize<'de> + FromEmptyBody,
+    T: de::Deserialize<'de> + FromEmptyBody,
 {
     type DeserializableBody = Self;
 
