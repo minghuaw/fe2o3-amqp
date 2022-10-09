@@ -177,7 +177,7 @@ macro_rules! impl_into_serializable_body {
 impl_into_serializable_body!{
     AmqpValue, 
     {
-        bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, char,
+        (), bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, char,
         Dec32, Dec64, Dec128, Timestamp, Uuid, Binary, String, Symbol
     }
 }
@@ -304,7 +304,7 @@ macro_rules! impl_from_deserializable_or_empty_body {
 impl_from_deserializable_or_empty_body!{
     AmqpValue,
     {
-        bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, char,
+        (), bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, char,
         Dec32, Dec64, Dec128, Timestamp, Uuid, Binary, String, Symbol
     }
 }

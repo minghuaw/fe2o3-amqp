@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::{marker::PhantomData, io};
+use std::{io, marker::PhantomData};
 
 use serde::{
     de::{self},
@@ -27,7 +27,6 @@ pub mod __private {
     pub struct Deserializable<T>(pub T);
 }
 use __private::{Deserializable, Serializable};
-
 
 /// Determines how a `Message<T>` should be docoded.
 ///
@@ -161,6 +160,22 @@ impl<T> Message<T> {
             0x78
         } else {
             0x77
+        }
+    }
+
+    /// Map body to SerializableBody
+    pub fn map_body<F, B>(self, op: F) -> Message<B>
+    where
+        F: FnOnce(T) -> B,
+    {
+        Message {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: (op)(self.body),
+            footer: self.footer,
         }
     }
 }
@@ -492,14 +507,14 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body`
-    pub fn body<V: Serialize>(self, value: impl Into<Body<V>>) -> Builder<Body<V>> {
+    pub fn body<B>(self, value: B) -> Builder<B> {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: value.into(),
+            body: value,
             footer: self.footer,
         }
     }
@@ -571,14 +586,9 @@ impl<T> Builder<T> {
             footer: self.footer,
         }
     }
-}
 
-impl<B> Builder<B>
-where
-    B: SerializableBody,
-{
     /// Build the [`Message`]
-    pub fn build(self) -> Message<B> {
+    pub fn build(self) -> Message<T> {
         Message {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
