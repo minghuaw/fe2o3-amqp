@@ -622,6 +622,15 @@ mod tests {
     }
 
     #[test]
+    fn test_serialize_amqp_value_f32() {
+        let message = Message::from(AmqpValue(3.14f32));
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let expected = Message::from(Body::Value(AmqpValue(Value::from(3.14f32))));
+        let expected = to_vec(&Serializable(expected)).unwrap();
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
     fn test_serialize_deserialize_body() {
         let data = b"amqp".to_vec();
         let data = Data(ByteBuf::from(data));
