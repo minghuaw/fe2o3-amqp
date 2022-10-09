@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, Deserialize, Serialize, ser};
 use serde_amqp::{SerializeComposite, DeserializeComposite};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, sealed::Sealed, SerializableBody, DeserializableBody};
+use crate::messaging::{message::__private::{Deserializable, Serializable}, sealed::Sealed, SerializableBody, DeserializableBody, IntoSerializableBody, FromDeserializableBody, FromEmptyBody};
 
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
@@ -119,3 +119,55 @@ where
 impl<T> Sealed for AmqpValue<T> {}
 
 impl<'se, T> Sealed for &'se AmqpValue<T> {}
+
+impl<T> SerializableBody for AmqpValue<T>
+where
+    T: ser::Serialize,
+{
+    type Serializable = Self;
+
+    fn serializable(&self) -> &Self::Serializable {
+        self
+    }
+}
+
+impl<T> DeserializableBody for AmqpValue<T>
+where
+    for<'de> T: de::Deserialize<'de>,
+{
+    type Deserializable = Self;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable
+    }
+}
+
+impl<T> IntoSerializableBody for AmqpValue<T> 
+where
+    T: ser::Serialize,
+{
+    type SerializableBody = Self;
+
+    fn into_serializable_body(self) -> Self::SerializableBody {
+        self
+    }
+}
+
+impl<T> FromDeserializableBody for AmqpValue<T> 
+where
+    for<'de> T: de::Deserialize<'de> + FromEmptyBody,
+{
+    type DeserializableBody = Self;
+
+    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+        deserializable
+    } 
+}
+
+impl<T> FromEmptyBody for AmqpValue<T> where T: FromEmptyBody {
+    type Error = T::Error;
+
+    fn from_empty_body() -> Result<Self, Self::Error> {
+        T::from_empty_body().map(AmqpValue)
+    }
+}

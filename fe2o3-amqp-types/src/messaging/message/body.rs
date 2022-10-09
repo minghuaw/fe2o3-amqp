@@ -6,7 +6,7 @@ use serde::{
 };
 use serde_amqp::Value;
 
-use crate::messaging::{AmqpSequence, AmqpValue, Data, sealed::Sealed, SerializableBody, DeserializableBody};
+use crate::messaging::{AmqpSequence, AmqpValue, Data, sealed::Sealed, SerializableBody, DeserializableBody, FromEmptyBody, IntoSerializableBody, FromDeserializableBody};
 
 use super::__private::{Deserializable, Serializable};
 
@@ -247,12 +247,12 @@ where
 
         match val {
             Field::Data => {
-                let data = variant.newtype_variant()?;
-                Ok(Body::Data(data))
+                let data: TransparentVec<Data> = variant.newtype_variant()?;
+                Ok(Body::DataBatch(data))
             }
             Field::Sequence => {
-                let sequence = variant.newtype_variant()?;
-                Ok(Body::Sequence(sequence))
+                let sequence: TransparentVec<AmqpSequence<_>> = variant.newtype_variant()?;
+                Ok(Body::SequenceBatch(sequence))
             }
             Field::Value => {
                 let value = variant.newtype_variant()?;
@@ -283,3 +283,55 @@ where
 impl<T> Sealed for Body<T> {}
 
 impl<'se, T> Sealed for &'se Body<T> {}
+
+impl<T> SerializableBody for Body<T>
+where
+    T: ser::Serialize,
+{
+    type Serializable = Self;
+
+    fn serializable(&self) -> &Self::Serializable {
+        self
+    }
+}
+
+impl<T> DeserializableBody for Body<T>
+where
+    for<'de> T: de::Deserialize<'de>,
+{
+    type Deserializable = Self;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable
+    }
+}
+
+impl<T> IntoSerializableBody for Body<T> 
+where
+    T: ser::Serialize,
+{
+    type SerializableBody = Self;
+
+    fn into_serializable_body(self) -> Self::SerializableBody {
+        self
+    }
+}
+
+impl<T> FromDeserializableBody for Body<T> 
+where
+    for<'de> T: de::Deserialize<'de>,
+{
+    type DeserializableBody = Self;
+
+    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+        deserializable
+    } 
+}
+
+impl<T> FromEmptyBody for Body<T> {
+    type Error = serde_amqp::Error;
+
+    fn from_empty_body() -> Result<Self, Self::Error> {
+        Ok(Self::Empty)
+    }
+}

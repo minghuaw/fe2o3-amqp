@@ -331,7 +331,7 @@ where
 
         let body = match body {
             Some(body) => body,
-            None => B::from_empty_body()?
+            None => B::from_empty_body().map_err(|e| de::Error::custom(e))?
         };
 
         Ok(Message {
@@ -695,7 +695,7 @@ mod tests {
         let mut buf = Vec::new();
         let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         message.serialize(&mut serializer).unwrap();
-        let deserialized: Deserializable<Message<Value>> = from_slice(&buf).unwrap();
+        let deserialized: Deserializable<Message<Body<Value>>> = from_slice(&buf).unwrap();
 
         assert!(deserialized.0.header.is_some());
         assert!(deserialized.0.delivery_annotations.is_some());
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_decoding_message_with_no_body_section_from_slice() {
         let buf: [u8; 8] = [0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45];
-        let result: Result<Deserializable<Message<Value>>, _> = from_slice(&buf);
+        let result: Result<Deserializable<Message<Body<Value>>>, _> = from_slice(&buf);
         let message = result.unwrap().0;
         assert!(message.header.is_some());
         assert!(message.delivery_annotations.is_none());
@@ -733,19 +733,19 @@ mod tests {
         assert!(message.message_annotations.is_none());
         assert!(message.properties.is_some());
         assert!(message.application_properties.is_none());
-        assert!(message.body.is_empty());
+        assert!(matches!(message.body, Value::Null));
         assert!(message.footer.is_none());
     }
 
     #[test]
     fn test_encode_message_with_body_nothing() {
-        let message: Message<Value> = Message {
+        let message: Message<AmqpValue<()>> = Message {
             header: None,
             delivery_annotations: None,
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body: Body::Empty,
+            body: AmqpValue(()),
             footer: None,
         };
         let serializable = Serializable(message);
@@ -778,10 +778,10 @@ mod tests {
             0x40, 0x0, 0x53, 0x75, 0xa0, 0xa, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x20, 0x23,
             0x31,
         ];
-        let result: Result<Deserializable<Message<String>>, _> = from_reader(&buf[..]);
+        let result: Result<Deserializable<Message<Data>>, _> = from_reader(&buf[..]);
         assert!(result.is_ok());
         let message = result.unwrap().0;
-        assert!(matches!(message.body, Body::Data(_)));
+        assert!(message.body.0.len() > 0 );
     }
 
     #[test]
@@ -812,7 +812,7 @@ mod tests {
             0x8, 0x9, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0,
             0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9,
         ];
-        let message: Deserializable<Message<Value>> = from_slice(&buf[..]).unwrap();
+        let message: Deserializable<Message<Body<Value>>> = from_slice(&buf[..]).unwrap();
 
         let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
         let data_batch = TransparentVec::new(vec![data.clone(), data.clone(), data.clone()]);
@@ -854,7 +854,7 @@ mod tests {
             0x3, 0x0, 0x53, 0x76, 0xc0, 0x07, 0x3, 0x54, 0x4, 0x54, 0x5, 0x54, 0x6, 0x0, 0x53,
             0x76, 0xc0, 0x07, 0x3, 0x54, 0x7, 0x54, 0x8, 0x54, 0x9,
         ];
-        let message: Deserializable<Message<i32>> = from_slice(&buf[..]).unwrap();
+        let message: Deserializable<Message<Body<i32>>> = from_slice(&buf[..]).unwrap();
 
         let batch = TransparentVec::new(vec![
             AmqpSequence::new(vec![1i32, 2, 3]),

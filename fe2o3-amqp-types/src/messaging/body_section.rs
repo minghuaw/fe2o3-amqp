@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use serde::{de, ser};
 use serde_amqp::Value;
 
@@ -25,14 +27,14 @@ pub trait SerializableBody: Sealed {
     fn serializable(&self) -> &Self::Serializable;
 }
 
-impl<T> SerializableBody for T
-where
-    T: ser::Serialize + Sealed,
-{
-    type Serializable = Self;
+/// How to interprerte an emtpy body
+pub trait FromEmptyBody: Sized {
+    /// Error
+    type Error: de::Error;
 
-    fn serializable(&self) -> &Self::Serializable {
-        self
+    /// Interprete an empty body
+    fn from_empty_body() -> Result<Self, Self::Error> {
+        Err(<Self::Error as de::Error>::custom("An empty body section is found. Consider use Message<Option<B>> or Message<Body<Value>> instead"))
     }
 }
 
@@ -45,17 +47,6 @@ pub trait DeserializableBody: Sealed {
 
     /// Convert from deserializable to self
     fn from_deserializable(deserializable: Self::Deserializable) -> Self;
-}
-
-impl<T> DeserializableBody for T
-where
-    for<'de> T: de::Deserialize<'de> + Sealed,
-{
-    type Deserializable = Self;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
 }
 
 /// Convert the type to a `SerializableBody` which includes:
@@ -75,14 +66,6 @@ pub trait IntoSerializableBody {
     fn into_serializable_body(self) -> Self::SerializableBody;
 }
 
-impl<T> IntoSerializableBody for T where T: SerializableBody {
-    type SerializableBody = Self;
-
-    fn into_serializable_body(self) -> Self::SerializableBody {
-        self
-    }
-}
-
 /// Convert back to the type from a `DeserializableBody` which inclused:
 ///
 /// 1. [`AmqpValue`]
@@ -92,26 +75,63 @@ impl<T> IntoSerializableBody for T where T: SerializableBody {
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
 /// 7. [`Option<T>`] where `T` implements `DeserializableBody`
-pub trait FromDeserializableBody: Sized {
+pub trait FromDeserializableBody: Sized + FromEmptyBody {
     /// Deserializable body
     type DeserializableBody: DeserializableBody;
 
     /// Convert back to the type from a `DeserializableBody`
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self;
+}
 
-    /// How to interprete an empty body
-    fn from_empty_body<E: de::Error>() -> Result<Self, E> {
-        Err(de::Error::custom("An empty body section is found. Consider use Message<Option<B>> or Message<Body<Value>> instead"))
+/* -------------------------------------------------------------------------- */
+/*                                  Option<T>                                 */
+/* -------------------------------------------------------------------------- */
+
+// Option can only be used on deserializing becuase the user should be certain
+// on whether an empty body is going to be serialized
+impl<T> FromDeserializableBody for Option<T>
+where
+    T: FromDeserializableBody,
+{
+    type DeserializableBody = T::DeserializableBody;
+
+    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+        Some(T::from_deserializable_body(deserializable))
+    } 
+}
+
+impl<T> FromEmptyBody for Option<T> {
+    type Error = serde_amqp::Error;
+
+    fn from_empty_body() -> Result<Self, Self::Error> {
+        Ok(Self::None)
     }
 }
 
-impl<T> FromDeserializableBody for T
-where
-    T: DeserializableBody,
-{
-    type DeserializableBody = Self;
+/* -------------------------------------------------------------------------- */
+/*                                    Value                                   */
+/* -------------------------------------------------------------------------- */
+
+impl IntoSerializableBody for Value {
+    type SerializableBody = AmqpValue<Value>;
+
+    fn into_serializable_body(self) -> Self::SerializableBody {
+        AmqpValue(self)
+    }
+}
+
+impl FromDeserializableBody for Value {
+    type DeserializableBody = AmqpValue<Value>;
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
-        deserializable
-    } 
+        deserializable.0
+    }
+}
+
+impl FromEmptyBody for Value {
+    type Error = serde_amqp::Error;
+
+    fn from_empty_body() -> Result<Self, Self::Error> {
+        Ok(Self::Null)
+    }
 }

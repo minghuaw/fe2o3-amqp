@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, Serialize};
 use serde_amqp::{primitives::Binary, Value, SerializeComposite, DeserializeComposite};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, SerializableBody, sealed::Sealed, Batch, DeserializableBody};
+use crate::messaging::{message::__private::{Deserializable, Serializable}, SerializableBody, sealed::Sealed, Batch, DeserializableBody, IntoSerializableBody, FromDeserializableBody, FromEmptyBody};
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
@@ -133,10 +133,91 @@ impl Display for Data {
 //     }
 // }
 
+/* -------------------------------------------------------------------------- */
+/*                                    Data                                    */
+/* -------------------------------------------------------------------------- */
+
 impl Sealed for Data {}
 
 impl<'se> Sealed for &'se Data {}
 
+impl SerializableBody for Data {
+    type Serializable = Self;
+
+    fn serializable(&self) -> &Self::Serializable {
+        self
+    }
+}
+
+impl DeserializableBody for Data {
+    type Deserializable = Self;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable
+    }
+}
+
+impl IntoSerializableBody for Data {
+    type SerializableBody = Self;
+
+    fn into_serializable_body(self) -> Self::SerializableBody {
+        self
+    }
+}
+
+impl FromDeserializableBody for Data {
+    type DeserializableBody = Data;
+
+    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+        deserializable
+    }
+}
+
+impl FromEmptyBody for Data {
+    type Error = serde_amqp::Error;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 Batch<Data>                                */
+/* -------------------------------------------------------------------------- */
+
 impl Sealed for Batch<Data> { }
 
 impl<'se> Sealed for Batch<&'se Data> { }
+
+
+impl SerializableBody for Batch<Data> {
+    type Serializable = Self;
+
+    fn serializable(&self) -> &Self::Serializable {
+        self
+    }
+}
+
+impl DeserializableBody for Batch<Data> {
+    type Deserializable = Self;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable
+    }
+}
+
+impl IntoSerializableBody for Batch<Data> {
+    type SerializableBody = Self;
+
+    fn into_serializable_body(self) -> Self::SerializableBody {
+        self
+    }
+}
+
+impl FromDeserializableBody for Batch<Data> {
+    type DeserializableBody = Batch<Data>;
+
+    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+        deserializable
+    }
+}
+
+impl FromEmptyBody for Batch<Data> {
+    type Error = serde_amqp::Error;
+}
