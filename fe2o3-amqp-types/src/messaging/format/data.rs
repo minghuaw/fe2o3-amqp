@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, borrow::Cow};
 
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
@@ -20,6 +20,36 @@ use crate::messaging::{
     encoding = "basic"
 )]
 pub struct Data(pub Binary);
+
+impl From<Binary> for Data {
+    fn from(value: Binary) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Vec<u8>> for Data {
+    fn from(value: Vec<u8>) -> Self {
+        Self(Binary::from(value))
+    }
+}
+
+impl<const N: usize> From<[u8; N]> for Data {
+    fn from(value: [u8; N]) -> Self {
+        Self(Binary::from(value))
+    }
+}
+
+impl From<&[u8]> for Data {
+    fn from(value: &[u8]) -> Self {
+        Self(Binary::from(value))
+    }
+}
+
+impl<'a> From<Cow<'a, [u8]>> for Data {
+    fn from(value: Cow<'a, [u8]>) -> Self {
+        Self(Binary::from(value.to_vec()))
+    }
+}
 
 impl TryFrom<Value> for Data {
     type Error = Value;

@@ -13,7 +13,7 @@ use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode},
     messaging::{
         message::__private::Serializable, Address, DeliveryState, Outcome, Source, Target,
-        MESSAGE_FORMAT,
+        MESSAGE_FORMAT, SerializableBody,
     },
     performatives::{Attach, Detach, Transfer},
 };
@@ -328,7 +328,7 @@ impl Sender {
     ///     .build();
     /// let outcome = sender.send(message).await.unwrap();
     /// ```
-    pub async fn send<T: serde::Serialize>(
+    pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, SendError> {
@@ -339,7 +339,7 @@ impl Sender {
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
     ///
     /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
-    pub async fn send_with_timeout<T: serde::Serialize>(
+    pub async fn send_with_timeout<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
         duration: Duration,
@@ -358,7 +358,7 @@ impl Sender {
     /// let result = fut.await;
     /// println!("fut {:?}", result);
     /// ```
-    pub async fn send_batchable<T: serde::Serialize>(
+    pub async fn send_batchable<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
@@ -551,7 +551,7 @@ where
 {
     pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, SendError>
     where
-        T: serde::Serialize,
+        T: SerializableBody,
     {
         self.send_with_state(sendable, None).await
     }
@@ -562,7 +562,7 @@ where
         state: Option<DeliveryState>,
     ) -> Result<Settlement, E>
     where
-        T: serde::Serialize,
+        T: SerializableBody,
         E: From<L::TransferError> + From<serde_amqp::Error>,
     {
         use bytes::BufMut;

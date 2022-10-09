@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{Fields, SequenceNo},
-    messaging::{DeliveryState, Outcome},
+    messaging::{DeliveryState, Outcome, SerializableBody},
     primitives::Symbol,
     transaction::{Declared, TransactionId, TransactionalState},
 };
@@ -184,7 +184,7 @@ impl OwnedTransaction {
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, PostError>>, PostError>
     where
-        T: serde::Serialize,
+        T: SerializableBody,
     {
         // If the transaction controller wishes to associate an outgoing transfer with a
         // transaction, it MUST set the state of the transfer with a transactional-state carrying
@@ -213,7 +213,7 @@ impl OwnedTransaction {
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, PostError>
     where
-        T: serde::Serialize,
+        T: SerializableBody,
     {
         // If the transaction controller wishes to associate an outgoing transfer with a
         // transaction, it MUST set the state of the transfer with a transactional-state carrying
