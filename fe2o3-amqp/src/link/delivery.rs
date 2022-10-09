@@ -4,13 +4,12 @@ use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
     messaging::{
         Accepted, DeliveryState, Message, Outcome,
-        MESSAGE_FORMAT,
+        MESSAGE_FORMAT, SerializableBody,
     },
     primitives::{BinaryRef},
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
-use serde::Serialize;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
@@ -186,7 +185,7 @@ impl Sendable<Uninitialized> {
 impl<T, U> From<T> for Sendable<U>
 where
     T: Into<Message<U>>,
-    U: Serialize,
+    U: SerializableBody,
 {
     fn from(value: T) -> Self {
         Self {
