@@ -2,6 +2,7 @@ use std::env;
 
 use dotenv::dotenv;
 use event_hubs::get_event_hub_partitions;
+use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
     types::{definitions::SECURE_PORT, messaging::Source, primitives::Value},
@@ -61,7 +62,8 @@ async fn main() {
 
     for _ in 0..3 {
         let delivery = receiver.recv::<Body<Value>>().await.unwrap();
-        let msg = std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..]).unwrap();
+        let msg = std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..])
+            .unwrap();
         println!("{:?}", msg);
         receiver.accept(&delivery).await.unwrap();
     }
