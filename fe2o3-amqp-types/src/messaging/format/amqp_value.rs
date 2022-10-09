@@ -3,10 +3,10 @@ use std::fmt::Display;
 use serde::{de, ser};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
-use crate::messaging::{
-    sealed::Sealed, DeserializableBody, FromDeserializableBody, FromEmptyBody,
-    IntoSerializableBody, SerializableBody,
-};
+use crate::{messaging::{
+    DeserializableBody, FromDeserializableBody, FromEmptyBody,
+    IntoSerializableBody, SerializableBody, BodySection,
+}, __sealed::Sealed};
 
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
@@ -33,7 +33,11 @@ where
 
 impl<T> Sealed for AmqpValue<T> {}
 
+impl<T> BodySection for AmqpValue<T> {}
+
 impl<'se, T> Sealed for &'se AmqpValue<T> {}
+
+impl<'se, T> BodySection for &'se AmqpValue<T> {}
 
 impl<T> SerializableBody for AmqpValue<T>
 where

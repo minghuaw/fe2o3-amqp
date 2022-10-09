@@ -2,10 +2,10 @@ use std::{borrow::Cow, fmt::Display};
 
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
-use crate::messaging::{
-    sealed::Sealed, Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
-    IntoSerializableBody, SerializableBody,
-};
+use crate::{messaging::{
+    Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
+    IntoSerializableBody, SerializableBody, BodySection,
+}, __sealed::Sealed};
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
@@ -75,7 +75,7 @@ impl Display for Data {
 
 impl Sealed for Data {}
 
-impl<'se> Sealed for &'se Data {}
+impl BodySection for Data {}
 
 impl SerializableBody for Data {
     type Serializable = Self;
@@ -114,12 +114,20 @@ impl FromEmptyBody for Data {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                    &Data                                   */
+/* -------------------------------------------------------------------------- */
+
+impl<'se> Sealed for &'se Data {}
+
+impl<'se> BodySection for &'se Data {}
+
+/* -------------------------------------------------------------------------- */
 /*                                 Batch<Data>                                */
 /* -------------------------------------------------------------------------- */
 
 impl Sealed for Batch<Data> {}
 
-impl<'se> Sealed for Batch<&'se Data> {}
+impl BodySection for Batch<Data> {}
 
 impl SerializableBody for Batch<Data> {
     type Serializable = Self;
@@ -156,3 +164,11 @@ impl FromDeserializableBody for Batch<Data> {
 impl FromEmptyBody for Batch<Data> {
     type Error = serde_amqp::Error;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                Batch<&Data>                                */
+/* -------------------------------------------------------------------------- */
+
+impl<'se> Sealed for Batch<&'se Data> {}
+
+impl<'se> BodySection for Batch<&'se Data> {}

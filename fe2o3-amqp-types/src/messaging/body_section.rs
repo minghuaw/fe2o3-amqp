@@ -11,23 +11,15 @@ use serde_amqp::{
     Value,
 };
 
-use self::sealed::Sealed;
+use crate::__sealed::Sealed;
 
 use super::AmqpValue;
 
-pub(crate) mod sealed {
-    pub trait Sealed {}
-
-    impl<T> Sealed for Option<T> where T: Sealed {}
-}
-
-/// Trait for message body
-pub trait BodySection: Sealed + SerializableBody + DeserializableBody {}
-
-impl<T> BodySection for T where T: Sealed + SerializableBody + DeserializableBody {}
+/// Marker trait for message body
+pub trait BodySection: Sealed {}
 
 /// Trait for a serializable body section
-pub trait SerializableBody: Sealed {
+pub trait SerializableBody: BodySection {
     /// The serializable type
     type Serializable: ser::Serialize;
 
@@ -47,7 +39,7 @@ pub trait FromEmptyBody: Sized {
 }
 
 /// Trait for a deserializable body section
-pub trait DeserializableBody: Sealed {
+pub trait DeserializableBody: BodySection {
     /// The deserializable type
     ///
     /// TODO: change to GAT once it stablizes
