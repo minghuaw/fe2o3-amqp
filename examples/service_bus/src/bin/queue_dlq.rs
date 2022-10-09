@@ -5,6 +5,7 @@ use fe2o3_amqp::connection::ConnectionHandle;
 use fe2o3_amqp::transaction::OwnedTransaction;
 use fe2o3_amqp::transaction::TransactionDischarge;
 use fe2o3_amqp::transaction::TransactionalRetirement;
+use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::messaging::Properties;
 use fe2o3_amqp::types::primitives::Binary;
@@ -41,7 +42,7 @@ async fn create_dlq_message(connection: &mut ConnectionHandle<()>, queue_name: &
     let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
     receiver.reject(&delivery, None).await.unwrap();
     receiver.close().await.unwrap();
 
@@ -82,7 +83,7 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
     println!("Received from DLQ: {:?}", delivery);
 
     // The Azure ServiceBus SDK disposes the DLQ message in a txn

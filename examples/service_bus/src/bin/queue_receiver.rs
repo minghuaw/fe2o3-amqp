@@ -1,4 +1,5 @@
 use dotenv::dotenv;
+use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Receiver;
 use std::env;
@@ -34,8 +35,9 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Value>().await.unwrap();
-    let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
+    let msg =
+        std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..]).unwrap();
     println!("Received: {:?}", msg);
     receiver.accept(&delivery).await.unwrap();
     println!("{:?}", delivery);
