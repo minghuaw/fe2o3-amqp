@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{AmqpValue, ApplicationProperties, Body, Message},
+    messaging::{ApplicationProperties, Message},
     primitives::{OrderedMap, Value},
 };
 
@@ -59,7 +59,7 @@ impl<'a> MessageSerializer for ReadRequest<'a> {
                     .insert(key, &value[..])
                     .build(),
             )
-            .value(())
+            .body(())
             .build()
     }
 }
@@ -73,18 +73,13 @@ impl ReadResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<OrderedMap<String, Value>> for ReadResponse {
+impl MessageDeserializer<Option<OrderedMap<String, Value>>> for ReadResponse {
     type Error = Error;
 
-    fn from_message(message: Message<OrderedMap<String, Value>>) -> Result<Self> {
+    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
         match message.body {
-            Body::Value(AmqpValue(map)) => Ok(Self {
-                entity_attributes: map,
-            }),
-            Body::Empty => Ok(Self {
-                entity_attributes: OrderedMap::with_capacity(0),
-            }),
-            _ => Err(Error::DecodeError),
+            Some(map) => Ok(Self { entity_attributes: map }),
+            None => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
         }
     }
 }
