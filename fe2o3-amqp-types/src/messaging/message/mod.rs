@@ -472,7 +472,7 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: Body::Sequence(AmqpSequence(values)),
+            body: Body::Sequence(TransparentVec::new(vec![AmqpSequence(values)])),
             footer: self.footer,
         }
     }
@@ -488,7 +488,7 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: Body::SequenceBatch(batch.into()),
+            body: Body::Sequence(batch.into()),
             footer: self.footer,
         }
     }
@@ -501,7 +501,7 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: Body::Data(Data(data.into())),
+            body: Body::Data(TransparentVec::new(vec![Data(data.into())])),
             footer: self.footer,
         }
     }
@@ -514,7 +514,7 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: Body::DataBatch(batch.into()),
+            body: Body::Data(batch.into()),
             footer: self.footer,
         }
     }
@@ -643,13 +643,13 @@ mod tests {
     fn test_serialize_deserialize_body() {
         let data = b"amqp".to_vec();
         let data = Data(ByteBuf::from(data));
-        let body = Body::<Value>::Data(data);
+        let body = Body::<Value>::Data(vec![data].into());
         let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
         let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
-        let body = Body::Sequence(AmqpSequence(vec![Value::Bool(true)]));
+        let body = Body::Sequence(vec![AmqpSequence(vec![Value::Bool(true)])].into());
         let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
         let field: Body<Value> = from_slice(&serialized).unwrap();

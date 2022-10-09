@@ -15,32 +15,20 @@ use serde_amqp::extensions::TransparentVec;
 
 /// The body consists of one of the following three choices: one or more data sections, one or more
 /// amqp-sequence sections, or a single amqp-value section.
-///
-/// Support for more than one `Data` or `AmqpSequence` sections are added since version "0.6.0".
-///
-/// # Why separating `Data`/`Sequence` and `DataBatch`/`SequenceBatch`
-///
-/// 1. Compatibility. Only the `Data` and `Sequence` variants were provided in the earlier versions
-/// 2. It seems like `DataBatch` and `SequenceBatch` are used much rarely than `Data` or `Sequence`.
-/// Allocating a Vec for just one element constantly seems a waste.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Body<T> {
-    /// A data section contains opaque binary data
-    Data(Data),
-    /// A sequence section contains an arbitrary number of structured data elements
-    Sequence(AmqpSequence<T>),
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
 
     /// More than one data section
     ///
     /// Added since `"0.6.0"`
-    DataBatch(TransparentVec<Data>),
+    Data(TransparentVec<Data>),
 
     /// More than one sequence section
     ///
     /// Added since `"0.6.0"`
-    SequenceBatch(TransparentVec<AmqpSequence<T>>),
+    Sequence(TransparentVec<AmqpSequence<T>>),
 
     /// There is no body section at all
     ///
@@ -85,11 +73,9 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Body::Data(data) => write!(f, "{}", data),
-            Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
-            Body::DataBatch(_) => write!(f, "DataBatch"),
-            Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
+            Body::Data(_) => write!(f, "Data"),
+            Body::Sequence(_) => write!(f, "Sequence"),
             Body::Empty => write!(f, "Nothing"),
         }
     }
@@ -103,7 +89,7 @@ impl<T: Serialize> From<T> for Body<T> {
 
 impl<T: Serialize + Clone, const N: usize> From<[T; N]> for Body<T> {
     fn from(values: [T; N]) -> Self {
-        Self::Sequence(AmqpSequence(values.to_vec()))
+        Self::Sequence(TransparentVec::new(vec![AmqpSequence(values.to_vec())]))
     }
 }
 
@@ -115,46 +101,15 @@ impl<T> From<AmqpValue<T>> for Body<T> {
 
 impl<T> From<AmqpSequence<T>> for Body<T> {
     fn from(val: AmqpSequence<T>) -> Self {
-        Self::Sequence(val)
+        Self::Sequence(TransparentVec::new(vec![val]))
     }
 }
 
 impl From<Data> for Body<Value> {
     fn from(val: Data) -> Self {
-        Self::Data(val)
+        Self::Data(TransparentVec::new(vec![val]))
     }
 }
-
-// impl<T: Serialize> Serialize for Serializable<Body<T>> {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         self.0.serialize(serializer)
-//     }
-// }
-
-// impl<T: Serialize> Serialize for Serializable<&Body<T>> {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         self.0.serialize(serializer)
-//     }
-// }
-
-// impl<'de, T> de::Deserialize<'de> for Deserializable<Body<T>>
-// where
-//     T: de::Deserialize<'de>,
-// {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         let value = Body::<T>::deserialize(deserializer)?;
-//         Ok(Deserializable(value))
-//     }
-// }
 
 impl<T: Serialize> ser::Serialize for Body<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -165,8 +120,6 @@ impl<T: Serialize> ser::Serialize for Body<T> {
             Body::Data(data) => data.serialize(serializer),
             Body::Sequence(seq) => seq.serialize(serializer),
             Body::Value(val) => val.serialize(serializer),
-            Body::DataBatch(vec) => vec.serialize(serializer),
-            Body::SequenceBatch(vec) => vec.serialize(serializer),
             Body::Empty => AmqpValue(()).serialize(serializer),
         }
     }
@@ -245,11 +198,11 @@ where
         match val {
             Field::Data => {
                 let data: TransparentVec<Data> = variant.newtype_variant()?;
-                Ok(Body::DataBatch(data))
+                Ok(Body::Data(data))
             }
             Field::Sequence => {
                 let sequence: TransparentVec<AmqpSequence<_>> = variant.newtype_variant()?;
-                Ok(Body::SequenceBatch(sequence))
+                Ok(Body::Sequence(sequence))
             }
             Field::Value => {
                 let value = variant.newtype_variant()?;
