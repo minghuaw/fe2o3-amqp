@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::{Message, IntoSerializableBody};
+use fe2o3_amqp_types::messaging::{IntoSerializableBody, Message};
 
 // use crate::constantsOperationRequest;
 

@@ -1,7 +1,15 @@
-use std::{borrow::Cow, collections::{HashMap, BTreeMap}};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+};
 
 use serde::{de, ser, Deserialize};
-use serde_amqp::{Value, primitives::{Dec32, Dec128, Dec64, Timestamp, Uuid, Binary, Symbol, SymbolRef, Array, OrderedMap}};
+use serde_amqp::{
+    primitives::{
+        Array, Binary, Dec128, Dec32, Dec64, OrderedMap, Symbol, SymbolRef, Timestamp, Uuid,
+    },
+    Value,
+};
 
 use self::sealed::Sealed;
 
@@ -144,10 +152,10 @@ impl FromEmptyBody for Value {
 
 macro_rules! impl_into_serializable_body {
     (
-        AmqpValue, 
+        AmqpValue,
         {
             $($type:ty),*
-        } 
+        }
     ) => {
         $(impl_into_serializable_body!(AmqpValue, $type);)*
     };
@@ -161,7 +169,7 @@ macro_rules! impl_into_serializable_body {
             }
         }
     };
-    
+
     (AmqpValue, $type:ty) => {
         impl IntoSerializableBody for $type {
             type SerializableBody = AmqpValue<Self>;
@@ -173,9 +181,8 @@ macro_rules! impl_into_serializable_body {
     };
 }
 
-
-impl_into_serializable_body!{
-    AmqpValue, 
+impl_into_serializable_body! {
+    AmqpValue,
     {
         (), bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, char,
         Dec32, Dec64, Dec128, Timestamp, Uuid, Binary, String, Symbol
@@ -209,7 +216,7 @@ impl<'a> IntoSerializableBody for SymbolRef<'a> {
     }
 }
 
-impl<K,V> IntoSerializableBody for OrderedMap<K, V> 
+impl<K, V> IntoSerializableBody for OrderedMap<K, V>
 where
     K: ser::Serialize + std::hash::Hash + Eq,
     V: ser::Serialize,
@@ -221,7 +228,7 @@ where
     }
 }
 
-impl<K,V> IntoSerializableBody for HashMap<K, V> 
+impl<K, V> IntoSerializableBody for HashMap<K, V>
 where
     K: ser::Serialize + std::hash::Hash + Eq,
     V: ser::Serialize,
@@ -233,7 +240,7 @@ where
     }
 }
 
-impl<K,V> IntoSerializableBody for BTreeMap<K, V> 
+impl<K, V> IntoSerializableBody for BTreeMap<K, V>
 where
     K: ser::Serialize + Ord,
     V: ser::Serialize,
@@ -264,7 +271,7 @@ macro_rules! impl_from_empty_body {
 
 macro_rules! impl_from_deserializable_or_empty_body {
     (
-        AmqpValue, 
+        AmqpValue,
         {
             $($type:ty),*
         }
@@ -273,12 +280,12 @@ macro_rules! impl_from_deserializable_or_empty_body {
     };
 
     (AmqpValue, $($generics:ident: $bound:ident<$lt:lifetime>),*; $type:tt) => {
-        impl<$($generics),*> FromDeserializableBody for $type<$($generics),*> 
+        impl<$($generics),*> FromDeserializableBody for $type<$($generics),*>
         where
             $(for <$lt> $generics: $bound<$lt>),*
         {
             type DeserializableBody = AmqpValue<Self>;
-        
+
             fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
                 deserializable.0
             }
@@ -290,18 +297,17 @@ macro_rules! impl_from_deserializable_or_empty_body {
     (AmqpValue, $type:ty) => {
         impl FromDeserializableBody for $type {
             type DeserializableBody = AmqpValue<Self>;
-        
+
             fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
                 deserializable.0
             }
         }
-        
+
         impl_from_empty_body!($type);
     };
 }
 
-
-impl_from_deserializable_or_empty_body!{
+impl_from_deserializable_or_empty_body! {
     AmqpValue,
     {
         (), bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, char,
@@ -314,7 +320,7 @@ impl_from_deserializable_or_empty_body!(AmqpValue, T:Deserialize<'de>; Array);
 
 impl_from_empty_body!(K, V; OrderedMap);
 impl<K, V> FromDeserializableBody for OrderedMap<K, V>
-where 
+where
     for<'de> K: de::Deserialize<'de> + std::hash::Hash + Eq,
     for<'de> V: de::Deserialize<'de>,
 {
@@ -327,7 +333,7 @@ where
 
 impl_from_empty_body!(K, V; HashMap);
 impl<K, V> FromDeserializableBody for HashMap<K, V>
-where 
+where
     for<'de> K: de::Deserialize<'de> + std::hash::Hash + Eq,
     for<'de> V: de::Deserialize<'de>,
 {
@@ -338,10 +344,9 @@ where
     }
 }
 
-
 impl_from_empty_body!(K, V; BTreeMap);
 impl<K, V> FromDeserializableBody for BTreeMap<K, V>
-where 
+where
     for<'de> K: de::Deserialize<'de> + Ord,
     for<'de> V: de::Deserialize<'de>,
 {

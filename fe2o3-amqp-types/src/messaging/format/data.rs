@@ -1,4 +1,4 @@
-use std::{fmt::Display, borrow::Cow};
+use std::{borrow::Cow, fmt::Display};
 
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 

@@ -63,7 +63,9 @@ impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetTypesRe
     fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
         match message.body {
             Some(types) => Ok(Self { types }),
-            None => Ok(Self { types: OrderedMap::with_capacity(0) })
+            None => Ok(Self {
+                types: OrderedMap::with_capacity(0),
+            }),
         }
     }
 }

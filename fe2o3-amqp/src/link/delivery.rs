@@ -2,11 +2,8 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
-    messaging::{
-        Accepted, DeliveryState, Message, Outcome,
-        MESSAGE_FORMAT, SerializableBody,
-    },
-    primitives::{BinaryRef},
+    messaging::{Accepted, DeliveryState, Message, Outcome, SerializableBody, MESSAGE_FORMAT},
+    primitives::BinaryRef,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;

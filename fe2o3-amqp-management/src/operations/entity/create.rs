@@ -109,8 +109,12 @@ impl MessageDeserializer<Option<OrderedMap<String, Value>>> for CreateResponse {
 
     fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
         match message.body {
-            Some(map) => Ok(Self { entity_attributes: map }),
-            None => Ok(Self { entity_attributes: OrderedMap::with_capacity(0) }),
+            Some(map) => Ok(Self {
+                entity_attributes: map,
+            }),
+            None => Ok(Self {
+                entity_attributes: OrderedMap::with_capacity(0),
+            }),
         }
     }
 }

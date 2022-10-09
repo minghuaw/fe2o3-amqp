@@ -59,7 +59,9 @@ impl MessageDeserializer<Option<Vec<String>>> for GetMgmtNodesResponse {
     fn from_message(message: Message<Option<Vec<String>>>) -> Result<Self> {
         match message.body {
             Some(addresses) => Ok(Self { addresses }),
-            None => Ok(Self { addresses: Vec::with_capacity(0) })
+            None => Ok(Self {
+                addresses: Vec::with_capacity(0),
+            }),
         }
     }
 }

@@ -1,10 +1,13 @@
 use fe2o3_amqp::{
     link::{DetachError, SendError},
     session::SessionHandle,
-    Delivery, Receiver, Sender, Sendable,
+    Delivery, Receiver, Sender,
 };
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, MessageId, Outcome, Properties, IntoSerializableBody, Message, FromDeserializableBody},
+    messaging::{
+        ApplicationProperties, FromDeserializableBody, IntoSerializableBody, MessageId,
+        Outcome, Properties,
+    },
     primitives::SimpleValue,
 };
 
@@ -127,7 +130,9 @@ impl MgmtClient {
         entity_type: impl Into<String>,
         locales: impl Into<Option<String>>,
     ) -> Result<Outcome, SendError> {
-        let mut message = operation.into_message().map_body(IntoSerializableBody::into_serializable_body);
+        let mut message = operation
+            .into_message()
+            .map_body(IntoSerializableBody::into_serializable_body);
 
         let application_properties = message
             .application_properties

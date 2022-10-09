@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::{Message, MessageId, FromDeserializableBody};
+use fe2o3_amqp_types::messaging::{FromDeserializableBody, Message, MessageId};
 
 use crate::{
     constants::{STATUS_CODE, STATUS_DESCRIPTION},

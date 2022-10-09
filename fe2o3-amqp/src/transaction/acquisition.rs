@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, SequenceNo},
-    messaging::{Modified, FromDeserializableBody},
+    messaging::{FromDeserializableBody, Modified},
     transaction::TransactionId,
 };
 

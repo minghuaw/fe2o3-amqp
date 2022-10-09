@@ -12,8 +12,8 @@ use tokio::{
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode},
     messaging::{
-        message::__private::Serializable, Address, DeliveryState, Outcome, Source, Target,
-        MESSAGE_FORMAT, SerializableBody,
+        message::__private::Serializable, Address, DeliveryState, Outcome, SerializableBody,
+        Source, Target, MESSAGE_FORMAT,
     },
     performatives::{Attach, Detach, Transfer},
 };

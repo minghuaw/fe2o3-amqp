@@ -71,9 +71,7 @@ impl GetOperationsResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Option<Operations>>
-    for GetOperationsResponse
-{
+impl MessageDeserializer<Option<Operations>> for GetOperationsResponse {
     type Error = Error;
 
     fn from_message(
@@ -81,7 +79,9 @@ impl MessageDeserializer<Option<Operations>>
     ) -> Result<Self> {
         match message.body {
             Some(operations) => Ok(Self { operations }),
-            None => Ok(Self { operations: Operations::with_capacity(0) })
+            None => Ok(Self {
+                operations: Operations::with_capacity(0),
+            }),
         }
     }
 }

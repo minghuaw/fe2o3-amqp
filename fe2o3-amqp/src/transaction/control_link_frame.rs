@@ -1,4 +1,7 @@
-use fe2o3_amqp_types::{transaction::{Declare, Discharge}, messaging::{IntoSerializableBody, AmqpValue, FromDeserializableBody, FromEmptyBody}};
+use fe2o3_amqp_types::{
+    messaging::{AmqpValue, FromDeserializableBody, FromEmptyBody, IntoSerializableBody},
+    transaction::{Declare, Discharge},
+};
 use serde::{
     de::{self, VariantAccess},
     ser,
