@@ -793,7 +793,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_message_with_data_batch() {
+    fn test_encode_message_builder_with_data_batch() {
         use serde_amqp::extensions::TransparentVec;
 
         let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
@@ -802,6 +802,30 @@ mod tests {
             .header(Header::default())
             .data_batch(data_batch)
             .build();
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let expected = &[
+            0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0,
+            0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9,
+        ];
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn test_encode_message_with_data_batch() {
+        use serde_amqp::extensions::TransparentVec;
+
+        let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
+        let data_batch = TransparentVec::new(vec![data.clone(), data.clone(), data.clone()]);
+        let message = Message {
+            header: Some(Header::default()),
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: data_batch,
+            footer: None,
+        };
         let buf = to_vec(&Serializable(message)).unwrap();
         let expected = &[
             0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
