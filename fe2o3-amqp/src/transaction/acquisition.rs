@@ -77,7 +77,7 @@ where
     /// Transactionally acquire a message
     pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, RecvError>
     where
-        T: FromDeserializableBody + Send,
+        for<'de> T: FromDeserializableBody<'de> + Send,
     {
         self.recver.recv().await
     }

@@ -25,7 +25,7 @@ impl FromEmptyBody for ControlMessageBody {
     type Error = serde_amqp::Error;
 }
 
-impl FromDeserializableBody for ControlMessageBody {
+impl<'de> FromDeserializableBody<'de> for ControlMessageBody {
     type DeserializableBody = AmqpValue<Self>;
 
     fn from_body(deserializable: Self::DeserializableBody) -> Self {
