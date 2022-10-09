@@ -2,23 +2,24 @@ use std::{fmt::Display, marker::PhantomData};
 
 use serde::{
     de::{self, VariantAccess},
-    Serialize, ser,
+    ser, Serialize,
 };
 use serde_amqp::Value;
 
-use crate::messaging::{AmqpSequence, AmqpValue, Data, sealed::Sealed, SerializableBody, DeserializableBody, FromEmptyBody, IntoSerializableBody, FromDeserializableBody};
-
-use super::__private::{Deserializable, Serializable};
+use crate::messaging::{
+    sealed::Sealed, AmqpSequence, AmqpValue, Data, DeserializableBody, FromDeserializableBody,
+    FromEmptyBody, IntoSerializableBody, SerializableBody,
+};
 
 use serde_amqp::extensions::TransparentVec;
 
 /// The body consists of one of the following three choices: one or more data sections, one or more
 /// amqp-sequence sections, or a single amqp-value section.
-/// 
+///
 /// Support for more than one `Data` or `AmqpSequence` sections are added since version "0.6.0".
-/// 
+///
 /// # Why separating `Data`/`Sequence` and `DataBatch`/`SequenceBatch`
-/// 
+///
 /// 1. Compatibility. Only the `Data` and `Sequence` variants were provided in the earlier versions
 /// 2. It seems like `DataBatch` and `SequenceBatch` are used much rarely than `Data` or `Sequence`.
 /// Allocating a Vec for just one element constantly seems a waste.
@@ -32,12 +33,12 @@ pub enum Body<T> {
     Value(AmqpValue<T>),
 
     /// More than one data section
-    /// 
+    ///
     /// Added since `"0.6.0"`
     DataBatch(TransparentVec<Data>),
 
     /// More than one sequence section
-    /// 
+    ///
     /// Added since `"0.6.0"`
     SequenceBatch(TransparentVec<AmqpSequence<T>>),
 
@@ -164,12 +165,8 @@ impl<T: Serialize> ser::Serialize for Body<T> {
             Body::Data(data) => data.serialize(serializer),
             Body::Sequence(seq) => seq.serialize(serializer),
             Body::Value(val) => val.serialize(serializer),
-            Body::DataBatch(vec) => {
-                vec.serialize(serializer)
-            }
-            Body::SequenceBatch(vec) => {
-                vec.serialize(serializer)
-            }
+            Body::DataBatch(vec) => vec.serialize(serializer),
+            Body::SequenceBatch(vec) => vec.serialize(serializer),
             Body::Empty => AmqpValue(()).serialize(serializer),
         }
     }
@@ -306,7 +303,7 @@ where
     }
 }
 
-impl<T> IntoSerializableBody for Body<T> 
+impl<T> IntoSerializableBody for Body<T>
 where
     T: ser::Serialize,
 {
@@ -317,7 +314,7 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for Body<T> 
+impl<T> FromDeserializableBody for Body<T>
 where
     for<'de> T: de::Deserialize<'de>,
 {
@@ -325,7 +322,7 @@ where
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
-    } 
+    }
 }
 
 impl<T> FromEmptyBody for Body<T> {

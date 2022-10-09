@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::{marker::PhantomData};
+use std::marker::PhantomData;
 
 use serde::{
     de::{self},
@@ -16,9 +16,9 @@ use serde_amqp::{
 use serde_amqp::extensions::TransparentVec;
 
 use super::{
-    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
-    MessageAnnotations, Properties, BodySection, SerializableBody, DeserializableBody, Batch,
-    IntoSerializableBody, FromDeserializableBody
+    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, DeserializableBody,
+    Footer, FromDeserializableBody, Header, IntoSerializableBody, MessageAnnotations, Properties,
+    SerializableBody,
 };
 
 mod body;
@@ -90,26 +90,31 @@ pub struct Message<B> {
     pub footer: Option<Footer>,
 }
 
-impl<B> Serialize for Serializable<Message<B>> where B: SerializableBody {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<B> Serialize for Serializable<&Message<B>> where B: SerializableBody {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<'de, B: FromDeserializableBody> de::Deserialize<'de> for Deserializable<Message<B>>
+impl<B> Serialize for Serializable<Message<B>>
+where
+    B: SerializableBody,
 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<B> Serialize for Serializable<&Message<B>>
+where
+    B: SerializableBody,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, B: FromDeserializableBody> de::Deserialize<'de> for Deserializable<Message<B>> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -317,11 +322,14 @@ where
                     count += 1;
                 }
                 Field::Body => {
-                    let deserializable: Option<<B::DeserializableBody as DeserializableBody>::Deserializable> = seq.next_element()?;
-                    body = deserializable.map(<B::DeserializableBody as DeserializableBody>::from_deserializable)
+                    let deserializable: Option<
+                        <B::DeserializableBody as DeserializableBody>::Deserializable,
+                    > = seq.next_element()?;
+                    body = deserializable
+                        .map(<B::DeserializableBody as DeserializableBody>::from_deserializable)
                         .map(<B as FromDeserializableBody>::from_deserializable_body);
                     count += 1;
-                },
+                }
                 Field::Footer => {
                     footer = seq.next_element()?;
                     count += 1;
@@ -331,7 +339,7 @@ where
 
         let body = match body {
             Some(body) => body,
-            None => B::from_empty_body().map_err(|e| de::Error::custom(e))?
+            None => B::from_empty_body().map_err(|e| de::Error::custom(e))?,
         };
 
         Ok(Message {
@@ -380,7 +388,7 @@ where
     }
 }
 
-impl<T, U> From<T> for Message<U> 
+impl<T, U> From<T> for Message<U>
 where
     T: IntoSerializableBody<SerializableBody = U>,
 {
@@ -405,7 +413,7 @@ pub trait FromMessage<B> {
 
 impl<T, B> FromMessage<B> for T
 where
-    T: FromDeserializableBody<DeserializableBody = B> 
+    T: FromDeserializableBody<DeserializableBody = B>,
 {
     fn from_message(message: Message<B>) -> Self {
         Self::from_deserializable_body(message.body)
@@ -781,7 +789,7 @@ mod tests {
         let result: Result<Deserializable<Message<Data>>, _> = from_reader(&buf[..]);
         assert!(result.is_ok());
         let message = result.unwrap().0;
-        assert!(message.body.0.len() > 0 );
+        assert!(message.body.0.len() > 0);
     }
 
     #[test]

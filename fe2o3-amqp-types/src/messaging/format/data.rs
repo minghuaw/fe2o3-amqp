@@ -1,19 +1,23 @@
 use std::fmt::Display;
 
-use serde::{de, Serialize};
-use serde_amqp::{primitives::Binary, Value, SerializeComposite, DeserializeComposite};
+use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, SerializableBody, sealed::Sealed, Batch, DeserializableBody, IntoSerializableBody, FromDeserializableBody, FromEmptyBody};
+use crate::messaging::{
+    sealed::Sealed, Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
+    IntoSerializableBody, SerializableBody,
+};
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
 ///     <descriptor name="amqp:data:binary" code="0x00000000:0x00000075"/>
 /// </type>
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
+)]
 #[amqp_contract(
-    name="amqp:data:binary",
-    code=0x0000_0000_0000_0075,
-    encoding = "basic",
+    name = "amqp:data:binary",
+    code = 0x0000_0000_0000_0075,
+    encoding = "basic"
 )]
 pub struct Data(pub Binary);
 
@@ -181,10 +185,9 @@ impl FromEmptyBody for Data {
 /*                                 Batch<Data>                                */
 /* -------------------------------------------------------------------------- */
 
-impl Sealed for Batch<Data> { }
+impl Sealed for Batch<Data> {}
 
-impl<'se> Sealed for Batch<&'se Data> { }
-
+impl<'se> Sealed for Batch<&'se Data> {}
 
 impl SerializableBody for Batch<Data> {
     type Serializable = Self;

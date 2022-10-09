@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use serde::{de, ser};
 use serde_amqp::Value;
 
@@ -97,7 +95,7 @@ where
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
         Some(T::from_deserializable_body(deserializable))
-    } 
+    }
 }
 
 impl<T> FromEmptyBody for Option<T> {

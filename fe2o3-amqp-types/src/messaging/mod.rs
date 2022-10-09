@@ -62,8 +62,6 @@ pub type FilterSet = OrderedMap<Symbol, Option<Described<Value>>>;
 
 use crate::definitions::Fields;
 
-use self::sealed::Sealed;
-
 /// 3.5.9 Node Properties
 /// Properties of a node.
 /// <type name="node-properties" class="restricted" source="fields"/>

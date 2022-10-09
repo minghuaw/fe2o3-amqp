@@ -1,19 +1,24 @@
 use std::fmt::Display;
 
-use serde::{de, Deserialize, Serialize, ser};
-use serde_amqp::{SerializeComposite, DeserializeComposite};
+use serde::{de, ser};
+use serde_amqp::{DeserializeComposite, SerializeComposite};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, sealed::Sealed, SerializableBody, DeserializableBody, IntoSerializableBody, FromDeserializableBody, FromEmptyBody};
+use crate::messaging::{
+    sealed::Sealed, DeserializableBody, FromDeserializableBody, FromEmptyBody,
+    IntoSerializableBody, SerializableBody,
+};
 
 /// 3.2.8 AMQP Value
 /// <type name="amqp-value" class="restricted" source="*" provides="section">
 ///     <descriptor name="amqp:amqp-value:*" code="0x00000000:0x00000077"/>
 /// </type>
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
+)]
 #[amqp_contract(
-    name="amqp:amqp-value:*",
-    code=0x0000_0000_0000_0077,
-    encoding = "basic",
+    name = "amqp:amqp-value:*",
+    code = 0x0000_0000_0000_0077,
+    encoding = "basic"
 )]
 pub struct AmqpValue<T>(pub T);
 
@@ -142,7 +147,7 @@ where
     }
 }
 
-impl<T> IntoSerializableBody for AmqpValue<T> 
+impl<T> IntoSerializableBody for AmqpValue<T>
 where
     T: ser::Serialize,
 {
@@ -153,7 +158,7 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for AmqpValue<T> 
+impl<T> FromDeserializableBody for AmqpValue<T>
 where
     for<'de> T: de::Deserialize<'de> + FromEmptyBody,
 {
@@ -161,10 +166,13 @@ where
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
-    } 
+    }
 }
 
-impl<T> FromEmptyBody for AmqpValue<T> where T: FromEmptyBody {
+impl<T> FromEmptyBody for AmqpValue<T>
+where
+    T: FromEmptyBody,
+{
     type Error = T::Error;
 
     fn from_empty_body() -> Result<Self, Self::Error> {

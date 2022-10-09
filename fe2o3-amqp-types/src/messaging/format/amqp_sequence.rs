@@ -1,18 +1,23 @@
 use std::fmt::Display;
 
-use serde::{de, Deserialize, Serialize, ser};
-use serde_amqp::{SerializeComposite, DeserializeComposite};
+use serde::{de, ser};
+use serde_amqp::{DeserializeComposite, SerializeComposite};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, sealed::Sealed, SerializableBody, Batch, DeserializableBody, IntoSerializableBody, FromDeserializableBody, FromEmptyBody};
+use crate::messaging::{
+    sealed::Sealed, Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
+    IntoSerializableBody, SerializableBody,
+};
 
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
 /// </type>
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
+)]
 #[amqp_contract(
-    name="amqp:amqp-sequence:list",
-    code=0x0000_0000_0000_0076,
+    name = "amqp:amqp-sequence:list",
+    code = 0x0000_0000_0000_0076,
     encoding = "basic"
 )]
 pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
@@ -135,9 +140,9 @@ where
 /*                                AmqpSequence                                */
 /* -------------------------------------------------------------------------- */
 
-impl<T> Sealed for AmqpSequence<T> { }
+impl<T> Sealed for AmqpSequence<T> {}
 
-impl<'se, T> Sealed for &'se AmqpSequence<T> { }
+impl<'se, T> Sealed for &'se AmqpSequence<T> {}
 
 impl<T> SerializableBody for AmqpSequence<T>
 where
@@ -161,7 +166,7 @@ where
     }
 }
 
-impl<T> IntoSerializableBody for AmqpSequence<T> 
+impl<T> IntoSerializableBody for AmqpSequence<T>
 where
     T: ser::Serialize,
 {
@@ -172,7 +177,7 @@ where
     }
 }
 
-impl<T> FromDeserializableBody for AmqpSequence<T> 
+impl<T> FromDeserializableBody for AmqpSequence<T>
 where
     for<'de> T: de::Deserialize<'de>,
 {
@@ -180,7 +185,7 @@ where
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
-    } 
+    }
 }
 
 impl<T> FromEmptyBody for AmqpSequence<T> {
@@ -236,7 +241,7 @@ where
 
     fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
-    } 
+    }
 }
 
 impl<T> FromEmptyBody for Batch<AmqpSequence<T>> {
