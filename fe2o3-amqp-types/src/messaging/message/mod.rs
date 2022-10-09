@@ -7,18 +7,12 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::{
-    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    primitives::Binary,
-    value::Value,
-};
-
-use serde_amqp::extensions::TransparentVec;
+use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use super::{
-    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, DeserializableBody,
-    Footer, FromDeserializableBody, Header, IntoSerializableBody, MessageAnnotations, Properties,
-    SerializableBody,
+    AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations,
+    DeserializableBody, Footer, FromDeserializableBody, Header, IntoSerializableBody,
+    MessageAnnotations, Properties, SerializableBody,
 };
 
 mod body;
@@ -33,34 +27,6 @@ pub mod __private {
     pub struct Deserializable<T>(pub T);
 }
 use __private::{Deserializable, Serializable};
-
-// /// Determines how a `Message<T>` should be docoded.
-// ///
-// /// This is a byproduct of the workaround chosen for #49.
-// ///
-// /// Why not `tokio_util::Decoder`
-// ///
-// /// 1. avoid confusion
-// /// 2. The decoder type `T` itself is also the returned type
-// pub trait DecodeIntoMessage: Sized {
-//     /// Error type associated with decoding
-//     type DecodeError;
-
-//     /// Decode reader into [`Message<T>`]
-//     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
-// }
-
-// impl<T> DecodeIntoMessage for T
-// where
-//     for<'de> T: de::Deserialize<'de>,
-// {
-//     type DecodeError = serde_amqp::Error;
-
-//     fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
-//         let message: Deserializable<Message<T>> = serde_amqp::from_reader(reader)?;
-//         Ok(message.0)
-//     }
-// }
 
 /// AMQP 1.0 Message
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -451,74 +417,6 @@ impl Builder<EmptyBody> {
 }
 
 impl<T> Builder<T> {
-    /// Set the body as `Body::Value`
-    pub fn value<V: Serialize>(self, value: V) -> Builder<Body<V>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Value(AmqpValue(value)),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as a single `Body::Sequence` section
-    pub fn sequence<V: Serialize>(self, values: Vec<V>) -> Builder<Body<V>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Sequence(TransparentVec::new(vec![AmqpSequence(values)])),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as `Body::SequenceBatch`
-    pub fn sequence_batch<V: Serialize>(
-        self,
-        batch: impl Into<TransparentVec<AmqpSequence<V>>>,
-    ) -> Builder<Body<V>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Sequence(batch.into()),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as a single `Body::Data` section
-    pub fn data(self, data: impl Into<Binary>) -> Builder<Body<Value>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Data(TransparentVec::new(vec![Data(data.into())])),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as `Body::DataBatch`
-    pub fn data_batch(self, batch: impl Into<TransparentVec<Data>>) -> Builder<Body<Value>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Data(batch.into()),
-            footer: self.footer,
-        }
-    }
-
     /// Set the header
     pub fn header(mut self, header: impl Into<Option<Header>>) -> Self {
         self.header = header.into();
@@ -563,9 +461,93 @@ impl<T> Builder<T> {
         self.footer = footer.into();
         self
     }
+
+    /// Set the body as `Body`
+    pub fn body<V: Serialize>(self, value: impl Into<Body<V>>) -> Builder<Body<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: value.into(),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as `Body::Value`
+    pub fn value<V: Serialize>(self, value: V) -> Builder<AmqpValue<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: AmqpValue(value),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as a single `Body::Sequence` section
+    pub fn sequence<V: Serialize>(self, values: impl Into<Vec<V>>) -> Builder<AmqpSequence<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: AmqpSequence(values.into()),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as `Body::SequenceBatch`
+    pub fn sequence_batch<V: Serialize>(
+        self,
+        batch: impl Into<Batch<AmqpSequence<V>>>,
+    ) -> Builder<Batch<AmqpSequence<V>>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: batch.into(),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as a single `Body::Data` section
+    pub fn data(self, data: impl Into<Data>) -> Builder<Data> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: data.into(),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as `Body::DataBatch`
+    pub fn data_batch(self, batch: impl Into<Batch<Data>>) -> Builder<Batch<Data>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: batch.into(),
+            footer: self.footer,
+        }
+    }
 }
 
-impl<B> Builder<B> {
+impl<B> Builder<B>
+where
+    B: SerializableBody,
+{
     /// Build the [`Message`]
     pub fn build(self) -> Message<B> {
         Message {
@@ -592,7 +574,7 @@ mod tests {
             Body,
             __private::{Deserializable, Serializable},
         },
-        AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Header,
+        AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations, Header,
         MessageAnnotations, Properties,
     };
 
@@ -837,17 +819,15 @@ mod tests {
 
     #[test]
     fn test_decode_message_with_data_batch() {
-        use serde_amqp::extensions::TransparentVec;
-
         let buf = &[
             0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
             0x8, 0x9, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0,
             0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9,
         ];
-        let message: Deserializable<Message<Body<Value>>> = from_slice(&buf[..]).unwrap();
+        let message: Deserializable<Message<Batch<Data>>> = from_slice(&buf[..]).unwrap();
 
         let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
-        let data_batch = TransparentVec::new(vec![data.clone(), data.clone(), data.clone()]);
+        let data_batch = vec![data.clone(), data.clone(), data.clone()];
         let expected = Message::builder()
             .header(Header::default())
             .data_batch(data_batch)
@@ -886,7 +866,8 @@ mod tests {
             0x3, 0x0, 0x53, 0x76, 0xc0, 0x07, 0x3, 0x54, 0x4, 0x54, 0x5, 0x54, 0x6, 0x0, 0x53,
             0x76, 0xc0, 0x07, 0x3, 0x54, 0x7, 0x54, 0x8, 0x54, 0x9,
         ];
-        let message: Deserializable<Message<Body<i32>>> = from_slice(&buf[..]).unwrap();
+        let message: Deserializable<Message<Batch<AmqpSequence<i32>>>> =
+            from_slice(&buf[..]).unwrap();
 
         let batch = TransparentVec::new(vec![
             AmqpSequence::new(vec![1i32, 2, 3]),
