@@ -304,7 +304,7 @@ impl Receiver {
     /// let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
-    pub async fn accept_all<'a, T: 'a>(
+    pub async fn accept_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
@@ -332,7 +332,7 @@ impl Receiver {
     /// to `Reject`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    pub async fn reject_all<'a, T: 'a>(
+    pub async fn reject_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
@@ -360,7 +360,7 @@ impl Receiver {
     /// to `Release`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    pub async fn release_all<'a, T: 'a>(
+    pub async fn release_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
@@ -386,7 +386,7 @@ impl Receiver {
     /// to `Modify`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    pub async fn modify_all<'a, T: 'a>(
+    pub async fn modify_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
