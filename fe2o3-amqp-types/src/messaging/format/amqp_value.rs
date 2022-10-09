@@ -119,25 +119,3 @@ where
 impl<T> Sealed for AmqpValue<T> {}
 
 impl<'se, T> Sealed for &'se AmqpValue<T> {}
-
-impl<T> SerializableBody for AmqpValue<T> 
-where
-    T: ser::Serialize,
-{
-    type Serializable = AmqpValue<T>;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
-
-impl<T> DeserializableBody for AmqpValue<T>
-where
-    for<'de> T: de::Deserialize<'de>,
-{
-    type Deserializable = AmqpValue<T>;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}

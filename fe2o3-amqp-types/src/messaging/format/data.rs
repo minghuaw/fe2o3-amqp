@@ -137,40 +137,6 @@ impl Sealed for Data {}
 
 impl<'se> Sealed for &'se Data {}
 
-impl SerializableBody for Data {
-    type Serializable = Data;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
-
-impl DeserializableBody for Data {
-    type Deserializable = Data;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}
-
-// TODO: impl DeserializableBody for &'de Data
-
 impl Sealed for Batch<Data> { }
 
 impl<'se> Sealed for Batch<&'se Data> { }
-
-impl SerializableBody for Batch<Data> {
-    type Serializable = Batch<Data>;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }    
-}
-
-impl DeserializableBody for Batch<Data> {
-    type Deserializable = Batch<Data>;
-
-    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
-        deserializable
-    }
-}

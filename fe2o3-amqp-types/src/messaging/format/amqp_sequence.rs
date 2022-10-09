@@ -3,7 +3,7 @@ use std::fmt::Display;
 use serde::{de, Deserialize, Serialize, ser};
 use serde_amqp::{SerializeComposite, DeserializeComposite};
 
-use crate::messaging::{message::__private::{Deserializable, Serializable}, sealed::Sealed, SerializableBody, Batch};
+use crate::messaging::{message::__private::{Deserializable, Serializable}, sealed::Sealed, SerializableBody, Batch, DeserializableBody};
 
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
@@ -135,39 +135,6 @@ impl<T> Sealed for AmqpSequence<T> { }
 
 impl<'se, T> Sealed for &'se AmqpSequence<T> { }
 
-impl<T> SerializableBody for AmqpSequence<T>
-where
-    T: ser::Serialize
-{
-    type Serializable = AmqpSequence<T>;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
-
 impl<T> Sealed for Batch<AmqpSequence<T>> {}
 
 impl<'se, T> Sealed for Batch<&'se AmqpSequence<T>> {}
-
-impl<T> SerializableBody for Batch<AmqpSequence<T>> 
-where
-    T: ser::Serialize,
-{
-    type Serializable = Batch<AmqpSequence<T>>;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
-
-impl<'se, T> SerializableBody for Batch<&'se AmqpSequence<T>> 
-where
-    T: ser::Serialize,
-{
-    type Serializable = Batch<&'se AmqpSequence<T>>;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}

@@ -2,11 +2,11 @@ use std::{fmt::Display, marker::PhantomData};
 
 use serde::{
     de::{self, VariantAccess},
-    Serialize,
+    Serialize, ser,
 };
 use serde_amqp::Value;
 
-use crate::messaging::{AmqpSequence, AmqpValue, Data};
+use crate::messaging::{AmqpSequence, AmqpValue, Data, sealed::Sealed, SerializableBody, DeserializableBody};
 
 use super::__private::{Deserializable, Serializable};
 
@@ -124,38 +124,38 @@ impl From<Data> for Body<Value> {
     }
 }
 
-impl<T: Serialize> Serialize for Serializable<Body<T>> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
+// impl<T: Serialize> Serialize for Serializable<Body<T>> {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         self.0.serialize(serializer)
+//     }
+// }
 
-impl<T: Serialize> Serialize for Serializable<&Body<T>> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
+// impl<T: Serialize> Serialize for Serializable<&Body<T>> {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         self.0.serialize(serializer)
+//     }
+// }
 
-impl<'de, T> de::Deserialize<'de> for Deserializable<Body<T>>
-where
-    T: de::Deserialize<'de>,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = Body::<T>::deserialize(deserializer)?;
-        Ok(Deserializable(value))
-    }
-}
+// impl<'de, T> de::Deserialize<'de> for Deserializable<Body<T>>
+// where
+//     T: de::Deserialize<'de>,
+// {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         let value = Body::<T>::deserialize(deserializer)?;
+//         Ok(Deserializable(value))
+//     }
+// }
 
-impl<T: Serialize> Body<T> {
+impl<T: Serialize> ser::Serialize for Body<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -262,7 +262,7 @@ where
     }
 }
 
-impl<'de, T> Body<T>
+impl<'de, T> de::Deserialize<'de> for Body<T>
 where
     T: de::Deserialize<'de>,
 {
@@ -279,3 +279,7 @@ where
         )
     }
 }
+
+impl<T> Sealed for Body<T> {}
+
+impl<'se, T> Sealed for &'se Body<T> {}

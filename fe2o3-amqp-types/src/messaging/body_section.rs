@@ -20,6 +20,17 @@ pub trait SerializableBody: Sealed {
     fn serializable(&self) -> &Self::Serializable;
 }
 
+impl<T> SerializableBody for T
+where
+    T: ser::Serialize + Sealed,
+{
+    type Serializable = Self;
+
+    fn serializable(&self) -> &Self::Serializable {
+        self
+    }
+}
+
 /// Trait for a deserializable body section
 pub trait DeserializableBody: Sealed {
     /// The deserializable type
@@ -29,6 +40,17 @@ pub trait DeserializableBody: Sealed {
 
     /// Convert from deserializable to self
     fn from_deserializable(deserializable: Self::Deserializable) -> Self;
+}
+
+impl<T> DeserializableBody for T 
+where
+    for<'de> T: de::Deserialize<'de> + Sealed,
+{
+    type Deserializable = Self;
+
+    fn from_deserializable(deserializable: Self::Deserializable) -> Self {
+        deserializable
+    }
 }
 
 // pub trait IntoBodySection {

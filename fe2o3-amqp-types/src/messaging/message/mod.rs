@@ -17,7 +17,7 @@ use serde_amqp::extensions::TransparentVec;
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
-    MessageAnnotations, Properties, BodySection, SerializableBody, DeserializableBody,
+    MessageAnnotations, Properties, BodySection, SerializableBody, DeserializableBody, Batch
 };
 
 mod body;
@@ -373,9 +373,88 @@ where
     }
 }
 
-impl<T, U> From<T> for Message<Body<U>>
+impl<U> From<Body<U>> for Message<Body<U>>{
+    fn from(value: Body<U>) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: value.into(),
+            footer: None,
+        }
+    }
+}
+
+impl<T, U> From<T> for Message<AmqpValue<U>>
 where
-    T: Into<Body<U>>,
+    T: Into<AmqpValue<U>>,
+{
+    fn from(value: T) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: value.into(),
+            footer: None,
+        }
+    }
+}
+
+impl From<Data> for Message<Data> {
+    fn from(value: Data) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: value.into(),
+            footer: None,
+        }
+    }
+}
+
+impl<T> From<T> for Message<Batch<Data>> 
+where
+    T: Into<Batch<Data>>,
+{
+    fn from(value: T) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: value.into(),
+            footer: None,
+        }
+    }
+}
+
+impl<T, U> From<T> for Message<AmqpSequence<U>>
+where
+    T: Into<AmqpSequence<U>>,
+{
+    fn from(value: T) -> Self {
+        Message {
+            header: None,
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: value.into(),
+            footer: None,
+        }
+    }
+}
+
+impl<T, U> From<T> for Message<Batch<AmqpSequence<U>>> 
+where
+    T: Into<Batch<AmqpSequence<U>>>,
 {
     fn from(value: T) -> Self {
         Message {
@@ -579,7 +658,6 @@ mod tests {
     fn test_convert_data_into_message() {
         let data = Data(Binary::from("hello AMQP"));
         let message = Message::from(data);
-        assert!(matches!(message.body, Body::Data(_)));
         let buf = to_vec(&Serializable(message)).unwrap();
         assert_eq!(buf[2], 0x75);
     }
@@ -588,7 +666,6 @@ mod tests {
     fn test_convert_amqp_sequence_into_message() {
         let sequence = AmqpSequence(vec![1, 2, 3, 4]);
         let message = Message::from(sequence);
-        assert!(matches!(message.body, Body::Sequence(_)));
         let buf = to_vec(&Serializable(message)).unwrap();
         assert_eq!(buf[2], 0x76);
     }
@@ -597,18 +674,17 @@ mod tests {
     fn test_convert_amqp_value_into_message() {
         let value = AmqpValue(vec![1, 2, 3, 4]);
         let message = Message::from(value);
-        assert!(matches!(message.body, Body::Value(_)));
         let buf = to_vec(&Serializable(message)).unwrap();
         assert_eq!(buf[2], 0x77);
     }
 
     #[test]
     fn test_serialize_deserialize_null() {
-        let body = Serializable(AmqpValue(Value::Null));
+        let body = AmqpValue(Value::Null);
         let buf = to_vec(&body).unwrap();
         println!("{:#x?}", buf);
 
-        let body2: Deserializable<AmqpValue<Value>> = from_slice(&buf).unwrap();
+        let body2: AmqpValue<Value> = from_slice(&buf).unwrap();
         println!("{:?}", body2.0)
     }
 
@@ -617,21 +693,21 @@ mod tests {
         let data = b"amqp".to_vec();
         let data = Data(ByteBuf::from(data));
         let body = Body::<Value>::Data(data);
-        let serialized = to_vec(&Serializable(body)).unwrap();
+        let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Deserializable<Body<Value>> = from_slice(&serialized).unwrap();
+        let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
         let body = Body::Sequence(AmqpSequence(vec![Value::Bool(true)]));
-        let serialized = to_vec(&Serializable(body)).unwrap();
+        let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Deserializable<Body<Value>> = from_slice(&serialized).unwrap();
+        let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
         let body = Body::Value(AmqpValue(Value::Bool(true)));
-        let serialized = to_vec(&Serializable(body)).unwrap();
+        let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Deserializable<Body<Value>> = from_slice(&serialized).unwrap();
+        let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
     }
 
