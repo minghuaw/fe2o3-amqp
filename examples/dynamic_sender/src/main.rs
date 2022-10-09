@@ -6,7 +6,7 @@ async fn main() {
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-    let mut sender = Sender::builder()
+    let sender = Sender::builder()
         .name("dynamic-sender")
         .target(Target::builder().dynamic(true).build())
         .attach(&mut session)
