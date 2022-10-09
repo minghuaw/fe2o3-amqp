@@ -1,6 +1,6 @@
 //! Implementation of Message as defined in AMQP 1.0 protocol Part 3.2
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, io};
 
 use serde::{
     de::{self},
@@ -27,6 +27,35 @@ pub mod __private {
     pub struct Deserializable<T>(pub T);
 }
 use __private::{Deserializable, Serializable};
+
+
+/// Determines how a `Message<T>` should be docoded.
+///
+/// This is a byproduct of the workaround chosen for #49.
+///
+/// Why not `tokio_util::Decoder`
+///
+/// 1. avoid confusion
+/// 2. The decoder type `T` itself is also the returned type
+pub trait DecodeIntoMessage: Sized {
+    /// Error type associated with decoding
+    type DecodeError;
+
+    /// Decode reader into [`Message<T>`]
+    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError>;
+}
+
+impl<T> DecodeIntoMessage for T
+where
+    T: FromDeserializableBody, // TODO: change to higher rank trait bound once GAT stablises
+{
+    type DecodeError = serde_amqp::Error;
+
+    fn decode_into_message(reader: impl io::Read) -> Result<Message<Self>, Self::DecodeError> {
+        let message: Deserializable<Message<T>> = serde_amqp::from_reader(reader)?;
+        Ok(message.0)
+    }
+}
 
 /// AMQP 1.0 Message
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
