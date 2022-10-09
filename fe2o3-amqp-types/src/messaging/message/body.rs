@@ -4,7 +4,7 @@ use serde::{
     de::{self, VariantAccess},
     ser, Serialize,
 };
-use serde_amqp::Value;
+use serde_amqp::{Value, primitives::Binary};
 
 use crate::messaging::{
     sealed::Sealed, AmqpSequence, AmqpValue, Data, DeserializableBody, FromDeserializableBody,
@@ -64,6 +64,60 @@ impl<T> Body<T> {
     /// Whether the body section is `Nothing`
     pub fn is_empty(&self) -> bool {
         matches!(self, Body::Empty)
+    }
+
+    /// Consume the delivery into the body if the body is an [`AmqpValue`].
+    /// An error will be returned if otherwise
+    pub fn try_into_value(self) -> Result<T, Self> {
+        match self {
+            Body::Value(AmqpValue(value)) => Ok(value),
+            _ => Err(self)
+        }
+    }
+
+    /// Consume the delivery into the body if the body is one or more [`Data`].
+    /// An error will be returned if otherwise
+    pub fn try_into_data(self) -> Result<impl Iterator<Item = Binary>, Self> {
+        match self {
+            Body::Data(batch) => Ok(batch.into_iter().map(|data| data.0)),
+            _ => Err(self)
+        }
+    }
+
+    /// Consume the delivery into the body if the body is one or more [`AmqpSequence`].
+    /// An error will be returned if otherwise
+    pub fn try_into_sequence(self) -> Result<impl Iterator<Item = Vec<T>>, Self> {
+        match self {
+            Body::Sequence(batch) => Ok(batch.into_iter().map(|seq| seq.0)),
+            _ => Err(self)
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is an [`AmqpValue`].
+    /// An error will be returned if the body isnot an [`AmqpValue`]
+    pub fn try_as_value(&self) -> Result<&T, &Self> {
+        match self {
+            Body::Value(AmqpValue(value)) => Ok(value),
+            _ => Err(self)
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is one or more [`Data`].
+    /// An error will be returned otherwise
+    pub fn try_as_data(&self) -> Result<impl Iterator<Item = &Binary>, &Self> {
+        match self {
+            Body::Data(batch) => Ok(batch.iter().map(|data| &data.0)),
+            _ => Err(self)
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is one or more [`AmqpSequence`].
+    /// An error will be returned otherwise
+    pub fn try_as_sequence(&self) -> Result<impl Iterator<Item = &Vec<T>>, &Self> {
+        match self {
+            Body::Sequence(batch) => Ok(batch.iter().map(|seq| &seq.0)),
+            _ => Err(self)
+        }
     }
 }
 
