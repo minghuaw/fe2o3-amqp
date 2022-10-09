@@ -16,13 +16,30 @@ use self::__private::BodySection;
 use super::AmqpValue;
 
 pub(crate) mod __private {
-    /// Marker trait for message body. This is only implemented for 
+    /// Marker trait for message body.
+    ///
+    /// This is only implemented for
+    ///
+    /// 1. [`Body`]
+    /// 2. [`AmqpValue`]
+    /// 3. [`AmqpSequnce`]
+    /// 4. [`Data`]
+    /// 5. [`Batch<AmqpSequence>`]
+    /// 6. [`Batch<Data>`]
     pub trait BodySection {}
 }
 
-
-/// Marker trait for a serializable body section
-pub trait SerializableBody: Serialize + BodySection { }
+/// Marker trait for a serializable body section.
+///
+/// This is only implemented for
+///
+/// 1. [`Body`]
+/// 2. [`AmqpValue`]
+/// 3. [`AmqpSequnce`]
+/// 4. [`Data`]
+/// 5. [`Batch<AmqpSequence>`]
+/// 6. [`Batch<Data>`]
+pub trait SerializableBody: Serialize + BodySection {}
 
 /// How to interprerte an emtpy body
 pub trait FromEmptyBody: Sized {
@@ -36,6 +53,15 @@ pub trait FromEmptyBody: Sized {
 }
 
 /// Trait for a deserializable body section
+/// 
+/// This is only implemented for
+///
+/// 1. [`Body`]
+/// 2. [`AmqpValue`]
+/// 3. [`AmqpSequnce`]
+/// 4. [`Data`]
+/// 5. [`Batch<AmqpSequence>`]
+/// 6. [`Batch<Data>`]
 pub trait DeserializableBody: BodySection {
     /// The deserializable type
     ///
@@ -54,7 +80,6 @@ pub trait DeserializableBody: BodySection {
 /// 4. [`Body`]
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
-/// 7. [`Option<T>`] where `T` implements `SerializableBody`
 pub trait IntoSerializableBody {
     /// Serializable
     type SerializableBody: SerializableBody;
