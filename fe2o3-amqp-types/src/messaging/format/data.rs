@@ -82,7 +82,7 @@ impl<'de> DeserializableBody<'de> for Data {}
 impl IntoSerializableBody for Data {
     type SerializableBody = Self;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         self
     }
 }
@@ -90,7 +90,7 @@ impl IntoSerializableBody for Data {
 impl<'de> FromDeserializableBody<'de> for Data {
     type DeserializableBody = Data;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
     }
 }
@@ -112,7 +112,7 @@ impl<'de> DeserializableBody<'de> for Batch<Data> {}
 impl IntoSerializableBody for Batch<Data> {
     type SerializableBody = Self;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         self
     }
 }
@@ -120,7 +120,7 @@ impl IntoSerializableBody for Batch<Data> {
 impl<'de> FromDeserializableBody<'de> for Batch<Data> {
     type DeserializableBody = Batch<Data>;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
     }
 }

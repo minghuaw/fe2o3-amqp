@@ -16,7 +16,7 @@ pub enum ControlMessageBody {
 impl IntoSerializableBody for ControlMessageBody {
     type SerializableBody = AmqpValue<Self>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -28,7 +28,7 @@ impl FromEmptyBody for ControlMessageBody {
 impl FromDeserializableBody for ControlMessageBody {
     type DeserializableBody = AmqpValue<Self>;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable.0
     }
 }

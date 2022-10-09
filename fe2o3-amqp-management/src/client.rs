@@ -132,7 +132,7 @@ impl MgmtClient {
     ) -> Result<Outcome, SendError> {
         let mut message = operation
             .into_message()
-            .map_body(IntoSerializableBody::into_serializable_body);
+            .map_body(IntoSerializableBody::into_body);
 
         let application_properties = message
             .application_properties
@@ -159,7 +159,7 @@ impl MgmtClient {
     where
         O: MessageDeserializer<T>,
         O::Error: Into<Error>,
-        T: FromDeserializableBody + std::fmt::Debug + Send,
+        for<'de> T: FromDeserializableBody<'de> + std::fmt::Debug + Send,
     {
         let delivery: Delivery<T> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;

@@ -334,7 +334,7 @@ where
                 Field::Body => {
                     let deserializable: Option<B::DeserializableBody> = seq.next_element()?;
                     body =
-                        deserializable.map(<B as FromDeserializableBody>::from_deserializable_body);
+                        deserializable.map(<B as FromDeserializableBody>::from_body);
                     count += 1;
                 }
                 Field::Footer => {
@@ -406,7 +406,7 @@ where
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body: value.into_serializable_body(),
+            body: value.into_body(),
             footer: None,
         }
     }
@@ -423,7 +423,7 @@ where
     for<'de> T: FromDeserializableBody<'de, DeserializableBody = B>,
 {
     fn from_message(message: Message<B>) -> Self {
-        Self::from_deserializable_body(message.body)
+        Self::from_body(message.body)
     }
 }
 

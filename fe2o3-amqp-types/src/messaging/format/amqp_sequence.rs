@@ -62,7 +62,7 @@ where
 {
     type SerializableBody = Self;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         self
     }
 }
@@ -73,7 +73,7 @@ where
 {
     type DeserializableBody = Self;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
     }
 }
@@ -98,7 +98,7 @@ where
 {
     type SerializableBody = Self;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         self
     }
 }
@@ -109,7 +109,7 @@ where
 {
     type DeserializableBody = Self;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable
     }
 }

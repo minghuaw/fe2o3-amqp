@@ -77,10 +77,10 @@ pub trait IntoSerializableBody {
     type SerializableBody: SerializableBody;
 
     /// Convert to a `SerializbleBody`
-    fn into_serializable_body(self) -> Self::SerializableBody;
+    fn into_body(self) -> Self::SerializableBody;
 }
 
-/// Convert back to the type from a `DeserializableBody` which inclused:
+/// Convert back to the type from a `DeserializableBody` which includes:
 ///
 /// 1. [`AmqpValue`]
 /// 2. [`AmqpSequence`]
@@ -88,13 +88,12 @@ pub trait IntoSerializableBody {
 /// 4. [`Body`]
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
-/// 7. [`Option<T>`] where `T` implements `DeserializableBody`
 pub trait FromDeserializableBody<'de>: Sized + FromEmptyBody {
     /// Deserializable body
     type DeserializableBody: DeserializableBody<'de>;
 
     /// Convert back to the type from a `DeserializableBody`
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self;
+    fn from_body(deserializable: Self::DeserializableBody) -> Self;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -109,8 +108,8 @@ where
 {
     type DeserializableBody = T::DeserializableBody;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
-        Some(T::from_deserializable_body(deserializable))
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
+        Some(T::from_body(deserializable))
     }
 }
 
@@ -129,7 +128,7 @@ impl<T> FromEmptyBody for Option<T> {
 impl IntoSerializableBody for Value {
     type SerializableBody = AmqpValue<Value>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -137,7 +136,7 @@ impl IntoSerializableBody for Value {
 impl<'de> FromDeserializableBody<'de> for Value {
     type DeserializableBody = AmqpValue<Value>;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable.0
     }
 }
@@ -170,7 +169,7 @@ macro_rules! impl_into_serializable_body {
         impl<$($generics: $bound),*> IntoSerializableBody for $type<$($generics),*> {
             type SerializableBody = AmqpValue<Self>;
 
-            fn into_serializable_body(self) -> Self::SerializableBody {
+            fn into_body(self) -> Self::SerializableBody {
                 AmqpValue(self)
             }
         }
@@ -180,7 +179,7 @@ macro_rules! impl_into_serializable_body {
         impl IntoSerializableBody for $type {
             type SerializableBody = AmqpValue<Self>;
 
-            fn into_serializable_body(self) -> Self::SerializableBody {
+            fn into_body(self) -> Self::SerializableBody {
                 AmqpValue(self)
             }
         }
@@ -201,7 +200,7 @@ impl_into_serializable_body!(AmqpValue, T:ser::Serialize; Array);
 impl<'a> IntoSerializableBody for &'a str {
     type SerializableBody = AmqpValue<&'a str>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -209,7 +208,7 @@ impl<'a> IntoSerializableBody for &'a str {
 impl<'a> IntoSerializableBody for Cow<'a, str> {
     type SerializableBody = AmqpValue<Self>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -217,7 +216,7 @@ impl<'a> IntoSerializableBody for Cow<'a, str> {
 impl<'a> IntoSerializableBody for SymbolRef<'a> {
     type SerializableBody = AmqpValue<Self>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -229,7 +228,7 @@ where
 {
     type SerializableBody = AmqpValue<Self>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -241,7 +240,7 @@ where
 {
     type SerializableBody = AmqpValue<Self>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
@@ -253,14 +252,14 @@ where
 {
     type SerializableBody = AmqpValue<Self>;
 
-    fn into_serializable_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::SerializableBody {
         AmqpValue(self)
     }
 }
 
 /* ------------------------- FromDeserializableBody ------------------------- */
 
-macro_rules! impl_from_empty_body {
+macro_rules! blanket_impl_from_empty_body {
     ($($generics:ident),*; $type:tt) => {
         // Blanket impl simply returns an error
         impl<$($generics),*> FromEmptyBody for $type<$($generics),*>  {
@@ -292,24 +291,24 @@ macro_rules! impl_from_deserializable_or_empty_body {
         {
             type DeserializableBody = AmqpValue<Self>;
 
-            fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+            fn from_body(deserializable: Self::DeserializableBody) -> Self {
                 deserializable.0
             }
         }
 
-        impl_from_empty_body!($($generics),*; $type);
+        blanket_impl_from_empty_body!($($generics),*; $type);
     };
 
     (AmqpValue, $type:ty) => {
         impl<'de> FromDeserializableBody<'de> for $type {
             type DeserializableBody = AmqpValue<Self>;
 
-            fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+            fn from_body(deserializable: Self::DeserializableBody) -> Self {
                 deserializable.0
             }
         }
 
-        impl_from_empty_body!($type);
+        blanket_impl_from_empty_body!($type);
     };
 }
 
@@ -324,7 +323,7 @@ impl_from_deserializable_or_empty_body! {
 impl_from_deserializable_or_empty_body!(AmqpValue, T:Deserialize<'de>; Vec);
 impl_from_deserializable_or_empty_body!(AmqpValue, T:Deserialize<'de>; Array);
 
-impl_from_empty_body!(K, V; OrderedMap);
+blanket_impl_from_empty_body!(K, V; OrderedMap);
 impl<'de, K, V> FromDeserializableBody<'de> for OrderedMap<K, V>
 where
     K: de::Deserialize<'de> + std::hash::Hash + Eq,
@@ -332,12 +331,12 @@ where
 {
     type DeserializableBody = AmqpValue<Self>;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable.0
     }
 }
 
-impl_from_empty_body!(K, V; HashMap);
+blanket_impl_from_empty_body!(K, V; HashMap);
 impl<'de, K, V> FromDeserializableBody<'de> for HashMap<K, V>
 where
     K: de::Deserialize<'de> + std::hash::Hash + Eq,
@@ -345,12 +344,12 @@ where
 {
     type DeserializableBody = AmqpValue<Self>;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable.0
     }
 }
 
-impl_from_empty_body!(K, V; BTreeMap);
+blanket_impl_from_empty_body!(K, V; BTreeMap);
 impl<'de, K, V> FromDeserializableBody<'de> for BTreeMap<K, V>
 where
     K: de::Deserialize<'de> + Ord,
@@ -358,7 +357,7 @@ where
 {
     type DeserializableBody = AmqpValue<Self>;
 
-    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::DeserializableBody) -> Self {
         deserializable.0
     }
 }

@@ -75,7 +75,7 @@ impl<R> Response<R> {
 
 pub trait MessageDeserializer<T>: Sized
 where
-    T: FromDeserializableBody,
+    for<'de> T: FromDeserializableBody<'de>,
 {
     type Error;
 
