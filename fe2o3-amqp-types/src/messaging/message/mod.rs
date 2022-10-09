@@ -17,7 +17,8 @@ use serde_amqp::extensions::TransparentVec;
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
-    MessageAnnotations, Properties, BodySection, SerializableBody, DeserializableBody, Batch
+    MessageAnnotations, Properties, BodySection, SerializableBody, DeserializableBody, Batch,
+    IntoSerializableBody, FromDeserializableBody
 };
 
 mod body;
@@ -89,7 +90,7 @@ pub struct Message<B> {
     pub footer: Option<Footer>,
 }
 
-impl<B> Serialize for Serializable<Message<B>> where B: BodySection {
+impl<B> Serialize for Serializable<Message<B>> where B: SerializableBody {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -98,7 +99,7 @@ impl<B> Serialize for Serializable<Message<B>> where B: BodySection {
     }
 }
 
-impl<B: BodySection> Serialize for Serializable<&Message<B>> {
+impl<B> Serialize for Serializable<&Message<B>> where B: SerializableBody {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -107,7 +108,7 @@ impl<B: BodySection> Serialize for Serializable<&Message<B>> {
     }
 }
 
-impl<'de, B: BodySection> de::Deserialize<'de> for Deserializable<Message<B>>
+impl<'de, B: FromDeserializableBody> de::Deserialize<'de> for Deserializable<Message<B>>
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -266,7 +267,7 @@ struct Visitor<B> {
 
 impl<'de, B> de::Visitor<'de> for Visitor<B>
 where
-    B: DeserializableBody,
+    B: FromDeserializableBody,
 {
     type Value = Message<B>;
 
@@ -316,8 +317,9 @@ where
                     count += 1;
                 }
                 Field::Body => {
-                    let deserializable: Option<B::Deserializable> = seq.next_element()?;
-                    body = deserializable.map(B::from_deserializable);
+                    let deserializable: Option<<B::DeserializableBody as DeserializableBody>::Deserializable> = seq.next_element()?;
+                    body = deserializable.map(<B::DeserializableBody as DeserializableBody>::from_deserializable)
+                        .map(<B as FromDeserializableBody>::from_deserializable_body);
                     count += 1;
                 },
                 Field::Footer => {
@@ -327,13 +329,18 @@ where
             }
         }
 
+        let body = match body {
+            Some(body) => body,
+            None => B::from_empty_body()?
+        };
+
         Ok(Message {
             header,
             delivery_annotations,
             message_annotations,
             properties,
             application_properties,
-            body: body.ok_or(de::Error::custom("An empty body section is found. Consider use Message<Option<B>> or Message<Body<Value>> instead"))?,
+            body,
             footer,
         })
     }
@@ -342,7 +349,7 @@ where
 // impl<'de, T> de::Deserialize<'de> for Message<T>
 impl<'de, B> Message<B>
 where
-    B: DeserializableBody,
+    B: FromDeserializableBody,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
@@ -373,23 +380,9 @@ where
     }
 }
 
-impl<U> From<Body<U>> for Message<Body<U>>{
-    fn from(value: Body<U>) -> Self {
-        Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: value.into(),
-            footer: None,
-        }
-    }
-}
-
-impl<T, U> From<T> for Message<AmqpValue<U>>
+impl<T, U> From<T> for Message<U> 
 where
-    T: Into<AmqpValue<U>>,
+    T: IntoSerializableBody<SerializableBody = U>,
 {
     fn from(value: T) -> Self {
         Message {
@@ -398,74 +391,24 @@ where
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body: value.into(),
+            body: value.into_serializable_body(),
             footer: None,
         }
     }
 }
 
-impl From<Data> for Message<Data> {
-    fn from(value: Data) -> Self {
-        Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: value.into(),
-            footer: None,
-        }
-    }
+/// Convert from message
+pub trait FromMessage<B> {
+    /// Convert from message
+    fn from_message(message: Message<B>) -> Self;
 }
 
-impl<T> From<T> for Message<Batch<Data>> 
+impl<T, B> FromMessage<B> for T
 where
-    T: Into<Batch<Data>>,
+    T: FromDeserializableBody<DeserializableBody = B> 
 {
-    fn from(value: T) -> Self {
-        Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: value.into(),
-            footer: None,
-        }
-    }
-}
-
-impl<T, U> From<T> for Message<AmqpSequence<U>>
-where
-    T: Into<AmqpSequence<U>>,
-{
-    fn from(value: T) -> Self {
-        Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: value.into(),
-            footer: None,
-        }
-    }
-}
-
-impl<T, U> From<T> for Message<Batch<AmqpSequence<U>>> 
-where
-    T: Into<Batch<AmqpSequence<U>>>,
-{
-    fn from(value: T) -> Self {
-        Message {
-            header: None,
-            delivery_annotations: None,
-            message_annotations: None,
-            properties: None,
-            application_properties: None,
-            body: value.into(),
-            footer: None,
-        }
+    fn from_message(message: Message<B>) -> Self {
+        Self::from_deserializable_body(message.body)
     }
 }
 
