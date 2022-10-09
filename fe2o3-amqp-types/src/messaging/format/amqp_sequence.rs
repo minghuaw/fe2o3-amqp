@@ -5,8 +5,8 @@ use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::{messaging::{
     Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
-    IntoSerializableBody, SerializableBody, BodySection,
-}, __sealed::Sealed};
+    IntoSerializableBody, SerializableBody, __private::BodySection
+}};
 
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
@@ -50,13 +50,7 @@ where
 /*                                AmqpSequence                                */
 /* -------------------------------------------------------------------------- */
 
-impl<T> Sealed for AmqpSequence<T> {}
-
 impl<T> BodySection for AmqpSequence<T> {}
-
-impl<'se, T> Sealed for &'se AmqpSequence<T> {}
-
-impl<'se, T> BodySection for &'se AmqpSequence<T> {}
 
 impl<T> SerializableBody for AmqpSequence<T> where T: Serialize {}
 
@@ -101,8 +95,6 @@ impl<T> FromEmptyBody for AmqpSequence<T> {
 /*                             Batch<AmqpSequece>                             */
 /* -------------------------------------------------------------------------- */
 
-impl<T> Sealed for Batch<AmqpSequence<T>> {}
-
 impl<T> BodySection for Batch<AmqpSequence<T>> {}
 
 impl<T> SerializableBody for Batch<AmqpSequence<T>> where T: Serialize {}
@@ -143,7 +135,3 @@ where
 impl<T> FromEmptyBody for Batch<AmqpSequence<T>> {
     type Error = serde_amqp::Error;
 }
-
-impl<'se, T> Sealed for Batch<&'se AmqpSequence<T>> {}
-
-impl<'se, T> BodySection for Batch<&'se AmqpSequence<T>> {}

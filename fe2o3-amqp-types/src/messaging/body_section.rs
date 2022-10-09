@@ -11,12 +11,15 @@ use serde_amqp::{
     Value,
 };
 
-use crate::__sealed::Sealed;
+use self::__private::BodySection;
 
 use super::AmqpValue;
 
-/// Marker trait for message body
-pub trait BodySection: Sealed {}
+pub(crate) mod __private {
+    /// Marker trait for message body. This is only implemented for 
+    pub trait BodySection {}
+}
+
 
 /// Marker trait for a serializable body section
 pub trait SerializableBody: Serialize + BodySection { }

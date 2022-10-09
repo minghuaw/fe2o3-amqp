@@ -111,8 +111,3 @@ pub mod states;
 #[cfg_attr(docsrs, doc(cfg(feature = "transaction")))]
 #[cfg(feature = "transaction")]
 pub mod transaction;
-
-pub(crate) mod __sealed {
-    /// A private trait to limit implementation within this crate
-    pub trait Sealed {}
-}

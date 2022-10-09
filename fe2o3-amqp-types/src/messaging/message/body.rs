@@ -7,10 +7,9 @@ use serde::{
 use serde_amqp::{primitives::Binary, Value};
 
 use crate::{
-    __sealed::Sealed,
     messaging::{
-        AmqpSequence, AmqpValue, BodySection, Data, DeserializableBody, FromDeserializableBody,
-        FromEmptyBody, IntoSerializableBody, SerializableBody,
+        AmqpSequence, AmqpValue, Data, DeserializableBody, FromDeserializableBody,
+        FromEmptyBody, IntoSerializableBody, SerializableBody, __private::BodySection,
     },
 };
 
@@ -287,13 +286,7 @@ where
     }
 }
 
-impl<T> Sealed for Body<T> {}
-
 impl<T> BodySection for Body<T> {}
-
-impl<'se, T> Sealed for &'se Body<T> {}
-
-impl<'se, T> BodySection for &'se Body<T> {}
 
 impl<T> SerializableBody for Body<T> where T: ser::Serialize {}
 
