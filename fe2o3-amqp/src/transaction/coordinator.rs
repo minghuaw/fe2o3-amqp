@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use fe2o3_amqp_types::{
     definitions::{self, AmqpError, LinkError},
-    messaging::{Accepted, Body, DeliveryState, Rejected},
+    messaging::{Accepted, DeliveryState, Rejected},
     performatives::Attach,
     transaction::{
         Coordinator, Declare, Declared, Discharge, TransactionError, TransactionId, TxnCapability,
@@ -147,23 +147,7 @@ impl TxnCoordinator {
 
     #[instrument(skip(self, delivery))]
     async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
-        let body = match delivery.body() {
-            Body::Value(v) => &v.0,
-            _ => {
-                // Message Decode Error?
-                let error = definitions::Error::new(
-                    AmqpError::DecodeError,
-                    "The coordinator is only expecting Declare or Discharge frames".to_string(),
-                    None,
-                );
-                tracing::error!(?error);
-                // TODO: detach instead of closing
-                let _ = self.inner.close_with_error(Some(error)).await;
-                return Running::Stop;
-            }
-        };
-
-        let result = match body {
+        let result = match delivery.body() {
             ControlMessageBody::Declare(declare) => self
                 .on_declare(declare)
                 .await

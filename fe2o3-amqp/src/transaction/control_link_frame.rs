@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::transaction::{Declare, Discharge};
+use fe2o3_amqp_types::{transaction::{Declare, Discharge}, messaging::{IntoSerializableBody, AmqpValue, FromDeserializableBody, FromEmptyBody}};
 use serde::{
     de::{self, VariantAccess},
     ser,
@@ -8,6 +8,26 @@ use serde::{
 pub enum ControlMessageBody {
     Declare(Declare),
     Discharge(Discharge),
+}
+
+impl IntoSerializableBody for ControlMessageBody {
+    type SerializableBody = AmqpValue<Self>;
+
+    fn into_serializable_body(self) -> Self::SerializableBody {
+        AmqpValue(self)
+    }
+}
+
+impl FromEmptyBody for ControlMessageBody {
+    type Error = serde_amqp::Error;
+}
+
+impl FromDeserializableBody for ControlMessageBody {
+    type DeserializableBody = AmqpValue<Self>;
+
+    fn from_deserializable_body(deserializable: Self::DeserializableBody) -> Self {
+        deserializable.0
+    }
 }
 
 impl ser::Serialize for ControlMessageBody {
