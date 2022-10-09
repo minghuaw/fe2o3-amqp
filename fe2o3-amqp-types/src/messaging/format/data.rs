@@ -2,10 +2,10 @@ use std::{borrow::Cow, fmt::Display};
 
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
-use crate::{messaging::{
-    Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
-    IntoSerializableBody, SerializableBody, __private::BodySection,
-}};
+use crate::messaging::{
+    Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody, IntoSerializableBody,
+    SerializableBody, __private::BodySection,
+};
 
 /// 3.2.6 Data
 /// <type name="data" class="restricted" source="binary" provides="section">
@@ -77,9 +77,7 @@ impl BodySection for Data {}
 
 impl SerializableBody for Data {}
 
-impl<'de> DeserializableBody<'de> for Data {
-
-}
+impl<'de> DeserializableBody<'de> for Data {}
 
 impl IntoSerializableBody for Data {
     type SerializableBody = Self;
@@ -109,8 +107,7 @@ impl BodySection for Batch<Data> {}
 
 impl SerializableBody for Batch<Data> {}
 
-impl<'de> DeserializableBody<'de> for Batch<Data> {
-}
+impl<'de> DeserializableBody<'de> for Batch<Data> {}
 
 impl IntoSerializableBody for Batch<Data> {
     type SerializableBody = Self;

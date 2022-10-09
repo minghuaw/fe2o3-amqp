@@ -53,7 +53,7 @@ pub trait FromEmptyBody: Sized {
 }
 
 /// Trait for a deserializable body section
-/// 
+///
 /// This is only implemented for
 ///
 /// 1. [`Body`]

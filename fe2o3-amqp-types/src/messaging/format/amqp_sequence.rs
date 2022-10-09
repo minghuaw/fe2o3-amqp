@@ -3,10 +3,10 @@ use std::fmt::Display;
 use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
-use crate::{messaging::{
-    Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody,
-    IntoSerializableBody, SerializableBody, __private::BodySection
-}};
+use crate::messaging::{
+    Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody, IntoSerializableBody,
+    SerializableBody, __private::BodySection,
+};
 
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
@@ -54,10 +54,7 @@ impl<T> BodySection for AmqpSequence<T> {}
 
 impl<T> SerializableBody for AmqpSequence<T> where T: Serialize {}
 
-impl<'de, T> DeserializableBody<'de> for AmqpSequence<T>
-where
-    T: de::Deserialize<'de>,
-{}
+impl<'de, T> DeserializableBody<'de> for AmqpSequence<T> where T: de::Deserialize<'de> {}
 
 impl<T> IntoSerializableBody for AmqpSequence<T>
 where
@@ -93,10 +90,7 @@ impl<T> BodySection for Batch<AmqpSequence<T>> {}
 
 impl<T> SerializableBody for Batch<AmqpSequence<T>> where T: Serialize {}
 
-impl<'de, T> DeserializableBody<'de> for Batch<AmqpSequence<T>>
-where
-    T: de::Deserialize<'de>,
-{}
+impl<'de, T> DeserializableBody<'de> for Batch<AmqpSequence<T>> where T: de::Deserialize<'de> {}
 
 impl<T> IntoSerializableBody for Batch<AmqpSequence<T>>
 where
