@@ -205,7 +205,7 @@ where
         if let Some(application_properties) = &self.application_properties {
             state.serialize_field("application_properties", application_properties)?
         }
-        state.serialize_field("body", self.body.serializable())?;
+        state.serialize_field("body", &self.body)?;
         if let Some(footer) = &self.footer {
             state.serialize_field("footer", footer)?;
         }

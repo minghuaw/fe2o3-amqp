@@ -3,7 +3,7 @@ use std::{
     collections::{BTreeMap, HashMap},
 };
 
-use serde::{de, ser, Deserialize};
+use serde::{de, ser, Deserialize, Serialize};
 use serde_amqp::{
     primitives::{
         Array, Binary, Dec128, Dec32, Dec64, OrderedMap, Symbol, SymbolRef, Timestamp, Uuid,
@@ -18,14 +18,8 @@ use super::AmqpValue;
 /// Marker trait for message body
 pub trait BodySection: Sealed {}
 
-/// Trait for a serializable body section
-pub trait SerializableBody: BodySection {
-    /// The serializable type
-    type Serializable: ser::Serialize;
-
-    /// Get a reference to the serializable type
-    fn serializable(&self) -> &Self::Serializable;
-}
+/// Marker trait for a serializable body section
+pub trait SerializableBody: Serialize + BodySection { }
 
 /// How to interprerte an emtpy body
 pub trait FromEmptyBody: Sized {

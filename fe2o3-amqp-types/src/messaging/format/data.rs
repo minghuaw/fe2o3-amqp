@@ -77,13 +77,7 @@ impl Sealed for Data {}
 
 impl BodySection for Data {}
 
-impl SerializableBody for Data {
-    type Serializable = Self;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
+impl SerializableBody for Data {}
 
 impl DeserializableBody for Data {
     type Deserializable = Self;
@@ -129,13 +123,7 @@ impl Sealed for Batch<Data> {}
 
 impl BodySection for Batch<Data> {}
 
-impl SerializableBody for Batch<Data> {
-    type Serializable = Self;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
+impl SerializableBody for Batch<Data> {}
 
 impl DeserializableBody for Batch<Data> {
     type Deserializable = Self;

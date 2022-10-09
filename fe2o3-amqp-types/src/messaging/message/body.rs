@@ -4,12 +4,15 @@ use serde::{
     de::{self, VariantAccess},
     ser, Serialize,
 };
-use serde_amqp::{Value, primitives::Binary};
+use serde_amqp::{primitives::Binary, Value};
 
-use crate::{messaging::{
-    AmqpSequence, AmqpValue, Data, DeserializableBody, FromDeserializableBody,
-    FromEmptyBody, IntoSerializableBody, SerializableBody, BodySection,
-}, __sealed::Sealed};
+use crate::{
+    __sealed::Sealed,
+    messaging::{
+        AmqpSequence, AmqpValue, BodySection, Data, DeserializableBody, FromDeserializableBody,
+        FromEmptyBody, IntoSerializableBody, SerializableBody,
+    },
+};
 
 use serde_amqp::extensions::TransparentVec;
 
@@ -71,7 +74,7 @@ impl<T> Body<T> {
     pub fn try_into_value(self) -> Result<T, Self> {
         match self {
             Body::Value(AmqpValue(value)) => Ok(value),
-            _ => Err(self)
+            _ => Err(self),
         }
     }
 
@@ -80,7 +83,7 @@ impl<T> Body<T> {
     pub fn try_into_data(self) -> Result<impl Iterator<Item = Binary>, Self> {
         match self {
             Body::Data(batch) => Ok(batch.into_iter().map(|data| data.0)),
-            _ => Err(self)
+            _ => Err(self),
         }
     }
 
@@ -89,7 +92,7 @@ impl<T> Body<T> {
     pub fn try_into_sequence(self) -> Result<impl Iterator<Item = Vec<T>>, Self> {
         match self {
             Body::Sequence(batch) => Ok(batch.into_iter().map(|seq| seq.0)),
-            _ => Err(self)
+            _ => Err(self),
         }
     }
 
@@ -98,7 +101,7 @@ impl<T> Body<T> {
     pub fn try_as_value(&self) -> Result<&T, &Self> {
         match self {
             Body::Value(AmqpValue(value)) => Ok(value),
-            _ => Err(self)
+            _ => Err(self),
         }
     }
 
@@ -107,7 +110,7 @@ impl<T> Body<T> {
     pub fn try_as_data(&self) -> Result<impl Iterator<Item = &Binary>, &Self> {
         match self {
             Body::Data(batch) => Ok(batch.iter().map(|data| &data.0)),
-            _ => Err(self)
+            _ => Err(self),
         }
     }
 
@@ -116,7 +119,7 @@ impl<T> Body<T> {
     pub fn try_as_sequence(&self) -> Result<impl Iterator<Item = &Vec<T>>, &Self> {
         match self {
             Body::Sequence(batch) => Ok(batch.iter().map(|seq| &seq.0)),
-            _ => Err(self)
+            _ => Err(self),
         }
     }
 }
@@ -292,16 +295,7 @@ impl<'se, T> Sealed for &'se Body<T> {}
 
 impl<'se, T> BodySection for &'se Body<T> {}
 
-impl<T> SerializableBody for Body<T>
-where
-    T: ser::Serialize,
-{
-    type Serializable = Self;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
+impl<T> SerializableBody for Body<T> where T: ser::Serialize {}
 
 impl<T> DeserializableBody for Body<T>
 where

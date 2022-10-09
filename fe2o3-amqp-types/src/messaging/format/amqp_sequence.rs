@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use serde::{de, ser};
+use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::{messaging::{
@@ -58,16 +58,7 @@ impl<'se, T> Sealed for &'se AmqpSequence<T> {}
 
 impl<'se, T> BodySection for &'se AmqpSequence<T> {}
 
-impl<T> SerializableBody for AmqpSequence<T>
-where
-    T: ser::Serialize,
-{
-    type Serializable = Self;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
+impl<T> SerializableBody for AmqpSequence<T> where T: Serialize {}
 
 impl<T> DeserializableBody for AmqpSequence<T>
 where
@@ -114,16 +105,7 @@ impl<T> Sealed for Batch<AmqpSequence<T>> {}
 
 impl<T> BodySection for Batch<AmqpSequence<T>> {}
 
-impl<T> SerializableBody for Batch<AmqpSequence<T>>
-where
-    T: ser::Serialize,
-{
-    type Serializable = Self;
-
-    fn serializable(&self) -> &Self::Serializable {
-        self
-    }
-}
+impl<T> SerializableBody for Batch<AmqpSequence<T>> where T: Serialize {}
 
 impl<T> DeserializableBody for Batch<AmqpSequence<T>>
 where
