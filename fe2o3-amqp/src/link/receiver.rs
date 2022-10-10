@@ -205,6 +205,7 @@ impl Receiver {
     /// section types, including an empty body, and `Value` covers all possible AMQP 1.0 types.
     /// 
     /// ```rust
+    /// // `Body<Value>` covers all possibilities
     /// let delivery: Delivery<Body<Value>> = receiver.recv::<Body<Value>>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
