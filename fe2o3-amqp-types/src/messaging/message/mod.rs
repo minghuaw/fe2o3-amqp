@@ -11,8 +11,7 @@ use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations, Footer,
-    FromBody, Header, IntoBody, MessageAnnotations, Properties,
-    SerializableBody,
+    FromBody, Header, IntoBody, MessageAnnotations, Properties, SerializableBody,
 };
 
 mod body;
@@ -333,8 +332,7 @@ where
                 }
                 Field::Body => {
                     let deserializable: Option<B::Body> = seq.next_element()?;
-                    body =
-                        deserializable.map(<B as FromBody>::from_body);
+                    body = deserializable.map(<B as FromBody>::from_body);
                     count += 1;
                 }
                 Field::Footer => {

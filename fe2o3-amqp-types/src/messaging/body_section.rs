@@ -81,7 +81,7 @@ pub trait FromEmptyBody: Sized {
 
 ///
 pub trait TransposeOption<'de, To: FromBody<'de>>: BodySection + Sized {
-    /// 
+    ///
     type From: DeserializableBody<'de>;
 
     ///
@@ -175,7 +175,7 @@ pub trait FromBody<'de>: Sized + FromEmptyBody {
 
 // Option can only be used on deserializing becuase the user should be certain
 // on whether an empty body is going to be serialized
-impl<'de, T> FromBody<'de> for Option<T> 
+impl<'de, T> FromBody<'de> for Option<T>
 where
     T: FromBody<'de>,
     T::Body: TransposeOption<'de, T>,
@@ -451,7 +451,7 @@ mod tests {
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
-        AmqpValue, Body, Message,
+        Body, Message,
     };
 
     const TEST_STR: &str = "test_str";
@@ -490,7 +490,7 @@ mod tests {
     fn test_decoding_none_str() {
         let src = Message::builder()
             // This actually serializes to `AmpqValue(Value::Null)`
-            .body(Body::<Value>::Empty) 
+            .body(Body::<Value>::Empty)
             .build();
         let buf = to_vec(&Serializable(src)).unwrap();
         println!("{:#x?}", buf);

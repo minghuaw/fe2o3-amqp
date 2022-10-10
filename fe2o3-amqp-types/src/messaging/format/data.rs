@@ -3,8 +3,8 @@ use std::{borrow::Cow, fmt::Display};
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
 use crate::messaging::{
-    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, __private::BodySection,
+    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
+    TransposeOption, __private::BodySection,
 };
 
 /// 3.2.6 Data
@@ -69,6 +69,29 @@ impl Display for Data {
     }
 }
 
+impl<'de, T> TransposeOption<'de, T> for Data
+where
+    T: FromBody<'de, Body = Data>,
+{
+    type From = Option<Data>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Some(data) => {
+                if data.0.is_empty() {
+                    // Note that a null value and a zero-length array (with a correct type for its
+                    // elements) both describe an absence of a value and MUST be treated as
+                    // semantically identical.
+                    None
+                } else {
+                    Some(T::from_body(data))
+                }
+            }
+            None => None,
+        }
+    }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                    Data                                    */
 /* -------------------------------------------------------------------------- */
@@ -127,4 +150,24 @@ impl<'de> FromBody<'de> for Batch<Data> {
 
 impl FromEmptyBody for Batch<Data> {
     type Error = serde_amqp::Error;
+}
+
+impl<'de, T> TransposeOption<'de, T> for Batch<Data>
+where
+    T: FromBody<'de, Body = Batch<Data>>,
+{
+    type From = Option<Batch<Data>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Some(batch) => {
+                if batch.is_empty() {
+                    None
+                } else {
+                    Some(T::from_body(batch))
+                }
+            }
+            None => None,
+        }
+    }
 }

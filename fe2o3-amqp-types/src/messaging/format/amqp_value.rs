@@ -4,8 +4,8 @@ use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
-    DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, __private::BodySection, TransposeOption, Body
+    DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody, TransposeOption,
+    __private::BodySection,
 };
 
 /// 3.2.8 AMQP Value

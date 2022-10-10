@@ -7,8 +7,8 @@ use serde::{
 use serde_amqp::{primitives::Binary, Value};
 
 use crate::messaging::{
-    AmqpSequence, AmqpValue, Data, DeserializableBody, FromBody, FromEmptyBody,
-    IntoBody, SerializableBody, __private::BodySection, TransposeOption, Batch,
+    AmqpSequence, AmqpValue, Batch, Data, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
+    SerializableBody, TransposeOption, __private::BodySection,
 };
 
 use serde_amqp::extensions::TransparentVec;
@@ -320,7 +320,7 @@ impl<T> FromEmptyBody for Body<T> {
     }
 }
 
-impl<'de, T, U> TransposeOption<'de, T> for Body<U> 
+impl<'de, T, U> TransposeOption<'de, T> for Body<U>
 where
     T: FromBody<'de, Body = Body<U>>,
     U: de::Deserialize<'de>,
@@ -335,26 +335,35 @@ where
             },
             Body::Data(batch) => {
                 if batch.is_empty() {
+                    // Note that a null value and a zero-length array (with a correct type for its
+                    // elements) both describe an absence of a value and MUST be treated as
+                    // semantically identical.
                     None
                 } else {
                     Some(T::from_body(Body::Data(batch)))
                 }
-            },
+            }
             Body::Sequence(batch) => {
                 if batch.is_empty() {
+                    // Note that a null value and a zero-length array (with a correct type for its
+                    // elements) both describe an absence of a value and MUST be treated as
+                    // semantically identical.
                     None
                 } else {
-                    let batch: Option<Batch<AmqpSequence<U>>> = batch.into_iter().map(|AmqpSequence(vec)| {
-                        let vec: Option<Vec<U>> = vec.into_iter().collect();
-                        vec.map(AmqpSequence)
-                    }).collect();
+                    let batch: Option<Batch<AmqpSequence<U>>> = batch
+                        .into_iter()
+                        .map(|AmqpSequence(vec)| {
+                            let vec: Option<Vec<U>> = vec.into_iter().collect();
+                            vec.map(AmqpSequence)
+                        })
+                        .collect();
 
                     match batch {
                         Some(batch) => Some(T::from_body(Body::Sequence(batch))),
                         None => None,
                     }
                 }
-            },
+            }
             Body::Empty => None,
         }
     }

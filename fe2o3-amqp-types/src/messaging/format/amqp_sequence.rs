@@ -4,8 +4,8 @@ use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
-    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, __private::BodySection, TransposeOption,
+    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
+    TransposeOption, __private::BodySection,
 };
 
 /// 3.2.7 AMQP Sequence
@@ -82,6 +82,36 @@ impl<T> FromEmptyBody for AmqpSequence<T> {
     type Error = serde_amqp::Error;
 }
 
+impl<'de, T, U> TransposeOption<'de, T> for AmqpSequence<U>
+where
+    T: FromBody<'de, Body = AmqpSequence<U>>,
+    U: de::Deserialize<'de>,
+{
+    type From = Option<AmqpSequence<Option<U>>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Some(AmqpSequence(vec)) => {
+                let vec: Option<Vec<U>> = vec.into_iter().collect();
+                match vec {
+                    Some(vec) => {
+                        if vec.is_empty() {
+                            // Note that a null value and a zero-length array (with a correct type
+                            // for its elements) both describe an absence of a value and MUST be
+                            // treated as semantically identical.
+                            None
+                        } else {
+                            Some(T::from_body(AmqpSequence(vec)))
+                        }
+                    }
+                    None => None,
+                }
+            }
+            None => None,
+        }
+    }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                             Batch<AmqpSequece>                             */
 /* -------------------------------------------------------------------------- */
@@ -116,4 +146,36 @@ where
 
 impl<T> FromEmptyBody for Batch<AmqpSequence<T>> {
     type Error = serde_amqp::Error;
+}
+
+impl<'de, T, U> TransposeOption<'de, T> for Batch<AmqpSequence<U>>
+where
+    T: FromBody<'de, Body = Batch<AmqpSequence<U>>>,
+    U: de::Deserialize<'de>,
+{
+    type From = Option<Batch<AmqpSequence<Option<U>>>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Some(batch) => {
+                if batch.is_empty() {
+                    return None;
+                }
+
+                let batch: Option<Batch<AmqpSequence<U>>> = batch
+                    .into_iter()
+                    .map(|AmqpSequence(vec)| {
+                        let vec: Option<Vec<U>> = vec.into_iter().collect();
+                        vec.map(AmqpSequence)
+                    })
+                    .collect();
+
+                match batch {
+                    Some(batch) => Some(T::from_body(batch)),
+                    None => None,
+                }
+            }
+            None => None,
+        }
+    }
 }
