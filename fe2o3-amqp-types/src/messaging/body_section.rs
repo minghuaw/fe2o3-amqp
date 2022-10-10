@@ -47,8 +47,10 @@ pub trait SerializableBody: Serialize + BodySection {}
 /// This trait defines how to interprerte a message when there is an emtpy body.
 ///
 /// It provides a blanket implementation that simply returns an error, which should work for most
-/// scenarios. If a mixture of empty body and non-empty body are expected, it is recommended to use
-/// [`Body<Value>`] as the body section type as there are different implementations of an empty body.
+/// scenarios. If a mixture of empty body and non-empty body are expected, though `Option<T>` could
+/// be used (ie. `Delivery<Option<String>>`), it is recommended to use [`Body<Value>`] as the body
+/// section type (ie. `Delivery<Body<Value>>`) as an empty body might be serialized differently in
+/// different implementations.
 ///
 /// # Example
 ///
@@ -79,12 +81,12 @@ pub trait FromEmptyBody: Sized {
     }
 }
 
-///
+/// A trait defining how to handle an optional body section.
 pub trait TransposeOption<'de, To: FromBody<'de>>: BodySection + Sized {
-    ///
+    /// The optional body section type
     type From: DeserializableBody<'de>;
 
-    ///
+    /// Transpose from the optional body section to a `Oprion<To>`
     fn transpose(src: Self::From) -> Option<To>;
 }
 
