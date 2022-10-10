@@ -16,7 +16,7 @@ use self::__private::BodySection;
 use super::AmqpValue;
 
 #[cfg(docsrs)]
-use super::{Data, AmqpSequence, Body, Batch};
+use super::{AmqpSequence, Batch, Body, Data};
 
 pub(crate) mod __private {
     /// Marker trait for message body.
@@ -44,7 +44,31 @@ pub(crate) mod __private {
 /// 6. [`Batch<Data>`]
 pub trait SerializableBody: Serialize + BodySection {}
 
-/// How to interprerte an emtpy body
+/// This trait defines how to interprerte a message when there is an emtpy body.
+/// 
+/// It provides a blanket implementation that simply returns an error, which should work for most
+/// scenarios. If a mixture of empty body and non-empty body are expected, one could either use
+/// [`Body`] as the body section type or use `Option<T>` which interpretes an empty body as `None`.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// #[derive(Deserialize)]
+/// struct Foo { a: 9 }
+/// 
+/// // Simply use the blanked implementation
+/// impl FromEmptyBody {
+///     // use `serde_amqp::Error` if you don't want to define your own
+///     type Error = serde_amqp::Error; 
+/// }
+/// ```
+/// 
+/// # Mis-wording of in the core specification
+/// 
+/// Though the core specification states that **at least one** body section should be present in the
+/// message. However, this is not the way `proton` is implemented, and according to
+/// [PROTON-2574](https://issues.apache.org/jira/browse/PROTON-2574), the wording in the core
+/// specification was an unintended.
 pub trait FromEmptyBody: Sized {
     /// Error
     type Error: de::Error;
@@ -71,10 +95,40 @@ pub trait DeserializableBody<'de>: Deserialize<'de> + BodySection {}
 ///
 /// 1. [`AmqpValue`]
 /// 2. [`AmqpSequence`]
-/// 3. [`Data`]
-/// 4. [`Body`]
-/// 5. [`Batch<AmqpSequence>`]
-/// 6. [`Batch<Data>`]
+/// 3. [`Batch<AmqpSequence>`]
+/// 4. [`Data`]
+/// 5. [`Batch<Data>`]
+/// 6. [`Body`]
+///
+/// # Body section type (`IntoBody::Body`)?
+///
+/// 1. [`AmqpValue<T>`] would fit most use cases where the type `T` implements [`serde::Serialize`]
+///    and is not an array.
+/// 2. If there is an vector of items [`Vec<T>`] where type `T` implements [`serde::Serialize`], you
+///    could choose either [`AmqpValue<Vec<T>>`] or [`AmqpSequence<T>`].
+/// 3. If there is an array of array of element (ie. `Vec<Vec<T>>`) where `T` implements
+///    [`serde::Serialize`], then [`Batch<AmqpSequence>`] is probably the best bet.
+/// 4. If a `CustomType` needs to use a custom encoding format that is different from AMQP 1.0 (eg.
+///    other serialization formats like json, bincode, etc.), then the type could be first
+///    serialized into bytes (ie. `Vec<u8>`, &[u8], etc.) and choose the [`Data`] body section type.
+/// 5. If there is an array of `CustomType`s that should be serialized with custom encoding formats,
+///    then the [`Batch<Data>`] would probably be the best choice.
+/// 6. Use [`Body`] if a type may need to change the body section type.
+///
+/// # Example
+///
+/// ```rust
+/// #[derive(Serialize)]
+/// struct Foo { a: i32 }
+///
+/// impl IntoBody for Foo {
+///     type Body = AmqpValue<Foo>;
+///
+///     fn into_body(self) -> Self::Body {
+///         AmqpValue(self)
+///     }
+/// }
+/// ```
 pub trait IntoBody {
     /// Serializable
     type Body: SerializableBody;
@@ -87,10 +141,15 @@ pub trait IntoBody {
 ///
 /// 1. [`AmqpValue`]
 /// 2. [`AmqpSequence`]
-/// 3. [`Data`]
-/// 4. [`Body`]
-/// 5. [`Batch<AmqpSequence>`]
-/// 6. [`Batch<Data>`]
+/// 3. [`Batch<AmqpSequence>`]
+/// 4. [`Data`]
+/// 5. [`Batch<Data>`]
+/// 6. [`Body`]
+///
+/// Please note that this also requires the type to implement the [`FromEmptyBody`] trait, which
+/// handles the case when an empty body is found. Please see [`FromEmptyBody`] for more information.
+///
+/// # `Body` section type?
 pub trait FromBody<'de>: Sized + FromEmptyBody {
     /// Deserializable body
     type Body: DeserializableBody<'de>;
