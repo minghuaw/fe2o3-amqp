@@ -131,22 +131,26 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serde::{Serialize, Deserialize};
-    use serde_amqp::{to_vec, from_slice};
+    use serde::{Deserialize, Serialize};
+    use serde_amqp::{from_slice, to_vec};
 
-    use crate::messaging::{AmqpValue, message::__private::{Serializable, Deserializable}};
+    use crate::messaging::{
+        message::__private::{Deserializable, Serializable},
+        AmqpValue,
+    };
 
     #[derive(Debug, Serialize, Deserialize)]
     struct TestExample {
-        a: i32
+        a: i32,
     }
 
     #[test]
-    fn test_serialize() {
+    fn test_serde_custom_type() {
         let example = Serializable(AmqpValue(TestExample { a: 9 }));
         let buf = to_vec(&example).unwrap();
-        println!("{:#x?}", buf);
+        let expected = [0x0, 0x53, 0x77, 0xc0, 0x3, 0x1, 0x54, 0x9];
+        assert_eq!(buf, expected);
         let decoded: Deserializable<AmqpValue<TestExample>> = from_slice(&buf).unwrap();
-        println!("{:?}", decoded);
+        assert_eq!(decoded.0 .0.a, example.0 .0.a);
     }
 }

@@ -753,16 +753,17 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.struct_encoding.push(StructEncoding::DescribedBasic);
             Ok(StructSerializer::new(self))
         } else {
-            match self.struct_encoding() {
-                // A None state indicates a freshly instantiated serializer
-                StructEncoding::None => {
-                    // Only non-described struct will go to this branch
-                    Ok(StructSerializer::new(self))
-                }
-                StructEncoding::DescribedBasic => Ok(StructSerializer::new(self)),
-                StructEncoding::DescribedList => Ok(StructSerializer::new(self)),
-                StructEncoding::DescribedMap => Ok(StructSerializer::new(self)),
-            }
+            // match self.struct_encoding() {
+            //     // A None state indicates a freshly instantiated serializer
+            //     StructEncoding::None => {
+            //         // Only non-described struct will go to this branch
+            //         Ok(StructSerializer::new(self))
+            //     }
+            //     StructEncoding::DescribedBasic => Ok(StructSerializer::new(self)),
+            //     StructEncoding::DescribedList => Ok(StructSerializer::new(self)),
+            //     StructEncoding::DescribedMap => Ok(StructSerializer::new(self)),
+            // }
+            Ok(StructSerializer::new(self))
         }
     }
 
@@ -1186,8 +1187,8 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                         value.serialize(&mut serializer)
                     }
                     StructEncoding::DescribedBasic => {
-                        // simply serialize the value without buffering
-                        let mut serializer = Serializer::described_list(&mut self.buf);
+                        let mut serializer = Serializer::new(&mut self.buf);
+                        serializer.is_array_elem = self.se.is_array_elem.clone();
                         value.serialize(&mut serializer)
                     }
                     StructEncoding::DescribedList => {
