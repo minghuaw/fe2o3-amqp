@@ -15,6 +15,9 @@ use self::__private::BodySection;
 
 use super::AmqpValue;
 
+#[cfg(docsrs)]
+use super::{Data, AmqpSequence, Body, Batch};
+
 pub(crate) mod __private {
     /// Marker trait for message body.
     ///
