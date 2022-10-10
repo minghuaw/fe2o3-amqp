@@ -220,7 +220,7 @@ impl Sender {
     /// - [`AmqpSequence`] / [`Batch<AmqpSequence>`]
     /// - [`Data`] / [`Batch<Data>`]
     /// 
-    /// Below are two ways to use custom types.
+    /// Below shows some ways to use custom types.
     /// 
     /// ## 1. Wrap custom type in [`AmqpValue`]
     /// 
@@ -263,7 +263,29 @@ impl Sender {
     /// sender.send(Foo{a: 5}).await.unwrap();
     /// ```
     /// 
-    /// # Customize [`Sendable`]
+    /// ## 3. Use message builder
+    /// 
+    /// One could still use the message builder to not only set other non-body fields of
+    /// [`Message`] but also choosing the type of body section.
+    /// 
+    /// ```rust
+    /// #[derive(Serialize)]
+    /// struct Foo {
+    ///     a: i32
+    /// }
+    /// 
+    /// let message = Message::builder()
+    ///     .properties(
+    ///         Properties::builder()
+    ///         .group_id(String::from("send_to_event_hub"))
+    ///         .build(),
+    ///     )
+    ///     .value(Foo {a: 8}) // set body section to `AmqpValue<Foo>`
+    ///     .build();
+    /// sender.send(message).await.unwrap();
+    /// ```
+    /// 
+    /// # Pre-settle a message with [`Sendable`] builder
     /// 
     /// The user can pre-settle a message by specifying `settled` field in the [`Sendable`]. Unless
     /// an explicity [`Sendable`] is passed to the argument, the `message_format` field is set to
