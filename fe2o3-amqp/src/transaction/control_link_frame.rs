@@ -1,5 +1,5 @@
 use fe2o3_amqp_types::{
-    messaging::{AmqpValue, FromDeserializableBody, FromEmptyBody, IntoSerializableBody},
+    messaging::{AmqpValue, FromBody, FromEmptyBody, IntoBody},
     transaction::{Declare, Discharge},
 };
 use serde::{
@@ -13,10 +13,10 @@ pub enum ControlMessageBody {
     Discharge(Discharge),
 }
 
-impl IntoSerializableBody for ControlMessageBody {
-    type SerializableBody = AmqpValue<Self>;
+impl IntoBody for ControlMessageBody {
+    type Body = AmqpValue<Self>;
 
-    fn into_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::Body {
         AmqpValue(self)
     }
 }
@@ -25,10 +25,10 @@ impl FromEmptyBody for ControlMessageBody {
     type Error = serde_amqp::Error;
 }
 
-impl<'de> FromDeserializableBody<'de> for ControlMessageBody {
-    type DeserializableBody = AmqpValue<Self>;
+impl<'de> FromBody<'de> for ControlMessageBody {
+    type Body = AmqpValue<Self>;
 
-    fn from_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::Body) -> Self {
         deserializable.0
     }
 }

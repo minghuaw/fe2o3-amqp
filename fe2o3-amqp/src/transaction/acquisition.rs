@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, SequenceNo},
-    messaging::{FromDeserializableBody, Modified},
+    messaging::{FromBody, Modified},
     transaction::TransactionId,
 };
 
@@ -77,7 +77,7 @@ where
     /// Transactionally acquire a message
     pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, RecvError>
     where
-        for<'de> T: FromDeserializableBody<'de> + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         self.recver.recv().await
     }

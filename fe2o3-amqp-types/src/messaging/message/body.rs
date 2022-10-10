@@ -7,8 +7,8 @@ use serde::{
 use serde_amqp::{primitives::Binary, Value};
 
 use crate::messaging::{
-    AmqpSequence, AmqpValue, Data, DeserializableBody, FromDeserializableBody, FromEmptyBody,
-    IntoSerializableBody, SerializableBody, __private::BodySection,
+    AmqpSequence, AmqpValue, Data, DeserializableBody, FromBody, FromEmptyBody,
+    IntoBody, SerializableBody, __private::BodySection,
 };
 
 use serde_amqp::extensions::TransparentVec;
@@ -290,24 +290,24 @@ impl<T> SerializableBody for Body<T> where T: ser::Serialize {}
 
 impl<'de, T> DeserializableBody<'de> for Body<T> where T: de::Deserialize<'de> {}
 
-impl<T> IntoSerializableBody for Body<T>
+impl<T> IntoBody for Body<T>
 where
     T: ser::Serialize,
 {
-    type SerializableBody = Self;
+    type Body = Self;
 
-    fn into_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::Body {
         self
     }
 }
 
-impl<'de, T> FromDeserializableBody<'de> for Body<T>
+impl<'de, T> FromBody<'de> for Body<T>
 where
     T: de::Deserialize<'de>,
 {
-    type DeserializableBody = Self;
+    type Body = Self;
 
-    fn from_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::Body) -> Self {
         deserializable
     }
 }

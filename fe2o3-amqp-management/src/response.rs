@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::{FromDeserializableBody, Message, MessageId};
+use fe2o3_amqp_types::messaging::{FromBody, Message, MessageId};
 
 use crate::{
     constants::{STATUS_CODE, STATUS_DESCRIPTION},
@@ -75,7 +75,7 @@ impl<R> Response<R> {
 
 pub trait MessageDeserializer<T>: Sized
 where
-    for<'de> T: FromDeserializableBody<'de>,
+    for<'de> T: FromBody<'de>,
 {
     type Error;
 

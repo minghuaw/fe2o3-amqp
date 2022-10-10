@@ -11,7 +11,7 @@ use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use super::{
     AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations, Footer,
-    FromDeserializableBody, Header, IntoSerializableBody, MessageAnnotations, Properties,
+    FromBody, Header, IntoBody, MessageAnnotations, Properties,
     SerializableBody,
 };
 
@@ -46,7 +46,7 @@ pub trait DecodeIntoMessage: Sized {
 
 impl<T> DecodeIntoMessage for T
 where
-    for<'de> T: FromDeserializableBody<'de>, // TODO: change to higher rank trait bound once GAT stablises
+    for<'de> T: FromBody<'de>, // TODO: change to higher rank trait bound once GAT stablises
 {
     type DecodeError = serde_amqp::Error;
 
@@ -108,7 +108,7 @@ where
     }
 }
 
-impl<'de, B: FromDeserializableBody<'de>> de::Deserialize<'de> for Deserializable<Message<B>> {
+impl<'de, B: FromBody<'de>> de::Deserialize<'de> for Deserializable<Message<B>> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -282,7 +282,7 @@ struct Visitor<B> {
 
 impl<'de, B> de::Visitor<'de> for Visitor<B>
 where
-    B: FromDeserializableBody<'de>,
+    B: FromBody<'de>,
 {
     type Value = Message<B>;
 
@@ -332,9 +332,9 @@ where
                     count += 1;
                 }
                 Field::Body => {
-                    let deserializable: Option<B::DeserializableBody> = seq.next_element()?;
+                    let deserializable: Option<B::Body> = seq.next_element()?;
                     body =
-                        deserializable.map(<B as FromDeserializableBody>::from_body);
+                        deserializable.map(<B as FromBody>::from_body);
                     count += 1;
                 }
                 Field::Footer => {
@@ -364,7 +364,7 @@ where
 // impl<'de, T> de::Deserialize<'de> for Message<T>
 impl<'de, B> Message<B>
 where
-    B: FromDeserializableBody<'de>,
+    B: FromBody<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
@@ -397,7 +397,7 @@ where
 
 impl<T, U> From<T> for Message<U>
 where
-    T: IntoSerializableBody<SerializableBody = U>,
+    T: IntoBody<Body = U>,
 {
     fn from(value: T) -> Self {
         Message {
@@ -420,7 +420,7 @@ pub trait FromMessage<B> {
 
 impl<T, B> FromMessage<B> for T
 where
-    for<'de> T: FromDeserializableBody<'de, DeserializableBody = B>,
+    for<'de> T: FromBody<'de, Body = B>,
 {
     fn from_message(message: Message<B>) -> Self {
         Self::from_body(message.body)

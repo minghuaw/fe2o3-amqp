@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Display};
 use serde_amqp::{primitives::Binary, DeserializeComposite, SerializeComposite, Value};
 
 use crate::messaging::{
-    Batch, DeserializableBody, FromDeserializableBody, FromEmptyBody, IntoSerializableBody,
+    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
     SerializableBody, __private::BodySection,
 };
 
@@ -79,18 +79,18 @@ impl SerializableBody for Data {}
 
 impl<'de> DeserializableBody<'de> for Data {}
 
-impl IntoSerializableBody for Data {
-    type SerializableBody = Self;
+impl IntoBody for Data {
+    type Body = Self;
 
-    fn into_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::Body {
         self
     }
 }
 
-impl<'de> FromDeserializableBody<'de> for Data {
-    type DeserializableBody = Data;
+impl<'de> FromBody<'de> for Data {
+    type Body = Data;
 
-    fn from_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::Body) -> Self {
         deserializable
     }
 }
@@ -109,18 +109,18 @@ impl SerializableBody for Batch<Data> {}
 
 impl<'de> DeserializableBody<'de> for Batch<Data> {}
 
-impl IntoSerializableBody for Batch<Data> {
-    type SerializableBody = Self;
+impl IntoBody for Batch<Data> {
+    type Body = Self;
 
-    fn into_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::Body {
         self
     }
 }
 
-impl<'de> FromDeserializableBody<'de> for Batch<Data> {
-    type DeserializableBody = Batch<Data>;
+impl<'de> FromBody<'de> for Batch<Data> {
+    type Body = Batch<Data>;
 
-    fn from_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::Body) -> Self {
         deserializable
     }
 }

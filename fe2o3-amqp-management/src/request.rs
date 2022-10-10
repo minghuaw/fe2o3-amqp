@@ -1,4 +1,4 @@
-use fe2o3_amqp_types::messaging::{IntoSerializableBody, Message};
+use fe2o3_amqp_types::messaging::{IntoBody, Message};
 
 // use crate::constantsOperationRequest;
 
@@ -34,7 +34,7 @@ use fe2o3_amqp_types::messaging::{IntoSerializableBody, Message};
 // }
 
 pub trait MessageSerializer {
-    type Body: IntoSerializableBody;
+    type Body: IntoBody;
 
     fn into_message(self) -> Message<Self::Body>;
 }

@@ -4,7 +4,7 @@ use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
-    DeserializableBody, FromDeserializableBody, FromEmptyBody, IntoSerializableBody,
+    DeserializableBody, FromBody, FromEmptyBody, IntoBody,
     SerializableBody, __private::BodySection,
 };
 
@@ -37,24 +37,24 @@ impl<T> SerializableBody for AmqpValue<T> where T: Serialize {}
 
 impl<'de, T> DeserializableBody<'de> for AmqpValue<T> where T: de::Deserialize<'de> {}
 
-impl<T> IntoSerializableBody for AmqpValue<T>
+impl<T> IntoBody for AmqpValue<T>
 where
     T: ser::Serialize,
 {
-    type SerializableBody = Self;
+    type Body = Self;
 
-    fn into_body(self) -> Self::SerializableBody {
+    fn into_body(self) -> Self::Body {
         self
     }
 }
 
-impl<'de, T> FromDeserializableBody<'de> for AmqpValue<T>
+impl<'de, T> FromBody<'de> for AmqpValue<T>
 where
     T: de::Deserialize<'de> + FromEmptyBody,
 {
-    type DeserializableBody = Self;
+    type Body = Self;
 
-    fn from_body(deserializable: Self::DeserializableBody) -> Self {
+    fn from_body(deserializable: Self::Body) -> Self {
         deserializable
     }
 }
