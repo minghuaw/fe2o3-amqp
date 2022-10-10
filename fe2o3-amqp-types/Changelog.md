@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.4
+
+1. Updated dep `serde_amqp` version to "0.4.5" which fixes a bug with `AmqpValue`
+
 ## 0.5.3
 
 1. Quality of life update
