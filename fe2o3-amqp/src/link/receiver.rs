@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, SequenceNo},
     messaging::{
-        message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
-        Source, Target,
+        Accepted, Address, DeliveryState, Modified, Rejected, Released,
+        Source, Target, FromBody,
     },
     performatives::{Attach, Detach, Transfer},
 };
@@ -199,7 +199,7 @@ impl Receiver {
     /// ```
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         self.inner.recv().await
     }
@@ -557,7 +557,7 @@ where
 {
     pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         loop {
             match self.recv_inner().await? // FIXME: cancel safe? if oneshot channel is cancel safe
@@ -574,7 +574,7 @@ where
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         let frame = self
             .incoming
@@ -687,7 +687,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         // need to check whether the incoming transfer matches
         match (
@@ -736,7 +736,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         let delivery = match self.incomplete_transfer.take() {
             Some(mut incomplete) => {
@@ -776,7 +776,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
