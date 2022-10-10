@@ -1853,7 +1853,8 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
-    use serde::Serialize;
+    use serde::{Serialize, Deserialize};
+    use serde_amqp_derive::{SerializeComposite, DeserializeComposite};
 
     #[derive(Serialize)]
     struct Foo {
@@ -2156,6 +2157,36 @@ mod test {
             1,
         ];
         assert_eq_on_serialized_vs_expected(foo, &expected);
+    }
+
+    #[cfg(feature = "serde_amqp_derive")]
+    #[test]
+    fn test_basic_newtype_wrapper_over_custom_type() {
+        use serde::{Serialize, Deserialize};
+        use crate::macros::{SerializeComposite, DeserializeComposite};
+        use crate::{self as serde_amqp, from_slice};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+        struct Foo {
+            a: i32
+        }
+
+        #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq, PartialOrd)]
+        #[amqp_contract(
+            name = "test:basic-wrapper:*",
+            code = 0x0000_0000_0000_0099,
+            encoding = "basic",
+        )]
+        struct BasicWrapper<T>(pub T);
+
+        let value = BasicWrapper(Foo {a: 9});
+        let expected = [0x0, 0x53, 0x99, 0xc0, 0x3, 0x1, 0x54, 0x9];
+
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(buf, expected);
+
+        let decoded: BasicWrapper<Foo> = from_slice(&expected[..]).unwrap();
+        assert_eq!(decoded, value);
     }
 
     #[allow(dead_code)]
