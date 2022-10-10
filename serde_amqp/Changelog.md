@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.4.5
+
+1. Fixed a bug with serializing/deserilizing described basic wrapper that cause a bug on `AmqpValue` wrapping around a custom struct
+
 ## 0.4.4
 
 1. Impl `IntoIterator` for `Array<T>`
