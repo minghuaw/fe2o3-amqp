@@ -128,3 +128,25 @@ where
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::{Serialize, Deserialize};
+    use serde_amqp::{to_vec, from_slice};
+
+    use crate::messaging::{AmqpValue, message::__private::{Serializable, Deserializable}};
+
+    #[derive(Debug, Serialize, Deserialize)]
+    struct TestExample {
+        a: i32
+    }
+
+    #[test]
+    fn test_serialize() {
+        let example = Serializable(AmqpValue(TestExample { a: 9 }));
+        let buf = to_vec(&example).unwrap();
+        println!("{:#x?}", buf);
+        let decoded: Deserializable<AmqpValue<TestExample>> = from_slice(&buf).unwrap();
+        println!("{:?}", decoded);
+    }
+}

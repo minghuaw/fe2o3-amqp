@@ -1187,7 +1187,8 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                     }
                     StructEncoding::DescribedBasic => {
                         // simply serialize the value without buffering
-                        value.serialize(self.as_mut())
+                        let mut serializer = Serializer::described_list(&mut self.buf);
+                        value.serialize(&mut serializer)
                     }
                     StructEncoding::DescribedList => {
                         let mut serializer = Serializer::described_list(&mut self.buf);
@@ -1215,6 +1216,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
             StructEncoding::DescribedBasic => {
                 self.se.struct_encoding.pop();
                 // simply serialize the value without buffering
+                self.se.writer.write_all(&self.buf)?;
                 Ok(())
             }
             StructEncoding::DescribedList => {
