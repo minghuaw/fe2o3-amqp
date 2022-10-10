@@ -197,6 +197,49 @@ impl Receiver {
     /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
+    /// 
+    /// # The receive type `Delivery<T>`
+    /// 
+    /// If the user is not certain the exact type (including the exact body section type) to
+    /// receive, [`Body<Value>`] is probably the safest bet. [`Body<T>`] covers all possible body
+    /// section types, including an empty body, and `Value` covers all possible AMQP 1.0 types.
+    /// 
+    /// ```rust
+    /// let delivery: Delivery<Body<Value>> = receiver.recv::<Body<Value>>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    /// 
+    /// If the user is certain an [`AmqpValue`] body section is expected, then the user could use
+    /// [`AmqpValue<KnownType>`] if the exact message type `KnownType` is known and implements
+    /// [`serde::Deserialize`]. If the user is not sure about the exact message type, one could use
+    /// [`AmqpValue<Value>`] to cover the most general cases. This also applies to [`AmqpSequence`]
+    /// or [`Batch<AmqpSequence>`].
+    /// 
+    /// ```rust
+    /// // `KnownType` must implement `serde::Deserialize`
+    /// let delivery: Delivery<AmqpValue<KnownType>> = receiver.recv::<AmqpValue<KnownType>>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    /// 
+    /// Another option to use a custom type is to implement the [`FromBody`] trait on a custom type.
+    /// 
+    /// ```rust
+    /// #[derive(Deserialize)]
+    /// struct Foo {
+    ///     a: i32
+    /// }
+    /// 
+    /// impl<'de> FromBody<'de> for Foo {
+    ///     type Body = AmqpValue<Foo>;
+    /// 
+    ///     fn from_body(body: Self::Body) -> Self {
+    ///         body.0
+    ///     }
+    /// }
+    /// 
+    /// let delivery: Delivery<Foo> = receiver.recv::<Foo>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         for<'de> T: FromBody<'de> + Send,
