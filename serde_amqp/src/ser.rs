@@ -756,16 +756,17 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.struct_encoding.push(StructEncoding::DescribedBasic);
             Ok(StructSerializer::new(self))
         } else {
-            match self.struct_encoding() {
-                // A None state indicates a freshly instantiated serializer
-                StructEncoding::None => {
-                    // Only non-described struct will go to this branch
-                    Ok(StructSerializer::new(self))
-                }
-                StructEncoding::DescribedBasic => Ok(StructSerializer::new(self)),
-                StructEncoding::DescribedList => Ok(StructSerializer::new(self)),
-                StructEncoding::DescribedMap => Ok(StructSerializer::new(self)),
-            }
+            // match self.struct_encoding() {
+            //     // A None state indicates a freshly instantiated serializer
+            //     StructEncoding::None => {
+            //         // Only non-described struct will go to this branch
+            //         Ok(StructSerializer::new(self))
+            //     }
+            //     StructEncoding::DescribedBasic => Ok(StructSerializer::new(self)),
+            //     StructEncoding::DescribedList => Ok(StructSerializer::new(self)),
+            //     StructEncoding::DescribedMap => Ok(StructSerializer::new(self)),
+            // }
+            Ok(StructSerializer::new(self))
         }
     }
 
@@ -1214,8 +1215,9 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
                         value.serialize(&mut serializer)
                     }
                     StructEncoding::DescribedBasic => {
-                        // simply serialize the value without buffering
-                        value.serialize(self.as_mut())
+                        let mut serializer = Serializer::new(&mut self.buf);
+                        serializer.is_array_elem = self.se.is_array_elem.clone();
+                        value.serialize(&mut serializer)
                     }
                     StructEncoding::DescribedList => {
                         let mut serializer = Serializer::described_list(&mut self.buf);
@@ -1243,6 +1245,7 @@ impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleStructSerializer<'a, 
             StructEncoding::DescribedBasic => {
                 self.se.struct_encoding.pop();
                 // simply serialize the value without buffering
+                self.se.writer.write_all(&self.buf)?;
                 Ok(())
             }
             StructEncoding::DescribedList => {
@@ -1878,7 +1881,8 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
-    use serde::Serialize;
+    use serde::{Serialize, Deserialize};
+    use serde_amqp_derive::{SerializeComposite, DeserializeComposite};
 
     #[derive(Serialize)]
     struct Foo {
@@ -2181,6 +2185,36 @@ mod test {
             1,
         ];
         assert_eq_on_serialized_vs_expected(foo, &expected);
+    }
+
+    #[cfg(feature = "serde_amqp_derive")]
+    #[test]
+    fn test_basic_newtype_wrapper_over_custom_type() {
+        use serde::{Serialize, Deserialize};
+        use crate::macros::{SerializeComposite, DeserializeComposite};
+        use crate::{self as serde_amqp, from_slice};
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+        struct Foo {
+            a: i32
+        }
+
+        #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq, PartialOrd)]
+        #[amqp_contract(
+            name = "test:basic-wrapper:*",
+            code = 0x0000_0000_0000_0099,
+            encoding = "basic",
+        )]
+        struct BasicWrapper<T>(pub T);
+
+        let value = BasicWrapper(Foo {a: 9});
+        let expected = [0x0, 0x53, 0x99, 0xc0, 0x3, 0x1, 0x54, 0x9];
+
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(buf, expected);
+
+        let decoded: BasicWrapper<Foo> = from_slice(&expected[..]).unwrap();
+        assert_eq!(decoded, value);
     }
 
     #[allow(dead_code)]

@@ -1122,29 +1122,20 @@ where
             self.struct_encoding = StructEncoding::DescribedMap;
             visitor.visit_map(DescribedAccess::map(self))
         } else {
-            match self.struct_encoding {
-                StructEncoding::None => {
-                    match self
-                        .get_elem_code_or_peek_byte()
-                        .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
-                        .try_into()?
-                    {
-                        EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
-                            self.deserialize_tuple(fields.len(), visitor)
-                        }
-                        EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                        EncodingCodes::DescribedType => {
-                            visitor.visit_seq(DescribedAccess::list(self))
-                        }
-                        _ => Err(Error::InvalidFormatCode),
-                    }
-                    // }
+            self.struct_encoding = StructEncoding::None;
+            match self
+                .get_elem_code_or_peek_byte()
+                .ok_or_else(|| Error::unexpected_eof("Expecting format code"))??
+                .try_into()?
+            {
+                EncodingCodes::List0 | EncodingCodes::List32 | EncodingCodes::List8 => {
+                    self.deserialize_tuple(fields.len(), visitor)
                 }
-                StructEncoding::DescribedBasic => {
-                    visitor.visit_seq(DescribedAccess::basic(self, fields.len() as u32))
+                EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
+                EncodingCodes::DescribedType => {
+                    visitor.visit_seq(DescribedAccess::list(self))
                 }
-                StructEncoding::DescribedList => visitor.visit_seq(DescribedAccess::list(self)),
-                StructEncoding::DescribedMap => visitor.visit_map(DescribedAccess::map(self)),
+                _ => Err(Error::InvalidFormatCode),
             }
         };
         // Restore
