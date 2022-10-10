@@ -80,14 +80,12 @@ pub trait FromEmptyBody: Sized {
 }
 
 ///
-pub trait TransposeOption<'de>: BodySection + Sized {
+pub trait TransposeOption<'de, To: FromBody<'de>>: BodySection + Sized {
     /// 
     type From: DeserializableBody<'de>;
-    ///
-    type To: FromBody<'de>;
 
     ///
-    fn transpose(src: Option<Self::From>) -> Option<Self::To>;
+    fn transpose(src: Self::From) -> Option<To>;
 }
 
 /// Trait for a deserializable body section
@@ -180,12 +178,12 @@ pub trait FromBody<'de>: Sized + FromEmptyBody {
 impl<'de, T> FromBody<'de> for Option<T> 
 where
     T: FromBody<'de>,
-    T::Body: TransposeOption<'de, To = T>,
+    T::Body: TransposeOption<'de, T>,
 {
-    type Body = Option<<T::Body as TransposeOption<'de>>::From>;
+    type Body = <T::Body as TransposeOption<'de, T>>::From;
 
     fn from_body(deserializable: Self::Body) -> Self {
-        <T::Body as TransposeOption>::transpose(deserializable)
+        <T::Body as TransposeOption<'de, T>>::transpose(deserializable)
     }
 }
 

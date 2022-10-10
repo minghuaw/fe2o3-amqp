@@ -8,7 +8,7 @@ use serde_amqp::{primitives::Binary, Value};
 
 use crate::messaging::{
     AmqpSequence, AmqpValue, Data, DeserializableBody, FromBody, FromEmptyBody,
-    IntoBody, SerializableBody, __private::BodySection,
+    IntoBody, SerializableBody, __private::BodySection, TransposeOption, Batch,
 };
 
 use serde_amqp::extensions::TransparentVec;
@@ -317,5 +317,45 @@ impl<T> FromEmptyBody for Body<T> {
 
     fn from_empty_body() -> Result<Self, Self::Error> {
         Ok(Self::Empty)
+    }
+}
+
+impl<'de, T, U> TransposeOption<'de, T> for Body<U> 
+where
+    T: FromBody<'de, Body = Body<U>>,
+    U: de::Deserialize<'de>,
+{
+    type From = Body<Option<U>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Body::Value(AmqpValue(body)) => match body {
+                Some(body) => Some(T::from_body(Body::Value(AmqpValue(body)))),
+                None => None,
+            },
+            Body::Data(batch) => {
+                if batch.is_empty() {
+                    None
+                } else {
+                    Some(T::from_body(Body::Data(batch)))
+                }
+            },
+            Body::Sequence(batch) => {
+                if batch.is_empty() {
+                    None
+                } else {
+                    let batch: Option<Batch<AmqpSequence<U>>> = batch.into_iter().map(|AmqpSequence(vec)| {
+                        let vec: Option<Vec<U>> = vec.into_iter().collect();
+                        vec.map(AmqpSequence)
+                    }).collect();
+
+                    match batch {
+                        Some(batch) => Some(T::from_body(Body::Sequence(batch))),
+                        None => None,
+                    }
+                }
+            },
+            Body::Empty => None,
+        }
     }
 }

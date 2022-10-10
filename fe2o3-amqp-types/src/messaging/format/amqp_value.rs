@@ -70,15 +70,14 @@ where
     }
 }
 
-impl<'de, T> TransposeOption<'de> for AmqpValue<T>
+impl<'de, T, U> TransposeOption<'de, T> for AmqpValue<U>
 where
-    T: FromBody<'de, Body = Self> + de::Deserialize<'de>,
+    T: FromBody<'de, Body = AmqpValue<U>>,
+    U: de::Deserialize<'de>,
 {
-    type From = AmqpValue<Option<T>>;
+    type From = Option<AmqpValue<Option<U>>>;
 
-    type To = T;
-
-    fn transpose(src: Option<Self::From>) -> Option<Self::To> {
+    fn transpose(src: Self::From) -> Option<T> {
         match src {
             Some(AmqpValue(body)) => match body {
                 Some(body) => Some(T::from_body(AmqpValue(body))),
