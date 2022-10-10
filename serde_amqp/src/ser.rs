@@ -753,16 +753,6 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
             self.struct_encoding.push(StructEncoding::DescribedBasic);
             Ok(StructSerializer::new(self))
         } else {
-            // match self.struct_encoding() {
-            //     // A None state indicates a freshly instantiated serializer
-            //     StructEncoding::None => {
-            //         // Only non-described struct will go to this branch
-            //         Ok(StructSerializer::new(self))
-            //     }
-            //     StructEncoding::DescribedBasic => Ok(StructSerializer::new(self)),
-            //     StructEncoding::DescribedList => Ok(StructSerializer::new(self)),
-            //     StructEncoding::DescribedMap => Ok(StructSerializer::new(self)),
-            // }
             Ok(StructSerializer::new(self))
         }
     }
