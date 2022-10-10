@@ -63,9 +63,7 @@ impl<T> FromEmptyBody for AmqpValue<T>
 where
     T: FromEmptyBody,
 {
-    type Error = T::Error;
-
-    fn from_empty_body() -> Result<Self, Self::Error> {
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
         T::from_empty_body().map(AmqpValue)
     }
 }

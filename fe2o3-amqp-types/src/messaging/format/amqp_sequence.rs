@@ -78,9 +78,7 @@ where
     }
 }
 
-impl<T> FromEmptyBody for AmqpSequence<T> {
-    type Error = serde_amqp::Error;
-}
+impl<T> FromEmptyBody for AmqpSequence<T> { }
 
 impl<'de, T, U> TransposeOption<'de, T> for AmqpSequence<U>
 where
@@ -144,9 +142,7 @@ where
     }
 }
 
-impl<T> FromEmptyBody for Batch<AmqpSequence<T>> {
-    type Error = serde_amqp::Error;
-}
+impl<T> FromEmptyBody for Batch<AmqpSequence<T>> { }
 
 impl<'de, T, U> TransposeOption<'de, T> for Batch<AmqpSequence<U>>
 where

@@ -313,9 +313,7 @@ where
 }
 
 impl<T> FromEmptyBody for Body<T> {
-    type Error = serde_amqp::Error;
-
-    fn from_empty_body() -> Result<Self, Self::Error> {
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
         Ok(Self::Empty)
     }
 }

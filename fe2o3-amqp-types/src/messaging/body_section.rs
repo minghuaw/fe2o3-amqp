@@ -55,14 +55,12 @@ pub trait SerializableBody: Serialize + BodySection {}
 /// # Example
 ///
 /// ```rust
-/// #[derive(Deserialize)]
-/// struct Foo { a: 9 }
+/// use fe2o3_amqp_types::messaging::FromEmptyBody;
+/// 
+/// struct Foo { a: i32 }
 ///
 /// // Simply use the blanked implementation
-/// impl FromEmptyBody {
-///     // use `serde_amqp::Error` if you don't want to define your own
-///     type Error = serde_amqp::Error;
-/// }
+/// impl FromEmptyBody for Foo {}
 /// ```
 ///
 /// # Mis-wording of in the core specification
@@ -72,12 +70,9 @@ pub trait SerializableBody: Serialize + BodySection {}
 /// [PROTON-2574](https://issues.apache.org/jira/browse/PROTON-2574), the wording in the core
 /// specification was an unintended.
 pub trait FromEmptyBody: Sized {
-    /// Error
-    type Error: de::Error;
-
     /// Interprete an empty body
-    fn from_empty_body() -> Result<Self, Self::Error> {
-        Err(<Self::Error as de::Error>::custom("An empty body section is found. Consider use Message<Option<B>> or Message<Body<Value>> instead"))
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
+        Err(de::Error::custom("An empty body section is found. Consider use Message<Option<B>> or Message<Body<Value>> instead"))
     }
 }
 
@@ -130,6 +125,9 @@ pub trait DeserializableBody<'de>: Deserialize<'de> + BodySection {}
 /// # Example
 ///
 /// ```rust
+/// use serde::Serialize;
+/// use fe2o3_amqp_types::messaging::{IntoBody, AmqpValue};
+/// 
 /// #[derive(Serialize)]
 /// struct Foo { a: i32 }
 ///
@@ -162,6 +160,28 @@ pub trait IntoBody {
 /// handles the case when an empty body is found. Please see [`FromEmptyBody`] for more information.
 ///
 /// # `Body` section type?
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use serde::Deserialize;
+/// use fe2o3_amqp_types::messaging::{AmqpValue, FromEmptyBody, FromBody};
+/// 
+/// #[derive(Deserialize)]
+/// struct Foo {
+///     a: i32
+/// }
+/// 
+/// impl FromEmptyBody for Foo {}
+/// 
+/// impl<'de> FromBody<'de> for Foo {
+///     type Body = AmqpValue<Self>;
+/// 
+///     fn from_body(body: Self::Body) -> Self {
+///         body.0
+///     }
+/// }
+/// ```
 pub trait FromBody<'de>: Sized + FromEmptyBody {
     /// Deserializable body
     type Body: DeserializableBody<'de>;
@@ -173,7 +193,6 @@ pub trait FromBody<'de>: Sized + FromEmptyBody {
 /* -------------------------------------------------------------------------- */
 /*                                  Option<T>                                 */
 /* -------------------------------------------------------------------------- */
-// FIXME: how to transpose `Option`?
 
 // Option can only be used on deserializing becuase the user should be certain
 // on whether an empty body is going to be serialized
@@ -194,9 +213,7 @@ impl<B> BodySection for Option<B> where B: BodySection {}
 impl<'de, B> DeserializableBody<'de> for Option<B> where B: DeserializableBody<'de> {}
 
 impl<T> FromEmptyBody for Option<T> {
-    type Error = serde_amqp::Error;
-
-    fn from_empty_body() -> Result<Self, Self::Error> {
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
         Ok(Self::None)
     }
 }
@@ -222,9 +239,7 @@ impl<'de> FromBody<'de> for Value {
 }
 
 impl FromEmptyBody for Value {
-    type Error = serde_amqp::Error;
-
-    fn from_empty_body() -> Result<Self, Self::Error> {
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
         Ok(Self::Null)
     }
 }
@@ -342,15 +357,11 @@ where
 macro_rules! blanket_impl_from_empty_body {
     ($($generics:ident),*; $type:tt) => {
         // Blanket impl simply returns an error
-        impl<$($generics),*> FromEmptyBody for $type<$($generics),*>  {
-            type Error = serde_amqp::Error;
-        }
+        impl<$($generics),*> FromEmptyBody for $type<$($generics),*>  { }
     };
     ($type:ty) => {
         // Blanket impl simply returns an error
-        impl FromEmptyBody for $type {
-            type Error = serde_amqp::Error;
-        }
+        impl FromEmptyBody for $type { }
     };
 }
 
@@ -453,8 +464,10 @@ mod tests {
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
-        Body, Message,
+        Body, Message, AmqpValue,
     };
+
+    use super::{IntoBody, FromEmptyBody};
 
     const TEST_STR: &str = "test_str";
 
@@ -463,11 +476,22 @@ mod tests {
         a: i32,
     }
 
+    impl IntoBody for TestExample {
+        type Body = AmqpValue<Self>;
+
+        fn into_body(self) -> Self::Body {
+            AmqpValue(self)
+        }
+    }
+
+    impl FromEmptyBody for TestExample { }
+
     #[test]
     fn test_encoding_option_str() {
-        // let msg = Message::builder()
+        // let should_not_work = Message::builder()
         //     .body(Some(TEST_STR)) // This should NOT work
         //     .build();
+        // let buf = to_vec(&Serializable(should_not_work)).unwrap();
 
         let expected_msg = Message::builder().value(TEST_STR).build();
         let expected = to_vec(&Serializable(expected_msg)).unwrap();
@@ -482,25 +506,31 @@ mod tests {
     fn test_decoding_some_str() {
         let src = Message::builder().value(TEST_STR).build();
         let buf = to_vec(&Serializable(src)).unwrap();
-        let msg: Deserializable<Message<Body<String>>> = from_slice(&buf).unwrap();
+        let msg: Deserializable<Message<Option<String>>> = from_slice(&buf).unwrap();
 
-        assert!(!msg.0.body.is_empty());
-        assert_eq!(msg.0.body.try_as_value().unwrap(), TEST_STR);
+        assert!(msg.0.body.is_some());
+        assert_eq!(msg.0.body.unwrap(), TEST_STR);
     }
 
     #[test]
-    fn test_decoding_none_str() {
+    fn test_decoding_none_str_with_body_section_value_null() {
         let src = Message::builder()
             // This actually serializes to `AmpqValue(Value::Null)`
             .body(Body::<Value>::Empty)
             .build();
         let buf = to_vec(&Serializable(src)).unwrap();
-        println!("{:#x?}", buf);
         // This will give an error if the empty body section is not encoded as a
         // `AmqpValue(Value::Null)`
         let msg: Deserializable<Message<Option<String>>> = from_slice(&buf).unwrap();
 
-        println!("{:?}", msg);
-        // assert!(msg.0.body.is_none() || matches!(msg.0.body.unwrap(), Value::Null));
+        assert!(msg.0.body.is_none());
+    }
+
+    #[test]
+    fn test_decoding_none_str_with_no_body_section() {
+        let buf: [u8; 8] = [0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45];
+        let msg: Deserializable<Message<Option<String>>> = from_slice(&buf).unwrap();
+        assert!(msg.0.header.is_some());
+        assert!(msg.0.body.is_none());
     }
 }

@@ -118,9 +118,7 @@ impl<'de> FromBody<'de> for Data {
     }
 }
 
-impl FromEmptyBody for Data {
-    type Error = serde_amqp::Error;
-}
+impl FromEmptyBody for Data { }
 
 /* -------------------------------------------------------------------------- */
 /*                                 Batch<Data>                                */
@@ -148,9 +146,7 @@ impl<'de> FromBody<'de> for Batch<Data> {
     }
 }
 
-impl FromEmptyBody for Batch<Data> {
-    type Error = serde_amqp::Error;
-}
+impl FromEmptyBody for Batch<Data> { }
 
 impl<'de, T> TransposeOption<'de, T> for Batch<Data>
 where
