@@ -45,26 +45,26 @@ pub(crate) mod __private {
 pub trait SerializableBody: Serialize + BodySection {}
 
 /// This trait defines how to interprerte a message when there is an emtpy body.
-/// 
+///
 /// It provides a blanket implementation that simply returns an error, which should work for most
-/// scenarios. If a mixture of empty body and non-empty body are expected, one could either use
-/// [`Body`] as the body section type or use `Option<T>` which interpretes an empty body as `None`.
-/// 
+/// scenarios. If a mixture of empty body and non-empty body are expected, it is recommended to use
+/// [`Body<Value>`] as the body section type as there are different implementations of an empty body.
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// #[derive(Deserialize)]
 /// struct Foo { a: 9 }
-/// 
+///
 /// // Simply use the blanked implementation
 /// impl FromEmptyBody {
 ///     // use `serde_amqp::Error` if you don't want to define your own
-///     type Error = serde_amqp::Error; 
+///     type Error = serde_amqp::Error;
 /// }
 /// ```
-/// 
+///
 /// # Mis-wording of in the core specification
-/// 
+///
 /// Though the core specification states that **at least one** body section should be present in the
 /// message. However, this is not the way `proton` is implemented, and according to
 /// [PROTON-2574](https://issues.apache.org/jira/browse/PROTON-2574), the wording in the core
@@ -79,6 +79,17 @@ pub trait FromEmptyBody: Sized {
     }
 }
 
+///
+pub trait TransposeOption<'de>: BodySection + Sized {
+    /// 
+    type From: DeserializableBody<'de>;
+    ///
+    type To: FromBody<'de>;
+
+    ///
+    fn transpose(src: Option<Self::From>) -> Option<Self::To>;
+}
+
 /// Trait for a deserializable body section
 ///
 /// This is only implemented for
@@ -89,6 +100,7 @@ pub trait FromEmptyBody: Sized {
 /// 4. [`Data`]
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
+/// 7. `Option<B> where B: DeserializableBody`
 pub trait DeserializableBody<'de>: Deserialize<'de> + BodySection {}
 
 /// Convert the type to a `SerializableBody` which includes:
@@ -161,19 +173,25 @@ pub trait FromBody<'de>: Sized + FromEmptyBody {
 /* -------------------------------------------------------------------------- */
 /*                                  Option<T>                                 */
 /* -------------------------------------------------------------------------- */
+// FIXME: how to transpose `Option`?
 
 // Option can only be used on deserializing becuase the user should be certain
 // on whether an empty body is going to be serialized
-impl<'de, T> FromBody<'de> for Option<T>
+impl<'de, T> FromBody<'de> for Option<T> 
 where
     T: FromBody<'de>,
+    T::Body: TransposeOption<'de, To = T>,
 {
-    type Body = T::Body;
+    type Body = Option<<T::Body as TransposeOption<'de>>::From>;
 
     fn from_body(deserializable: Self::Body) -> Self {
-        Some(T::from_body(deserializable))
+        <T::Body as TransposeOption>::transpose(deserializable)
     }
 }
+
+impl<B> BodySection for Option<B> where B: BodySection {}
+
+impl<'de, B> DeserializableBody<'de> for Option<B> where B: DeserializableBody<'de> {}
 
 impl<T> FromEmptyBody for Option<T> {
     type Error = serde_amqp::Error;
@@ -421,5 +439,68 @@ where
 
     fn from_body(deserializable: Self::Body) -> Self {
         deserializable.0
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    Test                                    */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+    use serde_amqp::{from_slice, to_vec, Value};
+
+    use crate::messaging::{
+        message::__private::{Deserializable, Serializable},
+        AmqpValue, Body, Message,
+    };
+
+    const TEST_STR: &str = "test_str";
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+    struct TestExample {
+        a: i32,
+    }
+
+    #[test]
+    fn test_encoding_option_str() {
+        // let msg = Message::builder()
+        //     .body(Some(TEST_STR)) // This should NOT work
+        //     .build();
+
+        let expected_msg = Message::builder().value(TEST_STR).build();
+        let expected = to_vec(&Serializable(expected_msg)).unwrap();
+
+        let msg = Message::builder().value(Some(TEST_STR)).build();
+        let buf = to_vec(&Serializable(msg)).unwrap();
+
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn test_decoding_some_str() {
+        let src = Message::builder().value(TEST_STR).build();
+        let buf = to_vec(&Serializable(src)).unwrap();
+        let msg: Deserializable<Message<Body<String>>> = from_slice(&buf).unwrap();
+
+        assert!(!msg.0.body.is_empty());
+        assert_eq!(msg.0.body.try_as_value().unwrap(), TEST_STR);
+    }
+
+    #[test]
+    fn test_decoding_none_str() {
+        let src = Message::builder()
+            // This actually serializes to `AmpqValue(Value::Null)`
+            .body(Body::<Value>::Empty) 
+            .build();
+        let buf = to_vec(&Serializable(src)).unwrap();
+        println!("{:#x?}", buf);
+        // This will give an error if the empty body section is not encoded as a
+        // `AmqpValue(Value::Null)`
+        let msg: Deserializable<Message<Option<String>>> = from_slice(&buf).unwrap();
+
+        println!("{:?}", msg);
+        // assert!(msg.0.body.is_none() || matches!(msg.0.body.unwrap(), Value::Null));
     }
 }

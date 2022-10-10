@@ -5,7 +5,7 @@ use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
     DeserializableBody, FromBody, FromEmptyBody, IntoBody,
-    SerializableBody, __private::BodySection,
+    SerializableBody, __private::BodySection, TransposeOption, Body
 };
 
 /// 3.2.8 AMQP Value
@@ -67,5 +67,24 @@ where
 
     fn from_empty_body() -> Result<Self, Self::Error> {
         T::from_empty_body().map(AmqpValue)
+    }
+}
+
+impl<'de, T> TransposeOption<'de> for AmqpValue<T>
+where
+    T: FromBody<'de, Body = Self> + de::Deserialize<'de>,
+{
+    type From = AmqpValue<Option<T>>;
+
+    type To = T;
+
+    fn transpose(src: Option<Self::From>) -> Option<Self::To> {
+        match src {
+            Some(AmqpValue(body)) => match body {
+                Some(body) => Some(T::from_body(AmqpValue(body))),
+                None => None,
+            },
+            None => None,
+        }
     }
 }
