@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<T> FromEmptyBody for AmqpSequence<T> { }
+impl<T> FromEmptyBody for AmqpSequence<T> {}
 
 impl<'de, T, U> TransposeOption<'de, T> for AmqpSequence<U>
 where
@@ -142,7 +142,7 @@ where
     }
 }
 
-impl<T> FromEmptyBody for Batch<AmqpSequence<T>> { }
+impl<T> FromEmptyBody for Batch<AmqpSequence<T>> {}
 
 impl<'de, T, U> TransposeOption<'de, T> for Batch<AmqpSequence<U>>
 where

@@ -56,7 +56,7 @@ pub trait SerializableBody: Serialize + BodySection {}
 ///
 /// ```rust
 /// use fe2o3_amqp_types::messaging::FromEmptyBody;
-/// 
+///
 /// struct Foo { a: i32 }
 ///
 /// // Simply use the blanked implementation
@@ -127,7 +127,7 @@ pub trait DeserializableBody<'de>: Deserialize<'de> + BodySection {}
 /// ```rust
 /// use serde::Serialize;
 /// use fe2o3_amqp_types::messaging::{IntoBody, AmqpValue};
-/// 
+///
 /// #[derive(Serialize)]
 /// struct Foo { a: i32 }
 ///
@@ -160,23 +160,23 @@ pub trait IntoBody {
 /// handles the case when an empty body is found. Please see [`FromEmptyBody`] for more information.
 ///
 /// # `Body` section type?
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use serde::Deserialize;
 /// use fe2o3_amqp_types::messaging::{AmqpValue, FromEmptyBody, FromBody};
-/// 
+///
 /// #[derive(Deserialize)]
 /// struct Foo {
 ///     a: i32
 /// }
-/// 
+///
 /// impl FromEmptyBody for Foo {}
-/// 
+///
 /// impl<'de> FromBody<'de> for Foo {
 ///     type Body = AmqpValue<Self>;
-/// 
+///
 ///     fn from_body(body: Self::Body) -> Self {
 ///         body.0
 ///     }
@@ -464,10 +464,10 @@ mod tests {
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
-        Body, Message, AmqpValue,
+        AmqpValue, Body, Message,
     };
 
-    use super::{IntoBody, FromEmptyBody, FromBody};
+    use super::{FromBody, FromEmptyBody, IntoBody};
 
     const TEST_STR: &str = "test_str";
 
@@ -484,7 +484,7 @@ mod tests {
         }
     }
 
-    impl FromEmptyBody for TestExample { }
+    impl FromEmptyBody for TestExample {}
 
     impl<'de> FromBody<'de> for TestExample {
         type Body = AmqpValue<Self>;
@@ -544,13 +544,10 @@ mod tests {
 
     #[test]
     fn test_encoding_decoding_custom_type() {
-        let expected = AmqpValue(TestExample {a: 9});
-        let buf = to_vec(&expected).unwrap();
-        panic!("{:#x?}", buf);
-
-        // let msg = Message::from(expected.clone());
-        // let buf = to_vec(&Serializable(msg)).unwrap();
-        // let decoded: Deserializable<Message<TestExample>> = from_slice(&buf).unwrap();
-        // assert_eq!(decoded.0.body, expected)
+        let expected = TestExample { a: 9 };
+        let msg = Message::from(expected.clone());
+        let buf = to_vec(&Serializable(msg)).unwrap();
+        let decoded: Deserializable<Message<TestExample>> = from_slice(&buf).unwrap();
+        assert_eq!(decoded.0.body, expected)
     }
 }
