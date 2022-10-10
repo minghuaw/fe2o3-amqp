@@ -467,11 +467,11 @@ mod tests {
         Body, Message, AmqpValue,
     };
 
-    use super::{IntoBody, FromEmptyBody};
+    use super::{IntoBody, FromEmptyBody, FromBody};
 
     const TEST_STR: &str = "test_str";
 
-    #[derive(Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
     struct TestExample {
         a: i32,
     }
@@ -485,6 +485,14 @@ mod tests {
     }
 
     impl FromEmptyBody for TestExample { }
+
+    impl<'de> FromBody<'de> for TestExample {
+        type Body = AmqpValue<Self>;
+
+        fn from_body(deserializable: Self::Body) -> Self {
+            deserializable.0
+        }
+    }
 
     #[test]
     fn test_encoding_option_str() {
@@ -532,5 +540,17 @@ mod tests {
         let msg: Deserializable<Message<Option<String>>> = from_slice(&buf).unwrap();
         assert!(msg.0.header.is_some());
         assert!(msg.0.body.is_none());
+    }
+
+    #[test]
+    fn test_encoding_decoding_custom_type() {
+        let expected = AmqpValue(TestExample {a: 9});
+        let buf = to_vec(&expected).unwrap();
+        panic!("{:#x?}", buf);
+
+        // let msg = Message::from(expected.clone());
+        // let buf = to_vec(&Serializable(msg)).unwrap();
+        // let decoded: Deserializable<Message<TestExample>> = from_slice(&buf).unwrap();
+        // assert_eq!(decoded.0.body, expected)
     }
 }
