@@ -554,7 +554,8 @@ mod tests {
     #[test]
     fn test_encoding_reference() {
         let expected = TestExample { a: 9 };
-        // let msg = Message::builder().body(&expected).build();
+        // let msg = Message::builder().body(Body::Value(AmqpValue(&expected))).build();
+        // let msg = Message::from(AmqpValue(&expected));
         let msg = Message::from(&expected);
 
         let buf = to_vec(&Serializable(msg)).unwrap();
