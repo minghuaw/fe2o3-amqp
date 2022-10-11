@@ -5,10 +5,10 @@ use fe2o3_amqp::connection::ConnectionHandle;
 use fe2o3_amqp::transaction::OwnedTransaction;
 use fe2o3_amqp::transaction::TransactionDischarge;
 use fe2o3_amqp::transaction::TransactionalRetirement;
+use fe2o3_amqp::types::messaging::AmqpSequence;
 use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::messaging::Properties;
-use fe2o3_amqp::types::primitives::Binary;
 use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Receiver;
 use fe2o3_amqp::Sender;
@@ -83,7 +83,7 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
+    let delivery = receiver.recv::<AmqpSequence<String>>().await.unwrap();
     println!("Received from DLQ: {:?}", delivery);
 
     // The Azure ServiceBus SDK disposes the DLQ message in a txn
