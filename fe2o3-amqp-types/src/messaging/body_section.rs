@@ -147,6 +147,30 @@ pub trait IntoBody {
     fn into_body(self) -> Self::Body;
 }
 
+impl<'a, T> IntoBody for &'a T
+where
+    T: IntoBody,
+    T::Body: AsBodyRef<'a, T>
+{
+    type Body = <T::Body as AsBodyRef<'a, T>>::BodyRef;
+
+    fn into_body(self) -> Self::Body {
+        <T::Body as AsBodyRef<'a, T>>::as_body_ref(self)
+    }
+}
+
+/// Allows serializing with a reference to the type
+pub trait AsBodyRef<'a, T>: SerializableBody + BodySection
+where
+    T: IntoBody<Body = Self>,
+{
+    ///
+    type BodyRef: SerializableBody + 'a;
+
+    ///
+    fn as_body_ref(src: &'a T) -> Self::BodyRef;
+}
+
 /// Convert back to the type from a `DeserializableBody` which includes:
 ///
 /// 1. [`AmqpValue`]

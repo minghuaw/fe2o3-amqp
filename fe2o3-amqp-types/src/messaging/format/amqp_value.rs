@@ -5,7 +5,7 @@ use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
     DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody, TransposeOption,
-    __private::BodySection,
+    __private::BodySection, AsBodyRef,
 };
 
 /// 3.2.8 AMQP Value
@@ -93,15 +93,14 @@ where
     }
 }
 
-impl<'se, T> IntoBody for &'se T
+impl<'a, T: 'a> AsBodyRef<'a, T> for AmqpValue<T> 
 where
-    T: IntoBody<Body = AmqpValue<T>>,
-    AmqpValue<&'se T>: SerializableBody,
+    T: IntoBody<Body = Self> + Serialize,
 {
-    type Body = AmqpValue<&'se T>;
+    type BodyRef = AmqpValue<&'a T>;
 
-    fn into_body(self) -> Self::Body {
-        AmqpValue(self)
+    fn as_body_ref(src: &'a T) -> Self::BodyRef {
+        AmqpValue(src)
     }
 }
 
@@ -212,8 +211,6 @@ mod tests {
     #[test]
     fn test_encoding_reference() {
         let expected = TestExample { a: 9 };
-        // let msg = Message::builder().body(Body::Value(AmqpValue(&expected))).build();
-        // let msg = Message::from(AmqpValue(&expected));
         let msg = Message::from(&expected);
 
         let buf = to_vec(&Serializable(msg)).unwrap();
