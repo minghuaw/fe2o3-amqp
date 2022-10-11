@@ -27,10 +27,10 @@ async fn create_dlq_message(connection: &mut ConnectionHandle<()>, queue_name: &
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let data = "hello AMQP from rust".as_bytes().to_vec();
+    let seq = vec!["hello", "AMQP", "from", "rust"];
     let message = Message::builder()
         .properties(Properties::builder().message_id(1).build())
-        .data(Binary::from(data))
+        .sequence(seq)
         .build();
 
     let outcome = sender.send(message).await.unwrap();
