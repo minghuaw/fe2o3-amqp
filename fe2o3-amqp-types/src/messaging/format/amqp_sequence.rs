@@ -46,6 +46,12 @@ where
     }
 }
 
+impl<T> From<Vec<T>> for AmqpSequence<T> {
+    fn from(value: Vec<T>) -> Self {
+        Self(value)
+    }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                AmqpSequence                                */
 /* -------------------------------------------------------------------------- */
@@ -187,7 +193,7 @@ mod tests {
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
-        AmqpSequence, Message,
+        AmqpSequence, Batch, Message,
     };
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
@@ -224,5 +230,27 @@ mod tests {
         let buf = to_vec(&Serializable(message)).unwrap();
         let decoded: Deserializable<Message<AmqpSequence<TestExample>>> = from_slice(&buf).unwrap();
         assert_eq!(decoded.0.body.0, vec![example_1, example_2, example_3]);
+    }
+
+    #[test]
+    fn test_serde_amqp_sequence_batch() {
+        let examples = vec![
+            TestExample { a: 1 },
+            TestExample { a: 2 },
+            TestExample { a: 3 },
+        ];
+        let msg = Message::builder()
+            .sequence_batch(vec![examples.clone(), examples.clone(), examples.clone()])
+            .build();
+        let buf = to_vec(&Serializable(msg)).unwrap();
+        let decoded: Deserializable<Message<Batch<AmqpSequence<TestExample>>>> =
+            from_slice(&buf).unwrap();
+
+        let expected: Vec<AmqpSequence<TestExample>> =
+            vec![examples.clone(), examples.clone(), examples.clone()]
+                .into_iter()
+                .map(Into::into)
+                .collect();
+        assert_eq!(decoded.0.body.into_inner(), expected);
     }
 }

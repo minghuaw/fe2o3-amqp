@@ -528,14 +528,17 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as a single `Body::Sequence` section
-    pub fn sequence<V: Serialize>(self, values: impl Into<Vec<V>>) -> Builder<AmqpSequence<V>> {
+    pub fn sequence<V: Serialize>(
+        self,
+        values: impl Into<AmqpSequence<V>>,
+    ) -> Builder<AmqpSequence<V>> {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: AmqpSequence(values.into()),
+            body: values.into(),
             footer: self.footer,
         }
     }
@@ -543,7 +546,7 @@ impl<T> Builder<T> {
     /// Set the body as `Body::SequenceBatch`
     pub fn sequence_batch<V: Serialize>(
         self,
-        batch: impl Into<Batch<AmqpSequence<V>>>,
+        batch: impl IntoIterator<Item = impl Into<AmqpSequence<V>>>,
     ) -> Builder<Batch<AmqpSequence<V>>> {
         Builder {
             header: self.header,
@@ -551,7 +554,7 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: batch.into(),
+            body: batch.into_iter().map(Into::into).collect(),
             footer: self.footer,
         }
     }
@@ -570,14 +573,17 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body::DataBatch`
-    pub fn data_batch(self, batch: impl Into<Batch<Data>>) -> Builder<Batch<Data>> {
+    pub fn data_batch(
+        self,
+        batch: impl IntoIterator<Item = impl Into<Data>>,
+    ) -> Builder<Batch<Data>> {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: batch.into(),
+            body: batch.into_iter().map(Into::into).collect(),
             footer: self.footer,
         }
     }

@@ -4,8 +4,8 @@ use serde::{de, ser, Serialize};
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
-    DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody, TransposeOption,
-    __private::BodySection, AsBodyRef,
+    AsBodyRef, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
+    TransposeOption, __private::BodySection,
 };
 
 /// 3.2.8 AMQP Value
@@ -93,7 +93,7 @@ where
     }
 }
 
-impl<'a, T: 'a> AsBodyRef<'a, T> for AmqpValue<T> 
+impl<'a, T: 'a> AsBodyRef<'a, T> for AmqpValue<T>
 where
     T: IntoBody<Body = Self> + Serialize,
 {

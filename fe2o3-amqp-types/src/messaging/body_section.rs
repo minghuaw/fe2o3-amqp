@@ -150,7 +150,7 @@ pub trait IntoBody {
 impl<'a, T> IntoBody for &'a T
 where
     T: IntoBody,
-    T::Body: AsBodyRef<'a, T>
+    T::Body: AsBodyRef<'a, T>,
 {
     type Body = <T::Body as AsBodyRef<'a, T>>::BodyRef;
 

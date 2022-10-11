@@ -178,7 +178,7 @@ mod tests {
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
-        Message,
+        Batch, Message,
     };
 
     use super::Data;
@@ -191,5 +191,20 @@ mod tests {
         let buf = to_vec(&Serializable(msg)).unwrap();
         let decoded: Deserializable<Message<Data>> = from_slice(&buf).unwrap();
         assert_eq!(decoded.0.body.0, TEST_STR.as_bytes());
+    }
+
+    #[test]
+    fn test_serde_data_batch() {
+        let batch = vec![
+            TEST_STR.as_bytes(),
+            TEST_STR.as_bytes(),
+            TEST_STR.as_bytes(),
+        ];
+        let msg = Message::builder().data_batch(batch.clone()).build();
+        let buf = to_vec(&Serializable(msg)).unwrap();
+        let decoded: Deserializable<Message<Batch<Data>>> = from_slice(&buf).unwrap();
+        let expected: Vec<Data> = batch.into_iter().map(Into::into).collect();
+
+        assert_eq!(decoded.0.body.into_inner(), expected);
     }
 }
