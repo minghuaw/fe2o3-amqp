@@ -56,7 +56,7 @@ where
 }
 
 /// AMQP 1.0 Message
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Message<B> {
     /// Transport headers for a message.
     pub header: Option<Header>,
@@ -502,9 +502,7 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body`
-    pub fn body<U, B>(self, value: U) -> Builder<B> 
-    where
-        U: IntoBody<Body = B>,
+    pub fn body<B>(self, value: B) -> Builder<B> 
     {
         Builder {
             header: self.header,
@@ -512,7 +510,7 @@ impl<T> Builder<T> {
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: value.into_body(),
+            body: value,
             footer: self.footer,
         }
     }
