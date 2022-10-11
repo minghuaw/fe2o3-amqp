@@ -40,7 +40,7 @@ use super::{
 };
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Body, Data, Message, IntoBody, Batch};
+use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message};
 
 /// An AMQP1.0 sender
 ///
@@ -213,67 +213,67 @@ impl Sender {
     /// Send a message and wait for acknowledgement (disposition)
     ///
     /// # Use custom types as argument
-    /// 
+    ///
     /// The AMQP 1.0 protocol requires user to choose the body section type:
-    /// 
+    ///
     /// - [`AmqpValue`]
     /// - [`AmqpSequence`] / [`Batch<AmqpSequence>`]
     /// - [`Data`] / [`Batch<Data>`]
-    /// 
+    ///
     /// Below shows some ways to use custom types.
-    /// 
+    ///
     /// ## 1. Wrap custom type in [`AmqpValue`]
-    /// 
+    ///
     /// The easiest way to use a custom type is probably to define a custom type that implements
     /// [`serde::Serialize`] and then wrap the type in [`AmqpValue`].
-    /// 
+    ///
     /// ### Example
-    /// 
+    ///
     /// ```rust
     /// #[derive(Serialize)]
     /// struct Foo {
     ///     a: i32
     /// }
-    /// 
+    ///
     /// sender.send(AmqpValue(Foo{a: 3})).await.unwrap();
     /// ```
-    /// 
+    ///
     /// ## 2. Implement [`IntoBody`] trait for the custom type
-    /// 
+    ///
     /// Another option is to implement the [`IntoBody`] trait, which essentially asks the user to
     /// choose which body section type should be used. Please see documention on [`IntoBody`] for
     /// more information on the available body section types.
-    /// 
+    ///
     /// ### Example
-    /// 
+    ///
     /// ```rust
     /// #[derive(Serialize)]
     /// struct Foo {
     ///     a: i32
     /// }
-    /// 
+    ///
     /// impl IntoBody for Foo {
     ///     type Body = AmqpValue<Foo>;
-    /// 
+    ///
     ///     fn into_body(self) -> Self::Body {
     ///         AmqpValue(self)
     ///     }
     /// }
-    /// 
+    ///
     /// sender.send(Foo{a: 5}).await.unwrap();
     /// ```
-    /// 
+    ///
     /// ## 3. Use message builder
-    /// 
+    ///
     /// One could still use the message builder to not only set other non-body fields of
     /// [`Message`] but also choosing the type of body section.
-    /// 
+    ///
     /// ```rust
     /// #[derive(Serialize)]
     /// struct Foo {
     ///     a: i32
     /// }
-    /// 
+    ///
     /// let message = Message::builder()
     ///     .properties(
     ///         Properties::builder()
@@ -284,9 +284,9 @@ impl Sender {
     ///     .build();
     /// sender.send(message).await.unwrap();
     /// ```
-    /// 
+    ///
     /// # Pre-settle a message with [`Sendable`] builder
-    /// 
+    ///
     /// The user can pre-settle a message by specifying `settled` field in the [`Sendable`]. Unless
     /// an explicity [`Sendable`] is passed to the argument, the `message_format` field is set to
     /// [`MESSAGE_FORMAT`] and the `settled` field is set to `None`.

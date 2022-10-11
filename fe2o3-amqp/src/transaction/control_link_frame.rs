@@ -21,9 +21,7 @@ impl IntoBody for ControlMessageBody {
     }
 }
 
-impl FromEmptyBody for ControlMessageBody {
-    type Error = serde_amqp::Error;
-}
+impl FromEmptyBody for ControlMessageBody {}
 
 impl<'de> FromBody<'de> for ControlMessageBody {
     type Body = AmqpValue<Self>;

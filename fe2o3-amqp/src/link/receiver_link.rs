@@ -1,4 +1,7 @@
-use fe2o3_amqp_types::{definitions::Handle, messaging::{message::DecodeIntoMessage, FromBody}};
+use fe2o3_amqp_types::{
+    definitions::Handle,
+    messaging::{message::DecodeIntoMessage, FromBody},
+};
 use serde_amqp::format_code::EncodingCodes;
 
 use crate::util::{is_consecutive, AsByteIterator, IntoReader};
