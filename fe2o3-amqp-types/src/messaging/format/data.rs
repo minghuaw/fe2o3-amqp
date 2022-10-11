@@ -167,3 +167,29 @@ where
         }
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                    Test                                    */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use serde_amqp::{to_vec, from_slice};
+
+    use crate::messaging::{Message, message::__private::{Serializable, Deserializable}};
+
+    use super::Data;
+
+
+    const TEST_STR: &str = "this is some random string that acts as a test str";
+
+    #[test]
+    fn test_serde_data() {
+        let msg = Message::builder()
+            .data(TEST_STR.as_bytes())
+            .build();
+        let buf = to_vec(&Serializable(msg)).unwrap();
+        let decoded: Deserializable<Message<Data>> = from_slice(&buf).unwrap();
+        assert_eq!(decoded.0.body.0, TEST_STR.as_bytes());
+    }
+}
