@@ -1,6 +1,6 @@
 use dotenv::dotenv;
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, types::primitives::Value, Connection, Receiver, Session,
+    sasl_profile::SaslProfile, types::messaging::Data, Connection, Receiver, Session,
 };
 use fe2o3_amqp_ws::WebSocketStream;
 use std::env;
@@ -15,12 +15,9 @@ async fn main() {
     let queue_name = env::var("QUEUE_NAME").unwrap();
 
     // wss://[sas-policy]:[sas-key]@[ns].servicebus.windows.net/$servicebus/websocket
-    let ws_address =
-        format!("wss://{sa_key_name}:{sa_key_value}@{hostname}/$servicebus/websocket");
+    let ws_address = format!("wss://{sa_key_name}:{sa_key_value}@{hostname}/$servicebus/websocket");
 
-    let (ws_stream, _) = WebSocketStream::connect(ws_address)
-        .await
-        .unwrap();
+    let (ws_stream, _) = WebSocketStream::connect(ws_address).await.unwrap();
 
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
@@ -38,8 +35,8 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Value>().await.unwrap();
-    let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
+    let delivery = receiver.recv::<Data>().await.unwrap();
+    let msg = std::str::from_utf8(&delivery.body().0).unwrap();
     println!("Received: {:?}", msg);
     receiver.accept(&delivery).await.unwrap();
 

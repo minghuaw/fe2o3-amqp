@@ -2,44 +2,33 @@ use std::{fmt::Display, marker::PhantomData};
 
 use serde::{
     de::{self, VariantAccess},
-    Serialize,
+    ser, Serialize,
 };
-use serde_amqp::Value;
+use serde_amqp::{primitives::Binary, Value};
 
-use crate::messaging::{AmqpSequence, AmqpValue, Data};
-
-use super::__private::{Deserializable, Serializable};
+use crate::messaging::{
+    AmqpSequence, AmqpValue, Batch, Data, DeserializableBody, FromBody, FromEmptyBody, IntoBody,
+    SerializableBody, TransposeOption, __private::BodySection,
+};
 
 use serde_amqp::extensions::TransparentVec;
 
 /// The body consists of one of the following three choices: one or more data sections, one or more
 /// amqp-sequence sections, or a single amqp-value section.
-/// 
-/// Support for more than one `Data` or `AmqpSequence` sections are added since version "0.6.0".
-/// 
-/// # Why separating `Data`/`Sequence` and `DataBatch`/`SequenceBatch`
-/// 
-/// 1. Compatibility. Only the `Data` and `Sequence` variants were provided in the earlier versions
-/// 2. It seems like `DataBatch` and `SequenceBatch` are used much rarely than `Data` or `Sequence`.
-/// Allocating a Vec for just one element constantly seems a waste.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Body<T> {
-    /// A data section contains opaque binary data
-    Data(Data),
-    /// A sequence section contains an arbitrary number of structured data elements
-    Sequence(AmqpSequence<T>),
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
 
     /// More than one data section
-    /// 
+    ///
     /// Added since `"0.6.0"`
-    DataBatch(TransparentVec<Data>),
+    Data(TransparentVec<Data>),
 
     /// More than one sequence section
-    /// 
+    ///
     /// Added since `"0.6.0"`
-    SequenceBatch(TransparentVec<AmqpSequence<T>>),
+    Sequence(TransparentVec<AmqpSequence<T>>),
 
     /// There is no body section at all
     ///
@@ -76,6 +65,60 @@ impl<T> Body<T> {
     pub fn is_empty(&self) -> bool {
         matches!(self, Body::Empty)
     }
+
+    /// Consume the delivery into the body if the body is an [`AmqpValue`].
+    /// An error will be returned if otherwise
+    pub fn try_into_value(self) -> Result<T, Self> {
+        match self {
+            Body::Value(AmqpValue(value)) => Ok(value),
+            _ => Err(self),
+        }
+    }
+
+    /// Consume the delivery into the body if the body is one or more [`Data`].
+    /// An error will be returned if otherwise
+    pub fn try_into_data(self) -> Result<impl Iterator<Item = Binary>, Self> {
+        match self {
+            Body::Data(batch) => Ok(batch.into_iter().map(|data| data.0)),
+            _ => Err(self),
+        }
+    }
+
+    /// Consume the delivery into the body if the body is one or more [`AmqpSequence`].
+    /// An error will be returned if otherwise
+    pub fn try_into_sequence(self) -> Result<impl Iterator<Item = Vec<T>>, Self> {
+        match self {
+            Body::Sequence(batch) => Ok(batch.into_iter().map(|seq| seq.0)),
+            _ => Err(self),
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is an [`AmqpValue`].
+    /// An error will be returned if the body isnot an [`AmqpValue`]
+    pub fn try_as_value(&self) -> Result<&T, &Self> {
+        match self {
+            Body::Value(AmqpValue(value)) => Ok(value),
+            _ => Err(self),
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is one or more [`Data`].
+    /// An error will be returned otherwise
+    pub fn try_as_data(&self) -> Result<impl Iterator<Item = &Binary>, &Self> {
+        match self {
+            Body::Data(batch) => Ok(batch.iter().map(|data| &data.0)),
+            _ => Err(self),
+        }
+    }
+
+    /// Get a reference to the delivery body if the body is one or more [`AmqpSequence`].
+    /// An error will be returned otherwise
+    pub fn try_as_sequence(&self) -> Result<impl Iterator<Item = &Vec<T>>, &Self> {
+        match self {
+            Body::Sequence(batch) => Ok(batch.iter().map(|seq| &seq.0)),
+            _ => Err(self),
+        }
+    }
 }
 
 impl<T> Display for Body<T>
@@ -84,11 +127,9 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Body::Data(data) => write!(f, "{}", data),
-            Body::Sequence(seq) => write!(f, "{}", seq),
             Body::Value(val) => write!(f, "{}", val),
-            Body::DataBatch(_) => write!(f, "DataBatch"),
-            Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
+            Body::Data(_) => write!(f, "Data"),
+            Body::Sequence(_) => write!(f, "Sequence"),
             Body::Empty => write!(f, "Nothing"),
         }
     }
@@ -102,7 +143,7 @@ impl<T: Serialize> From<T> for Body<T> {
 
 impl<T: Serialize + Clone, const N: usize> From<[T; N]> for Body<T> {
     fn from(values: [T; N]) -> Self {
-        Self::Sequence(AmqpSequence(values.to_vec()))
+        Self::Sequence(TransparentVec::new(vec![AmqpSequence(values.to_vec())]))
     }
 }
 
@@ -114,66 +155,26 @@ impl<T> From<AmqpValue<T>> for Body<T> {
 
 impl<T> From<AmqpSequence<T>> for Body<T> {
     fn from(val: AmqpSequence<T>) -> Self {
-        Self::Sequence(val)
+        Self::Sequence(TransparentVec::new(vec![val]))
     }
 }
 
 impl From<Data> for Body<Value> {
     fn from(val: Data) -> Self {
-        Self::Data(val)
+        Self::Data(TransparentVec::new(vec![val]))
     }
 }
 
-impl<T: Serialize> Serialize for Serializable<Body<T>> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<T: Serialize> Serialize for Serializable<&Body<T>> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<'de, T> de::Deserialize<'de> for Deserializable<Body<T>>
-where
-    T: de::Deserialize<'de>,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = Body::<T>::deserialize(deserializer)?;
-        Ok(Deserializable(value))
-    }
-}
-
-impl<T: Serialize> Body<T> {
+impl<T: Serialize> ser::Serialize for Body<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match self {
-            Body::Data(data) => Serializable(data).serialize(serializer),
-            Body::Sequence(seq) => Serializable(seq).serialize(serializer),
-            Body::Value(val) => Serializable(val).serialize(serializer),
-            Body::DataBatch(vec) => {
-                let v: TransparentVec<Serializable<&Data>> = vec.iter().map(Serializable).collect();
-                v.serialize(serializer)
-            }
-            Body::SequenceBatch(vec) => {
-                let v: TransparentVec<Serializable<&AmqpSequence<T>>> =
-                    vec.iter().map(Serializable).collect();
-                v.serialize(serializer)
-            }
-            Body::Empty => Serializable(AmqpValue(())).serialize(serializer),
+            Body::Data(data) => data.serialize(serializer),
+            Body::Sequence(seq) => seq.serialize(serializer),
+            Body::Value(val) => val.serialize(serializer),
+            Body::Empty => AmqpValue(()).serialize(serializer),
         }
     }
 }
@@ -250,22 +251,22 @@ where
 
         match val {
             Field::Data => {
-                let Deserializable(data) = variant.newtype_variant()?;
+                let data: TransparentVec<Data> = variant.newtype_variant()?;
                 Ok(Body::Data(data))
             }
             Field::Sequence => {
-                let Deserializable(sequence) = variant.newtype_variant()?;
+                let sequence: TransparentVec<AmqpSequence<_>> = variant.newtype_variant()?;
                 Ok(Body::Sequence(sequence))
             }
             Field::Value => {
-                let Deserializable(value) = variant.newtype_variant()?;
+                let value = variant.newtype_variant()?;
                 Ok(Body::Value(value))
             }
         }
     }
 }
 
-impl<'de, T> Body<T>
+impl<'de, T> de::Deserialize<'de> for Body<T>
 where
     T: de::Deserialize<'de>,
 {
@@ -282,3 +283,89 @@ where
         )
     }
 }
+
+impl<T> BodySection for Body<T> {}
+
+impl<T> SerializableBody for Body<T> where T: ser::Serialize {}
+
+impl<'de, T> DeserializableBody<'de> for Body<T> where T: de::Deserialize<'de> {}
+
+impl<T> IntoBody for Body<T>
+where
+    T: ser::Serialize,
+{
+    type Body = Self;
+
+    fn into_body(self) -> Self::Body {
+        self
+    }
+}
+
+impl<'de, T> FromBody<'de> for Body<T>
+where
+    T: de::Deserialize<'de>,
+{
+    type Body = Self;
+
+    fn from_body(deserializable: Self::Body) -> Self {
+        deserializable
+    }
+}
+
+impl<T> FromEmptyBody for Body<T> {
+    fn from_empty_body() -> Result<Self, serde_amqp::Error> {
+        Ok(Self::Empty)
+    }
+}
+
+impl<'de, T, U> TransposeOption<'de, T> for Body<U>
+where
+    T: FromBody<'de, Body = Body<U>>,
+    U: de::Deserialize<'de>,
+{
+    type From = Body<Option<U>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Body::Value(AmqpValue(body)) => match body {
+                Some(body) => Some(T::from_body(Body::Value(AmqpValue(body)))),
+                None => None,
+            },
+            Body::Data(batch) => {
+                if batch.is_empty() {
+                    // Note that a null value and a zero-length array (with a correct type for its
+                    // elements) both describe an absence of a value and MUST be treated as
+                    // semantically identical.
+                    None
+                } else {
+                    Some(T::from_body(Body::Data(batch)))
+                }
+            }
+            Body::Sequence(batch) => {
+                if batch.is_empty() {
+                    // Note that a null value and a zero-length array (with a correct type for its
+                    // elements) both describe an absence of a value and MUST be treated as
+                    // semantically identical.
+                    None
+                } else {
+                    let batch: Option<Batch<AmqpSequence<U>>> = batch
+                        .into_iter()
+                        .map(|AmqpSequence(vec)| {
+                            let vec: Option<Vec<U>> = vec.into_iter().collect();
+                            vec.map(AmqpSequence)
+                        })
+                        .collect();
+
+                    match batch {
+                        Some(batch) => Some(T::from_body(Body::Sequence(batch))),
+                        None => None,
+                    }
+                }
+            }
+            Body::Empty => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {}

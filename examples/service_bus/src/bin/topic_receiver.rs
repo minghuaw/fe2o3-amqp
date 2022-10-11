@@ -2,7 +2,7 @@ use std::env;
 
 use dotenv::dotenv;
 use fe2o3_amqp::{
-    sasl_profile::SaslProfile, types::primitives::Value, Connection, Receiver, Session,
+    sasl_profile::SaslProfile, types::{primitives::Value, messaging::Body}, Connection, Receiver, Session,
 };
 
 #[tokio::main]
@@ -36,8 +36,8 @@ async fn main() {
 
     for _ in 0..3 {
         // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-        let delivery = receiver.recv::<Value>().await.unwrap();
-        let msg = std::str::from_utf8(&delivery.try_as_data().unwrap()[..]).unwrap();
+        let delivery = receiver.recv::<Body<Value>>().await.unwrap();
+        let msg = std::str::from_utf8(&delivery.body().try_as_data().unwrap().next().unwrap()[..]).unwrap();
         println!("Received: {:?}", msg);
         receiver.accept(&delivery).await.unwrap();
     }

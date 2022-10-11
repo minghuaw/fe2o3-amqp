@@ -4,7 +4,10 @@ use fe2o3_amqp::{
     Delivery, Receiver, Sender,
 };
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, MessageId, Outcome, Properties},
+    messaging::{
+        ApplicationProperties, FromBody, IntoBody, MessageId,
+        Outcome, Properties,
+    },
     primitives::SimpleValue,
 };
 
@@ -127,7 +130,10 @@ impl MgmtClient {
         entity_type: impl Into<String>,
         locales: impl Into<Option<String>>,
     ) -> Result<Outcome, SendError> {
-        let mut message = operation.into_message();
+        let mut message = operation
+            .into_message()
+            .map_body(IntoBody::into_body);
+
         let application_properties = message
             .application_properties
             .get_or_insert(ApplicationProperties::default());
@@ -153,7 +159,7 @@ impl MgmtClient {
     where
         O: MessageDeserializer<T>,
         O::Error: Into<Error>,
-        for<'de> T: serde::de::Deserialize<'de> + std::fmt::Debug + Send,
+        for<'de> T: FromBody<'de> + std::fmt::Debug + Send,
     {
         let delivery: Delivery<T> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;

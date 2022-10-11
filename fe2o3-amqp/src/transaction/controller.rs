@@ -1,6 +1,6 @@
 use fe2o3_amqp_types::{
     definitions::{self, SenderSettleMode},
-    messaging::{Accepted, DeliveryState, Message},
+    messaging::{Accepted, DeliveryState, Message, SerializableBody},
     transaction::{Coordinator, Declare, Declared, Discharge, TransactionId},
 };
 use tokio::sync::{oneshot, Mutex};
@@ -50,7 +50,7 @@ async fn send_on_control_link<T>(
     sendable: Sendable<T>,
 ) -> Result<oneshot::Receiver<Option<DeliveryState>>, link::SendError>
 where
-    T: serde::Serialize,
+    T: SerializableBody,
 {
     match sender.send(sendable).await? {
         Settlement::Settled(_) => Err(SendError::IllegalDeliveryState),

@@ -5,9 +5,10 @@ use fe2o3_amqp::connection::ConnectionHandle;
 use fe2o3_amqp::transaction::OwnedTransaction;
 use fe2o3_amqp::transaction::TransactionDischarge;
 use fe2o3_amqp::transaction::TransactionalRetirement;
+use fe2o3_amqp::types::messaging::AmqpSequence;
+use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::messaging::Properties;
-use fe2o3_amqp::types::primitives::Binary;
 use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Receiver;
 use fe2o3_amqp::Sender;
@@ -26,10 +27,10 @@ async fn create_dlq_message(connection: &mut ConnectionHandle<()>, queue_name: &
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let data = "hello AMQP from rust".as_bytes().to_vec();
+    let seq = vec!["hello", "AMQP", "from", "rust"];
     let message = Message::builder()
         .properties(Properties::builder().message_id(1).build())
-        .data(Binary::from(data))
+        .sequence(seq)
         .build();
 
     let outcome = sender.send(message).await.unwrap();
@@ -41,7 +42,7 @@ async fn create_dlq_message(connection: &mut ConnectionHandle<()>, queue_name: &
     let mut receiver = Receiver::attach(&mut session, "rust-receiver-link-1", queue_name)
         .await
         .unwrap();
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
     receiver.reject(&delivery, None).await.unwrap();
     receiver.close().await.unwrap();
 
@@ -82,7 +83,7 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<AmqpSequence<String>>().await.unwrap();
     println!("Received from DLQ: {:?}", delivery);
 
     // The Azure ServiceBus SDK disposes the DLQ message in a txn

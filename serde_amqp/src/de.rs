@@ -634,12 +634,11 @@ where
         V: de::Visitor<'de>,
     {
         match self.new_type {
-            NewType::None => visitor.visit_i64(self.parse_i64()?),
             NewType::Timestamp => {
                 self.new_type = NewType::None;
                 visitor.visit_i64(self.parse_timestamp()?)
             }
-            _ => unreachable!(),
+            _ => visitor.visit_i64(self.parse_i64()?),
         }
     }
 
@@ -705,14 +704,13 @@ where
         V: de::Visitor<'de>,
     {
         match self.new_type {
-            NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => {
                 // Leave symbol as visit_string because serde(untagged)
                 // on descriptor will visit String instead of str
                 self.new_type = NewType::None;
                 visitor.visit_string(self.parse_symbol()?)
             }
-            _ => unreachable!(),
+            _ => visitor.visit_string(self.parse_string()?),
         }
     }
 

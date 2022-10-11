@@ -7,17 +7,11 @@ use serde::{
     ser::SerializeStruct,
     Serialize,
 };
-use serde_amqp::{
-    __constants::{DESCRIBED_BASIC, DESCRIPTOR},
-    primitives::Binary,
-    value::Value,
-};
-
-use serde_amqp::extensions::TransparentVec;
+use serde_amqp::__constants::{DESCRIBED_BASIC, DESCRIPTOR};
 
 use super::{
-    AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Footer, Header,
-    MessageAnnotations, Properties,
+    AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations, Footer,
+    FromBody, Header, IntoBody, MessageAnnotations, Properties, SerializableBody,
 };
 
 mod body;
@@ -51,7 +45,7 @@ pub trait DecodeIntoMessage: Sized {
 
 impl<T> DecodeIntoMessage for T
 where
-    for<'de> T: de::Deserialize<'de>,
+    for<'de> T: FromBody<'de>, // TODO: change to higher rank trait bound once GAT stablises
 {
     type DecodeError = serde_amqp::Error;
 
@@ -62,8 +56,8 @@ where
 }
 
 /// AMQP 1.0 Message
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Message<T> {
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Message<B> {
     /// Transport headers for a message.
     pub header: Option<Header>,
 
@@ -83,39 +77,42 @@ pub struct Message<T> {
 
     /// The body consists of one of the following three choices: one or more data sections, one or more amqp-sequence
     /// sections, or a single amqp-value section.
-    pub body: Body<T>,
+    pub body: B,
 
     /// Transport footers for a message.
     pub footer: Option<Footer>,
 }
 
-impl<T: Serialize> Serialize for Serializable<Message<T>> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<T: Serialize> Serialize for Serializable<&Message<T>> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<'de, T> de::Deserialize<'de> for Deserializable<Message<T>>
+impl<B> Serialize for Serializable<Message<B>>
 where
-    T: de::Deserialize<'de>,
+    B: SerializableBody,
 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<B> Serialize for Serializable<&Message<B>>
+where
+    B: SerializableBody,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, B: FromBody<'de>> de::Deserialize<'de> for Deserializable<Message<B>> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let value = Message::<T>::deserialize(deserializer)?;
+        let value = Message::<B>::deserialize(deserializer)?;
         Ok(Deserializable(value))
     }
 }
@@ -164,12 +161,28 @@ impl<T> Message<T> {
             0x77
         }
     }
+
+    /// Map body to SerializableBody
+    pub fn map_body<F, B>(self, op: F) -> Message<B>
+    where
+        F: FnOnce(T) -> B,
+    {
+        Message {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: (op)(self.body),
+            footer: self.footer,
+        }
+    }
 }
 
 // impl<T> Serialize for Message<T>
-impl<T> Message<T>
+impl<B> Message<B>
 where
-    T: Serialize,
+    B: SerializableBody,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -191,7 +204,7 @@ where
         if let Some(application_properties) = &self.application_properties {
             state.serialize_field("application_properties", application_properties)?
         }
-        state.serialize_field("body", &Serializable(&self.body))?;
+        state.serialize_field("body", &self.body)?;
         if let Some(footer) = &self.footer {
             state.serialize_field("footer", footer)?;
         }
@@ -262,15 +275,15 @@ impl<'de> de::Deserialize<'de> for Field {
     }
 }
 
-struct Visitor<T> {
-    marker: PhantomData<T>,
+struct Visitor<B> {
+    marker: PhantomData<B>,
 }
 
-impl<'de, T> de::Visitor<'de> for Visitor<T>
+impl<'de, B> de::Visitor<'de> for Visitor<B>
 where
-    T: de::Deserialize<'de>,
+    B: FromBody<'de>,
 {
-    type Value = Message<T>;
+    type Value = Message<B>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("struct Message")
@@ -285,7 +298,7 @@ where
         let mut message_annotations = None;
         let mut properties = None;
         let mut application_properties = None;
-        let mut body: Body<T> = Body::Empty;
+        let mut body: Option<B> = None;
         let mut footer = None;
 
         let mut count = 0;
@@ -317,53 +330,22 @@ where
                     application_properties = seq.next_element()?;
                     count += 1;
                 }
-                Field::Body => match body {
-                    Body::Value(_) => {
-                        return Err(de::Error::custom("Only one AmqpValue section is expected"))
-                    }
-                    Body::Data(first) => match seq.next_element::<Deserializable<Data>>()? {
-                        Some(second) => {
-                            body = Body::DataBatch(TransparentVec::new(vec![first, second.0]));
-                        }
-                        None => body = Body::Data(first),
-                    },
-                    Body::DataBatch(mut batch) => {
-                        if let Some(data) = seq.next_element::<Deserializable<Data>>()? {
-                            batch.push(data.0);
-                        };
-                        body = Body::DataBatch(batch);
-                    }
-                    Body::Sequence(first) => {
-                        match seq.next_element::<Deserializable<AmqpSequence<T>>>()? {
-                            Some(second) => {
-                                body =
-                                    Body::SequenceBatch(TransparentVec::new(vec![first, second.0]));
-                            }
-                            None => body = Body::Sequence(first),
-                        }
-                    }
-                    Body::SequenceBatch(mut batch) => {
-                        if let Some(sequence) =
-                            seq.next_element::<Deserializable<AmqpSequence<T>>>()?
-                        {
-                            batch.push(sequence.0);
-                        }
-                        body = Body::SequenceBatch(batch);
-                    }
-                    Body::Empty => {
-                        body = seq
-                            .next_element::<Deserializable<Body<T>>>()?
-                            .map(|de| de.0)
-                            .unwrap_or(Body::Empty);
-                        count += 1; // Only count body once even with DataBatch or SequenceBatch
-                    }
-                },
+                Field::Body => {
+                    let deserializable: Option<B::Body> = seq.next_element()?;
+                    body = deserializable.map(<B as FromBody>::from_body);
+                    count += 1;
+                }
                 Field::Footer => {
                     footer = seq.next_element()?;
                     count += 1;
                 }
             }
         }
+
+        let body = match body {
+            Some(body) => body,
+            None => B::from_empty_body().map_err(|e| de::Error::custom(e))?,
+        };
 
         Ok(Message {
             header,
@@ -378,9 +360,9 @@ where
 }
 
 // impl<'de, T> de::Deserialize<'de> for Message<T>
-impl<'de, T> Message<T>
+impl<'de, B> Message<B>
 where
-    T: de::Deserialize<'de>,
+    B: FromBody<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
     where
@@ -404,7 +386,7 @@ where
                 DESCRIPTOR,
                 "footer",
             ],
-            Visitor::<T> {
+            Visitor::<B> {
                 marker: PhantomData,
             },
         )
@@ -413,7 +395,7 @@ where
 
 impl<T, U> From<T> for Message<U>
 where
-    T: Into<Body<U>>,
+    T: IntoBody<Body = U>,
 {
     fn from(value: T) -> Self {
         Message {
@@ -422,9 +404,24 @@ where
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body: value.into(),
+            body: value.into_body(),
             footer: None,
         }
+    }
+}
+
+/// Convert from message
+pub trait FromMessage<B> {
+    /// Convert from message
+    fn from_message(message: Message<B>) -> Self;
+}
+
+impl<T, B> FromMessage<B> for T
+where
+    for<'de> T: FromBody<'de, Body = B>,
+{
+    fn from_message(message: Message<B>) -> Self {
+        Self::from_body(message.body)
     }
 }
 
@@ -459,74 +456,6 @@ impl Builder<EmptyBody> {
 }
 
 impl<T> Builder<T> {
-    /// Set the body as `Body::Value`
-    pub fn value<V: Serialize>(self, value: V) -> Builder<Body<V>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Value(AmqpValue(value)),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as a single `Body::Sequence` section
-    pub fn sequence<V: Serialize>(self, values: Vec<V>) -> Builder<Body<V>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Sequence(AmqpSequence(values)),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as `Body::SequenceBatch`
-    pub fn sequence_batch<V: Serialize>(
-        self,
-        batch: impl Into<TransparentVec<AmqpSequence<V>>>,
-    ) -> Builder<Body<V>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::SequenceBatch(batch.into()),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as a single `Body::Data` section
-    pub fn data(self, data: impl Into<Binary>) -> Builder<Body<Value>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::Data(Data(data.into())),
-            footer: self.footer,
-        }
-    }
-
-    /// Set the body as `Body::DataBatch`
-    pub fn data_batch(self, batch: impl Into<TransparentVec<Data>>) -> Builder<Body<Value>> {
-        Builder {
-            header: self.header,
-            delivery_annotations: self.delivery_annotations,
-            message_annotations: self.message_annotations,
-            properties: self.properties,
-            application_properties: self.application_properties,
-            body: Body::DataBatch(batch.into()),
-            footer: self.footer,
-        }
-    }
-
     /// Set the header
     pub fn header(mut self, header: impl Into<Option<Header>>) -> Self {
         self.header = header.into();
@@ -571,9 +500,94 @@ impl<T> Builder<T> {
         self.footer = footer.into();
         self
     }
-}
 
-impl<T> Builder<Body<T>> {
+    /// Set the body as `Body`
+    pub fn body<B>(self, value: B) -> Builder<B> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: value,
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as `Body::Value`
+    pub fn value<V: Serialize>(self, value: V) -> Builder<AmqpValue<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: AmqpValue(value),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as a single `Body::Sequence` section
+    pub fn sequence<V: Serialize>(
+        self,
+        values: impl Into<AmqpSequence<V>>,
+    ) -> Builder<AmqpSequence<V>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: values.into(),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as `Body::SequenceBatch`
+    pub fn sequence_batch<V: Serialize>(
+        self,
+        batch: impl IntoIterator<Item = impl Into<AmqpSequence<V>>>,
+    ) -> Builder<Batch<AmqpSequence<V>>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: batch.into_iter().map(Into::into).collect(),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as a single `Body::Data` section
+    pub fn data(self, data: impl Into<Data>) -> Builder<Data> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: data.into(),
+            footer: self.footer,
+        }
+    }
+
+    /// Set the body as `Body::DataBatch`
+    pub fn data_batch(
+        self,
+        batch: impl IntoIterator<Item = impl Into<Data>>,
+    ) -> Builder<Batch<Data>> {
+        Builder {
+            header: self.header,
+            delivery_annotations: self.delivery_annotations,
+            message_annotations: self.message_annotations,
+            properties: self.properties,
+            application_properties: self.application_properties,
+            body: batch.into_iter().map(Into::into).collect(),
+            footer: self.footer,
+        }
+    }
+
     /// Build the [`Message`]
     pub fn build(self) -> Message<T> {
         Message {
@@ -600,7 +614,7 @@ mod tests {
             Body,
             __private::{Deserializable, Serializable},
         },
-        AmqpSequence, AmqpValue, ApplicationProperties, Data, DeliveryAnnotations, Header,
+        AmqpSequence, AmqpValue, ApplicationProperties, Batch, Data, DeliveryAnnotations, Header,
         MessageAnnotations, Properties,
     };
 
@@ -617,7 +631,6 @@ mod tests {
     fn test_convert_data_into_message() {
         let data = Data(Binary::from("hello AMQP"));
         let message = Message::from(data);
-        assert!(matches!(message.body, Body::Data(_)));
         let buf = to_vec(&Serializable(message)).unwrap();
         assert_eq!(buf[2], 0x75);
     }
@@ -626,7 +639,6 @@ mod tests {
     fn test_convert_amqp_sequence_into_message() {
         let sequence = AmqpSequence(vec![1, 2, 3, 4]);
         let message = Message::from(sequence);
-        assert!(matches!(message.body, Body::Sequence(_)));
         let buf = to_vec(&Serializable(message)).unwrap();
         assert_eq!(buf[2], 0x76);
     }
@@ -635,41 +647,49 @@ mod tests {
     fn test_convert_amqp_value_into_message() {
         let value = AmqpValue(vec![1, 2, 3, 4]);
         let message = Message::from(value);
-        assert!(matches!(message.body, Body::Value(_)));
         let buf = to_vec(&Serializable(message)).unwrap();
         assert_eq!(buf[2], 0x77);
     }
 
     #[test]
     fn test_serialize_deserialize_null() {
-        let body = Serializable(AmqpValue(Value::Null));
+        let body = AmqpValue(Value::Null);
         let buf = to_vec(&body).unwrap();
         println!("{:#x?}", buf);
 
-        let body2: Deserializable<AmqpValue<Value>> = from_slice(&buf).unwrap();
+        let body2: AmqpValue<Value> = from_slice(&buf).unwrap();
         println!("{:?}", body2.0)
+    }
+
+    #[test]
+    fn test_serialize_amqp_value_f32() {
+        let message = Message::from(AmqpValue(3.14f32));
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let expected = Message::from(Body::Value(AmqpValue(Value::from(3.14f32))));
+        let expected = to_vec(&Serializable(expected)).unwrap();
+        assert_eq!(buf, expected);
     }
 
     #[test]
     fn test_serialize_deserialize_body() {
         let data = b"amqp".to_vec();
         let data = Data(ByteBuf::from(data));
-        let body = Body::<Value>::Data(data);
-        let serialized = to_vec(&Serializable(body)).unwrap();
+        let body = Body::<Value>::Data(vec![data].into());
+        let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Deserializable<Body<Value>> = from_slice(&serialized).unwrap();
+        let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
-        let body = Body::Sequence(AmqpSequence(vec![Value::Bool(true)]));
-        let serialized = to_vec(&Serializable(body)).unwrap();
+        let body = Body::Sequence(vec![AmqpSequence(vec![Value::Bool(true)])].into());
+        let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Deserializable<Body<Value>> = from_slice(&serialized).unwrap();
+        let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
 
         let body = Body::Value(AmqpValue(Value::Bool(true)));
-        let serialized = to_vec(&Serializable(body)).unwrap();
+        let serialized = to_vec(&body).unwrap();
         println!("{:x?}", serialized);
-        let field: Deserializable<Body<Value>> = from_slice(&serialized).unwrap();
+        let field: Body<Value> = from_slice(&serialized).unwrap();
         println!("{:?}", field);
     }
 
@@ -714,7 +734,7 @@ mod tests {
         let mut buf = Vec::new();
         let mut serializer = serde_amqp::ser::Serializer::new(&mut buf);
         message.serialize(&mut serializer).unwrap();
-        let deserialized: Deserializable<Message<Value>> = from_slice(&buf).unwrap();
+        let deserialized: Deserializable<Message<Body<Value>>> = from_slice(&buf).unwrap();
 
         assert!(deserialized.0.header.is_some());
         assert!(deserialized.0.delivery_annotations.is_some());
@@ -731,7 +751,7 @@ mod tests {
     #[test]
     fn test_decoding_message_with_no_body_section_from_slice() {
         let buf: [u8; 8] = [0x0, 0x53, 0x70, 0x45, 0x0, 0x53, 0x73, 0x45];
-        let result: Result<Deserializable<Message<Value>>, _> = from_slice(&buf);
+        let result: Result<Deserializable<Message<Body<Value>>>, _> = from_slice(&buf);
         let message = result.unwrap().0;
         assert!(message.header.is_some());
         assert!(message.delivery_annotations.is_none());
@@ -752,19 +772,19 @@ mod tests {
         assert!(message.message_annotations.is_none());
         assert!(message.properties.is_some());
         assert!(message.application_properties.is_none());
-        assert!(message.body.is_empty());
+        assert!(matches!(message.body, Value::Null));
         assert!(message.footer.is_none());
     }
 
     #[test]
     fn test_encode_message_with_body_nothing() {
-        let message: Message<Value> = Message {
+        let message: Message<AmqpValue<()>> = Message {
             header: None,
             delivery_annotations: None,
             message_annotations: None,
             properties: None,
             application_properties: None,
-            body: Body::Empty,
+            body: AmqpValue(()),
             footer: None,
         };
         let serializable = Serializable(message);
@@ -797,14 +817,14 @@ mod tests {
             0x40, 0x0, 0x53, 0x75, 0xa0, 0xa, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x20, 0x23,
             0x31,
         ];
-        let result: Result<Deserializable<Message<String>>, _> = from_reader(&buf[..]);
+        let result: Result<Deserializable<Message<Data>>, _> = from_reader(&buf[..]);
         assert!(result.is_ok());
         let message = result.unwrap().0;
-        assert!(matches!(message.body, Body::Data(_)));
+        assert!(message.body.0.len() > 0);
     }
 
     #[test]
-    fn test_encode_message_with_data_batch() {
+    fn test_encode_message_builder_with_data_batch() {
         use serde_amqp::extensions::TransparentVec;
 
         let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
@@ -823,18 +843,40 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_message_with_data_batch() {
+    fn test_encode_message_with_data_batch() {
         use serde_amqp::extensions::TransparentVec;
 
+        let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
+        let data_batch = TransparentVec::new(vec![data.clone(), data.clone(), data.clone()]);
+        let message = Message {
+            header: Some(Header::default()),
+            delivery_annotations: None,
+            message_annotations: None,
+            properties: None,
+            application_properties: None,
+            body: data_batch,
+            footer: None,
+        };
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let expected = &[
+            0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0,
+            0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9,
+        ];
+        assert_eq!(buf, expected);
+    }
+
+    #[test]
+    fn test_decode_message_with_data_batch() {
         let buf = &[
             0x0u8, 0x53, 0x70, 0x45, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
             0x8, 0x9, 0x0, 0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0x0,
             0x53, 0x75, 0xa0, 0x9, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9,
         ];
-        let message: Deserializable<Message<Value>> = from_slice(&buf[..]).unwrap();
+        let message: Deserializable<Message<Batch<Data>>> = from_slice(&buf[..]).unwrap();
 
         let data = Data(Binary::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]));
-        let data_batch = TransparentVec::new(vec![data.clone(), data.clone(), data.clone()]);
+        let data_batch = vec![data.clone(), data.clone(), data.clone()];
         let expected = Message::builder()
             .header(Header::default())
             .data_batch(data_batch)
@@ -873,7 +915,8 @@ mod tests {
             0x3, 0x0, 0x53, 0x76, 0xc0, 0x07, 0x3, 0x54, 0x4, 0x54, 0x5, 0x54, 0x6, 0x0, 0x53,
             0x76, 0xc0, 0x07, 0x3, 0x54, 0x7, 0x54, 0x8, 0x54, 0x9,
         ];
-        let message: Deserializable<Message<i32>> = from_slice(&buf[..]).unwrap();
+        let message: Deserializable<Message<Batch<AmqpSequence<i32>>>> =
+            from_slice(&buf[..]).unwrap();
 
         let batch = TransparentVec::new(vec![
             AmqpSequence::new(vec![1i32, 2, 3]),

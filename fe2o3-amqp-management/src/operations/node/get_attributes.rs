@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{AmqpValue, ApplicationProperties, Body, Message},
+    messaging::{ApplicationProperties, Message},
     primitives::OrderedMap,
 };
 
@@ -44,7 +44,7 @@ impl<'a> MessageSerializer for GetAttributesRequest<'a> {
         }
         Message::builder()
             .application_properties(builder.build())
-            .value(())
+            .body(())
             .build()
     }
 }
@@ -66,13 +66,15 @@ impl GetAttributesResponse {
     pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<OrderedMap<String, Vec<String>>> for GetAttributesResponse {
+impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetAttributesResponse {
     type Error = Error;
 
-    fn from_message(message: Message<OrderedMap<String, Vec<String>>>) -> Result<Self> {
+    fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
         match message.body {
-            Body::Value(AmqpValue(attributes)) => Ok(Self { attributes }),
-            _ => Err(Error::DecodeError),
+            Some(attributes) => Ok(Self { attributes }),
+            None => Ok(Self {
+                attributes: OrderedMap::with_capacity(0),
+            }),
         }
     }
 }

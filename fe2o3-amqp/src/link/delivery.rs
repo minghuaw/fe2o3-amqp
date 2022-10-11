@@ -2,15 +2,11 @@
 
 use fe2o3_amqp_types::{
     definitions::{DeliveryNumber, DeliveryTag, Handle, MessageFormat, ReceiverSettleMode},
-    messaging::{
-        message::Body, Accepted, AmqpSequence, AmqpValue, Data, DeliveryState, Message, Outcome,
-        MESSAGE_FORMAT,
-    },
-    primitives::Binary,
+    messaging::{Accepted, DeliveryState, Message, Outcome, SerializableBody, MESSAGE_FORMAT},
+    primitives::BinaryRef,
 };
 use futures_util::FutureExt;
 use pin_project_lite::pin_project;
-use serde::Serialize;
 use std::{future::Future, marker::PhantomData, task::Poll};
 use tokio::sync::oneshot::{self, error::RecvError};
 
@@ -20,7 +16,7 @@ use crate::{
 };
 use crate::{util::AsDeliveryState, Payload};
 
-use super::{BodyError, LinkStateError, SendError};
+use super::{LinkStateError, SendError};
 
 /// Delivery information that is needed for disposing a message
 pub struct DeliveryInfo {
@@ -125,156 +121,25 @@ impl<T> Delivery<T> {
     }
 
     /// Get a reference to the message body
-    pub fn body(&self) -> &Body<T> {
+    pub fn body(&self) -> &T {
         &self.message.body
     }
 
     /// Consume the delivery into the message body section
-    pub fn into_body(self) -> Body<T> {
+    pub fn into_body(self) -> T {
         self.message.body
-    }
-
-    /// Consume the delivery into the body if the body is an [`AmqpValue`].
-    /// An error will be returned if the body isnot an [`AmqpValue`]
-    pub fn try_into_value(self) -> Result<T, BodyError> {
-        match self.into_body() {
-            Body::Value(AmqpValue(value)) => Ok(value),
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Consume the delivery into the body if the body is an [`Data`].
-    /// An error will be returned if the body isnot an [`Data`]
-    pub fn try_into_data(self) -> Result<Binary, BodyError> {
-        match self.into_body() {
-            Body::Data(Data(data)) => Ok(data),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Consume the delivery into the body if the body is a batch of [`Data`].
-    /// An error will be returned if the body is not a batch of [`Data`]
-    pub fn try_into_data_batch(self) -> Result<impl Iterator<Item = Binary>, BodyError> {
-        match self.into_body() {
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(batch) => Ok(batch.into_iter().map(|d| d.0)),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Consume the delivery into the body if the body is an [`AmqpSequence`].
-    /// An error will be returned if the body isnot an [`AmqpSequence`]
-    pub fn try_into_sequence(self) -> Result<Vec<T>, BodyError> {
-        match self.into_body() {
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Consume the delivery into the body if the body is a batch of [`AmqpSequence`].
-    /// An error will be returned if the body is not a batch of [`AmqpSequence`]
-    pub fn try_into_sequence_batch(self) -> Result<impl Iterator<Item = Vec<T>>, BodyError> {
-        match self.into_body() {
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(batch) => Ok(batch.into_iter().map(|s| s.0)),
-        }
-    }
-
-    /// Get a reference to the delivery body if the body is an [`AmqpValue`].
-    /// An error will be returned if the body isnot an [`AmqpValue`]
-    pub fn try_as_value(&self) -> Result<&T, BodyError> {
-        match self.body() {
-            Body::Value(AmqpValue(value)) => Ok(value),
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Get a reference to the delivery body if the body is an [`Data`].
-    /// An error will be returned if the body isnot an [`Data`]
-    pub fn try_as_data(&self) -> Result<&Binary, BodyError> {
-        match self.body() {
-            Body::Data(Data(data)) => Ok(data),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Get a reference to the delivery into the body if the body is a batch of [`Data`].
-    /// An error will be returned if the body is not a batch of [`Data`]
-    pub fn try_as_data_batch(&self) -> Result<impl Iterator<Item = &Binary>, BodyError> {
-        match self.body() {
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(batch) => Ok(batch.iter().map(|d| &d.0)),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Get a reference to the delivery body if the body is an [`AmqpSequence`].
-    /// An error will be returned if the body isnot an [`AmqpSequence`]
-    pub fn try_as_sequence(&self) -> Result<&Vec<T>, BodyError> {
-        match self.body() {
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Sequence(AmqpSequence(sequence)) => Ok(sequence),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(_) => Err(BodyError::IsSequenceBatch),
-        }
-    }
-
-    /// Get a reference to the delivery into the body if the body is a batch of [`AmqpSequence`].
-    /// An error will be returned if the body is not a batch of [`AmqpSequence`]
-    pub fn try_as_sequence_batch(&self) -> Result<impl Iterator<Item = &Vec<T>>, BodyError> {
-        match self.body() {
-            Body::Data(_) => Err(BodyError::IsData),
-            Body::Value(_) => Err(BodyError::IsValue),
-            Body::Sequence(_) => Err(BodyError::IsSequence),
-            Body::Empty => Err(BodyError::IsEmpty),
-            Body::DataBatch(_) => Err(BodyError::IsDataBatch),
-            Body::SequenceBatch(batch) => Ok(batch.iter().map(|s| &s.0)),
-        }
     }
 }
 
 impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.message.body {
-            Body::Data(data) => write!(f, "{}", data),
-            Body::Sequence(seq) => write!(f, "{}", seq),
-            Body::Value(val) => write!(f, "{}", val),
-            Body::DataBatch(_) => write!(f, "DataBatch"),
-            Body::SequenceBatch(_) => write!(f, "SequenceBatch"),
-            Body::Empty => write!(f, "Empty"),
-        }
+        write!(
+            f,
+            "Delivery {{ delivery_id: {}, delivery_tag: {:#x}, message.body: {} }}",
+            self.delivery_id(),
+            BinaryRef(&self.delivery_tag()[..]),
+            self.body()
+        )
     }
 }
 
@@ -317,7 +182,7 @@ impl Sendable<Uninitialized> {
 impl<T, U> From<T> for Sendable<U>
 where
     T: Into<Message<U>>,
-    U: Serialize,
+    U: SerializableBody,
 {
     fn from(value: T) -> Self {
         Self {
@@ -599,13 +464,12 @@ mod tests {
         messaging::{AmqpValue, Body, Data, Message},
         primitives::Binary,
     };
-    use serde_amqp::Value;
 
     use crate::Sendable;
 
     struct Foo {}
 
-    impl From<Foo> for Message<Value> {
+    impl From<Foo> for Message<Data> {
         fn from(_: Foo) -> Self {
             Message::builder().data(Binary::from("Foo")).build()
         }
@@ -615,7 +479,7 @@ mod tests {
     fn test_from_primitive_into_sendable() {
         let value = false;
         let sendable = Sendable::from(value);
-        assert_eq!(sendable.message.body, Body::Value(AmqpValue(false)));
+        assert_eq!(sendable.message.body, AmqpValue(false));
 
         // let mut map = std::collections::BTreeMap::new();
         // map.insert(String::from("hello"), String::from("world"));
@@ -633,13 +497,13 @@ mod tests {
     fn test_from_message_into_sendable() {
         let message = Message::builder().value(5671_u32).build();
         let sendable = Sendable::from(message);
-        assert_eq!(sendable.message.body, Body::Value(AmqpValue(5671_u32)));
+        assert_eq!(sendable.message.body, AmqpValue(5671_u32));
     }
 
     #[test]
     fn test_from_custom_type_into_sendable() {
         let value = Foo {};
         let sendable = Sendable::from(value);
-        assert_eq!(sendable.message.body, Body::Data(Data(Binary::from("Foo"))));
+        assert_eq!(sendable.message.body, Data(Binary::from("Foo")));
     }
 }

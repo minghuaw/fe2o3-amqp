@@ -1,8 +1,7 @@
 use dotenv::dotenv;
 use fe2o3_amqp::Delivery;
-use fe2o3_amqp::types::messaging::Body;
+use fe2o3_amqp::types::messaging::Batch;
 use fe2o3_amqp::types::messaging::Data;
-use fe2o3_amqp::types::primitives::Value;
 use fe2o3_amqp::Receiver;
 use std::env;
 
@@ -10,21 +9,10 @@ use fe2o3_amqp::sasl_profile::SaslProfile;
 use fe2o3_amqp::Connection;
 use fe2o3_amqp::Session;
 
-fn process_delivery_data(delivery: &Delivery<Value>) {
-    match delivery.body() {
-        // A batch of only one `Data` section will be treated as `Body::Data`
-        Body::Data(Data(data)) => {
-            let msg = std::str::from_utf8(&data).unwrap();
-            println!("Received: {:?}", msg);
-        },
-        // A batch of more than one `Data` section will be treated as `Body::DataBatch`
-        Body::DataBatch(batch) => {
-            for Data(data) in batch {
-                let msg = std::str::from_utf8(&data).unwrap();
-                println!("Received: {:?}", msg);
-            }
-        },
-        _ => panic!("Only expecting Data or DataBatch")
+fn process_delivery_data(delivery: &Delivery<Batch<Data>>) {
+    for Data(data) in delivery.body() {
+        let msg = std::str::from_utf8(&data).unwrap();
+        println!("Received: {:?}", msg);
     }
 }
 
@@ -55,7 +43,7 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<Value>().await.unwrap();
+    let delivery = receiver.recv::<Batch<Data>>().await.unwrap();
     process_delivery_data(&delivery);
     receiver.accept(&delivery).await.unwrap();
 

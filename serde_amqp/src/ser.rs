@@ -568,11 +568,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                 self.new_type = NewType::None;
             }
             // Timestamp should be handled by i64
-            NewType::Timestamp => unreachable!(),
-            NewType::Array => unreachable!(),
-            NewType::Symbol => unreachable!(),
-            NewType::SymbolRef => unreachable!(),
-            NewType::TransparentVec => unreachable!(),
+            NewType::Timestamp
+            | NewType::Array
+            | NewType::Symbol
+            | NewType::SymbolRef
+            | NewType::TransparentVec => unreachable!(),
         }
 
         self.writer.write_all(v).map_err(Into::into)
@@ -1871,8 +1871,8 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
-    use serde::{Serialize, Deserialize};
-    use serde_amqp_derive::{SerializeComposite, DeserializeComposite};
+    use serde::{Deserialize, Serialize};
+    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     #[derive(Serialize)]
     struct Foo {
@@ -2180,24 +2180,24 @@ mod test {
     #[cfg(feature = "serde_amqp_derive")]
     #[test]
     fn test_basic_newtype_wrapper_over_custom_type() {
-        use serde::{Serialize, Deserialize};
-        use crate::macros::{SerializeComposite, DeserializeComposite};
+        use crate::macros::{DeserializeComposite, SerializeComposite};
         use crate::{self as serde_amqp, from_slice};
+        use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
         struct Foo {
-            a: i32
+            a: i32,
         }
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq, PartialOrd)]
         #[amqp_contract(
             name = "test:basic-wrapper:*",
             code = 0x0000_0000_0000_0099,
-            encoding = "basic",
+            encoding = "basic"
         )]
         struct BasicWrapper<T>(pub T);
 
-        let value = BasicWrapper(Foo {a: 9});
+        let value = BasicWrapper(Foo { a: 9 });
         let expected = [0x0, 0x53, 0x99, 0xc0, 0x3, 0x1, 0x54, 0x9];
 
         let buf = to_vec(&value).unwrap();

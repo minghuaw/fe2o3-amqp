@@ -607,37 +607,37 @@ where
     }
 }
 
-/// Error trying to unwrap the body section
-#[derive(Debug, thiserror::Error)]
-pub enum BodyError {
-    /// Attempting to unwrap the body as either sequence or data but body is value
-    #[error("Body is Value")]
-    IsValue,
+// /// Error trying to unwrap the body section
+// #[derive(Debug, thiserror::Error)]
+// pub enum BodyError {
+//     /// Attempting to unwrap the body as either sequence or data but body is value
+//     #[error("Body is Value")]
+//     IsValue,
 
-    /// Attempting to unwrap the body as either sequence or value but body is Data
-    #[error("Body is Data")]
-    IsData,
+//     /// Attempting to unwrap the body as either sequence or value but body is Data
+//     #[error("Body is Data")]
+//     IsData,
 
-    /// Attempting to unwrap the body as either value or data but body is sequence
-    #[error("Body is Sequence")]
-    IsSequence,
+//     /// Attempting to unwrap the body as either value or data but body is sequence
+//     #[error("Body is Sequence")]
+//     IsSequence,
 
-    /// Attempting to unwrap the body as either sequence or value but body is DataBatch
-    /// 
-    /// Added since `"0.6.0"`
-    #[error("Body is DataBatch")]
-    IsDataBatch,
+//     /// Attempting to unwrap the body as either sequence or value but body is DataBatch
+//     ///
+//     /// Added since `"0.6.0"`
+//     #[error("Body is DataBatch")]
+//     IsDataBatch,
 
-    /// Attempting to unwrap the body as either sequence or value but body is SequenceBatch
-    /// 
-    /// Added since `"0.6.0"`
-    #[error("Body is SequenceBatch")]
-    IsSequenceBatch,
+//     /// Attempting to unwrap the body as either sequence or value but body is SequenceBatch
+//     ///
+//     /// Added since `"0.6.0"`
+//     #[error("Body is SequenceBatch")]
+//     IsSequenceBatch,
 
-    /// Attempting to unwrap the body but no body section is found
-    #[error("Body is nothing")]
-    IsEmpty,
-}
+//     /// Attempting to unwrap the body but no body section is found
+//     #[error("Body is nothing")]
+//     IsEmpty,
+// }
 
 /// Errors associated with resuming a sender link endpoint
 #[derive(Debug, thiserror::Error)]

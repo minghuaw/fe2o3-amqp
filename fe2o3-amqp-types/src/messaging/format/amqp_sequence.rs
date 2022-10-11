@@ -1,14 +1,25 @@
 use std::fmt::Display;
 
-use serde::{de, Deserialize, Serialize};
+use serde::{de, ser, Serialize};
+use serde_amqp::{DeserializeComposite, SerializeComposite};
 
-use crate::messaging::message::__private::{Deserializable, Serializable};
+use crate::messaging::{
+    Batch, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
+    TransposeOption, __private::BodySection,
+};
 
 /// 3.2.7 AMQP Sequence
 /// <type name="amqp-sequence" class="restricted" source="list" provides="section">
 ///     <descriptor name="amqp:amqp-sequence:list" code="0x00000000:0x00000076"/>
 /// </type>
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, SerializeComposite, DeserializeComposite,
+)]
+#[amqp_contract(
+    name = "amqp:amqp-sequence:list",
+    code = 0x0000_0000_0000_0076,
+    encoding = "basic"
+)]
 pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait
 
 impl<T> AmqpSequence<T> {
@@ -35,111 +46,211 @@ where
     }
 }
 
-impl<T> Serialize for Serializable<AmqpSequence<T>>
-where
-    T: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde_amqp::serde::ser::SerializeTupleStruct;
-        let mut state = serializer
-            .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
-            0x0000_0000_0000_0076_u64,
-        ))?;
-        state.serialize_field(&self.0 .0)?;
-        state.end()
+impl<T> From<Vec<T>> for AmqpSequence<T> {
+    fn from(value: Vec<T>) -> Self {
+        Self(value)
     }
 }
 
-impl<T> Serialize for Serializable<&AmqpSequence<T>>
+/* -------------------------------------------------------------------------- */
+/*                                AmqpSequence                                */
+/* -------------------------------------------------------------------------- */
+
+impl<T> BodySection for AmqpSequence<T> {}
+
+impl<T> SerializableBody for AmqpSequence<T> where T: Serialize {}
+
+impl<'de, T> DeserializableBody<'de> for AmqpSequence<T> where T: de::Deserialize<'de> {}
+
+impl<T> IntoBody for AmqpSequence<T>
 where
-    T: Serialize,
+    T: ser::Serialize,
 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde_amqp::serde::ser::SerializeTupleStruct;
-        let mut state = serializer
-            .serialize_tuple_struct(serde_amqp::__constants::DESCRIBED_BASIC, 1usize + 1)?;
-        state.serialize_field(&serde_amqp::descriptor::Descriptor::Code(
-            0x0000_0000_0000_0076_u64,
-        ))?;
-        state.serialize_field(&self.0 .0)?;
-        state.end()
+    type Body = Self;
+
+    fn into_body(self) -> Self::Body {
+        self
     }
 }
 
-impl<'de, T> de::Deserialize<'de> for Deserializable<AmqpSequence<T>>
+impl<'de, T> FromBody<'de> for AmqpSequence<T>
 where
-    T: Deserialize<'de>,
+    T: de::Deserialize<'de>,
 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct Visitor<T> {
-            _field0: std::marker::PhantomData<T>,
-        }
-        impl<T> Visitor<T> {
-            fn new() -> Self {
-                Self {
-                    _field0: std::marker::PhantomData,
-                }
-            }
-        }
-        impl<'de, T> serde_amqp::serde::de::Visitor<'de> for Visitor<T>
-        where
-            T: serde_amqp::serde::de::Deserialize<'de>,
-        {
-            type Value = Deserializable<AmqpSequence<T>>;
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("amqp:amqp-sequence:list")
-            }
-            fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde_amqp::serde::de::SeqAccess<'de>,
-            {
-                let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
-                    Some(val) => val,
-                    None => {
-                        return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
-                    }
-                };
-                match __descriptor {
-                    serde_amqp::descriptor::Descriptor::Name(__symbol) => {
-                        if __symbol.into_inner() != "amqp:amqp-sequence:list" {
-                            return Err(serde_amqp::serde::de::Error::custom(
-                                "Descriptor mismatch",
-                            ));
+    type Body = Self;
+
+    fn from_body(deserializable: Self::Body) -> Self {
+        deserializable
+    }
+}
+
+impl<T> FromEmptyBody for AmqpSequence<T> {}
+
+impl<'de, T, U> TransposeOption<'de, T> for AmqpSequence<U>
+where
+    T: FromBody<'de, Body = AmqpSequence<U>>,
+    U: de::Deserialize<'de>,
+{
+    type From = Option<AmqpSequence<Option<U>>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Some(AmqpSequence(vec)) => {
+                let vec: Option<Vec<U>> = vec.into_iter().collect();
+                match vec {
+                    Some(vec) => {
+                        if vec.is_empty() {
+                            // Note that a null value and a zero-length array (with a correct type
+                            // for its elements) both describe an absence of a value and MUST be
+                            // treated as semantically identical.
+                            None
+                        } else {
+                            Some(T::from_body(AmqpSequence(vec)))
                         }
                     }
-                    serde_amqp::descriptor::Descriptor::Code(__c) => {
-                        if __c != 0x0000_0000_0000_0076_u64 {
-                            return Err(serde_amqp::serde::de::Error::custom(
-                                "Descriptor mismatch",
-                            ));
-                        }
-                    }
+                    None => None,
                 }
-                let field0: Vec<T> = match __seq.next_element()? {
-                    Some(val) => val,
-                    None => {
-                        return Err(serde_amqp::serde::de::Error::custom(
-                            "Insufficient number of items",
-                        ))
-                    }
-                };
-                Ok(Deserializable(AmqpSequence(field0)))
             }
+            None => None,
         }
-        deserializer.deserialize_tuple_struct(
-            serde_amqp::__constants::DESCRIBED_BASIC,
-            1usize + 1,
-            Visitor::new(),
-        )
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             Batch<AmqpSequece>                             */
+/* -------------------------------------------------------------------------- */
+
+impl<T> BodySection for Batch<AmqpSequence<T>> {}
+
+impl<T> SerializableBody for Batch<AmqpSequence<T>> where T: Serialize {}
+
+impl<'de, T> DeserializableBody<'de> for Batch<AmqpSequence<T>> where T: de::Deserialize<'de> {}
+
+impl<T> IntoBody for Batch<AmqpSequence<T>>
+where
+    T: ser::Serialize,
+{
+    type Body = Self;
+
+    fn into_body(self) -> Self::Body {
+        self
+    }
+}
+
+impl<'de, T> FromBody<'de> for Batch<AmqpSequence<T>>
+where
+    T: de::Deserialize<'de>,
+{
+    type Body = Self;
+
+    fn from_body(deserializable: Self::Body) -> Self {
+        deserializable
+    }
+}
+
+impl<T> FromEmptyBody for Batch<AmqpSequence<T>> {}
+
+impl<'de, T, U> TransposeOption<'de, T> for Batch<AmqpSequence<U>>
+where
+    T: FromBody<'de, Body = Batch<AmqpSequence<U>>>,
+    U: de::Deserialize<'de>,
+{
+    type From = Option<Batch<AmqpSequence<Option<U>>>>;
+
+    fn transpose(src: Self::From) -> Option<T> {
+        match src {
+            Some(batch) => {
+                if batch.is_empty() {
+                    return None;
+                }
+
+                let batch: Option<Batch<AmqpSequence<U>>> = batch
+                    .into_iter()
+                    .map(|AmqpSequence(vec)| {
+                        let vec: Option<Vec<U>> = vec.into_iter().collect();
+                        vec.map(AmqpSequence)
+                    })
+                    .collect();
+
+                match batch {
+                    Some(batch) => Some(T::from_body(batch)),
+                    None => None,
+                }
+            }
+            None => None,
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    Test                                    */
+/* -------------------------------------------------------------------------- */
+
+#[cfg(test)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+    use serde_amqp::{from_slice, to_vec};
+
+    use crate::messaging::{
+        message::__private::{Deserializable, Serializable},
+        AmqpSequence, Batch, Message,
+    };
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+    struct TestExample {
+        a: i32,
+    }
+
+    #[test]
+    fn test_serde_amqp_sequence() {
+        let examples = vec![
+            TestExample { a: 1 },
+            TestExample { a: 2 },
+            TestExample { a: 3 },
+        ];
+        let message = Message::builder()
+            // Unless wrapped inside a `AmqpSequence`, a `Vec` will be serialized as `AmqpValue`
+            .sequence(examples.clone())
+            .build();
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let decoded: Deserializable<Message<AmqpSequence<TestExample>>> = from_slice(&buf).unwrap();
+        assert_eq!(decoded.0.body.0, examples);
+    }
+
+    #[test]
+    fn test_serde_amqp_sequence_with_ref() {
+        let example_1 = TestExample { a: 1 };
+        let example_2 = TestExample { a: 2 };
+        let example_3 = TestExample { a: 3 };
+        let examples = vec![&example_1, &example_2, &example_3];
+        let message = Message::builder()
+            // Unless wrapped inside a `AmqpSequence`, a `Vec` will be serialized as `AmqpValue`
+            .sequence(examples.clone())
+            .build();
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let decoded: Deserializable<Message<AmqpSequence<TestExample>>> = from_slice(&buf).unwrap();
+        assert_eq!(decoded.0.body.0, vec![example_1, example_2, example_3]);
+    }
+
+    #[test]
+    fn test_serde_amqp_sequence_batch() {
+        let examples = vec![
+            TestExample { a: 1 },
+            TestExample { a: 2 },
+            TestExample { a: 3 },
+        ];
+        let msg = Message::builder()
+            .sequence_batch(vec![examples.clone(), examples.clone(), examples.clone()])
+            .build();
+        let buf = to_vec(&Serializable(msg)).unwrap();
+        let decoded: Deserializable<Message<Batch<AmqpSequence<TestExample>>>> =
+            from_slice(&buf).unwrap();
+
+        let expected: Vec<AmqpSequence<TestExample>> =
+            vec![examples.clone(), examples.clone(), examples.clone()]
+                .into_iter()
+                .map(Into::into)
+                .collect();
+        assert_eq!(decoded.0.body.into_inner(), expected);
     }
 }

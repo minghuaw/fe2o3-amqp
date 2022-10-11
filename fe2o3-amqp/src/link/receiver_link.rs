@@ -1,4 +1,7 @@
-use fe2o3_amqp_types::{definitions::Handle, messaging::message::DecodeIntoMessage};
+use fe2o3_amqp_types::{
+    definitions::Handle,
+    messaging::{message::DecodeIntoMessage, FromBody},
+};
 use serde_amqp::format_code::EncodingCodes;
 
 use crate::util::{is_consecutive, AsByteIterator, IntoReader};
@@ -126,7 +129,7 @@ where
         section_offset: u64,
     ) -> Result<Delivery<T>, Self::TransferError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a,
     {
         match self.local_state {
