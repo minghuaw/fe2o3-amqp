@@ -22,6 +22,13 @@ use crate::messaging::{
 )]
 pub struct AmqpValue<T>(pub T);
 
+impl<T> AmqpValue<T> {
+    // ///
+    // pub fn as_ref(&self) -> AmqpValue<&T> {
+    //     AmqpValue(&self.0)
+    // }
+}
+
 impl<T> Display for AmqpValue<T>
 where
     T: Display,
@@ -83,6 +90,18 @@ where
             },
             None => None,
         }
+    }
+}
+
+impl<'se, T> IntoBody for &'se T
+where
+    T: IntoBody<Body = AmqpValue<T>>,
+    AmqpValue<&'se T>: SerializableBody,
+{
+    type Body = AmqpValue<&'se T>;
+
+    fn into_body(self) -> Self::Body {
+        AmqpValue(self)
     }
 }
 

@@ -550,4 +550,15 @@ mod tests {
         let decoded: Deserializable<Message<TestExample>> = from_slice(&buf).unwrap();
         assert_eq!(decoded.0.body, expected)
     }
+
+    #[test]
+    fn test_encoding_reference() {
+        let expected = TestExample { a: 9 };
+        // let msg = Message::builder().body(&expected).build();
+        let msg = Message::from(&expected);
+
+        let buf = to_vec(&Serializable(msg)).unwrap();
+        let decoded: Deserializable<Message<TestExample>> = from_slice(&buf).unwrap();
+        assert_eq!(decoded.0.body, expected)
+    }
 }

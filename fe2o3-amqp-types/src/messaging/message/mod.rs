@@ -502,14 +502,17 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body`
-    pub fn body<B>(self, value: B) -> Builder<B> {
+    pub fn body<U, B>(self, value: U) -> Builder<B> 
+    where
+        U: IntoBody<Body = B>,
+    {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,
             message_annotations: self.message_annotations,
             properties: self.properties,
             application_properties: self.application_properties,
-            body: value,
+            body: value.into_body(),
             footer: self.footer,
         }
     }
