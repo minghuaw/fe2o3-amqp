@@ -112,7 +112,7 @@ mod tests {
 
     use crate::messaging::{
         message::__private::{Deserializable, Serializable},
-        Body, Message, AmqpValue
+        AmqpValue, Body, Message,
     };
 
     use super::{FromBody, FromEmptyBody, IntoBody};

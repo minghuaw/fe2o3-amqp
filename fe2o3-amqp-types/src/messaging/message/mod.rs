@@ -502,8 +502,7 @@ impl<T> Builder<T> {
     }
 
     /// Set the body as `Body`
-    pub fn body<B>(self, value: B) -> Builder<B> 
-    {
+    pub fn body<B>(self, value: B) -> Builder<B> {
         Builder {
             header: self.header,
             delivery_annotations: self.delivery_annotations,

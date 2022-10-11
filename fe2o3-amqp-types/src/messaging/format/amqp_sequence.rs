@@ -182,29 +182,47 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serde::{Serialize, Deserialize};
-    use serde_amqp::{to_vec, from_slice};
+    use serde::{Deserialize, Serialize};
+    use serde_amqp::{from_slice, to_vec};
 
-    use crate::messaging::{Message, message::__private::{Serializable, Deserializable}, AmqpSequence};
+    use crate::messaging::{
+        message::__private::{Deserializable, Serializable},
+        AmqpSequence, Message,
+    };
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
     struct TestExample {
-        a: i32
+        a: i32,
     }
 
     #[test]
     fn test_serde_amqp_sequence() {
         let examples = vec![
-            TestExample {a: 1},
-            TestExample {a: 2},
-            TestExample {a: 3}
+            TestExample { a: 1 },
+            TestExample { a: 2 },
+            TestExample { a: 3 },
         ];
         let message = Message::builder()
-            // Unless wrapped inside a `AmqpSequence`, `Vec` will be serialized as `AmqpValue`
+            // Unless wrapped inside a `AmqpSequence`, a `Vec` will be serialized as `AmqpValue`
             .sequence(examples.clone())
             .build();
         let buf = to_vec(&Serializable(message)).unwrap();
         let decoded: Deserializable<Message<AmqpSequence<TestExample>>> = from_slice(&buf).unwrap();
         assert_eq!(decoded.0.body.0, examples);
+    }
+
+    #[test]
+    fn test_serde_amqp_sequence_with_ref() {
+        let example_1 = TestExample { a: 1 };
+        let example_2 = TestExample { a: 2 };
+        let example_3 = TestExample { a: 3 };
+        let examples = vec![&example_1, &example_2, &example_3];
+        let message = Message::builder()
+            // Unless wrapped inside a `AmqpSequence`, a `Vec` will be serialized as `AmqpValue`
+            .sequence(examples.clone())
+            .build();
+        let buf = to_vec(&Serializable(message)).unwrap();
+        let decoded: Deserializable<Message<AmqpSequence<TestExample>>> = from_slice(&buf).unwrap();
+        assert_eq!(decoded.0.body.0, vec![example_1, example_2, example_3]);
     }
 }
