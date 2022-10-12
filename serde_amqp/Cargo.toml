@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp"
-version = "0.5.0"
+version = "0.5.0-alpha"
 edition = "2021"
 description = "A serde implementation of AMQP1.0 protocol."
 license = "MIT/Apache-2.0"
@@ -41,8 +41,8 @@ thiserror = "1"
 bytes = "1"
 
 # derive
-serde_amqp_derive = { path = "../serde_amqp_derive", optional = true }
-# serde_amqp_derive = { version = "0.1", optional = true }
+# serde_amqp_derive = { path = "../serde_amqp_derive", optional = true }
+serde_amqp_derive = { version = "0.2", optional = true }
 
 # Optinal dependencies
 serde_json = { version = "1", optional = true }
