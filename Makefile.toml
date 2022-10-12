@@ -1,13 +1,13 @@
 [tasks.docsrs]
 args = [
-  "doc",
-  "--no-deps",
-  "--all-features",
-  "--open",
-  "-Z",
-  "unstable-options",
-  "--config",
-  "build.rustdocflags=[\"--cfg\", \"docsrs\"]",
+    "doc",
+    "--no-deps",
+    "--all-features",
+    "--open",
+    "-Z",
+    "unstable-options",
+    "--config",
+    "build.rustdocflags=[\"--cfg\", \"docsrs\"]",
 ]
 command = "cargo"
 toolchain = "nightly"
