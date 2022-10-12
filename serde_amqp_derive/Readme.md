@@ -3,9 +3,9 @@
  Provides custom derive macros `SerializeComposite` and `DeserializeComposite` for described
  types as defined in the AMQP1.0 protocol.
 
- - [Change Log](https://github.com/minghuaw/fe2o3-amqp/blob/main/serde_amqp_derive/Changelog.md)
+- [Change Log](https://github.com/minghuaw/fe2o3-amqp/blob/main/serde_amqp_derive/Changelog.md)
 
- ## Usage
+## Usage
 
  The macro provides three types of encodings:
 
@@ -19,7 +19,7 @@
     serializable/deserializable type. The inner struct will be serialized/deserialized with the
     descriptor prepended to the struct.
 
- ### Details with the `"list"` encoding
+### Details with the `"list"` encoding
 
  Optinal fields
 
@@ -36,7 +36,7 @@
  AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an
  empty field will be decoded as the default value of the type.
 
- ## Example
+## Example
 
  The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed
  by a list of the fields).
