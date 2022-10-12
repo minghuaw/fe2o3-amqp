@@ -119,7 +119,7 @@ struct DescribedAttr {
     #[darling(default)]
     pub name: Option<String>,
     #[darling(default)]
-    pub code: Option<u64>,
+    pub code: Option<String>,
     #[darling(default)]
     pub encoding: Option<EncodingType>,
     #[darling(default)]
