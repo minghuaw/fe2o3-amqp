@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 use darling::{FromDeriveInput, FromMeta};
 use proc_macro2::Span;
 use quote::quote;
@@ -9,7 +11,11 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
     let attr = DescribedAttr::from_derive_input(input).unwrap();
 
     let name = attr.name.unwrap_or_else(|| input.ident.to_string());
-    let code = attr.code;
+    let code = attr
+        .code
+        .map(|s| parse_descriptor_code(s))
+        .transpose()
+        .unwrap();
     let encoding = attr.encoding.unwrap_or(EncodingType::List);
     let rename_field = attr.rename_all;
     DescribedStructAttr {
@@ -17,6 +23,46 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
         code,
         encoding,
         rename_field,
+    }
+}
+
+/// Error with parsing descriptor code
+#[derive(Debug)]
+pub enum ParseDescriptorCodeError {
+    DomainIdNotFound,
+    DomainIdParseError(ParseIntError),
+    DescriptorIdNotFound,
+    DescriptorIdParseError(ParseIntError),
+}
+
+fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
+    let mut split = s.split(':');
+    let domain_id_str = split
+        .next()
+        .ok_or(ParseDescriptorCodeError::DomainIdNotFound)?
+        .replace("_", "");
+    
+    let domain_id = parse_hex_with_or_without_prefix(&domain_id_str)
+        .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
+
+    let descriptor_id_str = split
+        .next()
+        .ok_or(ParseDescriptorCodeError::DescriptorIdNotFound)?
+        .replace("_", "");
+    let descriptor_id = parse_hex_with_or_without_prefix(&descriptor_id_str)
+        .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
+    // numeric descriptors
+    // (domain-id << 32) | descriptor-id
+    Ok((domain_id << 32) | descriptor_id)
+}
+
+fn parse_hex_with_or_without_prefix(src: &str) -> Result<u64, ParseIntError> {
+    match src.strip_prefix("0x") {
+        Some(s) => u64::from_str_radix(s, 16),
+        None => match src.strip_prefix("0X") {
+            Some(s) => u64::from_str_radix(s, 16),
+            None => u64::from_str_radix(src, 16),
+        },
     }
 }
 
