@@ -8,7 +8,7 @@ use super::{ErrorCondition, Fields};
 #[derive(Debug, Clone, PartialEq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:error:list",
-    code = 0x0000_0000_0000_001d,
+    code = "0x0000_0000:0x0000_001d",
     encoding = "list",
     rename_all = "kebab-case"
 )]

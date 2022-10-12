@@ -19,7 +19,7 @@ use serde_amqp::{
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:coordinator:list",
-    code = 0x0000_0000_0000_0030,
+    code = "0x0000_0000:0x0000_0030",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -89,7 +89,7 @@ impl Coordinator {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:declare:list",
-    code = 0x0000_0000_0000_0031,
+    code = "0x0000_0000:0x0000_0031",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -129,7 +129,7 @@ impl Declare {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:discharge:list",
-    code = 0x0000_0000_0000_0032,
+    code = "0x0000_0000:0x0000_0032",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -164,7 +164,7 @@ pub type TransactionId = Binary;
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:declared:list",
-    code = 0x0000_0000_0000_0033,
+    code = "0x0000_0000:0x0000_0033",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -185,7 +185,7 @@ pub struct Declared {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:transactional-state:list",
-    code = 0x0000_0000_0000_0034,
+    code = "0x0000_0000:0x0000_0034",
     encoding = "list",
     rename_all = "kebab-case"
 )]

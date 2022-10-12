@@ -14,7 +14,7 @@ use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:open:list",
-    code = 0x0000_0000_0000_0010,
+    code = "0x0000_0000:0x0000_0010",
     encoding = "list",
     rename_all = "kebab-case"
 )]

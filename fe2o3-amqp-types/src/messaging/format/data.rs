@@ -16,7 +16,7 @@ use crate::messaging::{
 )]
 #[amqp_contract(
     name = "amqp:data:binary",
-    code = 0x0000_0000_0000_0075,
+    code = "0x0000_0000:0x0000_0075",
     encoding = "basic"
 )]
 pub struct Data(pub Binary);

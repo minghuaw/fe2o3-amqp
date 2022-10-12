@@ -8,7 +8,7 @@ use crate::definitions::Error;
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:end:list",
-    code = 0x0000_0000_0000_0017,
+    code = "0x0000_0000:0x0000_0017",
     encoding = "list",
     rename_all = "kebab-case"
 )]

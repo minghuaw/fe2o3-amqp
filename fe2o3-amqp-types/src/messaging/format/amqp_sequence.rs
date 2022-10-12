@@ -17,7 +17,7 @@ use crate::messaging::{
 )]
 #[amqp_contract(
     name = "amqp:amqp-sequence:list",
-    code = 0x0000_0000_0000_0076,
+    code = "0x0000_0000:0x0000_0076",
     encoding = "basic"
 )]
 pub struct AmqpSequence<T>(pub Vec<T>); // Vec doesnt implement Display trait

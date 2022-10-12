@@ -19,7 +19,7 @@ use super::{Address, MessageId};
 )]
 #[amqp_contract(
     name = "amqp:properties:list",
-    code = 0x0000_0000_0000_0073,
+    code = "0x0000_0000:0x0000_0073",
     encoding = "list",
     rename_all = "kebab-case"
 )]

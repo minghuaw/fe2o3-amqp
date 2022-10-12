@@ -32,7 +32,7 @@ use crate::{
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:attach:list",
-    code = 0x0000_0000_0000_0012,
+    code = "0x0000_0000:0x0000_0012",
     encoding = "list",
     rename_all = "kebab-case"
 )]

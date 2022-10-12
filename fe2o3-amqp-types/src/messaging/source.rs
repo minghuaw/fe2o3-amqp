@@ -18,7 +18,7 @@ use super::{
 #[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:source:list",
-    code = 0x0000_0000_0000_0028,
+    code = "0x0000_0000:0x0000_0028",
     encoding = "list",
     rename_all = "kebab-case"
 )]

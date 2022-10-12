@@ -17,17 +17,12 @@ use crate::messaging::{
 )]
 #[amqp_contract(
     name = "amqp:amqp-value:*",
-    code = 0x0000_0000_0000_0077,
+    code = "0x0000_0000:0x0000_0077",
     encoding = "basic"
 )]
 pub struct AmqpValue<T>(pub T);
 
-impl<T> AmqpValue<T> {
-    // ///
-    // pub fn as_ref(&self) -> AmqpValue<&T> {
-    //     AmqpValue(&self.0)
-    // }
-}
+impl<T> AmqpValue<T> { }
 
 impl<T> Display for AmqpValue<T>
 where

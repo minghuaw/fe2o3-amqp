@@ -16,7 +16,7 @@ pub use fe2o3_amqp_types::primitives::OrderedMap;
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "apache.org:legacy-amqp-direct-binding:string",
-    code = 0x0000_468c_0000_0000,
+    code = "0x0000_468c:0x0000_0000",
     encoding = "basic"
 )]
 pub struct LegacyAmqpDirectBinding(pub String);
@@ -69,7 +69,7 @@ impl From<LegacyAmqpDirectBinding> for Option<Described<Value>> {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "apache.org:legacy-amqp-topic-binding:string",
-    code = 0x0000_468c_0000_0001,
+    code = "0x0000_468c:0x0000_0001",
     encoding = "basic"
 )]
 pub struct LegacyAmqpTopicBinding(pub String);
@@ -127,7 +127,7 @@ impl From<LegacyAmqpTopicBinding> for Option<Described<Value>> {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "apache.org:legacy-amqp-headers-binding:map",
-    code = 0x0000_468c_0000_0002,
+    code = "0x0000_468c:0x0000_0002",
     encoding = "basic"
 )]
 pub struct LegacyAmqpHeadersBinding(pub OrderedMap<String, SimpleValue>);
@@ -181,7 +181,7 @@ impl From<LegacyAmqpHeadersBinding> for Option<Described<Value>> {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "apache.org:no-local-filter:list",
-    code = 0x0000_468c_0000_0003,
+    code = "0x0000_468c:0x0000_0003",
     encoding = "basic"
 )]
 pub struct NoLocalFilter(pub Vec<Value>);
@@ -229,7 +229,7 @@ impl From<NoLocalFilter> for Option<Described<Value>> {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "apache.org:selector-filter:string",
-    code = 0x0000_468c_0000_0004,
+    code = "0x0000_468c:0x0000_0004",
     encoding = "basic"
 )]
 pub struct SelectorFilter(pub String);
@@ -282,7 +282,7 @@ impl From<SelectorFilter> for Option<Described<Value>> {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "apache.org:xquery-filter:string",
-    code = 0x0000_468c_0000_0005,
+    code = "0x0000_468c:0x0000_0005",
     encoding = "basic"
 )]
 pub struct Xquery(pub String);
