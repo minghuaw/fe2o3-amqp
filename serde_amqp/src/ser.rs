@@ -1904,7 +1904,7 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo {
             is_fool: bool,
             a: i32,
@@ -1925,7 +1925,7 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo(bool, i32);
 
         let foo = Foo(true, 9);
@@ -1947,15 +1947,15 @@ mod test {
         ];
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x01, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "list")]
         struct Foo1;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x01, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "list")]
         struct Foo2();
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x01, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "list")]
         struct Foo3 {}
 
         let foo1 = Foo1;
@@ -1980,11 +1980,11 @@ mod test {
         use std::collections::BTreeMap;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x01, encoding = "basic")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "basic")]
         struct Wrapper(BTreeMap<Symbol, i32>);
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x1, encoding = "basic")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "basic")]
         struct Wrapper2 {
             map: BTreeMap<Symbol, i32>,
         }
@@ -2024,7 +2024,7 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo {
             is_fool: Option<bool>,
             a: Option<i32>,
@@ -2092,7 +2092,7 @@ mod test {
         assert_eq_on_serialized_vs_expected(foo, &expected);
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Bar {
             is_fool: Option<bool>,
             mandatory: u32,
@@ -2124,7 +2124,7 @@ mod test {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo(Option<bool>, Option<i32>);
 
         let foo = Foo(None, None);
@@ -2192,7 +2192,7 @@ mod test {
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq, PartialOrd)]
         #[amqp_contract(
             name = "test:basic-wrapper:*",
-            code = 0x0000_0000_0000_0099,
+            code = "0x0000_0000:0x0000_0099",
             encoding = "basic"
         )]
         struct BasicWrapper<T>(pub T);

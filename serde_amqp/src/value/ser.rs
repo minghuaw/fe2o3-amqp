@@ -981,11 +981,11 @@ mod tests {
     use crate as serde_amqp;
 
     #[derive(Debug, SerializeComposite, DeserializeComposite)]
-    #[amqp_contract(name = "composite", code = 0x0000_0000_0000_0001, encoding = "list")]
+    #[amqp_contract(name = "composite", code = "0x0000_0000:0x0000_0001", encoding = "list")]
     pub struct EmptyComposite {}
 
     #[derive(Debug, SerializeComposite, DeserializeComposite)]
-    #[amqp_contract(name = "composite", code = 0x0000_0000_0000_0001, encoding = "list")]
+    #[amqp_contract(name = "composite", code = "0x0000_0000:0x0000_0001", encoding = "list")]
     pub struct Composite {
         a: i32,
         b: String,
