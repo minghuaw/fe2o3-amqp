@@ -28,7 +28,7 @@
 //! #[derive(Debug, DeserializeComposite, SerializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:attach:list",
-//!     code = 0x0000_0000_0000_0012,
+//!     code = "0x0000_0000:0x0000_0012",
 //!     encoding = "list",
 //!     rename_all = "kebab-case"
 //! )]
@@ -90,7 +90,7 @@
 //! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:application-properties:map",
-//!     code = 0x0000_0000_0000_0074,
+//!     code = "0x0000_0000:0x0000_0074",
 //!     encoding = "basic"
 //! )]
 //! pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);
