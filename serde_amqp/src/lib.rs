@@ -1,7 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs, missing_debug_implementations)]
 
-//! A serde implementation of AMQP1.0 protocol.
+//! A serde implementation of AMQP1.0 protocol and the primitive types.
+//! 
+//! - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/serde_amqp/Changelog.md)
 //!
 //! # Serializing and deserializing data structures
 //!
