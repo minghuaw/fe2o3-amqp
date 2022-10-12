@@ -2,6 +2,10 @@
 command = "cargo"
 args = ["test", "--features", "derive extensions"]
 
+[tasks.expand]
+command = "cargo"
+args = ["expand", "--test", "derive", "--features", "derive"]
+
 [tasks.doctest]
 args = [
   "doc",

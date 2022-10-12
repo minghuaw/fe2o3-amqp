@@ -1,3 +1,7 @@
+//! This only acts as a test and macro expansion for the derive macro
+//! 
+//! cargo expand --test derive --features "derive"
+
 use serde_amqp::{SerializeComposite, DeserializeComposite};
 
 #[derive(SerializeComposite, DeserializeComposite)]
