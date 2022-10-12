@@ -1,26 +1,43 @@
-//! Provides custom derive macros `SerializeComposite` and `DeserializeComposite` for described types as defined in the AMQP1.0 protocol.
+//! Provides custom derive macros `SerializeComposite` and `DeserializeComposite` for described
+//! types as defined in the AMQP1.0 protocol.
+//! 
+//! - [Change Log](https://github.com/minghuaw/fe2o3-amqp/blob/main/serde_amqp_derive/Changelog.md)
 //!
 //! # Usage
 //!
 //! The macro provides three types of encodings:
 //!
-//! 1. `"list"`: The struct will be serialized as a described list. A described list is an AMQP1.0 list with its descriptor prepended to the list itself. The deserialization will take either the `"list"` or the `"map"` encoded values.
-//! 2. `"map"`: The struct will be serialized as a described map. A described map is an AMQP1.0 map with its descriptor prepended to the map. The deserialization will take either the `"list"` or the `"map"` encoded values.
-//! 3. `"basic"`: The struct must be a thin wrapper (containing only one field) over another serializable/deserializable type. The inner struct will be serialized/deserialized with the descriptor prepended to the struct.
+//! 1. `"list"`: The struct will be serialized as a described list. A described list is an AMQP1.0
+//!    list with its descriptor prepended to the list itself. The deserialization will take either
+//!    the `"list"` or the `"map"` encoded values.
+//! 2. `"map"`: The struct will be serialized as a described map. A described map is an AMQP1.0 map
+//!    with its descriptor prepended to the map. The deserialization will take either the `"list"`
+//!    or the `"map"` encoded values.
+//! 3. `"basic"`: The struct must be a thin wrapper (containing only one field) over another
+//!    serializable/deserializable type. The inner struct will be serialized/deserialized with the
+//!    descriptor prepended to the struct.
 //!
 //! ## Details with the `"list"` encoding
 //!
 //! Optinal fields
 //!
-//! If a field is not marked with `"mandatory"` in the specification, the field can be an `Option`. During serialization, the optional fields may be skipped completely or encoded as an AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an empty field will be decoded as a `None`.
+//! If a field is not marked with `"mandatory"` in the specification, the field can be an `Option`.
+//! During serialization, the optional fields may be skipped completely or encoded as an AMQP1.0
+//! `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an empty field
+//! will be decoded as a `None`.
 //!
 //! Fields with default values:
 //!
-//! For fields that have default values defined in the specification, the field type must implement both the `Default` and `PartialEq` trait. During serialization, if the field is equal to the default value of the field type, the field will be either ignored completely or encoded as an AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an empty field will be decoded as the default value of the type.
+//! For fields that have default values defined in the specification, the field type must implement
+//! both the `Default` and `PartialEq` trait. During serialization, if the field is equal to the
+//! default value of the field type, the field will be either ignored completely or encoded as an
+//! AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an
+//! empty field will be decoded as the default value of the type.
 //!
 //! # Example
 //!
-//! The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed by a list of the fields).
+//! The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed
+//! by a list of the fields).
 //!
 //! ```rust
 //! /// <type name="attach" class="composite" source="list" provides="frame">
@@ -28,7 +45,7 @@
 //! #[derive(Debug, DeserializeComposite, SerializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:attach:list",
-//!     code = 0x0000_0000_0000_0012,
+//!     code = "0x0000_0000:0x0000_0012",
 //!     encoding = "list",
 //!     rename_all = "kebab-case"
 //! )]
@@ -80,7 +97,8 @@
 //! }
 //! ```
 //!
-//! The basic encoding will have `ApplicationProperties` encoded as a descriptor followed by the wrapped element, which is a map.
+//! The basic encoding will have `ApplicationProperties` encoded as a descriptor followed by the
+//! wrapped element, which is a map.
 //!
 //! ```rust
 //! /// 3.2.5 Application Properties
@@ -90,7 +108,7 @@
 //! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:application-properties:map",
-//!     code = 0x0000_0000_0000_0074,
+//!     code = "0x0000_0000:0x0000_0074",
 //!     encoding = "basic"
 //! )]
 //! pub struct ApplicationProperties(pub BTreeMap<String, SimpleValue>);

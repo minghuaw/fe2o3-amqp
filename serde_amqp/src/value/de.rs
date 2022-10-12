@@ -1361,7 +1361,7 @@ mod tests {
         use crate as serde_amqp;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo(Option<bool>, Option<i32>);
 
         let foo = Foo(Some(true), Some(3));
@@ -1374,7 +1374,7 @@ mod tests {
         assert_eq!(value, expected_foo);
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 0x31, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x31", encoding = "list")]
         struct Bar(i32, Foo);
 
         let bar = Bar(13, foo);

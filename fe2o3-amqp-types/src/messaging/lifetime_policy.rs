@@ -17,7 +17,7 @@ use crate::definitions::Fields;
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-close:list",
-    code = 0x0000_0000_0000_002b,
+    code = "0x0000_0000:0x0000_002b",
     encoding = "list"
 )]
 pub struct DeleteOnClose {}
@@ -54,7 +54,7 @@ impl From<DeleteOnClose> for Value {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-no-links:list",
-    code = 0x0000_0000_0000_002c,
+    code = "0x0000_0000:0x0000_002c",
     encoding = "list"
 )]
 pub struct DeleteOnNoLinks {}
@@ -91,7 +91,7 @@ impl From<DeleteOnNoLinks> for Value {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-no-messages:list",
-    code = 0x0000_0000_0000_002d,
+    code = "0x0000_0000:0x0000_002d",
     encoding = "list"
 )]
 pub struct DeleteOnNoMessages {}
@@ -128,7 +128,7 @@ impl From<DeleteOnNoMessages> for Value {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite, Default)]
 #[amqp_contract(
     name = "amqp:delete-on-no-links-or-messages:list",
-    code = 0x0000_0000_0000_002e,
+    code = "0x0000_0000:0x0000_002e",
     encoding = "list"
 )]
 pub struct DeleteOnNoLinksOrMessages {}

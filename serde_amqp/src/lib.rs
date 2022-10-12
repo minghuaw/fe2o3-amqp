@@ -1,7 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs, missing_debug_implementations)]
 
-//! A serde implementation of AMQP1.0 protocol.
+//! A serde implementation of AMQP1.0 protocol and the primitive types.
+//! 
+//! - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/serde_amqp/Changelog.md)
 //!
 //! # Serializing and deserializing data structures
 //!
@@ -41,7 +43,7 @@
 //! };
 //!
 //! #[derive(Debug, SerializeComposite, DeserializeComposite)]
-//! #[amqp_contract(code = 0x13, encoding = "list")]
+//! #[amqp_contract(code = "0x00:0x13", encoding = "list")]
 //! struct Foo(Option<bool>, Option<i32>);
 //!
 //! let foo = Foo(Some(true), Some(3));
@@ -129,7 +131,7 @@
 //! #[derive(Debug, DeserializeComposite, SerializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:attach:list",
-//!     code = 0x0000_0000_0000_0012,
+//!     code = "0x0000_0000:0x0000_0012",
 //!     encoding = "list",
 //!     rename_all = "kebab-case"
 //! )]
@@ -189,7 +191,7 @@
 //! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:application-properties:map",
-//!     code = 0x0000_0000_0000_0074,
+//!     code = "0x0000_0000:0x0000_0074",
 //!     encoding = "basic"
 //! )]
 //! pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);

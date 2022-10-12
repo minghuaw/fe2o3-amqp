@@ -19,7 +19,7 @@ use super::Priority;
 )]
 #[amqp_contract(
     name = "amqp:header:list",
-    code = 0x0000_0000_0000_0070,
+    code = "0x0000_0000:0x0000_0070",
     encoding = "list",
     rename_all = "kebab-case"
 )]

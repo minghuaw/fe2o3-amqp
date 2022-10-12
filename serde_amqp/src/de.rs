@@ -2142,7 +2142,7 @@ mod tests {
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-            #[amqp_contract(code = 13, encoding = "list")]
+            #[amqp_contract(code = "00:13", encoding = "list")]
             struct Foo;
 
             let foo = Foo;
@@ -2153,7 +2153,7 @@ mod tests {
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-            #[amqp_contract(code = 13, encoding = "list")]
+            #[amqp_contract(code = "00:13", encoding = "list")]
             struct Foo();
 
             let foo = Foo();
@@ -2164,7 +2164,7 @@ mod tests {
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-            #[amqp_contract(code = 13, encoding = "list")]
+            #[amqp_contract(code = "00:13", encoding = "list")]
             struct Foo {}
 
             let foo = Foo {};
@@ -2182,7 +2182,7 @@ mod tests {
         use crate::ser::to_vec;
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list")]
+        #[amqp_contract(code = "00:13", encoding = "list")]
         struct Foo(bool, i32);
 
         let foo = Foo(true, 9);
@@ -2199,14 +2199,14 @@ mod tests {
         use crate::ser::to_vec;
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list", rename_all = "kebab-case")]
+        #[amqp_contract(code = "00:13", encoding = "list", rename_all = "kebab-case")]
         struct Foo {
             is_fool: bool,
             a: i32,
         }
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 9, encoding = "list", rename_all = "kebab-case")]
+        #[amqp_contract(code = "00:09", encoding = "list", rename_all = "kebab-case")]
         struct Bar {
             is_fool: bool,
             a: i32,
@@ -2236,7 +2236,7 @@ mod tests {
         use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo {
             pub is_fool: Option<bool>,
             pub a: Option<i32>,
@@ -2303,7 +2303,7 @@ mod tests {
         use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo(Option<bool>, Option<i32>);
 
         let buf = vec![
@@ -2360,7 +2360,7 @@ mod tests {
         assert!(foo.1.is_some());
 
         #[derive(Debug, PartialEq, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Bar {
             is_fool: Option<bool>,
             mandatory: u32,
@@ -2396,11 +2396,11 @@ mod tests {
         use std::collections::BTreeMap;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
-        #[amqp_contract(code = 0x01, encoding = "basic")]
+        #[amqp_contract(code ="0x00:0x01", encoding = "basic")]
         struct Wrapper(BTreeMap<Symbol, i32>);
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
-        #[amqp_contract(code = 0x1, encoding = "basic")]
+        #[amqp_contract(code = "0x00:0x1", encoding = "basic")]
         struct Wrapper2 {
             map: BTreeMap<Symbol, i32>,
         }

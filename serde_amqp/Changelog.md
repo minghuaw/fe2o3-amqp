@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.0
+
+1. Fixed [#117](https://github.com/minghuaw/fe2o3-amqp/issues/117) with `serde_amqp_derive = "0.2.0"`
+
 ## 0.4.5 (OCT/07/2022)
 
 1. Added `extensions::TransparentVec` type that is feature gated behind `"extensions"` feature flag.

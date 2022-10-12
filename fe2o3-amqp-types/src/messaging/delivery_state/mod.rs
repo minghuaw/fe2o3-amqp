@@ -487,7 +487,7 @@ impl From<Outcome> for DeliveryState {
 )]
 #[amqp_contract(
     name = "amqp:received:list",
-    code = 0x0000_0000_0000_0023,
+    code = "0x0000_0000:0x0000_0023",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -514,7 +514,7 @@ impl From<Received> for DeliveryState {
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:accepted:list",
-    code = 0x0000_0000_0000_0024,
+    code = "0x0000_0000:0x0000_0024",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -541,7 +541,7 @@ impl From<Accepted> for Outcome {
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:rejected:list",
-    code = 0x0000_0000_0000_0025,
+    code = "0x0000_0000:0x0000_0025",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -570,7 +570,7 @@ impl From<Rejected> for Outcome {
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:released:list",
-    code = 0x000_0000_0000_0026,
+    code = "0x000_0000:0x0000_0026",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -596,7 +596,7 @@ impl From<Released> for Outcome {
 #[derive(Debug, Clone, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:modified:list",
-    code = 0x0000_0000_0000_0027,
+    code = "0x0000_0000:0x0000_0027",
     encoding = "list",
     rename_all = "kebab-case"
 )]

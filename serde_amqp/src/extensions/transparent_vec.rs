@@ -193,7 +193,7 @@ mod tests {
 
     #[derive(Debug, Clone, SerializeComposite, DeserializeComposite, PartialEq, PartialOrd)]
     #[amqp_contract(
-        code = 0x13,
+        code = "0x00:0x13",
         name = "test:example",
         encoding = "list",
         rename_all = "kebab-case"

@@ -42,26 +42,26 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
         .ok_or(ParseDescriptorCodeError::DomainIdNotFound)?
         .replace("_", "");
     
-    let domain_id = parse_hex_with_or_without_prefix(&domain_id_str)
+    let domain_id = parse_code_based_on_prefix(&domain_id_str)
         .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
 
     let descriptor_id_str = split
         .next()
         .ok_or(ParseDescriptorCodeError::DescriptorIdNotFound)?
         .replace("_", "");
-    let descriptor_id = parse_hex_with_or_without_prefix(&descriptor_id_str)
+    let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
         .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
     // numeric descriptors
     // (domain-id << 32) | descriptor-id
     Ok((domain_id << 32) | descriptor_id)
 }
 
-fn parse_hex_with_or_without_prefix(src: &str) -> Result<u64, ParseIntError> {
+fn parse_code_based_on_prefix(src: &str) -> Result<u64, ParseIntError> {
     match src.strip_prefix("0x") {
         Some(s) => u64::from_str_radix(s, 16),
         None => match src.strip_prefix("0X") {
             Some(s) => u64::from_str_radix(s, 16),
-            None => u64::from_str_radix(src, 16),
+            None => u64::from_str_radix(src, 10),
         },
     }
 }

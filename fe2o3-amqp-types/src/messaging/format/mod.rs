@@ -62,7 +62,7 @@ impl From<Priority> for UByte {
 )]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
-    code = 0x0000_0000_0000_0071,
+    code = "0x0000_0000:0x0000_0071",
     encoding = "basic", // A simple wrapper over a map
 )]
 pub struct DeliveryAnnotations(pub Annotations);
@@ -124,7 +124,7 @@ impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for Option<DeliveryA
 )]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
-    code = 0x0000_0000_0000_0072,
+    code = "0x0000_0000:0x0000_0072",
     encoding = "basic"
 )]
 pub struct MessageAnnotations(pub Annotations);
@@ -176,7 +176,7 @@ use self::{annotations::OwnedKey, map_builder::MapBuilder};
 )]
 #[amqp_contract(
     name = "amqp:application-properties:map",
-    code = 0x0000_0000_0000_0074,
+    code = "0x0000_0000:0x0000_0074",
     encoding = "basic"
 )]
 pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
@@ -235,7 +235,7 @@ pub use amqp_value::*;
 )]
 #[amqp_contract(
     name = "amqp:footer:map",
-    code = 0x0000_0000_0000_0078,
+    code = "0x0000_0000:0x0000_0078",
     encoding = "basic"
 )]
 pub struct Footer(pub Annotations);

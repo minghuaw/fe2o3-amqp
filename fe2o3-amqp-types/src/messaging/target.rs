@@ -158,7 +158,7 @@ mod target_archetype_serde_impl {
 #[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
 #[amqp_contract(
     name = "amqp:target:list",
-    code = 0x0000_0000_0000_0029,
+    code = "0x0000_0000:0x0000_0029",
     encoding = "list",
     rename_all = "kebab-case"
 )]
