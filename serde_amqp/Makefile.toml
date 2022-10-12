@@ -1,3 +1,5 @@
+extend = "../Makefile.toml"
+
 [tasks.test]
 command = "cargo"
 args = ["test", "--features", "derive extensions"]
@@ -5,17 +7,3 @@ args = ["test", "--features", "derive extensions"]
 [tasks.expand]
 command = "cargo"
 args = ["expand", "--test", "derive", "--features", "derive"]
-
-[tasks.doctest]
-args = [
-  "doc",
-  "--no-deps",
-  "--all-features",
-  "--open",
-  "-Z",
-  "unstable-options",
-  "--config",
-  "build.rustdocflags=[\"--cfg\", \"docsrs\"]",
-]
-command = "cargo"
-toolchain = "nightly"
