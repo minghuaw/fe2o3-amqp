@@ -4,6 +4,12 @@
 
 1. Upgraded `fe2o3-amqp-types` to "0.6.0", which introduced breaking changes to `Body`
 
+## 0.6.10
+
+1. Updated dep version to fix a bug with `AmqpValue` on custom types
+   1. `serde_amqp` to "0.4.5"
+   2. `fe2o3-amqp-types` to "0.5.4"
+
 ## 0.6.9
 
 1. Changed visibiltiy of  `sesssion::Error` and `session::BeginError` to `pub`

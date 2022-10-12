@@ -4,6 +4,10 @@
 
 1. Allow more than one `Data` or `Sequence` section in message body by adding `Body::DataBatch` and `Body::SequenceBatch` variants.
 
+## 0.5.4
+
+1. Updated dep `serde_amqp` version to "0.4.5" which fixes a bug with `AmqpValue`
+
 ## 0.5.3
 
 1. Quality of life update
