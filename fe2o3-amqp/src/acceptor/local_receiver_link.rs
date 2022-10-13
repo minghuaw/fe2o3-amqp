@@ -12,7 +12,6 @@ use fe2o3_amqp_types::{
 };
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
-use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -98,7 +97,7 @@ where
     C: Clone,
     F: Fn(T) -> Option<T>,
 {
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     pub async fn accept_incoming_attach_inner(
         &self,
         shared: &SharedLinkAcceptorFields,
@@ -251,7 +250,10 @@ where
         };
 
         if let CreditMode::Auto(credit) = inner.credit_mode {
+            #[cfg(feature = "tracing")]
             tracing::debug!("Setting credits");
+            #[cfg(feature = "log")]
+            log::debug!("Setting credits");
             inner.set_credit(credit).await?;
         }
 

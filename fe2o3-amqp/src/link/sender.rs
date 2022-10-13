@@ -17,7 +17,6 @@ use fe2o3_amqp_types::{
     },
     performatives::{Attach, Detach, Transfer},
 };
-use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -733,7 +732,10 @@ impl DetachedSender {
         delivery_tag: DeliveryTag,
         resuming: ResumingDelivery,
     ) -> Result<(), SendError> {
+        #[cfg(feature = "tracing")]
         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
         let settlement = match resuming {
             ResumingDelivery::Abort => self.inner.abort(delivery_tag).await?,
             ResumingDelivery::Resend(payload) => {
@@ -751,8 +753,11 @@ impl DetachedSender {
         };
 
         let fut = DeliveryFut::<SendResult>::from(settlement);
-        let outcome = fut.await?;
-        tracing::debug!("Resuming delivery outcome {:?}", outcome);
+        let _outcome = fut.await?;
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery outcome {:?}", _outcome);
         Ok(())
     }
 
@@ -797,8 +802,11 @@ impl DetachedSender {
                             .await?;
                         let fut = DeliveryFut::<SendResult>::from(settlement);
 
-                        let outcome = fut.await?;
-                        tracing::debug!("Resuming delivery outcome {:?}", outcome)
+                        let _outcome = fut.await?;
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+                        #[cfg(feature = "log")]
+                        log::debug!("Resuming delivery outcome {:?}", _outcome);
                     }
 
                     // Upon completion of this reduction of state, the two parties MUST suspend and
@@ -811,10 +819,8 @@ impl DetachedSender {
         Ok(())
     }
 
-    // async fn on_attach_exchange(&mut self, attach_exchange: SenderAttachExchange) -> Result<(), SenderResumeErrorKind> {}
-
     /// Resume the sender link on the original session
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
         try_as_sender!(self, self.resume_inner(None).await);
         Ok(Sender { inner: self.inner })
@@ -830,7 +836,7 @@ impl DetachedSender {
     }
 
     /// Resume the sender link with a timeout
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume_with_timeout(
         mut self,
         duration: Duration,

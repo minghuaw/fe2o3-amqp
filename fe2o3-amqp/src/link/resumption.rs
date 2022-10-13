@@ -75,7 +75,10 @@ pub(crate) fn resume_delivery(
             // which means the application probably doesn't care about the
             // delivery state anyway
             let _ = local.settle_with_state(remote_state);
+            #[cfg(feature = "tracing")]
             tracing::error!(error = "Delivery handles are already dropped");
+            #[cfg(feature = "log")]
+            log::error!("error = Delivery handles are already dropped");
             None
         }
 
@@ -121,7 +124,10 @@ pub(crate) fn resume_delivery(
             // which means the application probably doesn't care about the
             // delivery state anyway
             let _ = local.settle_with_state(remote_state);
+            #[cfg(feature = "tracing")]
             tracing::error!(error = "Delivery handles are already dropped");
+            #[cfg(feature = "log")]
+            log::error!("error = Delivery handles are already dropped");
             None
         }
 

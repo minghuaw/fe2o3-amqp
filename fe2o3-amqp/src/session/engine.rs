@@ -4,8 +4,6 @@ use fe2o3_amqp_types::{
 };
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use tracing::{debug, error, instrument, trace};
-
 use crate::{
     connection::{self},
     control::{ConnectionControl, SessionControl},
@@ -79,7 +77,6 @@ where
 
 impl<S> SessionEngine<S>
 where
-    // S: endpoint::Session<State = SessionState> + Send + Sync + 'static,
     S: endpoint::SessionEndpoint<State = SessionState> + Send + Sync + 'static,
     AllocLinkError: From<S::AllocError>,
     SessionInnerError: From<S::Error> + From<S::BeginError> + From<S::EndError>,
@@ -89,7 +86,7 @@ where
     }
 
     #[inline]
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_incoming(
         &mut self,
         incoming: SessionIncomingItem,
@@ -160,9 +157,12 @@ where
     }
 
     #[inline]
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_control(&mut self, control: SessionControl) -> Result<Running, SessionInnerError> {
-        trace!("control: {}", control);
+        #[cfg(feature = "tracing")]
+        tracing::trace!("control: {}", control);
+        #[cfg(feature = "log")]
+        log::trace!("control: {}", control);
         match control {
             SessionControl::End(error) => {
                 // if control is closing, finish sending all buffered messages before closing
@@ -416,7 +416,7 @@ where
         }
     }
 
-    #[instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Session::event_loop", skip(self), fields(outgoing_channel = %self.session.outgoing_channel().0)))]
     async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
@@ -464,7 +464,10 @@ where
             let running = match result {
                 Ok(running) => running,
                 Err(error) => {
-                    error!("{:?}", error);
+                    #[cfg(feature = "tracing")]
+                    tracing::error!("{:?}", error);
+                    #[cfg(feature = "log")]
+                    log::error!("{:?}", error);
                     match self.on_error(&error).await {
                         Ok(running) => {
                             outcome = Err(error);
@@ -485,7 +488,10 @@ where
             }
         }
 
-        debug!("Stopped");
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Stopped");
+        #[cfg(feature = "log")]
+        log::debug!("Stopped");
         let _ =
             connection::deallocate_session(&mut self.conn_control, self.session.outgoing_channel())
                 .await;

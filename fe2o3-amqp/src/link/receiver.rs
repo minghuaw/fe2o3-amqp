@@ -17,7 +17,6 @@ use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
 };
-use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -1075,7 +1074,10 @@ impl DetachedReceiver {
             }
             None => self.inner.exchange_attach(false).await?,
         };
+        #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
+        #[cfg(feature = "log")]
+        log::debug!("exchange = {:?}", exchange);
 
         let credit = self.inner.link.flow_state.link_credit();
         self.inner.set_credit(credit).await?;
@@ -1087,7 +1089,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries.
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(self, self.resume_inner(None).await);
         let receiver = Receiver { inner: self.inner };
@@ -1107,7 +1109,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume_with_timeout(
         mut self,
         duration: Duration,

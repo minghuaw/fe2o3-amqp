@@ -11,7 +11,6 @@ use fe2o3_amqp_types::{
     },
 };
 use tokio::sync::mpsc;
-use tracing::instrument;
 
 use crate::{
     acceptor::{link::SharedLinkAcceptorFields, local_receiver_link::LocalReceiverLinkAcceptor},
@@ -62,7 +61,7 @@ impl Default for ControlLinkAcceptor {
 }
 
 impl ControlLinkAcceptor {
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     pub(crate) async fn accept_incoming_attach(
         &self,
         remote_attach: Attach,
@@ -145,7 +144,7 @@ impl TxnCoordinator {
         }
     }
 
-    #[instrument(skip(self, delivery))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, delivery)))]
     async fn on_delivery(&mut self, delivery: Delivery<ControlMessageBody>) -> Running {
         let result = match delivery.body() {
             ControlMessageBody::Declare(declare) => self
@@ -161,24 +160,33 @@ impl TxnCoordinator {
         self.handle_delivery_result(delivery_info, result).await
     }
 
-    #[instrument(skip(self, error))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, error)))]
     async fn on_recv_error(&mut self, error: RecvError) -> Running {
         match error {
             RecvError::LinkStateError(error) => match error {
                 crate::link::LinkStateError::IllegalState => {
+                    #[cfg(feature = "tracing")]
                     tracing::error!(?error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", error);
                     let error = definitions::Error::new(AmqpError::IllegalState, None, None);
                     // TODO: detach instead of closing
                     let _ = self.inner.close_with_error(Some(error)).await;
                     Running::Stop
                 }
                 crate::link::LinkStateError::IllegalSessionState => {
+                    #[cfg(feature = "tracing")]
                     tracing::error!(?error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", error);
                     // Session must have already stopped
                     Running::Stop
                 }
                 crate::link::LinkStateError::ExpectImmediateDetach => {
+                    #[cfg(feature = "tracing")]
                     tracing::error!(?error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", error);
                     let _ = self.inner.close_with_error(None).await;
                     // TODO: detach instead of closing
                     Running::Stop
@@ -190,12 +198,20 @@ impl TxnCoordinator {
                     self.inner
                         .close_with_error(None)
                         .await
-                        .unwrap_or_else(|err| tracing::error!(detach_error = ?err));
+                        .unwrap_or_else(|_err| {
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(detach_error = ?_err);
+                            #[cfg(feature = "log")]
+                            log::error!("detach_error = {:?}", _err);
+                        });
                     Running::Stop
                 }
             },
             RecvError::TransferLimitExceeded => {
+                #[cfg(feature = "tracing")]
                 tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
                 let error = definitions::Error::new(LinkError::TransferLimitExceeded, None, None);
                 // TODO: detach instead of closing
                 let _ = self.inner.close_with_error(Some(error)).await;
@@ -207,7 +223,10 @@ impl TxnCoordinator {
             | RecvError::IllegalRcvSettleModeInTransfer
             | RecvError::InconsistentFieldInMultiFrameDelivery
             | RecvError::TransactionalAcquisitionIsNotImeplemented => {
+                #[cfg(feature = "tracing")]
                 tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
                 let error =
                     definitions::Error::new(AmqpError::NotAllowed, format!("{:?}", error), None);
                 // TODO: detach instead of closing
@@ -229,7 +248,10 @@ impl TxnCoordinator {
                     .await
             }
             Err(error) => {
+                #[cfg(feature = "tracing")]
                 tracing::error!(?error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", error);
                 match error {
                     CoordinatorError::GlobalIdNotImplemented => {
                         let error = TransactionError::UnknownId;
@@ -282,12 +304,15 @@ impl TxnCoordinator {
         self.inner.dispose(delivery_info, Some(true), state).await
     }
 
-    #[instrument(name = "Coordinator::event_loop", skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Coordinator::event_loop", skip(self)))]
     pub async fn event_loop(mut self) {
         loop {
             let running = tokio::select! {
                 delivery = self.inner.recv() => {
+                    #[cfg(feature = "tracing")]
                     tracing::trace!(name = ?self.inner.link.name, ?delivery);
+                    #[cfg(feature = "log")]
+                    log::trace!("name = {:?}, delivery = {:?}", self.inner.link.name, delivery);
                     match delivery {
                         Ok(delivery) => self.on_delivery(delivery).await,
                         Err(error) => {

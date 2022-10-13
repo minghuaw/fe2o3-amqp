@@ -59,7 +59,6 @@ use serde_amqp::{ser::Serializer, Value};
 mod acquisition;
 pub use acquisition::*;
 use tokio::sync::{mpsc::error::TryRecvError, oneshot};
-use tracing::instrument;
 
 mod owned;
 pub use owned::*;
@@ -448,7 +447,7 @@ impl<'t> Transaction<'t> {
 }
 
 impl<'t> Drop for Transaction<'t> {
-    #[instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     fn drop(&mut self) {
         if !self.is_discharged {
             // rollback
@@ -460,8 +459,11 @@ impl<'t> Drop for Transaction<'t> {
             let message = Message::builder().value(discharge).build();
             let mut payload = BytesMut::new();
             let mut serializer = Serializer::from((&mut payload).writer());
-            if let Err(error) = Serializable(message).serialize(&mut serializer) {
-                tracing::error!(?error);
+            if let Err(_error) = Serializable(message).serialize(&mut serializer) {
+                #[cfg(feature = "tracing")]
+                tracing::error!(error = ?_error);
+                #[cfg(feature = "log")]
+                log::error!("error = {:?}", _error);
                 return;
             }
             // let payload = BytesMut::from(payload);
@@ -479,8 +481,11 @@ impl<'t> Drop for Transaction<'t> {
                         .ok_or(AmqpError::IllegalState)
                     {
                         Ok(handle) => handle,
-                        Err(error) => {
-                            tracing::error!(?error);
+                        Err(_error) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(error = ?_error);
+                            #[cfg(feature = "log")]
+                            log::error!("error = {:?}", _error);
                             return;
                         }
                     };
@@ -550,19 +555,31 @@ impl<'t> Drop for Transaction<'t> {
                         Ok(Some(state)) => match state {
                             DeliveryState::Accepted(_) => {}
                             _ => {
+                                #[cfg(feature = "tracing")]
                                 tracing::error!(error = ?state);
+                                #[cfg(feature = "log")]
+                                log::error!("error = {:?}", state);
                             }
                         },
                         Ok(None) => {
-                            tracing::error!(error = ?ControllerSendError::IllegalDeliveryState)
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(error = ?ControllerSendError::IllegalDeliveryState);
+                            #[cfg(feature = "log")]
+                            log::error!("error = {:?}", ControllerSendError::IllegalDeliveryState);
                         }
-                        Err(error) => {
-                            tracing::error!(?error);
+                        Err(_error) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(error = ?_error);
+                            #[cfg(feature = "log")]
+                            log::error!("error = {:?}", _error);
                         }
                     };
                 }
-                Err(error) => {
-                    tracing::error!(?error);
+                Err(_error) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(error = ?_error);
+                    #[cfg(feature = "log")]
+                    log::error!("error = {:?}", _error);
                 }
             }
         }

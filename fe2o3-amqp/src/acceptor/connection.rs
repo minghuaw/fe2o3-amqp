@@ -15,7 +15,6 @@ use tokio::{
     sync::mpsc::{self, Receiver},
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
-use tracing::instrument;
 
 use crate::{
     acceptor::sasl_acceptor::SaslServerFrame,
@@ -236,7 +235,7 @@ impl<Tls, Sasl> ConnectionAcceptor<Tls, Sasl>
 where
     Sasl: SaslAcceptor,
 {
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn negotiate_sasl_with_framed<Io>(
         &self,
         framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
@@ -249,7 +248,10 @@ where
 
         // Send mechanisms
         let frame = sasl::Frame::Mechanisms(self.sasl_acceptor.sasl_mechanisms());
+        #[cfg(feature = "tracing")]
         tracing::trace!(sending = ?frame);
+        #[cfg(feature = "log")]
+        log::trace!("sending = {:?}", frame);
         transport.send(frame).await?;
 
         let mut sasl_acceptor = self.sasl_acceptor.clone();
@@ -278,12 +280,18 @@ where
             match frame {
                 SaslServerFrame::Challenge(challenge) => {
                     let frame = sasl::Frame::Challenge(challenge);
+                    #[cfg(feature = "tracing")]
                     tracing::trace!(sending = ?frame);
+                    #[cfg(feature = "log")]
+                    log::trace!("sending = {:?}", frame);
                     transport.send(frame).await?;
                 }
                 SaslServerFrame::Outcome(outcome) => {
                     let frame = sasl::Frame::Outcome(outcome);
+                    #[cfg(feature = "tracing")]
                     tracing::trace!(sending = ?frame);
+                    #[cfg(feature = "log")]
+                    log::trace!("sending = {:?}", frame);
                     transport.send(frame).await?;
                     break;
                 }

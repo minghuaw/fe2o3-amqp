@@ -13,7 +13,6 @@ use fe2o3_amqp_types::{
     definitions::{MAJOR, MINOR, MIN_MAX_FRAME_SIZE, REVISION},
     states::ConnectionState,
 };
-use tracing::{event, instrument, span, trace, Level};
 
 use std::{io, marker::PhantomData, task::Poll, time::Duration};
 
@@ -172,19 +171,27 @@ where
         mut framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
         mut framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
     ) -> Result<Self, NegotiationError> {
-        let span = span!(Level::TRACE, "SEND");
+        #[cfg(feature = "tracing")]
+        let span = tracing::span!(tracing::Level::TRACE, "SEND");
         let proto_header = ProtocolHeader::sasl();
-        event!(parent: &span, Level::TRACE, ?proto_header);
+        #[cfg(feature = "tracing")]
+        tracing::event!(parent: &span, tracing::Level::TRACE, ?proto_header);
+        #[cfg(feature = "log")]
+        log::trace!("proto_header = {:?}", proto_header);
         framed_write.send(proto_header).await?;
 
-        let span = span!(Level::TRACE, "RECV");
+        #[cfg(feature = "tracing")]
+        let span = tracing::span!(tracing::Level::TRACE, "RECV");
         let incoming_header = framed_read.next().await.ok_or_else(|| {
             NegotiationError::Io(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "Waiting for SASL header exchange",
             ))
         })??;
-        event!(parent: &span, Level::TRACE, ?incoming_header);
+        #[cfg(feature = "tracing")]
+        tracing::event!(parent: &span, tracing::Level::TRACE, ?incoming_header);
+        #[cfg(feature = "log")]
+        log::trace!("incoming_header = {:?}", incoming_header);
 
         if !incoming_header.is_sasl()
             || incoming_header.major != MAJOR
@@ -211,7 +218,7 @@ where
     Io: AsyncRead + AsyncWrite + Unpin,
 {
     /// Performs AMQP negotiation
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     pub async fn negotiate_amqp_header(
         mut framed_write: FramedWrite<WriteHalf<Io>, ProtocolHeaderCodec>,
         mut framed_read: FramedRead<ReadHalf<Io>, ProtocolHeaderCodec>,
@@ -287,7 +294,7 @@ fn length_delimited_decoder(max_frame_size: usize) -> LengthDelimitedCodec {
         .new_codec()
 }
 
-#[instrument(name = "SEND", skip_all)]
+#[cfg_attr(feature = "tracing", tracing::instrument(name = "SEND", skip_all))]
 pub(crate) async fn send_amqp_proto_header<W>(
     framed_write: &mut FramedWrite<W, ProtocolHeaderCodec>,
     local_state: &mut ConnectionState,
@@ -296,7 +303,10 @@ pub(crate) async fn send_amqp_proto_header<W>(
 where
     W: AsyncWrite + Unpin,
 {
-    trace!(?proto_header);
+    #[cfg(feature = "tracing")]
+    tracing::trace!(?proto_header);
+    #[cfg(feature = "log")]
+    log::trace!("proto_header = {:?}", proto_header);
     match local_state {
         ConnectionState::Start => {
             framed_write.send(proto_header).await?;
@@ -311,7 +321,7 @@ where
     Ok(())
 }
 
-#[instrument(name = "RECV", skip_all)]
+#[cfg_attr(feature = "tracing", tracing::instrument(name = "RECV", skip_all))]
 async fn recv_amqp_proto_header<R>(
     framed_read: &mut FramedRead<R, ProtocolHeaderCodec>,
     local_state: &mut ConnectionState,
@@ -336,13 +346,16 @@ where
         }
         _ => return Err(NegotiationError::IllegalState),
     };
-    trace!(?proto_header);
+    #[cfg(feature = "tracing")]
+    tracing::trace!(?proto_header);
+    #[cfg(feature = "log")]
+    log::trace!("proto_header = {:?}", proto_header);
 
     Ok(proto_header)
 }
 
 #[cfg(any(feature = "rustls", feature = "native-tls"))]
-#[instrument(name = "SEND", skip_all)]
+#[cfg_attr(feature = "tracing", tracing::instrument(name = "SEND", skip_all))]
 async fn send_tls_proto_header<Io>(stream: &mut Io) -> Result<(), io::Error>
 where
     Io: AsyncWrite + Unpin,
@@ -355,19 +368,19 @@ where
 }
 
 #[cfg(any(feature = "rustls", feature = "native-tls"))]
-#[instrument(name = "RECV", skip_all)]
+#[cfg_attr(feature = "tracing", tracing::instrument(name = "RECV", skip_all))]
 pub(crate) async fn recv_tls_proto_header<Io>(
     stream: &mut Io,
 ) -> Result<ProtocolHeader, NegotiationError>
 where
     Io: AsyncRead + Unpin,
 {
-    use std::convert::TryFrom;
+    // use std::convert::TryFrom;
     use tokio::io::AsyncReadExt;
 
     let mut buf = [0u8; 8];
     stream.read_exact(&mut buf).await?;
-    ProtocolHeader::try_from(buf).map_err(|buf| {
+    std::convert::TryFrom::try_from(buf).map_err(|buf| {
         NegotiationError::Io(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("Invalid protocol header {:?}", buf),

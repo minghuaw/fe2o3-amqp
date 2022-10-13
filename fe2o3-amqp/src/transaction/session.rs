@@ -8,7 +8,6 @@ use fe2o3_amqp_types::{
     transaction::{TransactionError, TransactionId},
 };
 use tokio::sync::{mpsc, oneshot};
-use tracing::instrument;
 use uuid::Uuid;
 
 use crate::{
@@ -139,7 +138,7 @@ impl<S> endpoint::HandleDischarge for TxnSession<S>
 where
     S: endpoint::Session<Error = session::SessionInnerError> + endpoint::SessionExt + Send + Sync,
 {
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn commit_transaction(
         &mut self,
         txn_id: TransactionId,
@@ -267,7 +266,7 @@ where
         }
     }
 
-    #[instrument(skip_all, flow = ?flow)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all, flow = ?flow))]
     async fn on_incoming_flow(&mut self, flow: Flow) -> Result<Option<LinkFlow>, Self::Error> {
         // TODO: implement transactional acquisition
         // match flow

@@ -19,7 +19,6 @@ use tokio::{
     },
     task::JoinHandle,
 };
-use tracing::{instrument, trace};
 
 use crate::{
     connection::ConnectionHandle,
@@ -467,7 +466,7 @@ impl endpoint::Session for Session {
         Ok(None)
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_disposition(
         &mut self,
         disposition: Disposition,
@@ -539,9 +538,12 @@ impl endpoint::Session for Session {
         }
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::Error> {
-        trace!(frame = ?detach);
+        #[cfg(feature = "tracing")]
+        tracing::trace!(frame = ?detach);
+        #[cfg(feature = "log")]
+        log::trace!("frame = {:?}", detach);
         // Remove the link by input handle
         match self
             .link_by_input_handle
@@ -555,13 +557,16 @@ impl endpoint::Session for Session {
         }
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_end(
         &mut self,
         _channel: IncomingChannel,
         end: End,
     ) -> Result<(), Self::EndError> {
-        trace!(end = ?end);
+        #[cfg(feature = "tracing")]
+        tracing::trace!(end = ?end);
+        #[cfg(feature = "log")]
+        log::trace!("end = {:?}", end);
         match self.local_state {
             SessionState::BeginSent | SessionState::BeginReceived | SessionState::Mapped => {
                 self.local_state = SessionState::EndReceived;
@@ -575,7 +580,10 @@ impl endpoint::Session for Session {
                 self.local_state = SessionState::Unmapped;
 
                 if let Some(error) = end.error {
+                    #[cfg(feature = "tracing")]
                     tracing::error!(remote_error = ?error);
+                    #[cfg(feature = "log")]
+                    log::error!("remote_error = {:?}", error);
                     return Err(SessionStateError::RemoteEndedWithError(error));
                 }
                 Ok(())
