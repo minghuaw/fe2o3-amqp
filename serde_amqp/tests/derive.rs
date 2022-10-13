@@ -1,9 +1,10 @@
 //! This only acts as a test and macro expansion for the derive macro
 //! 
 //! cargo expand --test derive --features "derive"
-
+#[cfg(feature = "derive")]
 use serde_amqp::{SerializeComposite, DeserializeComposite};
 
+#[cfg(feature = "derive")]
 #[derive(SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "test:example:bool",

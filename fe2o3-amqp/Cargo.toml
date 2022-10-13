@@ -61,8 +61,11 @@ slab = "0.4"
 tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 serde_bytes = "0.11"
-tracing = "0.1"
 parking_lot = { version = "0.12.1", features = ["send_guard"] }
+
+# Optinoal deps that are feature themselves
+tracing = { version = "0.1", optional = true }
+log = { version = "0.4.17", optional = true }
 
 # Optional deps
 tokio-rustls = { version = "0.23", optional = true }

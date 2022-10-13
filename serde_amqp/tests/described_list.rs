@@ -1,5 +1,7 @@
+#[cfg(feature = "derive")]
 use serde_amqp::{to_vec, DeserializeComposite, SerializeComposite, from_slice};
 
+#[cfg(feature = "derive")]
 #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq, PartialOrd)]
 #[amqp_contract(
     name = "test:example:*",
@@ -10,6 +12,7 @@ struct Single<T> {
     a: T,
 }
 
+#[cfg(feature = "derive")]
 #[test]
 fn single_bool() {
     let value = Single { a: true };
@@ -23,6 +26,7 @@ fn single_bool() {
     assert_eq!(decoded, value);
 }
 
+#[cfg(feature = "derive")]
 #[test]
 fn single_i8() {
     let value = Single { a: 0i8 };

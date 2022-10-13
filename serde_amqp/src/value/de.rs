@@ -1182,14 +1182,9 @@ impl<'de> de::VariantAccess<'de> for VariantAccess {
 #[cfg(test)]
 mod tests {
     use serde::de;
-    use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     use crate::{
-        described::Described,
-        descriptor::Descriptor,
-        from_slice,
         primitives::OrderedMap,
-        to_vec,
         value::{ser::to_value, Value},
     };
 
@@ -1356,8 +1351,11 @@ mod tests {
         assert_eq_from_value_vs_expected(val, expected);
     }
 
+    #[cfg(feature = "derive")]
     #[test]
     fn test_deserialize_derive_macro() {
+        use crate::{described::Described, descriptor::Descriptor, from_slice, to_vec};
+        use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
         use crate as serde_amqp;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
