@@ -18,12 +18,12 @@ pub enum Body<T> {
     /// An amqp-value section contains a single AMQP value
     Value(AmqpValue<T>),
 
-    /// More than one data section
+    /// One or more data section
     ///
     /// Added since `"0.6.0"`
     Data(Batch<Data>),
 
-    /// More than one sequence section
+    /// One or more sequence section
     ///
     /// Added since `"0.6.0"`
     Sequence(Batch<AmqpSequence<T>>),
