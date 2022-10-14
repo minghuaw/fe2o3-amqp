@@ -146,7 +146,7 @@ pub struct SaslOutcome {
 ///     <choice name="sys-perm" value="3"/>
 ///     <choice name="sys-temp" value="4"/>
 /// </type>
-#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SaslCode {
     /// 0 Connection authentication succeeded.
