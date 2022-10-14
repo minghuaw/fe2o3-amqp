@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use fe2o3_amqp::{Connection, Session, Sender, Receiver};
+use fe2o3_amqp::{Connection, Receiver, Sender, Session};
 use fe2o3_amqp_types::messaging::Message;
 use testcontainers::{clients, images};
 
@@ -19,8 +19,12 @@ async fn activemq_artemis_send_receive() {
     let url = format!("amqp://localhost:{}", port);
     let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-    let mut sender = Sender::attach(&mut session, "test-sender", "test-queue").await.unwrap();
-    let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue").await.unwrap();
+    let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
+        .await
+        .unwrap();
+    let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
+        .await
+        .unwrap();
 
     let message = Message::from("test-message");
     let outcome = sender.send(message).await.unwrap();
@@ -49,8 +53,12 @@ async fn activemq_artemis_send_receive_large_content() {
     let url = format!("amqp://localhost:{}", port);
     let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-    let mut sender = Sender::attach(&mut session, "test-sender", "test-queue").await.unwrap();
-    let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue").await.unwrap();
+    let mut sender = Sender::attach(&mut session, "test-sender", "test-queue")
+        .await
+        .unwrap();
+    let mut receiver = Receiver::attach(&mut session, "test-receiver", "test-queue")
+        .await
+        .unwrap();
 
     let message = Message::from("test-message".repeat(100_000));
     let outcome = sender.send(message).await.unwrap();

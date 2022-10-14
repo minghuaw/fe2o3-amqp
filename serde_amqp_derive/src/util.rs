@@ -41,7 +41,7 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
         .next()
         .ok_or(ParseDescriptorCodeError::DomainIdNotFound)?
         .replace("_", "");
-    
+
     let domain_id = parse_code_based_on_prefix(&domain_id_str)
         .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
 

@@ -5,7 +5,7 @@
 //!
 //! - [Documentation](https://docs.rs/fe2o3-amqp-types)
 //! - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/fe2o3-amqp-types/Changelog.md)
-//! 
+//!
 //! # Feature flags
 //!
 //! Please note that `Performative` will require both `"transport"` and `"messaging"` feature flags

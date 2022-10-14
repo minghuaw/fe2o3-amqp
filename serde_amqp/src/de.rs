@@ -1130,9 +1130,7 @@ where
                     self.deserialize_tuple(fields.len(), visitor)
                 }
                 EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                EncodingCodes::DescribedType => {
-                    visitor.visit_seq(DescribedAccess::list(self))
-                }
+                EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
                 _ => Err(Error::InvalidFormatCode),
             }
         };
@@ -2396,7 +2394,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
-        #[amqp_contract(code ="0x00:0x01", encoding = "basic")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "basic")]
         struct Wrapper(BTreeMap<Symbol, i32>);
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]

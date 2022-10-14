@@ -304,7 +304,10 @@ impl TxnCoordinator {
         self.inner.dispose(delivery_info, Some(true), state).await
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Coordinator::event_loop", skip(self)))]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(name = "Coordinator::event_loop", skip(self))
+    )]
     pub async fn event_loop(mut self) {
         loop {
             let running = tokio::select! {

@@ -4,10 +4,7 @@ use fe2o3_amqp::{
     Delivery, Receiver, Sender,
 };
 use fe2o3_amqp_types::{
-    messaging::{
-        ApplicationProperties, FromBody, IntoBody, MessageId,
-        Outcome, Properties,
-    },
+    messaging::{ApplicationProperties, FromBody, IntoBody, MessageId, Outcome, Properties},
     primitives::SimpleValue,
 };
 
@@ -130,9 +127,7 @@ impl MgmtClient {
         entity_type: impl Into<String>,
         locales: impl Into<Option<String>>,
     ) -> Result<Outcome, SendError> {
-        let mut message = operation
-            .into_message()
-            .map_body(IntoBody::into_body);
+        let mut message = operation.into_message().map_body(IntoBody::into_body);
 
         let application_properties = message
             .application_properties

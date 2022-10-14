@@ -22,7 +22,7 @@ use crate::messaging::{
 )]
 pub struct AmqpValue<T>(pub T);
 
-impl<T> AmqpValue<T> { }
+impl<T> AmqpValue<T> {}
 
 impl<T> Display for AmqpValue<T>
 where

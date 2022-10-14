@@ -1354,9 +1354,9 @@ mod tests {
     #[cfg(feature = "derive")]
     #[test]
     fn test_deserialize_derive_macro() {
+        use crate as serde_amqp;
         use crate::{described::Described, descriptor::Descriptor, from_slice, to_vec};
         use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
-        use crate as serde_amqp;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite)]
         #[amqp_contract(code = "0x00:0x13", encoding = "list")]

@@ -1871,9 +1871,9 @@ mod test {
         assert_eq_on_serialized_vs_expected(descriptor, &expected);
     }
 
-    use serde::{Serialize};
     #[cfg(feature = "derive")]
     use serde::Deserialize;
+    use serde::Serialize;
     #[cfg(feature = "derive")]
     use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 

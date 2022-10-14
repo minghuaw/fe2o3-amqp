@@ -1,6 +1,6 @@
 //! Provides custom derive macros `SerializeComposite` and `DeserializeComposite` for described
 //! types as defined in the AMQP1.0 protocol.
-//! 
+//!
 //! - [Change Log](https://github.com/minghuaw/fe2o3-amqp/blob/main/serde_amqp_derive/Changelog.md)
 //!
 //! # Usage

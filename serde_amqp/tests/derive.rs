@@ -1,8 +1,8 @@
 //! This only acts as a test and macro expansion for the derive macro
-//! 
+//!
 //! cargo expand --test derive --features "derive"
 #[cfg(feature = "derive")]
-use serde_amqp::{SerializeComposite, DeserializeComposite};
+use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 #[cfg(feature = "derive")]
 #[derive(SerializeComposite, DeserializeComposite)]
@@ -12,5 +12,5 @@ use serde_amqp::{SerializeComposite, DeserializeComposite};
     encoding = "list"
 )]
 struct Example {
-    a: i32
+    a: i32,
 }
