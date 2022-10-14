@@ -11,8 +11,6 @@ use crate::messaging::{
     SerializableBody, TransposeOption, __private::BodySection,
 };
 
-use serde_amqp::extensions::TransparentVec;
-
 /// The body consists of one of the following three choices: one or more data sections, one or more
 /// amqp-sequence sections, or a single amqp-value section.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -23,12 +21,12 @@ pub enum Body<T> {
     /// More than one data section
     ///
     /// Added since `"0.6.0"`
-    Data(TransparentVec<Data>),
+    Data(Batch<Data>),
 
     /// More than one sequence section
     ///
     /// Added since `"0.6.0"`
-    Sequence(TransparentVec<AmqpSequence<T>>),
+    Sequence(Batch<AmqpSequence<T>>),
 
     /// There is no body section at all
     ///
@@ -143,7 +141,7 @@ impl<T: Serialize> From<T> for Body<T> {
 
 impl<T: Serialize + Clone, const N: usize> From<[T; N]> for Body<T> {
     fn from(values: [T; N]) -> Self {
-        Self::Sequence(TransparentVec::new(vec![AmqpSequence(values.to_vec())]))
+        Self::Sequence(Batch::new(vec![AmqpSequence(values.to_vec())]))
     }
 }
 
@@ -155,13 +153,13 @@ impl<T> From<AmqpValue<T>> for Body<T> {
 
 impl<T> From<AmqpSequence<T>> for Body<T> {
     fn from(val: AmqpSequence<T>) -> Self {
-        Self::Sequence(TransparentVec::new(vec![val]))
+        Self::Sequence(Batch::new(vec![val]))
     }
 }
 
 impl From<Data> for Body<Value> {
     fn from(val: Data) -> Self {
-        Self::Data(TransparentVec::new(vec![val]))
+        Self::Data(Batch::new(vec![val]))
     }
 }
 
@@ -251,11 +249,11 @@ where
 
         match val {
             Field::Data => {
-                let data: TransparentVec<Data> = variant.newtype_variant()?;
+                let data: Batch<Data> = variant.newtype_variant()?;
                 Ok(Body::Data(data))
             }
             Field::Sequence => {
-                let sequence: TransparentVec<AmqpSequence<_>> = variant.newtype_variant()?;
+                let sequence: Batch<AmqpSequence<_>> = variant.newtype_variant()?;
                 Ok(Body::Sequence(sequence))
             }
             Field::Value => {
