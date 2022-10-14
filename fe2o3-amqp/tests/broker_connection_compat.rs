@@ -1,3 +1,5 @@
+//! Tests connection with different brokers
+
 use std::time::Duration;
 
 use fe2o3_amqp::connection::Connection;
