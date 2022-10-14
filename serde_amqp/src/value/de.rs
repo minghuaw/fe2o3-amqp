@@ -126,7 +126,7 @@ impl<'de> de::Visitor<'de> for FieldVisitor {
         E: de::Error,
     {
         let field = EncodingCodes::try_from(v)
-            .map(|c| ValueType::from(c))
+            .map(ValueType::from)
             .map_err(|err: Error| de::Error::custom(err.to_string()))?;
         Ok(field)
     }
