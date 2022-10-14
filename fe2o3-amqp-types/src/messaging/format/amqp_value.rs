@@ -79,11 +79,8 @@ where
 
     fn transpose(src: Self::From) -> Option<T> {
         match src {
-            Some(AmqpValue(body)) => match body {
-                Some(body) => Some(T::from_body(AmqpValue(body))),
-                None => None,
-            },
-            None => None,
+            Some(AmqpValue(Some(body))) => Some(T::from_body(AmqpValue(body))),
+            Some(_) | None => None,
         }
     }
 }

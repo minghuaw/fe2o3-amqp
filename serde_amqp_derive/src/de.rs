@@ -275,6 +275,7 @@ fn expand_deserialize_tuple_struct(
     Ok(token)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn expand_deserialize_struct(
     ident: &syn::Ident,
     generics: &syn::Generics,

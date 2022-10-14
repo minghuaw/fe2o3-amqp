@@ -9,7 +9,7 @@ use serde_amqp::primitives::Symbol;
 use super::ErrorCondition;
 
 /// Symbols used to indicate connection error conditions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionError {
     /// An operator intervened to close the connection for some reason. The client could retry at
     /// some later date

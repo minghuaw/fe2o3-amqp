@@ -172,10 +172,7 @@ where
                     })
                     .collect();
 
-                match batch {
-                    Some(batch) => Some(T::from_body(batch)),
-                    None => None,
-                }
+                batch.map(T::from_body)
             }
             None => None,
         }

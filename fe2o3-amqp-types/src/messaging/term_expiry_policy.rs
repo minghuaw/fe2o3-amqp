@@ -10,7 +10,7 @@ use serde_amqp::primitives::Symbol;
 /// <type name="terminus-expiry-policy" class="restricted" source="symbol">
 /// </type>
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminusExpiryPolicy {
     /// <choice name="link-detach" value="link-detach"/>
     LinkDetach,

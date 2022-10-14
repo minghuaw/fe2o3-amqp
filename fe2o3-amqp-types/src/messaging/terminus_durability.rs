@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Durability policy for a terminus.
 /// <type name="terminus-durability" class="restricted" source="uint">
 /// </type>
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TerminusDurability {
     /// <choice name="none" value="0"/>
     None,

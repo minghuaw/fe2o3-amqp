@@ -344,7 +344,7 @@ where
 
         let body = match body {
             Some(body) => body,
-            None => B::from_empty_body().map_err(|e| de::Error::custom(e))?,
+            None => B::from_empty_body().map_err(de::Error::custom)?,
         };
 
         Ok(Message {

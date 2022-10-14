@@ -95,7 +95,7 @@ impl From<MaxFrameSize> for usize {
 /// connection. A peer MUST not use channel numbers outside the range that its partner can handle.
 /// A peer that receives a channel number outside the supported range MUST close the connection
 /// with the framing-error error-code.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelMax(pub UShort);
 
 impl Default for ChannelMax {

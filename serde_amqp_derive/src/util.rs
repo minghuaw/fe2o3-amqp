@@ -13,7 +13,7 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
     let name = attr.name.unwrap_or_else(|| input.ident.to_string());
     let code = attr
         .code
-        .map(|s| parse_descriptor_code(s))
+        .map(parse_descriptor_code)
         .transpose()
         .unwrap();
     let encoding = attr.encoding.unwrap_or(EncodingType::List);
@@ -40,7 +40,7 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
     let domain_id_str = split
         .next()
         .ok_or(ParseDescriptorCodeError::DomainIdNotFound)?
-        .replace("_", "");
+        .replace('_', "");
 
     let domain_id = parse_code_based_on_prefix(&domain_id_str)
         .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
@@ -48,7 +48,7 @@ fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
     let descriptor_id_str = split
         .next()
         .ok_or(ParseDescriptorCodeError::DescriptorIdNotFound)?
-        .replace("_", "");
+        .replace('_', "");
     let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
         .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
     // numeric descriptors
@@ -61,7 +61,7 @@ fn parse_code_based_on_prefix(src: &str) -> Result<u64, ParseIntError> {
         Some(s) => u64::from_str_radix(s, 16),
         None => match src.strip_prefix("0X") {
             Some(s) => u64::from_str_radix(s, 16),
-            None => u64::from_str_radix(src, 10),
+            None => src.parse::<u64>(),
         },
     }
 }
