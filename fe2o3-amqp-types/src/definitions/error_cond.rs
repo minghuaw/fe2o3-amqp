@@ -10,7 +10,7 @@ use crate::transaction::TransactionError;
 use super::{AmqpError, ConnectionError, LinkError, SessionError};
 
 /// Archetype error-condition
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorCondition {
     /// 2.8.15 AMQP Error
     AmqpError(AmqpError),

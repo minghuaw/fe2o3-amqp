@@ -61,7 +61,7 @@ pub struct Open {
 /// frames larger than its partner can handle. A peer that receives an oversized frame MUST close
 /// the connection with the framing-error error-code.
 /// Both peers MUST accept frames of up to 512 (MIN-MAX-FRAME-SIZE) octets.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaxFrameSize(pub UInt);
 
 impl Default for MaxFrameSize {
