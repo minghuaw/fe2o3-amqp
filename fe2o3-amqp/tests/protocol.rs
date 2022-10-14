@@ -4,7 +4,7 @@ use fe2o3_amqp::connection::Connection;
 use testcontainers::{clients, images};
 
 #[tokio::test]
-async fn test_single_amqp_connection() {
+async fn activemq_artemis_connection() {
     let docker = clients::Cli::default();
     let image = images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
         .with_env_var("DISABLE_SECURITY", "true")
@@ -19,7 +19,7 @@ async fn test_single_amqp_connection() {
 }
 
 #[tokio::test]
-async fn test_sasl_connection() {
+async fn activemq_artemis_sasl_connection() {
     let docker = clients::Cli::default();
     let image = images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
         .with_env_var("ARTEMIS_USERNAME", "test")
