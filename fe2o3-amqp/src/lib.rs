@@ -6,6 +6,9 @@
 //!
 //! [![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
 //!
+//! - [Documentation](https://docs.rs/fe2o3-amqp)
+//! - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/fe2o3-amqp/Changelog.md)
+//! 
 //! # Feature flags
 //!
 //! ```toml
@@ -19,6 +22,8 @@
 //! |`"acceptor"`| enables `ConnectionAcceptor`, `SessionAcceptor`, and `LinkAcceptor`|
 //! |`"transaction"`| enables `Controller`, `Transaction`, `OwnedTransaction` and `control_link_acceptor` |
 //! |`"scram"`| enables SCRAM auth |
+//! |`"tracing"`| enables logging with `tracing` |
+//! |`"log"`| enables logging with `log` |
 //!
 //! # Quick start
 //!
@@ -155,41 +160,12 @@
 //! |`fe2o3-amqp`| Implementation of AMQP1.0 `Connection`, `Session`, and `Link` |
 //! |`fe2o3-amqp-ext`| Extension types and implementations |
 //! |`fe2o3-amqp-ws` | WebSocket binding for `fe2o3-amqp` transport |
+//! |`fe2o3-amqp-management`| Experimental implementation of AMQP1.0 management |
+//! |`fe2o3-amqp-cbs`| Experimental implementation of AMQP1.0 CBS |
 //!
 //! # Minimum rust version supported
 //!
 //! 1.56.0 (ie. 2021 edition)
-//!
-//! # Road map
-//!
-//! The items below are listed in the order of priority.
-//!
-//! - [x] Proper error handling (more or less)
-//! - [x] Listeners
-//!   - [x] Acceptor that provide fine control over each incoming endpoint
-//!   - [x] TLS acceptor integration with `tokio-rustls`
-//!   - [x] TLS acceptor integration with `tokio-native-tls`
-//!   - [x] Naive PLAIN SASL acceptor
-//!   - [ ] ~~Listener that provide coarse control~~
-//! - [x] Transaction
-//!   - [x] controller side
-//!   - [x] controller side testing
-//!     - [x] posting
-//!     - [x] retirement
-//!     - [ ] ~~acquisition~~ #43
-//!   - [x] resource side and testing
-//!     - [x] posting
-//!     - [x] retirement
-//!     - [ ] ~~acquisition~~ #43
-//! - [x] [qpid interoperability test](https://github.com/minghuaw/qpid-interop-test)
-//! - [x] Link resumption
-//! - [x] Dynamic link
-//! - [x] Dispose multiple deliveries
-//! - [x] WebSocket binding [`fe2o3-amqp-ws`](https://crates.io/crates/fe2o3-amqp-ws)
-//! - [x] SASL-SCRAM-SHA-1, SASL-SCRAM-SHA-256, SASL-SCRAM-SHA-512
-//!   - [x] client
-//!   - [x] acceptor
-//! - [ ] Pipelined open
 
 pub(crate) mod control;
 pub(crate) mod endpoint;
