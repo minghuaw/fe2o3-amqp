@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "derive")]
 use serde_amqp::{DeserializeComposite, SerializeComposite};
 
+#[cfg(feature = "derive")]
 #[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "test:example:*",

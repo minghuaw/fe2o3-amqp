@@ -9,11 +9,13 @@ use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() {
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::TRACE)
-        .finish();
+    // let subscriber = FmtSubscriber::builder()
+    //     .with_max_level(Level::TRACE)
+    //     .finish();
 
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    env_logger::init();
 
     let mut connection = Connection::open("connection-1", "amqp://localhost:5672")
         .await
@@ -30,16 +32,8 @@ async fn main() {
         .await
         .unwrap();
 
-    struct Foo {}
-
-    impl From<Foo> for Message<Value> {
-        fn from(_: Foo) -> Self {
-            Message::builder().data(Binary::from("Foo")).build()
-        }
-    }
-
     // let outcome = sender.send(message).await.unwrap();
-    let fut = sender.send_batchable(Foo {}).await.unwrap();
+    let fut = sender.send_batchable("hello world").await.unwrap();
     let outcome = fut.await.unwrap();
 
     // Checks the outcome of delivery
