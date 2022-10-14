@@ -4,6 +4,7 @@
 
 1. Upgraded `fe2o3-amqp-types` to "0.6.0", which introduced breaking changes to `Body` (#115, please
    see `fe2o3-amqp-types` changelog for more details)
+2. Logging with either `tracing` or `log` is now toggled by enabling the corresponding feature
 
 ## 0.6.10
 
