@@ -9,8 +9,7 @@ use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, SequenceNo},
     messaging::{
-        message::DecodeIntoMessage, Accepted, Address, DeliveryState, Modified, Rejected, Released,
-        Source, Target,
+        Accepted, Address, DeliveryState, FromBody, Modified, Rejected, Released, Source, Target,
     },
     performatives::{Attach, Detach, Transfer},
 };
@@ -18,7 +17,6 @@ use tokio::{
     sync::mpsc,
     time::{error::Elapsed, timeout},
 };
-use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -197,9 +195,53 @@ impl Receiver {
     /// let delivery: Delivery<String> = receiver.recv::<String>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
+    ///
+    /// # The receive type `Delivery<T>`
+    ///
+    /// If the user is not certain the exact type (including the exact body section type) to
+    /// receive, [`Body<Value>`] is probably the safest bet. [`Body<T>`] covers all possible body
+    /// section types, including an empty body, and `Value` covers all possible AMQP 1.0 types.
+    ///
+    /// ```rust
+    /// // `Body<Value>` covers all possibilities
+    /// let delivery: Delivery<Body<Value>> = receiver.recv::<Body<Value>>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    ///
+    /// If the user is certain an [`AmqpValue`] body section is expected, then the user could use
+    /// [`AmqpValue<KnownType>`] if the exact message type `KnownType` is known and implements
+    /// [`serde::Deserialize`]. If the user is not sure about the exact message type, one could use
+    /// [`AmqpValue<Value>`] to cover the most general cases. This also applies to [`AmqpSequence`]
+    /// or [`Batch<AmqpSequence>`].
+    ///
+    /// ```rust
+    /// // `KnownType` must implement `serde::Deserialize`
+    /// let delivery: Delivery<AmqpValue<KnownType>> = receiver.recv::<AmqpValue<KnownType>>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
+    ///
+    /// Another option to use a custom type is to implement the [`FromBody`] trait on a custom type.
+    ///
+    /// ```rust
+    /// #[derive(Deserialize)]
+    /// struct Foo {
+    ///     a: i32
+    /// }
+    ///
+    /// impl<'de> FromBody<'de> for Foo {
+    ///     type Body = AmqpValue<Foo>;
+    ///
+    ///     fn from_body(body: Self::Body) -> Self {
+    ///         body.0
+    ///     }
+    /// }
+    ///
+    /// let delivery: Delivery<Foo> = receiver.recv::<Foo>().await.unwrap();
+    /// receiver.accept(&delivery).await.unwrap();
+    /// ```
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         self.inner.recv().await
     }
@@ -304,7 +346,7 @@ impl Receiver {
     /// let delivery2: Delivery<Value> = receiver.recv().await.unwrap();
     /// receiver.accept_all(vec![&delivery1, &delivery2]).await.unwrap();
     /// ```
-    pub async fn accept_all<'a, T: 'a>(
+    pub async fn accept_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
@@ -332,7 +374,7 @@ impl Receiver {
     /// to `Reject`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    pub async fn reject_all<'a, T: 'a>(
+    pub async fn reject_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         error: impl Into<Option<definitions::Error>>,
@@ -360,7 +402,7 @@ impl Receiver {
     /// to `Release`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    pub async fn release_all<'a, T: 'a>(
+    pub async fn release_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
     ) -> Result<(), DispositionError> {
@@ -386,7 +428,7 @@ impl Receiver {
     /// to `Modify`
     ///
     /// Only deliveries that are found in the local unsettled map will be included in the disposition frame(s).
-    pub async fn modify_all<'a, T: 'a>(
+    pub async fn modify_all(
         &self,
         deliveries: impl IntoIterator<Item = impl Into<DeliveryInfo>>,
         modified: Modified,
@@ -557,7 +599,7 @@ where
 {
     pub(crate) async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         loop {
             match self.recv_inner().await? // FIXME: cancel safe? if oneshot channel is cancel safe
@@ -574,7 +616,7 @@ where
     #[inline]
     pub(crate) async fn recv_inner<T>(&mut self) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         let frame = self
             .incoming
@@ -687,7 +729,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         // need to check whether the incoming transfer matches
         match (
@@ -736,7 +778,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         let delivery = match self.incomplete_transfer.take() {
             Some(mut incomplete) => {
@@ -776,7 +818,7 @@ where
         payload: Payload,
     ) -> Result<Option<Delivery<T>>, RecvError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         // Aborted messages SHOULD be discarded by the recipient (any payload
         // within the frame carrying the performative MUST be ignored). An aborted
@@ -1032,7 +1074,10 @@ impl DetachedReceiver {
             }
             None => self.inner.exchange_attach(false).await?,
         };
+        #[cfg(feature = "tracing")]
         tracing::debug!(?exchange);
+        #[cfg(feature = "log")]
+        log::debug!("exchange = {:?}", exchange);
 
         let credit = self.inner.link.flow_state.link_credit();
         self.inner.set_credit(credit).await?;
@@ -1044,7 +1089,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries.
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<ResumingReceiver, ReceiverResumeError> {
         let exchange = try_as_recver!(self, self.resume_inner(None).await);
         let receiver = Receiver { inner: self.inner };
@@ -1064,7 +1109,7 @@ impl DetachedReceiver {
     ///
     /// Please note that the link may need to be detached and then resume multiple
     /// times if there are unsettled deliveries. For more details please see [`resume`](./#method.resume)
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume_with_timeout(
         mut self,
         duration: Duration,

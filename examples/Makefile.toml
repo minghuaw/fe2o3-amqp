@@ -1,0 +1,17 @@
+[config]
+skip_core_tasks = true
+
+[tasks.check]
+script = '''
+# ignored examples
+protocol_test="./protocol_test"
+
+for entry in ./*
+do
+    if [ "$entry" == "$protocol_test" ]; then
+        echo "Ignored"
+    elif [ -d "$entry" ]; then
+        cargo check --manifest-path "$entry/Cargo.toml" --all-targets --all-features
+    fi
+done
+'''

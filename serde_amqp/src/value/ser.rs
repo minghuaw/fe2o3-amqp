@@ -201,6 +201,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
             NewType::Array => Err(Error::InvalidValue),
             NewType::Symbol => Err(Error::InvalidValue),
             NewType::SymbolRef => Err(Error::InvalidValue),
+            NewType::TransparentVec => Err(Error::InvalidValue),
         }
     }
 
@@ -827,13 +828,15 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
+
+    #[cfg(feature = "derive")]
     use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
+    #[cfg(feature = "derive")]
+    use crate::{described::Described, from_slice, to_vec};
+
     use crate::{
-        described::Described,
-        from_slice,
         primitives::{Array, OrderedMap, Timestamp},
-        to_vec,
         value::Value,
     };
 
@@ -977,14 +980,25 @@ mod tests {
         inner: T,
     }
 
+    #[cfg(feature = "derive")]
     use crate as serde_amqp;
 
+    #[cfg(feature = "derive")]
     #[derive(Debug, SerializeComposite, DeserializeComposite)]
-    #[amqp_contract(name = "composite", code = 0x0000_0000_0000_0001, encoding = "list")]
+    #[amqp_contract(
+        name = "composite",
+        code = "0x0000_0000:0x0000_0001",
+        encoding = "list"
+    )]
     pub struct EmptyComposite {}
 
+    #[cfg(feature = "derive")]
     #[derive(Debug, SerializeComposite, DeserializeComposite)]
-    #[amqp_contract(name = "composite", code = 0x0000_0000_0000_0001, encoding = "list")]
+    #[amqp_contract(
+        name = "composite",
+        code = "0x0000_0000:0x0000_0001",
+        encoding = "list"
+    )]
     pub struct Composite {
         a: i32,
         b: String,
@@ -1002,6 +1016,7 @@ mod tests {
         println!("{:?}", buf);
     }
 
+    #[cfg(feature = "derive")]
     #[test]
     fn test_serialize_empty_composite() {
         let comp = EmptyComposite {};
@@ -1015,6 +1030,7 @@ mod tests {
         )
     }
 
+    #[cfg(feature = "derive")]
     #[test]
     fn test_serialize_composite() {
         let comp = Composite {
@@ -1031,6 +1047,7 @@ mod tests {
         )
     }
 
+    #[cfg(feature = "derive")]
     #[test]
     fn test_deserialize_empty_composite() {
         let comp = EmptyComposite {};

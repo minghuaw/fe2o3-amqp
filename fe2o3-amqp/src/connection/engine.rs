@@ -10,7 +10,6 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
-use tracing::{debug, error, instrument, trace};
 
 use crate::control::ConnectionControl;
 use crate::endpoint::{IncomingChannel, OutgoingChannel};
@@ -207,7 +206,7 @@ where
         tokio::spawn(self.event_loop())
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn forward_to_session(
         &mut self,
         channel: IncomingChannel,
@@ -225,10 +224,12 @@ where
         Ok(())
     }
 
-    #[instrument(name = "RECV", skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "RECV", skip_all))]
     async fn on_incoming(&mut self, frame: Frame) -> Result<Running, ConnectionInnerError> {
-        // let frame = incoming;
-        trace!(?frame);
+        #[cfg(feature = "tracing")]
+        tracing::trace!(?frame);
+        #[cfg(feature = "log")]
+        log::trace!("frame={:?}", frame);
 
         let Frame { channel, body } = frame;
         let channel = IncomingChannel(channel);
@@ -311,12 +312,15 @@ where
     }
 
     #[inline]
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn on_control(
         &mut self,
         control: ConnectionControl,
     ) -> Result<Running, ConnectionInnerError> {
-        debug!("{}", control);
+        #[cfg(feature = "tracing")]
+        tracing::debug!("{}", control);
+        #[cfg(feature = "log")]
+        log::debug!("{}", control);
         match control {
             ConnectionControl::Close(error) => {
                 self.outgoing_session_frames.close();
@@ -339,8 +343,12 @@ where
             }
             ConnectionControl::GetMaxFrameSize(resp) => {
                 let max_frame_size = self.transport.encoder_max_frame_size();
+                #[allow(unused_variables)]
                 if let Err(error) = resp.send(max_frame_size) {
+                    #[cfg(feature = "tracing")]
                     tracing::error!(?error);
+                    #[cfg(feature = "log")]
+                    log::error!("{:?}", error);
                 }
             }
         }
@@ -352,13 +360,11 @@ where
     }
 
     #[inline]
-    #[instrument(name = "SEND", skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "SEND", skip_all))]
     async fn on_outgoing_session_frames(
         &mut self,
         frame: SessionFrame,
     ) -> Result<Running, ConnectionInnerError> {
-        use crate::frames::amqp::FrameBody;
-
         match self.connection.local_state() {
             ConnectionState::Opened => {}
             _ => return Err(ConnectionInnerError::IllegalState),
@@ -387,7 +393,10 @@ where
             SessionFrameBody::End(end) => self.connection.on_outgoing_end(channel, end)?,
         };
 
-        trace!(channel = frame.channel, frame = ?frame.body);
+        #[cfg(feature = "tracing")]
+        tracing::trace!(channel = frame.channel, frame = ?frame.body);
+        #[cfg(feature = "log")]
+        log::trace!("channel = {}, frame = {:?}", frame.channel, frame.body);
         self.transport.send(frame).await?;
         Ok(Running::Continue)
     }
@@ -434,7 +443,7 @@ where
         }
     }
 
-    #[instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(name = "Connection::event_loop", skip(self), fields(container_id = %self.connection.local_open().container_id)))]
     async fn event_loop(mut self) -> Result<(), Error> {
         let mut outcome = Ok(());
         loop {
@@ -497,7 +506,10 @@ where
             let running = match result {
                 Ok(running) => running,
                 Err(error) => {
-                    error!("{:?}", error);
+                    #[cfg(feature = "tracing")]
+                    tracing::error!("{:?}", error);
+                    #[cfg(feature = "log")]
+                    log::error!("{:?}", error);
                     // let running = self.on_error(&error).await;
                     match self.on_error(&error).await {
                         Ok(running) => {
@@ -506,7 +518,10 @@ where
                         }
                         Err(error) => {
                             // Stop the session if error cannot be handled
-                            error!("Unable to handle error {:?}", error);
+                            #[cfg(feature = "tracing")]
+                            tracing::error!("Unable to handle error {:?}", error);
+                            #[cfg(feature = "log")]
+                            log::error!("Unable to handle error {:?}", error);
                             outcome = Err(error);
                             Running::Stop
                         }
@@ -531,7 +546,10 @@ where
         self.outgoing_session_frames.close();
         let close = self.transport.close().await.map_err(Into::into);
 
-        debug!("Stopped");
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Stopped");
+        #[cfg(feature = "log")]
+        log::debug!("Stopped");
 
         outcome.and(close).map_err(Into::into)
     }

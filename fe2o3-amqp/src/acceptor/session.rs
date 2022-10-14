@@ -8,7 +8,6 @@ use fe2o3_amqp_types::{
 };
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
-use tracing::instrument;
 
 use crate::{
     connection::AllocSessionError,
@@ -287,7 +286,7 @@ impl SessionAcceptor {
     }
 
     /// Waits for incoming session'e Begin performative and then accepts an incoming session
-    #[instrument]
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub async fn accept(
         &self,
         connection: &mut ListenerConnectionHandle,
@@ -314,7 +313,10 @@ where
         outgoing: mpsc::Sender<SessionFrame>,
         outgoing_link_frames: mpsc::Receiver<LinkFrame>,
     ) -> Result<Self, BeginError> {
+        #[cfg(feature = "tracing")]
         tracing::trace!("Instantiating session engine");
+        #[cfg(feature = "log")]
+        log::trace!("Instantiating session engine");
         let mut engine = Self {
             conn_control,
             session,

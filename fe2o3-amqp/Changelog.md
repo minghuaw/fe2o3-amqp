@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.0
+
+1. Upgraded `fe2o3-amqp-types` to "0.6.0", which introduced breaking changes to `Body` (#115, please
+   see `fe2o3-amqp-types` changelog for more details)
+
 ## 0.6.10
 
 1. Updated dep version to fix a bug with `AmqpValue` on custom types

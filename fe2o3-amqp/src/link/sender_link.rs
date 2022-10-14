@@ -675,7 +675,7 @@ where
         self.on_incoming_attach(remote_attach)
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn handle_attach_error(
         &mut self,
         attach_error: SenderAttachError,

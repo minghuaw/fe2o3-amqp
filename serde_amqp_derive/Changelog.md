@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0
+
+1. Fixed [#117](https://github.com/minghuaw/fe2o3-amqp/issues/117)
+
 ## 0.1.2
 
 1. Fixed generated `where` clause not using re-exported `serde`

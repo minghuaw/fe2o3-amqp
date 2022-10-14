@@ -10,7 +10,7 @@ use serde_amqp::primitives::Symbol;
 use super::ErrorCondition;
 
 /// Symbols used to indicate session error conditions.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionError {
     /// The peer violated incoming window for the session.
     WindowViolation,

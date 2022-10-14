@@ -22,7 +22,6 @@ pub use sender::Sender;
 use serde::Serialize;
 use serde_amqp::ser::Serializer;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, instrument, trace};
 
 use crate::{
     control::SessionControl,
@@ -411,9 +410,12 @@ where
     type DetachError = DetachError;
 
     /// Closing or not isn't taken care of here but outside
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_detach(&mut self, detach: Detach) -> Result<(), Self::DetachError> {
-        trace!(detach = ?detach);
+        #[cfg(feature = "tracing")]
+        tracing::trace!(detach = ?detach);
+        #[cfg(feature = "log")]
+        log::trace!("detach = {:?}", detach);
 
         match detach.closed {
             true => match self.local_state {
@@ -468,7 +470,7 @@ where
     /// # Cancel safety
     ///
     /// This is cancel safe because it only .await on sending over `tokio::mpsc::Sender`
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn send_detach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,
@@ -483,7 +485,10 @@ where
                     error,
                 };
 
-                debug!("Sending detach: {:?}", detach);
+                #[cfg(feature = "tracing")]
+                tracing::debug!("Sending detach: {:?}", detach);
+                #[cfg(feature = "log")]
+                log::debug!("Sending detach: {:?}", detach);
 
                 writer
                     .send(LinkFrame::Detach(detach))
@@ -653,7 +658,7 @@ impl LinkRelay<OutputHandle> {
     }
 
     /// Returns whether an echo is needed
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     pub(crate) fn on_incoming_disposition(
         &mut self,
         _role: Role, // Is a role check necessary?

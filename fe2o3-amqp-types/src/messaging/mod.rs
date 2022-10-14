@@ -2,8 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 use serde_amqp::described::Described;
+use serde_amqp::extensions::TransparentVec;
 use serde_amqp::primitives::{Array, OrderedMap};
 use serde_amqp::{primitives::Symbol, value::Value};
+
+mod body_section;
+pub use body_section::*;
 
 pub mod message;
 pub use message::{Body, Message};
@@ -34,6 +38,9 @@ pub use dist_mode::DistributionMode;
 
 mod lifetime_policy;
 pub use lifetime_policy::*;
+
+/// Type alias for ergonomics (Batch<Data> and Batch<AmqpSequence>)
+pub type Batch<T> = TransparentVec<T>;
 
 /// 3.5.8 Filter Set
 /// <type name="filter-set" class="restricted" source="map"/>

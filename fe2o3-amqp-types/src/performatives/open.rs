@@ -14,7 +14,7 @@ use crate::definitions::{Fields, IetfLanguageTag, Milliseconds};
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:open:list",
-    code = 0x0000_0000_0000_0010,
+    code = "0x0000_0000:0x0000_0010",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -61,7 +61,7 @@ pub struct Open {
 /// frames larger than its partner can handle. A peer that receives an oversized frame MUST close
 /// the connection with the framing-error error-code.
 /// Both peers MUST accept frames of up to 512 (MIN-MAX-FRAME-SIZE) octets.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaxFrameSize(pub UInt);
 
 impl Default for MaxFrameSize {
@@ -95,7 +95,7 @@ impl From<MaxFrameSize> for usize {
 /// connection. A peer MUST not use channel numbers outside the range that its partner can handle.
 /// A peer that receives a channel number outside the supported range MUST close the connection
 /// with the framing-error error-code.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelMax(pub UShort);
 
 impl Default for ChannelMax {

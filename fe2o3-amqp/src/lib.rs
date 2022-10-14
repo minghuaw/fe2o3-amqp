@@ -8,7 +8,7 @@
 //!
 //! - [Documentation](https://docs.rs/fe2o3-amqp)
 //! - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/fe2o3-amqp/Changelog.md)
-//! 
+//!
 //! # Feature flags
 //!
 //! ```toml

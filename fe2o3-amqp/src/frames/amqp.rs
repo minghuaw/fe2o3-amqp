@@ -93,7 +93,6 @@ impl FrameEncoder {
         transfer.serialize(&mut buf_serializer)?;
         let remaining_bytes = buf.len() + payload.len();
         let more = remaining_bytes > self.max_frame_body_size;
-        tracing::debug!(?more);
         if more {
             let orig_more = transfer.more; // If the transfer is pre-split at link
             transfer.more = true;
@@ -222,10 +221,6 @@ impl Decoder for FrameDecoder {
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        // use fe2o3_amqp_types::definitions::{AmqpError, ConnectionError};
-
-        tracing::debug!(frame_len=?src.len());
-
         let doff = src.get_u8();
         let ftype = src.get_u8();
         let channel = src.get_u16();

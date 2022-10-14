@@ -1,5 +1,33 @@
 # Change Log
 
+## 0.6.0
+
+1. Added type alias `Batch<T> = TransparentVec<T>`
+2. Changed `Message::body` to generic and only implement serialization and deserialization with
+   trait bound (`SerializableBody` and `DeserializableBody`)
+   - `SerializableBody`/`DeserializableBody` are marker traits that are only implemented on a few
+     type and are sealed from external implementation with crate only marker trait.
+   - The following
+     types implement `SerializableBody`:
+      - `AmqpValue`
+      - `AmqpSequence` / `Batch<AmqpSequence>`
+      - `Data` / `Batch<Data>`
+      - `Body`
+   - The following types implement `DeserializableBody`
+      - `AmqpValue`
+      - `AmqpSequence` / `Batch<AmqpSequence>`
+      - `Data` / `Batch<Data>`
+      - `Body`
+      - `Option<B> where B: DeserializableBody`
+3. Added `IntoBody`, `FromBody`, `FromEmptyBody` that allow external types to convert to a
+   serializable/deserializable `Message::body` without explicitly wrapping inside a
+   `SerializableBody` or `DeserializableBody`
+   - This is implemented for all types that convert into `serde_amqp::Value`
+4. Allow more than one `Data` or `Sequence` section in `Body` by changing wrapped type to
+   `TransparentVec`
+5. Upgraded `serde_amqp` to `"0.2.0"` and changed all `#[amqp_contract(code = ... )]` to comply with
+   upstream bug fix ([#117](https://github.com/minghuaw/fe2o3-amqp/issues/117))
+
 ## 0.5.4
 
 1. Updated dep `serde_amqp` version to "0.4.5" which fixes a bug with `AmqpValue`
@@ -13,17 +41,22 @@
 ## 0.5.2
 
 1. Updated `serde_amqp` to "0.4.3", which is needed to fix #103
-2. Fixed #103, and EoF will simply return a None and other errors associated with deserialization will be passed along.
+2. Fixed #103, and EoF will simply return a None and other errors associated with deserialization
+   will be passed along.
 
 ## 0.5.1
 
-1. Fixed #94 by switching `Annotations` map key type to `OwnedKey` to allow both `Symbol` and `u64` as the key type. It then uses a trait object `dyn AnnotationKey` to allow looking up the map using multiple types including `&str`, `String`, `u64`, `Symbol`, `SymbolRef`
+1. Fixed #94 by switching `Annotations` map key type to `OwnedKey` to allow both `Symbol` and `u64`
+   as the key type. It then uses a trait object `dyn AnnotationKey` to allow looking up the map
+   using multiple types including `&str`, `String`, `u64`, `Symbol`, `SymbolRef`
 
 ## 0.5.0
 
 1. Breaking change(s):
-   1. Updated `serde_amqp` to "0.4.0" which introduced breaking change that `Value::Map` now wraps around a `OrderedMap` #96
-   2. Changed the following types to either alias or use an `OrderedMap` instead of `BTreeMap` to preserve the encoded order after deserialization #96
+   1. Updated `serde_amqp` to "0.4.0" which introduced breaking change that `Value::Map` now wraps
+      around a `OrderedMap` #96
+   2. Changed the following types to either alias or use an `OrderedMap` instead of `BTreeMap` to
+      preserve the encoded order after deserialization #96
       1. `Fields`
       2. `FilterSet`
       3. `ApplicationProperties`
@@ -37,7 +70,9 @@
 
 ## 0.4.0
 
-1. Moved `Serialize` and `Deserialize` impl for `AmqpValue`, `AmqpSequence` and `Data` into wrapper types (`Serializable<T>` and `Deserializable<T>`), thus making `Message::from(AmqpSequence(_))` yielding a `Body::Sequence` and `Message::from(Data)` yielding a `Body::Data`
+1. Moved `Serialize` and `Deserialize` impl for `AmqpValue`, `AmqpSequence` and `Data` into wrapper
+   types (`Serializable<T>` and `Deserializable<T>`), thus making `Message::from(AmqpSequence(_))`
+   yielding a `Body::Sequence` and `Message::from(Data)` yielding a `Body::Data`
 2. Renamed `Body::Nothing` to `Body::Empty`
 
 ## 0.3.6

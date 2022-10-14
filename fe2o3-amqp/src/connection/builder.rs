@@ -15,7 +15,6 @@ use tokio::{
     sync::mpsc::{self},
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
-use tracing::instrument;
 use url::Url;
 
 use crate::{
@@ -30,6 +29,9 @@ use super::{
     engine::ConnectionEngine, ConnectionHandle, OpenError, DEFAULT_CHANNEL_MAX,
     DEFAULT_MAX_FRAME_SIZE,
 };
+
+#[cfg(feature = "tracing")]
+use tracing::instrument;
 
 pub(crate) const DEFAULT_CONTROL_CHAN_BUF: usize = 128;
 pub(crate) const DEFAULT_OUTGOING_BUFFER_SIZE: usize = u16::MAX as usize;
@@ -531,7 +533,7 @@ impl<'a, Mode, Tls> Builder<'a, Mode, Tls> {
 
 impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
     /// Performs SASL negotiation
-    #[instrument(skip_all, fields(hostname = ?self.hostname))]
+    #[cfg_attr(feature = "tracing", instrument(skip_all, fields(hostname = ?self.hostname)))]
     pub async fn negotiate_sasl<Io>(
         &mut self,
         transport: &mut Transport<Io, sasl::Frame>,
@@ -545,17 +547,27 @@ impl<'a, Tls> Builder<'a, mode::ConnectorWithId, Tls> {
         while let Some(frame) = transport.next().await {
             let frame = frame?;
 
+            #[cfg(feature = "tracing")]
             tracing::trace!(received = ?frame);
+
+            #[cfg(feature = "log")]
+            log::trace!("received = {:?}", frame);
 
             match profile.on_frame(frame, self.hostname)? {
                 Negotiation::Init(init) => {
                     let frame = sasl::Frame::Init(init);
+                    #[cfg(feature = "tracing")]
                     tracing::trace!(sending = ?frame);
+                    #[cfg(feature = "log")]
+                    log::trace!("sending = {:?}", frame);
                     transport.send(frame).await?
                 }
                 Negotiation::Response(response) => {
                     let frame = sasl::Frame::Response(response);
+                    #[cfg(feature = "tracing")]
                     tracing::trace!(sending = ?frame);
+                    #[cfg(feature = "log")]
+                    log::trace!("sending = {:?}", frame);
                     transport.send(frame).await?
                 }
                 Negotiation::Outcome(outcome) => match outcome.code {

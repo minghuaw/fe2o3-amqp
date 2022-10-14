@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{AmqpValue, ApplicationProperties, Message},
+    messaging::{ApplicationProperties, Message},
     primitives::{OrderedMap, Value},
 };
 
@@ -63,7 +63,7 @@ impl<'a> MessageSerializer for DeleteRequest<'a> {
                     .insert(key, &value[..])
                     .build(),
             )
-            .value(())
+            .body(())
             .build()
     }
 }
@@ -78,20 +78,14 @@ impl DeleteResponse {
     pub const STATUS_CODE: u16 = 204;
 }
 
-impl MessageDeserializer<OrderedMap<String, Value>> for DeleteResponse {
+impl MessageDeserializer<Option<OrderedMap<String, Value>>> for DeleteResponse {
     type Error = Error;
 
-    fn from_message(message: Message<OrderedMap<String, Value>>) -> Result<Self> {
-        match message.body {
-            fe2o3_amqp_types::messaging::Body::Value(AmqpValue(map)) => {
-                if map.len() > 0 {
-                    Err(Error::DecodeError)
-                } else {
-                    Ok(Self {
-                        empty_map: EmptyMap::new(),
-                    })
-                }
-            }
+    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+        match message.body.map(|m| m.len()) {
+            None | Some(0) => Ok(Self {
+                empty_map: EmptyMap::new(),
+            }),
             _ => Err(Error::DecodeError),
         }
     }

@@ -2,7 +2,7 @@
 
 use fe2o3_amqp_types::{
     definitions::{self, SequenceNo},
-    messaging::Modified,
+    messaging::{FromBody, Modified},
     transaction::TransactionId,
 };
 
@@ -77,7 +77,7 @@ where
     /// Transactionally acquire a message
     pub async fn recv<T>(&mut self) -> Result<delivery::Delivery<T>, RecvError>
     where
-        T: for<'de> serde::Deserialize<'de> + Send,
+        for<'de> T: FromBody<'de> + Send,
     {
         self.recver.recv().await
     }
@@ -159,13 +159,16 @@ where
             }
 
             // Set drain to true
-            if let Err(err) = self.recver.inner.link.blocking_send_flow(
+            if let Err(_err) = self.recver.inner.link.blocking_send_flow(
                 &self.recver.inner.outgoing,
                 Some(0),
                 Some(true),
                 true,
             ) {
-                tracing::error!("error {:?}", err)
+                #[cfg(feature = "tracing")]
+                tracing::error!("error {:?}", _err);
+                #[cfg(feature = "log")]
+                log::error!("error {:?}", _err);
             }
         }
     }

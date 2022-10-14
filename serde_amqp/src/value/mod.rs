@@ -912,7 +912,7 @@ mod tests {
         use crate::macros::SerializeComposite;
 
         #[derive(Debug, SerializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo {
             is_fool: bool,
             a: i32,

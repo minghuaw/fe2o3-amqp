@@ -102,6 +102,7 @@ impl<'de, T: de::Deserialize<'de>> de::Deserialize<'de> for Described<T> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "derive")]
     use serde_amqp_derive::{DeserializeComposite, SerializeComposite};
 
     use crate::{descriptor::Descriptor, from_slice, to_vec};
@@ -129,8 +130,10 @@ mod tests {
     }
 
     // Expanded macro
+    #[cfg(feature = "derive")]
     use crate as serde_amqp;
 
+    #[cfg(feature = "derive")]
     #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
     struct Foo {
         b: u64,
@@ -138,6 +141,7 @@ mod tests {
         a: i32,
     }
 
+    #[cfg(feature = "derive")]
     #[test]
     fn test_expanded_list_macro() {
         let foo = Foo {
@@ -152,12 +156,14 @@ mod tests {
         assert_eq!(foo, deserialized);
     }
 
+    #[cfg(feature = "derive")]
     #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
     struct Test {
         a: Option<i32>,
         b: bool,
     }
 
+    #[cfg(feature = "derive")]
     #[test]
     fn test_expanded_map_macro() {
         let test = Test {

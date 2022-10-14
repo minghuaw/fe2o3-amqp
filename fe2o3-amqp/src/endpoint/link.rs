@@ -5,7 +5,7 @@ use fe2o3_amqp_types::{
     definitions::{
         DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
     },
-    messaging::{message::DecodeIntoMessage, DeliveryState},
+    messaging::{DeliveryState, FromBody},
     performatives::{Attach, Detach, Transfer},
 };
 use futures_util::Future;
@@ -201,7 +201,7 @@ pub(crate) trait ReceiverLink: Link + LinkExt {
         section_offset: u64,
     ) -> Result<Delivery<T>, Self::TransferError>
     where
-        T: DecodeIntoMessage + Send,
+        for<'de> T: FromBody<'de> + Send,
         for<'b> P: IntoReader + AsByteIterator<'b> + Send + 'a;
 
     async fn dispose(

@@ -15,7 +15,6 @@ use tokio::{
     sync::{mpsc::Sender, oneshot},
     task::JoinHandle,
 };
-use tracing::instrument;
 use url::Url;
 
 use crate::{
@@ -525,13 +524,16 @@ impl endpoint::Connection for Connection {
     }
 
     /// Reacting to remote Open frame
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_incoming_open(
         &mut self,
         _channel: IncomingChannel,
         open: Open,
     ) -> Result<(), Self::OpenError> {
+        #[cfg(feature = "tracing")]
         tracing::trace!(frame = ?open);
+        #[cfg(feature = "log")]
+        log::trace!("frame = {:?}", open);
 
         match &self.local_state {
             ConnectionState::HeaderExchange => self.local_state = ConnectionState::OpenReceived,
@@ -626,7 +628,7 @@ impl endpoint::Connection for Connection {
         }
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn send_open<W>(&mut self, writer: &mut W) -> Result<(), Self::OpenError>
     where
         W: Sink<Frame> + Send + Unpin,
@@ -634,7 +636,10 @@ impl endpoint::Connection for Connection {
     {
         let body = FrameBody::Open(self.local_open.clone());
         let frame = Frame::new(0u16, body);
+        #[cfg(feature = "tracing")]
         tracing::trace!(?frame);
+        #[cfg(feature = "log")]
+        log::trace!("frame = {:?}", frame);
         writer.send(frame).await.map_err(Into::into)?;
 
         // change local state after successfully sending the frame
@@ -658,7 +663,7 @@ impl endpoint::Connection for Connection {
         Ok(frame)
     }
 
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     fn on_outgoing_end(
         &mut self,
         channel: OutgoingChannel,

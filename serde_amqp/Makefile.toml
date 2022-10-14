@@ -1,10 +1,9 @@
+extend = "../Makefile.toml"
+
 [tasks.test]
 command = "cargo"
-args = ["test", "--features", "derive"]
+args = ["test", "--features", "derive extensions"]
 
-[tasks.doctest]
-toolchain = "nightly"
+[tasks.expand]
 command = "cargo"
-args = [
-    "doc", "--no-deps", "--all-features", "--open"
-]
+args = ["expand", "--test", "derive", "--features", "derive"]

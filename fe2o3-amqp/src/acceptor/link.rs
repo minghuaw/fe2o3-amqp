@@ -12,7 +12,6 @@ use fe2o3_amqp_types::{
     performatives::Attach,
     primitives::{Symbol, ULong},
 };
-use tracing::instrument;
 
 use crate::{connection::DEFAULT_OUTGOING_BUFFER_SIZE, session::SessionHandle, util::Initialized};
 
@@ -185,7 +184,7 @@ where
     }
 
     /// Accept incoming link with an explicit Attach performative
-    #[instrument(skip_all)]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     pub async fn accept_incoming_attach<R>(
         &self,
         remote_attach: Attach,

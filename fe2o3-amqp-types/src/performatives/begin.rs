@@ -15,7 +15,7 @@ use crate::definitions::{Fields, Handle, TransferNumber};
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:begin:list",
-    code = 0x0000_0000_0000_0011,
+    code = "0x0000_0000:0x0000_0011",
     encoding = "list",
     rename_all = "kebab-case"
 )]

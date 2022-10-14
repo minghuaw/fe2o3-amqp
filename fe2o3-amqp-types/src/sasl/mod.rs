@@ -43,7 +43,7 @@ pub struct SaslMechanisms {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:sasl-init:list",
-    code = 0x0000_0000_0000_0041,
+    code = "0x0000_0000:0x0000_0041",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -85,7 +85,7 @@ pub struct SaslInit {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:sasl-challenge:list",
-    code = 0x0000_0000_0000_0042,
+    code = "0x0000_0000:0x0000_0042",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -104,7 +104,7 @@ pub struct SaslChallenge {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:sasl-response:list",
-    code = 0x0000_0000_0000_0043,
+    code = "0x0000_0000:0x0000_0043",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -126,7 +126,7 @@ pub struct SaslResponse {
 #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:sasl-outcome:list",
-    code = 0x0000_0000_0000_0044,
+    code = "0x0000_0000:0x0000_0044",
     encoding = "list",
     rename_all = "kebab-case"
 )]
@@ -146,7 +146,7 @@ pub struct SaslOutcome {
 ///     <choice name="sys-perm" value="3"/>
 ///     <choice name="sys-temp" value="4"/>
 /// </type>
-#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Clone, Serialize_repr, Deserialize_repr, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SaslCode {
     /// 0 Connection authentication succeeded.

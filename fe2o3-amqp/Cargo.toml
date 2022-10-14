@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.6.10"
+version = "0.7.0"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -44,10 +44,10 @@ tokio-test = { version = "0.4" }
 testcontainers = "0.14"
 
 [dependencies]
-serde_amqp = "0.4.5"
-# serde_amqp = { path = "../serde_amqp" }
-fe2o3-amqp-types = "0.5.4"
-# fe2o3-amqp-types = { path = "../fe2o3-amqp-types" }
+# serde_amqp = "0.5.0-alpha"
+serde_amqp = { version = "0.5.0", path = "../serde_amqp" }
+# fe2o3-amqp-types = "0.6.0-alpha"
+fe2o3-amqp-types = { version = "0.6.0", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio = { version = "^1.16.1", features = ["io-util", "net", "rt", "macros"] }
@@ -61,8 +61,11 @@ slab = "0.4"
 tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 serde_bytes = "0.11"
-tracing = "0.1"
 parking_lot = { version = "0.12.1", features = ["send_guard"] }
+
+# Optinoal deps that are feature themselves
+tracing = { version = "0.1", optional = true }
+log = { version = "0.4.17", optional = true }
 
 # Optional deps
 tokio-rustls = { version = "0.23", optional = true }

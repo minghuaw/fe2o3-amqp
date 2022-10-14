@@ -12,7 +12,6 @@ use fe2o3_amqp_types::{
 };
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, Notify};
-use tracing::instrument;
 
 use crate::{
     connection::DEFAULT_OUTGOING_BUFFER_SIZE,
@@ -443,7 +442,7 @@ impl Builder<role::SenderMarker, Target, WithName, WithSource, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    #[instrument(skip(self, session))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, session)))]
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,
@@ -500,11 +499,17 @@ where
             .await
         {
             Ok(exchange) => {
+                #[cfg(feature = "tracing")]
                 tracing::debug!(?exchange);
+                #[cfg(feature = "log")]
+                log::debug!("exchange = {:?}", exchange);
                 exchange.complete_or(SenderAttachError::IllegalState)?
             }
             Err(attach_error) => {
+                #[cfg(feature = "tracing")]
                 tracing::error!(?attach_error);
+                #[cfg(feature = "log")]
+                log::error!("attach_error = {:?}", attach_error);
                 let err = link
                     .handle_attach_error(
                         attach_error,
@@ -543,7 +548,7 @@ impl Builder<role::ReceiverMarker, Target, WithName, WithSource, WithTarget> {
     ///     .await
     ///     .unwrap();
     /// ```
-    #[instrument(skip(self, session))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, session)))]
     pub async fn attach<R>(
         self,
         session: &mut SessionHandle<R>,

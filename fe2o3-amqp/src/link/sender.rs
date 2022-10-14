@@ -12,12 +12,11 @@ use tokio::{
 use fe2o3_amqp_types::{
     definitions::{self, DeliveryTag, MessageFormat, SenderSettleMode},
     messaging::{
-        message::__private::Serializable, Address, DeliveryState, Outcome, Source, Target,
-        MESSAGE_FORMAT,
+        message::__private::Serializable, Address, DeliveryState, Outcome, SerializableBody,
+        Source, Target, MESSAGE_FORMAT,
     },
     performatives::{Attach, Detach, Transfer},
 };
-use tracing::instrument;
 
 use crate::{
     control::SessionControl,
@@ -40,7 +39,7 @@ use super::{
 };
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Body, Data, Message};
+use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body, Data, IntoBody, Message};
 
 /// An AMQP1.0 sender
 ///
@@ -212,16 +211,91 @@ impl Sender {
 
     /// Send a message and wait for acknowledgement (disposition)
     ///
-    /// # Argument
+    /// # Use custom types as argument
     ///
-    /// The argument `sendable` can be any type that implement `Into<Sendable>` with the [`Sendable`]'s
-    /// field `message_format` set to [`MESSAGE_FORMAT`] and field `settled` set to `None`.
+    /// The AMQP 1.0 protocol requires user to choose the body section type:
+    ///
+    /// - [`AmqpValue`]
+    /// - [`AmqpSequence`] / [`Batch<AmqpSequence>`]
+    /// - [`Data`] / [`Batch<Data>`]
+    ///
+    /// Below shows some ways to use custom types.
+    ///
+    /// ## 1. Wrap custom type in [`AmqpValue`]
+    ///
+    /// The easiest way to use a custom type is probably to define a custom type that implements
+    /// [`serde::Serialize`] and then wrap the type in [`AmqpValue`].
+    ///
+    /// ### Example
+    ///
+    /// ```rust
+    /// #[derive(Serialize)]
+    /// struct Foo {
+    ///     a: i32
+    /// }
+    ///
+    /// sender.send(AmqpValue(Foo{a: 3})).await.unwrap();
+    /// ```
+    ///
+    /// ## 2. Implement [`IntoBody`] trait for the custom type
+    ///
+    /// Another option is to implement the [`IntoBody`] trait, which essentially asks the user to
+    /// choose which body section type should be used. Please see documention on [`IntoBody`] for
+    /// more information on the available body section types.
+    ///
+    /// ### Example
+    ///
+    /// ```rust
+    /// #[derive(Serialize)]
+    /// struct Foo {
+    ///     a: i32
+    /// }
+    ///
+    /// impl IntoBody for Foo {
+    ///     type Body = AmqpValue<Foo>;
+    ///
+    ///     fn into_body(self) -> Self::Body {
+    ///         AmqpValue(self)
+    ///     }
+    /// }
+    ///
+    /// sender.send(Foo{a: 5}).await.unwrap();
+    /// ```
+    ///
+    /// ## 3. Use message builder
+    ///
+    /// One could still use the message builder to not only set other non-body fields of
+    /// [`Message`] but also choosing the type of body section.
+    ///
+    /// ```rust
+    /// #[derive(Serialize)]
+    /// struct Foo {
+    ///     a: i32
+    /// }
+    ///
+    /// let message = Message::builder()
+    ///     .properties(
+    ///         Properties::builder()
+    ///         .group_id(String::from("send_to_event_hub"))
+    ///         .build(),
+    ///     )
+    ///     .value(Foo {a: 8}) // set body section to `AmqpValue<Foo>`
+    ///     .build();
+    /// sender.send(message).await.unwrap();
+    /// ```
+    ///
+    /// # Pre-settle a message with [`Sendable`] builder
+    ///
+    /// The user can pre-settle a message by specifying `settled` field in the [`Sendable`]. Unless
+    /// an explicity [`Sendable`] is passed to the argument, the `message_format` field is set to
+    /// [`MESSAGE_FORMAT`] and the `settled` field is set to `None`.
     ///
     /// ## Example
     ///
-    /// Send message pre-settled if the sender's settle mode is set to `SenderSettleMode::Mixed`. Please
-    /// note that the field `settled` will be ***ignored*** if the negotiated `SenderSettleMode` is set to
-    /// either `SenderSettleMode::Settled` or `SenderSettleMode::Unsettled`
+    /// Send message pre-settled if the sender's settle mode is set to `SenderSettleMode::Mixed`.
+    /// Please note that the field `settled` will be ***ignored*** if the negotiated
+    /// `SenderSettleMode` is set to either `SenderSettleMode::Settled` or
+    /// `SenderSettleMode::Unsettled`
     ///
     /// ```rust
     /// let sendable = Sendable::builder()
@@ -230,105 +304,7 @@ impl Sender {
     ///     .build();
     /// let outcome = sender.send(sendable).await.unwrap():
     /// ```
-    ///
-    /// # Specify Message Body Section Type
-    ///
-    /// There are several ways to define the exact type of body section to use.
-    ///
-    /// - Any type that implements [`serde::Serialize`] will be implicitly wrapped inside an [`AmqpValue`].
-    /// (**BREAKING** change in v0.5.0: `AmqpValue`, `AmqpSequence` and `Data` no longer implement
-    /// `Serialize` unless placed in a `Serializable<T>` wrapper, and thus they can be used to specify body section type.
-    /// Please see the method below)
-    ///
-    /// ## Example
-    ///
-    /// The string literal `"hello"` will be implicitly converted to `AmqpValue<&str>("hello")`
-    ///
-    /// ```rust
-    /// let outcome = sender.send("hello").await.unwrap();
-    /// ```
-    ///
-    /// - Use `AmqpValue`, `AmqpSequence` or `Data` wrapper types to specify the body section type
-    /// with all other message field set to None
-    ///
-    /// ## Example
-    ///
-    /// ```rust
-    /// use fe2o3_amqp::types::primitives::Binary;
-    /// use fe2o3_amqp::types::messaging::{AmqpValue, AmqpSequence, Data, Body};
-    ///
-    /// // Send with Body::Value
-    /// let outcome = sender.send(AmqpValue("hello world")).await.unwrap();
-    ///
-    /// // Send with Body::Sequence
-    /// let outcome = sender.send(AmqpSequence(vec![1i32, 2, 3])).await.unwrap();
-    ///
-    /// // Send with Body::Data
-    /// let outcome = sender.send(Data(Binary::from("hello world"))).await.unwrap();
-    /// ```
-    ///
-    /// - Use [`Body`] to specify the exact type of body section to use with all other message sections
-    /// set to `None`
-    ///
-    /// ## Example
-    ///
-    /// Use `Body::Data` section
-    ///
-    /// ```rust
-    /// use fe2o3_amqp::types::primitives::Binary;
-    /// use fe2o3_amqp::types::messaging::{Data, Body};
-    ///
-    /// let data = Binary::from("hello AMQP");
-    /// let outcome = sender.send(Body::<Value>::Data(Data(data))).await.unwrap();
-    /// ```
-    ///
-    /// Use `Body::Sequence` section
-    ///
-    /// ```rust
-    /// use fe2o3_amqp::types::messaging::{AmqpSequence, Body};
-    ///
-    /// let outcome = sender.send(Body::Sequence(AmqpSequence(vec![1i32, 2, 3]))).await.unwrap();
-    /// ```
-    ///
-    /// - Use [`Message`] builder to specify the exact body section and set other section of the message
-    /// if needed
-    ///
-    /// ## Example
-    ///
-    /// Creates a `Message` with the body section set to `Body::Value`
-    ///
-    /// ```rust
-    /// use fe2o3_amqp::types::messaging::Message;
-    ///
-    /// let message = Message::builder()
-    ///     .value("hello AMQP")
-    ///     .build()
-    /// let outcome = sender.send(message).await.unwrap();
-    /// ```
-    ///
-    /// Creates a `Message` with the body section set to `Body::Sequence`
-    ///
-    /// ```rust
-    /// use fe2o3_amqp::types::messaging::Message;
-    ///
-    /// let message = Message::builder()
-    ///     .sequence(vec![1, 2 ,3])
-    ///     .build();
-    /// let outcome = sender.send(message).await.unwrap();
-    /// ```
-    ///
-    /// Creates a `Message` with the body section set to `Body::Data`
-    ///
-    /// ```rust
-    /// use fe2o3_amqp::types::primitives::Binary;
-    /// use fe2o3_amqp::types::messaging::Message;
-    ///
-    /// let message = Message::builder()
-    ///     .data(Binary::from("hello AMQP"))
-    ///     .build();
-    /// let outcome = sender.send(message).await.unwrap();
-    /// ```
-    pub async fn send<T: serde::Serialize>(
+    pub async fn send<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, SendError> {
@@ -339,7 +315,7 @@ impl Sender {
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
     ///
     /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
-    pub async fn send_with_timeout<T: serde::Serialize>(
+    pub async fn send_with_timeout<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
         duration: Duration,
@@ -349,7 +325,8 @@ impl Sender {
 
     /// Send a message without waiting for the acknowledgement.
     ///
-    /// This will set the batchable field of the `Transfer` performative to true.
+    /// This will set the batchable field of the `Transfer` performative to true. Please see
+    /// [`send()`](#method.send) for information on how to use custom type as argument.
     ///
     /// # Example
     ///
@@ -358,7 +335,7 @@ impl Sender {
     /// let result = fut.await;
     /// println!("fut {:?}", result);
     /// ```
-    pub async fn send_batchable<T: serde::Serialize>(
+    pub async fn send_batchable<T: SerializableBody>(
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
@@ -366,18 +343,6 @@ impl Sender {
 
         Ok(DeliveryFut::from(settlement))
     }
-
-    // /// Send a message without waiting for the acknowledgement with a timeout.
-    // ///
-    // /// This will set the batchable field of the `Transfer` performative to true.
-    // pub async fn send_batchable_with_timeout<T: serde::Serialize>(
-    //     &mut self,
-    //     sendable: impl Into<Sendable<T>>,
-    //     duration: Duration,
-    // ) -> Result<Timeout<DeliveryFut<Result<(), SendError>>>, SendError> {
-    //     let fut = self.send_batchable(sendable).await?;
-    //     Ok(timeout(duration, fut))
-    // }
 
     /// Returns when the remote peer detach/close the link
     pub async fn on_detach(&mut self) -> DetachError {
@@ -551,7 +516,7 @@ where
 {
     pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, SendError>
     where
-        T: serde::Serialize,
+        T: SerializableBody,
     {
         self.send_with_state(sendable, None).await
     }
@@ -562,7 +527,7 @@ where
         state: Option<DeliveryState>,
     ) -> Result<Settlement, E>
     where
-        T: serde::Serialize,
+        T: SerializableBody,
         E: From<L::TransferError> + From<serde_amqp::Error>,
     {
         use bytes::BufMut;
@@ -767,7 +732,10 @@ impl DetachedSender {
         delivery_tag: DeliveryTag,
         resuming: ResumingDelivery,
     ) -> Result<(), SendError> {
+        #[cfg(feature = "tracing")]
         tracing::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery: delivery_tag: {:?}", delivery_tag);
         let settlement = match resuming {
             ResumingDelivery::Abort => self.inner.abort(delivery_tag).await?,
             ResumingDelivery::Resend(payload) => {
@@ -785,8 +753,11 @@ impl DetachedSender {
         };
 
         let fut = DeliveryFut::<SendResult>::from(settlement);
-        let outcome = fut.await?;
-        tracing::debug!("Resuming delivery outcome {:?}", outcome);
+        let _outcome = fut.await?;
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+        #[cfg(feature = "log")]
+        log::debug!("Resuming delivery outcome {:?}", _outcome);
         Ok(())
     }
 
@@ -831,8 +802,11 @@ impl DetachedSender {
                             .await?;
                         let fut = DeliveryFut::<SendResult>::from(settlement);
 
-                        let outcome = fut.await?;
-                        tracing::debug!("Resuming delivery outcome {:?}", outcome)
+                        let _outcome = fut.await?;
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!("Resuming delivery outcome {:?}", _outcome);
+                        #[cfg(feature = "log")]
+                        log::debug!("Resuming delivery outcome {:?}", _outcome);
                     }
 
                     // Upon completion of this reduction of state, the two parties MUST suspend and
@@ -845,10 +819,8 @@ impl DetachedSender {
         Ok(())
     }
 
-    // async fn on_attach_exchange(&mut self, attach_exchange: SenderAttachExchange) -> Result<(), SenderResumeErrorKind> {}
-
     /// Resume the sender link on the original session
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume(mut self) -> Result<Sender, SenderResumeError> {
         try_as_sender!(self, self.resume_inner(None).await);
         Ok(Sender { inner: self.inner })
@@ -864,7 +836,7 @@ impl DetachedSender {
     }
 
     /// Resume the sender link with a timeout
-    #[instrument(skip(self))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     pub async fn resume_with_timeout(
         mut self,
         duration: Duration,

@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp"
-version = "0.4.5"
+version = "0.5.0"
 edition = "2021"
 description = "A serde implementation of AMQP1.0 protocol."
 license = "MIT/Apache-2.0"
@@ -20,6 +20,7 @@ all-features = true
 default = []
 
 derive = ["serde_amqp_derive"]
+extensions = []
 
 # Provide conversion from json::Value to amqp::Value
 # and the value will use deserialize any instead of deserialize enum
@@ -27,12 +28,10 @@ derive = ["serde_amqp_derive"]
 json = ["serde_json"]
 
 [dev-dependencies]
-serde_json = "1"
-serde_amqp_derive = "0.1"
 
-[dependencies.serde_amqp_derive]
-version = "0.1"
-optional = true
+# [dependencies.serde_amqp_derive]
+# version = "0.1"
+# optional = true
 
 [dependencies]
 ordered-float = { version = "3", features = ["serde"] }
@@ -40,6 +39,10 @@ serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 thiserror = "1"
 bytes = "1"
+
+# derive
+serde_amqp_derive = { version = "0.2.0", path = "../serde_amqp_derive", optional = true }
+# serde_amqp_derive = { version = "0.2", optional = true }
 
 # Optinal dependencies
 serde_json = { version = "1", optional = true }

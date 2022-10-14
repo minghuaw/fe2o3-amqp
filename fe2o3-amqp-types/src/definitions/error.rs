@@ -5,10 +5,10 @@ use super::{ErrorCondition, Fields};
 /// <type name="error" class="composite" source="list">
 /// <descriptor name="amqp:error:list" code="0x00000000:0x0000001d"/>
 /// </type>
-#[derive(Debug, Clone, PartialEq, SerializeComposite, DeserializeComposite)]
+#[derive(Debug, Clone, PartialEq, Eq, SerializeComposite, DeserializeComposite)]
 #[amqp_contract(
     name = "amqp:error:list",
-    code = 0x0000_0000_0000_001d,
+    code = "0x0000_0000:0x0000_001d",
     encoding = "list",
     rename_all = "kebab-case"
 )]

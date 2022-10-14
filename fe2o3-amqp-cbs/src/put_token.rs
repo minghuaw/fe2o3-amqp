@@ -36,7 +36,7 @@ impl<'a> MessageSerializer for PutTokenRequest<'a> {
                     .insert(NAME, self.name.to_string())
                     .build(),
             )
-            .value(self.token.to_string())
+            .body(self.token.to_string())
             .build()
     }
 }

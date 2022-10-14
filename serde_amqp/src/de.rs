@@ -1,13 +1,17 @@
 //! Deserializer implementation
 
-use serde::de::{self};
+use serde::{
+    de::{self},
+    Deserialize,
+};
 use std::convert::TryInto;
 
 use crate::{
     __constants::{
         ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
-        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, UUID, VALUE,
+        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID, VALUE,
     },
+    descriptor::PeekDescriptor,
     error::Error,
     fixed_width::{DECIMAL128_WIDTH, DECIMAL32_WIDTH, DECIMAL64_WIDTH, UUID_WIDTH},
     format::{
@@ -15,7 +19,7 @@ use crate::{
     },
     format_code::EncodingCodes,
     read::{IoReader, Read, SliceReader},
-    util::{EnumType, NewType, StructEncoding},
+    util::{EnumType, NewType, PeekTypeCode, StructEncoding},
 };
 
 /// Deserialize an instance of type T from an IO stream
@@ -630,12 +634,11 @@ where
         V: de::Visitor<'de>,
     {
         match self.new_type {
-            NewType::None => visitor.visit_i64(self.parse_i64()?),
             NewType::Timestamp => {
                 self.new_type = NewType::None;
                 visitor.visit_i64(self.parse_timestamp()?)
             }
-            _ => unreachable!(),
+            _ => visitor.visit_i64(self.parse_i64()?),
         }
     }
 
@@ -701,14 +704,13 @@ where
         V: de::Visitor<'de>,
     {
         match self.new_type {
-            NewType::None => visitor.visit_string(self.parse_string()?),
             NewType::Symbol => {
                 // Leave symbol as visit_string because serde(untagged)
                 // on descriptor will visit String instead of str
                 self.new_type = NewType::None;
                 visitor.visit_string(self.parse_symbol()?)
             }
-            _ => unreachable!(),
+            _ => visitor.visit_string(self.parse_string()?),
         }
     }
 
@@ -853,6 +855,9 @@ where
         } else if name == TIMESTAMP {
             self.new_type = NewType::Timestamp;
             self.deserialize_i64(visitor)
+        } else if name == TRANSPARENT_VEC {
+            self.new_type = NewType::TransparentVec;
+            visitor.visit_seq(TransparentVecAccess::new(self))
         } else {
             visitor.visit_newtype_struct(self)
         }
@@ -1125,9 +1130,7 @@ where
                     self.deserialize_tuple(fields.len(), visitor)
                 }
                 EncodingCodes::Map32 | EncodingCodes::Map8 => self.deserialize_map(visitor),
-                EncodingCodes::DescribedType => {
-                    visitor.visit_seq(DescribedAccess::list(self))
-                }
+                EncodingCodes::DescribedType => visitor.visit_seq(DescribedAccess::list(self)),
                 _ => Err(Error::InvalidFormatCode),
             }
         };
@@ -1395,6 +1398,63 @@ impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for ListAccess<'a, R> {
                 seed.deserialize(self.as_mut()).map(Some)
             }
         }
+    }
+}
+
+/// Accessor for transparent vec type
+#[derive(Debug)]
+pub struct TransparentVecAccess<'a, R> {
+    de: &'a mut Deserializer<R>,
+    cached: Option<PeekTypeCode>,
+}
+
+impl<'a, R> TransparentVecAccess<'a, R> {
+    pub(crate) fn new(de: &'a mut Deserializer<R>) -> Self {
+        Self { de, cached: None }
+    }
+}
+
+impl<'a, R> AsMut<Deserializer<R>> for TransparentVecAccess<'a, R> {
+    fn as_mut(&mut self) -> &mut Deserializer<R> {
+        self.de
+    }
+}
+
+impl<'a, 'de, R: Read<'de>> de::SeqAccess<'de> for TransparentVecAccess<'a, R> {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        match self.de.reader.peek().map(|b| b.try_into()).transpose()? {
+            Some(EncodingCodes::DescribedType) => {
+                let peek = PeekDescriptor::deserialize(self.as_mut())?;
+                let peek = PeekTypeCode::Composite(peek);
+                match &self.cached {
+                    Some(cached) => {
+                        if *cached != peek {
+                            return Ok(None); // Treat as end of vec
+                        }
+                    }
+                    None => self.cached = Some(peek),
+                }
+            }
+            Some(code) => {
+                let peek = PeekTypeCode::Primitive(code.into());
+                match &self.cached {
+                    Some(cached) => {
+                        if *cached != peek {
+                            return Ok(None); // Treat as end of vec
+                        }
+                    }
+                    None => self.cached = Some(peek),
+                }
+            }
+            None => return Ok(None),
+        }
+
+        seed.deserialize(self.as_mut()).map(Some)
     }
 }
 
@@ -2080,7 +2140,7 @@ mod tests {
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-            #[amqp_contract(code = 13, encoding = "list")]
+            #[amqp_contract(code = "00:13", encoding = "list")]
             struct Foo;
 
             let foo = Foo;
@@ -2091,7 +2151,7 @@ mod tests {
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-            #[amqp_contract(code = 13, encoding = "list")]
+            #[amqp_contract(code = "00:13", encoding = "list")]
             struct Foo();
 
             let foo = Foo();
@@ -2102,7 +2162,7 @@ mod tests {
 
         {
             #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-            #[amqp_contract(code = 13, encoding = "list")]
+            #[amqp_contract(code = "00:13", encoding = "list")]
             struct Foo {}
 
             let foo = Foo {};
@@ -2120,7 +2180,7 @@ mod tests {
         use crate::ser::to_vec;
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list")]
+        #[amqp_contract(code = "00:13", encoding = "list")]
         struct Foo(bool, i32);
 
         let foo = Foo(true, 9);
@@ -2137,14 +2197,14 @@ mod tests {
         use crate::ser::to_vec;
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 13, encoding = "list", rename_all = "kebab-case")]
+        #[amqp_contract(code = "00:13", encoding = "list", rename_all = "kebab-case")]
         struct Foo {
             is_fool: bool,
             a: i32,
         }
 
         #[derive(Debug, PartialEq, SerializeComposite, DeserializeComposite)]
-        #[amqp_contract(code = 9, encoding = "list", rename_all = "kebab-case")]
+        #[amqp_contract(code = "00:09", encoding = "list", rename_all = "kebab-case")]
         struct Bar {
             is_fool: bool,
             a: i32,
@@ -2174,7 +2234,7 @@ mod tests {
         use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo {
             pub is_fool: Option<bool>,
             pub a: Option<i32>,
@@ -2241,7 +2301,7 @@ mod tests {
         use crate::macros::DeserializeComposite;
 
         #[derive(Debug, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Foo(Option<bool>, Option<i32>);
 
         let buf = vec![
@@ -2298,7 +2358,7 @@ mod tests {
         assert!(foo.1.is_some());
 
         #[derive(Debug, PartialEq, DeserializeComposite)]
-        #[amqp_contract(code = 0x13, encoding = "list")]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
         struct Bar {
             is_fool: Option<bool>,
             mandatory: u32,
@@ -2334,11 +2394,11 @@ mod tests {
         use std::collections::BTreeMap;
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
-        #[amqp_contract(code = 0x01, encoding = "basic")]
+        #[amqp_contract(code = "0x00:0x01", encoding = "basic")]
         struct Wrapper(BTreeMap<Symbol, i32>);
 
         #[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
-        #[amqp_contract(code = 0x1, encoding = "basic")]
+        #[amqp_contract(code = "0x00:0x1", encoding = "basic")]
         struct Wrapper2 {
             map: BTreeMap<Symbol, i32>,
         }

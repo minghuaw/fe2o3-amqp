@@ -14,7 +14,7 @@ use crate::definitions::ErrorCondition;
 ///     <choice name="transaction-rollback" value="amqp:transaction:rollback"/>
 ///     <choice name="transaction-timeout" value="amqp:transaction:timeout"/>
 /// </type>
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionError {
     /// amqp:transaction:unknown-id
     /// The specified txn-id does not exist.

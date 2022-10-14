@@ -1,16 +1,4 @@
-[tasks.doctest]
-args = [
-  "doc",
-  "--no-deps",
-  "--all-features",
-  "--open",
-  "-Z",
-  "unstable-options",
-  "--config",
-  "build.rustdocflags=[\"--cfg\", \"docsrs\"]",
-]
-command = "cargo"
-toolchain = "nightly"
+extend = "../Makefile.toml"
 
 [tasks.feature_check]
 dependencies = [
@@ -18,6 +6,8 @@ dependencies = [
   "check_feature_rustls",
   "check_feature_nativetls",
   "check_feature_transaction",
+  "check_feature_tracing",
+  "check_feature_log",
   "check_feature_group1",
   "check_feature_group2",
   "check_feature_group3",
@@ -142,6 +132,26 @@ args = [
   "--no-default-features",
   "--features",
   "rustls, scram",
+]
+command = "cargo"
+toolchain = "stable"
+
+[tasks.check_feature_tracing]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "tracing",
+]
+command = "cargo"
+toolchain = "stable"
+
+[tasks.check_feature_log]
+args = [
+  "check",
+  "--no-default-features",
+  "--features",
+  "log",
 ]
 command = "cargo"
 toolchain = "stable"

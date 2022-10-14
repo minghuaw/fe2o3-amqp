@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+1. Updated deps to breaking alpha releases
+
 ## 0.4.0
 
 1. Breaking change(s):

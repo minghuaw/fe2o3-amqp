@@ -9,7 +9,7 @@ use serde_amqp::primitives::Symbol;
 use super::ErrorCondition;
 
 /// Shared error conditions.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AmqpError {
     /// An internal error occurred. Operator intervention might be necessary to resume normal
     /// operation

@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp_derive"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "Custom derive macros for serde_amqp"
 license = "MIT/Apache-2.0"
@@ -20,7 +20,7 @@ proc-macro = true
 serde = { version = "1", features = ["derive"] }
 
 [dependencies]
-convert_case = "0.5"
+convert_case = "0.6.0"
 darling = "0.14.1"
 proc-macro2 = "1"
 quote = "1"

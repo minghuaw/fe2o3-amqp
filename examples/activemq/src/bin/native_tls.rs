@@ -58,7 +58,7 @@ async fn main() {
 
     let delivery = receiver.recv::<String>().await.unwrap();
     receiver.accept(&delivery).await.unwrap();
-    println!("Received: {:?}", delivery.try_as_value().unwrap());
+    println!("Received: {:?}", delivery.body());
 
     sender.close().await.unwrap();
     session.end().await.unwrap();

@@ -17,7 +17,7 @@ pub mod header;
 pub use header::Header;
 
 /// relative message priority
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord)]
 pub struct Priority(pub UByte);
 
 impl Default for Priority {
@@ -57,10 +57,12 @@ impl From<Priority> for UByte {
 ///
 /// If the delivery-annotations section is omitted, it is equivalent to a delivery-annotations
 /// section containing an empty map of annotations.
-#[derive(Debug, Clone, Default, DeserializeComposite, SerializeComposite)]
+#[derive(
+    Debug, Clone, Default, DeserializeComposite, SerializeComposite, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[amqp_contract(
     name = "amqp:delivery-annotations:map",
-    code = 0x0000_0000_0000_0071,
+    code = "0x0000_0000:0x0000_0071",
     encoding = "basic", // A simple wrapper over a map
 )]
 pub struct DeliveryAnnotations(pub Annotations);
@@ -117,10 +119,12 @@ impl From<MapBuilder<OwnedKey, Value, DeliveryAnnotations>> for Option<DeliveryA
 ///
 /// If the message-annotations section is omitted, it is equivalent to a message-annotations section
 /// containing an empty map of annotations.
-#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
+#[derive(
+    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[amqp_contract(
     name = "amqp:message-annotations:map",
-    code = 0x0000_0000_0000_0072,
+    code = "0x0000_0000:0x0000_0072",
     encoding = "basic"
 )]
 pub struct MessageAnnotations(pub Annotations);
@@ -167,10 +171,12 @@ use self::{annotations::OwnedKey, map_builder::MapBuilder};
 /// <type name="application-properties" class="restricted" source="map" provides="section">
 ///     <descriptor name="amqp:application-properties:map" code="0x00000000:0x00000074"/>
 /// </type>
-#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
+#[derive(
+    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[amqp_contract(
     name = "amqp:application-properties:map",
-    code = 0x0000_0000_0000_0074,
+    code = "0x0000_0000:0x0000_0074",
     encoding = "basic"
 )]
 pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
@@ -224,10 +230,12 @@ pub use amqp_value::*;
 /// <type name="footer" class="restricted" source="annotations" provides="section">
 ///     <descriptor name="amqp:footer:map" code="0x00000000:0x00000078"/>
 /// </type>
-#[derive(Debug, Clone, Default, SerializeComposite, DeserializeComposite)]
+#[derive(
+    Debug, Clone, Default, SerializeComposite, DeserializeComposite, PartialEq, Eq, PartialOrd, Ord,
+)]
 #[amqp_contract(
     name = "amqp:footer:map",
-    code = 0x0000_0000_0000_0078,
+    code = "0x0000_0000:0x0000_0078",
     encoding = "basic"
 )]
 pub struct Footer(pub Annotations);

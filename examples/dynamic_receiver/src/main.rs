@@ -1,7 +1,7 @@
 use fe2o3_amqp::{
     connection::Connection,
     session::Session,
-    types::{messaging::Source, primitives::Value},
+    types::{messaging::Source},
     Receiver,
 };
 
@@ -11,7 +11,7 @@ async fn main() {
         .await
         .unwrap();
     let mut session = Session::begin(&mut connection).await.unwrap();
-    let mut receiver = Receiver::builder()
+    let receiver = Receiver::builder()
         .name("dynamic-receiver")
         .source(Source::builder().dynamic(true).build())
         .attach(&mut session)

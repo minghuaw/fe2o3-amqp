@@ -9,7 +9,7 @@ use crate::definitions::Error;
 // #[serde(rename_all = "kebab-case")]
 #[amqp_contract(
     name = "amqp:close:list",
-    code = 0x0000_0000_0000_0018,
+    code = "0x0000_0000:0x0000_0018",
     encoding = "list",
     rename_all = "kebab-case"
 )]
