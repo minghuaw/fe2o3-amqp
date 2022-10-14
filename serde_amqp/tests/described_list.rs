@@ -37,6 +37,120 @@ fn single_bool() {
 
 #[cfg(feature = "derive")]
 #[test]
+fn single_u8_min() {
+    let value = Single { a: u8::MIN };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x0, 0x1, 0x50, 0x00,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u8> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u8_max() {
+    let value = Single { a: u8::MAX };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x0, 0x1, 0x50, 0xff,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u8> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u16_min() {
+    let value = Single { a: u16::MIN };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x4, 0x1, 0x60, 0x00, 0x00,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u16> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u16_max() {
+    let value = Single { a: u16::MAX };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x4, 0x1, 0x60, 0xff, 0xff,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u16> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u32_min() {
+    let value = Single { a: u32::MIN };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x2, 0x1, 0x43,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u32> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u32_max() {
+    let value = Single { a: u32::MAX };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x6, 0x1, 0x70, 0xff, 0xff, 0xff,
+        0xff,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u32> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u64_min() {
+    let value = Single { a: u64::MIN };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x2, 0x1, 0x44,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u64> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
+fn single_u64_max() {
+    let value = Single { a: u64::MAX };
+    let buf = to_vec(&value).unwrap();
+    let expected = [
+        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0xa, 0x1, 0x80, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff,
+    ];
+    assert_eq!(buf, expected);
+
+    let decoded: Single<u64> = from_slice(&buf).unwrap();
+    assert_eq!(decoded, value);
+}
+
+#[cfg(feature = "derive")]
+#[test]
 fn single_i8_zero() {
     let value = Single { a: 0i8 };
     let buf = to_vec(&value).unwrap();
@@ -218,120 +332,6 @@ fn single_i64_min() {
     assert_eq!(buf, expected);
 
     let decoded: Single<i64> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u8_min() {
-    let value = Single { a: u8::MIN };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x0, 0x1, 0x50, 0x00,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u8> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u8_max() {
-    let value = Single { a: u8::MAX };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x0, 0x1, 0x50, 0xff,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u8> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u16_min() {
-    let value = Single { a: u16::MIN };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x4, 0x1, 0x60, 0x00, 0x00,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u16> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u16_max() {
-    let value = Single { a: u16::MAX };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x4, 0x1, 0x60, 0xff, 0xff,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u16> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u32_min() {
-    let value = Single { a: u32::MIN };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x2, 0x1, 0x43,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u32> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u32_max() {
-    let value = Single { a: u32::MAX };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x6, 0x1, 0x70, 0xff, 0xff, 0xff,
-        0xff,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u32> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u64_min() {
-    let value = Single { a: u64::MIN };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0x2, 0x1, 0x44,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u64> = from_slice(&buf).unwrap();
-    assert_eq!(decoded, value);
-}
-
-#[cfg(feature = "derive")]
-#[test]
-fn single_u64_max() {
-    let value = Single { a: u64::MAX };
-    let buf = to_vec(&value).unwrap();
-    let expected = [
-        0x0, 0x80, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x1, 0xc0, 0xa, 0x1, 0x80, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0xff, 0xff, 0xff,
-    ];
-    assert_eq!(buf, expected);
-
-    let decoded: Single<u64> = from_slice(&buf).unwrap();
     assert_eq!(decoded, value);
 }
 
