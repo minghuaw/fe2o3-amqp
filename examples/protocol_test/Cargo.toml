@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1"
 serde = "1"
 serde_json = "1"
-fe2o3-amqp = { path = "../../fe2o3-amqp", default-features = false, features = ["acceptor", "transaction", "scram"] }
+fe2o3-amqp = { path = "../../fe2o3-amqp", default-features = false, features = ["acceptor", "transaction", "scram", "tracing", "log"] }
 fe2o3-amqp-ws = { path = "../../fe2o3-amqp-ws" }
 fe2o3-amqp-ext = { path = "../../fe2o3-amqp-ext" }
 # fe2o3-amqp = { version = "0.0.13", features = ["acceptor", "transaction"] }
