@@ -140,15 +140,15 @@ impl SaslProfile {
             }
             #[cfg(feature = "scram")]
             SaslProfile::ScramSha1(scram_sha1) => Some(Binary::from(
-                scram_sha1.client.compute_client_first_message(),
+                scram_sha1.client.compute_client_first_message().to_vec(),
             )),
             #[cfg(feature = "scram")]
             SaslProfile::ScramSha256(scram_sha256) => Some(Binary::from(
-                scram_sha256.client.compute_client_first_message(),
+                scram_sha256.client.compute_client_first_message().to_vec(),
             )),
             #[cfg(feature = "scram")]
             SaslProfile::ScramSha512(scram_sha512) => Some(Binary::from(
-                scram_sha512.client.compute_client_first_message(),
+                scram_sha512.client.compute_client_first_message().to_vec(),
             )),
         }
     }

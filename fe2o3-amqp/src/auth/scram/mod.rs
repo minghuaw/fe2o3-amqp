@@ -513,6 +513,7 @@ fn generate_nonce() -> [u8; 32] {
 }
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use super::attributes::{GS2_HEADER, NONCE_KEY, SALT_KEY};
     use super::{ScramCredentialProvider, ScramVersion, StoredPassword};
@@ -712,6 +713,7 @@ mod tests {
             .is_ok());
     }
 
+    #[cfg(feature = "acceptor")]
     #[test]
     fn test_sasl_scram_sha1_server() {
         use scram_sha1::*;
@@ -757,6 +759,7 @@ mod tests {
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
     }
 
+    #[cfg(feature = "acceptor")]
     #[test]
     fn test_sasl_scram_sha256_server() {
         use scram_sha256::*;
@@ -802,6 +805,7 @@ mod tests {
         assert_eq!(server_final, SERVER_FINAL_MESSAGE.as_bytes())
     }
 
+    #[cfg(feature = "acceptor")]
     #[test]
     fn test_sasl_scram_sha512_server() {
         use scram_sha512::*;
