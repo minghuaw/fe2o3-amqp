@@ -612,6 +612,10 @@ where
         // version of the source properties
         let remote_source = remote_attach
             .source
+            // Only need to check the source 
+            //
+            // If there is no pre-existing terminus, and the peer does not wish to create a new one, 
+            // this is indicated by setting the local terminus (source or target as appropriate) to null. 
             .ok_or(ReceiverAttachError::IncomingSourceIsNone)?;
         if let Some(local_source) = &self.source {
             local_source.verify_as_receiver(&remote_source)?;
@@ -648,7 +652,10 @@ where
             (Some(local_target), Some(remote_target)) => {
                 local_target.verify_as_receiver(remote_target)?
             }
-            (_, None) => return Err(ReceiverAttachError::IncomingTargetIsNone),
+            // Only need to check the source 
+            //
+            // If there is no pre-existing terminus, and the peer does not wish to create a new one, 
+            // this is indicated by setting the local terminus (source or target as appropriate) to null. 
             _ => {}
         }
 
@@ -797,8 +804,7 @@ where
 
             // ReceiverAttachError::SndSettleModeNotSupported
             ReceiverAttachError::RcvSettleModeNotSupported
-            | ReceiverAttachError::IncomingSourceIsNone
-            | ReceiverAttachError::IncomingTargetIsNone => {
+            | ReceiverAttachError::IncomingSourceIsNone => {
                 // Just send detach immediately
                 let err = self
                     .send_detach(writer, true, None)
@@ -821,6 +827,7 @@ where
                     Err(_) => attach_error,
                 }
             }
+            _ => attach_error
         }
     }
 }

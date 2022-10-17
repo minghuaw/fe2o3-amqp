@@ -66,6 +66,7 @@ pub enum SenderAttachError {
 
     // Errors that should reject Attach
     /// Incoming Attach frame's Source field is None
+    #[deprecated = "Since 0.7.1, `source` from a receiver link is not checked at the sender anymore"]
     #[error("Source field is None")]
     IncomingSourceIsNone,
 
@@ -204,6 +205,7 @@ pub enum ReceiverAttachError {
     IncomingSourceIsNone,
 
     /// Incoming Attach frame's Target field is None
+    #[deprecated = "Since 0.7.1 `target` from a sender link is not checked at the receiver anymore"]
     #[error("Target field is None")]
     IncomingTargetIsNone,
 
@@ -278,11 +280,7 @@ impl<'a> TryFrom<&'a ReceiverAttachError> for definitions::Error {
             ReceiverAttachError::DynamicNodePropertiesIsSomeWhenDynamicIsFalse => {
                 AmqpError::InvalidField.into()
             }
-            ReceiverAttachError::IncomingSourceIsNone
-            | ReceiverAttachError::IncomingTargetIsNone
-            // | ReceiverAttachError::SndSettleModeNotSupported
-            | ReceiverAttachError::RcvSettleModeNotSupported
-            | ReceiverAttachError::RemoteClosedWithError(_) => return Err(value),
+            _ => return Err(value),
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))
@@ -355,11 +353,7 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
                 AmqpError::InvalidField.into()
             }
 
-            SenderAttachError::IncomingSourceIsNone
-            | SenderAttachError::IncomingTargetIsNone
-            | SenderAttachError::SndSettleModeNotSupported
-            | SenderAttachError::RcvSettleModeNotSupported
-            | SenderAttachError::RemoteClosedWithError(_) => return Err(value),
+            _ => return Err(value),
 
             #[cfg(feature = "transaction")]
             SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),

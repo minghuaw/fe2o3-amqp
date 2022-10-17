@@ -541,7 +541,10 @@ where
             (Some(local_source), Some(remote_source)) => {
                 local_source.verify_as_sender(remote_source)?;
             }
-            (_, None) => return Err(SenderAttachError::IncomingSourceIsNone),
+            // Only need to check the target
+            //
+            // If there is no pre-existing terminus, and the peer does not wish to create a new one, 
+            // this is indicated by setting the local terminus (source or target as appropriate) to null. 
             _ => {}
         }
 
@@ -559,6 +562,10 @@ where
             (Some(local_target), Some(remote_target)) => {
                 local_target.verify_as_sender(remote_target)?
             }
+            // Only need to check the target
+            //
+            // If there is no pre-existing terminus, and the peer does not wish to create a new one, 
+            // this is indicated by setting the local terminus (source or target as appropriate) to null. 
             (_, None) => return Err(SenderAttachError::IncomingTargetIsNone),
             _ => {}
         }
@@ -705,7 +712,6 @@ where
 
             SenderAttachError::SndSettleModeNotSupported
             | SenderAttachError::RcvSettleModeNotSupported
-            | SenderAttachError::IncomingSourceIsNone
             | SenderAttachError::IncomingTargetIsNone => {
                 // Just send detach immediately
                 let err = self
@@ -726,6 +732,8 @@ where
             SenderAttachError::DesireTxnCapabilitiesNotSupported => {
                 try_detach_with_error(self, attach_error, writer, reader).await
             }
+
+            _ => attach_error
         }
     }
 }

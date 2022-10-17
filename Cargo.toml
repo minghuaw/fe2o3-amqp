@@ -39,4 +39,5 @@ exclude = [
     "examples/event_hubs",
     "examples/activemq",
     "examples/cancel_safety",
+    "examples/quick_start",
 ]
