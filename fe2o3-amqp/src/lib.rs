@@ -47,6 +47,7 @@
 //!
 //! ```rust
 //! use fe2o3_amqp::{Connection, Session, Sender, Receiver};
+//! use fe2o3_amqp::types::messaging::Outcome;
 //!
 //! #[tokio::main]
 //! async fn main() {
