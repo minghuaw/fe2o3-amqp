@@ -353,10 +353,10 @@ impl<'a> TryFrom<&'a SenderAttachError> for definitions::Error {
                 AmqpError::InvalidField.into()
             }
 
-            _ => return Err(value),
-
             #[cfg(feature = "transaction")]
             SenderAttachError::DesireTxnCapabilitiesNotSupported => return Err(value),
+
+            _ => return Err(value),
         };
 
         Ok(Self::new(condition, format!("{:?}", value), None))
