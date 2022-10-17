@@ -6,6 +6,7 @@ The examples below are individual examples which you need to `cd` into the corre
 
 | Name | Description |
 |------|-------------|
+|[quick_start](./quick_start)|A simple example to get you started |
 |[sender](./sender/) | A simple sender with default configuration |
 |[dynamic_sender](./dynamic_sender) | Request the receiving peer to dynamically create a node at target |
 |[send_with_custom_properties](./send_with_custom_properties) | Send a message with customized message sections |
