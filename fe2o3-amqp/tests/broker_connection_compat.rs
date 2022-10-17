@@ -12,7 +12,7 @@ async fn activemq_artemis_connection() {
         .with_env_var("DISABLE_SECURITY", "true")
         .with_exposed_port(5672);
     let node = docker.run(image);
-    tokio::time::sleep(Duration::from_millis(3_000)).await; // wait for container to start
+    tokio::time::sleep(Duration::from_millis(5_000)).await; // wait for container to start
 
     let port = node.get_host_port_ipv4(5672);
     let url = format!("amqp://localhost:{}", port);
@@ -28,7 +28,7 @@ async fn activemq_artemis_sasl_connection() {
         .with_env_var("ARTEMIS_PASSWORD", "test")
         .with_exposed_port(5672);
     let node = docker.run(image);
-    tokio::time::sleep(Duration::from_millis(3_000)).await; // wait for container to start
+    tokio::time::sleep(Duration::from_millis(5_000)).await; // wait for container to start
 
     let port = node.get_host_port_ipv4(5672);
     let url = format!("amqp://test:test@localhost:{}", port);
