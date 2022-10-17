@@ -41,6 +41,9 @@ use super::{
 #[cfg(feature = "transaction")]
 use fe2o3_amqp_types::definitions::AmqpError;
 
+#[cfg(docsrs)]
+use fe2o3_amqp_types::messaging::{Body, AmqpValue, AmqpSequence, Batch};
+
 /// Credit mode for the link
 #[derive(Debug, Clone)]
 pub enum CreditMode {

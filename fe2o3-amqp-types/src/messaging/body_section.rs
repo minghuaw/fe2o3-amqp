@@ -59,7 +59,7 @@ pub trait SerializableBody: Serialize + BodySection {}
 ///
 /// struct Foo { a: i32 }
 ///
-/// // Simply use the blanked implementation
+/// // Simply use the blanket implementation
 /// impl FromEmptyBody for Foo {}
 /// ```
 ///
