@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.1
+
+1. Fixed [#122](https://github.com/minghuaw/fe2o3-amqp/issues/122) by not checking if target is null if remote peer is sender and not checking source if remote peer is receiver.
+
 ## 0.7.0
 
 1. Upgraded `fe2o3-amqp-types` to "0.6.0", which introduced breaking changes to `Body` ([#115](https://github.com/minghuaw/fe2o3-amqp/issues/115), please
