@@ -23,7 +23,7 @@ default = [
     # "rustls",
     # "native-tls",
     # "transaction",
-    "scram",
+    # "scram",
 ]
 
 transaction = ["fe2o3-amqp-types/transaction", "uuid"]
