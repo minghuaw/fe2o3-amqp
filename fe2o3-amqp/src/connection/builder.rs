@@ -746,7 +746,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         mut self,
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = parse_url(url)?;
+        let url = url.try_into().map_err(Into::into)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -761,7 +761,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
             self.sasl_profile = Some(profile);
         }
 
-        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let addr = url.socket_addrs(|| default_port(url.scheme()))?;
         let stream = TcpStream::connect(&*addr).await?; // std::io::Error
 
         self.open_with_stream(stream).await
@@ -956,7 +956,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
         mut self,
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = parse_url(url)?;
+        let url = url.try_into().map_err(Into::into)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -971,7 +971,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
             self.sasl_profile = Some(profile);
         }
 
-        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let addr = url.socket_addrs(|| default_port(url.scheme()))?;
         let stream = TcpStream::connect(&*addr).await?; // std::io::Error
 
         self.open_with_stream(stream).await
@@ -1077,7 +1077,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
         mut self,
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = parse_url(url)?;
+        let url = url.try_into().map_err(Into::into)?;
         
         // Url info will override the builder fields
         // only override if value exists
@@ -1092,7 +1092,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
             self.sasl_profile = Some(profile);
         }
 
-        let addr = url.socket_addrs(|| Some(fe2o3_amqp_types::definitions::PORT))?;
+        let addr = url.socket_addrs(|| default_port(url.scheme()))?;
         let stream = TcpStream::connect(&*addr).await?; // std::io::Error
 
         self.open_with_stream(stream).await
@@ -1127,35 +1127,22 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     }
 }
 
-/// Parse URL and set default port if port is not found
-fn parse_url(url: impl TryInto<Url, Error = impl Into<OpenError>>) -> Result<Url, OpenError> {
-    let mut url = url.try_into().map_err(Into::into)?;
-    if url.port().is_none() {
-        match url.scheme() { // TODO: better error message?
-            "amqp" => url.set_port(Some(fe2o3_amqp_types::definitions::PORT)).map_err(|_| {
-                OpenError::UrlError(url::ParseError::InvalidPort)
-            })?,
-            "amqps" => url.set_port(Some(fe2o3_amqp_types::definitions::SECURE_PORT)).map_err(|_| {
-                OpenError::UrlError(url::ParseError::InvalidPort)
-            })?,
-            _ => return Err(OpenError::InvalidScheme),
-        }
+fn default_port(scheme: &str) -> Option<u16> {
+    match scheme {
+        "amqp" => Some(fe2o3_amqp_types::definitions::PORT),
+        "amqps" => Some(fe2o3_amqp_types::definitions::SECURE_PORT),
+        _ => None,
     }
-    Ok(url)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::parse_url;
+    use url::Url;
 
     #[test]
     fn test_url_name_resolution() {
-        let url = parse_url("amqp://example.net/").unwrap();
+        let url: Url = "amqp://example.net/".try_into().unwrap();
         assert_eq!(url.port(), Some(5672));
         let _addrs = url.socket_addrs(|| Some(5672)).unwrap();
-
-        let url = parse_url("amqps://example.net/").unwrap();
-        assert_eq!(url.port(), Some(5671));
-        let _addrs = url.socket_addrs(|| Some(5671)).unwrap();
     }
 }
