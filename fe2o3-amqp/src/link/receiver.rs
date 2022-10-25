@@ -242,6 +242,11 @@ impl Receiver {
     /// let delivery: Delivery<Foo> = receiver.recv::<Foo>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
+    /// 
+    /// # Cancel safety
+    /// 
+    /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
+    /// for more details.
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>
     where
         for<'de> T: FromBody<'de> + Send,
