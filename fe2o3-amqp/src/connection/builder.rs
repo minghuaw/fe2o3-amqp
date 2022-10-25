@@ -746,7 +746,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, ()> {
         mut self,
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = url.try_into().map_err(Into::into)?;
+        let url: Url = parse_url(url)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -956,7 +956,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_rustls::TlsConnector> {
         mut self,
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = url.try_into().map_err(Into::into)?;
+        let url: Url = parse_url(url)?;
 
         // Url info will override the builder fields
         // only override if value exists
@@ -1077,8 +1077,8 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
         mut self,
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
-        let url: Url = url.try_into().map_err(Into::into)?;
-
+        let url: Url = parse_url(url)?;
+        
         // Url info will override the builder fields
         // only override if value exists
         self.scheme = url.scheme();
@@ -1127,14 +1127,35 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
     }
 }
 
+/// Parse URL and set default port if port is not found
+fn parse_url(url: impl TryInto<Url, Error = impl Into<OpenError>>) -> Result<Url, OpenError> {
+    let mut url = url.try_into().map_err(Into::into)?;
+    if url.port().is_none() {
+        match url.scheme() { // TODO: better error message?
+            "amqp" => url.set_port(Some(fe2o3_amqp_types::definitions::PORT)).map_err(|_| {
+                OpenError::UrlError(url::ParseError::InvalidPort)
+            })?,
+            "amqps" => url.set_port(Some(fe2o3_amqp_types::definitions::SECURE_PORT)).map_err(|_| {
+                OpenError::UrlError(url::ParseError::InvalidPort)
+            })?,
+            _ => return Err(OpenError::InvalidScheme),
+        }
+    }
+    Ok(url)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::Connection;
+    use super::parse_url;
 
     #[test]
     fn test_url_name_resolution() {
-        let url = url::Url::parse("amqp://example.net/").unwrap();
+        let url = parse_url("amqp://example.net/").unwrap();
+        assert_eq!(url.port(), Some(5672));
+        let _addrs = url.socket_addrs(|| Some(5672)).unwrap();
+
+        let url = parse_url("amqps://example.net/").unwrap();
+        assert_eq!(url.port(), Some(5671));
         let _addrs = url.socket_addrs(|| Some(5671)).unwrap();
-        let _ = Connection::builder().container_id("test").open(url); // This is just to see an url is accepted
     }
 }
