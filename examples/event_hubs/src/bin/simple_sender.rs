@@ -4,7 +4,6 @@ use dotenv::dotenv;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
     types::{
-        definitions::SECURE_PORT,
         messaging::{Message, Properties},
         primitives::Binary,
     },
