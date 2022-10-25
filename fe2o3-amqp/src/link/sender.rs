@@ -304,9 +304,9 @@ impl Sender {
     ///     .build();
     /// let outcome = sender.send(sendable).await.unwrap():
     /// ```
-    /// 
+    ///
     /// # Cancel safety
-    /// 
+    ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
     pub async fn send<T: SerializableBody>(

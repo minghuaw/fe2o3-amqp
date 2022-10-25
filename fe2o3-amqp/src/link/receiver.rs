@@ -42,7 +42,7 @@ use super::{
 use fe2o3_amqp_types::definitions::AmqpError;
 
 #[cfg(docsrs)]
-use fe2o3_amqp_types::messaging::{Body, AmqpValue, AmqpSequence, Batch};
+use fe2o3_amqp_types::messaging::{AmqpSequence, AmqpValue, Batch, Body};
 
 /// Credit mode for the link
 #[derive(Debug, Clone)]
@@ -242,9 +242,9 @@ impl Receiver {
     /// let delivery: Delivery<Foo> = receiver.recv::<Foo>().await.unwrap();
     /// receiver.accept(&delivery).await.unwrap();
     /// ```
-    /// 
+    ///
     /// # Cancel safety
-    /// 
+    ///
     /// This function is cancel-safe. See [#22](https://github.com/minghuaw/fe2o3-amqp/issues/22)
     /// for more details.
     pub async fn recv<T>(&mut self) -> Result<Delivery<T>, RecvError>

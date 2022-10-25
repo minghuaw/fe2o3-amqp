@@ -1078,7 +1078,7 @@ impl<'a> Builder<'a, mode::ConnectorWithId, tokio_native_tls::TlsConnector> {
         url: impl TryInto<Url, Error = impl Into<OpenError>>,
     ) -> Result<ConnectionHandle<()>, OpenError> {
         let url = url.try_into().map_err(Into::into)?;
-        
+
         // Url info will override the builder fields
         // only override if value exists
         self.scheme = url.scheme();

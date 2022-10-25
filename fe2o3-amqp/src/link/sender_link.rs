@@ -543,8 +543,8 @@ where
             }
             // Only need to check the target
             //
-            // If there is no pre-existing terminus, and the peer does not wish to create a new one, 
-            // this is indicated by setting the local terminus (source or target as appropriate) to null. 
+            // If there is no pre-existing terminus, and the peer does not wish to create a new one,
+            // this is indicated by setting the local terminus (source or target as appropriate) to null.
             _ => {}
         }
 
@@ -564,8 +564,8 @@ where
             }
             // Only need to check the target
             //
-            // If there is no pre-existing terminus, and the peer does not wish to create a new one, 
-            // this is indicated by setting the local terminus (source or target as appropriate) to null. 
+            // If there is no pre-existing terminus, and the peer does not wish to create a new one,
+            // this is indicated by setting the local terminus (source or target as appropriate) to null.
             (_, None) => return Err(SenderAttachError::IncomingTargetIsNone),
             _ => {}
         }
@@ -733,7 +733,7 @@ where
                 try_detach_with_error(self, attach_error, writer, reader).await
             }
 
-            _ => attach_error
+            _ => attach_error,
         }
     }
 }
