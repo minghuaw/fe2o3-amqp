@@ -5,7 +5,7 @@ use event_hubs::get_event_hub_partitions;
 use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::{
     sasl_profile::SaslProfile,
-    types::{definitions::SECURE_PORT, messaging::Source, primitives::Value},
+    types::{messaging::Source, primitives::Value},
     Connection, Receiver, Session,
 };
 use fe2o3_amqp_ext::filters::SelectorFilter;
@@ -15,12 +15,11 @@ async fn main() {
     dotenv().ok();
 
     let hostname = env::var("HOST_NAME").unwrap();
-    let port = SECURE_PORT;
     let sa_key_name = env::var("SHARED_ACCESS_KEY_NAME").unwrap();
     let sa_key_value = env::var("SHARED_ACCESS_KEY_VALUE").unwrap();
     let event_hub_name = env::var("EVENT_HUB_NAME").unwrap();
 
-    let url = format!("amqps://{}:{}", hostname, port);
+    let url = format!("amqps://{}", hostname);
     let mut connection = Connection::builder()
         .container_id("rust-connection-1")
         .alt_tls_establishment(true) // EventHubs uses alternative TLS establishment
