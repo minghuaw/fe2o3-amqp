@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.2
+
+1. Set default port (5672 for "amqp" and 5671 for "amqps") if not specified in the URL.
+
 ## 0.7.1
 
 1. Fixed [#122](https://github.com/minghuaw/fe2o3-amqp/issues/122) by not checking if target is null if remote peer is sender and not checking source if remote peer is receiver.
