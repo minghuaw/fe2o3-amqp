@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.3
+
+1. Reduced duplicated code for setting default port when not specified in the connection url
+2. Updated docs of `Sender::send` and `Receiver::recv` on cancel safety
+
 ## 0.7.2
 
 1. Set default port (5672 for "amqp" and 5671 for "amqps") if not specified in the URL.
