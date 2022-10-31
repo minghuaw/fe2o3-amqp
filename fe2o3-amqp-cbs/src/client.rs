@@ -9,7 +9,7 @@ use fe2o3_amqp_management::{
 
 use crate::{
     constants::{CBS_NODE_ADDR, DEFAULT_CBS_CLIENT_NODE},
-    put_token::{PutTokenRequest, PutTokenResponse},
+    put_token::{PutTokenRequest, PutTokenResponse}, token::CbsToken,
 };
 
 /// CBS client
@@ -36,18 +36,15 @@ impl CbsClient {
 
     pub async fn put_token(
         &mut self,
-        name: impl Into<Cow<'_, str>>,
-        token: impl Into<Cow<'_, str>>,
-        entity_type: impl Into<Cow<'_, str>>,
+        token: CbsToken<'_>,
     ) -> Result<(), MgmtError> {
         let req = PutTokenRequest {
-            name: name.into(),
-            token: token.into(),
+            name: Cow::Borrowed(token.name()),
+            token: Cow::Borrowed(token.token_value()),
         };
-        let entity_type = entity_type.into();
         let _accepted = self
             .mgmt_client
-            .send_request(req, entity_type, None)
+            .send_request(req, token.token_type(), None)
             .await?
             .accepted_or_else(|o| MgmtError::NotAccepted(o))?;
         let response: Response<PutTokenResponse> = self.mgmt_client.recv_response().await?;
