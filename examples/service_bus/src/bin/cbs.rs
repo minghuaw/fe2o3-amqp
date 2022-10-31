@@ -9,7 +9,7 @@ use fe2o3_amqp::{
     sasl_profile::SaslProfile,
     Connection, Receiver, Sender, Session,
 };
-use fe2o3_amqp_cbs::client::CbsClient;
+use fe2o3_amqp_cbs::{client::CbsClient, token::CbsToken};
 use hmac::{
     digest::{InvalidLength, KeyInit},
     Hmac, Mac,
@@ -48,10 +48,12 @@ async fn put_token(
 ) {
     let mut session = Session::begin(connection).await.unwrap();
 
+    
     let mut cbs_client = CbsClient::attach(&mut session).await.unwrap();
     let name = format!("amqp://{}/{}", namespace, entity);
     let entity_type = "servicebus.windows.net:sastoken";
-    cbs_client.put_token(name, sas_token, entity_type).await.unwrap();
+    let token = CbsToken::new(name, sas_token, entity_type, None);
+    cbs_client.put_token(token).await.unwrap();
 
     cbs_client.close().await.unwrap();
     session.close().await.unwrap();
