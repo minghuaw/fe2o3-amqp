@@ -15,3 +15,4 @@ readme = "Readme.md"
 [dependencies]
 fe2o3-amqp = { version = "0.7.0", path = "../fe2o3-amqp" }
 fe2o3-amqp-management = { version = "0.0.3", path = "../fe2o3-amqp-management" }
+time = "0.3"
