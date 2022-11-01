@@ -35,6 +35,20 @@ impl Uuid {
     }
 }
 
+#[cfg(feature = "uuid")]
+impl From<uuid::Uuid> for Uuid {
+    fn from(val: uuid::Uuid) -> Self {
+        Self(val.into_bytes())
+    }
+}
+
+#[cfg(feature = "uuid")]
+impl From<Uuid> for uuid::Uuid {
+    fn from(val: Uuid) -> Self {
+        Self::from_bytes(val.0)
+    }
+}
+
 impl AsRef<[u8; UUID_WIDTH]> for Uuid {
     fn as_ref(&self) -> &[u8; UUID_WIDTH] {
         &self.0

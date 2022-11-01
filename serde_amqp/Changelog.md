@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.5.1
+
+1. Added feature gated conversion impls for `Timestamp` from/to
+   1. `chrono::DateTime`
+   2. `chrono::Duration`
+   3. `time::OffsetDateTime`
+   4. `time::Duration`
+2. Added feature gated conversion impls for `Uuid` from/to
+   1. `uuid::Uuid`
+
 ## 0.5.0
 
 1. Fixed [#117](https://github.com/minghuaw/fe2o3-amqp/issues/117) with `serde_amqp_derive = "0.2.0"`

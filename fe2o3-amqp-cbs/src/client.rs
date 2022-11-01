@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use fe2o3_amqp::{link::DetachError, session::SessionHandle};
 use fe2o3_amqp_management::{
     client::MgmtClient,
@@ -9,7 +7,7 @@ use fe2o3_amqp_management::{
 
 use crate::{
     constants::{CBS_NODE_ADDR, DEFAULT_CBS_CLIENT_NODE},
-    put_token::{PutTokenRequest, PutTokenResponse},
+    put_token::{PutTokenRequest, PutTokenResponse}, token::CbsToken,
 };
 
 /// CBS client
@@ -36,15 +34,10 @@ impl CbsClient {
 
     pub async fn put_token(
         &mut self,
-        name: impl Into<Cow<'_, str>>,
-        token: impl Into<Cow<'_, str>>,
-        entity_type: impl Into<Cow<'_, str>>,
+        token: CbsToken<'_>,
     ) -> Result<(), MgmtError> {
-        let req = PutTokenRequest {
-            name: name.into(),
-            token: token.into(),
-        };
-        let entity_type = entity_type.into();
+        let entity_type = token.token_type.clone();
+        let req = PutTokenRequest::from(token);
         let _accepted = self
             .mgmt_client
             .send_request(req, entity_type, None)
