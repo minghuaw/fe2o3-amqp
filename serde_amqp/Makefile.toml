@@ -2,7 +2,7 @@ extend = "../Makefile.toml"
 
 [tasks.test]
 command = "cargo"
-args = ["test", "--features", "derive extensions"]
+args = ["test", "--all-features"]
 
 [tasks.expand]
 command = "cargo"

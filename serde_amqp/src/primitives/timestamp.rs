@@ -71,3 +71,69 @@ impl<'de> de::Deserialize<'de> for Timestamp {
         deserializer.deserialize_newtype_struct(TIMESTAMP, Visitor {})
     }
 }
+
+/// Please note that this conversion does NOT check for overflow
+#[cfg(feature = "time")]
+impl From<time::OffsetDateTime> for Timestamp {
+    fn from(val: time::OffsetDateTime) -> Self {
+        Self((val.unix_timestamp_nanos() / 1_000_000) as i64)
+    }
+}
+
+#[cfg(feature = "time")]
+impl TryFrom<Timestamp> for time::OffsetDateTime {
+    type Error = time::error::ComponentRange;
+
+    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
+        time::OffsetDateTime::from_unix_timestamp_nanos(value.0 as i128 * 1_000_000)
+    }
+}
+
+/// Please note that this conversion does NOT check for overflow
+#[cfg(feature = "time")]
+impl From<time::Duration> for Timestamp {
+    fn from(val: time::Duration) -> Self {
+        Self(val.whole_milliseconds() as i64)
+    }
+}
+
+#[cfg(feature = "time")]
+impl From<Timestamp> for time::Duration {
+    fn from(value: Timestamp) -> Self {
+        time::Duration::milliseconds(value.0)
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<chrono::Duration> for Timestamp {
+    fn from(val: chrono::Duration) -> Self {
+        Self(val.num_milliseconds())
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<Timestamp> for chrono::Duration {
+    fn from(value: Timestamp) -> Self {
+        chrono::Duration::milliseconds(value.0)
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
+    fn from(val: chrono::DateTime<chrono::Utc>) -> Self {
+        Self(val.timestamp_millis())
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<Timestamp> for chrono::DateTime<chrono::Utc> {
+    fn from(value: Timestamp) -> Self {
+        chrono::DateTime::<chrono::Utc>::from_utc(
+            chrono::NaiveDateTime::from_timestamp(
+                value.0 / 1000,
+                (value.0 % 1000) as u32 * 1_000_000,
+            ),
+            chrono::Utc,
+        )
+    }
+}

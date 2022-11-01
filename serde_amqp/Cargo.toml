@@ -39,6 +39,7 @@ serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 thiserror = "1"
 bytes = "1"
+indexmap = { version = "1.9.1", features = ["serde"] }
 
 # derive
 serde_amqp_derive = { version = "0.2.0", path = "../serde_amqp_derive", optional = true }
@@ -46,6 +47,6 @@ serde_amqp_derive = { version = "0.2.0", path = "../serde_amqp_derive", optional
 
 # Optinal dependencies
 serde_json = { version = "1", optional = true }
-chrono = { version = "0.4", features = ["serde"], optional = true }
-uuid = { version = "1", features = ["serde"], optional = true }
-indexmap = { version = "1.9.1", features = ["serde"] }
+chrono = { version = "0.4", optional = true }
+uuid = { version = "1", optional = true }
+time = { version = "0.3", optional = true }
