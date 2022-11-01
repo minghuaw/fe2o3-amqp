@@ -106,7 +106,7 @@
 //! |`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)), added since "0.4.5" |
 //! |`"time"`| enables conversion of `Timestamp` from/to `time::Duration` and `time::OffsetDateTime`, added since "0.5.1" |
 //! |`"chrono"`| enables conversion of `Timestamp` from/to `chrono::Duration` and `chrono::DateTime`, added since "0.5.1" |
-//! |`"uuid"`| enables conversion of `Uuid` from/to `uuid::Uuid`, added since "0.5.1" | 
+//! |`"uuid"`| enables conversion of `Uuid` from/to `uuid::Uuid`, added since "0.5.1" |
 //!
 //! ## `SerializeComposite` and `DeserializeComposite`
 //!
