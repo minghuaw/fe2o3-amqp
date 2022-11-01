@@ -51,8 +51,8 @@ async fn put_token(
 
     let name = format!("amqp://{}/{}", namespace, entity);
     let entity_type = "servicebus.windows.net:sastoken";
-    let token = CbsToken::new(name, sas_token, entity_type, None);
-    cbs_client.put_token(token).await.unwrap();
+    let token = CbsToken::new(sas_token, entity_type, None);
+    cbs_client.put_token(name, token).await.unwrap();
 
     cbs_client.close().await.unwrap();
     session.close().await.unwrap();

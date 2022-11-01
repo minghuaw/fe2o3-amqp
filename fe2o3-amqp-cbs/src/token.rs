@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use fe2o3_amqp::types::primitives::Timestamp;
 
 pub struct CbsToken<'a> {
-    pub(crate) name: Cow<'a, str>,
     pub(crate) token_value: Cow<'a, str>,
     pub(crate) token_type: Cow<'a, str>,
     pub(crate) expires_at_utc: Option<Timestamp>,
@@ -11,21 +10,15 @@ pub struct CbsToken<'a> {
 
 impl<'a> CbsToken<'a> {
     pub fn new(
-        name: impl Into<Cow<'a, str>>,
         token_value: impl Into<Cow<'a, str>>,
         token_type: impl Into<Cow<'a, str>>,
         expires_at_utc: impl Into<Option<Timestamp>>,
     ) -> Self {
         Self {
-            name: name.into(),
             token_value: token_value.into(),
             token_type: token_type.into(),
             expires_at_utc: expires_at_utc.into(),
         }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
     }
 
     pub fn token_value(&self) -> &str {
