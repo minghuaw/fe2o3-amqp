@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.4
+
+- Fixed error in `AsyncCbsTokenProvider`
+
 ## 0.0.3
 
 - Added `CbsToken` struct, and `CbsTokenProvider`, `AsyncCbsTokenProvider` traits.
