@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use fe2o3_amqp::{link::DetachError, session::SessionHandle};
 use fe2o3_amqp_management::{
     client::MgmtClient,
@@ -38,13 +36,11 @@ impl CbsClient {
         &mut self,
         token: CbsToken<'_>,
     ) -> Result<(), MgmtError> {
-        let req = PutTokenRequest {
-            name: Cow::Borrowed(token.name()),
-            token: Cow::Borrowed(token.token_value()),
-        };
+        let entity_type = token.token_type.clone();
+        let req = PutTokenRequest::from(token);
         let _accepted = self
             .mgmt_client
-            .send_request(req, token.token_type(), None)
+            .send_request(req, entity_type, None)
             .await?
             .accepted_or_else(|o| MgmtError::NotAccepted(o))?;
         let response: Response<PutTokenResponse> = self.mgmt_client.recv_response().await?;

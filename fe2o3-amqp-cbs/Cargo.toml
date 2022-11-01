@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp-cbs"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 description = "An experimental impl of AMQP 1.0 CBS extension"
 license = "MIT/Apache-2.0"
@@ -15,4 +15,3 @@ readme = "Readme.md"
 [dependencies]
 fe2o3-amqp = { version = "0.7.0", path = "../fe2o3-amqp" }
 fe2o3-amqp-management = { version = "0.0.3", path = "../fe2o3-amqp-management" }
-time = "0.3"

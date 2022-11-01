@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 
-use time::OffsetDateTime;
+use fe2o3_amqp::types::primitives::Timestamp;
 
 pub struct CbsToken<'a> {
-    name: Cow<'a, str>,
-    token_value: Cow<'a, str>,
-    token_type: Cow<'a, str>,
-    expires_at_utc: Option<OffsetDateTime>,
+    pub(crate) name: Cow<'a, str>,
+    pub(crate) token_value: Cow<'a, str>,
+    pub(crate) token_type: Cow<'a, str>,
+    pub(crate) expires_at_utc: Option<Timestamp>,
 }
 
 impl<'a> CbsToken<'a> {
@@ -14,7 +14,7 @@ impl<'a> CbsToken<'a> {
         name: impl Into<Cow<'a, str>>,
         token_value: impl Into<Cow<'a, str>>,
         token_type: impl Into<Cow<'a, str>>,
-        expires_at_utc: impl Into<Option<OffsetDateTime>>,
+        expires_at_utc: impl Into<Option<Timestamp>>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -36,7 +36,7 @@ impl<'a> CbsToken<'a> {
         &self.token_type
     }
 
-    pub fn expires_at_utc(&self) -> &Option<OffsetDateTime> {
+    pub fn expires_at_utc(&self) -> &Option<Timestamp> {
         &self.expires_at_utc
     }
 }
