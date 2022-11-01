@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.7
+
+- Changed trait signature
+
 ## 0.0.6
 
 - Added lifetime marker to `AsyncCbsTokenProvider`
