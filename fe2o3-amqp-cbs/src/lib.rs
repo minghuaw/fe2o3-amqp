@@ -20,6 +20,7 @@ pub trait CbsTokenProvider {
     ) -> Result<CbsToken, Self::Error>;
 }
 
+/// TODO: This will be updated when GAT is stablized
 pub trait AsyncCbsTokenProvider {
     type Error;
 
@@ -30,10 +31,3 @@ pub trait AsyncCbsTokenProvider {
         claims: impl IntoIterator<Item = impl Into<String>>,
     ) -> Result<Pin<Box<dyn Future<Output = Result<CbsToken, Self::Error>>>>, Self::Error>;   
 }
-
-// /// Open connection with `SaslProfile::Anonymous` and then perform CBS
-// pub async fn open_connection_and_perform_cbs<'a, Mode, Tls>(
-//     builder: connection::Builder<'a, Mode, Tls>,
-// ) -> Result<ConnectionHandle<()>, ()> {
-//     todo!()
-// }
