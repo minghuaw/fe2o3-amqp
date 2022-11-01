@@ -16,7 +16,7 @@ pub trait CbsTokenProvider {
         &mut self,
         container_id: impl AsRef<str>,
         resource_id: impl AsRef<str>,
-        claims: impl IntoIterator<Item = impl Into<String>>,
+        claims: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<CbsToken, Self::Error>;
 }
 
@@ -28,6 +28,6 @@ pub trait AsyncCbsTokenProvider {
         &mut self,
         container_id: impl AsRef<str>,
         resource_id: impl AsRef<str>,
-        claims: impl IntoIterator<Item = impl Into<String>>,
+        claims: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Pin<Box<dyn Future<Output = Result<CbsToken, Self::Error>> + '_>>;
 }
