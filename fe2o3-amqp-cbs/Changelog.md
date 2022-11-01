@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.5
+
+- Moved `name` outside `CbsToken`
+
 ## 0.0.4
 
 - Fixed error in `AsyncCbsTokenProvider`
