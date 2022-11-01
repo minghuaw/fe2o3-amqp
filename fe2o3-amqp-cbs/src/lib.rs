@@ -29,5 +29,5 @@ pub trait AsyncCbsTokenProvider {
         container_id: impl AsRef<str>,
         resource_id: impl AsRef<str>,
         claims: impl IntoIterator<Item = impl Into<String>>,
-    ) -> Pin<Box<dyn Future<Output = Result<CbsToken, Self::Error>>>>;
+    ) -> Pin<Box<dyn Future<Output = Result<CbsToken, Self::Error>> + '_>>;
 }
