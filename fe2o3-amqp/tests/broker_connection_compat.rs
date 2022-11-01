@@ -1,37 +1,37 @@
 //! Tests connection with different brokers
 
-use std::time::Duration;
-
 use fe2o3_amqp::connection::Connection;
-use testcontainers::{clients, images};
+
+mod common;
 
 #[tokio::test]
 async fn activemq_artemis_connection() {
-    let docker = clients::Cli::default();
-    let image = images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
-        .with_env_var("DISABLE_SECURITY", "true")
-        .with_exposed_port(5672);
-    let node = docker.run(image);
-    tokio::time::sleep(Duration::from_millis(5_000)).await; // wait for container to start
-
-    let port = node.get_host_port_ipv4(5672);
+    let (_node, port) = common::setup_activemq_artemis(None, None).await;
     let url = format!("amqp://localhost:{}", port);
     let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
     connection.close().await.unwrap();
 }
 
 #[tokio::test]
-async fn activemq_artemis_sasl_connection() {
-    let docker = clients::Cli::default();
-    let image = images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
-        .with_env_var("ARTEMIS_USERNAME", "test")
-        .with_env_var("ARTEMIS_PASSWORD", "test")
-        .with_exposed_port(5672);
-    let node = docker.run(image);
-    tokio::time::sleep(Duration::from_millis(5_000)).await; // wait for container to start
+async fn activemq_artemis_sasl_plain_connection() {
+    let (_node, port) = common::setup_activemq_artemis(Some("guest"), Some("guest")).await;
+    let url = format!("amqp://guest:guest@localhost:{}", port);
+    let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+    connection.close().await.unwrap();
+}
 
-    let port = node.get_host_port_ipv4(5672);
-    let url = format!("amqp://test:test@localhost:{}", port);
+#[tokio::test]
+async fn rabbitmq_amqp10_connection() {
+    let (_node, port) = common::setup_rabbitmq_amqp10(None, None).await;
+    let url = format!("amqp://localhost:{}", port);
+    let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn rabbitmq_amqp10_sasl_plain_connection() {
+    let (_node, port) = common::setup_rabbitmq_amqp10(Some("guest"), Some("guest")).await;
+    let url = format!("amqp://guest1:guest@localhost:{}", port);
     let mut connection = Connection::open("test-connection", &url[..]).await.unwrap();
     connection.close().await.unwrap();
 }
