@@ -7,8 +7,8 @@ A serde implementation of AMQP1.0 protocol and the primitive types.
 
 ## Serializing and deserializing data structures
 
-Any type that implement `serde::Serialize` and `serde::Deserialize` trait can be serialized/deserialized with
-the following convenience functions
+Any type that implement `serde::Serialize` and `serde::Deserialize` trait can be
+serialized/deserialized with the following convenience functions
 
 Serialization:
 
@@ -25,12 +25,14 @@ All primitive types defined in AMQP1.0 protocol can be found in mod [primitives]
 
 ## Described types
 
-AMQP1.0 specification allows annotating any AMQP type with a [`descriptor::Descriptor`], thus creating a described type.
-Though this can be constructed using [`described::Described`] and [`Value`], a much easier way to define a custom described type is
-to use the custom [`SerializeComposite`] and [`DeserializeComposite`] derive macros. Please be aware
-that the `"derive"` feature flag must be enabled.
+AMQP1.0 specification allows annotating any AMQP type with a [`descriptor::Descriptor`], thus
+creating a described type. Though this can be constructed using [`described::Described`] and
+[`Value`], a much easier way to define a custom described type is to use the custom
+[`SerializeComposite`] and [`DeserializeComposite`] derive macros. Please be aware that the
+`"derive"` feature flag must be enabled.
 
-You can read more about how to use the derive macros in the corresponding [section](#serializecomposite-and-deserializecomposite).
+You can read more about how to use the derive macros in the corresponding
+[section](#serializecomposite-and-deserializecomposite).
 
 ## Untyped AMQP1.0 values
 
@@ -61,8 +63,8 @@ let expected = Value::from(
 assert_eq!(value, expected);
 ```
 
-Types that implements `serde::Serialize` and `serde::Deserialize` traits can also be converted into/from
-[`Value`] using the [`to_value`] and [`from_value`] functions.
+Types that implements `serde::Serialize` and `serde::Deserialize` traits can also be converted
+into/from [`Value`] using the [`to_value`] and [`from_value`] functions.
 
 ## **WARNING** `enum`
 
@@ -81,14 +83,15 @@ enum Enumeration {
 ```
 
 AMQP1.0 protocol doesn't natively support `NewTypeVariant`, `TupleVariant` or `StructVariant`.
-For the sake of completeness, serialization and deserialization for these variants are implemented as follows:
+For the sake of completeness, serialization and deserialization for these variants are
+implemented as follows:
 
-- `NewTypeVariant` is encoded/decoded as a map of one key-value pair with the
-variant index being the key and the single wrapped field being the value.
-- `TupleVariant` is encoded/decoded as a map of one key-value pair with the
-varant index being the key and a list of the fields being the value.
-- `StructVariant` is encoded/decoded as a map of one key-value pair with the
-variant index being the key and a list of the fields being the value.
+- `NewTypeVariant` is encoded/decoded as a map of one key-value pair with the variant index
+being the key and the single wrapped field being the value.
+- `TupleVariant` is encoded/decoded as a map of one key-value pair with the varant index being
+the key and a list of the fields being the value.
+- `StructVariant` is encoded/decoded as a map of one key-value pair with the variant index being
+the key and a list of the fields being the value.
 
 ## Feature flag
 
@@ -100,28 +103,45 @@ default = []
 |---------|-------------|
 |`"derive"`| enables [`SerializeComposite` and `DeserializeComposite`](#serializecomposite-and-deserializecomposite) |
 |`"extensions"`| enables `extensions` mod (see [Extensions](#extensions)), added since "0.4.5" |
+|`"time"`| enables conversion of `Timestamp` from/to `time::Duration` and `time::OffsetDateTime`, added since "0.5.1" |
+|`"chrono"`| enables conversion of `Timestamp` from/to `chrono::Duration` and `chrono::DateTime`, added since "0.5.1" |
+|`"uuid"`| enables conversion of `Uuid` from/to `uuid::Uuid`, added since "0.5.1" |
 
 ### `SerializeComposite` and `DeserializeComposite`
 
 The macro provides three types of encodings:
 
-1. `"list"`: The struct will be serialized as a described list. A described list is an AMQP1.0 list with its descriptor prepended to the list itself. The deserialization will take either the `"list"` or the `"map"` encoded values.
-2. `"map"`: The struct will be serialized as a described map. A described map is an AMQP1.0 map with its descriptor prepended to the map. The deserialization will take either the `"list"` or the `"map"` encoded values.
-3. `"basic"`: The struct must be a thin wrapper (containing only one field) over another serializable/deserializable type. The inner struct will be serialized/deserialized with the descriptor prepended to the struct.
+1. `"list"`: The struct will be serialized as a described list. A described list is an AMQP1.0
+   list with its descriptor prepended to the list itself. The deserialization will take either
+   the `"list"` or the `"map"` encoded values.
+2. `"map"`: The struct will be serialized as a described map. A described map is an AMQP1.0 map
+   with its descriptor prepended to the map. The deserialization will take either the `"list"`
+   or the `"map"` encoded values.
+3. `"basic"`: The struct must be a thin wrapper (containing only one field) over another
+   serializable/deserializable type. The inner struct will be serialized/deserialized with the
+   descriptor prepended to the struct.
 
 #### Details with the `"list"` encoding
 
 Optinal fields
 
-If a field is not marked with `"mandatory"` in the specification, the field can be an `Option`. During serialization, the optional fields may be skipped completely or encoded as an AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an empty field will be decoded as a `None`.
+If a field is not marked with `"mandatory"` in the specification, the field can be an `Option`.
+During serialization, the optional fields may be skipped completely or encoded as an AMQP1.0
+`null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an empty field
+will be decoded as a `None`.
 
 Fields with default values:
 
-For fields that have default values defined in the specification, the field type must implement both the `Default` and `PartialEq` trait. During serialization, if the field is equal to the default value of the field type, the field will be either ignored completely or encoded as an AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an empty field will be decoded as the default value of the type.
+For fields that have default values defined in the specification, the field type must implement
+both the `Default` and `PartialEq` trait. During serialization, if the field is equal to the
+default value of the field type, the field will be either ignored completely or encoded as an
+AMQP1.0 `null` primitive (`0x40`). During deserialization, an AMQP1.0 `null` primitive or an
+empty field will be decoded as the default value of the type.
 
 ### Example of the derive macros
 
-The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed by a list of the fields).
+The `"list"` encoding will encode the `Attach` struct as a described list (a descriptor followed
+by a list of the fields).
 
 ```rust, ignore
 /// 2.7.3 Attach
@@ -201,7 +221,7 @@ pub struct ApplicationProperties(pub OrderedMap<String, SimpleValue>);
 
 The following type(s) are provided in the `extensions` mod and require the `extensions` feature
 
-1. `TransparentVec` - a thin wrapper around `Vec` that is serialized/deserialized as a sequence of elements
-   `Vec` is treated as an AMQP `List` in the core spec
+1. `TransparentVec` - a thin wrapper around `Vec` that is serialized/deserialized as a sequence
+   of elements `Vec` is treated as an AMQP `List` in the core spec
 
 License: MIT/Apache-2.0
