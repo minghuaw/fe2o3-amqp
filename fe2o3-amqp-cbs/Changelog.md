@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.6
+
+- Added lifetime marker to `AsyncCbsTokenProvider`
+
 ## 0.0.5
 
 - Moved `name` outside `CbsToken`
