@@ -624,7 +624,7 @@ impl From<serde_json::Value> for Value {
             }
             serde_json::Value::String(s) => Value::String(s),
             serde_json::Value::Array(a) => {
-                let v: Vec<Value> = a.into_iter().map(|value| Value::from(value)).collect();
+                let v: Vec<Value> = a.into_iter().map(Value::from).collect();
                 Value::List(v)
             }
             serde_json::Value::Object(o) => {
