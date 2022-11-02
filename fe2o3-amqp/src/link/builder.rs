@@ -428,6 +428,18 @@ impl<T, NameState, SS, TS> Builder<role::SenderMarker, T, NameState, SS, TS> {
     }
 }
 
+impl<T, NameState, SS, TS> Builder<role::ReceiverMarker, T, NameState, SS, TS> {
+    /// Set the credit mode for the receiver.
+    /// 
+    /// If the credit mode is `Auto`, the receiver will automatically send flow frames when the
+    /// remaining credit if below 50% of the assigned credit. An initial flow frame will also be
+    /// sent if the mode if `Auto`.
+    pub fn credit_mode(mut self, credit_mode: CreditMode) -> Self {
+        self.credit_mode = credit_mode;
+        self
+    }
+}
+
 impl Builder<role::SenderMarker, Target, WithName, WithSource, WithTarget> {
     /// Attach the link as a sender
     ///
@@ -536,16 +548,6 @@ where
 }
 
 impl Builder<role::ReceiverMarker, Target, WithName, WithSource, WithTarget> {
-    /// Set the credit mode for the receiver.
-    /// 
-    /// If the credit mode is `Auto`, the receiver will automatically send flow frames when the
-    /// remaining credit if below 50% of the assigned credit. An initial flow frame will also be
-    /// sent if the mode if `Auto`.
-    pub fn credit_mode(mut self, credit_mode: CreditMode) -> Self {
-        self.credit_mode = credit_mode;
-        self
-    }
-
     /// Attach the link as a receiver
     ///
     /// # Example
