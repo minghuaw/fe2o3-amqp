@@ -40,7 +40,7 @@ impl CbsClient {
         name: impl Into<Cow<'a, str>>,
         token: CbsToken<'a>,
     ) -> Result<(), MgmtError> {
-        let entity_type = token.token_type.clone();
+        let entity_type = token.token_type;
         let req = PutTokenRequest::new(name, token.token_value, token.expires_at_utc);
         let _accepted = self
             .mgmt_client
