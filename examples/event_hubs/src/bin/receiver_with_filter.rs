@@ -7,6 +7,7 @@ use fe2o3_amqp::{
     sasl_profile::SaslProfile,
     types::{messaging::Source, primitives::Value},
     Connection, Receiver, Session,
+    link::receiver::CreditMode,
 };
 use fe2o3_amqp_ext::filters::SelectorFilter;
 
@@ -55,6 +56,7 @@ async fn main() {
                 )
                 .build(),
         )
+        .credit_mode(CreditMode::Auto(100)) // User could also manually control link credit
         .attach(&mut session)
         .await
         .unwrap();
