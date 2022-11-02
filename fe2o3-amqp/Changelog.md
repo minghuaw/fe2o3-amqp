@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.4
+
+1. Added `Builder::credit_mode()` method to `Receiver` builder.
+
 ## 0.7.3
 
 1. Reduced duplicated code for setting default port when not specified in the connection url
