@@ -45,7 +45,7 @@ pub trait DecodeIntoMessage: Sized {
 
 impl<T> DecodeIntoMessage for T
 where
-    for<'de> T: FromBody<'de>, // TODO: change to higher rank trait bound once GAT stablises
+    for<'de> T: FromBody<'de>,
 {
     type DecodeError = serde_amqp::Error;
 
