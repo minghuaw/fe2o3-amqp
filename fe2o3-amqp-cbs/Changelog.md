@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.8
+
+- Experimental use of GAT as opposed to `Pin<Box<dyn Future>>`
+
 ## 0.0.7
 
 - Changed trait signature
