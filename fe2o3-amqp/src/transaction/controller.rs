@@ -52,7 +52,10 @@ async fn send_on_control_link<T>(
 where
     T: SerializableBody,
 {
-    match sender.send_with_state::<T, link::SendError>(sendable, None).await? {
+    match sender
+        .send_with_state::<T, link::SendError>(sendable, None)
+        .await?
+    {
         Settlement::Settled(_) => Err(SendError::IllegalDeliveryState),
         Settlement::Unsettled {
             delivery_tag: _,

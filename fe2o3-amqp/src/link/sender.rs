@@ -324,7 +324,7 @@ impl Sender {
     }
 
     /// Like [`send()`](#method.send) but takes a reference to the message
-    /// 
+    ///
     /// This is useful when the message is large and you want to avoid cloning it because the
     /// message may be used again after the send operation.
     pub async fn send_ref<T: SerializableBody>(
@@ -362,19 +362,23 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
-        self.inner.send_with_state(sendable.into(), None).await
+        self.inner
+            .send_with_state(sendable.into(), None)
+            .await
             .map(DeliveryFut::from)
     }
 
     /// Like [`send_batchable()`](#method.send_batchable) but this only takes a reference.
-    /// 
+    ///
     /// This is useful when the message is large and you want to avoid cloning it because the
     /// message may be used again after the send operation.
     pub async fn send_batchable_ref<T: SerializableBody>(
         &mut self,
         sendable: &Sendable<T>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
-        self.inner.send_ref_with_state(sendable, None).await
+        self.inner
+            .send_ref_with_state(sendable, None)
+            .await
             .map(DeliveryFut::from)
     }
 
