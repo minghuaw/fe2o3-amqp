@@ -648,15 +648,13 @@ where
 
         // **the receiver is considered to hold the authoritative version of the target properties**,
         // Is this verification necessary?
-        match (&self.target, &target) {
-            (Some(local_target), Some(remote_target)) => {
-                local_target.verify_as_receiver(remote_target)?
-            }
-            // Only need to check the source
-            //
-            // If there is no pre-existing terminus, and the peer does not wish to create a new one,
-            // this is indicated by setting the local terminus (source or target as appropriate) to null.
-            _ => {}
+        // 
+        // Only need to check the source
+        //
+        // If there is no pre-existing terminus, and the peer does not wish to create a new one,
+        // this is indicated by setting the local terminus (source or target as appropriate) to null.
+        if let (Some(local_target), Some(remote_target)) = (&self.target, &target) {
+            local_target.verify_as_receiver(remote_target)?
         }
 
         self.max_message_size =
