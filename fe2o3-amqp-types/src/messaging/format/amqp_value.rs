@@ -5,7 +5,7 @@ use serde_amqp::{DeserializeComposite, SerializeComposite};
 
 use crate::messaging::{
     AsBodyRef, DeserializableBody, FromBody, FromEmptyBody, IntoBody, SerializableBody,
-    TransposeOption, __private::BodySection,
+    TransposeOption, __private::BodySection, 
 };
 
 /// 3.2.8 AMQP Value

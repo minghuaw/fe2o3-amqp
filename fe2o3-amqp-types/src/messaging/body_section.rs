@@ -29,7 +29,10 @@ pub(crate) mod __private {
     /// 4. [`Data`]
     /// 5. [`Batch<AmqpSequence>`]
     /// 6. [`Batch<Data>`]
+    /// 7. [`&T`] where `T` implements `BodySection`
     pub trait BodySection {}
+
+    impl<T> BodySection for &T where T: BodySection {}
 }
 
 /// Marker trait for a serializable body section.
@@ -42,7 +45,10 @@ pub(crate) mod __private {
 /// 4. [`Data`]
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
+/// 7. [`&T`] where `T` implements `BodySection`
 pub trait SerializableBody: Serialize + BodySection {}
+
+impl<T> SerializableBody for &T where T: SerializableBody {}
 
 /// This trait defines how to interprerte a message when there is an emtpy body.
 ///
