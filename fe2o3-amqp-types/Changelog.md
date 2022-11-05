@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.6.2
+
+1. Added impl of `BodySection` and `SerializableBody` for the following pointer types
+   1. `&mut T` where `T` implements `BodySection`
+   2. `Arc<T>` where `T` implements `BodySection`
+   3. `Rc<T>` where `T` implements `BodySection`
+   4. `Box<T>` where `T` implements `BodySection`
+
 ## 0.6.1
 
 1. Added impl of `BodySection` and `SerializableBody` to references `&T` where `T` implements

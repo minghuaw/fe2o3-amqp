@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap}, sync::Arc, rc::Rc,
 };
 
 use serde::{de, ser, Deserialize, Serialize};
@@ -19,6 +19,8 @@ use super::AmqpValue;
 use super::{AmqpSequence, Batch, Body, Data};
 
 pub(crate) mod __private {
+    use std::{sync::Arc, rc::Rc};
+
     /// Marker trait for message body.
     ///
     /// This is only implemented for
@@ -30,9 +32,21 @@ pub(crate) mod __private {
     /// 5. [`Batch<AmqpSequence>`]
     /// 6. [`Batch<Data>`]
     /// 7. [`&T`] where `T` implements `BodySection`
+    /// 8. [`&mut T`] where `T` implements `BodySection`
+    /// 9. [`Arc<T>`] where `T` implements `BodySection`
+    /// 10. [`Rc<T>`] where `T` implements `BodySection`
+    /// 11. [`Box<T>`] where `T` implements `BodySection`
     pub trait BodySection {}
 
     impl<T> BodySection for &T where T: BodySection {}
+
+    impl<T> BodySection for &mut T where T: BodySection {}
+
+    impl<T> BodySection for Box<T> where T: BodySection {}
+
+    impl<T> BodySection for Rc<T> where T: BodySection {}
+
+    impl<T> BodySection for Arc<T> where T: BodySection {}
 }
 
 /// Marker trait for a serializable body section.
@@ -45,10 +59,34 @@ pub(crate) mod __private {
 /// 4. [`Data`]
 /// 5. [`Batch<AmqpSequence>`]
 /// 6. [`Batch<Data>`]
-/// 7. [`&T`] where `T` implements `BodySection`
+/// 7. [`&T`] where `T` implements `SerializableBody`
+/// 8. [`&mut T`] where `T` implements `SerializableBody`
+/// 9. [`Arc<T>`] where `T` implements `SerializableBody`
+/// 10. [`Rc<T>`] where `T` implements `SerializableBody`
+/// 11. [`Box<T>`] where `T` implements `SerializableBody`
 pub trait SerializableBody: Serialize + BodySection {}
 
 impl<T> SerializableBody for &T where T: SerializableBody {}
+
+impl<T> SerializableBody for &mut T where T: SerializableBody {}
+
+impl<T> SerializableBody for Box<T>
+    where 
+        T: SerializableBody,
+        Box<T>: Serialize,
+{}
+
+impl<T> SerializableBody for Rc<T>
+    where 
+        T: SerializableBody,
+        Rc<T>: Serialize,
+{}
+
+impl<T> SerializableBody for Arc<T> 
+    where 
+        T: SerializableBody,
+        Arc<T>: Serialize,
+{}
 
 /// This trait defines how to interprerte a message when there is an emtpy body.
 ///
