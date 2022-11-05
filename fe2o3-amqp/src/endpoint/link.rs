@@ -82,6 +82,8 @@ pub(crate) trait LinkExt: Link {
 
     fn target(&self) -> &Option<Self::Target>;
 
+    fn max_message_size(&self) -> Option<u64>;
+
     async fn exchange_attach(
         &mut self,
         writer: &mpsc::Sender<LinkFrame>,

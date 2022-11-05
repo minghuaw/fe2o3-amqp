@@ -109,6 +109,12 @@ impl Sender {
         builder::Builder::<role::SenderMarker, Target, _, _, _>::new()
     }
 
+    /// Returns the `max_message_size` of the link. A value of zero indicates that the link has no
+    /// maximum message size, and thus a zero value is turned into a `None`
+    pub fn max_message_size(&self) -> Option<u64> {
+        self.inner.link.max_message_size()
+    }
+
     /// Get a reference to the link's source field
     pub fn source(&self) -> &Option<Source> {
         &self.inner.link.source
