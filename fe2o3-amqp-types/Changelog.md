@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.6.1
+
+1. Added impl of `BodySection` and `SerializableBody` to references `&T` where `T` implements
+   `BodySection`
+
 ## 0.6.0
 
 1. Added type alias `Batch<T> = TransparentVec<T>`

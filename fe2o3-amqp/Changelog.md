@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.6
+
+1. Derive `Clone` on `Sendable<T>`
+
 ## 0.7.5
 
 1. Exposed `max_message_size()` method on both `Sender` and `Receiver`.
