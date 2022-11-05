@@ -325,7 +325,9 @@ where
 
     fn transpose(src: Self::From) -> Option<T> {
         match src {
-            Body::Value(AmqpValue(body)) => body.map(|body| T::from_body(Body::Value(AmqpValue(body)))),
+            Body::Value(AmqpValue(body)) => {
+                body.map(|body| T::from_body(Body::Value(AmqpValue(body))))
+            }
             Body::Data(batch) => {
                 if batch.is_empty() {
                     // Note that a null value and a zero-length array (with a correct type for its
@@ -351,7 +353,7 @@ where
                         })
                         .collect();
 
-                        batch.map(|batch| T::from_body(Body::Sequence(batch)))
+                    batch.map(|batch| T::from_body(Body::Sequence(batch)))
                 }
             }
             Body::Empty => None,
