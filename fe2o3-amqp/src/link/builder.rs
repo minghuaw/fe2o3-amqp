@@ -430,7 +430,7 @@ impl<T, NameState, SS, TS> Builder<role::SenderMarker, T, NameState, SS, TS> {
 
 impl<T, NameState, SS, TS> Builder<role::ReceiverMarker, T, NameState, SS, TS> {
     /// Set the credit mode for the receiver.
-    /// 
+    ///
     /// If the credit mode is `Auto`, the receiver will automatically send flow frames when the
     /// remaining credit if below 50% of the assigned credit. An initial flow frame will also be
     /// sent if the mode if `Auto`.

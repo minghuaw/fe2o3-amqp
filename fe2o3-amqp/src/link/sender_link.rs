@@ -537,15 +537,13 @@ where
 
         // In this case, the sender is considered to hold the authoritative version of the
         // version of the source properties
-        match (&self.source, &remote_attach.source) {
-            (Some(local_source), Some(remote_source)) => {
-                local_source.verify_as_sender(remote_source)?;
-            }
-            // Only need to check the target
-            //
-            // If there is no pre-existing terminus, and the peer does not wish to create a new one,
-            // this is indicated by setting the local terminus (source or target as appropriate) to null.
-            _ => {}
+        //
+        // Only need to check the target
+        //
+        // If there is no pre-existing terminus, and the peer does not wish to create a new one,
+        // this is indicated by setting the local terminus (source or target as appropriate) to null.
+        if let (Some(local_source), Some(remote_source)) = (&self.source, &remote_attach.source) {
+            local_source.verify_as_sender(remote_source)?;
         }
 
         let target = remote_attach

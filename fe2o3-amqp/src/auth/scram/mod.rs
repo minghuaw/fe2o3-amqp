@@ -283,7 +283,7 @@ impl ScramVersion {
             Some(stored) => stored,
             None => return Ok(None),
         };
-        let base64_salt = base64::encode(&stored_password.salt);
+        let base64_salt = base64::encode(stored_password.salt);
         let iterations = stored_password.iterations.to_string();
 
         let client_server_nonce = format!("{}{}", client_nonce, base64_server_nonce);

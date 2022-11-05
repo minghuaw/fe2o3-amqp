@@ -323,6 +323,18 @@ impl Sender {
         fut.await
     }
 
+    /// Like [`send()`](#method.send) but takes a reference to the message
+    ///
+    /// This is useful when the message is large and you want to avoid cloning it because the
+    /// message may be used again after the send operation.
+    pub async fn send_ref<T: SerializableBody>(
+        &mut self,
+        sendable: &Sendable<T>,
+    ) -> Result<Outcome, SendError> {
+        let fut = self.send_batchable_ref(sendable).await?;
+        fut.await
+    }
+
     /// Send a message and wait for acknowledgement (disposition) with a timeout.
     ///
     /// This simply wraps [`send`](#method.send) inside a [`tokio::time::timeout`]
@@ -350,9 +362,24 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
-        let settlement = self.inner.send(sendable.into()).await?;
+        self.inner
+            .send_with_state(sendable.into(), None)
+            .await
+            .map(DeliveryFut::from)
+    }
 
-        Ok(DeliveryFut::from(settlement))
+    /// Like [`send_batchable()`](#method.send_batchable) but this only takes a reference.
+    ///
+    /// This is useful when the message is large and you want to avoid cloning it because the
+    /// message may be used again after the send operation.
+    pub async fn send_batchable_ref<T: SerializableBody>(
+        &mut self,
+        sendable: &Sendable<T>,
+    ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
+        self.inner
+            .send_ref_with_state(sendable, None)
+            .await
+            .map(DeliveryFut::from)
     }
 
     /// Returns when the remote peer detach/close the link
@@ -525,13 +552,6 @@ where
         + Send
         + Sync,
 {
-    pub(crate) async fn send<T>(&mut self, sendable: Sendable<T>) -> Result<Settlement, SendError>
-    where
-        T: SerializableBody,
-    {
-        self.send_with_state(sendable, None).await
-    }
-
     pub(crate) async fn send_with_state<T, E>(
         &mut self,
         sendable: Sendable<T>,
@@ -558,6 +578,35 @@ where
         let payload = payload.freeze();
 
         self.send_payload(payload, message_format, settled, state)
+            .await
+    }
+
+    pub(crate) async fn send_ref_with_state<T, E>(
+        &mut self,
+        sendable: &Sendable<T>,
+        state: Option<DeliveryState>,
+    ) -> Result<Settlement, E>
+    where
+        T: SerializableBody,
+        E: From<L::TransferError> + From<serde_amqp::Error>,
+    {
+        use bytes::BufMut;
+        use serde::Serialize;
+        use serde_amqp::ser::Serializer;
+
+        let Sendable {
+            message,
+            message_format,
+            settled,
+        } = sendable;
+
+        // serialize message
+        let mut payload = BytesMut::new();
+        let mut serializer = Serializer::from((&mut payload).writer());
+        Serializable(message).serialize(&mut serializer)?;
+        let payload = payload.freeze();
+
+        self.send_payload(payload, *message_format, *settled, state)
             .await
     }
 

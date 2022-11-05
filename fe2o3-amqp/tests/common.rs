@@ -1,10 +1,18 @@
-use testcontainers::{clients::{Cli}, core::WaitFor, images::{self, generic::GenericImage}, Container};
+use testcontainers::{
+    clients::Cli,
+    core::WaitFor,
+    images::{self, generic::GenericImage},
+    Container,
+};
 use tokio::sync::OnceCell;
 
 static DOCKER: OnceCell<Cli> = OnceCell::const_new();
 
-pub async fn setup_activemq_artemis(username: Option<&str>, password: Option<&str>) -> (Container<'static, GenericImage>, u16) {
-    let docker = DOCKER.get_or_init(|| async {Cli::default()}).await;
+pub async fn setup_activemq_artemis(
+    username: Option<&str>,
+    password: Option<&str>,
+) -> (Container<'static, GenericImage>, u16) {
+    let docker = DOCKER.get_or_init(|| async { Cli::default() }).await;
     let image = match (username, password) {
         (Some(username), Some(password)) => {
             images::generic::GenericImage::new("docker.io/vromero/activemq-artemis", "latest")
@@ -25,8 +33,11 @@ pub async fn setup_activemq_artemis(username: Option<&str>, password: Option<&st
 }
 
 // TODO: disable default user and add a new user
-pub async fn setup_rabbitmq_amqp10(username: Option<&str>, password: Option<&str>) -> (Container<'static, GenericImage>, u16) {
-    let docker = DOCKER.get_or_init(|| async {Cli::default()}).await;
+pub async fn setup_rabbitmq_amqp10(
+    username: Option<&str>,
+    password: Option<&str>,
+) -> (Container<'static, GenericImage>, u16) {
+    let docker = DOCKER.get_or_init(|| async { Cli::default() }).await;
     let image = match (username, password) {
         (Some(username), Some(password)) => {
             images::generic::GenericImage::new("docker.io/minghuaw/rabbitmq-amqp1.0", "latest")

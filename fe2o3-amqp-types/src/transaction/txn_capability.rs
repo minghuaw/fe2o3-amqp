@@ -14,7 +14,7 @@ use serde_amqp::primitives::Symbol;
 ///     <choice name="multi-txns-per-ssn" value="amqp:multi-txns-per-ssn"/>
 ///     <choice name="multi-ssns-per-txn" value="amqp:multi-ssns-per-txn"/>
 /// </type>
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum TxnCapability {
     /// amqp:local-transactions
     /// Support local transactions.
