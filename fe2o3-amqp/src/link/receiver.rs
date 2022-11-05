@@ -121,6 +121,12 @@ impl Receiver {
         builder::Builder::<role::ReceiverMarker, Target, _, _, _>::new()
     }
 
+    /// Returns the `max_message_size` of the link. A value of zero indicates that the link has no
+    /// maximum message size, and thus a zero value is turned into a `None`
+    pub fn max_message_size(&self) -> Option<u64> {
+        self.inner.link.max_message_size()
+    }
+
     /// Set the credit mode
     ///
     /// This will not send a flow to the remote peer even if credits in `CreditMode::Auto` is changed.

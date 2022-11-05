@@ -748,6 +748,13 @@ where
         &self.target
     }
 
+    fn max_message_size(&self) -> Option<u64> {
+        match self.max_message_size {
+            0 => None,
+            _ => Some(self.max_message_size),
+        }
+    }
+
     /// # Cancel safety
     ///
     /// This should be cancel safe if oneshot channel is cancel safe

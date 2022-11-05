@@ -1,6 +1,6 @@
 //! Experimental implementation of AMQP 1.0 CBS extension protocol
 
-use std::{future::Future, pin::Pin};
+use std::{future::Future};
 
 use token::CbsToken;
 
@@ -23,11 +23,12 @@ pub trait CbsTokenProvider {
 /// TODO: This will be updated when GAT is stablized
 pub trait AsyncCbsTokenProvider {
     type Error;
+    type Fut<'a>: Future<Output = Result<CbsToken<'a>, Self::Error>> where Self: 'a;
 
     fn get_token_async(
         &mut self,
         container_id: impl AsRef<str>,
         resource_id: impl AsRef<str>,
         claims: impl IntoIterator<Item = impl AsRef<str>>,
-    ) -> Pin<Box<dyn Future<Output = Result<CbsToken, Self::Error>> + '_>>;
+    ) -> Self::Fut<'_>;
 }

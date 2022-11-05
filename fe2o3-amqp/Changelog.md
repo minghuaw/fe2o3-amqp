@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.5
+
+1. Exposed `max_message_size()` method on both `Sender` and `Receiver`.
+
 ## 0.7.4
 
 1. Added `Builder::credit_mode()` method to `Receiver` builder.

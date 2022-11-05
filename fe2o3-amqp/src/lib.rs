@@ -6,6 +6,7 @@
 //!
 //! [![crate_version](https://img.shields.io/crates/v/fe2o3-amqp.svg?style=flat)](https://crates.io/crates/fe2o3-amqp) [![docs_version](https://img.shields.io/badge/docs-latest-blue.svg?style=flat)](https://docs.rs/fe2o3-amqp/latest/fe2o3_amqp/)
 //!
+//! - [Quick Start](#quick-start)
 //! - [Documentation](https://docs.rs/fe2o3-amqp)
 //! - [Changelog](https://github.com/minghuaw/fe2o3-amqp/blob/main/fe2o3-amqp/Changelog.md)
 //! - [Examples](https://github.com/minghuaw/fe2o3-amqp/tree/main/examples)
