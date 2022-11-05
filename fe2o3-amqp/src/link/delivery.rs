@@ -157,7 +157,7 @@ impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
 ///     .build();
 /// sender.send(sendable).await.unwrap();
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sendable<T> {
     /// The message to send
     pub message: Message<T>,
