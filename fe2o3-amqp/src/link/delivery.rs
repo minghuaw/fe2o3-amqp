@@ -89,6 +89,7 @@ pub struct Delivery<T> {
     pub(crate) delivery_id: DeliveryNumber,
     pub(crate) delivery_tag: DeliveryTag,
 
+    pub(crate) message_format: Option<MessageFormat>,
     pub(crate) rcv_settle_mode: Option<ReceiverSettleMode>,
 
     pub(crate) message: Message<T>,
@@ -113,6 +114,11 @@ impl<T> Delivery<T> {
     /// Get the delivery tag
     pub fn delivery_tag(&self) -> &DeliveryTag {
         &self.delivery_tag
+    }
+
+    /// Get the message format
+    pub fn message_format(&self) -> &Option<MessageFormat> {
+        &self.message_format
     }
 
     /// Consume the delivery into the message

@@ -2,7 +2,9 @@ use dotenv::dotenv;
 use fe2o3_amqp::Sendable;
 use fe2o3_amqp::types::messaging::Batch;
 use fe2o3_amqp::types::messaging::Message;
+use fe2o3_amqp::types::messaging::message::__private::Serializable;
 use fe2o3_amqp::types::primitives::Binary;
+use serde_amqp::to_vec;
 use std::env;
 
 use fe2o3_amqp::sasl_profile::SaslProfile;
@@ -38,9 +40,13 @@ async fn main() {
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
     let data = Binary::from("hello world");
+    let message = Message::from(data);
+    let item1 = Binary::from(to_vec(&Serializable(message)).unwrap());
     let data2 = Binary::from("hello world 2");
+    let message2 = Message::from(data2);
+    let item2 = Binary::from(to_vec(&Serializable(message2)).unwrap());
     let message = Message::builder()
-        .data_batch(Batch::new(vec![data, data2]))
+        .data_batch(Batch::new(vec![item1, item2]))
         .build();
 
     // let outcome = sender.send(message).await.unwrap();
