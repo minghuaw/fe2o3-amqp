@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.7.8
+
+1. Fixed [#136](https://github.com/minghuaw/fe2o3-amqp/issues/136) where `send_batchable` does not
+   actually set the `batchable` flag.
+
 ## 0.7.7
 
 1. Added `Sender::send_ref()` and `Sender::send_batchable_ref()` methods to allow sending without
