@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.9
+
+1. Added `message_format` and getter method `message_format()` to `Delivery` struct.
+
 ## 0.7.8
 
 1. Fixed [#136](https://github.com/minghuaw/fe2o3-amqp/issues/136) where `send_batchable` does not
