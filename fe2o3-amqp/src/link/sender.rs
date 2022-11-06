@@ -319,7 +319,8 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, SendError> {
-        let fut = self.inner
+        let fut = self
+            .inner
             .send_with_state::<T, SendError>(sendable.into(), None, false)
             .await
             .map(DeliveryFut::from)?;
@@ -334,7 +335,8 @@ impl Sender {
         &mut self,
         sendable: &Sendable<T>,
     ) -> Result<Outcome, SendError> {
-        let fut = self.inner
+        let fut = self
+            .inner
             .send_ref_with_state::<T, SendError>(sendable, None, false)
             .await
             .map(DeliveryFut::from)?;
@@ -562,7 +564,7 @@ where
         &mut self,
         sendable: Sendable<T>,
         state: Option<DeliveryState>,
-        batchable: bool
+        batchable: bool,
     ) -> Result<Settlement, E>
     where
         T: SerializableBody,
@@ -592,7 +594,7 @@ where
         &mut self,
         sendable: &Sendable<T>,
         state: Option<DeliveryState>,
-        batchable: bool
+        batchable: bool,
     ) -> Result<Settlement, E>
     where
         T: SerializableBody,
