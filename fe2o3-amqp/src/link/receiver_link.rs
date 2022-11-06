@@ -150,6 +150,7 @@ where
         let delivery_tag = transfer
             .delivery_tag
             .ok_or(Self::TransferError::DeliveryTagIsNone)?;
+        let message_format = transfer.message_format;
 
         let (message, mode) = if settled_by_sender {
             // If the message is pre-settled, there is no need to
@@ -211,6 +212,7 @@ where
             link_output_handle,
             delivery_id,
             delivery_tag,
+            message_format,
             rcv_settle_mode: mode,
             message,
         };
