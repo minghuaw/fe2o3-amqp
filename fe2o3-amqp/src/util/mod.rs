@@ -216,6 +216,7 @@ impl AsDeliveryState for Option<DeliveryState> {
 }
 
 /// A private zero-sized type that makes struct not constructable by users
+#[derive(Debug, Clone)]
 pub(crate) struct Sealed {}
 
 #[cfg(test)]
