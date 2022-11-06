@@ -178,7 +178,7 @@ impl OwnedTransaction {
     }
 
     /// Post a transactional work without waiting for the acknowledgement.
-    async fn post_batchable<T>(
+    pub async fn post_batchable<T>(
         &mut self,
         sender: &mut Sender,
         sendable: impl Into<Sendable<T>>,
@@ -200,7 +200,7 @@ impl OwnedTransaction {
         let state = DeliveryState::TransactionalState(state);
         let settlement = sender
             .inner
-            .send_with_state::<T, PostError>(sendable, Some(state))
+            .send_with_state::<T, PostError>(sendable, Some(state), true)
             .await?;
 
         Ok(DeliveryFut::from(settlement))
@@ -221,7 +221,18 @@ impl OwnedTransaction {
 
         // Note that if delivery is split across several transfer frames then all frames MUST be
         // explicitly associated with the same transaction.
-        let fut = self.post_batchable(sender, sendable).await?;
+        let sendable = sendable.into();
+        let state = TransactionalState {
+            txn_id: self.declared.txn_id.clone(),
+            outcome: None,
+        };
+        let state = DeliveryState::TransactionalState(state);
+        let settlement = sender
+            .inner
+            .send_with_state::<T, PostError>(sendable, Some(state), false)
+            .await?;
+
+        let fut = DeliveryFut::from(settlement);
 
         // On receiving a non-settled delivery associated with a live transaction, the transactional
         // resource MUST inform the controller of the presumptive terminal outcome before it can

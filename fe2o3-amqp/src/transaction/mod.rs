@@ -369,7 +369,7 @@ impl<'t> Transaction<'t> {
         let state = DeliveryState::TransactionalState(state);
         let settlement = sender
             .inner
-            .send_with_state::<T, PostError>(sendable, Some(state))
+            .send_with_state::<T, PostError>(sendable, Some(state), false)
             .await?;
 
         Ok(DeliveryFut::from(settlement))

@@ -319,7 +319,10 @@ impl Sender {
         &mut self,
         sendable: impl Into<Sendable<T>>,
     ) -> Result<Outcome, SendError> {
-        let fut = self.send_batchable(sendable).await?;
+        let fut = self.inner
+            .send_with_state::<T, SendError>(sendable.into(), None, false)
+            .await
+            .map(DeliveryFut::from)?;
         fut.await
     }
 
@@ -331,7 +334,10 @@ impl Sender {
         &mut self,
         sendable: &Sendable<T>,
     ) -> Result<Outcome, SendError> {
-        let fut = self.send_batchable_ref(sendable).await?;
+        let fut = self.inner
+            .send_ref_with_state::<T, SendError>(sendable, None, false)
+            .await
+            .map(DeliveryFut::from)?;
         fut.await
     }
 
@@ -363,7 +369,7 @@ impl Sender {
         sendable: impl Into<Sendable<T>>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
         self.inner
-            .send_with_state(sendable.into(), None)
+            .send_with_state(sendable.into(), None, true)
             .await
             .map(DeliveryFut::from)
     }
@@ -377,7 +383,7 @@ impl Sender {
         sendable: &Sendable<T>,
     ) -> Result<DeliveryFut<Result<Outcome, SendError>>, SendError> {
         self.inner
-            .send_ref_with_state(sendable, None)
+            .send_ref_with_state(sendable, None, true)
             .await
             .map(DeliveryFut::from)
     }
@@ -556,6 +562,7 @@ where
         &mut self,
         sendable: Sendable<T>,
         state: Option<DeliveryState>,
+        batchable: bool
     ) -> Result<Settlement, E>
     where
         T: SerializableBody,
@@ -577,7 +584,7 @@ where
         Serializable(message).serialize(&mut serializer)?;
         let payload = payload.freeze();
 
-        self.send_payload(payload, message_format, settled, state)
+        self.send_payload(payload, message_format, settled, state, batchable)
             .await
     }
 
@@ -585,6 +592,7 @@ where
         &mut self,
         sendable: &Sendable<T>,
         state: Option<DeliveryState>,
+        batchable: bool
     ) -> Result<Settlement, E>
     where
         T: SerializableBody,
@@ -606,7 +614,7 @@ where
         Serializable(message).serialize(&mut serializer)?;
         let payload = payload.freeze();
 
-        self.send_payload(payload, *message_format, *settled, state)
+        self.send_payload(payload, *message_format, *settled, state, batchable)
             .await
     }
 
@@ -616,6 +624,7 @@ where
         message_format: MessageFormat,
         settled: Option<bool>,
         state: Option<DeliveryState>,
+        batchable: bool,
     ) -> Result<Settlement, E>
     where
         E: From<L::TransferError> + From<serde_amqp::Error>,
@@ -631,7 +640,7 @@ where
                 message_format,
                 settled,
                 state,
-                false,
+                batchable,
             )
             .await?;
         Ok(settlement)
@@ -858,7 +867,7 @@ impl DetachedSender {
                     for payload in self.resend_buf.drain(..) {
                         let settlement = self
                             .inner
-                            .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None)
+                            .send_payload::<SendError>(payload, MESSAGE_FORMAT, None, None, false)
                             .await?;
                         let fut = DeliveryFut::<SendResult>::from(settlement);
 
