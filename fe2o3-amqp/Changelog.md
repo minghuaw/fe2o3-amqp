@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.10
+
+1. Derive `Clone` on `DeliveryInfo`
+
 ## 0.7.9
 
 1. Added `message_format` and getter method `message_format()` to `Delivery` struct.

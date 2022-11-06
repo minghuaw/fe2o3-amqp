@@ -19,6 +19,7 @@ use crate::{util::AsDeliveryState, Payload};
 use super::{LinkStateError, SendError};
 
 /// Delivery information that is needed for disposing a message
+#[derive(Clone)]
 pub struct DeliveryInfo {
     /// Delivery ID carried by the transfer frame
     pub(crate) delivery_id: DeliveryNumber,
