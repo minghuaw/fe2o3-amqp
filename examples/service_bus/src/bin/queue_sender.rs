@@ -1,10 +1,6 @@
 use dotenv::dotenv;
-use fe2o3_amqp::Sendable;
-use fe2o3_amqp::types::messaging::Batch;
 use fe2o3_amqp::types::messaging::Message;
-use fe2o3_amqp::types::messaging::message::__private::Serializable;
 use fe2o3_amqp::types::primitives::Binary;
-use serde_amqp::to_vec;
 use std::env;
 
 use fe2o3_amqp::sasl_profile::SaslProfile;
@@ -39,28 +35,13 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let data = Binary::from("hello world");
-    let message = Message::from(data);
-    let item1 = Binary::from(to_vec(&Serializable(message)).unwrap());
-    let data2 = Binary::from("hello world 2");
-    let message2 = Message::from(data2);
-    let item2 = Binary::from(to_vec(&Serializable(message2)).unwrap());
-    let message = Message::builder()
-        .data_batch(Batch::new(vec![item1, item2]))
-        .build();
+    let data = Binary::from("hello AMQP from rust");
+    let message = Message::builder().data(data).build();
 
-    // let outcome = sender.send(message).await.unwrap();
-    
-    let sendable = Sendable::builder()
-        .message(message)
-        .message_format(2147563264)
-        .build();
-    let fut = sender.send_batchable_ref(&sendable).await.unwrap();
-    let outcome = fut.await.unwrap();
-    
+    let outcome = sender.send(message).await.unwrap();
     outcome.accepted_or_else(|outcome| outcome).unwrap();
-
     sender.close().await.unwrap();
+
     session.end().await.unwrap();
     connection.close().await.unwrap();
 }
