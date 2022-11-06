@@ -53,7 +53,7 @@ where
     T: SerializableBody,
 {
     match sender
-        .send_with_state::<T, link::SendError>(sendable, None)
+        .send_with_state::<T, link::SendError>(sendable, None, false)
         .await?
     {
         Settlement::Settled(_) => Err(SendError::IllegalDeliveryState),

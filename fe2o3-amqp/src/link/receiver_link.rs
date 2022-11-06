@@ -648,7 +648,7 @@ where
 
         // **the receiver is considered to hold the authoritative version of the target properties**,
         // Is this verification necessary?
-        // 
+        //
         // Only need to check the source
         //
         // If there is no pre-existing terminus, and the peer does not wish to create a new one,

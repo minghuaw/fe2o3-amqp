@@ -93,6 +93,7 @@ impl FrameEncoder {
         transfer.serialize(&mut buf_serializer)?;
         let remaining_bytes = buf.len() + payload.len();
         let more = remaining_bytes > self.max_frame_body_size;
+
         if more {
             let orig_more = transfer.more; // If the transfer is pre-split at link
             transfer.more = true;

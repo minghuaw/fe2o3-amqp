@@ -198,4 +198,23 @@ mod tests {
         let serialized = to_vec(&transfer).unwrap();
         println!("{0:x?}", serialized);
     }
+
+    #[test]
+    fn test_serialize_transfer_with_custom_message_format() {
+        let transfer = Transfer {
+            handle: Handle(0),
+            delivery_id: Some(0),
+            delivery_tag: Some(ByteBuf::from([0, 0, 0, 0])),
+            message_format: Some(2147563264),
+            settled: Some(false),
+            more: false,
+            rcv_settle_mode: None,
+            state: None,
+            resume: false,
+            aborted: false,
+            batchable: true,
+        };
+        let serialized = to_vec(&transfer).unwrap();
+        println!("{0:x?}", serialized);
+    }
 }
