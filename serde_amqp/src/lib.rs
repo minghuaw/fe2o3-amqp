@@ -236,6 +236,7 @@ pub mod primitives;
 pub mod read;
 pub mod ser;
 pub mod value;
+pub mod size_ser;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "extensions")))]
 #[cfg(feature = "extensions")]

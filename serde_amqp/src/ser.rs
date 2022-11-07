@@ -1003,7 +1003,7 @@ fn write_list<'a, W: Write + 'a>(
             writer.write_all(&len_num)?;
         }
         // FIXME: whether `len` should be below u32::MAX - 4
-        256..=U32_MAX_MINUS_4 => {
+        U8_MAX..=U32_MAX_MINUS_4 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::List32 as u8];
                 writer.write_all(&code)?;
@@ -1128,25 +1128,6 @@ fn write_map<'a, W: Write + 'a>(
     }
     writer.write_all(buf)?;
     Ok(())
-}
-
-// Serialize into a List with
-impl<'a, W: Write + 'a> ser::SerializeTupleStruct for TupleSerializer<'a, W> {
-    type Ok = ();
-    type Error = Error;
-
-    #[inline]
-    fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-    where
-        T: Serialize,
-    {
-        <Self as ser::SerializeTuple>::serialize_element(self, value)
-    }
-
-    #[inline]
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        <Self as ser::SerializeTuple>::end(self)
-    }
 }
 
 /// Serializer for tuple struct types
