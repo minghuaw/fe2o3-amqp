@@ -14,6 +14,7 @@
 //! Serialization:
 //!
 //! - [`to_vec`]
+//! - [`serialized_size`]
 //!
 //! Deserialization:
 //!
@@ -236,6 +237,7 @@ pub mod primitives;
 pub mod read;
 pub mod ser;
 pub mod value;
+pub mod size_ser;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "extensions")))]
 #[cfg(feature = "extensions")]
@@ -259,6 +261,7 @@ pub use de::{from_reader, from_slice};
 pub use error::Error;
 pub use ser::to_vec;
 pub use value::{de::from_value, ser::to_value, Value};
+pub use size_ser::serialized_size;
 
 #[cfg(feature = "derive")]
 pub mod macros;
