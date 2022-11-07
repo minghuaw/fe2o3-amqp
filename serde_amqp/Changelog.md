@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.5.2
+
+1. Fixed a bug where variable length types like str or vbin doesn't handle boundary condition at u8::MAX
+2. Added `serialized_size` method that returns the size of the serialized data without actually serializing it to a buffer
+
 ## 0.5.1
 
 1. Added feature gated conversion impls for `Timestamp` from/to
