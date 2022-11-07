@@ -1650,6 +1650,7 @@ mod test {
         use serde_bytes::ByteBuf;
         const SMALL_BYTES_VALUE: &[u8] = &[133u8; 200];
         const LARGE_BYTES_VALUE: &[u8] = &[199u8; 1000];
+        const U8_MAX_BYTES_VALUE: &[u8] = &[255u8; 255];
 
         // vbin8
         let val = ByteBuf::from(SMALL_BYTES_VALUE);
@@ -1660,6 +1661,14 @@ mod test {
 
         // vbin32
         let val = ByteBuf::from(LARGE_BYTES_VALUE);
+        let len = val.len() as u32;
+        let mut expected = vec![EncodingCodes::VBin32 as u8];
+        expected.append(&mut len.to_be_bytes().to_vec());
+        expected.append(&mut val.to_vec());
+        assert_eq_on_serialized_vs_expected(val, &expected);
+
+        // u8 max length
+        let val = ByteBuf::from(U8_MAX_BYTES_VALUE);
         let len = val.len() as u32;
         let mut expected = vec![EncodingCodes::VBin32 as u8];
         expected.append(&mut len.to_be_bytes().to_vec());
