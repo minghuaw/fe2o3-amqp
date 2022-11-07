@@ -2,11 +2,19 @@
 
 use serde::ser::{self, SerializeMap};
 
-use crate::{Error, util::{IsArrayElement, NewType, StructEncoding, FieldRole}, ser::{U8_MAX_MINUS_1, U32_MAX_MINUS_4, U8_MAX_MINUS_2, U8_MAX, U32_MAX_MINUS_8}, __constants::{SYMBOL, SYMBOL_REF, ARRAY, DECIMAL32, DECIMAL64, DECIMAL128, TIMESTAMP, UUID, TRANSPARENT_VEC, DESCRIPTOR, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP}};
+use crate::{
+    Error,
+    __constants::{
+        ARRAY, DECIMAL128, DECIMAL32, DECIMAL64, DESCRIBED_BASIC, DESCRIBED_LIST, DESCRIBED_MAP,
+        DESCRIPTOR, SYMBOL, SYMBOL_REF, TIMESTAMP, TRANSPARENT_VEC, UUID,
+    },
+    ser::{U32_MAX_MINUS_4, U8_MAX, U8_MAX_MINUS_1, U8_MAX_PLUS_1},
+    util::{FieldRole, IsArrayElement, NewType, StructEncoding},
+};
 
 /// Serializer that calculates the size of serialized data without actually allocating `Vec<u8>`
 #[derive(Debug)]
-pub struct SizeSerializer { 
+pub struct SizeSerializer {
     /// How a struct should be encoded
     pub(crate) struct_encoding: Vec<StructEncoding>,
     pub(crate) new_type: NewType,
@@ -81,16 +89,14 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
 
     fn serialize_i8(self, _v: i8) -> Result<Self::Ok, Self::Error> {
         match self.is_array_element {
-            IsArrayElement::False | 
-            IsArrayElement::FirstElement => Ok(2),
+            IsArrayElement::False | IsArrayElement::FirstElement => Ok(2),
             IsArrayElement::OtherElement => Ok(1),
         }
     }
 
     fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> {
         match self.is_array_element {
-            IsArrayElement::False | 
-            IsArrayElement::FirstElement => Ok(3),
+            IsArrayElement::False | IsArrayElement::FirstElement => Ok(3),
             IsArrayElement::OtherElement => Ok(2),
         }
     }
@@ -121,7 +127,7 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::FirstElement => Ok(9),
                 IsArrayElement::OtherElement => Ok(8),
             },
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -193,30 +199,30 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         match self.is_array_element {
             IsArrayElement::False => match self.new_type {
                 NewType::Symbol | NewType::SymbolRef => match v.len() {
-                    0..=U8_MAX_MINUS_1 => {
+                    0..=U8_MAX => {
                         self.new_type = NewType::None;
                         Ok(2 + v.len())
-                    },
-                    256..=U32_MAX_MINUS_4 => {
+                    }
+                    U8_MAX_PLUS_1..=U32_MAX_MINUS_4 => {
                         self.new_type = NewType::None;
                         Ok(5 + v.len())
-                    },
-                    _ => Err(Error::too_long())
+                    }
+                    _ => Err(Error::too_long()),
                 },
                 NewType::None => match v.len() {
-                    0..=U8_MAX_MINUS_1 => Ok(2 + v.len()),
-                    256..=U32_MAX_MINUS_4 => Ok(5 + v.len()),
-                    _ => Err(Error::too_long())
+                    0..=U8_MAX => Ok(2 + v.len()),
+                    U8_MAX_PLUS_1..=U32_MAX_MINUS_4 => Ok(5 + v.len()),
+                    _ => Err(Error::too_long()),
                 },
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             IsArrayElement::FirstElement => match self.new_type {
                 NewType::Symbol | NewType::SymbolRef | NewType::None => Ok(5 + v.len()),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             IsArrayElement::OtherElement => match self.new_type {
                 NewType::Symbol | NewType::SymbolRef | NewType::None => Ok(4 + v.len()),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
         }
     }
@@ -226,9 +232,9 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         match self.new_type {
             NewType::None => match self.is_array_element {
                 IsArrayElement::False => match l {
-                    0..=U8_MAX_MINUS_1 => Ok(2 + l),
-                    256..=U32_MAX_MINUS_4 => Ok(5 + l),
-                    _ => Err(Error::too_long())
+                    0..=U8_MAX => Ok(2 + l),
+                    U8_MAX_PLUS_1..=U32_MAX_MINUS_4 => Ok(5 + l),
+                    _ => Err(Error::too_long()),
                 },
                 IsArrayElement::FirstElement => Ok(5 + l),
                 IsArrayElement::OtherElement => Ok(4 + l),
@@ -253,11 +259,11 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
                 IsArrayElement::FirstElement => Ok(1 + l),
                 IsArrayElement::OtherElement => Ok(l),
             },
-            NewType::Timestamp |
-            NewType::Array |
-            NewType::Symbol |
-            NewType::SymbolRef |
-            NewType::TransparentVec => unreachable!(),
+            NewType::Timestamp
+            | NewType::Array
+            | NewType::Symbol
+            | NewType::SymbolRef
+            | NewType::TransparentVec => unreachable!(),
         }
     }
 
@@ -267,7 +273,8 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
 
     fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize {
+        T: serde::Serialize,
+    {
         value.serialize(self)
     }
 
@@ -294,7 +301,8 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize {
+        T: serde::Serialize,
+    {
         if name == SYMBOL {
             self.new_type = NewType::Symbol;
         } else if name == SYMBOL_REF {
@@ -325,9 +333,10 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
-        T: serde::Serialize {
+        T: serde::Serialize,
+    {
         if name == DESCRIPTOR {
-            value.serialize(self).map(|len| len+1)
+            value.serialize(self).map(|len| len + 1)
         } else {
             let mut state = self.serialize_map(Some(1))?;
             state.serialize_entry(&variant_index, value)?;
@@ -408,10 +417,9 @@ impl<'a> ser::Serializer for &'a mut SizeSerializer {
     }
 }
 
-
 /// SeqSerializer that calculates the size of serialized data without actually allocating `Vec<u8>`
 #[derive(Debug)]
-pub struct SeqSerializer<'a> { 
+pub struct SeqSerializer<'a> {
     cumulated_size: usize,
     idx: usize,
     se: &'a mut SizeSerializer,
@@ -438,7 +446,7 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
         match self.se.new_type {
             NewType::None => {
                 self.cumulated_size += value.serialize(&mut *self.se)?;
-            },
+            }
             NewType::Array => {
                 let mut serializer = SizeSerializer::new();
                 match self.idx {
@@ -446,18 +454,18 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
                     _ => serializer.is_array_element = IsArrayElement::OtherElement,
                 }
                 self.cumulated_size += value.serialize(&mut serializer)?;
-            },
+            }
             NewType::TransparentVec => {
                 let mut serializer = SizeSerializer::new();
                 self.cumulated_size += value.serialize(&mut serializer)?;
-            },
-            NewType::Dec32 |
-            NewType::Dec64 |
-            NewType::Dec128 |
-            NewType::Symbol |
-            NewType::SymbolRef |
-            NewType::Timestamp |
-            NewType::Uuid => unreachable!(),
+            }
+            NewType::Dec32
+            | NewType::Dec64
+            | NewType::Dec128
+            | NewType::Symbol
+            | NewType::SymbolRef
+            | NewType::Timestamp
+            | NewType::Uuid => unreachable!(),
         }
 
         self.idx += 1;
@@ -466,16 +474,21 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
 
     fn end(self) -> Result<usize, Error> {
         match self.se.new_type {
-            NewType::None => list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long()),
-            NewType::Array => array_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long()),
-            NewType::TransparentVec => transparent_vec_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long()),
-            NewType::Dec32 |
-            NewType::Dec64 |
-            NewType::Dec128 |
-            NewType::Symbol |
-            NewType::SymbolRef |
-            NewType::Timestamp |
-            NewType::Uuid => unreachable!(),
+            NewType::None => list_size(self.cumulated_size, &self.se.is_array_element)
+                .map_err(|_| Error::too_long()),
+            NewType::Array => array_size(self.cumulated_size, &self.se.is_array_element)
+                .map_err(|_| Error::too_long()),
+            NewType::TransparentVec => {
+                transparent_vec_size(self.cumulated_size, &self.se.is_array_element)
+                    .map_err(|_| Error::too_long())
+            }
+            NewType::Dec32
+            | NewType::Dec64
+            | NewType::Dec128
+            | NewType::Symbol
+            | NewType::SymbolRef
+            | NewType::Timestamp
+            | NewType::Uuid => unreachable!(),
         }
     }
 }
@@ -499,12 +512,12 @@ fn list_size(len: usize, is_array_element: &IsArrayElement) -> Result<usize, usi
 
 fn array_size(len: usize, is_array_element: &IsArrayElement) -> Result<usize, usize> {
     let out = match len {
-        0..=U8_MAX_MINUS_2 => match is_array_element {
+        0..=U8_MAX_MINUS_1 => match is_array_element {
             IsArrayElement::False => 1 + 2 + len,
             IsArrayElement::FirstElement => 1 + 2 + len,
             IsArrayElement::OtherElement => 2 + len,
         },
-        U8_MAX_MINUS_1..=U32_MAX_MINUS_4 => match is_array_element {
+        U8_MAX..=U32_MAX_MINUS_4 => match is_array_element {
             IsArrayElement::False => 1 + 4 + 4 + len,
             IsArrayElement::FirstElement => 1 + 4 + 4 + len,
             IsArrayElement::OtherElement => 4 + 4 + len,
@@ -520,7 +533,7 @@ fn transparent_vec_size(len: usize, _is_array_element: &IsArrayElement) -> Resul
 
 /// SeqSerializer that calculates the size of serialized data without actually allocating `Vec<u8>`
 #[derive(Debug)]
-pub struct TupleSerializer<'a> { 
+pub struct TupleSerializer<'a> {
     cumulated_size: usize,
     se: &'a mut SizeSerializer,
 }
@@ -573,13 +586,14 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     type Error = Error;
 
     fn serialize_entry<K: ?Sized, V: ?Sized>(
-            &mut self,
-            key: &K,
-            value: &V,
-        ) -> Result<(), Self::Error>
-        where
-            K: serde::Serialize,
-            V: serde::Serialize, {
+        &mut self,
+        key: &K,
+        value: &V,
+    ) -> Result<(), Self::Error>
+    where
+        K: serde::Serialize,
+        V: serde::Serialize,
+    {
         let mut serializer = SizeSerializer::new();
         self.cumulated_size += key.serialize(&mut serializer)?;
         let mut serializer = SizeSerializer::new();
@@ -612,12 +626,12 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
 
 fn map_size(len: usize, is_array_element: &IsArrayElement) -> Result<usize, usize> {
     match len {
-        0..=U8_MAX_MINUS_2 => match is_array_element {
+        0..=U8_MAX_MINUS_1 => match is_array_element {
             IsArrayElement::False => Ok(1 + 2 + len),
             IsArrayElement::FirstElement => Ok(1 + 2 + len),
             IsArrayElement::OtherElement => Ok(2 + len),
         },
-        U8_MAX_MINUS_1..=U32_MAX_MINUS_8 => match is_array_element {
+        U8_MAX..=U32_MAX_MINUS_4 => match is_array_element {
             IsArrayElement::False => Ok(1 + 4 + 4 + len),
             IsArrayElement::FirstElement => Ok(1 + 4 + 4 + len),
             IsArrayElement::OtherElement => Ok(4 + 4 + len),
@@ -628,7 +642,7 @@ fn map_size(len: usize, is_array_element: &IsArrayElement) -> Result<usize, usiz
 
 /// SeqSerializer that calculates the size of serialized data without actually allocating `Vec<u8>`
 #[derive(Debug)]
-pub struct TupleStructSerializer<'a> { 
+pub struct TupleStructSerializer<'a> {
     field_role: FieldRole,
     cumulated_size: usize,
     se: &'a mut SizeSerializer,
@@ -666,41 +680,43 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
                 let mut serializer = SizeSerializer::new();
                 self.cumulated_size += value.serialize(&mut serializer)?;
                 Ok(())
-            },
+            }
             FieldRole::Fields => match self.se.struct_encoding() {
                 StructEncoding::None => {
                     let mut serializer = SizeSerializer::new();
                     serializer.is_array_element = self.se.is_array_element.clone();
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
-                },
+                }
                 StructEncoding::DescribedList => {
                     let mut serializer = SizeSerializer::new();
                     serializer.is_array_element = self.se.is_array_element.clone();
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
-                },
+                }
                 StructEncoding::DescribedBasic => {
                     let mut serializer = SizeSerializer::new();
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
-                },
+                }
                 StructEncoding::DescribedMap => unreachable!(),
-            }
+            },
         }
     }
 
     fn end(self) -> Result<usize, Error> {
         match self.se.struct_encoding() {
-            StructEncoding::None => list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long()),
+            StructEncoding::None => list_size(self.cumulated_size, &self.se.is_array_element)
+                .map_err(|_| Error::too_long()),
             StructEncoding::DescribedList => {
                 let _ = self.se.struct_encoding.pop();
-                list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long())
-            },
+                list_size(self.cumulated_size, &self.se.is_array_element)
+                    .map_err(|_| Error::too_long())
+            }
             StructEncoding::DescribedBasic => {
                 let _ = self.se.struct_encoding.pop();
                 Ok(self.cumulated_size)
-            },
+            }
             StructEncoding::DescribedMap => unreachable!(),
         }
     }
@@ -708,7 +724,7 @@ impl<'a> ser::SerializeTupleStruct for TupleStructSerializer<'a> {
 
 /// SeqSerializer that calculates the size of serialized data without actually allocating `Vec<u8>`
 #[derive(Debug)]
-pub struct StructSerializer<'a> { 
+pub struct StructSerializer<'a> {
     cumulated_size: usize,
     se: &'a mut SizeSerializer,
 }
@@ -740,40 +756,43 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
                     serializer.is_array_element = self.se.is_array_element.clone();
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
-                },
+                }
                 StructEncoding::DescribedList => {
                     let mut serializer = SizeSerializer::described_list();
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
-                },
+                }
                 StructEncoding::DescribedMap => {
                     let mut serializer = SizeSerializer::described_map();
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
-                },
+                }
                 StructEncoding::DescribedBasic => {
                     self.cumulated_size += value.serialize(&mut *self.se)?;
                     Ok(())
-                },
+                }
             }
         }
     }
 
     fn end(self) -> Result<usize, Error> {
         match self.se.struct_encoding() {
-            StructEncoding::None => list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long()),
+            StructEncoding::None => list_size(self.cumulated_size, &self.se.is_array_element)
+                .map_err(|_| Error::too_long()),
             StructEncoding::DescribedList => {
                 let _ = self.se.struct_encoding.pop();
-                list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long())
-            },
+                list_size(self.cumulated_size, &self.se.is_array_element)
+                    .map_err(|_| Error::too_long())
+            }
             StructEncoding::DescribedMap => {
                 let _ = self.se.struct_encoding.pop();
-                map_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long())
-            },
+                map_size(self.cumulated_size, &self.se.is_array_element)
+                    .map_err(|_| Error::too_long())
+            }
             StructEncoding::DescribedBasic => {
                 let _ = self.se.struct_encoding.pop();
                 Ok(self.cumulated_size)
-            },
+            }
         }
     }
 }
@@ -811,7 +830,8 @@ impl<'a> ser::SerializeTupleVariant for VariantSerializer<'a> {
     fn end(self) -> Result<usize, Error> {
         let mut serializer = SizeSerializer::new();
         let key_len = ser::Serialize::serialize(&self.variant_index, &mut serializer)?;
-        let value_len = list_size(self.cumulated_size, &self.se.is_array_element).map_err(|_| Error::too_long())?;
+        let value_len = list_size(self.cumulated_size, &self.se.is_array_element)
+            .map_err(|_| Error::too_long())?;
 
         map_size(key_len + value_len, &self.se.is_array_element).map_err(|_| Error::too_long())
     }

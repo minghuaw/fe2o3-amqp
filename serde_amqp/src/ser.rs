@@ -23,11 +23,13 @@ pub(crate) const U8_MAX: usize = u8::MAX as usize;
 
 // Variable type will spend a byte on size
 pub(crate) const U8_MAX_MINUS_1: usize = u8::MAX as usize - 1;
-pub(crate) const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
+// pub(crate) const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
+
+pub(crate) const U8_MAX_PLUS_1: usize = u8::MAX as usize + 1;
 
 // Variable type will spend 4 bytes on size
 pub(crate) const U32_MAX_MINUS_4: usize = u32::MAX as usize - 4;
-pub(crate) const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
+// pub(crate) const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
 
 /// Serializes the given value into a byte vector
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
@@ -412,11 +414,11 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
 
                         match l {
                             // sym8
-                            0..=U8_MAX_MINUS_1 => {
+                            0..=U8_MAX => {
                                 let code = [EncodingCodes::Sym8 as u8, l as u8];
                                 self.writer.write_all(&code)?;
                             }
-                            U8_MAX..=U32_MAX_MINUS_4 => {
+                            U8_MAX_PLUS_1..=U32_MAX_MINUS_4 => {
                                 let code = [EncodingCodes::Sym32 as u8];
                                 let width = (l as u32).to_be_bytes();
                                 self.writer.write_all(&code)?;
@@ -432,14 +434,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                         let l = v.len();
                         match l {
                             // str8-utf8
-                            0..=U8_MAX_MINUS_1 => {
+                            0..=U8_MAX => {
                                 let code = [EncodingCodes::Str8 as u8, l as u8];
                                 // let width: [u8; 1] = (l as u8).to_be_bytes();
                                 self.writer.write_all(&code)?;
                                 // self.writer.write_all(&width)?;
                             }
                             // str32-utf8
-                            U8_MAX..=U32_MAX_MINUS_4 => {
+                            U8_MAX_PLUS_1..=U32_MAX_MINUS_4 => {
                                 let code = [EncodingCodes::Str32 as u8];
                                 let width: [u8; 4] = (l as u32).to_be_bytes();
                                 self.writer.write_all(&code)?;
@@ -513,14 +515,14 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     IsArrayElement::False => {
                         match l {
                             // vbin8
-                            0..=U8_MAX_MINUS_1 => {
+                            0..=U8_MAX => {
                                 let code = [EncodingCodes::VBin8 as u8];
                                 let width: [u8; 1] = (l as u8).to_be_bytes();
                                 self.writer.write_all(&code)?;
                                 self.writer.write_all(&width)?;
                             }
                             // vbin32
-                            U8_MAX..=U32_MAX_MINUS_4 => {
+                            U8_MAX_PLUS_1..=U32_MAX_MINUS_4 => {
                                 let code = [EncodingCodes::VBin32 as u8];
                                 let width: [u8; 4] = (l as u32).to_be_bytes();
                                 self.writer.write_all(&code)?;
@@ -904,7 +906,7 @@ fn write_array<'a, W: Write + 'a>(
     let len = buf.len();
 
     match len {
-        0..=U8_MAX_MINUS_2 => {
+        0..=U8_MAX_MINUS_1 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Array8 as u8];
                 writer.write_all(&code)?;
@@ -914,7 +916,7 @@ fn write_array<'a, W: Write + 'a>(
             let len_num = [len as u8, num as u8];
             writer.write_all(&len_num)?;
         }
-        U8_MAX_MINUS_1..=U32_MAX_MINUS_8 => {
+        U8_MAX..=U32_MAX_MINUS_4 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Array32 as u8];
                 writer.write_all(&code)?;
@@ -1101,7 +1103,7 @@ fn write_map<'a, W: Write + 'a>(
 
     match len {
         // FIXME: Whether `len` should be 255 - 1
-        0..=U8_MAX_MINUS_2 => {
+        0..=U8_MAX_MINUS_1 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Map8 as u8];
                 writer.write_all(&code)?;
@@ -1112,7 +1114,7 @@ fn write_map<'a, W: Write + 'a>(
             writer.write_all(&len_num)?;
         }
         // FIXME: whether `len` should be u32::MAX - 4
-        U8_MAX_MINUS_1..=U32_MAX_MINUS_8 => {
+        U8_MAX..=U32_MAX_MINUS_4 => {
             if let IsArrayElement::False | IsArrayElement::FirstElement = ext_is_array_elem {
                 let code = [EncodingCodes::Map32 as u8];
                 writer.write_all(&code)?;
@@ -1635,8 +1637,23 @@ mod test {
         expected.append(&mut val.as_bytes().to_vec());
         assert_eq_on_serialized_vs_expected(val, &expected);
 
+        // u8 max length
+        let val = String::from_utf8(vec![b'X'; u8::MAX as usize]).unwrap();
+        let len = val.len() as u8;
+        let mut expected = vec![EncodingCodes::Str8 as u8, len];
+        expected.append(&mut val.as_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, &expected);
+
         // str32
         let val = LARGE_STRING_VALUIE;
+        let len = val.len() as u32;
+        let mut expected = vec![EncodingCodes::Str32 as u8];
+        expected.append(&mut len.to_be_bytes().to_vec());
+        expected.append(&mut val.as_bytes().to_vec());
+        assert_eq_on_serialized_vs_expected(val, &expected);
+
+        // u8 max + 1 length
+        let val = String::from_utf8(vec![b'X'; u8::MAX as usize + 1]).unwrap();
         let len = val.len() as u32;
         let mut expected = vec![EncodingCodes::Str32 as u8];
         expected.append(&mut len.to_be_bytes().to_vec());
@@ -1649,11 +1666,19 @@ mod test {
         // serialize_bytes only works with serde_bytes wrapper types `Bytes` and `ByteBuf`
         use serde_bytes::ByteBuf;
         const SMALL_BYTES_VALUE: &[u8] = &[133u8; 200];
-        const LARGE_BYTES_VALUE: &[u8] = &[199u8; 1000];
         const U8_MAX_BYTES_VALUE: &[u8] = &[255u8; 255];
+        const U8_MAX_PLUS_ONE_BYTES_VALUE: &[u8] = &[255u8; 256];
+        const LARGE_BYTES_VALUE: &[u8] = &[199u8; 1000];
 
         // vbin8
         let val = ByteBuf::from(SMALL_BYTES_VALUE);
+        let len = val.len() as u8;
+        let mut expected = vec![EncodingCodes::VBin8 as u8, len];
+        expected.append(&mut val.to_vec());
+        assert_eq_on_serialized_vs_expected(val, &expected);
+
+        // u8 max length
+        let val = ByteBuf::from(U8_MAX_BYTES_VALUE);
         let len = val.len() as u8;
         let mut expected = vec![EncodingCodes::VBin8 as u8, len];
         expected.append(&mut val.to_vec());
@@ -1667,8 +1692,8 @@ mod test {
         expected.append(&mut val.to_vec());
         assert_eq_on_serialized_vs_expected(val, &expected);
 
-        // u8 max length
-        let val = ByteBuf::from(U8_MAX_BYTES_VALUE);
+        // u8 max + 1 length
+        let val = ByteBuf::from(U8_MAX_PLUS_ONE_BYTES_VALUE);
         let len = val.len() as u32;
         let mut expected = vec![EncodingCodes::VBin32 as u8];
         expected.append(&mut len.to_be_bytes().to_vec());
@@ -1776,6 +1801,38 @@ mod test {
             EncodingCodes::SmallInt as u8,
             4,
         ];
+        assert_eq_on_serialized_vs_expected(val, &expected);
+
+        // List8 with 255 elements of small ints
+        let val: Vec<i32> = (0..127).collect();
+        let mut expected = vec![EncodingCodes::List8 as u8, 255, 127];
+        for el in val.iter() {
+            expected.push(EncodingCodes::SmallInt as u8);
+            expected.push(*el as u8);
+        }
+        assert_eq_on_serialized_vs_expected(val, &expected);
+    }
+
+    #[test]
+    fn test_serialize_array() {
+        let val: Array<u8> = (0..253).collect();
+        let mut expected = vec![
+            EncodingCodes::Array8 as u8,
+            255,
+            253,
+            EncodingCodes::UByte as u8,
+        ];
+        expected.append(&mut (0..253).collect());
+        assert_eq_on_serialized_vs_expected(val, &expected);
+
+        let val: Array<u8> = (0..254).collect();
+        let mut expected = vec![
+            EncodingCodes::Array32 as u8,
+            0, 0, 1, 3,
+            0, 0, 0, 254,
+            EncodingCodes::UByte as u8,
+        ];
+        expected.append(&mut (0..254).collect());
         assert_eq_on_serialized_vs_expected(val, &expected);
     }
 
