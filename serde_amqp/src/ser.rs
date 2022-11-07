@@ -20,12 +20,12 @@ use crate::{
 };
 
 // Variable type will spend a byte on size
-const U8_MAX_MINUS_1: usize = u8::MAX as usize - 1;
-const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
+pub(crate) const U8_MAX_MINUS_1: usize = u8::MAX as usize - 1;
+pub(crate) const U8_MAX_MINUS_2: usize = u8::MAX as usize - 2;
 
 // Variable type will spend 4 bytes on size
-const U32_MAX_MINUS_4: usize = u32::MAX as usize - 4;
-const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
+pub(crate) const U32_MAX_MINUS_4: usize = u32::MAX as usize - 4;
+pub(crate) const U32_MAX_MINUS_8: usize = u32::MAX as usize - 8;
 
 /// Serializes the given value into a byte vector
 pub fn to_vec<T>(value: &T) -> Result<Vec<u8>, Error>
@@ -427,7 +427,7 @@ impl<'a, W: Write + 'a> ser::Serializer for &'a mut Serializer<W> {
                     NewType::None => {
                         // A string represents a sequence of Unicode characters
                         // as defined by the Unicode V6.0.0 standard [UNICODE6].
-                        let l = v.chars().count();
+                        let l = v.len();
                         match l {
                             // str8-utf8
                             0..=U8_MAX_MINUS_1 => {
