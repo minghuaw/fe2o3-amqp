@@ -12,6 +12,15 @@ use crate::{
     util::{FieldRole, IsArrayElement, NewType, StructEncoding},
 };
 
+/// Obtain the serialized size without allocating `Vec<u8>`
+pub fn serialized_size<T>(value: &T) -> Result<usize, Error>
+where
+    T: ?Sized + ser::Serialize,
+{
+    let mut serializer = SizeSerializer::new();
+    value.serialize(&mut serializer)
+}
+
 /// Serializer that calculates the size of serialized data without actually allocating `Vec<u8>`
 #[derive(Debug)]
 pub struct SizeSerializer {
@@ -850,5 +859,429 @@ impl<'a> ser::SerializeStructVariant for VariantSerializer<'a> {
 
     fn end(self) -> Result<usize, Error> {
         <Self as ser::SerializeTupleVariant>::end(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, BTreeMap};
+
+    use serde_bytes::ByteBuf;
+
+    use crate::{to_vec, primitives::{Dec32, Dec64, Dec128, Uuid, Timestamp, Symbol, Array}};
+
+    use super::serialized_size;
+
+    #[test]
+    fn serialized_size_of_bool() {
+        let value = false;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_u8() {
+        let value = 0u8;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_u16() {
+        let value = 0u16;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 255u16;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 256u16;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_u32() {
+        let value = 0u32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 255u32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 256u32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_u64() {
+        let value = 0u64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 255u64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 256u64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_i8() {
+        let value = 0i8;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_i16() {
+        let value = 0i16;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 255i16;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 256i16;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_i32() {
+        let value = 0i32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 127i32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 128i32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_i64() {
+        let value = 0i64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 127i64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = 128i64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_f32() {
+        let value = 3.14f32;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_f64() {
+        let value = 3.14f64;
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_dec32() {
+        let value = Dec32::from([0, 1, 2, 3]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_dec64() {
+        let value = Dec64::from([0, 1, 2, 3, 4, 5, 6, 7]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_dec128() {
+        let value = Dec128::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_char() {
+        let value = 'a';
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_timestamp() {
+        let value = Timestamp::from(1234);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_uuid() {
+        let value = Uuid::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_vbin() {
+        let value = ByteBuf::from(vec![]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = ByteBuf::from(vec![0; 255]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = ByteBuf::from(vec![0; 256]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = ByteBuf::from(vec![0; 65535]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_str() {
+        let value = "";
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = "a";
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = String::from_utf8(vec![b'a'; 255]).unwrap();
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = String::from_utf8(vec![b'a'; 256]).unwrap();
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_symbol() {
+        let value = Symbol::from("");
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = Symbol::from("a");
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = Symbol::from(String::from_utf8(vec![b'a'; 255]).unwrap());
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = Symbol::from(String::from_utf8(vec![b'a'; 256]).unwrap());
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_list() {
+        let value = Vec::<u8>::new();
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = vec![0u8; 127];
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = vec![0u8; 128];
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_map() {
+        let mut value = HashMap::<u8, u8>::new();
+        value.insert(1, 2);
+        value.insert(3, 4);
+        value.insert(5, 6);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_array() {
+        let value = Array::from(vec![1u8]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = Array::from(vec![0u8; 253]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = Array::from(vec![0u8; 254]);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_derived_struct() {
+        use crate as serde_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
+        struct Foo {
+            is_fool: bool,
+            a: i32,
+        }
+
+        let value = Foo {
+            is_fool: true,
+            a: 9,
+        };
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_derived_struct_map_encoding() {
+        use crate as serde_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = "0x00:0x13", encoding = "map")]
+        struct Foo {
+            is_fool: bool,
+            a: i32,
+        }
+
+        let value = Foo {
+            is_fool: true,
+            a: 9,
+        };
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_derived_tuple_struct() {
+        use crate as serde_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = "0x00:0x13", encoding = "list")]
+        struct Foo(bool, i32);
+
+        let value = Foo(true, 9);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_newtype_wrapper() {
+        use crate as serde_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = "0x00:0x01", encoding = "basic")]
+        struct Wrapper(BTreeMap<Symbol, i32>);
+
+        let mut map = BTreeMap::new();
+        map.insert(Symbol::from("a"), 1);
+        map.insert(Symbol::from("b"), 2);
+        let value = Wrapper(map);
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+    }
+
+    #[test]
+    fn serialized_size_of_struct_with_optional_field() {
+        use crate as serde_amqp;
+        use crate::macros::SerializeComposite;
+
+        #[derive(Debug, SerializeComposite)]
+        #[amqp_contract(code = "0x00:0x01", encoding = "list")]
+        struct Foo {
+            a: i32,
+            b: Option<i32>,
+        }
+
+        let value = Foo { a: 1, b: None };
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
+
+        let value = Foo {
+            a: 1,
+            b: Some(2),
+        };
+        let ssize = serialized_size(&value).unwrap();
+        let buf = to_vec(&value).unwrap();
+        assert_eq!(ssize, buf.len());
     }
 }
