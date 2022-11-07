@@ -56,14 +56,6 @@ impl SizeSerializer {
         }
     }
 
-    // fn described_basic() -> Self {
-    //     Self {
-    //         struct_encoding: vec![StructEncoding::DescribedBasic],
-    //         new_type: NewType::None,
-    //         is_array_element: IsArrayElement::False,
-    //     }
-    // }
-
     fn struct_encoding(&self) -> &StructEncoding {
         self.struct_encoding.last().unwrap_or(&StructEncoding::None)
     }
@@ -755,6 +747,8 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     where
         T: ser::Serialize,
     {
+        use ser::Serialize;
+
         if key == DESCRIPTOR {
             self.cumulated_size += value.serialize(&mut *self.se)?;
             Ok(())
@@ -773,6 +767,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
                 }
                 StructEncoding::DescribedMap => {
                     let mut serializer = SizeSerializer::described_map();
+                    self.cumulated_size += key.serialize(&mut serializer)?;
                     self.cumulated_size += value.serialize(&mut serializer)?;
                     Ok(())
                 }
@@ -1206,6 +1201,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unused_macros)]
     fn serialized_size_of_derived_struct_map_encoding() {
         use crate as serde_amqp;
         use crate::macros::SerializeComposite;
