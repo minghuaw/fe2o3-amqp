@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.11
+
+1. Bumped dependencies `serde_amqp` to "0.5.2" and `fe2o3-amqp-types` to "0.6.2".
+
 ## 0.7.10
 
 1. Derive `Clone` on `DeliveryInfo`

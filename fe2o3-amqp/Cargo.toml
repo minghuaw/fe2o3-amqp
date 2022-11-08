@@ -1,6 +1,6 @@
 [package]
 name = "fe2o3-amqp"
-version = "0.7.10"
+version = "0.7.11"
 edition = "2021"
 description = "An implementation of AMQP1.0 protocol based on serde and tokio"
 license = "MIT/Apache-2.0"
@@ -45,9 +45,9 @@ testcontainers = "0.14"
 
 [dependencies]
 # serde_amqp = "0.5.0-alpha"
-serde_amqp = { version = "0.5.0", path = "../serde_amqp" }
+serde_amqp = { version = "0.5.2", path = "../serde_amqp" }
 # fe2o3-amqp-types = "0.6.0-alpha"
-fe2o3-amqp-types = { version = "0.6.1", path = "../fe2o3-amqp-types" }
+fe2o3-amqp-types = { version = "0.6.2", path = "../fe2o3-amqp-types" }
 
 bytes = "1"
 tokio = { version = "^1.16.1", features = ["io-util", "net", "rt", "macros"] }
@@ -61,11 +61,11 @@ slab = "0.4"
 tokio-stream = { version = "0.1", features = ["time"] }
 async-trait = "0.1"
 serde_bytes = "0.11"
-parking_lot = { version = "0.12.1", features = ["send_guard"] }
+parking_lot = { version = "0.12", features = ["send_guard"] }
 
 # Optinoal deps that are feature themselves
 tracing = { version = "0.1", optional = true }
-log = { version = "0.4.17", optional = true }
+log = { version = "0.4", optional = true }
 
 # Optional deps
 tokio-rustls = { version = "0.23", optional = true }
@@ -74,10 +74,10 @@ webpki-roots = { version = "0.22", optional = true }
 tokio-native-tls = { version = "0.3", optional = true }
 libnative-tls = { package = "native-tls", version = "0.2", optional = true }
 uuid = { version = "1.1", features = ["v4"], optional = true }
-sha-1 = { version = "0.10.0", optional = true }
-sha2 = { version = "0.10.2", optional = true }
-rand = { version = "0.8.5", optional = true }
-base64 = { version = "0.13.0", optional = true } # TODO: replace with base64-simd?
-stringprep = { version = "0.1.2", optional = true }
-hmac = { version = "0.12.1", optional = true }
-pbkdf2 = { version = "0.11.0", default-features = false, optional = true }
+sha-1 = { version = "0.10", optional = true }
+sha2 = { version = "0.10", optional = true }
+rand = { version = "0.8", optional = true }
+base64 = { version = "0.13", optional = true } # TODO: replace with base64-simd?
+stringprep = { version = "0.1", optional = true }
+hmac = { version = "0.12", optional = true }
+pbkdf2 = { version = "0.11", default-features = false, optional = true }
