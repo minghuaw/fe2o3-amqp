@@ -113,7 +113,6 @@ impl<'a> Request for DeleteRequest<'a> {
 /// entries. If the request was successful then the statusCode MUST be 204 (No Content).
 pub struct DeleteResponse {
     pub empty_map: EmptyMap,
-    pub correlation_id: Option<MessageId>,
 }
 
 impl DeleteResponse {
@@ -129,12 +128,10 @@ impl Response for DeleteResponse {
 
     fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
         let _status_code = Self::check_status_code(&mut message)?;
-        let correlation_id = message.remove_correlation_id();
 
         match message.body.map(|m| m.len()) {
             None | Some(0) => Ok(Self {
                 empty_map: EmptyMap::new(),
-                correlation_id,
             }),
             _ => Err(Error::DecodeError(InvalidType {
                 expected: "empty map".to_string(),

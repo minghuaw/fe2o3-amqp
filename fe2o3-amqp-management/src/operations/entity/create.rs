@@ -120,7 +120,6 @@ impl<'a> Request for CreateRequest<'a> {
 /// a failure response with a statusCode of 400 (Bad Request).
 pub struct CreateResponse {
     pub entity_attributes: OrderedMap<String, Value>,
-    pub correlation_id: Option<MessageId>,
 }
 
 impl Response for CreateResponse {
@@ -133,16 +132,12 @@ impl Response for CreateResponse {
     fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
         // check status code first
         let _status_code = Self::check_status_code(&mut message)?;
-
-        let correlation_id = message.remove_correlation_id();
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,
-                correlation_id,
             }),
             None => Ok(Self {
                 entity_attributes: OrderedMap::with_capacity(0),
-                correlation_id,
             }),
         }
     }

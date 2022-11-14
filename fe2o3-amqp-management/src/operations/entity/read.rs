@@ -107,7 +107,6 @@ impl<'a> Request for ReadRequest<'a> {
 #[derive(Debug)]
 pub struct ReadResponse {
     pub entity_attributes: OrderedMap<String, Value>,
-    pub correlation_id: Option<MessageId>,
 }
 
 impl ReadResponse {
@@ -122,15 +121,12 @@ impl Response for ReadResponse {
 
     fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
         let _status_code = Self::check_status_code(&mut message)?;
-        let correlation_id = message.remove_correlation_id();
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,
-                correlation_id,
             }),
             None => Ok(Self {
                 entity_attributes: OrderedMap::with_capacity(0),
-                correlation_id,
             }),
         }
     }
