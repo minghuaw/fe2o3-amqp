@@ -91,11 +91,11 @@ impl<'a> Request for CreateRequest<'a> {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, CREATE)
-                    .insert(TYPE, self.r#type.to_string())
+                    .insert(TYPE, SimpleValue::String(self.r#type.into()))
                     .insert(
                         LOCALES,
                         self.locales
-                            .map(|s| SimpleValue::from(s.to_string()))
+                            .map(|s| SimpleValue::String(s.into()))
                             .unwrap_or(SimpleValue::Null),
                     )
                     .insert(NAME, self.name.to_string())

@@ -70,12 +70,13 @@ impl MgmtClient {
 
     pub async fn call<Req, Res>(&mut self, request: Req) -> Result<Res, Error>
     where
-        Req: Request,
+        Req: Request<Response = Res>,
         Res: Response,
         Res::Error: Into<Error>,
         for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
     {
-        self.send_request(request).await?;
+        let outcome = self.send_request(request).await?;
+        let _accepted = outcome.accepted_or_else(|o| Error::NotAccepted(o))?;
         self.recv_response().await
     }
 }

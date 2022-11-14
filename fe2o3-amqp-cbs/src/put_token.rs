@@ -3,9 +3,9 @@ use fe2o3_amqp::types::{
     primitives::{SimpleValue, Timestamp, Value},
 };
 use fe2o3_amqp_management::{
-    constants::{NAME, OPERATION},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{LOCALES, NAME, OPERATION, TYPE},
+    request::Request,
+    response::Response,
 };
 use std::borrow::Cow;
 
@@ -19,6 +19,8 @@ pub struct PutTokenRequest<'a> {
     pub name: Cow<'a, str>,
     pub token: Cow<'a, str>,
     pub expiration: Option<Timestamp>,
+    pub r#type: Cow<'a, str>,
+    pub locales: Option<Cow<'a, str>>,
 }
 
 impl<'a> PutTokenRequest<'a> {
@@ -26,16 +28,21 @@ impl<'a> PutTokenRequest<'a> {
         name: impl Into<Cow<'a, str>>,
         token: impl Into<Cow<'a, str>>,
         expiration: impl Into<Option<Timestamp>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
     ) -> Self {
         Self {
             name: name.into(),
             token: token.into(),
             expiration: expiration.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
         }
     }
 }
 
-impl<'a> MessageSerializer for PutTokenRequest<'a> {
+impl<'a> Request for PutTokenRequest<'a> {
+    type Response = PutTokenResponse;
     type Body = String;
 
     fn into_message(self) -> fe2o3_amqp::types::messaging::Message<Self::Body> {
@@ -44,6 +51,13 @@ impl<'a> MessageSerializer for PutTokenRequest<'a> {
             None => SimpleValue::Null,
         };
         let props = ApplicationProperties::builder()
+            .insert(TYPE, SimpleValue::String(self.r#type.into()))
+            .insert(
+                LOCALES,
+                self.locales
+                    .map(|s| SimpleValue::String(s.into()))
+                    .unwrap_or(SimpleValue::Null),
+            )
             .insert(OPERATION, PUT_TOKEN)
             .insert(NAME, self.name.to_string())
             .insert(EXPIRATION, expiration)
@@ -57,14 +71,18 @@ impl<'a> MessageSerializer for PutTokenRequest<'a> {
 
 pub struct PutTokenResponse {}
 
-impl PutTokenResponse {
-    pub const STATUS_CODE: u16 = 202;
-}
+impl PutTokenResponse {}
 
-impl MessageDeserializer<Value> for PutTokenResponse {
+impl Response for PutTokenResponse {
+    const STATUS_CODE: u16 = 202;
+
+    type Body = Value;
+
     type Error = fe2o3_amqp_management::error::Error;
+    type StatusError = fe2o3_amqp_management::error::Error;
 
-    fn from_message(_message: Message<Value>) -> Result<Self, Self::Error> {
+    fn from_message(mut message: Message<Value>) -> Result<Self, Self::Error> {
+        let _status_code = Self::check_status_code(&mut message)?;
         Ok(Self {})
     }
 }
