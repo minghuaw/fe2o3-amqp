@@ -65,7 +65,7 @@ impl Request for DeregisterRequest<'_> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 

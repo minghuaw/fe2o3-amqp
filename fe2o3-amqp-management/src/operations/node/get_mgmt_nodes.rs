@@ -51,7 +51,7 @@ impl<'a> Request for GetMgmtNodesRequest<'a> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 

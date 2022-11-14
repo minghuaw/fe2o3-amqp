@@ -56,7 +56,7 @@ impl<'a> Request for GetOperationsRequest<'a> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 

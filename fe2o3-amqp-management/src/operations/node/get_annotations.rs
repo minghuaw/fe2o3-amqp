@@ -53,7 +53,7 @@ impl<'a> Request for GetAnnotationsRequest<'a> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 

@@ -65,7 +65,7 @@ impl<'a> Request for RegisterRequest<'a> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 

@@ -24,6 +24,12 @@ impl EmptyMap {
     }
 }
 
+impl Default for EmptyMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Delete a Manageable Entity.
 ///
 /// # Body:
@@ -108,7 +114,7 @@ impl<'a> Request for DeleteRequest<'a> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 

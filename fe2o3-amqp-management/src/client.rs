@@ -76,7 +76,7 @@ impl MgmtClient {
         for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
     {
         let outcome = self.send_request(request).await?;
-        let _accepted = outcome.accepted_or_else(|o| Error::NotAccepted(o))?;
+        let _accepted = outcome.accepted_or_else(Error::NotAccepted)?;
         self.recv_response().await
     }
 }

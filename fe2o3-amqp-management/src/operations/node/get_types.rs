@@ -53,7 +53,7 @@ impl<'a> Request for GetTypesRequest<'a> {
     }
 
     fn encode_body(self) -> Self::Body {
-        ()
+        
     }
 }
 
