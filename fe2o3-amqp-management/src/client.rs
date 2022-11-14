@@ -3,7 +3,7 @@ use fe2o3_amqp::{
     session::SessionHandle,
     Delivery, Receiver, Sender,
 };
-use fe2o3_amqp_types::messaging::{FromBody, IntoBody, MessageId, Outcome, Properties};
+use fe2o3_amqp_types::{messaging::{FromBody, IntoBody, MessageId, Outcome, Properties}, definitions::Fields};
 
 use crate::{
     error::{AttachError, Error},
@@ -84,6 +84,8 @@ impl MgmtClient {
 pub struct MgmtClientBuilder {
     mgmt_node_addr: String,
     client_node_addr: String,
+    sender_properties: Option<Fields>,
+    receiver_properties: Option<Fields>,
 }
 
 impl Default for MgmtClientBuilder {
@@ -91,11 +93,23 @@ impl Default for MgmtClientBuilder {
         MgmtClientBuilder {
             mgmt_node_addr: String::from(MANAGEMENT_NODE_ADDRESS),
             client_node_addr: String::from(DEFAULT_CLIENT_NODE_ADDRESS),
+            sender_properties: None,
+            receiver_properties: None,
         }
     }
 }
 
 impl MgmtClientBuilder {
+    pub fn sender_properties(mut self, properties: Fields) -> Self {
+        self.sender_properties = Some(properties);
+        self
+    }
+
+    pub fn receiver_properties(mut self, properties: Fields) -> Self {
+        self.receiver_properties = Some(properties);
+        self
+    }
+
     pub fn management_node_address(mut self, mgmt_node_addr: impl Into<String>) -> Self {
         self.mgmt_node_addr = mgmt_node_addr.into();
         self
@@ -110,15 +124,24 @@ impl MgmtClientBuilder {
         self,
         session: &mut SessionHandle<R>,
     ) -> Result<MgmtClient, AttachError> {
-        let sender = Sender::builder()
+        let mut sender_builder = Sender::builder()
             .name(format!("{}-mgmt-sender", self.client_node_addr))
-            .target(&self.mgmt_node_addr)
+            .target(&self.mgmt_node_addr);
+        if let Some(properties) = self.sender_properties {
+            sender_builder = sender_builder.properties(properties);
+        }
+        let sender = sender_builder
             .attach(session)
             .await?;
-        let receiver = Receiver::builder()
+        
+        let mut receiver_builder = Receiver::builder()
             .name(format!("{}-mgmt-receiver", self.client_node_addr))
             .source(self.mgmt_node_addr)
-            .target(&self.client_node_addr)
+            .target(&self.client_node_addr);
+        if let Some(properties) = self.receiver_properties {
+            receiver_builder = receiver_builder.properties(properties);
+        }
+        let receiver = receiver_builder
             .attach(session)
             .await?;
 
