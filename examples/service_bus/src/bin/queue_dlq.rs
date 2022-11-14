@@ -83,7 +83,7 @@ async fn main() {
         .unwrap();
 
     // All of the Microsoft AMQP clients represent the event body as an uninterpreted bag of bytes.
-    let delivery = receiver.recv::<AmqpSequence<String>>().await.unwrap();
+    let delivery = receiver.recv::<Body<Value>>().await.unwrap();
     println!("Received from DLQ: {:?}", delivery);
 
     // The Azure ServiceBus SDK disposes the DLQ message in a txn
