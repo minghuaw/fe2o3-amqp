@@ -7,10 +7,10 @@ use fe2o3_amqp_types::{
 
 use crate::{
     constants::{GET_OPERATIONS, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    error::{Error, Result}, request::Request, response::Response,
 };
+
+use super::get::GetRequest;
 
 pub trait GetOperations {
     fn get_operations(&self, req: GetOperationsRequest) -> Result<GetOperationsResponse>;
@@ -25,28 +25,31 @@ pub trait GetOperations {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetOperationsRequest<'a> {
-    pub entity_type: Option<Cow<'a, str>>,
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetOperationsRequest<'a> {
-    pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
+    pub fn new(
+        entity_type: impl Into<Option<Cow<'a, str>>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
         Self {
-            entity_type: entity_type.into(),
+            inner: GetRequest::new(entity_type, r#type, locales),
         }
     }
 }
 
-impl<'a> MessageSerializer for GetOperationsRequest<'a> {
+impl<'a> Request for GetOperationsRequest<'a> {
+    type Response = GetOperationsResponse;
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
-        let mut builder = ApplicationProperties::builder();
-        builder = builder.insert(OPERATION, GET_OPERATIONS);
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type.to_string());
-        }
+        let mut application_properties = self.inner.into_application_properties();
+        application_properties.insert(OPERATION.into(), GET_OPERATIONS.into());
+
         Message::builder()
-            .application_properties(builder.build())
+            .application_properties(application_properties)
             .body(())
             .build()
     }
@@ -68,15 +71,21 @@ pub struct GetOperationsResponse {
 }
 
 impl GetOperationsResponse {
-    pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Option<Operations>> for GetOperationsResponse {
+impl Response for GetOperationsResponse {
+    const STATUS_CODE: u16 = 200;
+
+    type Body = Option<Operations>;
+
     type Error = Error;
+    type StatusError = Error;
 
     fn from_message(
-        message: Message<Option<OrderedMap<String, OrderedMap<String, Vec<String>>>>>,
+        mut message: Message<Option<Operations>>,
     ) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
+
         match message.body {
             Some(operations) => Ok(Self { operations }),
             None => Ok(Self {

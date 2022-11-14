@@ -2,14 +2,12 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::Value,
+    primitives::{Value, SimpleValue},
 };
 
 use crate::{
-    constants::{DEREGISTER, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{DEREGISTER, OPERATION, TYPE, LOCALES},
+    error::{Error, Result}, request::Request, response::Response,
 };
 
 pub trait Deregister {
@@ -25,17 +23,30 @@ pub trait Deregister {
 /// The body of the message MUST be empty.
 pub struct DeregisterRequest<'a> {
     pub address: Cow<'a, str>,
+
+    /// Entity type
+    pub r#type: Cow<'a, str>,
+
+    /// locales
+    pub locales: Option<Cow<'a, str>>,
 }
 
 impl<'a> DeregisterRequest<'a> {
-    pub fn new(address: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new(
+        address: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
         Self {
             address: address.into(),
+            r#type: r#type.into(),
+            locales: locales.map(|x| x.into()),
         }
     }
 }
 
-impl<'a> MessageSerializer for DeregisterRequest<'a> {
+impl<'a> Request for DeregisterRequest<'a> {
+    type Response = DeregisterResponse;
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
@@ -43,6 +54,13 @@ impl<'a> MessageSerializer for DeregisterRequest<'a> {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, DEREGISTER)
+                    .insert(TYPE, self.r#type.to_string())
+                    .insert(
+                        LOCALES,
+                        self.locales
+                            .map(|s| SimpleValue::from(s.to_string()))
+                            .unwrap_or(SimpleValue::Null),
+                    )
                     .insert("address", self.address.to_string())
                     .build(),
             )
@@ -60,13 +78,19 @@ impl<'a> MessageSerializer for DeregisterRequest<'a> {
 pub struct DeregisterResponse {}
 
 impl DeregisterResponse {
-    pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Value> for DeregisterResponse {
-    type Error = Error;
+impl Response for DeregisterResponse {
+    const STATUS_CODE: u16 = 200;
 
-    fn from_message(_message: Message<Value>) -> Result<Self> {
+    type Body = Value;
+
+    type Error = Error;
+    type StatusError = Error;
+
+    fn from_message(mut message: Message<Value>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
+
         Ok(Self {})
     }
 }

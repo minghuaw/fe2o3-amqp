@@ -19,6 +19,7 @@ mod get_operations;
 mod get_types;
 mod query;
 mod register;
+mod get;
 
 pub use deregister::*;
 pub use get_annotations::*;

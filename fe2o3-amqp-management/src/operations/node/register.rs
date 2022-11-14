@@ -46,6 +46,7 @@ impl<'a> RegisterRequest<'a> {
 }
 
 impl<'a> Request for RegisterRequest<'a> {
+    type Response = RegisterResponse;
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
@@ -87,8 +88,8 @@ impl Response for RegisterResponse {
     type Error = Error;
     type StatusError = Error;
 
-    fn from_message(_message: Message<Value>) -> Result<Self> {
-
+    fn from_message(mut message: Message<Value>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
 
         Ok(Self {})
     }

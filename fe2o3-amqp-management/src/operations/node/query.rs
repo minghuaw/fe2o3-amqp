@@ -22,14 +22,13 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, Value},
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    constants::{OPERATION, QUERY},
+    constants::{LOCALES, OPERATION, QUERY, TYPE},
     error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    request::Request, response::Response,
 };
 
 pub trait Query {
@@ -40,15 +39,15 @@ pub struct QueryRequest<'a> {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
     pub entity_type: Option<Cow<'a, str>>,
-
+    
     /// If set, specifies the number of the first element of the result set to be returned. If not
     /// provided, a default of 0 MUST be assumed.
     pub offset: Option<u32>,
-
+    
     /// If set, specifies the number of entries from the result set to return. If not provided, all
     /// results from ‘offset’ onwards MUST be returned.
     pub count: Option<u32>,
-
+    
     /// The body of the message MUST consist of an amqp-value section containing a map which MUST have
     /// the following entries, where all keys MUST be of type string:
     ///
@@ -56,6 +55,12 @@ pub struct QueryRequest<'a> {
     /// requested. The list MUST NOT contain duplicate elements. If the list contains no elements
     /// then this indicates that all attributes are being requested.
     pub attribute_names: Vec<Cow<'a, str>>,
+
+    /// Entity type
+    pub r#type: Cow<'a, str>,
+
+    /// locales
+    pub locales: Option<Cow<'a, str>>,
 }
 
 impl<'a> QueryRequest<'a> {
@@ -64,8 +69,12 @@ impl<'a> QueryRequest<'a> {
         offset: impl Into<Option<u32>>,
         count: impl Into<Option<u32>>,
         attribute_names: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
     ) -> Self {
         Self {
+            r#type: r#type.into(),
+            locales: locales.into(),
             entity_type: entity_type.into(),
             offset: offset.into(),
             count: count.into(),
@@ -74,12 +83,22 @@ impl<'a> QueryRequest<'a> {
     }
 }
 
-impl<'a> MessageSerializer for QueryRequest<'a> {
+impl<'a> Request for QueryRequest<'a> {
+    type Response = QueryResponse;
     type Body = OrderedMap<String, Vec<String>>;
 
     fn into_message(self) -> Message<Self::Body> {
         let mut builder = ApplicationProperties::builder();
-        builder = builder.insert(OPERATION, QUERY);
+        builder = builder
+            .insert(OPERATION, QUERY)
+            .insert(TYPE, self.r#type.to_string())
+            .insert(
+                LOCALES,
+                self.locales
+                    .map(|s| SimpleValue::from(s.to_string()))
+                    .unwrap_or(SimpleValue::Null),
+            );
+
         if let Some(entity_type) = self.entity_type {
             builder = builder.insert("entityType", &entity_type[..]);
         }
@@ -134,33 +153,39 @@ pub struct QueryResponse {
 }
 
 impl QueryResponse {
-    pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<OrderedMap<String, Vec<Value>>> for QueryResponse {
+impl Response for QueryResponse {
+    const STATUS_CODE: u16 = 200;
+
+    type Body = OrderedMap<String, Vec<Value>>;
+
     type Error = Error;
+    type StatusError = Error;
 
     fn from_message(mut message: Message<OrderedMap<String, Vec<Value>>>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
+
         let count = message
             .application_properties
             .as_mut()
             .and_then(|ap| ap.remove("count"))
-            .map(|v| u32::try_from(v).map_err(|_| Error::DecodeError))
-            .ok_or(Error::DecodeError)??;
+            .map(|v| u32::try_from(v).map_err(|_| Error::DecodeError(None)))
+            .ok_or(Error::DecodeError(None))??;
         let mut map = message.body;
 
-        let attribute_names = map.remove("attributeNames").ok_or(Error::DecodeError)?;
+        let attribute_names = map.remove("attributeNames").ok_or(Error::DecodeError(None))?;
         let attribute_names = attribute_names
             .into_iter()
-            .map(|v| String::try_from(v).map_err(|_| Error::DecodeError))
+            .map(|v| String::try_from(v).map_err(|_| Error::DecodeError(None)))
             .collect::<Result<Vec<String>>>()?;
 
-        let results = map.remove("results").ok_or(Error::DecodeError)?;
+        let results = map.remove("results").ok_or(Error::DecodeError(None))?;
         let results: Vec<Vec<Value>> = results
             .into_iter()
             .map(|v| match v {
                 Value::List(vout) => Ok(vout),
-                _ => Err(Error::DecodeError),
+                _ => Err(Error::DecodeError(None)),
             })
             .collect::<Result<Vec<Vec<Value>>>>()?;
 

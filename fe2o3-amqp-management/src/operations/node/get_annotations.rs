@@ -2,15 +2,15 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::OrderedMap,
+    primitives::{OrderedMap, SimpleValue},
 };
 
 use crate::{
-    constants::{GET_ANNOTATIONS, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{GET_ANNOTATIONS, OPERATION, TYPE, LOCALES},
+    error::{Error, Result}, request::Request, response::Response,
 };
+
+use super::get::GetRequest;
 
 pub trait GetAnnotations {
     fn get_annotations(&self, req: GetAnnotationsRequest) -> Result<GetAnnotationsResponse>;
@@ -22,28 +22,31 @@ pub trait GetAnnotations {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAnnotationsRequest<'a> {
-    pub entity_type: Option<Cow<'a, str>>,
+    inner: GetRequest<'a>
 }
 
 impl<'a> GetAnnotationsRequest<'a> {
-    pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
+    pub fn new(
+        entity_type: impl Into<Option<Cow<'a, str>>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
         Self {
-            entity_type: entity_type.into(),
+            inner: GetRequest::new(entity_type, r#type, locales)
         }
     }
 }
 
-impl<'a> MessageSerializer for GetAnnotationsRequest<'a> {
+impl<'a> Request for GetAnnotationsRequest<'a> {
+    type Response = GetAnnotationsResponse;
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
-        let mut builder = ApplicationProperties::builder();
-        builder = builder.insert(OPERATION, GET_ANNOTATIONS);
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type.to_string());
-        }
+        let mut application_properties = self.inner.into_application_properties();
+        application_properties.insert(OPERATION.into(), GET_ANNOTATIONS.into());
+
         Message::builder()
-            .application_properties(builder.build())
+            .application_properties(application_properties)
             .body(())
             .build()
     }
@@ -53,14 +56,17 @@ pub struct GetAnnotationsResponse {
     pub annotations: OrderedMap<String, Vec<String>>,
 }
 
-impl GetAnnotationsResponse {
-    pub const STATUS_CODE: u16 = 200;
-}
+impl Response for GetAnnotationsResponse {
+    const STATUS_CODE: u16 = 200;
 
-impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetAnnotationsResponse {
+    type Body = Option<OrderedMap<String, Vec<String>>>;
+
     type Error = Error;
+    type StatusError = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
+    fn from_message(mut message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
+
         match message.body {
             Some(annotations) => Ok(Self { annotations }),
             None => Ok(Self {

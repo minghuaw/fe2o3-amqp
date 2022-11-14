@@ -4,20 +4,11 @@ use fe2o3_amqp::{
     Delivery, Receiver, Sender,
 };
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, FromBody, IntoBody, MessageId, Outcome, Properties},
-    primitives::SimpleValue,
+    messaging::{FromBody, IntoBody, MessageId, Outcome, Properties},
 };
 
 use crate::{
-    error::{AttachError, Error, StatusError},
-    // operations::{
-    //     CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, DeregisterRequest,
-    //     DeregisterResponse, GetAnnotationsRequest, GetAnnotationsResponse, GetAttributesRequest,
-    //     GetAttributesResponse, GetMgmtNodesRequest, GetMgmtNodesResponse, GetOperationsRequest,
-    //     GetOperationsResponse, GetTypesRequest, GetTypesResponse, QueryRequest, QueryResponse,
-    //     ReadRequest, ReadResponse, RegisterRequest, RegisterResponse, UpdateRequest,
-    //     UpdateResponse,
-    // },
+    error::{AttachError, Error},
     request::Request,
     response::{Response},
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
@@ -28,52 +19,6 @@ pub struct MgmtClient {
     client_node_addr: String,
     sender: Sender,
     receiver: Receiver,
-}
-
-macro_rules! operation {
-    ($op:ident, $lt:lifetime, $req_ty:ty, $res_ty:ty) => {
-        pub async fn $op<$lt>(
-            &mut self,
-            req: $req_ty,
-            entity_type: impl Into<String>,
-            locales: Option<String>,
-        ) -> Result<$res_ty, Error> {
-            self.send_request(req, entity_type, locales)
-                .await?
-                .accepted_or_else(|o| Error::NotAccepted(o))?;
-            let response: Response<$res_ty> = self.recv_response().await?;
-            match response.status_code.0.get() {
-                <$res_ty>::STATUS_CODE => Ok(response.operation),
-                _ => Err(StatusError {
-                    code: response.status_code,
-                    description: response.status_description,
-                }
-                .into()),
-            }
-        }
-    };
-
-    ($op:ident, $req_ty:ty, $res_ty:ty) => {
-        pub async fn $op(
-            &mut self,
-            req: $req_ty,
-            entity_type: impl Into<String>,
-            locales: Option<String>,
-        ) -> Result<$res_ty, Error> {
-            self.send_request(req, entity_type, locales)
-                .await?
-                .accepted_or_else(|o| Error::NotAccepted(o))?;
-            let response: Response<$res_ty> = self.recv_response().await?;
-            match response.status_code.0.get() {
-                <$res_ty>::STATUS_CODE => Ok(response.operation),
-                _ => Err(StatusError {
-                    code: response.status_code,
-                    description: response.status_description,
-                }
-                .into()),
-            }
-        }
-    };
 }
 
 impl MgmtClient {
@@ -96,30 +41,6 @@ impl MgmtClient {
         self.receiver.close().await?;
         Ok(())
     }
-
-    // operation!(create, 'a,  CreateRequest<'a>, CreateResponse);
-
-    // operation!(read, 'a, ReadRequest<'a>, ReadResponse);
-
-    // operation!(update, 'a, UpdateRequest<'a>, UpdateResponse);
-
-    // operation!(delete, 'a, DeleteRequest<'a>, DeleteResponse);
-
-    // operation!(query, 'a, QueryRequest<'a>, QueryResponse);
-
-    // operation!(get_types, 'a, GetTypesRequest<'a>, GetTypesResponse);
-
-    // operation!(get_annotations, 'a, GetAnnotationsRequest<'a>, GetAnnotationsResponse);
-
-    // operation!(get_attributes, 'a, GetAttributesRequest<'a>, GetAttributesResponse);
-
-    // operation!(get_operations, 'a, GetOperationsRequest<'a>, GetOperationsResponse);
-
-    // operation!(get_mgmt_nodes, GetMgmtNodesRequest, GetMgmtNodesResponse);
-
-    // operation!(register, 'a, RegisterRequest<'a>, RegisterResponse);
-
-    // operation!(deregister, 'a, DeregisterRequest<'a>, DeregisterResponse);
 
     pub async fn send_request(
         &mut self,

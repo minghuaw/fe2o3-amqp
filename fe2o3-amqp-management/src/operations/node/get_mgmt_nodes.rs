@@ -1,11 +1,13 @@
-use fe2o3_amqp_types::messaging::{ApplicationProperties, Message};
+use std::borrow::Cow;
+
+use fe2o3_amqp_types::messaging::{Message};
 
 use crate::{
     constants::{GET_MGMT_NODES, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    error::{Error, Result}, request::Request, response::Response,
 };
+
+use super::get::GetRequest;
 
 pub trait GetMgmtNodes {
     fn get_mgmt_nodes(&self, req: GetMgmtNodesRequest) -> Result<GetMgmtNodesResponse>;
@@ -18,24 +20,31 @@ pub trait GetMgmtNodes {
 /// Body:
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
-pub struct GetMgmtNodesRequest {}
+pub struct GetMgmtNodesRequest<'a> {
+    inner: GetRequest<'a>
+}
 
-impl GetMgmtNodesRequest {
-    pub fn new() -> Self {
-        Self {}
+impl<'a> GetMgmtNodesRequest<'a> {
+    pub fn new(
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
+        Self {
+            inner: GetRequest::new(None, r#type, locales),
+        }
     }
 }
 
-impl MessageSerializer for GetMgmtNodesRequest {
+impl<'a> Request for GetMgmtNodesRequest<'a> {
+    type Response = GetMgmtNodesResponse;
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
+        let mut application_properties = self.inner.into_application_properties();
+        application_properties.insert(OPERATION.into(), GET_MGMT_NODES.into());
+
         Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, GET_MGMT_NODES)
-                    .build(),
-            )
+            .application_properties(application_properties)
             .body(())
             .build()
     }
@@ -50,13 +59,18 @@ pub struct GetMgmtNodesResponse {
 }
 
 impl GetMgmtNodesResponse {
-    pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Option<Vec<String>>> for GetMgmtNodesResponse {
-    type Error = Error;
+impl Response for GetMgmtNodesResponse {
+    const STATUS_CODE: u16 = 200;
 
-    fn from_message(message: Message<Option<Vec<String>>>) -> Result<Self> {
+    type Body = Option<Vec<String>>;
+
+    type Error = Error;
+    type StatusError = Error;
+
+    fn from_message(mut message: Message<Option<Vec<String>>>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
         match message.body {
             Some(addresses) => Ok(Self { addresses }),
             None => Ok(Self {

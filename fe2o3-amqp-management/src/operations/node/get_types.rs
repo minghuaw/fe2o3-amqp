@@ -2,15 +2,15 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::OrderedMap,
+    primitives::{OrderedMap, SimpleValue},
 };
 
 use crate::{
-    constants::{GET_TYPES, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{GET_TYPES, OPERATION, TYPE, LOCALES},
+    error::{Error, Result}, request::Request, response::Response,
 };
+
+use super::get::GetRequest;
 
 pub trait GetTypes {
     fn get_types(&self, req: GetTypesRequest) -> Result<GetTypesResponse>;
@@ -22,28 +22,31 @@ pub trait GetTypes {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetTypesRequest<'a> {
-    pub entity_type: Option<Cow<'a, str>>,
+    inner: GetRequest<'a>
 }
 
 impl<'a> GetTypesRequest<'a> {
-    pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
+    pub fn new(
+        entity_type: impl Into<Option<Cow<'a, str>>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
         Self {
-            entity_type: entity_type.into(),
+            inner: GetRequest::new(entity_type, r#type, locales)
         }
     }
 }
 
-impl<'a> MessageSerializer for GetTypesRequest<'a> {
+impl<'a> Request for GetTypesRequest<'a> {
+    type Response = GetTypesResponse;
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
-        let mut builder = ApplicationProperties::builder();
-        builder = builder.insert(OPERATION, GET_TYPES);
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type.to_string());
-        }
+    fn into_message(self) -> Message<Self::Body> {        
+        let mut application_properties = self.inner.into_application_properties();
+        application_properties.insert(OPERATION.into(), GET_TYPES.into());
+
         Message::builder()
-            .application_properties(builder.build())
+            .application_properties(application_properties)
             .body(())
             .build()
     }
@@ -54,13 +57,18 @@ pub struct GetTypesResponse {
 }
 
 impl GetTypesResponse {
-    pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetTypesResponse {
-    type Error = Error;
+impl Response for GetTypesResponse {
+    const STATUS_CODE: u16 = 200;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
+    type Body = Option<OrderedMap<String, Vec<String>>>;
+
+    type Error = Error;
+    type StatusError = Error;
+
+    fn from_message(mut message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
         match message.body {
             Some(types) => Ok(Self { types }),
             None => Ok(Self {
