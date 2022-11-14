@@ -2,98 +2,82 @@ use fe2o3_amqp_types::messaging::{IntoBody, Message};
 
 use crate::response::Response;
 
-/// This leaves the responsibility of transforming a request to a Message entirely to the user. The
-/// only field that will be set automatically is the message-id (if not set) which is a source for
-/// the correlation-id of the response.
-///
-/// This will likely see some significant changes in the future.
-///
-/// TODO: separating setting entity type, operation, and locales from the request body?
-pub trait Request {
+use fe2o3_amqp_types::{messaging::{
+    ApplicationProperties, DeliveryAnnotations, Footer, Header, 
+    MessageAnnotations, Properties,
+}, primitives::SimpleValue};
+
+use crate::{constants};
+
+pub trait Request: Sized {
+    /// Management operation
+    const OPERATION: &'static str;
+
     type Response: Response;
     type Body: IntoBody;
 
-    fn into_message(self) -> Message<Self::Body>;
-}
+    fn locales(&mut self) -> Option<String> {
+        None
+    }
 
-mod exp {
-    use fe2o3_amqp_types::{messaging::{
-        ApplicationProperties, DeliveryAnnotations, Footer, Header, IntoBody, Message,
-        MessageAnnotations, Properties,
-    }, primitives::SimpleValue};
+    /// Set the manageable entity type.
+    /// 
+    /// This seems to be mandatory for all requests in the working draft. However, existing
+    /// implementations do not seem to comply, which is why it is an option.
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        None
+    }
 
-    use crate::{response::Response, constants};
+    fn encode_header(&mut self) -> Option<Header> {
+        None
+    }
 
-    pub trait Request: Sized {
-        /// Management operation
-        const OPERATION: &'static str;
+    fn encode_delivery_annotations(&mut self) -> Option<DeliveryAnnotations> {
+        None
+    }
 
-        type Response: Response;
-        type Body: IntoBody;
+    fn encode_message_annotations(&mut self) -> Option<MessageAnnotations> {
+        None
+    }
 
-        fn locales(&mut self) -> Option<String> {
-            None
-        }
+    fn encode_properties(&mut self) -> Option<Properties> {
+        None
+    }
 
-        /// Set the manageable entity type.
-        /// 
-        /// This seems to be mandatory for all requests in the working draft. However, existing
-        /// implementations do not seem to comply, which is why it is an option.
-        fn manageable_entity_type(&mut self) -> Option<String> {
-            None
-        }
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        None
+    }
 
-        fn encode_header(&mut self) -> Option<Header> {
-            None
-        }
+    fn encode_body(&mut self) -> Self::Body;
 
-        fn encode_delivery_annotations(&mut self) -> Option<DeliveryAnnotations> {
-            None
-        }
+    fn encode_footer(&mut self) -> Option<Footer> {
+        None
+    }
 
-        fn encode_message_annotations(&mut self) -> Option<MessageAnnotations> {
-            None
-        }
-
-        fn encode_properties(&mut self) -> Option<Properties> {
-            None
-        }
-
-        fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
-            None
-        }
-
-        fn encode_body(&mut self) -> Self::Body;
-
-        fn encode_footer(&mut self) -> Option<Footer> {
-            None
-        }
-
-        fn into_message(mut self) -> Message<Self::Body> {
-            let mut application_properties = self.encode_application_properties().unwrap_or_default();
+    fn into_message(mut self) -> Message<Self::Body> {
+        let mut application_properties = self.encode_application_properties().unwrap_or_default();
+        application_properties.as_inner_mut()
+            .entry(constants::OPERATION.to_string())
+            .or_insert(SimpleValue::String(Self::OPERATION.to_string()));
+        if let Some(entity_type) = self.manageable_entity_type() {
             application_properties.as_inner_mut()
-                .entry(constants::OPERATION.to_string())
-                .or_insert(SimpleValue::String(Self::OPERATION.to_string()));
-            if let Some(entity_type) = self.manageable_entity_type() {
-                application_properties.as_inner_mut()
-                    .entry(constants::TYPE.to_string())
-                    .or_insert(SimpleValue::String(entity_type));
-            }
-            if let Some(locales) = self.locales() {
-                application_properties.as_inner_mut()
-                    .entry(constants::LOCALES.to_string())
-                    .or_insert(SimpleValue::String(locales));
-            }
-    
-            Message {
-                header: self.encode_header(),
-                delivery_annotations: self.encode_delivery_annotations(),
-                message_annotations: self.encode_message_annotations(),
-                properties: self.encode_properties(),
-                application_properties: Some(application_properties),
-                body: self.encode_body(),
-                footer: self.encode_footer(),
-            }
+                .entry(constants::TYPE.to_string())
+                .or_insert(SimpleValue::String(entity_type));
+        }
+        if let Some(locales) = self.locales() {
+            application_properties.as_inner_mut()
+                .entry(constants::LOCALES.to_string())
+                .or_insert(SimpleValue::String(locales));
+        }
+
+        Message {
+            header: self.encode_header(),
+            delivery_annotations: self.encode_delivery_annotations(),
+            message_annotations: self.encode_message_annotations(),
+            properties: self.encode_properties(),
+            application_properties: Some(application_properties),
+            body: self.encode_body(),
+            footer: self.encode_footer(),
         }
     }
 }
