@@ -9,8 +9,8 @@ use crate::{
     constants::{CREATE, LOCALES, NAME, OPERATION, TYPE},
     error::{Error, InvalidType, Result, StatusError},
     mgmt_ext::AmqpMessageManagementExt,
-    request::IntoMessage,
-    response::FromMessage,
+    request::Request,
+    response::Response,
 };
 
 pub trait Create {
@@ -83,7 +83,8 @@ impl<'a> CreateRequest<'a> {
     }
 }
 
-impl<'a> IntoMessage for CreateRequest<'a> {
+impl<'a> Request for CreateRequest<'a> {
+    type Response = CreateResponse;
     type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
@@ -122,7 +123,7 @@ pub struct CreateResponse {
     pub correlation_id: Option<MessageId>,
 }
 
-impl FromMessage for CreateResponse {
+impl Response for CreateResponse {
     const STATUS_CODE: u16 = 201;
     
     type Body = Option<OrderedMap<String, Value>>;

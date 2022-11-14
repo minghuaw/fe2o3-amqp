@@ -18,8 +18,8 @@ use crate::{
     //     ReadRequest, ReadResponse, RegisterRequest, RegisterResponse, UpdateRequest,
     //     UpdateResponse,
     // },
-    request::IntoMessage,
-    response::{FromMessage},
+    request::Request,
+    response::{Response},
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
 
@@ -123,7 +123,7 @@ impl MgmtClient {
 
     pub async fn send_request(
         &mut self,
-        request: impl IntoMessage,
+        request: impl Request,
     ) -> Result<Outcome, SendError> {
         let mut message = request.into_message().map_body(IntoBody::into_body);
 
@@ -140,7 +140,7 @@ impl MgmtClient {
     }
     pub async fn recv_response<Res>(&mut self) -> Result<Res, Error>
     where
-        Res: FromMessage,
+        Res: Response,
         Res::Error: Into<Error>,
         for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
     {
@@ -155,8 +155,8 @@ impl MgmtClient {
         request: Req,
     ) -> Result<Res, Error>
     where
-        Req: IntoMessage,
-        Res: FromMessage,
+        Req: Request,
+        Res: Response,
         Res::Error: Into<Error>,
         for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
     {

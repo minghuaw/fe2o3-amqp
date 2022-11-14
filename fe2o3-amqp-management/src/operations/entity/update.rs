@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     constants::{IDENTITY, NAME, OPERATION, UPDATE, TYPE, LOCALES},
-    error::{Error, Result}, request::IntoMessage, response::FromMessage, mgmt_ext::AmqpMessageManagementExt,
+    error::{Error, Result}, request::Request, response::Response, mgmt_ext::AmqpMessageManagementExt,
 };
 
 pub trait Update {
@@ -77,7 +77,8 @@ impl<'a> UpdateRequest<'a> {
     }
 }
 
-impl<'a> IntoMessage for UpdateRequest<'a> {
+impl<'a> Request for UpdateRequest<'a> {
+    type Response = UpdateResponse;
     type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
@@ -118,7 +119,7 @@ pub struct UpdateResponse {
     pub correlation_id: Option<MessageId>,
 }
 
-impl FromMessage for UpdateResponse {
+impl Response for UpdateResponse {
     const STATUS_CODE: u16 = 200;
 
     type Body = Option<OrderedMap<String, Value>>;

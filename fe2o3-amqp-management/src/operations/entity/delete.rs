@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     constants::{DELETE, IDENTITY, NAME, OPERATION, TYPE, LOCALES},
-    error::{Error, Result, InvalidType}, request::IntoMessage, response::FromMessage, mgmt_ext::AmqpMessageManagementExt,
+    error::{Error, Result, InvalidType}, request::Request, response::Response, mgmt_ext::AmqpMessageManagementExt,
 };
 
 pub trait Delete {
@@ -72,7 +72,8 @@ impl<'a> DeleteRequest<'a> {
     }
 }
 
-impl<'a> IntoMessage for DeleteRequest<'a> {
+impl<'a> Request for DeleteRequest<'a> {
+    type Response = DeleteResponse;
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
@@ -118,7 +119,7 @@ pub struct DeleteResponse {
 impl DeleteResponse {
 }
 
-impl FromMessage for DeleteResponse {
+impl Response for DeleteResponse {
     const STATUS_CODE: u16 = 204;
 
     type Body = Option<OrderedMap<String, Value>>;

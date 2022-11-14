@@ -1,5 +1,7 @@
 use fe2o3_amqp_types::messaging::{IntoBody, Message};
 
+use crate::response::Response;
+
 // use crate::constantsOperationRequest;
 
 // pub struct RequestMessageProperties {
@@ -34,7 +36,8 @@ use fe2o3_amqp_types::messaging::{IntoBody, Message};
 // }
 
 /// TODO: separating setting entity type, operation, and locales from the request body?
-pub trait IntoMessage {
+pub trait Request {
+    type Response: Response;
     type Body: IntoBody;
 
     fn into_message(self) -> Message<Self::Body>;

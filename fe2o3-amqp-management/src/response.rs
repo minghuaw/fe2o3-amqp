@@ -77,11 +77,11 @@ use crate::{
 /// 
 /// TODO: only allowing one type of body for now as it seems like all responses should know the
 /// exact type of body they are expecting
-pub trait FromMessage: Sized {
+pub trait Response: Sized {
     const STATUS_CODE: u16;
 
     type Body: for<'de> FromBody<'de>; 
-    
+
     type Error;
     type StatusError: From<StatusError> + From<InvalidType> + From<StatusCodeNotFound>;
 

@@ -8,8 +8,8 @@ use fe2o3_amqp_types::{
 use crate::{
     constants::{IDENTITY, LOCALES, NAME, OPERATION, READ, TYPE},
     error::{Error, Result},
-    request::IntoMessage,
-    response::FromMessage, mgmt_ext::AmqpMessageManagementExt,
+    request::Request,
+    response::Response, mgmt_ext::AmqpMessageManagementExt,
 };
 
 pub trait Read {
@@ -67,7 +67,8 @@ impl<'a> ReadRequest<'a> {
     }
 }
 
-impl<'a> IntoMessage for ReadRequest<'a> {
+impl<'a> Request for ReadRequest<'a> {
+    type Response = ReadResponse;
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
@@ -112,7 +113,7 @@ pub struct ReadResponse {
 impl ReadResponse {
 }
 
-impl FromMessage for ReadResponse {
+impl Response for ReadResponse {
     const STATUS_CODE: u16 = 200;
 
     type Body = Option<OrderedMap<String, Value>>;
