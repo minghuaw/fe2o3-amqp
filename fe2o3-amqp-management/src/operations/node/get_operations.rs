@@ -2,17 +2,12 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
-use crate::{
-    constants::{GET_OPERATIONS, OPERATION},
-    error::{Error, Result},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::GET_OPERATIONS, error::Error, request::Request, response::Response};
 
 use super::get::GetRequest;
 
 pub trait GetOperations {
-    fn get_operations(&self, req: GetOperationsRequest) -> Result<GetOperationsResponse>;
+    fn get_operations(&self, req: GetOperationsRequest) -> Result<GetOperationsResponse, Error>;
 }
 
 /// GET-OPERATIONS
@@ -40,17 +35,28 @@ impl<'a> GetOperationsRequest<'a> {
 }
 
 impl<'a> Request for GetOperationsRequest<'a> {
+    const OPERATION: &'static str = GET_OPERATIONS;
+
     type Response = GetOperationsResponse;
+
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
-        let mut application_properties = self.inner.into_application_properties();
-        application_properties.insert(OPERATION.into(), GET_OPERATIONS.into());
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        self.inner.manageable_entity_type()
+    }
 
-        Message::builder()
-            .application_properties(application_properties)
-            .body(())
-            .build()
+    fn locales(&mut self) -> Option<String> {
+        self.inner.locales()
+    }
+
+    fn encode_application_properties(
+        &mut self,
+    ) -> Option<fe2o3_amqp_types::messaging::ApplicationProperties> {
+        self.inner.encode_application_properties()
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -77,11 +83,8 @@ impl Response for GetOperationsResponse {
     type Body = Option<Operations>;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<Operations>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
-
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(operations) => Ok(Self { operations }),
             None => Ok(Self {

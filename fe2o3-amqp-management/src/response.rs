@@ -17,13 +17,11 @@ pub trait Response: Sized {
 
     /// Checks the status code and description of the response and returns `None` if status code is
     /// not found or returns `Some(Err(error))` if the status code is not the expected one.
-    /// 
+    ///
     /// Please note that the blanket implementation will remove the status code and description.
     /// The user should override the blanket implementation if they want to keep the status code
     /// and description.
-    fn verify_status_code(
-        message: &mut Message<Self::Body>,
-    ) -> Result<StatusCode, Self::Error> {
+    fn verify_status_code(message: &mut Message<Self::Body>) -> Result<StatusCode, Self::Error> {
         let status_code = match message.remove_status_code().ok_or(StatusCodeNotFound {})? {
             Ok(status_code) => status_code,
             Err(err) => {

@@ -2,17 +2,12 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::messaging::Message;
 
-use crate::{
-    constants::{GET_MGMT_NODES, OPERATION},
-    error::{Error, Result},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::GET_MGMT_NODES, error::Error, request::Request, response::Response};
 
 use super::get::GetRequest;
 
 pub trait GetMgmtNodes {
-    fn get_mgmt_nodes(&self, req: GetMgmtNodesRequest) -> Result<GetMgmtNodesResponse>;
+    fn get_mgmt_nodes(&self, req: GetMgmtNodesRequest) -> Result<GetMgmtNodesResponse, Error>;
 }
 
 /// GET-MGMT-NODES
@@ -35,17 +30,28 @@ impl<'a> GetMgmtNodesRequest<'a> {
 }
 
 impl<'a> Request for GetMgmtNodesRequest<'a> {
+    const OPERATION: &'static str = GET_MGMT_NODES;
+
     type Response = GetMgmtNodesResponse;
+
     type Body = ();
 
-    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        let mut application_properties = self.inner.into_application_properties();
-        application_properties.insert(OPERATION.into(), GET_MGMT_NODES.into());
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        self.inner.manageable_entity_type()
+    }
 
-        Message::builder()
-            .application_properties(application_properties)
-            .body(())
-            .build()
+    fn locales(&mut self) -> Option<String> {
+        self.inner.locales()
+    }
+
+    fn encode_application_properties(
+        &mut self,
+    ) -> Option<fe2o3_amqp_types::messaging::ApplicationProperties> {
+        self.inner.encode_application_properties()
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -65,10 +71,8 @@ impl Response for GetMgmtNodesResponse {
     type Body = Option<Vec<String>>;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<Vec<String>>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(addresses) => Ok(Self { addresses }),
             None => Ok(Self {

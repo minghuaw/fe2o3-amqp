@@ -123,7 +123,7 @@ impl DeleteResponse {}
 impl Response for DeleteResponse {
     const STATUS_CODE: u16 = 204;
 
-    type Body =  Option<OrderedMap<String, Value>>;
+    type Body = Option<OrderedMap<String, Value>>;
 
     type Error = Error;
 

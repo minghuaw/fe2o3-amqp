@@ -22,18 +22,13 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue, Value},
+    primitives::{OrderedMap, Value},
 };
 
-use crate::{
-    constants::{LOCALES, OPERATION, QUERY, TYPE},
-    error::{Error, Result},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::QUERY, error::Error, request::Request, response::Response};
 
 pub trait Query {
-    fn query(&self, req: QueryRequest) -> Result<QueryResponse>;
+    fn query(&self, req: QueryRequest) -> Result<QueryResponse, Error>;
 }
 
 pub struct QueryRequest<'a> {
@@ -85,23 +80,24 @@ impl<'a> QueryRequest<'a> {
 }
 
 impl<'a> Request for QueryRequest<'a> {
+    const OPERATION: &'static str = QUERY;
+
     type Response = QueryResponse;
+
     type Body = OrderedMap<String, Vec<String>>;
 
-    fn into_message(self) -> Message<Self::Body> {
-        let mut builder = ApplicationProperties::builder();
-        builder = builder
-            .insert(OPERATION, QUERY)
-            .insert(TYPE, self.r#type.to_string())
-            .insert(
-                LOCALES,
-                self.locales
-                    .map(|s| SimpleValue::from(s.to_string()))
-                    .unwrap_or(SimpleValue::Null),
-            );
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        self.entity_type.as_ref().map(|s| s.to_string())
+    }
 
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", &entity_type[..]);
+    fn locales(&mut self) -> Option<String> {
+        self.locales.as_ref().map(|s| s.to_string())
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        let mut builder = ApplicationProperties::builder();
+        if let Some(entity_type) = self.entity_type.as_ref() {
+            builder = builder.insert("entityType", entity_type.to_string());
         }
         if let Some(offset) = self.offset {
             builder = builder.insert("offset", offset);
@@ -109,8 +105,10 @@ impl<'a> Request for QueryRequest<'a> {
         if let Some(count) = self.count {
             builder = builder.insert("count", count);
         }
-        let application_properties = builder.build();
+        Some(builder.build())
+    }
 
+    fn encode_body(self) -> Self::Body {
         let mut map = OrderedMap::new();
         let value = self
             .attribute_names
@@ -118,11 +116,7 @@ impl<'a> Request for QueryRequest<'a> {
             .map(|s| s.to_string())
             .collect();
         map.insert(String::from("attribute_names"), value);
-
-        Message::builder()
-            .application_properties(application_properties)
-            .body(map)
-            .build()
+        map
     }
 }
 
@@ -153,19 +147,14 @@ pub struct QueryResponse {
     pub results: Vec<Vec<Value>>,
 }
 
-impl QueryResponse {}
-
 impl Response for QueryResponse {
     const STATUS_CODE: u16 = 200;
 
     type Body = OrderedMap<String, Vec<Value>>;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<OrderedMap<String, Vec<Value>>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
-
+    fn decode_message(mut message: Message<Self::Body>) -> Result<Self, Self::Error> {
         let count = message
             .application_properties
             .as_mut()
@@ -180,7 +169,7 @@ impl Response for QueryResponse {
         let attribute_names = attribute_names
             .into_iter()
             .map(|v| String::try_from(v).map_err(|_| Error::DecodeError(None)))
-            .collect::<Result<Vec<String>>>()?;
+            .collect::<Result<Vec<String>, Error>>()?;
 
         let results = map.remove("results").ok_or(Error::DecodeError(None))?;
         let results: Vec<Vec<Value>> = results
@@ -189,7 +178,7 @@ impl Response for QueryResponse {
                 Value::List(vout) => Ok(vout),
                 _ => Err(Error::DecodeError(None)),
             })
-            .collect::<Result<Vec<Vec<Value>>>>()?;
+            .collect::<Result<Vec<Vec<Value>>, Error>>()?;
 
         Ok(Self {
             count,

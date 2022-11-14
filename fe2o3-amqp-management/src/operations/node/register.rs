@@ -2,18 +2,13 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{SimpleValue, Value},
+    primitives::Value,
 };
 
-use crate::{
-    constants::{LOCALES, OPERATION, REGISTER, TYPE},
-    error::{Error, Result},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::REGISTER, error::Error, request::Request, response::Response};
 
 pub trait Register {
-    fn register(&mut self, req: RegisterRequest) -> Result<RegisterResponse>;
+    fn register(&mut self, req: RegisterRequest) -> Result<RegisterResponse, Error>;
 }
 
 /// REGISTER
@@ -48,26 +43,29 @@ impl<'a> RegisterRequest<'a> {
 }
 
 impl<'a> Request for RegisterRequest<'a> {
+    const OPERATION: &'static str = REGISTER;
+
     type Response = RegisterResponse;
     type Body = ();
 
-    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, REGISTER)
-                    .insert(TYPE, self.r#type.to_string())
-                    .insert(
-                        LOCALES,
-                        self.locales
-                            .map(|s| SimpleValue::from(s.to_string()))
-                            .unwrap_or(SimpleValue::Null),
-                    )
-                    .insert("address", self.address.to_string())
-                    .build(),
-            )
-            .body(())
-            .build()
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        Some(self.r#type.to_string())
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        self.locales.as_ref().map(|s| s.to_string())
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        Some(
+            ApplicationProperties::builder()
+                .insert("address", self.address.to_string())
+                .build(),
+        )
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -87,11 +85,8 @@ impl Response for RegisterResponse {
     type Body = Value;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Value>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
-
+    fn decode_message(_message: Message<Self::Body>) -> Result<Self, Self::Error> {
         Ok(Self {})
     }
 }

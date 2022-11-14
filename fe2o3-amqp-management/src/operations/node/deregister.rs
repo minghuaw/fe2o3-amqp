@@ -2,18 +2,13 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{SimpleValue, Value},
+    primitives::Value,
 };
 
-use crate::{
-    constants::{DEREGISTER, LOCALES, OPERATION, TYPE},
-    error::{Error, Result},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::DEREGISTER, error::Error, request::Request, response::Response};
 
 pub trait Deregister {
-    fn deregister(&mut self, req: DeregisterRequest) -> Result<DeregisterResponse>;
+    fn deregister(&mut self, req: DeregisterRequest) -> Result<DeregisterResponse, Error>;
 }
 
 /// DEREGISTER
@@ -47,27 +42,30 @@ impl<'a> DeregisterRequest<'a> {
     }
 }
 
-impl<'a> Request for DeregisterRequest<'a> {
+impl Request for DeregisterRequest<'_> {
+    const OPERATION: &'static str = DEREGISTER;
+
     type Response = DeregisterResponse;
     type Body = ();
 
-    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, DEREGISTER)
-                    .insert(TYPE, self.r#type.to_string())
-                    .insert(
-                        LOCALES,
-                        self.locales
-                            .map(|s| SimpleValue::from(s.to_string()))
-                            .unwrap_or(SimpleValue::Null),
-                    )
-                    .insert("address", self.address.to_string())
-                    .build(),
-            )
-            .body(())
-            .build()
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        Some(self.r#type.to_string())
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        self.locales.as_ref().map(|x| x.to_string())
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        Some(
+            ApplicationProperties::builder()
+                .insert("address", self.address.to_string())
+                .build(),
+        )
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -87,11 +85,8 @@ impl Response for DeregisterResponse {
     type Body = Value;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Value>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
-
+    fn decode_message(_message: Message<Self::Body>) -> Result<Self, Self::Error> {
         Ok(Self {})
     }
 }

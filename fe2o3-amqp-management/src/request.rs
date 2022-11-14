@@ -2,12 +2,14 @@ use fe2o3_amqp_types::messaging::{IntoBody, Message};
 
 use crate::response::Response;
 
-use fe2o3_amqp_types::{messaging::{
-    ApplicationProperties, DeliveryAnnotations, Footer, Header, 
-    MessageAnnotations, Properties,
-}, primitives::SimpleValue};
+use fe2o3_amqp_types::{
+    messaging::{
+        ApplicationProperties, DeliveryAnnotations, Footer, Header, MessageAnnotations, Properties,
+    },
+    primitives::SimpleValue,
+};
 
-use crate::{constants};
+use crate::constants;
 
 pub trait Request: Sized {
     /// Management operation
@@ -21,7 +23,7 @@ pub trait Request: Sized {
     }
 
     /// Set the manageable entity type.
-    /// 
+    ///
     /// This seems to be mandatory for all requests in the working draft. However, existing
     /// implementations do not seem to comply, which is why it is an option.
     fn manageable_entity_type(&mut self) -> Option<String> {
@@ -61,16 +63,19 @@ pub trait Request: Sized {
         let properties = self.encode_properties();
 
         let mut application_properties = self.encode_application_properties().unwrap_or_default();
-        application_properties.as_inner_mut()
+        application_properties
+            .as_inner_mut()
             .entry(constants::OPERATION.to_string())
             .or_insert(SimpleValue::String(Self::OPERATION.to_string()));
         if let Some(entity_type) = self.manageable_entity_type() {
-            application_properties.as_inner_mut()
+            application_properties
+                .as_inner_mut()
                 .entry(constants::TYPE.to_string())
                 .or_insert(SimpleValue::String(entity_type));
         }
         if let Some(locales) = self.locales() {
-            application_properties.as_inner_mut()
+            application_properties
+                .as_inner_mut()
                 .entry(constants::LOCALES.to_string())
                 .or_insert(SimpleValue::String(locales));
         }

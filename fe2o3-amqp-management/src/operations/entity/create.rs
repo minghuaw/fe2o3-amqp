@@ -1,16 +1,11 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{Message},
+    messaging::Message,
     primitives::{OrderedMap, Value},
 };
 
-use crate::{
-    constants::{CREATE},
-    error::{Error},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::CREATE, error::Error, request::Request, response::Response};
 
 pub trait Create {
     fn create(&mut self, req: CreateRequest) -> Result<CreateResponse, Error>;
@@ -121,7 +116,7 @@ impl Response for CreateResponse {
     const STATUS_CODE: u16 = 201;
 
     type Body = Option<OrderedMap<String, Value>>;
-    
+
     type Error = Error;
 
     fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {

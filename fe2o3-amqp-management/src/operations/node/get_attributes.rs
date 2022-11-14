@@ -2,17 +2,12 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
-use crate::{
-    constants::{GET_ATTRIBUTES, OPERATION},
-    error::{Error, Result},
-    request::Request,
-    response::Response,
-};
+use crate::{constants::GET_ATTRIBUTES, error::Error, request::Request, response::Response};
 
 use super::get::GetRequest;
 
 pub trait GetAttributes {
-    fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse>;
+    fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse, Error>;
 }
 
 /// GET-ATTRIBUTES
@@ -37,17 +32,28 @@ impl<'a> GetAttributesRequest<'a> {
 }
 
 impl<'a> Request for GetAttributesRequest<'a> {
+    const OPERATION: &'static str = GET_ATTRIBUTES;
+
     type Response = GetAttributesResponse;
+
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
-        let mut application_properties = self.inner.into_application_properties();
-        application_properties.insert(OPERATION.into(), GET_ATTRIBUTES.into());
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        self.inner.manageable_entity_type()
+    }
 
-        Message::builder()
-            .application_properties(application_properties)
-            .body(())
-            .build()
+    fn locales(&mut self) -> Option<String> {
+        self.inner.locales()
+    }
+
+    fn encode_application_properties(
+        &mut self,
+    ) -> Option<fe2o3_amqp_types::messaging::ApplicationProperties> {
+        self.inner.encode_application_properties()
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -72,11 +78,8 @@ impl Response for GetAttributesResponse {
     type Body = Option<OrderedMap<String, Vec<String>>>;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
-
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(attributes) => Ok(Self { attributes }),
             None => Ok(Self {

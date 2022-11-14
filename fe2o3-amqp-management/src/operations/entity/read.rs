@@ -7,7 +7,7 @@ use fe2o3_amqp_types::{
 
 use crate::{
     constants::{IDENTITY, NAME, READ},
-    error::{Error},
+    error::Error,
     request::Request,
     response::Response,
 };

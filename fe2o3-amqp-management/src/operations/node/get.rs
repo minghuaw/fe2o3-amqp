@@ -1,14 +1,14 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{messaging::ApplicationProperties, primitives::SimpleValue};
+use fe2o3_amqp_types::messaging::ApplicationProperties;
 
-use crate::constants::{ENTITY_TYPE, LOCALES, TYPE};
+use crate::constants::ENTITY_TYPE;
 
 pub(crate) struct GetRequest<'a> {
     pub entity_type: Option<Cow<'a, str>>,
 
     /// Entity type
-    pub r#type: Cow<'a, str>,
+    pub manageable_entity_type: Cow<'a, str>,
 
     /// locales
     pub locales: Option<Cow<'a, str>>,
@@ -17,28 +17,29 @@ pub(crate) struct GetRequest<'a> {
 impl<'a> GetRequest<'a> {
     pub fn new(
         entity_type: impl Into<Option<Cow<'a, str>>>,
-        r#type: impl Into<Cow<'a, str>>,
+        manageable_entity_type: impl Into<Cow<'a, str>>,
         locales: Option<impl Into<Cow<'a, str>>>,
     ) -> Self {
         Self {
             entity_type: entity_type.into(),
-            r#type: r#type.into(),
+            manageable_entity_type: manageable_entity_type.into(),
             locales: locales.map(|x| x.into()),
         }
     }
 
-    pub(crate) fn into_application_properties(self) -> ApplicationProperties {
-        let mut builder = ApplicationProperties::builder()
-            .insert(TYPE, SimpleValue::String(self.r#type.into()))
-            .insert(
-                LOCALES,
-                self.locales
-                    .map(|s| SimpleValue::String(s.into()))
-                    .unwrap_or(SimpleValue::Null),
-            );
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert(ENTITY_TYPE, SimpleValue::String(entity_type.into()));
-        }
-        builder.build()
+    pub(crate) fn manageable_entity_type(&mut self) -> Option<String> {
+        Some(self.manageable_entity_type.to_string())
+    }
+
+    pub(crate) fn locales(&mut self) -> Option<String> {
+        self.locales.as_ref().map(|x| x.to_string())
+    }
+
+    pub(crate) fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        self.entity_type.as_ref().map(|entity_type| {
+            ApplicationProperties::builder()
+                .insert(ENTITY_TYPE, entity_type.to_string())
+                .build()
+        })
     }
 }
