@@ -1,19 +1,19 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue, Value},
+    messaging::{Message},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{
-    constants::{CREATE, LOCALES, NAME, OPERATION, TYPE},
-    error::{Error, Result},
+    constants::{CREATE},
+    error::{Error},
     request::Request,
     response::Response,
 };
 
 pub trait Create {
-    fn create(&mut self, req: CreateRequest) -> Result<CreateResponse>;
+    fn create(&mut self, req: CreateRequest) -> Result<CreateResponse, Error>;
 }
 
 pub struct CreateRequest<'a> {
@@ -83,26 +83,22 @@ impl<'a> CreateRequest<'a> {
 }
 
 impl<'a> Request for CreateRequest<'a> {
+    const OPERATION: &'static str = CREATE;
+
     type Response = CreateResponse;
+
     type Body = OrderedMap<String, Value>;
 
-    fn into_message(self) -> Message<Self::Body> {
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, CREATE)
-                    .insert(TYPE, SimpleValue::String(self.r#type.into()))
-                    .insert(
-                        LOCALES,
-                        self.locales
-                            .map(|s| SimpleValue::String(s.into()))
-                            .unwrap_or(SimpleValue::Null),
-                    )
-                    .insert(NAME, self.name.to_string())
-                    .build(),
-            )
-            .body(self.body)
-            .build()
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        Some(self.r#type.to_string())
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        self.locales.as_ref().map(|s| s.to_string())
+    }
+
+    fn encode_body(self) -> Self::Body {
+        self.body
     }
 }
 
@@ -125,12 +121,10 @@ impl Response for CreateResponse {
     const STATUS_CODE: u16 = 201;
 
     type Body = Option<OrderedMap<String, Value>>;
+    
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
-        // check status code first
-        let _status_code = Self::check_status_code(&mut message)?;
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,

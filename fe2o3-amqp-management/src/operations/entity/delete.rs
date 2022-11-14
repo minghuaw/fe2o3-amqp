@@ -6,14 +6,14 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    constants::{DELETE, IDENTITY, LOCALES, NAME, OPERATION, TYPE},
-    error::{Error, InvalidType, Result},
+    constants::{DELETE, IDENTITY, NAME},
+    error::{Error, InvalidType},
     request::Request,
     response::Response,
 };
 
 pub trait Delete {
-    fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
+    fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse, Error>;
 }
 
 pub struct EmptyMap(OrderedMap<String, Value>);
@@ -75,39 +75,40 @@ impl<'a> DeleteRequest<'a> {
 }
 
 impl<'a> Request for DeleteRequest<'a> {
+    const OPERATION: &'static str = DELETE;
+
     type Response = DeleteResponse;
+
     type Body = ();
 
-    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        let (key, value, r#type, locales) = match self {
-            Self::Name {
-                value,
-                r#type,
-                locales,
-            } => (NAME, value, r#type, locales),
-            Self::Identity {
-                value,
-                r#type,
-                locales,
-            } => (IDENTITY, value, r#type, locales),
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        match self {
+            Self::Name { r#type, .. } => Some(r#type.to_string()),
+            Self::Identity { r#type, .. } => Some(r#type.to_string()),
+        }
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        match self {
+            Self::Name { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+            Self::Identity { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+        }
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        let (key, value) = match self {
+            Self::Name { value, .. } => (NAME, value),
+            Self::Identity { value, .. } => (IDENTITY, value),
         };
 
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, DELETE)
-                    .insert(TYPE, r#type.to_string())
-                    .insert(
-                        LOCALES,
-                        locales
-                            .map(|s| SimpleValue::from(s.to_string()))
-                            .unwrap_or(SimpleValue::Null),
-                    )
-                    .insert(key, &value[..])
-                    .build(),
-            )
-            .body(())
-            .build()
+        let app_props = ApplicationProperties::builder()
+            .insert(key, SimpleValue::String(value.to_string()))
+            .build();
+        Some(app_props)
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -122,14 +123,11 @@ impl DeleteResponse {}
 impl Response for DeleteResponse {
     const STATUS_CODE: u16 = 204;
 
-    type Body = Option<OrderedMap<String, Value>>;
+    type Body =  Option<OrderedMap<String, Value>>;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
-
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body.map(|m| m.len()) {
             None | Some(0) => Ok(Self {
                 empty_map: EmptyMap::new(),

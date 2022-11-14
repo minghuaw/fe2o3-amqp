@@ -48,13 +48,18 @@ pub trait Request: Sized {
         None
     }
 
-    fn encode_body(&mut self) -> Self::Body;
+    fn encode_body(self) -> Self::Body;
 
     fn encode_footer(&mut self) -> Option<Footer> {
         None
     }
 
     fn into_message(mut self) -> Message<Self::Body> {
+        let header = self.encode_header();
+        let delivery_annotations = self.encode_delivery_annotations();
+        let message_annotations = self.encode_message_annotations();
+        let properties = self.encode_properties();
+
         let mut application_properties = self.encode_application_properties().unwrap_or_default();
         application_properties.as_inner_mut()
             .entry(constants::OPERATION.to_string())
@@ -70,14 +75,19 @@ pub trait Request: Sized {
                 .or_insert(SimpleValue::String(locales));
         }
 
-        Message {
-            header: self.encode_header(),
-            delivery_annotations: self.encode_delivery_annotations(),
-            message_annotations: self.encode_message_annotations(),
-            properties: self.encode_properties(),
-            application_properties: Some(application_properties),
-            body: self.encode_body(),
-            footer: self.encode_footer(),
-        }
+        let footer = self.encode_footer();
+
+        // `encode_body` will consume self, so we need to call it last.
+        let body = self.encode_body();
+
+        Message::builder()
+            .header(header)
+            .delivery_annotations(delivery_annotations)
+            .message_annotations(message_annotations)
+            .properties(properties)
+            .application_properties(application_properties)
+            .body(body)
+            .footer(footer)
+            .build()
     }
 }

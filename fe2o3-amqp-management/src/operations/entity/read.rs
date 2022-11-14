@@ -2,18 +2,18 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue, Value},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{
-    constants::{IDENTITY, LOCALES, NAME, OPERATION, READ, TYPE},
-    error::{Error, Result},
+    constants::{IDENTITY, NAME, READ},
+    error::{Error},
     request::Request,
     response::Response,
 };
 
 pub trait Read {
-    fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
+    fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse, Error>;
 }
 
 /// Retrieve the attributes of a Manageable Entity.
@@ -68,39 +68,41 @@ impl<'a> ReadRequest<'a> {
 }
 
 impl<'a> Request for ReadRequest<'a> {
+    const OPERATION: &'static str = READ;
+
     type Response = ReadResponse;
+
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
-        let (key, value, r#type, locales) = match self {
-            ReadRequest::Name {
-                value,
-                r#type,
-                locales,
-            } => (NAME, value, r#type, locales),
-            ReadRequest::Identity {
-                value,
-                r#type,
-                locales,
-            } => (IDENTITY, value, r#type, locales),
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        match self {
+            ReadRequest::Name { r#type, .. } => Some(r#type.to_string()),
+            ReadRequest::Identity { r#type, .. } => Some(r#type.to_string()),
+        }
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        match self {
+            ReadRequest::Name { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+            ReadRequest::Identity { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+        }
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        let (key, value) = match self {
+            ReadRequest::Name { value, .. } => (NAME, value),
+            ReadRequest::Identity { value, .. } => (IDENTITY, value),
         };
 
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, READ)
-                    .insert(TYPE, r#type.to_string())
-                    .insert(
-                        LOCALES,
-                        locales
-                            .map(|s| SimpleValue::from(s.to_string()))
-                            .unwrap_or(SimpleValue::Null),
-                    )
-                    .insert(key, &value[..])
-                    .build(),
-            )
-            .body(())
-            .build()
+        Some(
+            ApplicationProperties::builder()
+                .insert(key, &value[..])
+                .build(),
+        )
+    }
+
+    fn encode_body(self) -> Self::Body {
+        ()
     }
 }
 
@@ -116,10 +118,8 @@ impl Response for ReadResponse {
 
     type Body = Option<OrderedMap<String, Value>>;
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,

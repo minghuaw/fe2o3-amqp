@@ -2,18 +2,18 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue, Value},
+    primitives::{OrderedMap, Value},
 };
 
 use crate::{
-    constants::{IDENTITY, LOCALES, NAME, OPERATION, TYPE, UPDATE},
-    error::{Error, Result},
+    constants::{IDENTITY, NAME, UPDATE},
+    error::{Error},
     request::Request,
     response::Response,
 };
 
 pub trait Update {
-    fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse>;
+    fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse, Error>;
 }
 
 /// Update a Manageable Entity.
@@ -80,41 +80,44 @@ impl<'a> UpdateRequest<'a> {
 }
 
 impl<'a> Request for UpdateRequest<'a> {
+    const OPERATION: &'static str = UPDATE;
+
     type Response = UpdateResponse;
+
     type Body = OrderedMap<String, Value>;
 
-    fn into_message(self) -> Message<Self::Body> {
-        let (key, value, body, r#type, locales) = match self {
-            UpdateRequest::Name {
-                value,
-                body,
-                r#type,
-                locales,
-            } => (NAME, value, body, r#type, locales),
-            UpdateRequest::Identity {
-                value,
-                body,
-                r#type,
-                locales,
-            } => (IDENTITY, value, body, r#type, locales),
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        match self {
+            UpdateRequest::Name { r#type, .. } => Some(r#type.to_string()),
+            UpdateRequest::Identity { r#type, .. } => Some(r#type.to_string()),
+        }
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        match self {
+            UpdateRequest::Name { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+            UpdateRequest::Identity { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+        }
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        let (key, value) = match self {
+            UpdateRequest::Name { value, .. } => (NAME, value),
+            UpdateRequest::Identity { value, .. } => (IDENTITY, value),
         };
 
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, UPDATE)
-                    .insert(TYPE, r#type.to_string())
-                    .insert(
-                        LOCALES,
-                        locales
-                            .map(|s| SimpleValue::from(s.to_string()))
-                            .unwrap_or(SimpleValue::Null),
-                    )
-                    .insert(key, &value[..])
-                    .build(),
-            )
-            .body(body)
-            .build()
+        Some(
+            ApplicationProperties::builder()
+                .insert(key, &value[..])
+                .build(),
+        )
+    }
+
+    fn encode_body(self) -> Self::Body {
+        match self {
+            UpdateRequest::Name { body, .. } => body,
+            UpdateRequest::Identity { body, .. } => body,
+        }
     }
 }
 
@@ -136,10 +139,8 @@ impl Response for UpdateResponse {
     type Body = Option<OrderedMap<String, Value>>;
 
     type Error = Error;
-    type StatusError = Error;
 
-    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
-        let _status_code = Self::check_status_code(&mut message)?;
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,
