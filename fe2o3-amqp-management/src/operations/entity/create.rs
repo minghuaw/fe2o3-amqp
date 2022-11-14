@@ -1,15 +1,16 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, Value},
+    messaging::{ApplicationProperties, Message, MessageId},
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    constants::{CREATE, NAME, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{CREATE, LOCALES, NAME, OPERATION, TYPE},
+    error::{Error, InvalidType, Result, StatusError},
+    mgmt_ext::AmqpMessageManagementExt,
+    request::IntoMessage,
+    response::FromMessage,
 };
 
 pub trait Create {
@@ -21,6 +22,12 @@ pub struct CreateRequest<'a> {
     ///
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
     pub name: Cow<'a, str>,
+
+    /// Entity type
+    pub r#type: Cow<'a, str>,
+
+    /// locales
+    pub locales: Option<Cow<'a, str>>,
 
     /// The body MUST consist of an amqp-value section containing a map. The map consists of
     /// key-value pairs where the key represents the name of an attribute of the entity and the
@@ -61,15 +68,22 @@ pub struct CreateRequest<'a> {
 }
 
 impl<'a> CreateRequest<'a> {
-    pub fn new(name: impl Into<Cow<'a, str>>, body: impl Into<OrderedMap<String, Value>>) -> Self {
+    pub fn new(
+        name: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+        body: OrderedMap<String, Value>,
+    ) -> Self {
         Self {
             name: name.into(),
-            body: body.into(),
+            r#type: r#type.into(),
+            locales: locales.map(|x| x.into()),
+            body,
         }
     }
 }
 
-impl<'a> MessageSerializer for CreateRequest<'a> {
+impl<'a> IntoMessage for CreateRequest<'a> {
     type Body = OrderedMap<String, Value>;
 
     fn into_message(self) -> Message<Self::Body> {
@@ -77,6 +91,13 @@ impl<'a> MessageSerializer for CreateRequest<'a> {
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, CREATE)
+                    .insert(TYPE, self.r#type.to_string())
+                    .insert(
+                        LOCALES,
+                        self.locales
+                            .map(|s| SimpleValue::from(s.to_string()))
+                            .unwrap_or(SimpleValue::Null),
+                    )
                     .insert(NAME, self.name.to_string())
                     .build(),
             )
@@ -98,22 +119,29 @@ impl<'a> MessageSerializer for CreateRequest<'a> {
 /// a failure response with a statusCode of 400 (Bad Request).
 pub struct CreateResponse {
     pub entity_attributes: OrderedMap<String, Value>,
+    pub correlation_id: Option<MessageId>,
 }
 
-impl CreateResponse {
-    pub const STATUS_CODE: u16 = 201;
-}
-
-impl MessageDeserializer<Option<OrderedMap<String, Value>>> for CreateResponse {
+impl FromMessage for CreateResponse {
+    const STATUS_CODE: u16 = 201;
+    
+    type Body = Option<OrderedMap<String, Value>>;
     type Error = Error;
+    type StatusError = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+        // check status code first
+        let _status_code = Self::check_status_code(&mut message)?;
+
+        let correlation_id = message.remove_correlation_id();
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,
+                correlation_id,
             }),
             None => Ok(Self {
                 entity_attributes: OrderedMap::with_capacity(0),
+                correlation_id,
             }),
         }
     }

@@ -1,15 +1,15 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, Value},
+    messaging::{ApplicationProperties, Message, MessageId},
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    constants::{IDENTITY, NAME, OPERATION, READ},
+    constants::{IDENTITY, LOCALES, NAME, OPERATION, READ, TYPE},
     error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    request::IntoMessage,
+    response::FromMessage, mgmt_ext::AmqpMessageManagementExt,
 };
 
 pub trait Read {
@@ -25,37 +25,76 @@ pub trait Read {
 #[derive(Debug)]
 pub enum ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    Name(Cow<'a, str>),
+    Name {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    Identity(Cow<'a, str>),
+    Identity {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
 }
 
 impl<'a> ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub fn name(value: impl Into<Cow<'a, str>>) -> Self {
-        Self::Name(value.into())
+    pub fn name(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Name {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    pub fn identity(value: impl Into<Cow<'a, str>>) -> Self {
-        Self::Identity(value.into())
+    pub fn identity(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Identity {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 }
 
-impl<'a> MessageSerializer for ReadRequest<'a> {
+impl<'a> IntoMessage for ReadRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> Message<Self::Body> {
-        let (key, value) = match self {
-            ReadRequest::Name(value) => (NAME, value),
-            ReadRequest::Identity(value) => (IDENTITY, value),
+        let (key, value, r#type, locales) = match self {
+            ReadRequest::Name {
+                value,
+                r#type,
+                locales,
+            } => (NAME, value, r#type, locales),
+            ReadRequest::Identity {
+                value,
+                r#type,
+                locales,
+            } => (IDENTITY, value, r#type, locales),
         };
 
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, READ)
+                    .insert(TYPE, r#type.to_string())
+                    .insert(
+                        LOCALES,
+                        locales
+                            .map(|s| SimpleValue::from(s.to_string()))
+                            .unwrap_or(SimpleValue::Null),
+                    )
                     .insert(key, &value[..])
                     .build(),
             )
@@ -67,22 +106,30 @@ impl<'a> MessageSerializer for ReadRequest<'a> {
 #[derive(Debug)]
 pub struct ReadResponse {
     pub entity_attributes: OrderedMap<String, Value>,
+    pub correlation_id: Option<MessageId>,
 }
 
 impl ReadResponse {
-    pub const STATUS_CODE: u16 = 200;
 }
 
-impl MessageDeserializer<Option<OrderedMap<String, Value>>> for ReadResponse {
-    type Error = Error;
+impl FromMessage for ReadResponse {
+    const STATUS_CODE: u16 = 200;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+    type Body = Option<OrderedMap<String, Value>>;
+    type Error = Error;
+    type StatusError = Error;
+
+    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
+        let correlation_id = message.remove_correlation_id();
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,
+                correlation_id,
             }),
             None => Ok(Self {
                 entity_attributes: OrderedMap::with_capacity(0),
+                correlation_id,
             }),
         }
     }

@@ -32,11 +32,28 @@ impl std::fmt::Display for StatusError {
 
 impl std::error::Error for StatusError {}
 
+#[derive(Debug)]
+pub struct InvalidType {
+    pub expected: String,
+    pub actual: String,
+}
+
+impl std::fmt::Display for InvalidType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "InvalidType {{expected: {:?}, actual: {:?} }}",
+            self.expected, self.actual
+        )
+    }
+}
+
+impl std::error::Error for InvalidType {}
+
+pub struct StatusCodeNotFound {}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
-    State(#[from] StatusError),
-
     #[error("Correlation ID or Message ID is not found")]
     CorrelationIdAndMessageIdAreNone,
 
@@ -44,10 +61,10 @@ pub enum Error {
     StatusCodeNotFound,
 
     #[error("Error decoding from message")]
-    DecodeError,
+    DecodeError(Option<InvalidType>),
 
-    #[error("Wrong status code {}", 0.0)]
-    Status(StatusCode),
+    #[error(transparent)]
+    Status(#[from] StatusError),
 
     #[error(transparent)]
     Send(#[from] SendError),
@@ -65,6 +82,18 @@ pub enum Error {
 impl From<Outcome> for Error {
     fn from(outcome: Outcome) -> Self {
         Self::NotAccepted(outcome)
+    }
+}
+
+impl From<InvalidType> for Error {
+    fn from(invalid_type: InvalidType) -> Self {
+        Self::DecodeError(Some(invalid_type))
+    }
+}
+
+impl From<StatusCodeNotFound> for Error {
+    fn from(_: StatusCodeNotFound) -> Self {
+        Self::StatusCodeNotFound
     }
 }
 

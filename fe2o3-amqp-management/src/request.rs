@@ -33,7 +33,8 @@ use fe2o3_amqp_types::messaging::{IntoBody, Message};
 //     pub locales: Option<String>,
 // }
 
-pub trait MessageSerializer {
+/// TODO: separating setting entity type, operation, and locales from the request body?
+pub trait IntoMessage {
     type Body: IntoBody;
 
     fn into_message(self) -> Message<Self::Body>;

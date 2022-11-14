@@ -1,15 +1,13 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, Value},
+    messaging::{ApplicationProperties, Message, MessageId},
+    primitives::{OrderedMap, Value, SimpleValue},
 };
 
 use crate::{
-    constants::{DELETE, IDENTITY, NAME, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{DELETE, IDENTITY, NAME, OPERATION, TYPE, LOCALES},
+    error::{Error, Result, InvalidType}, request::IntoMessage, response::FromMessage, mgmt_ext::AmqpMessageManagementExt,
 };
 
 pub trait Delete {
@@ -32,34 +30,76 @@ impl EmptyMap {
 /// ignored.
 pub enum DeleteRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    Name(Cow<'a, str>),
+    Name {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
+
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    Identity(Cow<'a, str>),
+    Identity {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
 }
 
 impl<'a> DeleteRequest<'a> {
-    pub fn name(name: impl Into<Cow<'a, str>>) -> Self {
-        Self::Name(name.into())
+    /// The name of the Manageable Entity to be managed. This is case-sensitive.
+    pub fn name(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Name {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 
-    pub fn identity(identity: impl Into<Cow<'a, str>>) -> Self {
-        Self::Identity(identity.into())
+    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
+    pub fn identity(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Identity {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 }
 
-impl<'a> MessageSerializer for DeleteRequest<'a> {
+impl<'a> IntoMessage for DeleteRequest<'a> {
     type Body = ();
 
     fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
-        let (key, value) = match self {
-            DeleteRequest::Name(value) => (NAME, value),
-            DeleteRequest::Identity(value) => (IDENTITY, value),
+        let (key, value, r#type, locales) = match self {
+            Self::Name {
+                value,
+                r#type,
+                locales,
+            } => (NAME, value, r#type, locales),
+            Self::Identity {
+                value,
+                r#type,
+                locales,
+            } => (IDENTITY, value, r#type, locales),
         };
 
         Message::builder()
             .application_properties(
                 ApplicationProperties::builder()
                     .insert(OPERATION, DELETE)
+                    .insert(TYPE, r#type.to_string())
+                    .insert(
+                        LOCALES,
+                        locales
+                            .map(|s| SimpleValue::from(s.to_string()))
+                            .unwrap_or(SimpleValue::Null),
+                    )
                     .insert(key, &value[..])
                     .build(),
             )
@@ -72,21 +112,33 @@ impl<'a> MessageSerializer for DeleteRequest<'a> {
 /// entries. If the request was successful then the statusCode MUST be 204 (No Content).
 pub struct DeleteResponse {
     pub empty_map: EmptyMap,
+    pub correlation_id: Option<MessageId>,
 }
 
 impl DeleteResponse {
-    pub const STATUS_CODE: u16 = 204;
 }
 
-impl MessageDeserializer<Option<OrderedMap<String, Value>>> for DeleteResponse {
-    type Error = Error;
+impl FromMessage for DeleteResponse {
+    const STATUS_CODE: u16 = 204;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+    type Body = Option<OrderedMap<String, Value>>;
+
+    type Error = Error;
+    type StatusError = Error;
+
+    fn from_message(mut message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+        let _status_code = Self::check_status_code(&mut message)?;
+        let correlation_id = message.remove_correlation_id();
+
         match message.body.map(|m| m.len()) {
             None | Some(0) => Ok(Self {
                 empty_map: EmptyMap::new(),
+                correlation_id,
             }),
-            _ => Err(Error::DecodeError),
+            _ => Err(Error::DecodeError(InvalidType {
+                expected: "empty map".to_string(),
+                actual: "non-empty map".to_string(),
+            }.into())),
         }
     }
 }

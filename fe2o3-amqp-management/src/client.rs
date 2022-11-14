@@ -10,16 +10,16 @@ use fe2o3_amqp_types::{
 
 use crate::{
     error::{AttachError, Error, StatusError},
-    operations::{
-        CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, DeregisterRequest,
-        DeregisterResponse, GetAnnotationsRequest, GetAnnotationsResponse, GetAttributesRequest,
-        GetAttributesResponse, GetMgmtNodesRequest, GetMgmtNodesResponse, GetOperationsRequest,
-        GetOperationsResponse, GetTypesRequest, GetTypesResponse, QueryRequest, QueryResponse,
-        ReadRequest, ReadResponse, RegisterRequest, RegisterResponse, UpdateRequest,
-        UpdateResponse,
-    },
-    request::MessageSerializer,
-    response::{MessageDeserializer, Response, ResponseMessageProperties},
+    // operations::{
+    //     CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, DeregisterRequest,
+    //     DeregisterResponse, GetAnnotationsRequest, GetAnnotationsResponse, GetAttributesRequest,
+    //     GetAttributesResponse, GetMgmtNodesRequest, GetMgmtNodesResponse, GetOperationsRequest,
+    //     GetOperationsResponse, GetTypesRequest, GetTypesResponse, QueryRequest, QueryResponse,
+    //     ReadRequest, ReadResponse, RegisterRequest, RegisterResponse, UpdateRequest,
+    //     UpdateResponse,
+    // },
+    request::IntoMessage,
+    response::{FromMessage},
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
 
@@ -97,73 +97,71 @@ impl MgmtClient {
         Ok(())
     }
 
-    operation!(create, 'a,  CreateRequest<'a>, CreateResponse);
+    // operation!(create, 'a,  CreateRequest<'a>, CreateResponse);
 
-    operation!(read, 'a, ReadRequest<'a>, ReadResponse);
+    // operation!(read, 'a, ReadRequest<'a>, ReadResponse);
 
-    operation!(update, 'a, UpdateRequest<'a>, UpdateResponse);
+    // operation!(update, 'a, UpdateRequest<'a>, UpdateResponse);
 
-    operation!(delete, 'a, DeleteRequest<'a>, DeleteResponse);
+    // operation!(delete, 'a, DeleteRequest<'a>, DeleteResponse);
 
-    operation!(query, 'a, QueryRequest<'a>, QueryResponse);
+    // operation!(query, 'a, QueryRequest<'a>, QueryResponse);
 
-    operation!(get_types, 'a, GetTypesRequest<'a>, GetTypesResponse);
+    // operation!(get_types, 'a, GetTypesRequest<'a>, GetTypesResponse);
 
-    operation!(get_annotations, 'a, GetAnnotationsRequest<'a>, GetAnnotationsResponse);
+    // operation!(get_annotations, 'a, GetAnnotationsRequest<'a>, GetAnnotationsResponse);
 
-    operation!(get_attributes, 'a, GetAttributesRequest<'a>, GetAttributesResponse);
+    // operation!(get_attributes, 'a, GetAttributesRequest<'a>, GetAttributesResponse);
 
-    operation!(get_operations, 'a, GetOperationsRequest<'a>, GetOperationsResponse);
+    // operation!(get_operations, 'a, GetOperationsRequest<'a>, GetOperationsResponse);
 
-    operation!(get_mgmt_nodes, GetMgmtNodesRequest, GetMgmtNodesResponse);
+    // operation!(get_mgmt_nodes, GetMgmtNodesRequest, GetMgmtNodesResponse);
 
-    operation!(register, 'a, RegisterRequest<'a>, RegisterResponse);
+    // operation!(register, 'a, RegisterRequest<'a>, RegisterResponse);
 
-    operation!(deregister, 'a, DeregisterRequest<'a>, DeregisterResponse);
+    // operation!(deregister, 'a, DeregisterRequest<'a>, DeregisterResponse);
 
     pub async fn send_request(
         &mut self,
-        operation: impl MessageSerializer,
-        entity_type: impl Into<String>,
-        locales: impl Into<Option<String>>,
+        request: impl IntoMessage,
     ) -> Result<Outcome, SendError> {
-        let mut message = operation.into_message().map_body(IntoBody::into_body);
+        let mut message = request.into_message().map_body(IntoBody::into_body);
 
-        let application_properties = message
-            .application_properties
-            .get_or_insert(ApplicationProperties::default());
-        application_properties.insert(
-            String::from("type"),
-            SimpleValue::String(entity_type.into()),
-        );
-        if let Some(locales) = locales.into() {
-            application_properties
-                .insert(String::from("locales"), SimpleValue::String(locales.into()));
-        }
-
+        // Only insert the request-id if it's not already set
         let properties = message.properties.get_or_insert(Properties::default());
-        properties.message_id = Some(MessageId::from(self.req_id));
-        properties.reply_to = Some(self.client_node_addr.clone());
-
-        self.req_id += 1;
+        properties.message_id.get_or_insert({
+            let message_id = MessageId::from(self.req_id);
+            self.req_id += 1;
+            message_id
+        });
+        properties.reply_to.get_or_insert(self.client_node_addr.clone());
 
         self.sender.send(message).await
     }
-
-    pub async fn recv_response<O, T>(&mut self) -> Result<Response<O>, Error>
+    pub async fn recv_response<Res>(&mut self) -> Result<Res, Error>
     where
-        O: MessageDeserializer<T>,
-        O::Error: Into<Error>,
-        for<'de> T: FromBody<'de> + std::fmt::Debug + Send,
+        Res: FromMessage,
+        Res::Error: Into<Error>,
+        for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
     {
-        let delivery: Delivery<T> = self.receiver.recv().await?;
+        let delivery: Delivery<Res::Body> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;
 
-        let mut message = delivery.into_message();
-        let properties = ResponseMessageProperties::try_take_from_message(&mut message)?;
-        let operation = MessageDeserializer::from_message(message).map_err(Into::into)?;
+        Res::from_message(delivery.into_message()).map_err(Into::into)
+    }
 
-        Ok(Response::from_parts(properties, operation))
+    pub async fn call<Req, Res>(
+        &mut self,
+        request: Req,
+    ) -> Result<Res, Error>
+    where
+        Req: IntoMessage,
+        Res: FromMessage,
+        Res::Error: Into<Error>,
+        for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
+    {
+        self.send_request(request).await?;
+        self.recv_response().await
     }
 }
 

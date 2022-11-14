@@ -14,6 +14,8 @@ pub const DEREGISTER: &str = "DEREGISTER";
 
 pub const NAME: &str = "name";
 pub const IDENTITY: &str = "identity";
+pub const TYPE: &str = "type";
+pub const LOCALES: &str = "locales";
 
 pub const STATUS_CODE: &str = "status-code";
 pub const STATUS_DESCRIPTION: &str = "status-description";
