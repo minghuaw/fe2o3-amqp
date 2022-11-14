@@ -3,8 +3,7 @@ use std::borrow::Cow;
 use fe2o3_amqp::{link::DetachError, session::SessionHandle};
 use fe2o3_amqp_management::{
     client::MgmtClient,
-    error::{AttachError, Error as MgmtError, StatusError},
-    response::Response,
+    error::{AttachError, Error as MgmtError},
 };
 
 use crate::{
@@ -41,21 +40,14 @@ impl CbsClient {
         token: CbsToken<'a>,
     ) -> Result<(), MgmtError> {
         let entity_type = token.token_type;
-        let req = PutTokenRequest::new(name, token.token_value, token.expires_at_utc);
-        let _accepted = self
-            .mgmt_client
-            .send_request(req, entity_type, None)
-            .await?
-            .accepted_or_else(|o| MgmtError::NotAccepted(o))?;
-        let response: Response<PutTokenResponse> = self.mgmt_client.recv_response().await?;
-
-        match response.status_code.0.get() {
-            PutTokenResponse::STATUS_CODE => Ok(()),
-            _ => Err(StatusError {
-                code: response.status_code,
-                description: response.status_description,
-            }
-            .into()),
-        }
+        let req = PutTokenRequest::new(
+            name,
+            token.token_value,
+            token.expires_at_utc,
+            entity_type,
+            None,
+        );
+        let _res: PutTokenResponse = self.mgmt_client.call(req).await?;
+        Ok(())
     }
 }

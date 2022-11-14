@@ -6,14 +6,14 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    constants::{IDENTITY, NAME, OPERATION, READ},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{IDENTITY, NAME, READ},
+    error::Error,
+    request::Request,
+    response::Response,
 };
 
 pub trait Read {
-    fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse>;
+    fn read(&mut self, arg: ReadRequest) -> Result<ReadResponse, Error>;
 }
 
 /// Retrieve the attributes of a Manageable Entity.
@@ -25,42 +25,84 @@ pub trait Read {
 #[derive(Debug)]
 pub enum ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    Name(Cow<'a, str>),
+    Name {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    Identity(Cow<'a, str>),
+    Identity {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
 }
 
 impl<'a> ReadRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    pub fn name(value: impl Into<Cow<'a, str>>) -> Self {
-        Self::Name(value.into())
+    pub fn name(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Name {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    pub fn identity(value: impl Into<Cow<'a, str>>) -> Self {
-        Self::Identity(value.into())
+    pub fn identity(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Identity {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 }
 
-impl<'a> MessageSerializer for ReadRequest<'a> {
+impl<'a> Request for ReadRequest<'a> {
+    const OPERATION: &'static str = READ;
+
+    type Response = ReadResponse;
+
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        match self {
+            ReadRequest::Name { r#type, .. } => Some(r#type.to_string()),
+            ReadRequest::Identity { r#type, .. } => Some(r#type.to_string()),
+        }
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        match self {
+            ReadRequest::Name { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+            ReadRequest::Identity { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+        }
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
         let (key, value) = match self {
-            ReadRequest::Name(value) => (NAME, value),
-            ReadRequest::Identity(value) => (IDENTITY, value),
+            ReadRequest::Name { value, .. } => (NAME, value),
+            ReadRequest::Identity { value, .. } => (IDENTITY, value),
         };
 
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, READ)
-                    .insert(key, &value[..])
-                    .build(),
-            )
-            .body(())
-            .build()
+        Some(
+            ApplicationProperties::builder()
+                .insert(key, &value[..])
+                .build(),
+        )
+    }
+
+    fn encode_body(self) -> Self::Body {
+        
     }
 }
 
@@ -69,14 +111,15 @@ pub struct ReadResponse {
     pub entity_attributes: OrderedMap<String, Value>,
 }
 
-impl ReadResponse {
-    pub const STATUS_CODE: u16 = 200;
-}
+impl ReadResponse {}
 
-impl MessageDeserializer<Option<OrderedMap<String, Value>>> for ReadResponse {
+impl Response for ReadResponse {
+    const STATUS_CODE: u16 = 200;
+
+    type Body = Option<OrderedMap<String, Value>>;
     type Error = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,

@@ -6,14 +6,14 @@ use fe2o3_amqp_types::{
 };
 
 use crate::{
-    constants::{IDENTITY, NAME, OPERATION, UPDATE},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{IDENTITY, NAME, UPDATE},
+    error::Error,
+    request::Request,
+    response::Response,
 };
 
 pub trait Update {
-    fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse>;
+    fn update(&mut self, arg: UpdateRequest) -> Result<UpdateResponse, Error>;
 }
 
 /// Update a Manageable Entity.
@@ -37,51 +37,87 @@ pub trait Update {
 pub enum UpdateRequest<'a> {
     Name {
         value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
         body: OrderedMap<String, Value>,
     },
     Identity {
         value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
         body: OrderedMap<String, Value>,
     },
 }
 
 impl<'a> UpdateRequest<'a> {
-    pub fn name(name: impl Into<Cow<'a, str>>, body: impl Into<OrderedMap<String, Value>>) -> Self {
+    pub fn name(
+        name: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+        body: impl Into<OrderedMap<String, Value>>,
+    ) -> Self {
         Self::Name {
             value: name.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
             body: body.into(),
         }
     }
 
     pub fn identity(
         identity: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
         body: impl Into<OrderedMap<String, Value>>,
     ) -> Self {
         Self::Identity {
             value: identity.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
             body: body.into(),
         }
     }
 }
 
-impl<'a> MessageSerializer for UpdateRequest<'a> {
+impl<'a> Request for UpdateRequest<'a> {
+    const OPERATION: &'static str = UPDATE;
+
+    type Response = UpdateResponse;
+
     type Body = OrderedMap<String, Value>;
 
-    fn into_message(self) -> Message<Self::Body> {
-        let (key, value, body) = match self {
-            UpdateRequest::Name { value, body } => (NAME, value, body),
-            UpdateRequest::Identity { value, body } => (IDENTITY, value, body),
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        match self {
+            UpdateRequest::Name { r#type, .. } => Some(r#type.to_string()),
+            UpdateRequest::Identity { r#type, .. } => Some(r#type.to_string()),
+        }
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        match self {
+            UpdateRequest::Name { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+            UpdateRequest::Identity { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+        }
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
+        let (key, value) = match self {
+            UpdateRequest::Name { value, .. } => (NAME, value),
+            UpdateRequest::Identity { value, .. } => (IDENTITY, value),
         };
 
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, UPDATE)
-                    .insert(key, &value[..])
-                    .build(),
-            )
-            .body(body)
-            .build()
+        Some(
+            ApplicationProperties::builder()
+                .insert(key, &value[..])
+                .build(),
+        )
+    }
+
+    fn encode_body(self) -> Self::Body {
+        match self {
+            UpdateRequest::Name { body, .. } => body,
+            UpdateRequest::Identity { body, .. } => body,
+        }
     }
 }
 
@@ -97,14 +133,14 @@ pub struct UpdateResponse {
     pub entity_attributes: OrderedMap<String, Value>,
 }
 
-impl UpdateResponse {
-    pub const STATUS_CODE: u16 = 200;
-}
+impl Response for UpdateResponse {
+    const STATUS_CODE: u16 = 200;
 
-impl MessageDeserializer<Option<OrderedMap<String, Value>>> for UpdateResponse {
+    type Body = Option<OrderedMap<String, Value>>;
+
     type Error = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(map) => Ok(Self {
                 entity_attributes: map,

@@ -1,19 +1,13 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::OrderedMap,
-};
+use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
-use crate::{
-    constants::{GET_ANNOTATIONS, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
-};
+use crate::{constants::GET_ANNOTATIONS, error::Error, request::Request, response::Response};
+
+use super::get::GetRequest;
 
 pub trait GetAnnotations {
-    fn get_annotations(&self, req: GetAnnotationsRequest) -> Result<GetAnnotationsResponse>;
+    fn get_annotations(&self, req: GetAnnotationsRequest) -> Result<GetAnnotationsResponse, Error>;
 }
 
 /// GET-ANNOTATIONS
@@ -22,30 +16,44 @@ pub trait GetAnnotations {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAnnotationsRequest<'a> {
-    pub entity_type: Option<Cow<'a, str>>,
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetAnnotationsRequest<'a> {
-    pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
+    pub fn new(
+        entity_type: impl Into<Option<Cow<'a, str>>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
         Self {
-            entity_type: entity_type.into(),
+            inner: GetRequest::new(entity_type, r#type, locales),
         }
     }
 }
 
-impl<'a> MessageSerializer for GetAnnotationsRequest<'a> {
+impl<'a> Request for GetAnnotationsRequest<'a> {
+    const OPERATION: &'static str = GET_ANNOTATIONS;
+
+    type Response = GetAnnotationsResponse;
+
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
-        let mut builder = ApplicationProperties::builder();
-        builder = builder.insert(OPERATION, GET_ANNOTATIONS);
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type.to_string());
-        }
-        Message::builder()
-            .application_properties(builder.build())
-            .body(())
-            .build()
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        self.inner.manageable_entity_type()
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        self.inner.locales()
+    }
+
+    fn encode_application_properties(
+        &mut self,
+    ) -> Option<fe2o3_amqp_types::messaging::ApplicationProperties> {
+        self.inner.encode_application_properties()
+    }
+
+    fn encode_body(self) -> Self::Body {
+        
     }
 }
 
@@ -53,14 +61,14 @@ pub struct GetAnnotationsResponse {
     pub annotations: OrderedMap<String, Vec<String>>,
 }
 
-impl GetAnnotationsResponse {
-    pub const STATUS_CODE: u16 = 200;
-}
+impl Response for GetAnnotationsResponse {
+    const STATUS_CODE: u16 = 200;
 
-impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetAnnotationsResponse {
+    type Body = Option<OrderedMap<String, Vec<String>>>;
+
     type Error = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(annotations) => Ok(Self { annotations }),
             None => Ok(Self {

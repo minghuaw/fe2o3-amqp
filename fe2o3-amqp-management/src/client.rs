@@ -3,23 +3,12 @@ use fe2o3_amqp::{
     session::SessionHandle,
     Delivery, Receiver, Sender,
 };
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, FromBody, IntoBody, MessageId, Outcome, Properties},
-    primitives::SimpleValue,
-};
+use fe2o3_amqp_types::messaging::{FromBody, IntoBody, MessageId, Outcome, Properties};
 
 use crate::{
-    error::{AttachError, Error, StatusError},
-    operations::{
-        CreateRequest, CreateResponse, DeleteRequest, DeleteResponse, DeregisterRequest,
-        DeregisterResponse, GetAnnotationsRequest, GetAnnotationsResponse, GetAttributesRequest,
-        GetAttributesResponse, GetMgmtNodesRequest, GetMgmtNodesResponse, GetOperationsRequest,
-        GetOperationsResponse, GetTypesRequest, GetTypesResponse, QueryRequest, QueryResponse,
-        ReadRequest, ReadResponse, RegisterRequest, RegisterResponse, UpdateRequest,
-        UpdateResponse,
-    },
-    request::MessageSerializer,
-    response::{MessageDeserializer, Response, ResponseMessageProperties},
+    error::{AttachError, Error},
+    request::Request,
+    response::Response,
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
 
@@ -28,52 +17,6 @@ pub struct MgmtClient {
     client_node_addr: String,
     sender: Sender,
     receiver: Receiver,
-}
-
-macro_rules! operation {
-    ($op:ident, $lt:lifetime, $req_ty:ty, $res_ty:ty) => {
-        pub async fn $op<$lt>(
-            &mut self,
-            req: $req_ty,
-            entity_type: impl Into<String>,
-            locales: Option<String>,
-        ) -> Result<$res_ty, Error> {
-            self.send_request(req, entity_type, locales)
-                .await?
-                .accepted_or_else(|o| Error::NotAccepted(o))?;
-            let response: Response<$res_ty> = self.recv_response().await?;
-            match response.status_code.0.get() {
-                <$res_ty>::STATUS_CODE => Ok(response.operation),
-                _ => Err(StatusError {
-                    code: response.status_code,
-                    description: response.status_description,
-                }
-                .into()),
-            }
-        }
-    };
-
-    ($op:ident, $req_ty:ty, $res_ty:ty) => {
-        pub async fn $op(
-            &mut self,
-            req: $req_ty,
-            entity_type: impl Into<String>,
-            locales: Option<String>,
-        ) -> Result<$res_ty, Error> {
-            self.send_request(req, entity_type, locales)
-                .await?
-                .accepted_or_else(|o| Error::NotAccepted(o))?;
-            let response: Response<$res_ty> = self.recv_response().await?;
-            match response.status_code.0.get() {
-                <$res_ty>::STATUS_CODE => Ok(response.operation),
-                _ => Err(StatusError {
-                    code: response.status_code,
-                    description: response.status_description,
-                }
-                .into()),
-            }
-        }
-    };
 }
 
 impl MgmtClient {
@@ -97,73 +40,44 @@ impl MgmtClient {
         Ok(())
     }
 
-    operation!(create, 'a,  CreateRequest<'a>, CreateResponse);
+    pub async fn send_request(&mut self, request: impl Request) -> Result<Outcome, SendError> {
+        let mut message = request.into_message().map_body(IntoBody::into_body);
 
-    operation!(read, 'a, ReadRequest<'a>, ReadResponse);
-
-    operation!(update, 'a, UpdateRequest<'a>, UpdateResponse);
-
-    operation!(delete, 'a, DeleteRequest<'a>, DeleteResponse);
-
-    operation!(query, 'a, QueryRequest<'a>, QueryResponse);
-
-    operation!(get_types, 'a, GetTypesRequest<'a>, GetTypesResponse);
-
-    operation!(get_annotations, 'a, GetAnnotationsRequest<'a>, GetAnnotationsResponse);
-
-    operation!(get_attributes, 'a, GetAttributesRequest<'a>, GetAttributesResponse);
-
-    operation!(get_operations, 'a, GetOperationsRequest<'a>, GetOperationsResponse);
-
-    operation!(get_mgmt_nodes, GetMgmtNodesRequest, GetMgmtNodesResponse);
-
-    operation!(register, 'a, RegisterRequest<'a>, RegisterResponse);
-
-    operation!(deregister, 'a, DeregisterRequest<'a>, DeregisterResponse);
-
-    pub async fn send_request(
-        &mut self,
-        operation: impl MessageSerializer,
-        entity_type: impl Into<String>,
-        locales: impl Into<Option<String>>,
-    ) -> Result<Outcome, SendError> {
-        let mut message = operation.into_message().map_body(IntoBody::into_body);
-
-        let application_properties = message
-            .application_properties
-            .get_or_insert(ApplicationProperties::default());
-        application_properties.insert(
-            String::from("type"),
-            SimpleValue::String(entity_type.into()),
-        );
-        if let Some(locales) = locales.into() {
-            application_properties
-                .insert(String::from("locales"), SimpleValue::String(locales.into()));
-        }
-
+        // Only insert the request-id if it's not already set
         let properties = message.properties.get_or_insert(Properties::default());
-        properties.message_id = Some(MessageId::from(self.req_id));
-        properties.reply_to = Some(self.client_node_addr.clone());
-
-        self.req_id += 1;
+        properties.message_id.get_or_insert({
+            let message_id = MessageId::from(self.req_id);
+            self.req_id += 1;
+            message_id
+        });
+        properties
+            .reply_to
+            .get_or_insert(self.client_node_addr.clone());
 
         self.sender.send(message).await
     }
-
-    pub async fn recv_response<O, T>(&mut self) -> Result<Response<O>, Error>
+    pub async fn recv_response<Res>(&mut self) -> Result<Res, Error>
     where
-        O: MessageDeserializer<T>,
-        O::Error: Into<Error>,
-        for<'de> T: FromBody<'de> + std::fmt::Debug + Send,
+        Res: Response,
+        Res::Error: Into<Error>,
+        for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
     {
-        let delivery: Delivery<T> = self.receiver.recv().await?;
+        let delivery: Delivery<Res::Body> = self.receiver.recv().await?;
         self.receiver.accept(&delivery).await?;
 
-        let mut message = delivery.into_message();
-        let properties = ResponseMessageProperties::try_take_from_message(&mut message)?;
-        let operation = MessageDeserializer::from_message(message).map_err(Into::into)?;
+        Res::from_message(delivery.into_message()).map_err(Into::into)
+    }
 
-        Ok(Response::from_parts(properties, operation))
+    pub async fn call<Req, Res>(&mut self, request: Req) -> Result<Res, Error>
+    where
+        Req: Request<Response = Res>,
+        Res: Response,
+        Res::Error: Into<Error>,
+        for<'de> Res::Body: FromBody<'de> + std::fmt::Debug + Send,
+    {
+        let outcome = self.send_request(request).await?;
+        let _accepted = outcome.accepted_or_else(Error::NotAccepted)?;
+        self.recv_response().await
     }
 }
 

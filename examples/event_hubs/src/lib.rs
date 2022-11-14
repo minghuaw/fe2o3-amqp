@@ -9,9 +9,9 @@ pub async fn get_event_hub_partitions(
     let mut session = Session::begin(connection).await?;
     let mut mgmt_client = MgmtClient::attach(&mut session, "mgmt_client_node").await?;
 
-    let request = ReadRequest::name(event_hub_name);
+    let request = ReadRequest::name(event_hub_name, "com.microsoft:eventhub", None);
     let mut response = mgmt_client
-        .read(request, "com.microsoft:eventhub", None)
+        .call(request)
         .await?;
 
     mgmt_client.close().await?;

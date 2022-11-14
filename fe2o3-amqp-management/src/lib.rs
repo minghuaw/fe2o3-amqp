@@ -9,6 +9,8 @@ pub mod constants;
 pub mod request;
 pub mod response;
 
+pub mod mgmt_ext;
+
 pub const MANAGEMENT_NODE_ADDRESS: &str = "$management";
 pub const DEFAULT_CLIENT_NODE_ADDRESS: &str = "mgmt-client";
 

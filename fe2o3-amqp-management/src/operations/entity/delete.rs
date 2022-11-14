@@ -2,18 +2,18 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, Value},
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    constants::{DELETE, IDENTITY, NAME, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
+    constants::{DELETE, IDENTITY, NAME},
+    error::{Error, InvalidType},
+    request::Request,
+    response::Response,
 };
 
 pub trait Delete {
-    fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse>;
+    fn delete(&mut self, arg: DeleteRequest) -> Result<DeleteResponse, Error>;
 }
 
 pub struct EmptyMap(OrderedMap<String, Value>);
@@ -21,6 +21,12 @@ pub struct EmptyMap(OrderedMap<String, Value>);
 impl EmptyMap {
     pub fn new() -> Self {
         Self(OrderedMap::with_capacity(0))
+    }
+}
+
+impl Default for EmptyMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -32,39 +38,83 @@ impl EmptyMap {
 /// ignored.
 pub enum DeleteRequest<'a> {
     /// The name of the Manageable Entity to be managed. This is case-sensitive.
-    Name(Cow<'a, str>),
+    Name {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
+
     /// The identity of the Manageable Entity to be managed. This is case-sensitive.
-    Identity(Cow<'a, str>),
+    Identity {
+        value: Cow<'a, str>,
+        r#type: Cow<'a, str>,
+        locales: Option<Cow<'a, str>>,
+    },
 }
 
 impl<'a> DeleteRequest<'a> {
-    pub fn name(name: impl Into<Cow<'a, str>>) -> Self {
-        Self::Name(name.into())
+    /// The name of the Manageable Entity to be managed. This is case-sensitive.
+    pub fn name(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Name {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 
-    pub fn identity(identity: impl Into<Cow<'a, str>>) -> Self {
-        Self::Identity(identity.into())
+    /// The identity of the Manageable Entity to be managed. This is case-sensitive.
+    pub fn identity(
+        value: impl Into<Cow<'a, str>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: impl Into<Option<Cow<'a, str>>>,
+    ) -> Self {
+        Self::Identity {
+            value: value.into(),
+            r#type: r#type.into(),
+            locales: locales.into(),
+        }
     }
 }
 
-impl<'a> MessageSerializer for DeleteRequest<'a> {
+impl<'a> Request for DeleteRequest<'a> {
+    const OPERATION: &'static str = DELETE;
+
+    type Response = DeleteResponse;
+
     type Body = ();
 
-    fn into_message(self) -> fe2o3_amqp_types::messaging::Message<Self::Body> {
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        match self {
+            Self::Name { r#type, .. } => Some(r#type.to_string()),
+            Self::Identity { r#type, .. } => Some(r#type.to_string()),
+        }
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        match self {
+            Self::Name { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+            Self::Identity { locales, .. } => locales.as_ref().map(|s| s.to_string()),
+        }
+    }
+
+    fn encode_application_properties(&mut self) -> Option<ApplicationProperties> {
         let (key, value) = match self {
-            DeleteRequest::Name(value) => (NAME, value),
-            DeleteRequest::Identity(value) => (IDENTITY, value),
+            Self::Name { value, .. } => (NAME, value),
+            Self::Identity { value, .. } => (IDENTITY, value),
         };
 
-        Message::builder()
-            .application_properties(
-                ApplicationProperties::builder()
-                    .insert(OPERATION, DELETE)
-                    .insert(key, &value[..])
-                    .build(),
-            )
-            .body(())
-            .build()
+        let app_props = ApplicationProperties::builder()
+            .insert(key, SimpleValue::String(value.to_string()))
+            .build();
+        Some(app_props)
+    }
+
+    fn encode_body(self) -> Self::Body {
+        
     }
 }
 
@@ -74,19 +124,27 @@ pub struct DeleteResponse {
     pub empty_map: EmptyMap,
 }
 
-impl DeleteResponse {
-    pub const STATUS_CODE: u16 = 204;
-}
+impl DeleteResponse {}
 
-impl MessageDeserializer<Option<OrderedMap<String, Value>>> for DeleteResponse {
+impl Response for DeleteResponse {
+    const STATUS_CODE: u16 = 204;
+
+    type Body = Option<OrderedMap<String, Value>>;
+
     type Error = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Value>>>) -> Result<Self> {
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body.map(|m| m.len()) {
             None | Some(0) => Ok(Self {
                 empty_map: EmptyMap::new(),
             }),
-            _ => Err(Error::DecodeError),
+            _ => Err(Error::DecodeError(
+                InvalidType {
+                    expected: "empty map".to_string(),
+                    actual: "non-empty map".to_string(),
+                }
+                .into(),
+            )),
         }
     }
 }

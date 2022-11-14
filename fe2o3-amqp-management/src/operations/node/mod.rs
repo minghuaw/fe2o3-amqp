@@ -12,6 +12,7 @@
 //! • DEREGISTER
 
 mod deregister;
+mod get;
 mod get_annotations;
 mod get_attributes;
 mod get_mgmt_nodes;

@@ -1,83 +1,62 @@
-use fe2o3_amqp_types::messaging::{FromBody, Message, MessageId};
+use fe2o3_amqp_types::messaging::{FromBody, Message};
 
 use crate::{
-    constants::{STATUS_CODE, STATUS_DESCRIPTION},
-    error::Error,
+    error::{InvalidType, StatusCodeNotFound, StatusError},
+    mgmt_ext::AmqpMessageManagementExt,
     status::StatusCode,
 };
 
-/// The correlation-id of the response message MUST be the correlation-id from the request message
-/// (if present), else the message-id from the request message. Response messages have the following
-/// application-properties:
-pub struct ResponseMessageProperties {
-    pub correlation_id: MessageId,
-    pub status_code: StatusCode,
-    pub status_description: Option<String>,
-}
+pub trait Response: Sized {
+    const STATUS_CODE: u16;
 
-impl ResponseMessageProperties {
-    pub fn try_take_from_message<T>(message: &mut Message<T>) -> Result<Self, Error> {
-        let correlation_id = match message
-            .properties
-            .as_mut()
-            .and_then(|p| p.correlation_id.take())
-        {
-            Some(correlation_id) => correlation_id,
-            None => message
-                .properties
-                .as_mut()
-                .and_then(|p| p.message_id.take())
-                .ok_or(Error::CorrelationIdAndMessageIdAreNone)?,
+    type Body: for<'de> FromBody<'de>;
+
+    type Error: From<StatusError> + From<InvalidType> + From<StatusCodeNotFound>;
+
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error>;
+
+    /// Checks the status code and description of the response and returns `None` if status code is
+    /// not found or returns `Some(Err(error))` if the status code is not the expected one.
+    ///
+    /// Please note that the blanket implementation will remove the status code and description.
+    /// The user should override the blanket implementation if they want to keep the status code
+    /// and description.
+    fn verify_status_code(message: &mut Message<Self::Body>) -> Result<StatusCode, Self::Error> {
+        let status_code = match message.remove_status_code().ok_or(StatusCodeNotFound {})? {
+            Ok(status_code) => status_code,
+            Err(err) => {
+                return Err(InvalidType {
+                    expected: "u16".to_string(),
+                    actual: format!("{:?}", err),
+                }
+                .into())
+            }
         };
+        if status_code.0.get() != Self::STATUS_CODE {
+            let status_description = match message.remove_status_description() {
+                Some(Ok(status_description)) => Some(status_description),
+                Some(Err(err)) => {
+                    return Err(InvalidType {
+                        expected: "String".to_string(),
+                        actual: format!("{:?}", err),
+                    }
+                    .into())
+                }
+                None => None,
+            };
 
-        let status_code = match message
-            .application_properties
-            .as_mut()
-            .and_then(|ap| ap.remove(STATUS_CODE))
-        {
-            Some(value) => StatusCode::try_from(value).map_err(|_| Error::DecodeError)?,
-            None => return Err(Error::StatusCodeNotFound),
-        };
-
-        let status_description: Option<String> = message
-            .application_properties
-            .as_mut()
-            .and_then(|ap| ap.remove(STATUS_DESCRIPTION))
-            .map(|value| String::try_from(value).map_err(|_| Error::DecodeError))
-            .transpose()?;
-
-        Ok(Self {
-            correlation_id,
-            status_code,
-            status_description,
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct Response<R> {
-    pub correlation_id: MessageId,
-    pub status_code: StatusCode,
-    pub status_description: Option<String>,
-    pub operation: R,
-}
-
-impl<R> Response<R> {
-    pub fn from_parts(properties: ResponseMessageProperties, operation: R) -> Self {
-        Self {
-            correlation_id: properties.correlation_id,
-            status_code: properties.status_code,
-            status_description: properties.status_description,
-            operation,
+            return Err(StatusError {
+                code: status_code,
+                description: status_description.map(Into::into),
+            }
+            .into());
         }
+
+        Ok(status_code)
     }
-}
 
-pub trait MessageDeserializer<T>: Sized
-where
-    for<'de> T: FromBody<'de>,
-{
-    type Error;
-
-    fn from_message(message: Message<T>) -> Result<Self, Self::Error>;
+    fn from_message(mut message: Message<Self::Body>) -> Result<Self, Self::Error> {
+        Self::verify_status_code(&mut message)?;
+        Self::decode_message(message)
+    }
 }

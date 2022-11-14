@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.0.9
+
+- Updated dependencies `fe2o3-amqp-management` to "0.0.4" and updated `PutTokenRequest` and
+  `PutTokenResponse` to use `Request` and `Response` traits
+
 ## 0.0.8
 
 - Experimental use of GAT as opposed to `Pin<Box<dyn Future>>`

@@ -1,19 +1,13 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::OrderedMap,
-};
+use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
-use crate::{
-    constants::{GET_ATTRIBUTES, OPERATION},
-    error::{Error, Result},
-    request::MessageSerializer,
-    response::MessageDeserializer,
-};
+use crate::{constants::GET_ATTRIBUTES, error::Error, request::Request, response::Response};
+
+use super::get::GetRequest;
 
 pub trait GetAttributes {
-    fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse>;
+    fn get_attributes(&self, req: GetAttributesRequest) -> Result<GetAttributesResponse, Error>;
 }
 
 /// GET-ATTRIBUTES
@@ -22,30 +16,44 @@ pub trait GetAttributes {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAttributesRequest<'a> {
-    pub entity_type: Option<Cow<'a, str>>,
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetAttributesRequest<'a> {
-    pub fn new(entity_type: impl Into<Option<Cow<'a, str>>>) -> Self {
+    pub fn new(
+        entity_type: impl Into<Option<Cow<'a, str>>>,
+        r#type: impl Into<Cow<'a, str>>,
+        locales: Option<impl Into<Cow<'a, str>>>,
+    ) -> Self {
         Self {
-            entity_type: entity_type.into(),
+            inner: GetRequest::new(entity_type, r#type, locales),
         }
     }
 }
 
-impl<'a> MessageSerializer for GetAttributesRequest<'a> {
+impl<'a> Request for GetAttributesRequest<'a> {
+    const OPERATION: &'static str = GET_ATTRIBUTES;
+
+    type Response = GetAttributesResponse;
+
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {
-        let mut builder = ApplicationProperties::builder();
-        builder = builder.insert(OPERATION, GET_ATTRIBUTES);
-        if let Some(entity_type) = self.entity_type {
-            builder = builder.insert("entityType", entity_type.to_string());
-        }
-        Message::builder()
-            .application_properties(builder.build())
-            .body(())
-            .build()
+    fn manageable_entity_type(&mut self) -> Option<String> {
+        self.inner.manageable_entity_type()
+    }
+
+    fn locales(&mut self) -> Option<String> {
+        self.inner.locales()
+    }
+
+    fn encode_application_properties(
+        &mut self,
+    ) -> Option<fe2o3_amqp_types::messaging::ApplicationProperties> {
+        self.inner.encode_application_properties()
+    }
+
+    fn encode_body(self) -> Self::Body {
+        
     }
 }
 
@@ -62,14 +70,16 @@ pub struct GetAttributesResponse {
     pub attributes: OrderedMap<String, Vec<String>>,
 }
 
-impl GetAttributesResponse {
-    pub const STATUS_CODE: u16 = 200;
-}
+impl GetAttributesResponse {}
 
-impl MessageDeserializer<Option<OrderedMap<String, Vec<String>>>> for GetAttributesResponse {
+impl Response for GetAttributesResponse {
+    const STATUS_CODE: u16 = 200;
+
+    type Body = Option<OrderedMap<String, Vec<String>>>;
+
     type Error = Error;
 
-    fn from_message(message: Message<Option<OrderedMap<String, Vec<String>>>>) -> Result<Self> {
+    fn decode_message(message: Message<Self::Body>) -> Result<Self, Self::Error> {
         match message.body {
             Some(attributes) => Ok(Self { attributes }),
             None => Ok(Self {
