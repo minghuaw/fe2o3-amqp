@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message, MessageId},
+    messaging::{ApplicationProperties, Message},
     primitives::{OrderedMap, SimpleValue, Value},
 };
 
@@ -9,7 +9,7 @@ use crate::{
     constants::{IDENTITY, LOCALES, NAME, OPERATION, READ, TYPE},
     error::{Error, Result},
     request::Request,
-    response::Response, mgmt_ext::AmqpMessageManagementExt,
+    response::Response,
 };
 
 pub trait Read {
@@ -109,8 +109,7 @@ pub struct ReadResponse {
     pub entity_attributes: OrderedMap<String, Value>,
 }
 
-impl ReadResponse {
-}
+impl ReadResponse {}
 
 impl Response for ReadResponse {
     const STATUS_CODE: u16 = 200;

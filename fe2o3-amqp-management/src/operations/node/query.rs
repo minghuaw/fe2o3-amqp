@@ -28,7 +28,8 @@ use fe2o3_amqp_types::{
 use crate::{
     constants::{LOCALES, OPERATION, QUERY, TYPE},
     error::{Error, Result},
-    request::Request, response::Response,
+    request::Request,
+    response::Response,
 };
 
 pub trait Query {
@@ -39,15 +40,15 @@ pub struct QueryRequest<'a> {
     /// If set, restricts the set of Manageable Entities requested to those that extend (directly or
     /// indirectly) the given Manageable Entity Type.
     pub entity_type: Option<Cow<'a, str>>,
-    
+
     /// If set, specifies the number of the first element of the result set to be returned. If not
     /// provided, a default of 0 MUST be assumed.
     pub offset: Option<u32>,
-    
+
     /// If set, specifies the number of entries from the result set to return. If not provided, all
     /// results from ‘offset’ onwards MUST be returned.
     pub count: Option<u32>,
-    
+
     /// The body of the message MUST consist of an amqp-value section containing a map which MUST have
     /// the following entries, where all keys MUST be of type string:
     ///
@@ -152,8 +153,7 @@ pub struct QueryResponse {
     pub results: Vec<Vec<Value>>,
 }
 
-impl QueryResponse {
-}
+impl QueryResponse {}
 
 impl Response for QueryResponse {
     const STATUS_CODE: u16 = 200;
@@ -174,7 +174,9 @@ impl Response for QueryResponse {
             .ok_or(Error::DecodeError(None))??;
         let mut map = message.body;
 
-        let attribute_names = map.remove("attributeNames").ok_or(Error::DecodeError(None))?;
+        let attribute_names = map
+            .remove("attributeNames")
+            .ok_or(Error::DecodeError(None))?;
         let attribute_names = attribute_names
             .into_iter()
             .map(|v| String::try_from(v).map_err(|_| Error::DecodeError(None)))

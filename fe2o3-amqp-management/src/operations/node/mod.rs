@@ -12,6 +12,7 @@
 //! • DEREGISTER
 
 mod deregister;
+mod get;
 mod get_annotations;
 mod get_attributes;
 mod get_mgmt_nodes;
@@ -19,7 +20,6 @@ mod get_operations;
 mod get_types;
 mod query;
 mod register;
-mod get;
 
 pub use deregister::*;
 pub use get_annotations::*;

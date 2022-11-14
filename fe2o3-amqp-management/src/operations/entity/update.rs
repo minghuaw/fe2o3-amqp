@@ -1,13 +1,15 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message, MessageId},
-    primitives::{OrderedMap, Value, SimpleValue},
+    messaging::{ApplicationProperties, Message},
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    constants::{IDENTITY, NAME, OPERATION, UPDATE, TYPE, LOCALES},
-    error::{Error, Result}, request::Request, response::Response, mgmt_ext::AmqpMessageManagementExt,
+    constants::{IDENTITY, LOCALES, NAME, OPERATION, TYPE, UPDATE},
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 pub trait Update {
@@ -52,7 +54,7 @@ impl<'a> UpdateRequest<'a> {
         name: impl Into<Cow<'a, str>>,
         r#type: impl Into<Cow<'a, str>>,
         locales: impl Into<Option<Cow<'a, str>>>,
-        body: impl Into<OrderedMap<String, Value>>
+        body: impl Into<OrderedMap<String, Value>>,
     ) -> Self {
         Self::Name {
             value: name.into(),
@@ -66,7 +68,7 @@ impl<'a> UpdateRequest<'a> {
         identity: impl Into<Cow<'a, str>>,
         r#type: impl Into<Cow<'a, str>>,
         locales: impl Into<Option<Cow<'a, str>>>,
-        body: impl Into<OrderedMap<String, Value>>
+        body: impl Into<OrderedMap<String, Value>>,
     ) -> Self {
         Self::Identity {
             value: identity.into(),
@@ -83,8 +85,18 @@ impl<'a> Request for UpdateRequest<'a> {
 
     fn into_message(self) -> Message<Self::Body> {
         let (key, value, body, r#type, locales) = match self {
-            UpdateRequest::Name { value, body, r#type, locales } => (NAME, value, body, r#type, locales),
-            UpdateRequest::Identity { value, body, r#type, locales } => (IDENTITY, value, body, r#type, locales),
+            UpdateRequest::Name {
+                value,
+                body,
+                r#type,
+                locales,
+            } => (NAME, value, body, r#type, locales),
+            UpdateRequest::Identity {
+                value,
+                body,
+                r#type,
+                locales,
+            } => (IDENTITY, value, body, r#type, locales),
         };
 
         Message::builder()

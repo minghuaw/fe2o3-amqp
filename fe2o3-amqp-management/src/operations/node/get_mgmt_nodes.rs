@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::messaging::{Message};
+use fe2o3_amqp_types::messaging::Message;
 
 use crate::{
     constants::{GET_MGMT_NODES, OPERATION},
-    error::{Error, Result}, request::Request, response::Response,
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 use super::get::GetRequest;
@@ -21,14 +23,11 @@ pub trait GetMgmtNodes {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetMgmtNodesRequest<'a> {
-    inner: GetRequest<'a>
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetMgmtNodesRequest<'a> {
-    pub fn new(
-        r#type: impl Into<Cow<'a, str>>,
-        locales: Option<impl Into<Cow<'a, str>>>,
-    ) -> Self {
+    pub fn new(r#type: impl Into<Cow<'a, str>>, locales: Option<impl Into<Cow<'a, str>>>) -> Self {
         Self {
             inner: GetRequest::new(None, r#type, locales),
         }
@@ -58,8 +57,7 @@ pub struct GetMgmtNodesResponse {
     pub addresses: Vec<String>,
 }
 
-impl GetMgmtNodesResponse {
-}
+impl GetMgmtNodesResponse {}
 
 impl Response for GetMgmtNodesResponse {
     const STATUS_CODE: u16 = 200;

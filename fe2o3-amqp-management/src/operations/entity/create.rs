@@ -1,14 +1,13 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message, MessageId},
+    messaging::{ApplicationProperties, Message},
     primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
     constants::{CREATE, LOCALES, NAME, OPERATION, TYPE},
-    error::{Error, InvalidType, Result, StatusError},
-    mgmt_ext::AmqpMessageManagementExt,
+    error::{Error, Result},
     request::Request,
     response::Response,
 };
@@ -124,7 +123,7 @@ pub struct CreateResponse {
 
 impl Response for CreateResponse {
     const STATUS_CODE: u16 = 201;
-    
+
     type Body = Option<OrderedMap<String, Value>>;
     type Error = Error;
     type StatusError = Error;

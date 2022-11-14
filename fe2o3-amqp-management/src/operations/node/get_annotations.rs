@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue},
-};
+use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
 use crate::{
-    constants::{GET_ANNOTATIONS, OPERATION, TYPE, LOCALES},
-    error::{Error, Result}, request::Request, response::Response,
+    constants::{GET_ANNOTATIONS, OPERATION},
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 use super::get::GetRequest;
@@ -22,7 +21,7 @@ pub trait GetAnnotations {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAnnotationsRequest<'a> {
-    inner: GetRequest<'a>
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetAnnotationsRequest<'a> {
@@ -32,7 +31,7 @@ impl<'a> GetAnnotationsRequest<'a> {
         locales: Option<impl Into<Cow<'a, str>>>,
     ) -> Self {
         Self {
-            inner: GetRequest::new(entity_type, r#type, locales)
+            inner: GetRequest::new(entity_type, r#type, locales),
         }
     }
 }

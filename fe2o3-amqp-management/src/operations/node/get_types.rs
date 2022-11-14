@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue},
-};
+use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
 use crate::{
-    constants::{GET_TYPES, OPERATION, TYPE, LOCALES},
-    error::{Error, Result}, request::Request, response::Response,
+    constants::{GET_TYPES, OPERATION},
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 use super::get::GetRequest;
@@ -22,7 +21,7 @@ pub trait GetTypes {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetTypesRequest<'a> {
-    inner: GetRequest<'a>
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetTypesRequest<'a> {
@@ -32,7 +31,7 @@ impl<'a> GetTypesRequest<'a> {
         locales: Option<impl Into<Cow<'a, str>>>,
     ) -> Self {
         Self {
-            inner: GetRequest::new(entity_type, r#type, locales)
+            inner: GetRequest::new(entity_type, r#type, locales),
         }
     }
 }
@@ -41,7 +40,7 @@ impl<'a> Request for GetTypesRequest<'a> {
     type Response = GetTypesResponse;
     type Body = ();
 
-    fn into_message(self) -> Message<Self::Body> {        
+    fn into_message(self) -> Message<Self::Body> {
         let mut application_properties = self.inner.into_application_properties();
         application_properties.insert(OPERATION.into(), GET_TYPES.into());
 
@@ -56,8 +55,7 @@ pub struct GetTypesResponse {
     pub types: OrderedMap<String, Vec<String>>,
 }
 
-impl GetTypesResponse {
-}
+impl GetTypesResponse {}
 
 impl Response for GetTypesResponse {
     const STATUS_CODE: u16 = 200;

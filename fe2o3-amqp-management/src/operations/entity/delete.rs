@@ -1,13 +1,15 @@
 use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message, MessageId},
-    primitives::{OrderedMap, Value, SimpleValue},
+    messaging::{ApplicationProperties, Message},
+    primitives::{OrderedMap, SimpleValue, Value},
 };
 
 use crate::{
-    constants::{DELETE, IDENTITY, NAME, OPERATION, TYPE, LOCALES},
-    error::{Error, Result, InvalidType}, request::Request, response::Response, mgmt_ext::AmqpMessageManagementExt,
+    constants::{DELETE, IDENTITY, LOCALES, NAME, OPERATION, TYPE},
+    error::{Error, InvalidType, Result},
+    request::Request,
+    response::Response,
 };
 
 pub trait Delete {
@@ -115,8 +117,7 @@ pub struct DeleteResponse {
     pub empty_map: EmptyMap,
 }
 
-impl DeleteResponse {
-}
+impl DeleteResponse {}
 
 impl Response for DeleteResponse {
     const STATUS_CODE: u16 = 204;
@@ -133,10 +134,13 @@ impl Response for DeleteResponse {
             None | Some(0) => Ok(Self {
                 empty_map: EmptyMap::new(),
             }),
-            _ => Err(Error::DecodeError(InvalidType {
-                expected: "empty map".to_string(),
-                actual: "non-empty map".to_string(),
-            }.into())),
+            _ => Err(Error::DecodeError(
+                InvalidType {
+                    expected: "empty map".to_string(),
+                    actual: "non-empty map".to_string(),
+                }
+                .into(),
+            )),
         }
     }
 }

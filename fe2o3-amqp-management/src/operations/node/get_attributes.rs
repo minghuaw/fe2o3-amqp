@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::{OrderedMap, SimpleValue},
-};
+use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
 use crate::{
-    constants::{GET_ATTRIBUTES, OPERATION, TYPE, LOCALES},
-    error::{Error, Result}, request::Request, response::Response,
+    constants::{GET_ATTRIBUTES, OPERATION},
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 use super::get::GetRequest;
@@ -22,7 +21,7 @@ pub trait GetAttributes {
 ///
 /// No information is carried in the message body therefore any message body is valid and MUST be ignored.
 pub struct GetAttributesRequest<'a> {
-    inner: GetRequest<'a>
+    inner: GetRequest<'a>,
 }
 
 impl<'a> GetAttributesRequest<'a> {
@@ -32,7 +31,7 @@ impl<'a> GetAttributesRequest<'a> {
         locales: Option<impl Into<Cow<'a, str>>>,
     ) -> Self {
         Self {
-            inner: GetRequest::new(entity_type, r#type, locales)
+            inner: GetRequest::new(entity_type, r#type, locales),
         }
     }
 }
@@ -65,12 +64,11 @@ pub struct GetAttributesResponse {
     pub attributes: OrderedMap<String, Vec<String>>,
 }
 
-impl GetAttributesResponse {
-}
+impl GetAttributesResponse {}
 
 impl Response for GetAttributesResponse {
     const STATUS_CODE: u16 = 200;
-    
+
     type Body = Option<OrderedMap<String, Vec<String>>>;
 
     type Error = Error;

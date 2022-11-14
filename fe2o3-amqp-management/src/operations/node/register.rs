@@ -2,12 +2,14 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{Value, SimpleValue},
+    primitives::{SimpleValue, Value},
 };
 
 use crate::{
-    constants::{OPERATION, REGISTER, TYPE, LOCALES},
-    error::{Error, Result}, request::Request, response::Response,
+    constants::{LOCALES, OPERATION, REGISTER, TYPE},
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 pub trait Register {
@@ -75,10 +77,9 @@ impl<'a> Request for RegisterRequest<'a> {
 /// If the request was successful then the statusCode MUST be 200 (OK). Upon a successful
 /// registration, the address of the registered Management Node will be present in the list of known
 /// Management Nodes returned by subsequent GET-MGMT-NODES operations.
-pub struct RegisterResponse { }
+pub struct RegisterResponse {}
 
-impl RegisterResponse {
-}
+impl RegisterResponse {}
 
 impl Response for RegisterResponse {
     const STATUS_CODE: u16 = 200;

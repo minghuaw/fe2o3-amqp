@@ -1,9 +1,6 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{message, ApplicationProperties, Message},
-    primitives::SimpleValue,
-};
+use fe2o3_amqp_types::{messaging::ApplicationProperties, primitives::SimpleValue};
 
 use crate::constants::{ENTITY_TYPE, LOCALES, TYPE};
 

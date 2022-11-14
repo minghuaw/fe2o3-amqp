@@ -3,14 +3,12 @@ use fe2o3_amqp::{
     session::SessionHandle,
     Delivery, Receiver, Sender,
 };
-use fe2o3_amqp_types::{
-    messaging::{FromBody, IntoBody, MessageId, Outcome, Properties},
-};
+use fe2o3_amqp_types::messaging::{FromBody, IntoBody, MessageId, Outcome, Properties};
 
 use crate::{
     error::{AttachError, Error},
     request::Request,
-    response::{Response},
+    response::Response,
     DEFAULT_CLIENT_NODE_ADDRESS, MANAGEMENT_NODE_ADDRESS,
 };
 
@@ -42,10 +40,7 @@ impl MgmtClient {
         Ok(())
     }
 
-    pub async fn send_request(
-        &mut self,
-        request: impl Request,
-    ) -> Result<Outcome, SendError> {
+    pub async fn send_request(&mut self, request: impl Request) -> Result<Outcome, SendError> {
         let mut message = request.into_message().map_body(IntoBody::into_body);
 
         // Only insert the request-id if it's not already set
@@ -55,7 +50,9 @@ impl MgmtClient {
             self.req_id += 1;
             message_id
         });
-        properties.reply_to.get_or_insert(self.client_node_addr.clone());
+        properties
+            .reply_to
+            .get_or_insert(self.client_node_addr.clone());
 
         self.sender.send(message).await
     }
@@ -71,10 +68,7 @@ impl MgmtClient {
         Res::from_message(delivery.into_message()).map_err(Into::into)
     }
 
-    pub async fn call<Req, Res>(
-        &mut self,
-        request: Req,
-    ) -> Result<Res, Error>
+    pub async fn call<Req, Res>(&mut self, request: Req) -> Result<Res, Error>
     where
         Req: Request,
         Res: Response,

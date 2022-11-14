@@ -1,6 +1,13 @@
-use fe2o3_amqp_types::{messaging::{Message, MessageId}, primitives::SimpleValue};
+use fe2o3_amqp_types::{
+    messaging::{Message, MessageId},
+    primitives::SimpleValue,
+};
 
-use crate::{constants::{STATUS_CODE, STATUS_DESCRIPTION}, error::InvalidType, status::StatusCode};
+use crate::{
+    constants::{STATUS_CODE, STATUS_DESCRIPTION},
+    error::InvalidType,
+    status::StatusCode,
+};
 
 pub trait AmqpMessageManagementExt {
     fn status_code(&self) -> Option<Result<StatusCode, InvalidType>>;
@@ -33,9 +40,7 @@ impl<T> AmqpMessageManagementExt for Message<T> {
         self.application_properties
             .as_mut()
             .and_then(|ap| ap.remove(STATUS_CODE))
-            .map(|value| {
-                StatusCode::try_from(value).map_err(|actual| SimpleValue::from(actual))
-            })
+            .map(|value| StatusCode::try_from(value).map_err(|actual| SimpleValue::from(actual)))
     }
 
     fn correlation_id(&self) -> Option<&MessageId> {
@@ -52,24 +57,22 @@ impl<T> AmqpMessageManagementExt for Message<T> {
 
     fn status_description(&self) -> Option<Result<&str, InvalidType>> {
         self.application_properties.as_ref().and_then(|ap| {
-            ap.get(STATUS_DESCRIPTION)
-                .and_then(|value| match value {
-                    SimpleValue::String(s) => Some(Ok(s.as_str())),
-                    _ => Some(Err(InvalidType {
-                        expected: "String".to_string(),
-                        actual: format!("{:?}", value),
-                    })),
-                })
+            ap.get(STATUS_DESCRIPTION).and_then(|value| match value {
+                SimpleValue::String(s) => Some(Ok(s.as_str())),
+                _ => Some(Err(InvalidType {
+                    expected: "String".to_string(),
+                    actual: format!("{:?}", value),
+                })),
+            })
         })
     }
 
     fn remove_status_description(&mut self) -> Option<Result<String, SimpleValue>> {
         self.application_properties.as_mut().and_then(|ap| {
-            ap.remove(STATUS_DESCRIPTION)
-                .and_then(|value| match value {
-                    SimpleValue::String(s) => Some(Ok(s)),
-                    _ => Some(Err(value)),
-                })
+            ap.remove(STATUS_DESCRIPTION).and_then(|value| match value {
+                SimpleValue::String(s) => Some(Ok(s)),
+                _ => Some(Err(value)),
+            })
         })
     }
 }

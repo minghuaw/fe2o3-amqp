@@ -2,12 +2,14 @@ use std::borrow::Cow;
 
 use fe2o3_amqp_types::{
     messaging::{ApplicationProperties, Message},
-    primitives::{Value, SimpleValue},
+    primitives::{SimpleValue, Value},
 };
 
 use crate::{
-    constants::{DEREGISTER, OPERATION, TYPE, LOCALES},
-    error::{Error, Result}, request::Request, response::Response,
+    constants::{DEREGISTER, LOCALES, OPERATION, TYPE},
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 pub trait Deregister {
@@ -77,8 +79,7 @@ impl<'a> Request for DeregisterRequest<'a> {
 /// of known Management Nodes returned by subsequent GET-MGMT-NODES operations.
 pub struct DeregisterResponse {}
 
-impl DeregisterResponse {
-}
+impl DeregisterResponse {}
 
 impl Response for DeregisterResponse {
     const STATUS_CODE: u16 = 200;

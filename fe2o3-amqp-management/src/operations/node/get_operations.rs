@@ -1,13 +1,12 @@
 use std::borrow::Cow;
 
-use fe2o3_amqp_types::{
-    messaging::{ApplicationProperties, Message},
-    primitives::OrderedMap,
-};
+use fe2o3_amqp_types::{messaging::Message, primitives::OrderedMap};
 
 use crate::{
     constants::{GET_OPERATIONS, OPERATION},
-    error::{Error, Result}, request::Request, response::Response,
+    error::{Error, Result},
+    request::Request,
+    response::Response,
 };
 
 use super::get::GetRequest;
@@ -70,8 +69,7 @@ pub struct GetOperationsResponse {
     pub operations: Operations,
 }
 
-impl GetOperationsResponse {
-}
+impl GetOperationsResponse {}
 
 impl Response for GetOperationsResponse {
     const STATUS_CODE: u16 = 200;
@@ -81,9 +79,7 @@ impl Response for GetOperationsResponse {
     type Error = Error;
     type StatusError = Error;
 
-    fn from_message(
-        mut message: Message<Option<Operations>>,
-    ) -> Result<Self> {
+    fn from_message(mut message: Message<Option<Operations>>) -> Result<Self> {
         let _status_code = Self::check_status_code(&mut message)?;
 
         match message.body {
