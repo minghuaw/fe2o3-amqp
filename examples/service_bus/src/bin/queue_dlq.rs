@@ -5,7 +5,6 @@ use fe2o3_amqp::connection::ConnectionHandle;
 use fe2o3_amqp::transaction::OwnedTransaction;
 use fe2o3_amqp::transaction::TransactionDischarge;
 use fe2o3_amqp::transaction::TransactionalRetirement;
-use fe2o3_amqp::types::messaging::AmqpSequence;
 use fe2o3_amqp::types::messaging::Body;
 use fe2o3_amqp::types::messaging::Message;
 use fe2o3_amqp::types::messaging::Properties;
