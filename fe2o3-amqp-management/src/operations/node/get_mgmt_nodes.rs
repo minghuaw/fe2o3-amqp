@@ -50,9 +50,7 @@ impl<'a> Request for GetMgmtNodesRequest<'a> {
         self.inner.encode_application_properties()
     }
 
-    fn encode_body(self) -> Self::Body {
-        
-    }
+    fn encode_body(self) -> Self::Body {}
 }
 
 /// If the request was successful then the statusCode MUST be 200 (OK) and the body of the message

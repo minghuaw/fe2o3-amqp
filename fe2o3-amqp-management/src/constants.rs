@@ -18,5 +18,12 @@ pub const TYPE: &str = "type";
 pub const LOCALES: &str = "locales";
 pub const ENTITY_TYPE: &str = "entityType";
 
-pub const STATUS_CODE: &str = "status-code";
-pub const STATUS_DESCRIPTION: &str = "status-description";
+pub(crate) mod kebab_case {
+    pub const STATUS_CODE: &str = "status-code";
+    pub const STATUS_DESCRIPTION: &str = "status-description";
+}
+
+pub(crate) mod lower_camel_case {
+    pub const STATUS_CODE: &str = "statusCode";
+    pub const STATUS_DESCRIPTION: &str = "statusDescription";
+}

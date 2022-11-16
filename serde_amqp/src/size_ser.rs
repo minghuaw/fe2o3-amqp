@@ -30,6 +30,12 @@ pub struct SizeSerializer {
     pub(crate) is_array_element: IsArrayElement,
 }
 
+impl Default for SizeSerializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SizeSerializer {
     /// Create a new `SizeSerializer`
     pub fn new() -> Self {

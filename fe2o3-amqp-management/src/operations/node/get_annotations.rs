@@ -52,9 +52,7 @@ impl<'a> Request for GetAnnotationsRequest<'a> {
         self.inner.encode_application_properties()
     }
 
-    fn encode_body(self) -> Self::Body {
-        
-    }
+    fn encode_body(self) -> Self::Body {}
 }
 
 pub struct GetAnnotationsResponse {

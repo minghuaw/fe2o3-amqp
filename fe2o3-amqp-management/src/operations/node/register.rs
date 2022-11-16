@@ -64,9 +64,7 @@ impl<'a> Request for RegisterRequest<'a> {
         )
     }
 
-    fn encode_body(self) -> Self::Body {
-        
-    }
+    fn encode_body(self) -> Self::Body {}
 }
 
 /// No information is carried in the message body therefore any message body is valid and MUST be

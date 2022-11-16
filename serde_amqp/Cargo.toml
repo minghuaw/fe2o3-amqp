@@ -1,6 +1,6 @@
 [package]
 name = "serde_amqp"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 description = "A serde implementation of AMQP1.0 protocol."
 license = "MIT/Apache-2.0"
@@ -26,6 +26,10 @@ extensions = []
 # and the value will use deserialize any instead of deserialize enum
 # which has some hacky impl for amqp
 json = ["serde_json"]
+
+# A temporary feature flag that removes use of deprecated API from `chorono` until next breaking
+# release
+chrono-preview = ["chrono"]
 
 [dev-dependencies]
 

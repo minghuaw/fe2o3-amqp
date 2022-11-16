@@ -73,6 +73,7 @@ impl<'de> de::Deserialize<'de> for Timestamp {
 }
 
 /// Please note that this conversion does NOT check for overflow
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl From<time::OffsetDateTime> for Timestamp {
     fn from(val: time::OffsetDateTime) -> Self {
@@ -80,6 +81,7 @@ impl From<time::OffsetDateTime> for Timestamp {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl TryFrom<Timestamp> for time::OffsetDateTime {
     type Error = time::error::ComponentRange;
@@ -90,6 +92,7 @@ impl TryFrom<Timestamp> for time::OffsetDateTime {
 }
 
 /// Please note that this conversion does NOT check for overflow
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl From<time::Duration> for Timestamp {
     fn from(val: time::Duration) -> Self {
@@ -97,6 +100,7 @@ impl From<time::Duration> for Timestamp {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl From<Timestamp> for time::Duration {
     fn from(value: Timestamp) -> Self {
@@ -104,6 +108,7 @@ impl From<Timestamp> for time::Duration {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 #[cfg(feature = "chrono")]
 impl From<chrono::Duration> for Timestamp {
     fn from(val: chrono::Duration) -> Self {
@@ -111,6 +116,7 @@ impl From<chrono::Duration> for Timestamp {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 #[cfg(feature = "chrono")]
 impl From<Timestamp> for chrono::Duration {
     fn from(value: Timestamp) -> Self {
@@ -118,6 +124,7 @@ impl From<Timestamp> for chrono::Duration {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 #[cfg(feature = "chrono")]
 impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
     fn from(val: chrono::DateTime<chrono::Utc>) -> Self {
@@ -125,8 +132,13 @@ impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
     }
 }
 
-#[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "chrono", not(feature = "chrono-preview")))))]
+#[cfg(all(feature = "chrono", not(feature = "chrono-preview")))]
 impl From<Timestamp> for chrono::DateTime<chrono::Utc> {
+    #[deprecated(
+        since = "0.5.3", 
+        note = r#"Deprecated due to chrono's deprecation of from_timestamp(), use try_from with "chrono-preview" feature"#
+    )]
     fn from(value: Timestamp) -> Self {
         chrono::DateTime::<chrono::Utc>::from_utc(
             chrono::NaiveDateTime::from_timestamp(
@@ -137,3 +149,52 @@ impl From<Timestamp> for chrono::DateTime<chrono::Utc> {
         )
     }
 }
+
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono-preview")))]
+#[cfg(feature = "chrono-preview")]
+impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
+    type Error = Timestamp;
+
+    /// Conversion from [`Timestamp`] to [`chrono::DateTime<chrono::Utc>`] is fallible. An error
+    /// will be returned if the timestamp is out of range for [`chrono::DateTime<chrono::Utc>`].
+    /// 
+    /// This preview feature is to reflect upstream changes in `chrono` that deprecates
+    /// `from_timestamp()`.
+    /// 
+    /// Conversion between `Timestamp` to `DateTime<Utc>` using `From::from` is still available if
+    /// only the "chrono" feature is enabled without the "chrono-preview" feature, and it will be
+    /// removed in favour of the one provided with the "chrono-preview" feature in the next major
+    /// version.
+    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
+        let native_time =
+            chrono::NaiveDateTime::from_timestamp_millis(value.milliseconds()).ok_or(value)?;
+        Ok(chrono::DateTime::<chrono::Utc>::from_utc(
+            native_time,
+            chrono::Utc,
+        ))
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono-preview")))]
+#[cfg(feature = "chrono-preview")]
+impl From<Timestamp> for Option<chrono::DateTime<chrono::Utc>> {
+    /// Conversion from [`Timestamp`] to [`chrono::DateTime<chrono::Utc>`] is fallible. A `None`
+    /// will be returned if the timestamp is out of range of `chrono::DateTime<chrono::Utc>`
+    /// 
+    /// This preview feature is to reflect upstream changes in `chrono` that deprecates
+    /// `from_timestamp()`.
+    /// 
+    /// Conversion between `Timestamp` to `DateTime<Utc>` using `From::from` is still available if
+    /// only the "chrono" feature is enabled without the "chrono-preview" feature, and it will be
+    /// removed in favour of the one provided with the "chrono-preview" feature in the next major
+    /// version.
+    fn from(value: Timestamp) -> Self{
+        let native_time =
+            chrono::NaiveDateTime::from_timestamp_millis(value.milliseconds())?;
+        Some(chrono::DateTime::<chrono::Utc>::from_utc(
+            native_time,
+            chrono::Utc,
+        ))
+    }
+}
+
