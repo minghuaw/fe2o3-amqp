@@ -113,9 +113,7 @@ impl<'a> Request for DeleteRequest<'a> {
         Some(app_props)
     }
 
-    fn encode_body(self) -> Self::Body {
-        
-    }
+    fn encode_body(self) -> Self::Body {}
 }
 
 /// The body of the message MUST consist of an amqp-value section containing a map with zero

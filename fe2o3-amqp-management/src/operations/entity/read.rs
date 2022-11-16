@@ -101,9 +101,7 @@ impl<'a> Request for ReadRequest<'a> {
         )
     }
 
-    fn encode_body(self) -> Self::Body {
-        
-    }
+    fn encode_body(self) -> Self::Body {}
 }
 
 #[derive(Debug)]

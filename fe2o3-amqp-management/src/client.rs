@@ -3,7 +3,10 @@ use fe2o3_amqp::{
     session::SessionHandle,
     Delivery, Receiver, Sender,
 };
-use fe2o3_amqp_types::{messaging::{FromBody, IntoBody, MessageId, Outcome, Properties}, definitions::Fields};
+use fe2o3_amqp_types::{
+    definitions::Fields,
+    messaging::{FromBody, IntoBody, MessageId, Outcome, Properties},
+};
 
 use crate::{
     error::{AttachError, Error},
@@ -130,10 +133,8 @@ impl MgmtClientBuilder {
         if let Some(properties) = self.sender_properties {
             sender_builder = sender_builder.properties(properties);
         }
-        let sender = sender_builder
-            .attach(session)
-            .await?;
-        
+        let sender = sender_builder.attach(session).await?;
+
         let mut receiver_builder = Receiver::builder()
             .name(format!("{}-mgmt-receiver", self.client_node_addr))
             .source(self.mgmt_node_addr)
@@ -141,9 +142,7 @@ impl MgmtClientBuilder {
         if let Some(properties) = self.receiver_properties {
             receiver_builder = receiver_builder.properties(properties);
         }
-        let receiver = receiver_builder
-            .attach(session)
-            .await?;
+        let receiver = receiver_builder.attach(session).await?;
 
         Ok(MgmtClient {
             req_id: 0,

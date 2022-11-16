@@ -55,9 +55,7 @@ impl<'a> Request for GetOperationsRequest<'a> {
         self.inner.encode_application_properties()
     }
 
-    fn encode_body(self) -> Self::Body {
-        
-    }
+    fn encode_body(self) -> Self::Body {}
 }
 
 type Operations = OrderedMap<String, OrderedMap<String, Vec<String>>>;

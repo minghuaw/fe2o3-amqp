@@ -27,4 +27,3 @@ pub(crate) mod lower_camel_case {
     pub const STATUS_CODE: &str = "statusCode";
     pub const STATUS_DESCRIPTION: &str = "statusDescription";
 }
-
