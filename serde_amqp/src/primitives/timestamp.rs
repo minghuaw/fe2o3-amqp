@@ -126,14 +126,15 @@ impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
 }
 
 #[cfg(feature = "chrono")]
-impl From<Timestamp> for chrono::DateTime<chrono::Utc> {
-    fn from(value: Timestamp) -> Self {
-        chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp(
-                value.0 / 1000,
-                (value.0 % 1000) as u32 * 1_000_000,
-            ),
+impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
+    type Error = Timestamp;
+
+    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
+        let native_time =
+            chrono::NaiveDateTime::from_timestamp_millis(value.milliseconds()).ok_or(value)?;
+        Ok(chrono::DateTime::<chrono::Utc>::from_utc(
+            native_time,
             chrono::Utc,
-        )
+        ))
     }
 }
