@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.5
+
+1. Checking both `"status-code"` and `"statusCode"` because multiple cases have been found in different implementations
+
 ## 0.0.4
 
 1. Removed `MessageSerializer` and`MessageDeserializer` traits

@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.0.10
+
+- Updated `fe2o3-amqp-management` to "0.0.5"
+
 ## 0.0.9
 
 - Updated dependencies `fe2o3-amqp-management` to "0.0.4" and updated `PutTokenRequest` and
