@@ -105,7 +105,7 @@ impl<K, V> OrderedMap<K, V> {
 
     ///Clears the IndexMap in the given index range, returning those key-value pairs as a drain iterator.
     ///
-    ///The range may be any type that implements RangeBounds<usize>, including all of the std::ops::Range* types, or even a tuple pair of Bound start and end values. To drain the map entirely, use RangeFull like map.drain(..).
+    ///The range may be any type that implements `RangeBounds<usize>`, including all of the std::ops::Range* types, or even a tuple pair of Bound start and end values. To drain the map entirely, use RangeFull like map.drain(..).
     ///
     ///This shifts down all entries following the drained range to fill the gap, and keeps the allocated memory for reuse.
     ///
