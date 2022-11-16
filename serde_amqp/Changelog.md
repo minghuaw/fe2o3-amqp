@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.3
+
+1. Added "chrono-preview" feature to reflect deprecation of `from_timestamp` in `chrono` crate.
+
 ## 0.5.2
 
 1. Fixed a bug where variable length types like str or vbin doesn't handle boundary condition at u8::MAX
