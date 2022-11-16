@@ -27,6 +27,10 @@ extensions = []
 # which has some hacky impl for amqp
 json = ["serde_json"]
 
+# A temporary feature flag that removes use of deprecated API from `chorono` until next breaking
+# release
+chrono-preview = ["chrono"]
+
 [dev-dependencies]
 
 # [dependencies.serde_amqp_derive]

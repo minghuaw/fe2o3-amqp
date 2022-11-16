@@ -73,6 +73,7 @@ impl<'de> de::Deserialize<'de> for Timestamp {
 }
 
 /// Please note that this conversion does NOT check for overflow
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl From<time::OffsetDateTime> for Timestamp {
     fn from(val: time::OffsetDateTime) -> Self {
@@ -80,6 +81,7 @@ impl From<time::OffsetDateTime> for Timestamp {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl TryFrom<Timestamp> for time::OffsetDateTime {
     type Error = time::error::ComponentRange;
@@ -90,6 +92,7 @@ impl TryFrom<Timestamp> for time::OffsetDateTime {
 }
 
 /// Please note that this conversion does NOT check for overflow
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl From<time::Duration> for Timestamp {
     fn from(val: time::Duration) -> Self {
@@ -97,6 +100,7 @@ impl From<time::Duration> for Timestamp {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
 impl From<Timestamp> for time::Duration {
     fn from(value: Timestamp) -> Self {
@@ -104,6 +108,7 @@ impl From<Timestamp> for time::Duration {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 #[cfg(feature = "chrono")]
 impl From<chrono::Duration> for Timestamp {
     fn from(val: chrono::Duration) -> Self {
@@ -111,6 +116,7 @@ impl From<chrono::Duration> for Timestamp {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 #[cfg(feature = "chrono")]
 impl From<Timestamp> for chrono::Duration {
     fn from(value: Timestamp) -> Self {
@@ -118,6 +124,7 @@ impl From<Timestamp> for chrono::Duration {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 #[cfg(feature = "chrono")]
 impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
     fn from(val: chrono::DateTime<chrono::Utc>) -> Self {
@@ -125,7 +132,22 @@ impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
     }
 }
 
-#[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "chrono", not(feature = "chrono-preview")))))]
+#[cfg(all(feature = "chrono", not(feature = "chrono-preview")))]
+impl From<Timestamp> for chrono::DateTime<chrono::Utc> {
+    fn from(value: Timestamp) -> Self {
+        chrono::DateTime::<chrono::Utc>::from_utc(
+            chrono::NaiveDateTime::from_timestamp(
+                value.0 / 1000,
+                (value.0 % 1000) as u32 * 1_000_000,
+            ),
+            chrono::Utc,
+        )
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono-preview")))]
+#[cfg(feature = "chrono-preview")]
 impl TryFrom<Timestamp> for chrono::DateTime<chrono::Utc> {
     type Error = Timestamp;
 

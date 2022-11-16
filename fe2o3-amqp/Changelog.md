@@ -6,7 +6,7 @@
 
 ## 0.7.11
 
-1. Bumped dependencies `serde_amqp` to "0.5.2" and `fe2o3-amqp-types` to "0.6.2".
+1. Bumped dependencies `serde_amqp` to "0.5.2" and `fe2o3-amqp-types` to "0.6.2" which fixes [#142](https://github.com/minghuaw/fe2o3-amqp/issues/142), where `&[u8]` or `String` of length 255 may fail to serialize with error too long.
 
 ## 0.7.10
 
