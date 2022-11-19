@@ -33,11 +33,12 @@ fn expand_serialize_on_datastruct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let descriptor = match amqp_attr.code {
-        Some(code) => quote!(serde_amqp::descriptor::Descriptor::Code(#code)),
-        None => {
-            let name = &amqp_attr.name[..];
-            quote!(serde_amqp::descriptor::Descriptor::Name(serde_amqp::primitives::Symbol::from(#name)))
-        }
+        Some(code) => Some(quote!(serde_amqp::descriptor::Descriptor::Code(#code))),
+        None => match amqp_attr.name {
+            Some(ref name) => Some(quote!(serde_amqp::descriptor::Descriptor::Name(serde_amqp::primitives::Symbol::from(#name)))
+        ),
+            None => None,
+        },
     };
 
     match &data.fields {
@@ -79,14 +80,24 @@ fn expand_serialize_on_datastruct(
 
 fn expand_serialize_unit_struct(
     ident: &syn::Ident,
-    descriptor: &proc_macro2::TokenStream,
+    descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
 ) -> proc_macro2::TokenStream {
-    let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
-        EncodingType::Basic => panic!("Basic encoding on unit struct is not supported"),
-        EncodingType::Map => panic!("Map encoding on unit struct is not supported"),
+    let struct_name = if descriptor.is_none() {
+        quote!(#ident)
+    } else {
+        match encoding {
+            EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+            EncodingType::Basic => panic!("Basic encoding on unit struct is not supported"),
+            EncodingType::Map => panic!("Map encoding on unit struct is not supported"),
+        }
     };
+
+    let serialize_descriptor = match descriptor {
+        Some(descriptor) => quote!(state.serialize_field(&#descriptor)?;),
+        None => quote!(),
+    };
+
     quote! {
         #[automatically_derived]
         impl serde_amqp::serde::ser::Serialize for #ident {
@@ -98,7 +109,8 @@ fn expand_serialize_unit_struct(
                 // len + 1 for compatibility with other serializer
                 let mut state = serializer.serialize_tuple_struct(#struct_name, 0 + 1)?;
                 // serialize descriptor
-                state.serialize_field(&#descriptor)?;
+                // state.serialize_field(&#descriptor)?;
+                #serialize_descriptor
                 state.end()
             }
         }
@@ -108,22 +120,27 @@ fn expand_serialize_unit_struct(
 fn expand_serialize_tuple_struct(
     ident: &syn::Ident,
     generics: &syn::Generics,
-    descriptor: &proc_macro2::TokenStream,
+    descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
     fields: &syn::FieldsUnnamed,
 ) -> proc_macro2::TokenStream {
-    let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
-        EncodingType::Basic => {
-            if fields.unnamed.len() == 1 {
-                // Basic encoding is allowed on newtype struct
-                quote!(serde_amqp::__constants::DESCRIBED_BASIC)
-            } else {
-                unimplemented!()
+    let struct_name = if descriptor.is_none() {
+        quote!(#ident)
+    } else {
+        match encoding {
+            EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+            EncodingType::Basic => {
+                if fields.unnamed.len() == 1 {
+                    // Basic encoding is allowed on newtype struct
+                    quote!(serde_amqp::__constants::DESCRIBED_BASIC)
+                } else {
+                    unimplemented!()
+                }
             }
+            EncodingType::Map => panic!("Map encoding for tuple struct is not supported"),
         }
-        EncodingType::Map => panic!("Map encoding for tuple struct is not supported"),
     };
+    
     let field_indices: Vec<syn::Index> = fields
         .unnamed
         .iter()
@@ -136,6 +153,11 @@ fn expand_serialize_tuple_struct(
     let where_clause = match generics.params.len() {
         0 => quote! {},
         _ => where_serialize(generics),
+    };
+
+    let serialize_descriptor = match descriptor {
+        Some(descriptor) => quote!(state.serialize_field(&#descriptor)?;),
+        None => quote!(),
     };
 
     quote! {
@@ -155,7 +177,7 @@ fn expand_serialize_tuple_struct(
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in serde_amqp serializer, this will be deducted
-                state.serialize_field(&#descriptor)?;
+                #serialize_descriptor
                 // #( state.serialize_field(&self.#field_indices)?; )*
                 #( buffer_if_none_for_tuple!(state, null_count, &self.#field_indices, #field_types); )*
                 state.end()
@@ -167,24 +189,28 @@ fn expand_serialize_tuple_struct(
 fn expand_serialize_struct(
     ident: &syn::Ident,
     generics: &syn::Generics,
-    descriptor: &proc_macro2::TokenStream,
+    descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
     rename_all: &str,
     fields: &syn::FieldsNamed,
     ctx: &DeriveInput,
 ) -> proc_macro2::TokenStream {
     let len = fields.named.len();
-    let struct_name = match encoding {
-        EncodingType::Basic => {
-            if fields.named.len() == 1 {
-                // Basic encoding is allowed on newtype struct
-                quote!(serde_amqp::__constants::DESCRIBED_BASIC)
-            } else {
-                unimplemented!()
+    let struct_name = if descriptor.is_none() {
+        quote!(#ident)
+    } else { 
+        match encoding {
+            EncodingType::Basic => {
+                if fields.named.len() == 1 {
+                    // Basic encoding is allowed on newtype struct
+                    quote!(serde_amqp::__constants::DESCRIBED_BASIC)
+                } else {
+                    unimplemented!()
+                }
             }
+            EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+            EncodingType::Map => quote!(serde_amqp::__constants::DESCRIBED_MAP),
         }
-        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
-        EncodingType::Map => quote!(serde_amqp::__constants::DESCRIBED_MAP),
     };
     let field_idents: Vec<syn::Ident> = fields
         .named
@@ -213,9 +239,16 @@ fn expand_serialize_struct(
         EncodingType::Map => {
             let serialize_if_some = macro_rules_serialize_if_some();
             let serialize_if_neq_default = macro_rules_serialize_if_neq_default();
-            quote! {
-                #serialize_if_some
-                #serialize_if_neq_default
+            match field_attrs.iter().any(|attr| attr.default) {
+                true => {
+                    quote! {
+                        #serialize_if_some
+                        #serialize_if_neq_default
+                    }
+                },
+                false => {
+                    quote! {#serialize_if_some}
+                },
             }
         }
     };
@@ -266,6 +299,11 @@ fn expand_serialize_struct(
         _ => where_serialize(generics),
     };
 
+    let serialize_descriptor = match descriptor {
+        Some(descriptor) => quote!(state.serialize_field(serde_amqp::__constants::DESCRIPTOR, &#descriptor)?;),
+        None => quote!(),
+    };
+
     quote! {
         #declarative_macro
 
@@ -284,7 +322,8 @@ fn expand_serialize_struct(
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in serde_amqp serializer, this will be deducted
-                state.serialize_field(serde_amqp::__constants::DESCRIPTOR, &#descriptor)?;
+                // state.serialize_field(serde_amqp::__constants::DESCRIPTOR, &#descriptor)?;
+                #serialize_descriptor
                 // #( state.serialize_field(#field_names, &self.#field_idents)?; )*
                 // #(buffer_if_none!(state, null_count, &self.#field_idents, #field_names, #field_types);) *
                 #( #field_impls; )*

@@ -31,8 +31,8 @@ fn expand_deserialize_on_datastruct(
     data: &syn::DataStruct,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let name = &attr.name[..]; // descriptor name
-    let expecting = format!("struct {}", name);
+    // let name = &attr.name[..]; // descriptor name
+    // let expecting = format!("struct {}", name);
 
     let evaluate_code = match attr.code {
         Some(code) => quote! {
@@ -47,15 +47,33 @@ fn expand_deserialize_on_datastruct(
         },
     };
 
-    let evaluate_descriptor = quote! {
-        match __descriptor {
+    let evaluate_name = match &attr.name {
+        Some(name) => quote! {
             serde_amqp::descriptor::Descriptor::Name(__symbol) => {
                 if __symbol.into_inner() != #name {
                     return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
                 }
             },
-            #evaluate_code
-        }
+        },
+        None => quote! {
+            serde_amqp::descriptor::Descriptor::Name(_) => return Err(serde_amqp::serde::de::Error::custom("Descriptor mismatch"))
+        },
+    };
+
+    let (name, expecting) = match &attr.name {
+        Some(name) => (quote! { #name }, format!("struct {}", name)),
+        None => (quote! { #ident }, format!("struct {}", ident)),
+    };
+
+    let evaluate_descriptor = if attr.name.is_none() && attr.code.is_none() {
+        None
+    } else {
+        Some(quote! {
+            match __descriptor {
+                #evaluate_code,
+                #evaluate_name
+            }
+        })
     };
 
     match &data.fields {
@@ -72,7 +90,7 @@ fn expand_deserialize_on_datastruct(
         Fields::Unnamed(fields) => Ok(expand_deserialize_tuple_struct(
             ident,
             generics,
-            name,
+            &name,
             &evaluate_descriptor,
             &attr.encoding,
             fields,
@@ -90,18 +108,23 @@ fn expand_deserialize_on_datastruct(
 
 fn impl_visit_seq_for_unit_struct(
     ident: &syn::Ident,
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
 ) -> proc_macro2::TokenStream {
+    let evaluate_descriptor  = match evaluate_descriptor {
+        Some(t) => quote!{
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
+                Some(__val) => __val,
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
+            };
+            #t
+        },
+        None => quote! {},
+    };
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
             A: serde_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
-                Some(__val) => __val,
-                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
-            };
-
             #evaluate_descriptor
 
             Ok( #ident )
@@ -112,7 +135,7 @@ fn impl_visit_seq_for_unit_struct(
 fn expand_deserialize_unit_struct(
     ident: &syn::Ident,
     expecting: &str,
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
@@ -170,22 +193,28 @@ fn impl_visit_seq_for_tuple_struct(
     ident: &syn::Ident,
     field_idents: &Vec<syn::Ident>,
     field_types: &Vec<&syn::Type>,
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
 ) -> proc_macro2::TokenStream {
     let unwrap_or_none = match field_idents.len() {
         0 => quote! {},
         _ => macro_rules_unwrap_or_none(),
     };
+    let evaluate_descriptor = match evaluate_descriptor {
+        Some(t) => quote!{
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
+                Some(val) => val,
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
+            };
+            #t
+        },
+        None => quote! {},
+    };
+
     quote! {
         fn visit_seq<A>(self, mut __seq: A) -> Result<Self::Value, A::Error>
         where
             A: serde_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
-                Some(val) => val,
-                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
-            };
-
             #evaluate_descriptor
 
             #unwrap_or_none
@@ -200,8 +229,8 @@ fn impl_visit_seq_for_tuple_struct(
 fn expand_deserialize_tuple_struct(
     ident: &syn::Ident,
     generics: &syn::Generics,
-    expecting: &str,
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    expecting: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
     fields: &syn::FieldsUnnamed,
     ctx: &DeriveInput,
@@ -280,7 +309,7 @@ fn expand_deserialize_struct(
     ident: &syn::Ident,
     generics: &syn::Generics,
     expecting: &str,
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
     rename_all: &str,
     fields: &syn::FieldsNamed,
@@ -461,7 +490,7 @@ fn impl_visit_seq_for_struct(
     field_idents: &[syn::Ident],
     field_types: &[&syn::Type],
     field_attrs: &[FieldAttr],
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
 ) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
     for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
@@ -476,16 +505,22 @@ fn impl_visit_seq_for_struct(
         field_impls.push(token);
     }
 
+    let evaluate_descriptor = match evaluate_descriptor {
+        Some(t) => quote!{
+            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
+                Some(val) => val,
+                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
+            };
+            #t
+        },
+        None => quote! {},
+    };
+
     quote! {
         fn visit_seq<_A>(self, mut __seq: _A) -> Result<Self::Value, _A::Error>
         where
             _A: serde_amqp::serde::de::SeqAccess<'de>,
         {
-            let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
-                Some(val) => val,
-                None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
-            };
-
             #evaluate_descriptor
 
             // #( unwrap_or_none!(#field_idents, __seq, #field_types); )*
@@ -502,7 +537,7 @@ fn impl_visit_map(
     field_names: &Vec<String>,
     field_types: &Vec<&syn::Type>,
     field_attrs: &Vec<FieldAttr>,
-    evaluate_descriptor: &proc_macro2::TokenStream,
+    evaluate_descriptor: &Option<proc_macro2::TokenStream>,
 ) -> proc_macro2::TokenStream {
     let mut field_impls: Vec<proc_macro2::TokenStream> = vec![];
     for ((id, ty), attr) in field_idents.iter().zip(field_types.iter()).zip(field_attrs) {
@@ -517,17 +552,23 @@ fn impl_visit_map(
         field_impls.push(token);
     }
 
-    quote! {
-        fn visit_map<_A>(self, mut __map: _A)-> Result<Self::Value, _A::Error>
-        where _A: serde_amqp::serde::de::MapAccess<'de>
-        {
-            #(let mut #field_idents: Option<#field_types> = None;)*
-
+    let evaluate_descriptor = match evaluate_descriptor {
+        Some(t) => quote!{
             // The first should always be the descriptor
             let __descriptor: serde_amqp::descriptor::Descriptor = match __map.next_key()? {
                 Some(val) => val,
                 None => return Err(serde_amqp::serde::de::Error::custom("Expecting__descriptor"))
             };
+            #t
+        },
+        None => quote! {},
+    };
+
+    quote! {
+        fn visit_map<_A>(self, mut __map: _A)-> Result<Self::Value, _A::Error>
+        where _A: serde_amqp::serde::de::MapAccess<'de>
+        {
+            #(let mut #field_idents: Option<#field_types> = None;)*
 
             #evaluate_descriptor
 

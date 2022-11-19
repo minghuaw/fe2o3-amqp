@@ -10,7 +10,7 @@ use crate::{DescribedAttr, DescribedStructAttr, EncodingType, FieldAttr};
 pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> DescribedStructAttr {
     let attr = DescribedAttr::from_derive_input(input).unwrap();
 
-    let name = attr.name.unwrap_or_else(|| input.ident.to_string());
+    let name = attr.name;
     let code = attr
         .code
         .map(parse_descriptor_code)

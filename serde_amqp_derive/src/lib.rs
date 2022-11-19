@@ -154,7 +154,7 @@ struct FieldAttr {
 }
 
 struct DescribedStructAttr {
-    name: String,
+    name: Option<String>,
     code: Option<u64>,
     encoding: EncodingType,
     rename_field: String,
