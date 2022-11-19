@@ -7,6 +7,11 @@
 
 ## Usage
 
+Starting from "0.2.1", the macro will work for both described types and non-described types. If
+no descriptor name or descriptor code is found, it will treat the type as a non-described type.
+For non-described types, the trait impls become similar to the `serde`'s `Serialize` and
+`Deserialize` traits but allow the users to specify the encoding of the type ("list" or "map").
+
  The macro provides three types of encodings:
 
  1. `"list"`: The struct will be serialized as a described list. A described list is an AMQP1.0
