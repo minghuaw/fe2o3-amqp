@@ -34,7 +34,7 @@ fn test_serialize_example_map() {
         foo_bar: 0,
     };
     let encoded = serde_amqp::to_vec(&example).unwrap();
-    println!("encoded: {:#x?}", encoded);
+    assert_eq!(encoded[0], 0xc1);
     let decoded: ExampleMap = serde_amqp::from_slice(&encoded).unwrap();
     assert_eq!(example, decoded);
 }
