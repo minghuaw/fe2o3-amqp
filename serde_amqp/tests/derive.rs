@@ -15,7 +15,7 @@ use serde_amqp::{DeserializeComposite, SerializeComposite};
 //     a: i32,
 // }
 
-#[derive(SerializeComposite, DeserializeComposite)]
+#[derive(Debug, SerializeComposite, DeserializeComposite, PartialEq)]
 #[amqp_contract(encoding = "map", rename_all = "kebab-case")]
 struct ExampleMap {
     a: i32,
@@ -36,4 +36,5 @@ fn test_serialize_example_map() {
     let encoded = serde_amqp::to_vec(&example).unwrap();
     println!("encoded: {:#x?}", encoded);
     let decoded: ExampleMap = serde_amqp::from_slice(&encoded).unwrap();
+    assert_eq!(example, decoded);
 }
