@@ -18,14 +18,14 @@ pub(crate) fn expand_deserialize(
     let generics = &input.generics;
     match &input.data {
         syn::Data::Struct(data) => {
-            expand_deserialize_on_datastruct(&attr, ident, generics, data, input)
+            expand_deserialize_on_datastruct(attr, ident, generics, data, input)
         }
         _ => unimplemented!(),
     }
 }
 
 fn expand_deserialize_on_datastruct(
-    attr: &DescribedStructAttr,
+    attr: DescribedStructAttr,
     ident: &syn::Ident,
     generics: &syn::Generics,
     data: &syn::DataStruct,
@@ -60,11 +60,6 @@ fn expand_deserialize_on_datastruct(
         },
     };
 
-    let (name, expecting) = match &attr.name {
-        Some(name) => (quote! { #name }, format!("struct {}", name)),
-        None => (quote! { #ident }, format!("struct {}", ident)),
-    };
-
     let evaluate_descriptor = if attr.name.is_none() && attr.code.is_none() {
         None
     } else {
@@ -74,6 +69,11 @@ fn expand_deserialize_on_datastruct(
                 #evaluate_name
             }
         })
+    };
+
+    let (expecting, name) = match attr.name {
+        Some(name) => (format!("struct {}", name), name),
+        None => (format!("struct {}", ident), ident.to_string()),
     };
 
     match &data.fields {
@@ -110,8 +110,8 @@ fn impl_visit_seq_for_unit_struct(
     ident: &syn::Ident,
     evaluate_descriptor: &Option<proc_macro2::TokenStream>,
 ) -> proc_macro2::TokenStream {
-    let evaluate_descriptor  = match evaluate_descriptor {
-        Some(t) => quote!{
+    let evaluate_descriptor = match evaluate_descriptor {
+        Some(t) => quote! {
             let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(__val) => __val,
                 None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
@@ -139,25 +139,30 @@ fn expand_deserialize_unit_struct(
     encoding: &EncodingType,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
-        EncodingType::Basic => {
-            let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
-            return Err(syn::Error::new(
-                span,
-                "Basic encoding is not supported for unit struct",
-            ));
-        }
-        EncodingType::Map => {
-            let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
-            return Err(syn::Error::new(
-                span,
-                "Map encoding is not supported for unit struct",
-            ));
+    let struct_name = if evaluate_descriptor.is_none() {
+        let ident_name = ident.to_string();
+        quote!(#ident_name)
+    } else {
+        match encoding {
+            EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+            EncodingType::Basic => {
+                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
+                return Err(syn::Error::new(
+                    span,
+                    "Basic encoding is not supported for unit struct",
+                ));
+            }
+            EncodingType::Map => {
+                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
+                return Err(syn::Error::new(
+                    span,
+                    "Map encoding is not supported for unit struct",
+                ));
+            }
         }
     };
     let visit_seq = impl_visit_seq_for_unit_struct(ident, evaluate_descriptor);
-    let len = 0usize;
+    let len = if evaluate_descriptor.is_none() { 0usize } else { 1usize };
 
     let token = quote! {
         #[automatically_derived]
@@ -200,7 +205,7 @@ fn impl_visit_seq_for_tuple_struct(
         _ => macro_rules_unwrap_or_none(),
     };
     let evaluate_descriptor = match evaluate_descriptor {
-        Some(t) => quote!{
+        Some(t) => quote! {
             let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
                 None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
@@ -229,31 +234,36 @@ fn impl_visit_seq_for_tuple_struct(
 fn expand_deserialize_tuple_struct(
     ident: &syn::Ident,
     generics: &syn::Generics,
-    expecting: &proc_macro2::TokenStream,
+    expecting: &str,
     evaluate_descriptor: &Option<proc_macro2::TokenStream>,
     encoding: &EncodingType,
     fields: &syn::FieldsUnnamed,
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-    let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
-        EncodingType::Basic => {
-            if fields.unnamed.len() == 1 {
-                quote!(serde_amqp::__constants::DESCRIBED_BASIC)
-            } else {
+    let struct_name = if evaluate_descriptor.is_none() {
+        let ident_name = ident.to_string();
+        quote!(#ident_name)
+    } else {
+        match encoding {
+            EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+            EncodingType::Basic => {
+                if fields.unnamed.len() == 1 {
+                    quote!(serde_amqp::__constants::DESCRIBED_BASIC)
+                } else {
+                    let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
+                    return Err(syn::Error::new(
+                        span,
+                        "Basic encoding is not supported for tuple struct",
+                    ));
+                }
+            }
+            EncodingType::Map => {
                 let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
                 return Err(syn::Error::new(
                     span,
-                    "Basic encoding is not supported for tuple struct",
+                    "Map encoding is not supported for tuple struct",
                 ));
             }
-        }
-        EncodingType::Map => {
-            let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
-            return Err(syn::Error::new(
-                span,
-                "Map encoding is not supported for tuple struct",
-            ));
         }
     };
     let field_idents: Vec<syn::Ident> = fields
@@ -267,7 +277,11 @@ fn expand_deserialize_tuple_struct(
     let field_types: Vec<&syn::Type> = fields.unnamed.iter().map(|f| &f.ty).collect();
     let visit_seq =
         impl_visit_seq_for_tuple_struct(ident, &field_idents, &field_types, evaluate_descriptor);
-    let len = field_idents.len();
+    let len = if evaluate_descriptor.is_none() {
+        field_idents.len()
+    } else {
+        field_idents.len() + 1 // descriptor takes one
+    };
 
     let gen_params = &generics.params;
     let visitor = generic_visitor(generics);
@@ -295,7 +309,7 @@ fn expand_deserialize_tuple_struct(
                 // DESCRIPTOR is included here for compatibility with other deserializer
                 deserializer.deserialize_tuple_struct(
                     #struct_name,
-                    #len + 1, // descriptor also takes one
+                    #len,
                     Visitor::new()
                 )
             }
@@ -316,29 +330,35 @@ fn expand_deserialize_struct(
     ctx: &DeriveInput,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let len = fields.named.len();
-    let struct_name = match encoding {
-        EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
-        EncodingType::Basic => match len {
-            0 => {
-                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
-                return Err(syn::Error::new(
-                    span,
-                    "Basic encoding is not supported on unit struct",
-                ));
-            }
-            _ => quote!(serde_amqp::__constants::DESCRIBED_BASIC),
-        },
-        EncodingType::Map => match len {
-            0 => {
-                let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
-                return Err(syn::Error::new(
-                    span,
-                    "Map encoding on unit struct is not implemented",
-                ));
-            }
-            _ => quote!(serde_amqp::__constants::DESCRIBED_MAP),
-        },
+    let struct_name = if evaluate_descriptor.is_none() {
+        let ident_name = ident.to_string();
+        quote!(#ident_name)
+    } else {
+        match encoding {
+            EncodingType::List => quote!(serde_amqp::__constants::DESCRIBED_LIST),
+            EncodingType::Basic => match len {
+                0 => {
+                    let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
+                    return Err(syn::Error::new(
+                        span,
+                        "Basic encoding is not supported on unit struct",
+                    ));
+                }
+                _ => quote!(serde_amqp::__constants::DESCRIBED_BASIC),
+            },
+            EncodingType::Map => match len {
+                0 => {
+                    let span = get_span_of("encoding", ctx).unwrap_or_else(|| ident.span());
+                    return Err(syn::Error::new(
+                        span,
+                        "Map encoding on unit struct is not implemented",
+                    ));
+                }
+                _ => quote!(serde_amqp::__constants::DESCRIBED_MAP),
+            },
+        }
     };
+
     let field_idents: Vec<syn::Ident> = fields
         .named
         .iter()
@@ -393,6 +413,11 @@ fn expand_deserialize_struct(
     let gen_params = &generics.params;
     let visitor = generic_visitor(generics);
     let where_clause = where_deserialize(generics);
+    let fields = if evaluate_descriptor.is_some() {
+        quote!(const FIELDS: &'static [&'static str] = &[serde_amqp::__constants::DESCRIPTOR, #(#field_names,)*];)
+    } else {
+        quote!(const FIELDS: &'static [&'static str] = &[#(#field_names,)*];)
+    };
 
     let token = quote! {
         #unwrap_or_default
@@ -421,7 +446,8 @@ fn expand_deserialize_struct(
                 }
 
                 // DESCRIPTOR is included here for compatibility with other deserializer
-                const FIELDS: &'static [&'static str] = &[serde_amqp::__constants::DESCRIPTOR, #(#field_names,)*];
+                // const FIELDS: &'static [&'static str] = &[serde_amqp::__constants::DESCRIPTOR, #(#field_names,)*];
+                #fields
                 deserializer.deserialize_struct(
                     #struct_name,
                     FIELDS,
@@ -506,7 +532,7 @@ fn impl_visit_seq_for_struct(
     }
 
     let evaluate_descriptor = match evaluate_descriptor {
-        Some(t) => quote!{
+        Some(t) => quote! {
             let __descriptor: serde_amqp::descriptor::Descriptor = match __seq.next_element()? {
                 Some(val) => val,
                 None => return Err(serde_amqp::serde::de::Error::custom("Expecting descriptor"))
@@ -553,7 +579,7 @@ fn impl_visit_map(
     }
 
     let evaluate_descriptor = match evaluate_descriptor {
-        Some(t) => quote!{
+        Some(t) => quote! {
             // The first should always be the descriptor
             let __descriptor: serde_amqp::descriptor::Descriptor = match __map.next_key()? {
                 Some(val) => val,

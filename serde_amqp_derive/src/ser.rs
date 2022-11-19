@@ -6,7 +6,7 @@ use crate::{
         convert_to_case, macro_rules_buffer_if_eq_default, macro_rules_buffer_if_none,
         macro_rules_buffer_if_none_for_tuple_struct, macro_rules_serialize_if_neq_default,
         macro_rules_serialize_if_some, parse_described_struct_attr, parse_named_field_attrs,
-        where_serialize,
+        where_serialize, macro_rules_serialize_all,
     },
     DescribedStructAttr, EncodingType, FieldAttr,
 };
@@ -93,9 +93,9 @@ fn expand_serialize_unit_struct(
         }
     };
 
-    let serialize_descriptor = match descriptor {
-        Some(descriptor) => quote!(state.serialize_field(&#descriptor)?;),
-        None => quote!(),
+    let (serialize_descriptor, len) = match descriptor {
+        Some(descriptor) => (quote!(state.serialize_field(&#descriptor)?;), 1usize),
+        None => (quote!(), 0usize),
     };
 
     quote! {
@@ -107,7 +107,7 @@ fn expand_serialize_unit_struct(
             {
                 use serde_amqp::serde::ser::SerializeTupleStruct;
                 // len + 1 for compatibility with other serializer
-                let mut state = serializer.serialize_tuple_struct(#struct_name, 0 + 1)?;
+                let mut state = serializer.serialize_tuple_struct(#struct_name, #len)?;
                 // serialize descriptor
                 // state.serialize_field(&#descriptor)?;
                 #serialize_descriptor
@@ -155,9 +155,9 @@ fn expand_serialize_tuple_struct(
         _ => where_serialize(generics),
     };
 
-    let serialize_descriptor = match descriptor {
-        Some(descriptor) => quote!(state.serialize_field(&#descriptor)?;),
-        None => quote!(),
+    let (serialize_descriptor, len) = match descriptor {
+        Some(descriptor) => (quote!(state.serialize_field(&#descriptor)?;), len + 1),
+        None => (quote!(), len),
     };
 
     quote! {
@@ -173,7 +173,7 @@ fn expand_serialize_tuple_struct(
                 use serde_amqp::serde::ser::SerializeTupleStruct;
                 let mut null_count = 0u32;
                 // len + 1 for compatibility with other serializer
-                let mut state = serializer.serialize_tuple_struct(#struct_name, #len + 1)?;
+                let mut state = serializer.serialize_tuple_struct(#struct_name, #len)?;
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in serde_amqp serializer, this will be deducted
@@ -195,9 +195,9 @@ fn expand_serialize_struct(
     fields: &syn::FieldsNamed,
     ctx: &DeriveInput,
 ) -> proc_macro2::TokenStream {
-    let len = fields.named.len();
     let struct_name = if descriptor.is_none() {
-        quote!(#ident)
+        let name = ident.to_string();
+        quote!(#name)
     } else { 
         match encoding {
             EncodingType::Basic => {
@@ -239,16 +239,22 @@ fn expand_serialize_struct(
         EncodingType::Map => {
             let serialize_if_some = macro_rules_serialize_if_some();
             let serialize_if_neq_default = macro_rules_serialize_if_neq_default();
-            match field_attrs.iter().any(|attr| attr.default) {
-                true => {
-                    quote! {
-                        #serialize_if_some
-                        #serialize_if_neq_default
-                    }
-                },
-                false => {
-                    quote! {#serialize_if_some}
-                },
+            let serialize_all = macro_rules_serialize_all();
+
+            if descriptor.is_some() {
+                match field_attrs.iter().any(|attr| attr.default) {
+                    true => {
+                        quote! {
+                            #serialize_if_some
+                            #serialize_if_neq_default
+                        }
+                    },
+                    false => {
+                        quote! {#serialize_if_some}
+                    },
+                }
+            } else {
+                quote!{#serialize_all}
             }
         }
     };
@@ -281,13 +287,17 @@ fn expand_serialize_struct(
                 .zip(field_types.iter())
                 .zip(field_attrs.iter())
             {
-                let token = match attr.default {
-                    true => quote! {
-                        serialize_if_neq_default!(state, &self.#id, #name, #ty);
-                    },
-                    false => quote! {
-                        serialize_if_some!(state, &self.#id, #name, #ty);
-                    },
+                let token = if descriptor.is_some() {
+                    match attr.default {
+                        true => quote! {
+                            serialize_if_neq_default!(state, &self.#id, #name, #ty);
+                        },
+                        false => quote! {
+                            serialize_if_some!(state, &self.#id, #name, #ty);
+                        },
+                    }
+                } else {
+                    quote!{serialize_all!(state, &self.#id, #name, #ty);}
                 };
                 field_impls.push(token);
             }
@@ -299,9 +309,12 @@ fn expand_serialize_struct(
         _ => where_serialize(generics),
     };
 
-    let serialize_descriptor = match descriptor {
-        Some(descriptor) => quote!(state.serialize_field(serde_amqp::__constants::DESCRIPTOR, &#descriptor)?;),
-        None => quote!(),
+    let (serialize_descriptor, len) = match descriptor {
+        Some(descriptor) => {
+            let token = quote!(state.serialize_field(serde_amqp::__constants::DESCRIPTOR, &#descriptor)?;);
+            (token, fields.named.len() + 1)
+        },
+        None => (quote!(), fields.named.len()),
     };
 
     quote! {
@@ -318,7 +331,7 @@ fn expand_serialize_struct(
                 // let mut null_count = 0u32;
                 let mut nulls: Vec<&str> = Vec::new();
                 // len + 1 for compatibility with other serializer
-                let mut state = serializer.serialize_struct(#struct_name, #len + 1)?;
+                let mut state = serializer.serialize_struct(#struct_name, #len)?;
                 // serialize descriptor
                 // descriptor does not count towards number of element in list
                 // in serde_amqp serializer, this will be deducted

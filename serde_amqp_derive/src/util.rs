@@ -297,6 +297,16 @@ pub(crate) fn macro_rules_buffer_if_eq_default() -> proc_macro2::TokenStream {
     }
 }
 
+pub(crate) fn macro_rules_serialize_all() -> proc_macro2::TokenStream {
+    quote! {
+        macro_rules! serialize_all {
+            ($state: ident, $fident: expr, $fname: expr, $ftype: ty) => {
+                $state.serialize_field($fname, $fident)?;
+            };
+        }
+    }
+}
+
 pub(crate) fn macro_rules_serialize_if_some() -> proc_macro2::TokenStream {
     quote! {
         macro_rules! serialize_if_some {
