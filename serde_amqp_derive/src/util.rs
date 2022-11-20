@@ -29,31 +29,37 @@ pub(crate) fn parse_described_struct_attr(input: &syn::DeriveInput) -> Described
 /// Error with parsing descriptor code
 #[derive(Debug)]
 pub enum ParseDescriptorCodeError {
-    DomainIdNotFound,
+    IncorrectDescriptorFormat,
     DomainIdParseError(ParseIntError),
-    DescriptorIdNotFound,
     DescriptorIdParseError(ParseIntError),
 }
 
 fn parse_descriptor_code(s: String) -> Result<u64, ParseDescriptorCodeError> {
     let mut split = s.split(':');
-    let domain_id_str = split
-        .next()
-        .ok_or(ParseDescriptorCodeError::DomainIdNotFound)?
-        .replace('_', "");
 
-    let domain_id = parse_code_based_on_prefix(&domain_id_str)
-        .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
+    let first_half = split.next();
+    let second_half = split.next();
 
-    let descriptor_id_str = split
-        .next()
-        .ok_or(ParseDescriptorCodeError::DescriptorIdNotFound)?
-        .replace('_', "");
-    let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
-        .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
-    // numeric descriptors
-    // (domain-id << 32) | descriptor-id
-    Ok((domain_id << 32) | descriptor_id)
+    match second_half {
+        Some(descriptor_id_str) => {
+                let domain_id_str = first_half.ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?.replace('_', "");
+                let domain_id = parse_code_based_on_prefix(&domain_id_str)
+                    .map_err(ParseDescriptorCodeError::DomainIdParseError)?;
+            
+                let descriptor_id_str = descriptor_id_str.replace('_', "");
+                let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
+                    .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
+                // numeric descriptors
+                // (domain-id << 32) | descriptor-id
+                Ok((domain_id << 32) | descriptor_id)
+        },
+        None => {
+            let descriptor_id_str = first_half.ok_or(ParseDescriptorCodeError::IncorrectDescriptorFormat)?.replace('_', "");
+            let descriptor_id = parse_code_based_on_prefix(&descriptor_id_str)
+                .map_err(ParseDescriptorCodeError::DescriptorIdParseError)?;
+            Ok(descriptor_id)
+        },
+    }
 }
 
 fn parse_code_based_on_prefix(src: &str) -> Result<u64, ParseIntError> {
