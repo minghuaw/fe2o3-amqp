@@ -221,6 +221,22 @@
 //! ```
 //!
 //! ## Extensions
+//! 
+//! A raw u64 can be used as the descriptor code in the macro attribute. This is useful for defining types
+//! that are not strictly compliant.
+//! 
+//! ```
+//! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
+//! #[amqp_contract(
+//!     name = "amqp:application-properties:map",
+//!     code = "0x000_0000_0000_0007",
+//!     encoding = "list",
+//!     rename_all = "kebab-case"
+//! )]
+//! pub struct Foo {
+//!    pub bar: String,
+//! }
+//! ```
 //!
 //! The following type(s) are provided in the `extensions` mod and require the `extensions` feature
 //!
