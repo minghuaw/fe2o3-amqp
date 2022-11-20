@@ -226,6 +226,8 @@
 //! that are not strictly compliant.
 //! 
 //! ```
+//! use serde_amqp::macros::{SerializeComposite, DeserializeComposite};
+//! 
 //! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:application-properties:map",
