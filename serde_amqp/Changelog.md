@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.4
+
+1. Updated macro to "0.2.1" to allow using raw u64 as the descriptor code (ie. `0x0000_0000_0000_0000`)
+
 ## 0.5.3
 
 1. Added "chrono-preview" feature to reflect deprecation of `from_timestamp` in `chrono` crate.
