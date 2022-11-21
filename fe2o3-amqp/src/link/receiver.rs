@@ -409,7 +409,7 @@ impl Receiver {
     /// to `Release`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
-    pub async fn release<T>(
+    pub async fn release(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
     ) -> Result<(), DispositionError> {
@@ -434,7 +434,7 @@ impl Receiver {
     /// to `Modify`
     ///
     /// This will not send disposition if the delivery is not found in the local unsettled map.
-    pub async fn modify<T>(
+    pub async fn modify(
         &self,
         delivery_info: impl Into<DeliveryInfo>,
         modified: Modified,

@@ -3,6 +3,7 @@
 ## 0.7.12
 
 1. Added `credit_mode()` getter to `Receiver`
+2. Removed unused generic type parameter from `Receiver::modify` and `Receiver::release`
 
 ## 0.7.11
 
