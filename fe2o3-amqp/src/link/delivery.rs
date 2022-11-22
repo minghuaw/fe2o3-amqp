@@ -136,6 +136,20 @@ impl<T> Delivery<T> {
     pub fn into_body(self) -> T {
         self.message.body
     }
+
+    /// Consume the delivery into the delivery info and message.
+    /// The message format will be lost.
+    pub fn into_parts(self) -> (DeliveryInfo, Message<T>) {
+        (
+            DeliveryInfo {
+                delivery_id: self.delivery_id,
+                delivery_tag: self.delivery_tag,
+                rcv_settle_mode: self.rcv_settle_mode,
+                _sealed: Sealed {},
+            },
+            self.message,
+        )
+    }
 }
 
 impl<T: std::fmt::Display> std::fmt::Display for Delivery<T> {
