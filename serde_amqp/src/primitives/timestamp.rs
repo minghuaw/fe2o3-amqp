@@ -83,11 +83,11 @@ impl From<time::OffsetDateTime> for Timestamp {
 
 #[cfg_attr(docsrs, doc(cfg(feature = "time")))]
 #[cfg(feature = "time")]
-impl TryFrom<Timestamp> for time::OffsetDateTime {
-    type Error = time::error::ComponentRange;
-
-    fn try_from(value: Timestamp) -> Result<Self, Self::Error> {
-        time::OffsetDateTime::from_unix_timestamp_nanos(value.0 as i128 * 1_000_000)
+impl From<Timestamp> for time::OffsetDateTime {
+    fn from(val: Timestamp) -> Self {
+        let millis = val.0;
+        let duration = time::Duration::milliseconds(millis);
+        time::OffsetDateTime::UNIX_EPOCH + duration
     }
 }
 
