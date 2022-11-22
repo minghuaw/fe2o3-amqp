@@ -137,7 +137,7 @@ impl<T> Delivery<T> {
         self.message.body
     }
 
-    /// Consume the delivery into the delivery info and message. 
+    /// Consume the delivery into the delivery info and message.
     /// The message format will be lost.
     pub fn into_parts(self) -> (DeliveryInfo, Message<T>) {
         (
