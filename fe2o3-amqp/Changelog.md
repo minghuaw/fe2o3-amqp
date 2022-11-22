@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.13
+
+1. Added `Delivery::into_parts()`
+
 ## 0.7.12
 
 1. Added `credit_mode()` getter to `Receiver`
