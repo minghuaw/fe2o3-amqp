@@ -231,7 +231,7 @@
 //! #[derive(Debug, Clone, SerializeComposite, DeserializeComposite)]
 //! #[amqp_contract(
 //!     name = "amqp:application-properties:map",
-//!     code = "0x000_0000_0000_0007",
+//!     code = "0x000_0000_0000_0007"   ,
 //!     encoding = "list",
 //!     rename_all = "kebab-case"
 //! )]
