@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.5
+
+1. Changed conversion from `Timestamp` to `time::OffsetDateTime` to infallible
+
 ## 0.5.4
 
 1. Updated macro to "0.2.1" to allow using raw u64 as the descriptor code (ie. `0x0000_0000_0000_0000`)
