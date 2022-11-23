@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use fe2o3_amqp_types::{
     definitions::{
-        DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo,
+        DeliveryNumber, DeliveryTag, Error, MessageFormat, ReceiverSettleMode, Role, SequenceNo, Fields,
     },
     messaging::{DeliveryState, FromBody},
     performatives::{Attach, Detach, Transfer},
@@ -83,6 +83,14 @@ pub(crate) trait LinkExt: Link {
     fn target(&self) -> &Option<Self::Target>;
 
     fn max_message_size(&self) -> Option<u64>;
+
+    fn properties<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&Option<Fields>) -> O;
+
+    fn properties_mut<F, O>(&self, op: F) -> O
+    where
+        F: FnOnce(&mut Option<Fields>) -> O;
 
     async fn exchange_attach(
         &mut self,

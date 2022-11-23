@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.7.15
+
+1. Added `.properties()` and `.properties_mut()` methods to `Receiver` and `Sender`
+
 ## 0.7.14
 
 1. Added `.name()` method to `Receiver` and `Sender`
